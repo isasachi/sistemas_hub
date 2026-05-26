@@ -47,14 +47,14 @@ Dominant colors, background color, headline color, CTA color. Fixed from referen
 Font style, weight, case, alignment, size hierarchy. Fixed from reference.
 
 **7. PRODUCT (Image 2)**
-Describe product appearance accurately: shape, format, main colors, finish. Place it exactly per its physical position.
+Describe product appearance accurately: shape, format, main colors, finish. Place it exactly per its physical position. The product's label — all text, graphics, and colors printed on it — must be reproduced exactly as it appears in Image 2. Do NOT simplify, alter, or omit any label detail.
 
 **8. BRANDING**
 If logo provided (Image 3): place it exactly where the original brand appeared in the reference.
 If no logo: leave that area as background. Do NOT invent a logo. Do NOT reuse the reference brand mark.
 
 **9. COPY — exact**
-Every text element: element name → exact text content. Specify font weight, color (from reference colorimetry), and position for each.
+Every text element: element name → exact text content. Specify font weight, exact color (reproduce the exact color from the reference ad for each text element — do NOT change them), and position for each.
 
 **10. SCENE ADAPTATIONS**
 Evaluate each scene element against targetAudience and whatItDoes:
