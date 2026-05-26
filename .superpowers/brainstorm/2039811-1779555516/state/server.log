@@ -1,0 +1,7 @@
+{"type":"server-started","port":60915,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:60915","screen_dir":"/home/isaac/chamba/sistemas_hub/.superpowers/brainstorm/2039811-1779555516/content","state_dir":"/home/isaac/chamba/sistemas_hub/.superpowers/brainstorm/2039811-1779555516/state"}
+{"type":"screen-added","file":"/home/isaac/chamba/sistemas_hub/.superpowers/brainstorm/2039811-1779555516/content/visual-style.html"}
+{"source":"user-event","type":"click","text":"JR AI Hub\n      \n      \n        \n          \n          Ad Generator\n          Crea anuncios con IA\n        \n        \n          \n          Video Ad Gen\n          Videos publicitarios\n        \n      \n      \n        Probar ahora →\n      \n    \n    \n      Oscuro + Marca Propia\n      Oscuro tecnológico pero con los colores de JR Consulting (naranja/rojo cálido). Combina la energía tech de Higgsfield con la identidad de marca existente.","choice":"dark-brand","id":null,"timestamp":1779555573823}
+{"type":"screen-added","file":"/home/isaac/chamba/sistemas_hub/.superpowers/brainstorm/2039811-1779555516/content/waiting-1.html"}
+{"type":"screen-added","file":"/home/isaac/chamba/sistemas_hub/.superpowers/brainstorm/2039811-1779555516/content/home-layout.html"}
+{"type":"screen-added","file":"/home/isaac/chamba/sistemas_hub/.superpowers/brainstorm/2039811-1779555516/content/home-v2.html"}
+{"type":"screen-added","file":"/home/isaac/chamba/sistemas_hub/.superpowers/brainstorm/2039811-1779555516/content/tool-wizard.html"}

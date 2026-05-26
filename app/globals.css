@@ -1,26 +1,134 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@custom-variant dark (&:is(.dark *));
 
+/* ── JR AI Hub Design Tokens ──────────────────────────────── */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: 'Plus Jakarta Sans', -apple-system, sans-serif;
+  --font-heading: 'Plus Jakarta Sans', -apple-system, sans-serif;
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+
+  /* JR brand tokens */
+  --color-brand-amber: #f59e0b;
+  --color-brand-red: #ef4444;
+  --color-surface: rgba(255, 255, 255, 0.04);
+  --color-surface-hover: rgba(255, 255, 255, 0.07);
+  --color-border-brand: rgba(245, 158, 11, 0.28);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* ── OLED Dark theme as default ──────────────────────────── */
+:root {
+  --background: #080810;
+  --foreground: #f1f5f9;
+  --card: #131320;
+  --card-foreground: #f1f5f9;
+  --popover: #0d0d18;
+  --popover-foreground: #f1f5f9;
+  --primary: #f59e0b;
+  --primary-foreground: #ffffff;
+  --secondary: #131320;
+  --secondary-foreground: #f1f5f9;
+  --muted: #0d0d18;
+  --muted-foreground: #94a3b8;
+  --accent: #131320;
+  --accent-foreground: #f1f5f9;
+  --destructive: #ef4444;
+  --border: rgba(255, 255, 255, 0.08);
+  --input: rgba(255, 255, 255, 0.06);
+  --ring: rgba(245, 158, 11, 0.5);
+  --radius: 0.75rem;
+
+  /* JR brand */
+  --brand-amber: #f59e0b;
+  --brand-red: #ef4444;
+  --brand-gradient: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%);
+  --glow-amber: rgba(245, 158, 11, 0.15);
+
+  /* Text utilities */
+  --fg-subtle: #475569;
+  --fg-muted: #94a3b8;
+
+  /* Backgrounds */
+  --bg-deep: #080810;
+  --bg-base: #0d0d18;
+  --bg-elevated: #131320;
+  --surface: rgba(255, 255, 255, 0.04);
+  --surface-hover: rgba(255, 255, 255, 0.07);
+  --border-brand: rgba(245, 158, 11, 0.28);
+
+  /* Motion */
+  --ease-smooth: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-fast: 200ms;
+}
+
+/* .dark kept for Shadcn components that need it */
+.dark {
+  --background: #080810;
+  --foreground: #f1f5f9;
+  --card: #131320;
+  --card-foreground: #f1f5f9;
+  --popover: #0d0d18;
+  --popover-foreground: #f1f5f9;
+  --primary: #f59e0b;
+  --primary-foreground: #ffffff;
+  --secondary: #131320;
+  --secondary-foreground: #f1f5f9;
+  --muted: #0d0d18;
+  --muted-foreground: #94a3b8;
+  --accent: #131320;
+  --accent-foreground: #f1f5f9;
+  --destructive: #ef4444;
+  --border: rgba(255, 255, 255, 0.08);
+  --input: rgba(255, 255, 255, 0.06);
+  --ring: rgba(245, 158, 11, 0.5);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    box-sizing: border-box;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* ── Gradient text utility ───────────────────────────────── */
+.gradient-text {
+  background: var(--brand-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Brand gradient bg utility ───────────────────────────── */
+.bg-brand-gradient {
+  background: var(--brand-gradient);
 }

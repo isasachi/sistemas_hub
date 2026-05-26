@@ -1,0 +1,97 @@
+<h2>Estructura del all-in-one page</h2>
+<p class="subtitle">¿Cómo deben comportarse las secciones del wizard al estar todas en una sola página?</p>
+
+<div class="cards">
+
+  <!-- Option A -->
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:16px; background:#0d0d18; border-radius:8px; font-family:monospace; font-size:12px; line-height:1.8;">
+      <div style="border:1px solid rgba(245,158,11,0.6); border-radius:6px; padding:10px; margin-bottom:6px; background:rgba(245,158,11,0.06);">
+        <span style="color:#f59e0b; font-size:10px; font-weight:700; text-transform:uppercase;">✓ ACTIVO</span><br>
+        <span style="color:#f1f5f9;">📎 Referencia — analizada</span>
+      </div>
+      <div style="border:1px solid rgba(245,158,11,0.6); border-radius:6px; padding:10px; margin-bottom:6px; background:rgba(245,158,11,0.06);">
+        <span style="color:#f59e0b; font-size:10px; font-weight:700; text-transform:uppercase;">→ EN CURSO</span><br>
+        <span style="color:#f1f5f9;">📦 Producto + preguntas</span>
+      </div>
+      <div style="border:1px dashed rgba(255,255,255,0.12); border-radius:6px; padding:10px; margin-bottom:6px; opacity:0.4;">
+        <span style="color:#475569; font-size:10px; font-weight:700; text-transform:uppercase;">🔒 BLOQUEADO</span><br>
+        <span style="color:#475569;">💬 Comentarios TikTok</span>
+      </div>
+      <div style="border:1px dashed rgba(255,255,255,0.12); border-radius:6px; padding:10px; margin-bottom:6px; opacity:0.25;">
+        <span style="color:#475569; font-size:10px; font-weight:700; text-transform:uppercase;">🔒 BLOQUEADO</span><br>
+        <span style="color:#475569;">✍️ Elegir copy</span>
+      </div>
+      <div style="border:1px dashed rgba(255,255,255,0.12); border-radius:6px; padding:10px; opacity:0.15;">
+        <span style="color:#475569; font-size:10px; font-weight:700; text-transform:uppercase;">🔒 BLOQUEADO</span><br>
+        <span style="color:#475569;">✨ Generar anuncio</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Todo visible, secciones bloqueadas</h3>
+      <p>Todas las secciones están en pantalla desde el inicio. Las secciones futuras aparecen opacas con candado. El usuario ve el recorrido completo antes de empezar.</p>
+    </div>
+  </div>
+
+  <!-- Option B -->
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:16px; background:#0d0d18; border-radius:8px; font-family:monospace; font-size:12px; line-height:1.8;">
+      <div style="border:1px solid rgba(245,158,11,0.6); border-radius:6px; padding:10px; margin-bottom:6px; background:rgba(245,158,11,0.06);">
+        <span style="color:#f59e0b; font-size:10px; font-weight:700; text-transform:uppercase;">✓ ACTIVO</span><br>
+        <span style="color:#f1f5f9;">📎 Referencia — analizada</span>
+      </div>
+      <div style="border:1px solid rgba(245,158,11,0.6); border-radius:6px; padding:10px; margin-bottom:6px; background:rgba(245,158,11,0.06);">
+        <span style="color:#f59e0b; font-size:10px; font-weight:700; text-transform:uppercase;">→ EN CURSO</span><br>
+        <span style="color:#f1f5f9;">📦 Producto + preguntas</span>
+      </div>
+      <div style="border:2px dashed rgba(245,158,11,0.3); border-radius:6px; padding:6px 10px; margin-bottom:6px; opacity:0.5; text-align:center; color:#94a3b8; font-size:11px; font-style:italic;">
+        ↓ próximas secciones aparecen aquí al avanzar
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Aparición progresiva (reveal)</h3>
+      <p>Solo las secciones completadas y la activa son visibles. Cada sección nueva aparece con animación cuando se desbloquea. La página crece hacia abajo.</p>
+    </div>
+  </div>
+
+  <!-- Option C -->
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:16px; background:#0d0d18; border-radius:8px; font-family:monospace; font-size:12px; line-height:1.8;">
+      <div style="border:1px solid rgba(245,158,11,0.6); border-radius:6px; overflow:hidden; margin-bottom:6px;">
+        <div style="padding:8px 12px; background:rgba(245,158,11,0.1); display:flex; justify-content:space-between; align-items:center;">
+          <span style="color:#f59e0b; font-size:11px; font-weight:700;">1. Referencia ✓</span>
+          <span style="color:#f59e0b; font-size:10px;">▲</span>
+        </div>
+        <div style="padding:8px 12px; background:rgba(245,158,11,0.04); border-top:1px solid rgba(245,158,11,0.15);">
+          <span style="color:#94a3b8; font-size:10px;">Anuncio analizado: ratio 9:16, TikTok, estilo lifestyle</span>
+        </div>
+      </div>
+      <div style="border:1px solid rgba(255,255,255,0.12); border-radius:6px; overflow:hidden; margin-bottom:6px;">
+        <div style="padding:8px 12px; background:rgba(245,158,11,0.08); display:flex; justify-content:space-between; align-items:center;">
+          <span style="color:#f1f5f9; font-size:11px; font-weight:700;">2. Producto + preguntas →</span>
+          <span style="color:#94a3b8; font-size:10px;">▼</span>
+        </div>
+      </div>
+      <div style="border:1px dashed rgba(255,255,255,0.08); border-radius:6px; overflow:hidden; margin-bottom:6px; opacity:0.4;">
+        <div style="padding:8px 12px; display:flex; justify-content:space-between; align-items:center;">
+          <span style="color:#475569; font-size:11px;">🔒 3. Comentarios TikTok</span>
+        </div>
+      </div>
+      <div style="border:1px dashed rgba(255,255,255,0.08); border-radius:6px; overflow:hidden; margin-bottom:6px; opacity:0.25;">
+        <div style="padding:8px 12px; display:flex; justify-content:space-between; align-items:center;">
+          <span style="color:#475569; font-size:11px;">🔒 4. Copy</span>
+        </div>
+      </div>
+      <div style="border:1px dashed rgba(255,255,255,0.08); border-radius:6px; overflow:hidden; opacity:0.15;">
+        <div style="padding:8px 12px; display:flex; justify-content:space-between; align-items:center;">
+          <span style="color:#475569; font-size:11px;">🔒 5. Generar</span>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C — Acordeón (todo visible, colapsado)</h3>
+      <p>Todas las secciones visibles como acordeón. Las completadas colapsan mostrando su resumen. La activa está expandida. Las bloqueadas se ven pero no abren.</p>
+    </div>
+  </div>
+
+</div>

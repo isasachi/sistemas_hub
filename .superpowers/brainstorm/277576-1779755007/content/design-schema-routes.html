@@ -1,0 +1,110 @@
+<h2>Diseño — Schema + Rutas API</h2>
+<p class="subtitle">Sección 2 de 3. ¿Se ve correcto?</p>
+
+<div class="section">
+  <h3>Nuevo schema de sesión (Supabase)</h3>
+  <p style="font-size:12px;color:#94a3b8;margin-bottom:10px;">La tabla <code>sessions</code> se reemplaza limpiamente con este schema simplificado.</p>
+
+  <div style="font-family:monospace; font-size:11.5px; background:#080810; border:1px solid rgba(255,255,255,0.08); border-radius:8px; padding:16px; line-height:2;">
+    <div style="color:#475569; margin-bottom:4px;">-- Core</div>
+    <div><span style="color:#f59e0b;">id</span>               <span style="color:#94a3b8;">UUID PRIMARY KEY DEFAULT gen_random_uuid()</span></div>
+    <div><span style="color:#f59e0b;">created_at</span>       <span style="color:#94a3b8;">TIMESTAMPTZ DEFAULT NOW()</span></div>
+    <div><span style="color:#f59e0b;">step</span>             <span style="color:#94a3b8;">INTEGER DEFAULT 0</span></div>
+
+    <div style="color:#475569; margin-top:8px; margin-bottom:4px;">-- Step 1: Referencia</div>
+    <div><span style="color:#f59e0b;">reference_url</span>    <span style="color:#94a3b8;">TEXT  </span><span style="color:#475569; font-size:10px;">← Supabase Storage</span></div>
+    <div><span style="color:#f59e0b;">reference_analysis</span> <span style="color:#94a3b8;">JSONB</span></div>
+
+    <div style="color:#475569; margin-top:8px; margin-bottom:4px;">-- Step 2: Producto + preguntas</div>
+    <div><span style="color:#f59e0b;">product_url</span>      <span style="color:#94a3b8;">TEXT  </span><span style="color:#475569; font-size:10px;">← Supabase Storage</span></div>
+    <div><span style="color:#f59e0b;">logo_url</span>         <span style="color:#94a3b8;">TEXT  </span><span style="color:#475569; font-size:10px;">← Supabase Storage (opcional)</span></div>
+    <div><span style="color:#f59e0b;">product_scan</span>     <span style="color:#94a3b8;">JSONB</span></div>
+    <div><span style="color:#f59e0b;">product_name</span>     <span style="color:#94a3b8;">TEXT</span></div>
+    <div><span style="color:#f59e0b;">what_it_does</span>     <span style="color:#94a3b8;">TEXT</span></div>
+    <div><span style="color:#f59e0b;">target_audience</span>  <span style="color:#94a3b8;">TEXT</span></div>
+
+    <div style="color:#475569; margin-top:8px; margin-bottom:4px;">-- Step 3: Copy</div>
+    <div><span style="color:#f59e0b;">tiktok_comments</span>  <span style="color:#94a3b8;">TEXT</span></div>
+    <div><span style="color:#f59e0b;">copy_versions</span>    <span style="color:#94a3b8;">JSONB </span><span style="color:#475569; font-size:10px;">← {versionA:[...], versionB:[...]}</span></div>
+
+    <div style="color:#475569; margin-top:8px; margin-bottom:4px;">-- Step 4: Confirmación</div>
+    <div><span style="color:#f59e0b;">confirmed_copy</span>   <span style="color:#94a3b8;">JSONB </span><span style="color:#475569; font-size:10px;">← {version:'A'|'B', breakdown:[...]}</span></div>
+
+    <div style="color:#475569; margin-top:8px; margin-bottom:4px;">-- Step 5: Resultado</div>
+    <div><span style="color:#f59e0b;">edit_instruction</span> <span style="color:#94a3b8;">TEXT</span></div>
+    <div><span style="color:#f59e0b;">image_url</span>        <span style="color:#94a3b8;">TEXT  </span><span style="color:#475569; font-size:10px;">← Supabase Storage</span></div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Rutas API — lo que cambia</h3>
+
+  <div style="font-size:12px; line-height:1.6;">
+
+    <div style="border:1px solid rgba(255,255,255,0.08); border-radius:8px; overflow:hidden; margin-bottom:8px;">
+      <div style="background:#131320; padding:8px 12px; display:flex; gap:8px; align-items:center; border-bottom:1px solid rgba(255,255,255,0.06);">
+        <span style="color:#22c55e; font-size:10px; font-weight:700; background:rgba(34,197,94,0.1); border:1px solid rgba(34,197,94,0.2); border-radius:4px; padding:1px 6px;">MANTIENE</span>
+        <code style="color:#f1f5f9;">POST /api/sessions</code>
+        <span style="color:#475569; margin-left:auto;">crear sesión</span>
+      </div>
+      <div style="background:#131320; padding:8px 12px; display:flex; gap:8px; align-items:center; border-bottom:1px solid rgba(255,255,255,0.06);">
+        <span style="color:#22c55e; font-size:10px; font-weight:700; background:rgba(34,197,94,0.1); border:1px solid rgba(34,197,94,0.2); border-radius:4px; padding:1px 6px;">MANTIENE</span>
+        <code style="color:#f1f5f9;">GET  /api/sessions/[id]</code>
+        <span style="color:#475569; margin-left:auto;">leer sesión</span>
+      </div>
+    </div>
+
+    <div style="border:1px solid rgba(245,158,11,0.2); border-radius:8px; overflow:hidden; margin-bottom:8px;">
+      <div style="background:#131320; padding:8px 12px; display:flex; gap:8px; align-items:center; border-bottom:1px solid rgba(255,255,255,0.06);">
+        <span style="color:#f59e0b; font-size:10px; font-weight:700; background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.2); border-radius:4px; padding:1px 6px;">REEMPLAZA</span>
+        <code style="color:#f1f5f9;">POST /api/sessions/[id]/analyze-reference</code>
+      </div>
+      <div style="padding:8px 12px; color:#94a3b8; font-size:11px;">Upload → Supabase Storage → Gemini 2.5 Flash → ReferenceAnalysis JSON → session step=1</div>
+    </div>
+
+    <div style="border:1px solid rgba(245,158,11,0.2); border-radius:8px; overflow:hidden; margin-bottom:8px;">
+      <div style="background:#131320; padding:8px 12px; display:flex; gap:8px; align-items:center; border-bottom:1px solid rgba(255,255,255,0.06);">
+        <span style="color:#f59e0b; font-size:10px; font-weight:700; background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.2); border-radius:4px; padding:1px 6px;">REEMPLAZA</span>
+        <code style="color:#f1f5f9;">POST /api/sessions/[id]/analyze-product</code>
+      </div>
+      <div style="padding:8px 12px; color:#94a3b8; font-size:11px;">Upload product + logo + {name, whatItDoes, audience} → Supabase Storage → Gemini scan → ProductScan JSON → session step=2</div>
+    </div>
+
+    <div style="border:1px solid rgba(245,158,11,0.2); border-radius:8px; overflow:hidden; margin-bottom:8px;">
+      <div style="background:#131320; padding:8px 12px; display:flex; gap:8px; align-items:center; border-bottom:1px solid rgba(255,255,255,0.06);">
+        <span style="color:#f59e0b; font-size:10px; font-weight:700; background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.2); border-radius:4px; padding:1px 6px;">NUEVO</span>
+        <code style="color:#f1f5f9;">POST /api/sessions/[id]/generate-copy</code>
+      </div>
+      <div style="padding:8px 12px; color:#94a3b8; font-size:11px;">TikTok comments → Gemini 2.5 Flash → CopyVersions {A, B} → session step=3</div>
+    </div>
+
+    <div style="border:1px solid rgba(245,158,11,0.2); border-radius:8px; overflow:hidden; margin-bottom:8px;">
+      <div style="background:#131320; padding:8px 12px; display:flex; gap:8px; align-items:center; border-bottom:1px solid rgba(255,255,255,0.06);">
+        <span style="color:#f59e0b; font-size:10px; font-weight:700; background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.2); border-radius:4px; padding:1px 6px;">SIMPLIFICA</span>
+        <code style="color:#f1f5f9;">POST /api/sessions/[id]/confirm-copy</code>
+      </div>
+      <div style="padding:8px 12px; color:#94a3b8; font-size:11px;">Body: <code>{version: 'A'|'B'}</code> → guarda confirmed_copy → session step=4</div>
+    </div>
+
+    <div style="border:1px solid rgba(245,158,11,0.2); border-radius:8px; overflow:hidden; margin-bottom:8px;">
+      <div style="background:#131320; padding:8px 12px; display:flex; gap:8px; align-items:center; border-bottom:1px solid rgba(255,255,255,0.06);">
+        <span style="color:#f59e0b; font-size:10px; font-weight:700; background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.2); border-radius:4px; padding:1px 6px;">REEMPLAZA</span>
+        <code style="color:#f1f5f9;">POST /api/sessions/[id]/generate-image</code>
+      </div>
+      <div style="padding:8px 12px; color:#94a3b8; font-size:11px;">SSE stream: fetch images from Supabase Storage → base64 → Gemini editImage → save result → Supabase Storage</div>
+    </div>
+
+    <div style="border:1px solid rgba(245,158,11,0.2); border-radius:8px; overflow:hidden;">
+      <div style="background:#131320; padding:8px 12px; display:flex; gap:8px; align-items:center; border-bottom:1px solid rgba(255,255,255,0.06);">
+        <span style="color:#f59e0b; font-size:10px; font-weight:700; background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.2); border-radius:4px; padding:1px 6px;">NUEVO</span>
+        <code style="color:#f1f5f9;">POST /api/sessions/[id]/refine-image</code>
+      </div>
+      <div style="padding:8px 12px; color:#94a3b8; font-size:11px;">Body: <code>{feedback: string}</code> → Gemini refineImage con resultado actual → nuevo image_url</div>
+    </div>
+
+  </div>
+</div>
+
+<div style="background:rgba(245,158,11,0.05); border:1px solid rgba(245,158,11,0.2); border-radius:8px; padding:12px; font-size:13px; color:#94a3b8; margin-top:8px;">
+  <strong style="color:#f59e0b;">¿Schema y rutas correctos?</strong> Responde en el terminal.
+</div>
