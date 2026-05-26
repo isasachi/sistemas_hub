@@ -8,9 +8,9 @@ import type { ReferenceAnalysis } from '@/lib/types'
 const btnPrimary = 'h-11 w-full rounded-xl text-white text-[13px] font-bold bg-brand-gradient hover:opacity-90 disabled:opacity-40 transition-all duration-200 cursor-pointer border-0 font-sans flex items-center justify-center gap-2'
 
 export default function Section1Reference() {
-  const { sessionId, setReferenceData, setLoading, isLoading } = useWizardStore()
+  const { sessionId, referenceUrl, setReferenceData, setLoading, isLoading } = useWizardStore()
   const [file, setFile] = useState<File | null>(null)
-  const [preview, setPreview] = useState<string | null>(null)
+  const [preview, setPreview] = useState<string | null>(referenceUrl)
   const [error, setError] = useState<string | null>(null)
 
   function handleFile(f: File) {

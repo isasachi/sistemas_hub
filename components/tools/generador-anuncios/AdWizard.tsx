@@ -16,11 +16,11 @@ function getStatus(sectionStep: number, currentStep: number): 'locked' | 'active
 }
 
 export default function AdWizard() {
-  const { step, startNewSession, referenceAnalysis, productName, targetAudience, confirmedCopy, resetFromStep } = useWizardStore()
+  const { step, imageUrl, startNewSession, setStep, referenceAnalysis, productName, targetAudience, confirmedCopy } = useWizardStore()
 
   useEffect(() => { startNewSession() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const progressPct = Math.round((step / 5) * 100)
+  const progressPct = Math.round((Math.min(step, 4) / 4) * 100)
 
   return (
     <div className="flex flex-col min-h-screen bg-[#080810]">
@@ -39,7 +39,7 @@ export default function AdWizard() {
           title="Anuncio de referencia"
           status={getStatus(0, step)}
           summary={referenceAnalysis ? `${referenceAnalysis.format.ratio} · ${referenceAnalysis.format.platform} · ${referenceAnalysis.style}` : undefined}
-          onReopen={() => resetFromStep(0)}
+          onReopen={() => setStep(0)}
         >
           <Section1Reference />
         </AccordionSection>
@@ -50,7 +50,7 @@ export default function AdWizard() {
           title="Producto + información"
           status={getStatus(1, step)}
           summary={productName && targetAudience ? `${productName} · ${targetAudience}` : undefined}
-          onReopen={() => resetFromStep(1)}
+          onReopen={() => setStep(1)}
         >
           <Section2Product />
         </AccordionSection>
@@ -61,7 +61,7 @@ export default function AdWizard() {
           title="Comentarios de TikTok"
           status={getStatus(2, step)}
           summary={step >= 3 ? 'Copy A/B generado' : undefined}
-          onReopen={() => resetFromStep(2)}
+          onReopen={() => setStep(2)}
         >
           <Section3Comments />
         </AccordionSection>
@@ -72,16 +72,16 @@ export default function AdWizard() {
           title="Elegir versión de copy"
           status={getStatus(3, step)}
           summary={confirmedCopy ? `Versión ${confirmedCopy.version} confirmada` : undefined}
-          onReopen={() => resetFromStep(3)}
+          onReopen={() => setStep(3)}
         >
           <Section4Copy />
         </AccordionSection>
 
-        {/* Section 5 */}
+        {/* Section 5 — stays open once reached; never collapses */}
         <AccordionSection
           index={5}
-          title={step >= 5 ? '¡Anuncio listo!' : 'Generar anuncio'}
-          status={getStatus(4, step)}
+          title={imageUrl ? '¡Anuncio listo!' : 'Generar anuncio'}
+          status={step >= 4 ? 'active' : 'locked'}
         >
           <Section5Generate />
         </AccordionSection>

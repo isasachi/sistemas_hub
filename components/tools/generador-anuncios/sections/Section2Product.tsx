@@ -9,15 +9,19 @@ const btnPrimary = 'h-11 w-full rounded-xl text-white text-[13px] font-bold bg-b
 const inputClass = 'w-full h-10 rounded-xl border border-white/[0.08] bg-[#080810] px-3 text-[13px] text-[#f1f5f9] placeholder:text-[#475569] focus:outline-none focus:border-[rgba(245,158,11,0.5)] transition-colors'
 
 export default function Section2Product() {
-  const { sessionId, setProductData, setLoading, isLoading } = useWizardStore()
+  const { sessionId, productUrl, logoUrl: storedLogoUrl, productName: storedName, whatItDoes: storedWhatItDoes, targetAudience: storedAudience, setProductData, setLoading, isLoading } = useWizardStore()
   const [productFile, setProductFile] = useState<File | null>(null)
-  const [productPreview, setProductPreview] = useState<string | null>(null)
+  const [productPreview, setProductPreview] = useState<string | null>(productUrl)
   const [logoFile, setLogoFile] = useState<File | null>(null)
-  const [logoPreview, setLogoPreview] = useState<string | null>(null)
-  const [answers, setAnswers] = useState({ productName: '', whatItDoes: '', targetAudience: '' })
+  const [logoPreview, setLogoPreview] = useState<string | null>(storedLogoUrl)
+  const [answers, setAnswers] = useState({
+    productName: storedName ?? '',
+    whatItDoes: storedWhatItDoes ?? '',
+    targetAudience: storedAudience ?? '',
+  })
   const [error, setError] = useState<string | null>(null)
 
-  const canSubmit = !!productFile && !!answers.productName && !!answers.whatItDoes && !!answers.targetAudience
+  const canSubmit = (!!productFile || !!productUrl) && !!answers.productName && !!answers.whatItDoes && !!answers.targetAudience
 
   async function handleSubmit() {
     if (!sessionId || !canSubmit || isLoading) return
@@ -25,8 +29,21 @@ export default function Section2Product() {
     setError(null)
     try {
       const form = new FormData()
-      form.append('product', productFile!)
-      if (logoFile) form.append('logo', logoFile)
+      if (productFile) {
+        form.append('product', productFile)
+      } else {
+        // Re-use previously uploaded image
+        const res = await fetch(productUrl!)
+        const blob = await res.blob()
+        form.append('product', new File([blob], 'product', { type: blob.type || 'image/jpeg' }))
+      }
+      if (logoFile) {
+        form.append('logo', logoFile)
+      } else if (storedLogoUrl) {
+        const res = await fetch(storedLogoUrl)
+        const blob = await res.blob()
+        form.append('logo', new File([blob], 'logo', { type: blob.type || 'image/png' }))
+      }
       form.append('productName', answers.productName)
       form.append('whatItDoes', answers.whatItDoes)
       form.append('targetAudience', answers.targetAudience)

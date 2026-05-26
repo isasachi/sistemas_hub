@@ -75,7 +75,7 @@ export const useWizardStore = create<WizardState & WizardActions>((set) => ({
 
   setConfirmedCopy: (confirmedCopy) => set({ confirmedCopy, step: 4 }),
 
-  setImageUrl: (url) => set({ imageUrl: url, step: 5 }),
+  setImageUrl: (url) => set({ imageUrl: url }),
 
   resetFromStep: (step) => {
     const resets: Partial<WizardState> = { step }
