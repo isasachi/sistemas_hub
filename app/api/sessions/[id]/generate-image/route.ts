@@ -34,9 +34,14 @@ export async function POST(
         send({ status: 'building_prompt' })
         const contextForReasoning = [
           `=== REFERENCE ANALYSIS ===`,
+          `Format: ${refAnalysis.format.ratio} — ${refAnalysis.format.platform}`,
           `Physical position: ${refAnalysis.physicalPosition}`,
           `Layout: ${refAnalysis.layoutDescription}`,
+          `Composition: ${refAnalysis.composition.join(' | ')}`,
           `Style: ${refAnalysis.style}`,
+          `Colorimetry: ${refAnalysis.colorimetry}`,
+          `Typography: ${refAnalysis.typography}`,
+          `Persuasive logic: ${refAnalysis.persuasiveLogic}`,
           `Scene elements:`,
           `  People: ${JSON.stringify(refAnalysis.sceneElements.people)}`,
           `  Props: ${JSON.stringify(refAnalysis.sceneElements.props)}`,
