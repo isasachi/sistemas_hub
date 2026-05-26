@@ -60,6 +60,7 @@ Every text element: element name → exact text content. Specify font weight, ex
 Evaluate each scene element against targetAudience and whatItDoes:
 
 - Primary subject (person using/holding the product): if demographic doesn't match targetAudience, replace with correct description. Otherwise preserve exactly.
+- Secondary figures (babies, children, companions, bystanders not interacting with the product): if the product category does NOT involve family, parenting, or relationships — REMOVE them entirely. Fill the space with background continuation. Do not replace. Do not keep in background.
 - Props: remove any that don't belong to the product's category.
 - Competitor brand marks: remove all.
 - Setting: adapt only if it conflicts with the product.
