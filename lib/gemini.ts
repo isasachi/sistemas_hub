@@ -3,11 +3,8 @@ import { z } from 'zod'
 import fs from 'fs'
 import path from 'path'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const ai: ReturnType<typeof GoogleGenAI> = (GoogleGenAI as any)({ apiKey: process.env.GOOGLE_API_KEY! })
-
 function getAI() {
-  return ai
+  return new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY! })
 }
 
 export const SYSTEM_PROMPT = fs.readFileSync(

@@ -4,9 +4,9 @@ import { z } from 'zod'
 const mockGenerateContent = vi.fn()
 
 vi.mock('@google/genai', () => ({
-  GoogleGenAI: vi.fn(() => ({
-    models: { generateContent: mockGenerateContent },
-  })),
+  GoogleGenAI: vi.fn().mockImplementation(function () {
+    return { models: { generateContent: mockGenerateContent } }
+  }),
   Modality: { IMAGE: 'IMAGE' },
 }))
 
