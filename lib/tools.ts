@@ -12,6 +12,18 @@ export interface Tool {
 
 export const tools: Tool[] = [
   {
+    name: "Buscador de Productos",
+    slug: "buscador-productos",
+    description:
+      "Encuentra productos ganadores validados en LATAM que aún no están saturados en Perú.",
+    longDescription:
+      "Escribe un nicho y la herramienta te muestra productos que ya están funcionando en México, Colombia, Chile, Argentina y Ecuador, con su situación de competencia real en Perú y señales de validación (anuncios activos, días corriendo).",
+    icon: "PackageSearch",
+    accentColor: "#2dd4bf",
+    tag: "Nuevo",
+    tagStyle: "new",
+  },
+  {
     name: "Generador de Anuncios",
     slug: "generador-anuncios",
     description:

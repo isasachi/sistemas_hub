@@ -1,0 +1,91 @@
+import { z } from 'zod'
+
+// ─── Datos crudos del scraper (lo que va en ph_products.raw_data) ─────────────
+
+export const ProductRawDataSchema = z.object({
+  page_id: z.string(),
+  ad_id: z.string(),
+  advertiser_name: z.string(),
+  ad_count: z.number(),
+  days_running: z.number().nullable(),
+  oldest_date: z.string().nullable(),
+  found_keyword: z.string(),
+  found_country: z.string(),
+})
+export type ProductRawData = z.infer<typeof ProductRawDataSchema>
+
+// ─── Análisis de Anthropic (lo que va en ph_products.analysis) ────────────────
+// Escenarios de competencia en Perú:
+//   A = 0 competidores · B = 2-3 con pocos ads · C = varios activos · D = saturado
+export const PeScenario = z.enum(['A', 'B', 'C', 'D'])
+
+export const PeCompetitorSchema = z.object({
+  name: z.string(),
+  adCount: z.number(),
+})
+export type PeCompetitor = z.infer<typeof PeCompetitorSchema>
+
+export const ProductAnalysisSchema = z.object({
+  score: z.number().min(0).max(100),
+  productName: z.string(),       // producto concreto inferido (no el nombre de la página)
+  whatItIs: z.string(),          // una línea simple
+  problemSolved: z.string(),
+  attributes: z.array(z.string()),          // cuáles de los 7 atributos cumple
+  peScenario: PeScenario,
+  peCompetitors: z.array(PeCompetitorSchema),
+  priority: z.enum(['alta', 'media', 'descartado']),
+  reasoning: z.string(),         // por qué este score/prioridad
+})
+export type ProductAnalysis = z.infer<typeof ProductAnalysisSchema>
+
+// ─── Fila de ph_products tal como vuelve de Supabase ──────────────────────────
+
+export interface ProductRow {
+  id: string
+  niche: string
+  page_id: string | null
+  name: string | null
+  raw_data: ProductRawData
+  score: number | null
+  analysis: ProductAnalysis | null
+  scraped_at: string
+  analyzed_at: string | null
+}
+
+// ─── Lo que la ruta /search devuelve al frontend ──────────────────────────────
+// Solo metadatos — sin slides HTML.
+
+export interface ProductCard {
+  id: string
+  advertiserName: string
+  productName: string
+  whatIs: string
+  problemSolved: string
+  adCount: number
+  daysRunning: number | null
+  foundCountry: string
+  attributes: string[]
+  peScenario: z.infer<typeof PeScenario>
+  peCompetitors: PeCompetitor[]
+  priority: 'alta' | 'media' | 'descartado'
+  score: number
+  // Links a Meta Ads Library
+  adUrl: string
+  pageUrl: string
+}
+
+export interface SearchResponse {
+  niche: string
+  status: 'ready' | 'pending' | 'empty'
+  products: ProductCard[]
+  totalUnseen: number
+}
+
+// ─── Niche ────────────────────────────────────────────────────────────────────
+
+export interface NicheRow {
+  id: string
+  status: 'pending' | 'active'
+  last_scraped: string | null
+  product_count: number
+}
