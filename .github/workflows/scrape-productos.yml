@@ -1,0 +1,49 @@
+name: Buscador de Productos — scrape + análisis
+
+on:
+  schedule:
+    - cron: "0 6 */2 * *"   # cada 48h a las 6 AM UTC
+  workflow_dispatch:
+    inputs:
+      niche:
+        description: "Nicho específico (vacío = todos los pendientes/vencidos)"
+        required: false
+        default: ""
+
+# Concurrencia: una sola corrida a la vez para no duplicar trabajo.
+concurrency:
+  group: scrape-productos
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      # Para abaratar el análisis: descomentar y usar Haiku
+      # PH_ANTHROPIC_MODEL: claude-haiku-4-5-20251001
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      # ── Paso 1: scraping (sin LLM) ──
+      - name: Scrape
+        run: npx tsx scripts/scrape.ts ${{ github.event.inputs.niche && format('--niche {0}', github.event.inputs.niche) || '--all' }}
+
+      # ── Paso 2: análisis Anthropic en batch (solo productos sin score) ──
+      # Único punto donde se gasta Anthropic. Nunca corre en Vercel.
+      - name: Analyze
+        run: npx tsx scripts/analyze.ts ${{ github.event.inputs.niche && format('--niche {0}', github.event.inputs.niche) || '' }}
