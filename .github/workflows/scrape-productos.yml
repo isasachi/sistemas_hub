@@ -2,7 +2,7 @@ name: Buscador de Productos — scrape + análisis
 
 on:
   schedule:
-    - cron: "0 */6 * * *"   # cada 6h (0, 6, 12, 18 UTC)
+    - cron: "0 */12 * * *"   # cada 12h (0, 12 UTC)
   workflow_dispatch:
     inputs:
       niche:
@@ -20,7 +20,9 @@ jobs:
     # Self-hosted runner en la máquina de Isaac: Meta Ads Library sirve resultados
     # vacíos a las IPs de datacenter de GitHub (Azure). Necesita IP residencial.
     runs-on: self-hosted
-    timeout-minutes: 180
+    # En self-hosted los minutos no se cobran. --all tarda ~3-5h; 10h da headroom
+    # de sobra sin acercarse al cron de 12h (la concurrencia evita solapamientos).
+    timeout-minutes: 600
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
