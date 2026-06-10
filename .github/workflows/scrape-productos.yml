@@ -17,7 +17,9 @@ concurrency:
 
 jobs:
   scrape:
-    runs-on: ubuntu-latest
+    # Self-hosted runner en la máquina de Isaac: Meta Ads Library sirve resultados
+    # vacíos a las IPs de datacenter de GitHub (Azure). Necesita IP residencial.
+    runs-on: self-hosted
     timeout-minutes: 180
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -37,7 +39,9 @@ jobs:
         run: npm ci
 
       - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
+        # Sin --with-deps: el runner es tu máquina, las libs del sistema ya están
+        # instaladas (corres el scraper local). Evita pedir sudo en el runner.
+        run: npx playwright install chromium
 
       # ── Paso 1: scraping (sin LLM) ──
       - name: Scrape
