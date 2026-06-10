@@ -5,7 +5,7 @@
 // ⚠️ COSTO: este es el ÚNICO punto donde se llama a Anthropic. Procesa en batch
 // solo los productos sin analizar (score IS NULL). El resultado queda cacheado en
 // DB y las rutas de Vercel solo lo LEEN. Así el costo no escala con usuarios.
-import 'dotenv/config'
+import './bootstrap' // env + polyfill WebSocket — debe ir primero
 import {
   getProductsToAnalyze,
   getPeCompetitors,

@@ -1,7 +1,7 @@
 // CLI del scraper — corre en GitHub Actions.
 //   npx tsx scripts/scrape.ts --niche espalda
 //   npx tsx scripts/scrape.ts --all          (todos los nichos pendientes/vencidos)
-import 'dotenv/config'
+import './bootstrap' // env + polyfill WebSocket — debe ir primero
 import { scrapeNiche } from '../lib/product-hunter/scraper'
 import { getNichesToRefresh } from '../lib/product-hunter/db'
 import { ALL_NICHES } from '../lib/product-hunter/keywords'
