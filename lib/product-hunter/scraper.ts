@@ -65,6 +65,11 @@ async function navigateAndCapture(page: Page, url: string): Promise<unknown[]> {
     }
   } finally {
     page.off('response', collect)
+    if (rawResponses.length === 0) {
+      const title = await page.title()
+      const finalUrl = page.url()
+      console.error(`[DEBUG] 0 responses GraphQL — title="${title}" url=${finalUrl}`)
+    }
   }
 
   const captured: unknown[] = []
