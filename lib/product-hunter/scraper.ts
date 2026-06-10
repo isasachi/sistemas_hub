@@ -65,11 +65,6 @@ async function navigateAndCapture(page: Page, url: string): Promise<unknown[]> {
     }
   } finally {
     page.off('response', collect)
-    if (rawResponses.length === 0) {
-      const title = await page.title()
-      const finalUrl = page.url()
-      console.error(`[DEBUG] 0 responses GraphQL — title="${title}" url=${finalUrl}`)
-    }
   }
 
   const captured: unknown[] = []
@@ -84,6 +79,21 @@ async function navigateAndCapture(page: Page, url: string): Promise<unknown[]> {
       }
     } catch { /* body no legible */ }
   }
+
+  if (rawResponses.length === 0) {
+    const title = await page.title()
+    console.error(`[DEBUG] 0 GraphQL responses — title="${title}" url=${page.url()}`)
+  } else if (captured.length === 0) {
+    const sample = await rawResponses[0].text().catch(() => '(no legible)')
+    console.error(`[DEBUG] ${rawResponses.length} responses, 0 parseadas. Primeros 500 chars:\n${sample.slice(0, 500)}`)
+  } else {
+    const nodes = captured.flatMap((r) => scanAdNodes(r))
+    if (nodes.length === 0) {
+      const first = captured[0] as Record<string, unknown>
+      console.error(`[DEBUG] ${captured.length} JSONs parseados, 0 nodos. Keys: ${Object.keys(first).join(', ')}`)
+    }
+  }
+
   return captured
 }
 
