@@ -88,7 +88,8 @@ export async function POST(req: NextRequest) {
   if (!nicheRow) {
     await upsertNiche(niche, 'pending')
     await triggerNicheScrape(niche)
-    const payload: SearchResponse = { niche, status: 'pending', products: [], totalUnseen: 0 }
+    // queued: true → nicho genuinamente NUEVO (la UI dice "lo encolamos").
+    const payload: SearchResponse = { niche, status: 'pending', products: [], totalUnseen: 0, queued: true }
     const res = NextResponse.json(payload)
     if (setCookie) res.cookies.set(PH_USER_COOKIE, userId, { httpOnly: true, path: '/', maxAge: 60 * 60 * 24 * 365 })
     return res
@@ -96,6 +97,7 @@ export async function POST(req: NextRequest) {
 
   const rows = await getUnseenProducts(niche, userId, 20)
   const cards = rows.map(toCard).filter((c): c is ProductCard => c !== null)
+  // Ganadores frescos para el usuario (honesto: pasa reglas de oro + no visto en 7d)
   const totalUnseen = await countUnseenProducts(niche, userId)
 
   // Garantía de output: priorizar ganadores (alta/media). Si no hay ninguno,
@@ -104,11 +106,16 @@ export async function POST(req: NextRequest) {
   const winners = cards.filter((c) => c.priority !== 'descartado')
   const products = winners.length ? winners : cards
   const bestEffort = !winners.length && cards.length > 0
+  // El pool nunca se vacía (ph_unseen_products re-muestra lo visto): si hay
+  // ganadores en pantalla pero ninguno es fresco para el usuario, se lo decimos.
+  const allSeen = winners.length > 0 && totalUnseen === 0
 
-  // El nicho existe pero todavía no hay productos analizados → análisis en proceso.
+  // products vacío SOLO si el nicho existe pero aún no tiene productos
+  // analizados (scrapeado/en cola, análisis pendiente) — NO es un nicho nuevo,
+  // así que pending va SIN queued (la UI dice "analizando", no "encolado").
   const status: SearchResponse['status'] = products.length ? 'ready' : 'pending'
 
-  const payload: SearchResponse = { niche, status, products, totalUnseen, bestEffort }
+  const payload: SearchResponse = { niche, status, products, totalUnseen, bestEffort, allSeen }
   const res = NextResponse.json(payload)
   if (setCookie) res.cookies.set(PH_USER_COOKIE, userId, { httpOnly: true, path: '/', maxAge: 60 * 60 * 24 * 365 })
   return res

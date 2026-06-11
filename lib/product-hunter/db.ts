@@ -284,6 +284,9 @@ export async function resetNicheAnalysis(niche: string): Promise<number> {
 
 // ─── SERVE: lectura para el usuario (vía RPC, rápido, sin LLM) ─────────────────
 
+// Productos del nicho rankeados con penalización de "visto" (ver migración
+// 20260611_seen_economy): frescos-para-el-usuario primero, lo visto-hace-poco al
+// fondo y re-aparece tras 7 días. NO excluye → nunca vacío si hay inventario.
 export async function getUnseenProducts(
   niche: string,
   userId: string,
@@ -298,6 +301,8 @@ export async function getUnseenProducts(
   return (data as ProductRow[]) ?? []
 }
 
+// Cuántos GANADORES (alta/media + reglas de oro) son frescos para el usuario:
+// el "nuevos para ti" honesto de la UI. 0 = ya vio todos los recientes.
 export async function countUnseenProducts(niche: string, userId: string): Promise<number> {
   const { data, error } = await getDb().rpc('ph_count_unseen', {
     p_niche: niche,
@@ -309,9 +314,12 @@ export async function countUnseenProducts(niche: string, userId: string): Promis
 
 export async function markSeen(userId: string, productIds: string[]): Promise<void> {
   if (!productIds.length) return
-  const rows = productIds.map((id) => ({ user_id: userId, product_id: id }))
+  // seen_at SE ACTUALIZA al re-ver: resetea el reloj de re-aparición (7 días en
+  // ph_unseen_products). Por eso upsert sin ignoreDuplicates — actualiza la fila.
+  const now = new Date().toISOString()
+  const rows = productIds.map((id) => ({ user_id: userId, product_id: id, seen_at: now }))
   const { error } = await getDb()
     .from('ph_user_seen')
-    .upsert(rows, { onConflict: 'user_id,product_id', ignoreDuplicates: true })
+    .upsert(rows, { onConflict: 'user_id,product_id' })
   if (error) throw new Error(error.message)
 }

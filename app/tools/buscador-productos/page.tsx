@@ -116,8 +116,10 @@ export default function BuscadorProductos() {
       if (!res.ok) throw new Error(data.error ?? "Error en la búsqueda");
       setResult(data);
 
-      // Marcar como vistos los productos mostrados (no se repetirán en próximas búsquedas)
-      if (data.status === "ready" && data.products.length) {
+      // Marcar como vistos los mostrados (se hunden y reaparecen tras 7 días).
+      // NO marcamos los bestEffort: son candidatos de relleno (sin ganadores),
+      // no hay que "quemarlos" antes de que el análisis los promueva.
+      if (data.status === "ready" && !data.bestEffort && data.products.length) {
         fetch("/api/buscador-productos/seen", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -177,10 +179,21 @@ export default function BuscadorProductos() {
         {result?.status === "pending" && (
           <div className="text-center py-16">
             <PackageSearch className="w-10 h-10 mx-auto mb-3 text-[#475569]" />
-            <h3 className="text-[16px] font-bold text-[#f1f5f9] mb-1">Estamos preparando este nicho</h3>
-            <p className="text-[13px] text-[#94a3b8] max-w-[380px] mx-auto leading-[1.6]">
-              Aún no tenemos productos analizados para <span className="text-[#f1f5f9]">{result.niche}</span>. Ya pusimos el nicho en cola y lo estamos procesando — los primeros resultados suelen estar listos en unas horas. Vuelve más tarde.
-            </p>
+            {result.queued ? (
+              <>
+                <h3 className="text-[16px] font-bold text-[#f1f5f9] mb-1">Nicho nuevo en cola</h3>
+                <p className="text-[13px] text-[#94a3b8] max-w-[380px] mx-auto leading-[1.6]">
+                  <span className="text-[#f1f5f9]">{result.niche}</span> es nuevo para nosotros. Ya lo pusimos en cola y el buscador lo está procesando — los primeros resultados suelen estar listos en unas horas. Vuelve más tarde.
+                </p>
+              </>
+            ) : (
+              <>
+                <h3 className="text-[16px] font-bold text-[#f1f5f9] mb-1">Analizando este nicho</h3>
+                <p className="text-[13px] text-[#94a3b8] max-w-[380px] mx-auto leading-[1.6]">
+                  Ya tenemos anuncios de <span className="text-[#f1f5f9]">{result.niche}</span> y los estamos analizando. Los productos validados aparecerán acá en breve — vuelve más tarde.
+                </p>
+              </>
+            )}
           </div>
         )}
 
@@ -191,8 +204,16 @@ export default function BuscadorProductos() {
                 Aún no encontramos ganadores validados para este nicho — te mostramos los mejores candidatos disponibles mientras ampliamos la búsqueda a más países y keywords.
               </div>
             )}
+            {result.allSeen && !result.bestEffort && (
+              <div className="bg-[rgba(45,212,191,0.06)] border border-[rgba(45,212,191,0.18)] rounded-xl p-4 text-[13px] text-[#5eead4] leading-[1.6]">
+                Ya viste los ganadores más recientes de este nicho — te re-mostramos los mejores mientras llegan nuevos en las próximas corridas.
+              </div>
+            )}
             <div className="flex items-center justify-between">
-              <span className="text-[12px] text-[#475569]">{result.products.length} productos · {result.totalUnseen} sin ver en total</span>
+              <span className="text-[12px] text-[#475569]">
+                {result.products.length} productos
+                {!result.bestEffort && result.totalUnseen > 0 && ` · ${result.totalUnseen} nuevos para ti`}
+              </span>
             </div>
             {result.products.map((p) => <ProductCardView key={p.id} p={p} />)}
           </div>
