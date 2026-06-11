@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { ProductRow, NicheRow, StoredAnalysis } from './types'
 import { prescore } from './prescore'
+import { sanitizeJsonDeep, cleanJsonText } from './json-clean'
 
 // Cliente Supabase con service role (bypassa RLS), igual que lib/db.ts del hub.
 // Se usa tanto desde rutas Next como desde los scripts de GitHub Actions.
@@ -121,8 +122,10 @@ export async function upsertProducts(products: UpsertProduct[]): Promise<void> {
     id: p.id,
     niche: p.niche,
     page_id: p.page_id,
-    name: p.name,
-    raw_data: p.raw_data,
+    // Sanitizado jsonb: los creativos truncados pueden traer lone surrogates
+    // (emoji partido por slice) que Postgres rechaza. Ver json-clean.ts.
+    name: cleanJsonText(p.name),
+    raw_data: sanitizeJsonDeep(p.raw_data),
     scraped_at: now,
   }))
   // ignoreDuplicates:false + onConflict:id, pero sin tocar score/analysis:
@@ -175,9 +178,11 @@ export async function saveProductAnalysis(
   score: number,
   analysis: StoredAnalysis
 ): Promise<void> {
+  // Sanitizado jsonb: peValidation lleva nombres de anunciantes scrapeados en
+  // vivo, que pueden traer lone surrogates igual que los creativos.
   const { error } = await getDb()
     .from('ph_products')
-    .update({ score, analysis, analyzed_at: new Date().toISOString() })
+    .update({ score, analysis: sanitizeJsonDeep(analysis), analyzed_at: new Date().toISOString() })
     .eq('id', productId)
   if (error) throw new Error(error.message)
 }
