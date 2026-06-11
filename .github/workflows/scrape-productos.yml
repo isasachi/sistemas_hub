@@ -9,6 +9,10 @@ on:
         description: "Nicho específico (vacío = todos los pendientes/vencidos)"
         required: false
         default: ""
+  # Cold start on-demand: el route /search dispara este evento cuando un usuario
+  # consulta un nicho nuevo (lib/product-hunter/github.ts).
+  repository_dispatch:
+    types: [scrape-niche]
 
 # Concurrencia: una sola corrida a la vez para no duplicar trabajo.
 concurrency:
@@ -27,6 +31,8 @@ jobs:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      # Nicho objetivo: input manual o payload del repository_dispatch (cold start)
+      NICHE: ${{ github.event.inputs.niche || github.event.client_payload.niche || '' }}
       # Para abaratar el análisis: descomentar y usar Haiku
       # PH_ANTHROPIC_MODEL: claude-haiku-4-5-20251001
     steps:
@@ -45,17 +51,52 @@ jobs:
         # instaladas (corres el scraper local). Evita pedir sudo en el runner.
         run: npx playwright install chromium
 
-      # ── Paso 1: scraping (sin LLM) ──
+      # ── Paso 1: scraping (la única llamada LLM aquí es la expansión de
+      #    keywords de nichos nuevos: una llamada Haiku por nicho, cacheada) ──
       - name: Scrape
-        run: npx tsx scripts/scrape.ts ${{ github.event.inputs.niche && format('--niche {0}', github.event.inputs.niche) || '--all' }}
+        run: |
+          if [ -n "$NICHE" ]; then
+            npx tsx scripts/scrape.ts --niche "$NICHE"
+          else
+            npx tsx scripts/scrape.ts --all
+          fi
 
       # ── Paso 2: análisis Anthropic en batch (solo productos sin score) ──
-      # Único punto donde se gasta Anthropic. Nunca corre en Vercel.
+      # Único punto donde se gasta Anthropic en volumen. Nunca corre en Vercel.
       - name: Analyze
-        run: npx tsx scripts/analyze.ts ${{ github.event.inputs.niche && format('--niche {0}', github.event.inputs.niche) || '' }}
+        run: |
+          if [ -n "$NICHE" ]; then
+            npx tsx scripts/analyze.ts --niche "$NICHE"
+          else
+            npx tsx scripts/analyze.ts
+          fi
+
+      # ── Paso 2.5: garantía de output — nichos sin ganadores se re-scrapean
+      #    una vez en US/ES (fallback del modelo original, $0 LLM) ──
+      - name: Expand uncovered niches
+        run: |
+          if [ -n "$NICHE" ]; then
+            npx tsx scripts/expand-uncovered.ts --niche "$NICHE"
+          else
+            npx tsx scripts/expand-uncovered.ts
+          fi
+
+      # ── Paso 2.6: re-análisis de lo que trajo la ampliación (no-op si nada) ──
+      - name: Analyze expanded
+        run: |
+          if [ -n "$NICHE" ]; then
+            npx tsx scripts/analyze.ts --niche "$NICHE"
+          else
+            npx tsx scripts/analyze.ts
+          fi
 
       # ── Paso 3: validación PE en vivo (solo candidatos alta/media, $0 LLM) ──
       # Busca los peSearchTerms de cada candidato prometedor en Meta filtrando
       # por Perú y reclasifica el escenario con competidores reales de hoy.
       - name: Validate PE (live)
-        run: npx tsx scripts/validate-pe.ts ${{ github.event.inputs.niche && format('--niche {0}', github.event.inputs.niche) || '' }}
+        run: |
+          if [ -n "$NICHE" ]; then
+            npx tsx scripts/validate-pe.ts --niche "$NICHE"
+          else
+            npx tsx scripts/validate-pe.ts
+          fi

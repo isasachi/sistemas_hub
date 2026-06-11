@@ -108,6 +108,9 @@ export interface SearchResponse {
   status: 'ready' | 'pending' | 'empty'
   products: ProductCard[]
   totalUnseen: number
+  // true cuando no hay ganadores (alta/media) y se muestran los mejores
+  // candidatos disponibles por score — la UI lo etiqueta como tal.
+  bestEffort?: boolean
 }
 
 // ─── Niche ────────────────────────────────────────────────────────────────────
@@ -117,4 +120,8 @@ export interface NicheRow {
   status: 'pending' | 'active'
   last_scraped: string | null
   product_count: number
+  // Keywords expandidas (≥15, modelo original) — seed estático o LLM en CI.
+  keywords: string[] | null
+  // true si ya corrió la pasada ampliada US/ES (garantía de output).
+  expanded: boolean
 }

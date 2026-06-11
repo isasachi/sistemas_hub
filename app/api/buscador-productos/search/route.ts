@@ -6,6 +6,7 @@ import {
   upsertNiche,
 } from '@/lib/product-hunter/db'
 import { readUserId, newUserId, PH_USER_COOKIE } from '@/lib/product-hunter/session'
+import { triggerNicheScrape } from '@/lib/product-hunter/github'
 import type { ProductRow, ProductCard, SearchResponse } from '@/lib/product-hunter/types'
 
 // ⚠️ Esta ruta SOLO lee de Supabase. No llama a Anthropic ni corre Playwright,
@@ -46,7 +47,7 @@ export async function POST(req: NextRequest) {
   try { body = await req.json() } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
-  const niche = body.niche?.trim().toLowerCase()
+  const niche = body.niche?.trim().toLowerCase().replace(/\s+/g, ' ')
   if (!niche) return NextResponse.json({ error: 'Falta el nicho' }, { status: 400 })
 
   // Identidad del usuario (pool compartido, solo para no repetir productos vistos)
@@ -57,9 +58,12 @@ export async function POST(req: NextRequest) {
   const nicheRow = await getNicheStatus(niche)
 
   // Cold start: el nicho no existe. Lo encolamos como pending (NO scrapeamos aquí,
-  // Vercel no puede correr Playwright) y el cron lo levantará.
+  // Vercel no puede correr Playwright) y disparamos el workflow vía GitHub API
+  // para que el runner lo levante en minutos; si el dispatch falla o no está
+  // configurado, el cron de 12h lo levanta igual.
   if (!nicheRow) {
     await upsertNiche(niche, 'pending')
+    await triggerNicheScrape(niche)
     const payload: SearchResponse = { niche, status: 'pending', products: [], totalUnseen: 0 }
     const res = NextResponse.json(payload)
     if (setCookie) res.cookies.set(PH_USER_COOKIE, userId, { httpOnly: true, path: '/', maxAge: 60 * 60 * 24 * 365 })
@@ -70,10 +74,17 @@ export async function POST(req: NextRequest) {
   const cards = rows.map(toCard).filter((c): c is ProductCard => c !== null)
   const totalUnseen = await countUnseenProducts(niche, userId)
 
-  // El nicho existe pero todavía no hay productos analizados → análisis en proceso.
-  const status: SearchResponse['status'] = cards.length ? 'ready' : 'pending'
+  // Garantía de output: priorizar ganadores (alta/media). Si no hay ninguno,
+  // mostrar los mejores candidatos por score con la etiqueta bestEffort en vez
+  // de una respuesta vacía (el pipeline amplía la red en paralelo vía CI).
+  const winners = cards.filter((c) => c.priority !== 'descartado')
+  const products = winners.length ? winners : cards
+  const bestEffort = !winners.length && cards.length > 0
 
-  const payload: SearchResponse = { niche, status, products: cards, totalUnseen }
+  // El nicho existe pero todavía no hay productos analizados → análisis en proceso.
+  const status: SearchResponse['status'] = products.length ? 'ready' : 'pending'
+
+  const payload: SearchResponse = { niche, status, products, totalUnseen, bestEffort }
   const res = NextResponse.json(payload)
   if (setCookie) res.cookies.set(PH_USER_COOKIE, userId, { httpOnly: true, path: '/', maxAge: 60 * 60 * 24 * 365 })
   return res

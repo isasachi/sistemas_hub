@@ -14,6 +14,7 @@ import {
   getProductsToAnalyze,
   getPeCompetitors,
   saveProductAnalysis,
+  getActiveNiches,
 } from '../lib/product-hunter/db'
 import {
   analyzeProduct,
@@ -84,7 +85,12 @@ async function collectNiche(niche: string): Promise<{ entries: BatchEntry[]; nam
 async function main() {
   const args = process.argv.slice(2)
   const nicheIdx = args.indexOf('--niche')
-  const niches = nicheIdx !== -1 && args[nicheIdx + 1] ? [args[nicheIdx + 1]] : ALL_NICHES
+  // Sin --niche: todos los nichos activos del DB (incluye los creados por
+  // usuarios, que el mapa estático ALL_NICHES no conoce).
+  const niches =
+    nicheIdx !== -1 && args[nicheIdx + 1]
+      ? [args[nicheIdx + 1]]
+      : await getActiveNiches().then((rows) => (rows.length ? rows.map((n) => n.id) : ALL_NICHES))
 
   // Un solo batch para todos los nichos de la corrida (menos overhead de polling)
   const entries: BatchEntry[] = []

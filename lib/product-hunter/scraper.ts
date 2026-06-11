@@ -1,5 +1,10 @@
 import { chromium, type Page, type Response } from 'playwright'
-import { loadKeywords, COUNTRIES } from './keywords'
+import {
+  seedKeywords,
+  COUNTRIES,
+  FALLBACK_COUNTRIES,
+  MIN_CANDIDATES_BEFORE_FALLBACK,
+} from './keywords'
 import { upsertProducts, updateNicheAfterScrape, upsertNiche } from './db'
 import type { CreativeSnippet } from './types'
 
@@ -353,9 +358,21 @@ export async function launchScraperBrowser() {
   return { browser, page }
 }
 
-export async function scrapeNiche(niche: string): Promise<void> {
-  const keywords = loadKeywords(niche)
-  console.log(`\nNiche: "${niche}"  |  Keywords: ${keywords.join(', ')}\n`)
+export interface ScrapeOptions {
+  // Keywords a buscar. Default: seed estático del nicho, o el nicho a secas.
+  // scripts/scrape.ts pasa aquí las keywords expandidas (DB/LLM).
+  keywords?: string[]
+  // Países a recorrer. Default: LATAM+PE con fallback automático a US/ES si la
+  // pasada inicial junta pocos candidatos. Pasar países explícitos (ej. solo
+  // US/ES en la pasada de garantía) desactiva el fallback interno.
+  countries?: readonly string[]
+}
+
+export async function scrapeNiche(niche: string, opts: ScrapeOptions = {}): Promise<void> {
+  const keywords = opts.keywords ?? seedKeywords(niche) ?? [niche]
+  const countries = opts.countries ?? COUNTRIES
+  const useFallback = !opts.countries
+  console.log(`\nNiche: "${niche}"  |  ${keywords.length} keywords: ${keywords.join(', ')}\n`)
 
   const { browser, page } = await launchScraperBrowser()
 
@@ -364,10 +381,24 @@ export async function scrapeNiche(niche: string): Promise<void> {
     const candidates: Candidate[] = []
 
     console.log('─── Fase 1: recolectando candidatos ───')
-    for (const country of COUNTRIES) {
+    for (const country of countries) {
       for (const keyword of keywords) {
         const found = await collectFromSearch(page, keyword, country, seen)
         candidates.push(...found.map((f) => ({ ...f, keyword, country })))
+      }
+    }
+
+    // Fallback del modelo original: si LATAM no dio suficiente data, ampliar
+    // a US/ES con las mismas keywords (el dedupe por page_id ya está en `seen`).
+    if (useFallback && candidates.length < MIN_CANDIDATES_BEFORE_FALLBACK) {
+      console.log(
+        `\nSolo ${candidates.length} candidatos en LATAM (<${MIN_CANDIDATES_BEFORE_FALLBACK}) — ampliando a ${FALLBACK_COUNTRIES.join(', ')}`
+      )
+      for (const country of FALLBACK_COUNTRIES) {
+        for (const keyword of keywords) {
+          const found = await collectFromSearch(page, keyword, country, seen)
+          candidates.push(...found.map((f) => ({ ...f, keyword, country })))
+        }
       }
     }
     console.log(`\nTotal candidatos únicos: ${candidates.length}\n`)

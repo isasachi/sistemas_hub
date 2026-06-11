@@ -21,6 +21,7 @@ import {
   getProductsToValidatePe,
   getStrongDiscardsToValidate,
   saveProductAnalysis,
+  getActiveNiches,
 } from '../lib/product-hunter/db'
 import { ALL_NICHES } from '../lib/product-hunter/keywords'
 import type { PeCompetitor, PeValidation, ProductRow } from '../lib/product-hunter/types'
@@ -144,7 +145,12 @@ async function validateNiche(page: Page, niche: string) {
 async function main() {
   const args = process.argv.slice(2)
   const nicheIdx = args.indexOf('--niche')
-  const niches = nicheIdx !== -1 && args[nicheIdx + 1] ? [args[nicheIdx + 1]] : ALL_NICHES
+  // Sin --niche: todos los nichos activos del DB (incluye los creados por
+  // usuarios, que el mapa estático ALL_NICHES no conoce).
+  const niches =
+    nicheIdx !== -1 && args[nicheIdx + 1]
+      ? [args[nicheIdx + 1]]
+      : await getActiveNiches().then((rows) => (rows.length ? rows.map((n) => n.id) : ALL_NICHES))
 
   const { browser, page } = await launchScraperBrowser()
   try {

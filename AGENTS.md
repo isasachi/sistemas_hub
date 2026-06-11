@@ -31,13 +31,21 @@ GitHub Actions (cron 48h)          Supabase                Vercel (Next.js)
   scripts/analyze.ts  ──score───►  (score/analysis)         (solo lectura, ~200ms)
 ```
 
-- **`lib/product-hunter/`** — `scraper.ts` (Playwright), `anthropic.ts` (análisis), `db.ts` (Supabase), `types.ts`, `keywords.ts`, `session.ts`.
-- **Schema:** `supabase/migrations/20260609_product_hunter.sql` (tablas `ph_*` + RPCs). Aplicar en Supabase antes de usar.
-- **Workflow:** `.github/workflows/scrape-productos.yml` (scrape → analyze). Secrets: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`.
+- **`lib/product-hunter/`** — `scraper.ts` (Playwright), `anthropic.ts` (análisis), `keyword-expansion.ts` (expansión LLM de keywords), `competitors.ts`, `github.ts` (dispatch on-demand), `db.ts` (Supabase), `types.ts`, `keywords.ts`, `session.ts`.
+- **Schema:** `supabase/migrations/20260609_product_hunter.sql` + `20260611_niche_keywords.sql` (tablas `ph_*` + RPCs). Aplicar en Supabase antes de usar.
+- **Workflow:** `.github/workflows/scrape-productos.yml` (scrape → analyze → expand-uncovered → analyze → validate-pe). Secrets: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`. Env de Vercel para cold start on-demand: `GITHUB_REPO`, `GITHUB_DISPATCH_TOKEN`.
+
+**Garantía de output (regla del modelo original):** la tool debe devolver productos ganadores para TODO nicho consultado.
+
+1. **Expansión de keywords (≥15, 4 direcciones: síntomas · zonas · situaciones · soluciones).** Un nicho nuevo nunca se busca con su keyword literal: `scripts/scrape.ts` resuelve keywords en orden cache DB (`ph_niches.keywords`) → seed estático (`keywords.ts`) → expansión LLM (Haiku, `lib/prompts/expansion-keywords.md`, una llamada por nicho, cacheada).
+2. **Fallback de países.** Si la pasada LATAM junta <30 candidatos únicos, el scraper repite las keywords en US/ES (`FALLBACK_COUNTRIES`, como el agente original).
+3. **Ampliación post-análisis.** `scripts/expand-uncovered.ts`: si un nicho analizado quedó sin ganadores (0 alta/media frescos), re-scrapea una vez en US/ES (`ph_niches.expanded` evita repetirlo) y el workflow re-analiza.
+4. **Best-effort en el route.** `search` prioriza ganadores; si no hay, devuelve los mejores candidatos por score con `bestEffort: true` (la UI los etiqueta). Nunca respuesta vacía para un nicho ya scrapeado.
+5. **Cold start on-demand.** Un nicho nuevo dispara el workflow vía `repository_dispatch` (`lib/product-hunter/github.ts`); el cron de 12h sigue siendo el respaldo. Los scripts de CI iteran nichos desde el DB (`getActiveNiches`), no desde el mapa estático.
 
 **⚠️ REGLAS DE COSTO — no romper (esto fue requisito explícito del usuario):**
 
-1. **Anthropic SOLO en batch en GitHub Actions.** `lib/product-hunter/anthropic.ts` se importa únicamente desde `scripts/analyze.ts`. NINGUNA ruta de Vercel puede importarlo. Análisis en el path de request = costo x100.
+1. **Anthropic SOLO en GitHub Actions.** `lib/product-hunter/anthropic.ts` se importa únicamente desde `scripts/analyze.ts` (análisis en batch) y `lib/product-hunter/keyword-expansion.ts` únicamente desde `scripts/scrape.ts` (una llamada Haiku por nicho nuevo, cacheada en DB). NINGUNA ruta de Vercel puede importar ninguno de los dos. Análisis en el path de request = costo x100.
 2. **Vercel solo LEE de Supabase.** Las rutas `search`/`seen` no llaman LLM ni corren Playwright (respeta el timeout de 10s de Vercel Hobby).
 3. **Cada producto se analiza una sola vez.** `getProductsToAnalyze` filtra `score IS NULL`; el re-scrape preserva `score`/`analysis` (Supabase upsert no toca columnas ausentes del payload).
 4. **Cold start no scrapea inline.** Si el nicho no existe, `search` lo registra como `pending` y el cron lo levanta. Vercel no puede correr Playwright.

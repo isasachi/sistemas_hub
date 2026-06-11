@@ -179,13 +179,18 @@ export default function BuscadorProductos() {
             <PackageSearch className="w-10 h-10 mx-auto mb-3 text-[#475569]" />
             <h3 className="text-[16px] font-bold text-[#f1f5f9] mb-1">Estamos preparando este nicho</h3>
             <p className="text-[13px] text-[#94a3b8] max-w-[380px] mx-auto leading-[1.6]">
-              Aún no tenemos productos analizados para <span className="text-[#f1f5f9]">{result.niche}</span>. Nuestro sistema lo procesará en la próxima actualización (cada 48h). Vuelve pronto.
+              Aún no tenemos productos analizados para <span className="text-[#f1f5f9]">{result.niche}</span>. Ya pusimos el nicho en cola y lo estamos procesando — los primeros resultados suelen estar listos en unas horas. Vuelve más tarde.
             </p>
           </div>
         )}
 
         {result?.status === "ready" && (
           <div className="flex flex-col gap-4">
+            {result.bestEffort && (
+              <div className="bg-[rgba(245,158,11,0.08)] border border-[rgba(245,158,11,0.2)] rounded-xl p-4 text-[13px] text-[#fbbf24] leading-[1.6]">
+                Aún no encontramos ganadores validados para este nicho — te mostramos los mejores candidatos disponibles mientras ampliamos la búsqueda a más países y keywords.
+              </div>
+            )}
             <div className="flex items-center justify-between">
               <span className="text-[12px] text-[#475569]">{result.products.length} productos · {result.totalUnseen} sin ver en total</span>
             </div>

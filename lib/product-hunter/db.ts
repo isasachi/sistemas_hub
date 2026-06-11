@@ -39,6 +39,48 @@ export async function updateNicheAfterScrape(niche: string, productCount: number
   if (error) throw new Error(error.message)
 }
 
+// Guarda las keywords expandidas del nicho (cache: una expansión por nicho).
+// Upsert: el nicho puede no existir aún cuando se corre --niche a mano.
+export async function saveNicheKeywords(niche: string, keywords: string[]): Promise<void> {
+  const { error } = await getDb()
+    .from('ph_niches')
+    .upsert({ id: niche, keywords }, { onConflict: 'id' })
+  if (error) throw new Error(error.message)
+}
+
+// Marca que el nicho ya corrió la pasada ampliada US/ES (garantía de output).
+export async function markNicheExpanded(niche: string): Promise<void> {
+  const { error } = await getDb()
+    .from('ph_niches')
+    .update({ expanded: true })
+    .eq('id', niche)
+  if (error) throw new Error(error.message)
+}
+
+// Ganadores (alta/media) frescos del nicho — para decidir si ampliar la red.
+export async function countNicheWinners(niche: string): Promise<number> {
+  const freshAfter = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+  const { count, error } = await getDb()
+    .from('ph_products')
+    .select('id', { count: 'exact', head: true })
+    .eq('niche', niche)
+    .gt('scraped_at', freshAfter)
+    .in('analysis->>priority', ['alta', 'media'])
+  if (error) throw new Error(error.message)
+  return count ?? 0
+}
+
+// Todos los nichos activos — los scripts de CI iteran sobre esto (no sobre el
+// mapa estático de keywords.ts, que no conoce los nichos creados por usuarios).
+export async function getActiveNiches(): Promise<NicheRow[]> {
+  const { data, error } = await getDb()
+    .from('ph_niches')
+    .select('*')
+    .eq('status', 'active')
+  if (error) throw new Error(error.message)
+  return (data as NicheRow[]) ?? []
+}
+
 // Para el cron: nichos pendientes o vencidos (TTL 30 días).
 export async function getNichesToRefresh(): Promise<NicheRow[]> {
   const staleBefore = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
