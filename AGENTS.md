@@ -47,6 +47,7 @@ GitHub Actions (cron 48h)          Supabase                Vercel (Next.js)
 3. **Ampliación post-análisis.** `scripts/expand-uncovered.ts`: si un nicho analizado quedó sin ganadores (0 alta/media frescos), re-scrapea una vez en US/ES (`ph_niches.expanded` evita repetirlo) y el workflow re-analiza.
 4. **Best-effort en el route.** `search` prioriza ganadores; si no hay, devuelve los mejores candidatos por score con `bestEffort: true` (la UI los etiqueta). Nunca respuesta vacía para un nicho ya scrapeado.
 5. **Cold start on-demand.** Un nicho nuevo dispara el workflow vía `repository_dispatch` (`lib/product-hunter/github.ts`); el cron de 12h sigue siendo el respaldo. Los scripts de CI iteran nichos desde el DB (`getActiveNiches`), no desde el mapa estático.
+6. **Resolución de nicho antes del cold start.** `search` resuelve la consulta contra los nichos existentes (`lib/product-hunter/niche-match.ts`): match exacto del id, o la consulta contiene una keyword expandida / el id de un nicho (con tolerancia plural y acentos). "rodillera" o "dolor rodilla" resuelven al nicho `rodilla` en vez de crear un duplicado y disparar un scrape redundante. Precision-first: una consulta genuinamente nueva no matchea y sigue el cold start normal.
 
 **⚠️ REGLAS DE COSTO — no romper (esto fue requisito explícito del usuario):**
 

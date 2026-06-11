@@ -71,6 +71,15 @@ export async function countNicheWinners(niche: string): Promise<number> {
   return count ?? 0
 }
 
+// Todos los nichos (id + keywords, cualquier status) — para resolver la consulta
+// del usuario a un nicho existente antes del cold start (niche-match.ts).
+// Incluye pending: una variación de un nicho en cola no debe crear un duplicado.
+export async function getAllNicheKeywords(): Promise<Pick<NicheRow, 'id' | 'keywords'>[]> {
+  const { data, error } = await getDb().from('ph_niches').select('id, keywords')
+  if (error) throw new Error(error.message)
+  return (data as Pick<NicheRow, 'id' | 'keywords'>[]) ?? []
+}
+
 // Todos los nichos activos — los scripts de CI iteran sobre esto (no sobre el
 // mapa estático de keywords.ts, que no conoce los nichos creados por usuarios).
 export async function getActiveNiches(): Promise<NicheRow[]> {

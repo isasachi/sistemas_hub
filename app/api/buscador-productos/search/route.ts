@@ -3,8 +3,10 @@ import {
   getUnseenProducts,
   countUnseenProducts,
   getNicheStatus,
+  getAllNicheKeywords,
   upsertNiche,
 } from '@/lib/product-hunter/db'
+import { matchNiche } from '@/lib/product-hunter/niche-match'
 import { readUserId, newUserId, PH_USER_COOKIE } from '@/lib/product-hunter/session'
 import { triggerNicheScrape } from '@/lib/product-hunter/github'
 import type { ProductRow, ProductCard, SearchResponse } from '@/lib/product-hunter/types'
@@ -47,20 +49,32 @@ export async function POST(req: NextRequest) {
   try { body = await req.json() } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
-  const niche = body.niche?.trim().toLowerCase().replace(/\s+/g, ' ')
-  if (!niche) return NextResponse.json({ error: 'Falta el nicho' }, { status: 400 })
+  const query = body.niche?.trim().toLowerCase().replace(/\s+/g, ' ')
+  if (!query) return NextResponse.json({ error: 'Falta el nicho' }, { status: 400 })
 
   // Identidad del usuario (pool compartido, solo para no repetir productos vistos)
   let userId = await readUserId()
   let setCookie = false
   if (!userId) { userId = newUserId(); setCookie = true }
 
-  const nicheRow = await getNicheStatus(niche)
+  // Resolución de nicho: match exacto, o la consulta contiene una keyword/id de
+  // un nicho existente ("rodillera", "dolor rodilla" → "rodilla" — esas
+  // variaciones SON keywords expandidas del nicho en ph_niches.keywords).
+  // Sin esto, cada variación crearía un nicho duplicado y un scrape redundante.
+  let niche = query
+  let nicheRow = await getNicheStatus(query)
+  if (!nicheRow) {
+    const matched = matchNiche(query, await getAllNicheKeywords())
+    if (matched) {
+      niche = matched
+      nicheRow = await getNicheStatus(matched)
+    }
+  }
 
-  // Cold start: el nicho no existe. Lo encolamos como pending (NO scrapeamos aquí,
-  // Vercel no puede correr Playwright) y disparamos el workflow vía GitHub API
-  // para que el runner lo levante en minutos; si el dispatch falla o no está
-  // configurado, el cron de 12h lo levanta igual.
+  // Cold start: ni el nicho ni una variación conocida existen. Lo encolamos como
+  // pending (NO scrapeamos aquí, Vercel no puede correr Playwright) y disparamos
+  // el workflow vía GitHub API para que el runner lo levante en minutos; si el
+  // dispatch falla o no está configurado, el cron de 12h lo levanta igual.
   if (!nicheRow) {
     await upsertNiche(niche, 'pending')
     await triggerNicheScrape(niche)
