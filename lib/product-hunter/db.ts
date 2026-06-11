@@ -204,6 +204,30 @@ export async function getStrongDiscardsToValidate(niche: string, limit = 10): Pr
   return (data as ProductRow[]) ?? []
 }
 
+// Países donde el nicho tiene más productos ganadores (alta/media), excluyendo PE.
+// Usado en scrape.ts para seleccionar los 2 mejores países de descubrimiento.
+// Para nichos nuevos sin historial devuelve [] → el caller usa defaults.
+export async function getTopCountriesForNiche(niche: string, limit = 2): Promise<string[]> {
+  // Seleccionamos solo el campo que necesitamos del JSONB para no traer raw_data completo.
+  const { data, error } = await getDb()
+    .from('ph_products')
+    .select('id, raw_data')
+    .eq('niche', niche)
+    .in('analysis->>priority', ['alta', 'media'])
+    .neq('raw_data->>found_country', 'PE')
+  if (error) throw new Error(error.message)
+
+  const counts: Record<string, number> = {}
+  for (const row of (data ?? []) as Array<{ raw_data: { found_country?: string } }>) {
+    const c = row.raw_data?.found_country
+    if (c) counts[c] = (counts[c] ?? 0) + 1
+  }
+  return Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([country]) => country)
+}
+
 // Borra score/analysis de un nicho para re-analizarlo (ej. tras cambiar el prompt).
 export async function resetNicheAnalysis(niche: string): Promise<number> {
   const { data, error } = await getDb()

@@ -9,9 +9,18 @@
 // nichos nuevos — el análisis sigue siendo exclusivo de scripts/analyze.ts.
 import './bootstrap' // env + polyfill WebSocket — debe ir primero
 import { scrapeNiche } from '../lib/product-hunter/scraper'
-import { getNichesToRefresh, getNicheStatus, saveNicheKeywords } from '../lib/product-hunter/db'
+import {
+  getNichesToRefresh,
+  getNicheStatus,
+  saveNicheKeywords,
+  getTopCountriesForNiche,
+} from '../lib/product-hunter/db'
 import { seedKeywords, ALL_NICHES } from '../lib/product-hunter/keywords'
 import { expandNicheKeywords } from '../lib/product-hunter/keyword-expansion'
+
+// Países de descubrimiento cuando el nicho no tiene historial en DB.
+// MX y CO son los mercados LATAM más grandes y activos en e-commerce.
+const DEFAULT_DISCOVERY = ['MX', 'CO'] as const
 
 async function resolveKeywords(niche: string): Promise<string[]> {
   const row = await getNicheStatus(niche)
@@ -28,6 +37,27 @@ async function resolveKeywords(niche: string): Promise<string[]> {
   await saveNicheKeywords(niche, expanded)
   console.log(`[${niche}] ${expanded.length} keywords generadas: ${expanded.join(', ')}`)
   return expanded
+}
+
+// Selecciona los 2 países de descubrimiento óptimos para el nicho más PE.
+//
+// Lógica: usa los 2 países donde el nicho ya tiene más productos ganadores
+// (alta/media en el análisis previo). Para nichos nuevos sin historial, usa
+// MX + CO (los mercados LATAM con mayor volumen de e-commerce).
+// PE siempre se añade al final — es el pool de competidores locales.
+async function resolveCountries(niche: string): Promise<string[]> {
+  const top = await getTopCountriesForNiche(niche, 2)
+
+  // Completar con defaults si el historial no alcanza 2 países
+  const discovery = [...top]
+  for (const def of DEFAULT_DISCOVERY) {
+    if (discovery.length >= 2) break
+    if (!discovery.includes(def)) discovery.push(def)
+  }
+
+  const source = top.length >= 2 ? 'historial DB' : top.length === 1 ? 'DB + default' : 'defaults'
+  console.log(`[${niche}] países: ${[...discovery, 'PE'].join(', ')} (${source})`)
+  return [...discovery, 'PE']
 }
 
 async function main() {
@@ -48,7 +78,8 @@ async function main() {
 
   for (const niche of niches) {
     const keywords = await resolveKeywords(niche)
-    await scrapeNiche(niche, { keywords })
+    const countries = await resolveCountries(niche)
+    await scrapeNiche(niche, { keywords, countries })
   }
 }
 
