@@ -21,11 +21,23 @@ function normalize(s: string): string {
     .replace(/\s+/g, ' ')
 }
 
-// Igualdad de tokens con tolerancia de plural simple es/-s ("rodilleras" ≈ "rodillera").
+// Igualdad de tokens con tolerancia de plural (es/-s) y de derivación por raíz:
+// dos tokens matchean si comparten un prefijo que cubre casi toda la palabra
+// corta ("rodilla" ≈ "rodillera", "acne" ≈ "acnegenico"). Prefijo y NO substring
+// libre: "peso" ⊂ "espeso" o "pies" ⊂ "espies" serían falsos positivos por
+// coincidencia interna. El umbral de 4 chars + cobertura shorter-1 mantiene
+// fuera pares como pies/piel (raíz común 3) o cama/camiseta.
+const MIN_STEM = 4
+
 function tokenEq(a: string, b: string): boolean {
   if (a === b) return true
-  if (a.length < 4 || b.length < 4) return false // no aplicar plural a tokens cortos
-  return a === `${b}s` || b === `${a}s` || a === `${b}es` || b === `${a}es`
+  if (a.length < MIN_STEM || b.length < MIN_STEM) return false // tokens cortos: solo igualdad exacta
+  if (a === `${b}s` || b === `${a}s` || a === `${b}es` || b === `${a}es`) return true
+  // Raíz por prefijo común
+  let p = 0
+  const max = Math.min(a.length, b.length)
+  while (p < max && a[p] === b[p]) p++
+  return p >= MIN_STEM && p >= max - 1
 }
 
 // ¿Todos los tokens de `phrase` aparecen entre los tokens de `query`?

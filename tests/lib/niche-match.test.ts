@@ -7,6 +7,8 @@ const NICHES: NicheForMatch[] = [
   { id: 'rodilla', keywords: NICHE_KEYWORDS.rodilla },
   { id: 'espalda', keywords: NICHE_KEYWORDS.espalda },
   { id: 'acne', keywords: NICHE_KEYWORDS.acne },
+  { id: 'pies', keywords: NICHE_KEYWORDS.pies },
+  { id: 'peso', keywords: NICHE_KEYWORDS.peso },
   { id: 'cadera', keywords: null }, // pending: aún sin expansión
 ]
 
@@ -55,5 +57,20 @@ describe('matchNiche', () => {
   it('tokens cortos no disparan plural fuzzy (sin falsos positivos)', () => {
     // "pie" vs "pies" tendría tolerancia, pero tokens <4 chars exigen igualdad exacta
     expect(matchNiche('spa', NICHES)).toBeNull()
+  })
+
+  it('derivación por raíz: matchea contra el ID aunque el nicho no tenga keywords', () => {
+    // "caderas" ya cubierto por plural; derivados con sufijo distinto van por raíz
+    expect(matchNiche('rodillera', [{ id: 'rodilla', keywords: null }])).toBe('rodilla')
+    expect(matchNiche('acnegenico', NICHES)).toBe('acne')
+  })
+
+  it('raíz por prefijo, NO substring libre (sin falsos positivos internos)', () => {
+    // substring naive: "peso" ⊂ "espeso", "pies" ⊂ "espies" — deben dar null
+    expect(matchNiche('espeso', NICHES)).toBeNull()
+    expect(matchNiche('espies', NICHES)).toBeNull()
+    // raíz común corta no alcanza: pies/piel (3), peso/pesadilla (3)
+    expect(matchNiche('piel grasa', [{ id: 'pies', keywords: null }])).toBeNull()
+    expect(matchNiche('pesadilla', NICHES)).toBeNull()
   })
 })
