@@ -64,7 +64,11 @@ export async function POST(req: NextRequest) {
   let niche = query
   let nicheRow = await getNicheStatus(query)
   if (!nicheRow) {
-    const matched = matchNiche(query, await getAllNicheKeywords())
+    // Best-effort: si falla (ej. migración niche_keywords sin aplicar), se
+    // degrada al comportamiento anterior (cold start directo), nunca a un 500.
+    const matched = await getAllNicheKeywords()
+      .then((all) => matchNiche(query, all))
+      .catch(() => null)
     if (matched) {
       niche = matched
       nicheRow = await getNicheStatus(matched)
