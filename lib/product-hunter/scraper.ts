@@ -5,9 +5,9 @@ import {
   FALLBACK_COUNTRIES,
   MIN_CANDIDATES_BEFORE_FALLBACK,
 } from './keywords'
-import { upsertProducts, updateNicheAfterScrape, upsertNiche } from './db'
+import { upsertProducts, upsertPePool, updateNicheAfterScrape, upsertNiche } from './db'
 import type { AdNode, CreativeSnippet } from './types'
-import { quickDiscard } from './quick-discard'
+import { quickDiscard, goldenDiscard } from './quick-discard'
 import { extractFromDom } from './dom-fallback'
 import { prescore } from './prescore'
 
@@ -674,18 +674,18 @@ export async function scrapeNiche(niche: string, opts: ScrapeOptions = {}): Prom
     console.log('─── Fase 2: enriqueciendo candidatos ───')
     const products: EnrichedProduct[] = []
 
-    // Pool PE: producto directo desde la card, SIN visitar la página (~14s c/u
-    // ahorrados). El matching de competidores usa nombre/creativos (ya
-    // capturados) y validate-pe trae los counts en vivo para los ganadores.
-    const peCands = toEnrich.filter((c) => c.country === 'PE')
-    for (const c of peCands) {
-      const p = productFromCard(c, niche)
-      if (p) {
-        products.push(p)
-        metrics.peFromCard++
-      }
+    // Pool PE → tabla ph_pe_pool, directo desde la card y SIN visitar la página.
+    // ⚠️ REGLA DE ORO: un anunciante PE NUNCA entra a ph_products — solo
+    // alimenta el matching de competencia. validate-pe trae counts en vivo.
+    const peRows = toEnrich
+      .filter((c) => c.country === 'PE')
+      .map((c) => productFromCard(c, niche))
+      .filter((p): p is EnrichedProduct => p !== null)
+    if (peRows.length) {
+      await upsertPePool(peRows)
+      metrics.peFromCard = peRows.length
+      console.log(`  ${peRows.length} anunciantes PE → pool de competidores (ph_pe_pool, 0 navegaciones)`)
     }
-    if (peCands.length) console.log(`  ${metrics.peFromCard} anunciantes PE desde la card (0 navegaciones)`)
 
     // Discovery: solo el top-K por señal de card merece la navegación de
     // enrich — el análisis procesa 50/corrida; la cola débil es tiempo perdido.
@@ -704,7 +704,18 @@ export async function scrapeNiche(niche: string, opts: ScrapeOptions = {}): Prom
     for (let i = 0; i < settled.length; i++) {
       const r = settled[i]
       if (r.status === 'fulfilled') {
-        if (r.value) products.push(r.value)
+        if (!r.value) continue
+        // ⚠️ REGLAS DE ORO (Etapa 2): con los datos EXACTOS del enrich, el
+        // filtro es estricto — <40 ads, <10 días o antigüedad desconocida
+        // NUNCA se guardan en ph_products (requisito explícito del usuario).
+        const raw = r.value.raw_data as { ad_count: number; days_running: number | null }
+        const reason = goldenDiscard(raw.ad_count, raw.days_running)
+        if (reason) {
+          metrics.discarded[`oro_${reason}`] = (metrics.discarded[`oro_${reason}`] ?? 0) + 1
+          console.log(`  ⊘ ${r.value.name} → ${raw.ad_count} ads · ${raw.days_running ?? '?'} días — regla de oro (${reason})`)
+        } else {
+          products.push(r.value)
+        }
       } else {
         metrics.navFailures++
         const c = toVisit[i]
@@ -722,12 +733,17 @@ export async function scrapeNiche(niche: string, opts: ScrapeOptions = {}): Prom
     }
 
     // ── Resumen de métricas (visible en logs de Actions) ──────────────────────
-    const discardedTotal = candidates.length - toEnrich.length
+    // Recalculado al final: incluye los descartes de regla de oro (oro_*) de Fase 2.
+    const finalDiscardSummary = Object.entries(metrics.discarded)
+      .map(([k, v]) => `${k}=${v}`)
+      .join(', ') || 'ninguno'
+    const discardedTotal = Object.values(metrics.discarded).reduce((a, b) => a + b, 0)
     console.log(
       `\n─── Métricas [${niche}] ───\n` +
       `  búsquedas: ${metrics.searches} (omitidas por tope: ${metrics.searchesSkipped}) | 0-payloads: ${metrics.zeroPayloads} | fallback-DOM: ${metrics.domFallbacks}\n` +
-      `  Etapa 1: ${discardedTotal} descartados (${discardSummary})\n` +
-      `  enriquecidos: ${metrics.enriched} | PE desde card: ${metrics.peFromCard} | omitidos por tope: ${metrics.enrichSkipped} | navegaciones fallidas: ${metrics.navFailures}`
+      `  descartados: ${discardedTotal} (${finalDiscardSummary})\n` +
+      `  enriquecidos: ${metrics.enriched} | PE al pool: ${metrics.peFromCard} | omitidos por tope: ${metrics.enrichSkipped} | navegaciones fallidas: ${metrics.navFailures}\n` +
+      `  guardados en ph_products (cumplen reglas de oro): ${products.length}`
     )
 
     if (saved > 0) {

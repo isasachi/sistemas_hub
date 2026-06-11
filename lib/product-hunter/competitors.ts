@@ -39,10 +39,14 @@ function normalize(s: string): string {
   return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
 }
 
+// Filas que el matching necesita: nombre + raw_data. Lo cumplen tanto
+// ProductRow (candidatos) como PePoolRow (pool de competidores PE).
+export type PeSource = Pick<ProductRow, 'name' | 'raw_data'>
+
 // Tokens "de producto" de una fila: nombre + títulos/bodies de creativos.
 // La found_keyword NO entra: es del nicho, no del producto — un vendedor de
 // colágeno y uno de rodilleras comparten "dolor rodilla" sin competir entre sí.
-export function productTokens(row: ProductRow): Set<string> {
+export function productTokens(row: PeSource): Set<string> {
   const raw = row.raw_data
   const parts: string[] = [row.name ?? '']
   for (const c of raw.creatives ?? []) {
@@ -69,7 +73,7 @@ export interface PeMatchResult {
 const MAX_COMPETITORS = 10
 
 // Filtra el pool PE a competidores del MISMO producto que el candidato.
-export function matchPeCompetitors(candidate: ProductRow, pePool: ProductRow[]): PeMatchResult {
+export function matchPeCompetitors(candidate: ProductRow, pePool: PeSource[]): PeMatchResult {
   const sellers = pePool.filter(
     (p) => !isLikelyService(p.name ?? p.raw_data.advertiser_name, p.raw_data.page_categories ?? [])
   )

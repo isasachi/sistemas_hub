@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import type { ProductRow, NicheRow, StoredAnalysis } from './types'
+import type { ProductRow, NicheRow, PePoolRow, StoredAnalysis } from './types'
 import { prescore } from './prescore'
 import { sanitizeJsonDeep, cleanJsonText } from './json-clean'
 
@@ -159,18 +159,40 @@ export async function getProductsToAnalyze(niche: string, limit = 50): Promise<P
     .slice(0, limit)
 }
 
-// Devuelve TODOS los anunciantes de Perú del nicho (la competencia local),
-// para que el análisis clasifique el escenario A/B/C/D sin scrapear en vivo.
-export async function getPeCompetitors(niche: string): Promise<ProductRow[]> {
+// Pool de competidores PE del nicho (tabla ph_pe_pool — separada de ph_products
+// por las reglas de oro: un anunciante PE nunca es un producto candidato).
+// Lo usa el análisis para clasificar el escenario A/B/C/D sin scrapear en vivo.
+export async function getPeCompetitors(niche: string): Promise<PePoolRow[]> {
   const freshAfter = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
   const { data, error } = await getDb()
-    .from('ph_products')
+    .from('ph_pe_pool')
     .select('*')
     .eq('niche', niche)
-    .eq('raw_data->>found_country', 'PE')
     .gt('scraped_at', freshAfter)
   if (error) throw new Error(error.message)
-  return (data as ProductRow[]) ?? []
+  return (data as PePoolRow[]) ?? []
+}
+
+// Guarda anunciantes PE en el pool (sanitizado jsonb igual que upsertProducts).
+export async function upsertPePool(rows: Array<{
+  id: string
+  niche: string
+  page_id: string
+  name: string
+  raw_data: Record<string, unknown>
+}>): Promise<void> {
+  if (!rows.length) return
+  const now = new Date().toISOString()
+  const clean = rows.map((r) => ({
+    id: r.id,
+    niche: r.niche,
+    page_id: r.page_id,
+    name: cleanJsonText(r.name),
+    raw_data: sanitizeJsonDeep(r.raw_data),
+    scraped_at: now,
+  }))
+  const { error } = await getDb().from('ph_pe_pool').upsert(clean, { onConflict: 'id' })
+  if (error) throw new Error(error.message)
 }
 
 export async function saveProductAnalysis(

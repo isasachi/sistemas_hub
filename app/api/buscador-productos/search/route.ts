@@ -19,6 +19,12 @@ function toCard(row: ProductRow): ProductCard | null {
   if (!row.analysis || row.score == null) return null // aún sin analizar → no se muestra
   const a = row.analysis
   const r = row.raw_data
+  // ⚠️ REGLAS DE ORO — defensa en profundidad: aunque el scraper ya no guarda
+  // productos que las violen, las filas viejas tampoco deben mostrarse JAMÁS:
+  // ≥40 ads · ≥10 días activos (desconocido = fuera) · no pautado en Perú.
+  if (r.found_country === 'PE') return null
+  if (r.ad_count < 40) return null
+  if (r.days_running === null || r.days_running < 10) return null
   const pageParams = new URLSearchParams({
     active_status: 'active', ad_type: 'all', country: 'ALL',
     is_targeted_country: 'false', media_type: 'all', search_type: 'page',

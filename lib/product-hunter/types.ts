@@ -87,6 +87,20 @@ export interface ProductRow {
   analyzed_at: string | null
 }
 
+// ─── Fila de ph_pe_pool (competidores PE — NO son productos) ──────────────────
+// Alimenta el matching de competencia del análisis. Nunca se analiza con LLM
+// ni se sirve en la UI: las reglas de oro (≥40 ads · ≥10 días · no-PE) hacen
+// que un anunciante PE jamás califique como producto.
+
+export interface PePoolRow {
+  id: string
+  niche: string
+  page_id: string | null
+  name: string | null
+  raw_data: ProductRawData
+  scraped_at: string
+}
+
 // ─── Lo que la ruta /search devuelve al frontend ──────────────────────────────
 // Solo metadatos — sin slides HTML.
 

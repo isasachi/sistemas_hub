@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { quickDiscard, MIN_ADS, MIN_DAYS } from '@/lib/product-hunter/quick-discard'
+import { quickDiscard, goldenDiscard, MIN_ADS, MIN_DAYS } from '@/lib/product-hunter/quick-discard'
 import type { QuickDiscardCandidate } from '@/lib/product-hunter/quick-discard'
 
 const NOW_SECONDS = Math.floor(Date.now() / 1000)
@@ -75,5 +75,25 @@ describe('quickDiscard', () => {
       foundCountry: 'PE',
     }))
     expect(reason).toBe('servicio')
+  })
+})
+
+describe('goldenDiscard (reglas de oro post-enrich — estrictas)', () => {
+  it('pasa solo con ≥40 ads y ≥10 días', () => {
+    expect(goldenDiscard(MIN_ADS, MIN_DAYS)).toBeNull()
+    expect(goldenDiscard(100, 30)).toBeNull()
+  })
+
+  it(`descarta con menos de ${MIN_ADS} ads (caso real: SupleCaps con 13)`, () => {
+    expect(goldenDiscard(13, 632)).toBe('pocos_anuncios')
+    expect(goldenDiscard(MIN_ADS - 1, 100)).toBe('pocos_anuncios')
+  })
+
+  it(`descarta con menos de ${MIN_DAYS} días`, () => {
+    expect(goldenDiscard(100, MIN_DAYS - 1)).toBe('muy_reciente')
+  })
+
+  it('descarta antigüedad DESCONOCIDA (estricto, sin excepción conservadora)', () => {
+    expect(goldenDiscard(100, null)).toBe('muy_reciente')
   })
 })

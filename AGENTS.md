@@ -51,6 +51,16 @@ GitHub Actions (cron 48h)          Supabase                Vercel (Next.js)
 5. **Cold start on-demand.** Un nicho nuevo dispara el workflow vía `repository_dispatch` (`lib/product-hunter/github.ts`); el cron de 12h sigue siendo el respaldo. Los scripts de CI iteran nichos desde el DB (`getActiveNiches`), no desde el mapa estático.
 6. **Resolución de nicho antes del cold start.** `search` resuelve la consulta contra los nichos existentes (`lib/product-hunter/niche-match.ts`): match exacto del id, o la consulta contiene una keyword expandida / el id de un nicho. Tolerancia: plural (-s/-es), acentos y derivación por raíz vía prefijo común ≥4 chars que cubra casi toda la palabra corta ("rodillera" → `rodilla` incluso si el nicho está pending sin keywords). Prefijo y NO substring libre ("peso" ⊄ "espeso"). Precision-first: una consulta genuinamente nueva no matchea y sigue el cold start normal.
 
+**⚠️ REGLAS DE ORO DE PRODUCTO — no romper (requisito explícito del usuario, 2026-06-11):**
+
+`ph_products` SOLO contiene productos que cumplen las TRES reglas, SIEMPRE: **≥40 anuncios activos · ≥10 días corriendo · NO pautado en Perú**. Tres capas lo garantizan:
+
+1. **Etapa 1 (card, `quickDiscard`):** conservadora — si falta el dato, pasa al enrich.
+2. **Etapa 2 (post-enrich, `goldenDiscard`):** estricta — con los datos exactos, <40 ads, <10 días o antigüedad desconocida NO se guardan.
+3. **Serving (`toCard`):** defensa en profundidad — filas legadas que violen las reglas tampoco se muestran.
+
+Los anunciantes PE van a la tabla **`ph_pe_pool`** (migración `20260611_ph_pe_pool.sql`), nunca a `ph_products`: alimentan el matching de competencia (`getPeCompetitors`) pero no se analizan con LLM ni llegan a la UI.
+
 **⚠️ REGLAS DE COSTO — no romper (esto fue requisito explícito del usuario):**
 
 1. **Anthropic SOLO en GitHub Actions.** `lib/product-hunter/anthropic.ts` se importa únicamente desde `scripts/analyze.ts`, `scripts/pipeline.ts` y `lib/product-hunter/analysis-runner.ts` (módulo compartido que a su vez solo importan esos scripts). `lib/product-hunter/keyword-expansion.ts` se importa únicamente desde `scripts/resolve.ts` (usado por `scrape.ts`/`pipeline.ts`; una llamada Haiku por nicho nuevo, cacheada en DB). NINGUNA ruta de Vercel puede importar ninguno de estos módulos. Análisis en el path de request = costo x100.

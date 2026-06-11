@@ -31,3 +31,15 @@ export function quickDiscard(c: QuickDiscardCandidate): string | null {
   }
   return null
 }
+
+// ⚠️ REGLAS DE ORO (Etapa 2, post-enrich) — requisito explícito del usuario:
+// NINGÚN producto entra a ph_products sin cumplir ≥40 ads y ≥10 días activos.
+// A diferencia de la Etapa 1 (card, conservadora con datos faltantes), aquí
+// los datos son EXACTOS y el filtro es estricto: dato faltante = descartado.
+// La tercera regla (no pautado en PE) se cumple por construcción: los
+// candidatos PE van a ph_pe_pool, nunca a ph_products.
+export function goldenDiscard(adCount: number, daysRunning: number | null): string | null {
+  if (adCount < MIN_ADS) return 'pocos_anuncios'
+  if (daysRunning === null || daysRunning < MIN_DAYS) return 'muy_reciente'
+  return null
+}
