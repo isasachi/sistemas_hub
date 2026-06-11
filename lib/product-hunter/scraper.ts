@@ -25,6 +25,37 @@ const WAIT_MS = 8_000
 const SCROLL_WAIT = 1_500
 const SCROLL_PASSES = 3
 
+// Navegaciones en paralelo dentro del mismo browser context. Cada navegación
+// gasta ~12s ESPERANDO (no CPU), así que N pages multiplican el throughput ~N×
+// sin tocar los timings. ⚠️ La IP residencial es el recurso escaso: 3 es el
+// balance entre velocidad y riesgo de que Meta sirva vacíos / bloquee la IP.
+const CONCURRENCY = Math.max(1, Number(process.env.PH_CONCURRENCY ?? 3))
+
+// Worker-pool de concurrencia acotada: cada page drena un índice compartido
+// hasta agotar los items. Un fallo aislado no tumba el pool (PromiseSettled).
+async function runPool<T, R>(
+  items: T[],
+  pages: Page[],
+  fn: (item: T, page: Page) => Promise<R>
+): Promise<PromiseSettledResult<R>[]> {
+  const results: PromiseSettledResult<R>[] = new Array(items.length)
+  let next = 0
+  await Promise.all(
+    pages.map(async (page) => {
+      while (true) {
+        const i = next++
+        if (i >= items.length) break
+        try {
+          results[i] = { status: 'fulfilled', value: await fn(items[i], page) }
+        } catch (reason) {
+          results[i] = { status: 'rejected', reason }
+        }
+      }
+    })
+  )
+  return results
+}
+
 // ─── URLS ─────────────────────────────────────────────────────────────────────
 
 export function searchUrl(keyword: string, country: string): string {
@@ -285,11 +316,13 @@ interface Candidate {
   collationCount: number | null
 }
 
+// Devuelve TODOS los candidatos de esta búsqueda (un entry por página). El dedupe
+// entre búsquedas se hace globalmente tras la Fase 1 (concurrencia-safe: no se
+// puede compartir un Set con check-then-add a través de awaits concurrentes).
 async function collectFromSearch(
-  page: Page, keyword: string, country: string, seen: Set<string>, metrics: ScrapeMetrics
+  page: Page, keyword: string, country: string, metrics: ScrapeMetrics
 ): Promise<Omit<Candidate, 'keyword' | 'country'>[]> {
   metrics.searches++
-  process.stdout.write(`  [${country}] "${keyword}" ... `)
   const responses = await navigateAndCapture(page, searchUrl(keyword, country))
   let adNodes = responses.flatMap((r) => scanAdNodes(r))
 
@@ -313,8 +346,6 @@ async function collectFromSearch(
 
   const fresh: Omit<Candidate, 'keyword' | 'country'>[] = []
   for (const [pageId, group] of byPage) {
-    if (seen.has(pageId)) continue
-    seen.add(pageId)
     const first = group[0]
     // collationCount: máximo entre los nodos del grupo (todos deberían tener el
     // mismo valor propagado del padre; max es defensivo para rarezas de schema).
@@ -332,7 +363,7 @@ async function collectFromSearch(
       collationCount,
     })
   }
-  console.log(`${fresh.length} nuevos (${adNodes.length} nodos)`)
+  console.log(`  [${country}] "${keyword}" → ${fresh.length} páginas (${adNodes.length} nodos)`)
   return fresh
 }
 
@@ -349,7 +380,6 @@ interface EnrichedProduct {
 async function enrichCandidate(
   page: Page, c: Candidate, niche: string, metrics: ScrapeMetrics
 ): Promise<EnrichedProduct | null> {
-  process.stdout.write(`  ${c.pageId}  ${c.pageName} ... `)
   const responses = await navigateAndCapture(page, pageUrl(c.pageId))
   // page_id conocido se propaga como parent: en la vista de página algunos
   // payloads no repiten page_id por nodo.
@@ -390,14 +420,14 @@ async function enrichCandidate(
   }
 
   const adId = c.adId || adNodes[0]?.adArchiveID || null
-  if (!adId) { console.log('sin ad_id, omitido'); return null }
+  if (!adId) { console.log(`  ${c.pageId} ${c.pageName} → sin ad_id, omitido`); return null }
 
   // Creativos: los de la página del anunciante (más completos) o los de la búsqueda
   const creatives = summarizeCreatives(adNodes)
   const finalCreatives = creatives.length ? creatives : c.creatives
   const pageCategories = adNodes.find((n) => n.pageCategories.length)?.pageCategories ?? c.pageCategories
 
-  console.log(`✓  ${adCount} ads · ${daysRunning ?? '?'} días · ${finalCreatives.length} creativos`)
+  console.log(`  ✓ ${c.pageName} → ${adCount} ads · ${daysRunning ?? '?'} días · ${finalCreatives.length} creativos`)
   metrics.enriched++
   return {
     id: adId,
@@ -422,9 +452,11 @@ async function enrichCandidate(
 
 // ─── MAIN ─────────────────────────────────────────────────────────────────────
 
-// Setup compartido del browser (lo usa también la validación PE en vivo).
-// ⚠️ NO usar playwright-stealth — rompe la SPA de Meta. Solo ocultar webdriver.
-export async function launchScraperBrowser() {
+// Setup compartido del browser. Crea `pageCount` pages en un mismo context
+// (comparten sesión/cookies; cada page navega y captura GraphQL de forma
+// independiente). ⚠️ NO usar playwright-stealth — rompe la SPA de Meta. Solo
+// ocultar webdriver.
+export async function launchScraperContext(pageCount = 1) {
   const browser = await chromium.launch({
     headless: true,
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-blink-features=AutomationControlled'],
@@ -438,8 +470,17 @@ export async function launchScraperBrowser() {
   await context.addInitScript(() => {
     Object.defineProperty(navigator, 'webdriver', { get: () => undefined })
   })
-  const page = await context.newPage()
-  return { browser, page }
+  const pages: Page[] = []
+  for (let i = 0; i < Math.max(1, pageCount); i++) {
+    pages.push(await context.newPage())
+  }
+  return { browser, pages }
+}
+
+// Wrapper de una sola page (validación PE en vivo, debug-graphql).
+export async function launchScraperBrowser() {
+  const { browser, pages } = await launchScraperContext(1)
+  return { browser, page: pages[0] }
 }
 
 export interface ScrapeOptions {
@@ -456,47 +497,53 @@ export async function scrapeNiche(niche: string, opts: ScrapeOptions = {}): Prom
   const keywords = opts.keywords ?? seedKeywords(niche) ?? [niche]
   const countries = opts.countries ?? COUNTRIES
   const useFallback = !opts.countries
-  console.log(`\nNiche: "${niche}"  |  ${keywords.length} keywords: ${keywords.join(', ')}\n`)
+  console.log(`\nNiche: "${niche}"  |  ${keywords.length} keywords · concurrencia ${CONCURRENCY}: ${keywords.join(', ')}\n`)
 
-  const { browser, page } = await launchScraperBrowser()
+  const { browser, pages } = await launchScraperContext(CONCURRENCY)
   const metrics = emptyMetrics()
 
-  try {
-    const seen = new Set<string>()
-    const candidates: Candidate[] = []
-
-    console.log('─── Fase 1: recolectando candidatos ───')
-    for (const country of countries) {
-      for (const keyword of keywords) {
-        try {
-          const found = await collectFromSearch(page, keyword, country, seen, metrics)
-          candidates.push(...found.map((f) => ({ ...f, keyword, country })))
-        } catch (e) {
-          metrics.navFailures++
-          const msg = e instanceof Error ? e.message.split('\n')[0] : String(e)
-          console.log(`✗ búsqueda falló: ${msg}`)
-        }
+  // Recorre país×keyword en paralelo (pool de pages) y devuelve los candidatos
+  // con su keyword/country. Los fallos por búsqueda se cuentan, no abortan.
+  async function searchCountries(countriesToSearch: readonly string[]): Promise<Candidate[]> {
+    const tasks = countriesToSearch.flatMap((country) =>
+      keywords.map((keyword) => ({ keyword, country }))
+    )
+    const settled = await runPool(tasks, pages, async ({ keyword, country }, page) => {
+      const found = await collectFromSearch(page, keyword, country, metrics)
+      return found.map((f) => ({ ...f, keyword, country }))
+    })
+    const out: Candidate[] = []
+    for (let i = 0; i < settled.length; i++) {
+      const r = settled[i]
+      if (r.status === 'fulfilled') out.push(...r.value)
+      else {
+        metrics.navFailures++
+        const msg = r.reason instanceof Error ? r.reason.message.split('\n')[0] : String(r.reason)
+        console.log(`✗ búsqueda falló [${tasks[i].country}] "${tasks[i].keyword}": ${msg}`)
       }
     }
+    return out
+  }
+
+  // Dedupe global por pageId (concurrencia-safe: no compartimos Set entre awaits).
+  // Mantiene el primer hit de cada página.
+  function dedupe(cands: Candidate[]): Candidate[] {
+    const byPage = new Map<string, Candidate>()
+    for (const c of cands) if (!byPage.has(c.pageId)) byPage.set(c.pageId, c)
+    return [...byPage.values()]
+  }
+
+  try {
+    console.log('─── Fase 1: recolectando candidatos ───')
+    let candidates = dedupe(await searchCountries(countries))
 
     // Fallback del modelo original: si LATAM no dio suficiente data, ampliar
-    // a US/ES con las mismas keywords (el dedupe por page_id ya está en `seen`).
+    // a US/ES con las mismas keywords (se re-deduplica el total acumulado).
     if (useFallback && candidates.length < MIN_CANDIDATES_BEFORE_FALLBACK) {
       console.log(
         `\nSolo ${candidates.length} candidatos en LATAM (<${MIN_CANDIDATES_BEFORE_FALLBACK}) — ampliando a ${FALLBACK_COUNTRIES.join(', ')}`
       )
-      for (const country of FALLBACK_COUNTRIES) {
-        for (const keyword of keywords) {
-          try {
-            const found = await collectFromSearch(page, keyword, country, seen, metrics)
-            candidates.push(...found.map((f) => ({ ...f, keyword, country })))
-          } catch (e) {
-            metrics.navFailures++
-            const msg = e instanceof Error ? e.message.split('\n')[0] : String(e)
-            console.log(`✗ búsqueda falló: ${msg}`)
-          }
-        }
-      }
+      candidates = dedupe([...candidates, ...(await searchCountries(FALLBACK_COUNTRIES))])
     }
     console.log(`\nTotal candidatos únicos: ${candidates.length}\n`)
 
@@ -529,28 +576,27 @@ export async function scrapeNiche(niche: string, opts: ScrapeOptions = {}): Prom
     )
 
     console.log('─── Fase 2: enriqueciendo candidatos ───')
-    // Guardado incremental: con cientos de candidatos el enrich tarda horas;
-    // upsert por lotes para que un corte/crash no pierda todo lo ya enriquecido.
-    const SAVE_BATCH = 15
-    let saved = 0
-    let batch: EnrichedProduct[] = []
-    for (const c of toEnrich) {
-      let product: EnrichedProduct | null = null
-      try {
-        product = await enrichCandidate(page, c, niche, metrics)
-      } catch (e) {
+    // Enrich en paralelo (pool de pages). El enrich por nicho dura ahora minutos;
+    // se guarda en lotes al cerrar el nicho (los nichos previos del --all ya
+    // quedaron salvados vía updateNicheAfterScrape).
+    const settled = await runPool(toEnrich, pages, (c, page) => enrichCandidate(page, c, niche, metrics))
+    const products: EnrichedProduct[] = []
+    for (let i = 0; i < settled.length; i++) {
+      const r = settled[i]
+      if (r.status === 'fulfilled') {
+        if (r.value) products.push(r.value)
+      } else {
         metrics.navFailures++
-        const msg = e instanceof Error ? e.message.split('\n')[0] : String(e)
+        const c = toEnrich[i]
+        const msg = r.reason instanceof Error ? r.reason.message.split('\n')[0] : String(r.reason)
         console.log(`✗ enrich falló (${c.pageId} ${c.pageName}): ${msg}`)
       }
-      if (product) batch.push(product)
-      if (batch.length >= SAVE_BATCH) {
-        await upsertProducts(batch)
-        saved += batch.length
-        batch = []
-      }
     }
-    if (batch.length) {
+
+    const SAVE_BATCH = 15
+    let saved = 0
+    for (let i = 0; i < products.length; i += SAVE_BATCH) {
+      const batch = products.slice(i, i + SAVE_BATCH)
       await upsertProducts(batch)
       saved += batch.length
     }

@@ -31,9 +31,13 @@ GitHub Actions (cron 48h)          Supabase                Vercel (Next.js)
   scripts/analyze.ts  ──score───►  (score/analysis)         (solo lectura, ~200ms)
 ```
 
-- **`lib/product-hunter/`** — `scraper.ts` (Playwright + métricas), `anthropic.ts` (análisis), `keyword-expansion.ts` (expansión LLM de keywords), `quick-discard.ts` (Etapa 1: descarte rápido pre-enrich), `dom-fallback.ts` (fallback DOM cuando GraphQL da 0 nodos), `competitors.ts`, `github.ts` (dispatch on-demand), `db.ts` (Supabase), `types.ts`, `keywords.ts`, `session.ts`.
+- **`lib/product-hunter/`** — `scraper.ts` (Playwright + métricas + pool concurrente), `anthropic.ts` (análisis), `keyword-expansion.ts` (expansión LLM de keywords), `quick-discard.ts` (Etapa 1: descarte rápido pre-enrich), `dom-fallback.ts` (fallback DOM cuando GraphQL da 0 nodos), `competitors.ts`, `github.ts` (dispatch on-demand), `db.ts` (Supabase), `types.ts`, `keywords.ts`, `session.ts`.
 - **Schema:** `supabase/migrations/20260609_product_hunter.sql` + `20260611_niche_keywords.sql` (tablas `ph_*` + RPCs). Aplicar en Supabase antes de usar.
 - **Workflow:** `.github/workflows/scrape-productos.yml` (scrape → analyze → expand-uncovered → analyze → validate-pe). Secrets: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`. Env de Vercel para cold start on-demand: `GITHUB_REPO`, `GITHUB_DISPATCH_TOKEN`.
+
+**Siembra masiva de nichos.** `scripts/seed-niches.ts` registra listas de nichos como `pending` en `ph_niches` (`--from <archivo>` 1/línea · `--niches "a,b,c"` · posicionales · `--dry-run`). No llama LLM ni scrapea — solo escribe filas pending; salta los nichos que ya existen (no los degrada). Luego `scripts/scrape.ts --all` (o el cron de 12h) drena la cola. El loop `--all` es resiliente: un nicho que falla loguea `✗` y no aborta los demás. Lo que no entre en el timeout de 10h queda `pending` y lo levanta el siguiente cron.
+
+**Concurrencia del scraper.** `PH_CONCURRENCY` (default 3) controla cuántas pages navegan en paralelo dentro del mismo browser context (`launchScraperContext`). Cada navegación gasta ~12s esperando (no CPU), así que N pages dan ~N× throughput sin tocar los timings. ⚠️ La IP residencial es el recurso escaso: no subir de 3 sin evaluar (riesgo de que Meta sirva vacíos o bloquee la IP).
 
 **Garantía de output (regla del modelo original):** la tool debe devolver productos ganadores para TODO nicho consultado.
 

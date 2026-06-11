@@ -76,11 +76,22 @@ async function main() {
     process.exit(1)
   }
 
+  // Resiliencia: un fallo en un nicho (LLM/red) no debe abortar los demás —
+  // crítico al sembrar decenas de nichos en una sola corrida --all.
+  let ok = 0
+  let failed = 0
   for (const niche of niches) {
-    const keywords = await resolveKeywords(niche)
-    const countries = await resolveCountries(niche)
-    await scrapeNiche(niche, { keywords, countries })
+    try {
+      const keywords = await resolveKeywords(niche)
+      const countries = await resolveCountries(niche)
+      await scrapeNiche(niche, { keywords, countries })
+      ok++
+    } catch (e) {
+      failed++
+      console.error(`✗ [${niche}]: ${e instanceof Error ? e.message.split('\n')[0] : e}`)
+    }
   }
+  if (niches.length > 1) console.log(`\n═══ ${ok} nichos OK · ${failed} fallidos ═══`)
 }
 
 main().catch((e) => { console.error(e); process.exit(1) })
