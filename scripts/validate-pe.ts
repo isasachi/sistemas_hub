@@ -17,12 +17,18 @@ import {
   searchUrl,
 } from '../lib/product-hunter/scraper'
 import { isLikelyService } from '../lib/product-hunter/competitors'
-import { getProductsToValidatePe, saveProductAnalysis } from '../lib/product-hunter/db'
+import {
+  getProductsToValidatePe,
+  getStrongDiscardsToValidate,
+  saveProductAnalysis,
+} from '../lib/product-hunter/db'
 import { ALL_NICHES } from '../lib/product-hunter/keywords'
 import type { PeCompetitor, PeValidation, ProductRow } from '../lib/product-hunter/types'
 import type { Page } from 'playwright'
 
 const VALIDATE_LIMIT = Number(process.env.PH_VALIDATE_LIMIT ?? 15)
+// Rescate de falsos-D: cuántos descartados-con-validación-fuerte revisar por nicho
+const VALIDATE_D_LIMIT = Number(process.env.PH_VALIDATE_D_LIMIT ?? 10)
 const MAX_TERMS = 4
 
 // Busca un término en PE y devuelve los anunciantes-vendedores (sin servicios).
@@ -63,21 +69,31 @@ function rescore(oldScore: number, scenario: 'A' | 'B' | 'C' | 'D') {
   }
 }
 
-// Términos a buscar: los del análisis o, si faltan, derivados del productName.
+// Términos a buscar: los del análisis o, si faltan (descartados emiten []),
+// derivados del productName + la keyword que lo encontró.
 function termsFor(product: ProductRow): string[] {
   const fromAnalysis = (product.analysis?.peSearchTerms ?? []).filter(Boolean)
   if (fromAnalysis.length) return fromAnalysis.slice(0, MAX_TERMS)
-  const name = product.analysis?.productName ?? product.raw_data.found_keyword
-  return name ? [name.toLowerCase().split(/\s+/).slice(0, 3).join(' ')] : []
+  const out = new Set<string>()
+  const name = product.analysis?.productName
+  if (name) out.add(name.toLowerCase().split(/\s+/).slice(0, 3).join(' '))
+  if (product.raw_data.found_keyword) out.add(product.raw_data.found_keyword.toLowerCase())
+  return [...out].slice(0, MAX_TERMS)
 }
 
 async function validateNiche(page: Page, niche: string) {
-  const products = await getProductsToValidatePe(niche, VALIDATE_LIMIT)
+  // Dos grupos: los prometedores (alta/media) y el rescate de falsos-D
+  // (descartados por el matching de pool pese a validación externa fuerte).
+  const promising = await getProductsToValidatePe(niche, VALIDATE_LIMIT)
+  const strongDiscards = await getStrongDiscardsToValidate(niche, VALIDATE_D_LIMIT)
+  const products = [...promising, ...strongDiscards]
   if (!products.length) {
     console.log(`[${niche}] nada por validar en PE`)
     return
   }
-  console.log(`[${niche}] validando ${products.length} candidatos alta/media en PE (en vivo)`)
+  console.log(
+    `[${niche}] validando en PE (en vivo): ${promising.length} alta/media + ${strongDiscards.length} rescate-D`
+  )
 
   for (const product of products) {
     const analysis = product.analysis

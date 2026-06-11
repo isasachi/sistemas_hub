@@ -139,6 +139,29 @@ export async function getProductsToValidatePe(niche: string, limit = 15): Promis
   return (data as ProductRow[]) ?? []
 }
 
+// Rescate de falsos-D: descartados por competencia (escenario D del matching de
+// pool) pero con validación externa fuerte (40+ ads, 10+ días, no-PE, no servicio).
+// El matching por tokens puede sobre-contar competidores cuando los creativos
+// comparten vocabulario del nicho; la validación en vivo es el árbitro final.
+export async function getStrongDiscardsToValidate(niche: string, limit = 10): Promise<ProductRow[]> {
+  const { data, error } = await getDb()
+    .from('ph_products')
+    .select('*')
+    .eq('niche', niche)
+    .not('score', 'is', null)
+    .eq('analysis->>priority', 'descartado')
+    .eq('analysis->>peScenario', 'D')
+    .is('analysis->peValidation', null)
+    .neq('raw_data->>found_country', 'PE')
+    .gte('raw_data->ad_count', 40)
+    .gte('raw_data->days_running', 10)
+    .not('analysis->>reasoning', 'like', '%sin análisis LLM%') // excluir servicios
+    .order('raw_data->ad_count', { ascending: false })
+    .limit(limit)
+  if (error) throw new Error(error.message)
+  return (data as ProductRow[]) ?? []
+}
+
 // Borra score/analysis de un nicho para re-analizarlo (ej. tras cambiar el prompt).
 export async function resetNicheAnalysis(niche: string): Promise<number> {
   const { data, error } = await getDb()
