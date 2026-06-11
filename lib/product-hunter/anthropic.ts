@@ -7,6 +7,10 @@ import { ProductAnalysisSchema, type ProductAnalysis, type ProductRow } from './
 // ⚠️ COSTO: este módulo SOLO se importa desde scripts/analyze.ts (GitHub Actions).
 // Ninguna ruta de Next/Vercel debe importarlo — el análisis corre en batch en CI,
 // nunca en el path de request del usuario. Ver lib/prompts/buscador-productos.md.
+//
+// El análisis usa la Message Batches API (50% de descuento en todos los tokens,
+// mismo modelo y params). La latencia no importa: el cron corre cada 12h y
+// validate-pe.ts corre después en el mismo workflow.
 
 function getAI() {
   return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
@@ -28,7 +32,7 @@ const ANALYSIS_TOOL: Anthropic.Tool = {
   input_schema: z.toJSONSchema(ProductAnalysisSchema) as Anthropic.Tool.InputSchema,
 }
 
-interface AnalyzeInput {
+export interface AnalyzeInput {
   candidate: ProductRow
   peMatch: {
     competitors: { name: string; adCount: number }[]
@@ -37,7 +41,8 @@ interface AnalyzeInput {
   }
 }
 
-export async function analyzeProduct({ candidate, peMatch }: AnalyzeInput): Promise<ProductAnalysis> {
+// Params idénticos para el path directo y el de Batches — un solo origen.
+export function buildAnalyzeParams({ candidate, peMatch }: AnalyzeInput): Anthropic.Messages.MessageCreateParamsNonStreaming {
   const raw = candidate.raw_data
 
   // Creativos reales del anuncio — la señal principal para identificar el producto
@@ -71,18 +76,88 @@ export async function analyzeProduct({ candidate, peMatch }: AnalyzeInput): Prom
     'Devuelve el análisis llamando a la tool registrar_analisis.',
   ].join('\n')
 
-  const res = await getAI().messages.create({
+  return {
     model: MODEL,
     max_tokens: 2000,
+    // Scoring reproducible: en casos borderline el muestreo por defecto puede
+    // oscilar entre media/descartado con el mismo input (visto en pruebas).
+    temperature: 0,
     system: SYSTEM_PROMPT,
     tools: [ANALYSIS_TOOL],
     tool_choice: { type: 'tool', name: ANALYSIS_TOOL.name },
     messages: [{ role: 'user', content: userMessage }],
-  })
+  }
+}
 
-  const toolUse = res.content.find((b) => b.type === 'tool_use')
+export function parseAnalysis(content: Anthropic.Messages.ContentBlock[]): ProductAnalysis {
+  const toolUse = content.find((b) => b.type === 'tool_use')
   if (!toolUse || toolUse.type !== 'tool_use') {
     throw new Error('Anthropic no devolvió tool_use')
   }
   return ProductAnalysisSchema.parse(toolUse.input)
+}
+
+// Path directo (sin batch) — para lotes chicos o debug con PH_NO_BATCH=1.
+export async function analyzeProduct(input: AnalyzeInput): Promise<ProductAnalysis> {
+  const res = await getAI().messages.create(buildAnalyzeParams(input))
+  return parseAnalysis(res.content)
+}
+
+// ─── MESSAGE BATCHES API (50% descuento) ─────────────────────────────────────
+
+export interface BatchEntry {
+  customId: string // id del producto en ph_products
+  input: AnalyzeInput
+}
+
+export async function submitAnalysisBatch(entries: BatchEntry[]): Promise<string> {
+  const batch = await getAI().messages.batches.create({
+    requests: entries.map((e) => ({
+      custom_id: e.customId,
+      params: buildAnalyzeParams(e.input),
+    })),
+  })
+  return batch.id
+}
+
+// Espera a que el batch termine. Típico <1h; el timeout protege el workflow
+// (que tiene su propio cap de 10h).
+export async function waitForBatch(
+  batchId: string,
+  pollMs = 60_000,
+  timeoutMs = 4 * 3600_000
+): Promise<void> {
+  const ai = getAI()
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    const b = await ai.messages.batches.retrieve(batchId)
+    if (b.processing_status === 'ended') return
+    if (Date.now() > deadline) {
+      throw new Error(`Batch ${batchId} no terminó en ${Math.round(timeoutMs / 60000)} min`)
+    }
+    console.log(`  batch ${batchId}: ${b.processing_status} · en proceso: ${b.request_counts.processing}`)
+    await new Promise((r) => setTimeout(r, pollMs))
+  }
+}
+
+export interface BatchOutcome {
+  customId: string
+  analysis?: ProductAnalysis
+  error?: string
+}
+
+export async function* batchAnalysisResults(batchId: string): AsyncGenerator<BatchOutcome> {
+  for await (const result of await getAI().messages.batches.results(batchId)) {
+    if (result.result.type === 'succeeded') {
+      try {
+        yield { customId: result.custom_id, analysis: parseAnalysis(result.result.message.content) }
+      } catch (e) {
+        yield { customId: result.custom_id, error: e instanceof Error ? e.message : String(e) }
+      }
+    } else {
+      // errored / expired / canceled — queda con score NULL y se reintenta
+      // en la próxima corrida del cron.
+      yield { customId: result.custom_id, error: result.result.type }
+    }
+  }
 }
