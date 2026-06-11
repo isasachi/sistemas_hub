@@ -90,6 +90,31 @@ function findConnectionCount(obj: unknown, depth = 0): number | null {
   return null
 }
 
+// Reintentos de navegación: Meta/red dan errores transitorios (DNS
+// ERR_NAME_NOT_RESOLVED, timeouts puntuales) en el runner residencial. Un par de
+// reintentos con backoff recupera el candidato sin perderlo. Si agota los
+// intentos, relanza el error para que el caller lo capture y siga con el siguiente.
+const NAV_RETRIES = 2
+const NAV_RETRY_WAIT = 3_000
+
+async function gotoWithRetry(page: Page, url: string): Promise<void> {
+  let lastErr: unknown
+  for (let attempt = 0; attempt <= NAV_RETRIES; attempt++) {
+    try {
+      await page.goto(url, { timeout: NAV_TIMEOUT, waitUntil: 'domcontentloaded' })
+      return
+    } catch (e) {
+      lastErr = e
+      if (attempt < NAV_RETRIES) {
+        const msg = e instanceof Error ? e.message.split('\n')[0] : String(e)
+        console.error(`\n  [retry ${attempt + 1}/${NAV_RETRIES}] navegación falló (${msg}) — reintentando en ${NAV_RETRY_WAIT / 1000}s`)
+        await page.waitForTimeout(NAV_RETRY_WAIT)
+      }
+    }
+  }
+  throw lastErr
+}
+
 // Colectamos los Response síncronamente y leemos el body DESPUÉS de navegar
 // (evita race conditions; Playwright bufferea los bodies).
 export async function navigateAndCapture(page: Page, url: string): Promise<unknown[]> {
@@ -102,7 +127,7 @@ export async function navigateAndCapture(page: Page, url: string): Promise<unkno
 
   page.on('response', collect)
   try {
-    await page.goto(url, { timeout: NAV_TIMEOUT, waitUntil: 'domcontentloaded' })
+    await gotoWithRetry(page, url)
     await page.waitForTimeout(WAIT_MS)
     for (let i = 0; i < SCROLL_PASSES; i++) {
       await page.keyboard.press('End')
@@ -235,10 +260,12 @@ interface ScrapeMetrics {
   domFallbacks: number
   discarded: Record<string, number>
   enriched: number
+  // Navegaciones que fallaron tras agotar los reintentos (búsqueda o enrich).
+  navFailures: number
 }
 
 function emptyMetrics(): ScrapeMetrics {
-  return { searches: 0, zeroPayloads: 0, domFallbacks: 0, discarded: {}, enriched: 0 }
+  return { searches: 0, zeroPayloads: 0, domFallbacks: 0, discarded: {}, enriched: 0, navFailures: 0 }
 }
 
 // ─── FASE 1: search → candidatos únicos ──────────────────────────────────────
@@ -441,8 +468,14 @@ export async function scrapeNiche(niche: string, opts: ScrapeOptions = {}): Prom
     console.log('─── Fase 1: recolectando candidatos ───')
     for (const country of countries) {
       for (const keyword of keywords) {
-        const found = await collectFromSearch(page, keyword, country, seen, metrics)
-        candidates.push(...found.map((f) => ({ ...f, keyword, country })))
+        try {
+          const found = await collectFromSearch(page, keyword, country, seen, metrics)
+          candidates.push(...found.map((f) => ({ ...f, keyword, country })))
+        } catch (e) {
+          metrics.navFailures++
+          const msg = e instanceof Error ? e.message.split('\n')[0] : String(e)
+          console.log(`✗ búsqueda falló: ${msg}`)
+        }
       }
     }
 
@@ -454,8 +487,14 @@ export async function scrapeNiche(niche: string, opts: ScrapeOptions = {}): Prom
       )
       for (const country of FALLBACK_COUNTRIES) {
         for (const keyword of keywords) {
-          const found = await collectFromSearch(page, keyword, country, seen, metrics)
-          candidates.push(...found.map((f) => ({ ...f, keyword, country })))
+          try {
+            const found = await collectFromSearch(page, keyword, country, seen, metrics)
+            candidates.push(...found.map((f) => ({ ...f, keyword, country })))
+          } catch (e) {
+            metrics.navFailures++
+            const msg = e instanceof Error ? e.message.split('\n')[0] : String(e)
+            console.log(`✗ búsqueda falló: ${msg}`)
+          }
         }
       }
     }
@@ -496,7 +535,14 @@ export async function scrapeNiche(niche: string, opts: ScrapeOptions = {}): Prom
     let saved = 0
     let batch: EnrichedProduct[] = []
     for (const c of toEnrich) {
-      const product = await enrichCandidate(page, c, niche, metrics)
+      let product: EnrichedProduct | null = null
+      try {
+        product = await enrichCandidate(page, c, niche, metrics)
+      } catch (e) {
+        metrics.navFailures++
+        const msg = e instanceof Error ? e.message.split('\n')[0] : String(e)
+        console.log(`✗ enrich falló (${c.pageId} ${c.pageName}): ${msg}`)
+      }
       if (product) batch.push(product)
       if (batch.length >= SAVE_BATCH) {
         await upsertProducts(batch)
@@ -515,7 +561,7 @@ export async function scrapeNiche(niche: string, opts: ScrapeOptions = {}): Prom
       `\n─── Métricas [${niche}] ───\n` +
       `  búsquedas: ${metrics.searches} | 0-payloads: ${metrics.zeroPayloads} | fallback-DOM: ${metrics.domFallbacks}\n` +
       `  Etapa 1: ${discardedTotal} descartados (${discardSummary})\n` +
-      `  enriquecidos: ${metrics.enriched}`
+      `  enriquecidos: ${metrics.enriched} | navegaciones fallidas: ${metrics.navFailures}`
     )
 
     if (saved > 0) {
