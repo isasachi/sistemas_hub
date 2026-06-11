@@ -9,6 +9,7 @@ import { upsertProducts, updateNicheAfterScrape, upsertNiche } from './db'
 import type { AdNode, CreativeSnippet } from './types'
 import { quickDiscard } from './quick-discard'
 import { extractFromDom } from './dom-fallback'
+import { prescore } from './prescore'
 
 // Re-export para consumidores externos (validate-pe.ts usa el tipo indirectamente)
 export type { AdNode }
@@ -31,6 +32,19 @@ const SCROLL_PASSES = 3
 // balance entre velocidad y riesgo de que Meta sirva vacíos / bloquee la IP.
 // Exportado: validate-pe.ts usa el mismo pool para sus búsquedas PE en vivo.
 export const CONCURRENCY = Math.max(1, Number(process.env.PH_CONCURRENCY ?? 3))
+
+// ─── Presupuesto de tiempo por nicho ──────────────────────────────────────────
+// Las búsquedas traen cientos/miles de candidatos pero el análisis solo procesa
+// PH_ANALYZE_LIMIT (50) por corrida — enriquecer la cola larga de candidatos
+// débiles es trabajo perdido. Dos topes ($0, configurables; 0 = sin tope):
+
+// Corta la Fase 1 discovery al juntar este nº de candidatos únicos (las
+// keywords restantes mayormente traen duplicados). PE nunca se corta.
+const SEARCH_CAP = Math.max(0, Number(process.env.PH_SEARCH_CAP ?? 150))
+
+// Solo el top-K de candidatos discovery (por señal de card, prescore P_w)
+// recibe la navegación de enrich (~14s c/u). El resto se descarta.
+const ENRICH_LIMIT = Math.max(0, Number(process.env.PH_ENRICH_LIMIT ?? 80))
 
 // Worker-pool de concurrencia acotada: cada page drena un índice compartido
 // hasta agotar los items. Un fallo aislado no tumba el pool (PromiseSettled).
@@ -294,10 +308,18 @@ interface ScrapeMetrics {
   enriched: number
   // Navegaciones que fallaron tras agotar los reintentos (búsqueda o enrich).
   navFailures: number
+  // Presupuesto de tiempo: búsquedas no corridas por SEARCH_CAP, candidatos
+  // discovery descartados por ENRICH_LIMIT, productos PE armados desde la card.
+  searchesSkipped: number
+  enrichSkipped: number
+  peFromCard: number
 }
 
 function emptyMetrics(): ScrapeMetrics {
-  return { searches: 0, zeroPayloads: 0, domFallbacks: 0, discarded: {}, enriched: 0, navFailures: 0 }
+  return {
+    searches: 0, zeroPayloads: 0, domFallbacks: 0, discarded: {}, enriched: 0,
+    navFailures: 0, searchesSkipped: 0, enrichSkipped: 0, peFromCard: 0,
+  }
 }
 
 // ─── FASE 1: search → candidatos únicos ──────────────────────────────────────
@@ -315,6 +337,9 @@ interface Candidate {
   // Ads count de la card del anunciante — para el quick discard de Etapa 1.
   // null cuando el payload no incluye el campo (conservador: pasa al enrich).
   collationCount: number | null
+  // Nodos de anuncio que la búsqueda devolvió para esta página — proxy de
+  // volumen cuando collationCount falta (ranking de enrich y ad_count PE).
+  nodesSeen: number
 }
 
 // Devuelve TODOS los candidatos de esta búsqueda (un entry por página). El dedupe
@@ -362,6 +387,7 @@ async function collectFromSearch(
       creatives: summarizeCreatives(group),
       pageCategories: first.pageCategories,
       collationCount,
+      nodesSeen: group.length,
     })
   }
   console.log(`  [${country}] "${keyword}" → ${fresh.length} páginas (${adNodes.length} nodos)`)
@@ -376,6 +402,50 @@ interface EnrichedProduct {
   page_id: string
   name: string
   raw_data: Record<string, unknown>
+}
+
+// Señal de calidad desde la card de búsqueda (sin navegar): mismo P_w del
+// análisis, con collationCount (o nodos vistos como proxy débil) y startDate.
+function cardSignal(c: Candidate): number {
+  const adCount = c.collationCount ?? Math.min(c.nodesSeen, 20)
+  const daysRunning = c.startDate
+    ? Math.max(0, Math.floor(Date.now() / 1000 / 86_400 - c.startDate / 86_400))
+    : null
+  return prescore({ ad_count: adCount, days_running: daysRunning })
+}
+
+// Producto construido SOLO con datos de la card (sin visitar la página del
+// anunciante). Para el pool PE: el matching de competidores usa nombre/creativos
+// (ya capturados en búsqueda) y validate-pe trae los counts en vivo después —
+// la navegación de enrich por anunciante PE era redundante (~14s c/u).
+function productFromCard(c: Candidate, niche: string): EnrichedProduct | null {
+  if (!c.adId) return null
+  const adCount = c.collationCount ?? c.nodesSeen
+  let daysRunning: number | null = null
+  let oldestDate: string | null = null
+  if (c.startDate) {
+    oldestDate = new Date(c.startDate * 1000).toISOString().split('T')[0]
+    daysRunning = Math.floor((Date.now() - c.startDate * 1000) / 86_400_000)
+  }
+  return {
+    id: c.adId,
+    niche,
+    page_id: c.pageId,
+    name: c.pageName,
+    raw_data: {
+      page_id: c.pageId,
+      ad_id: c.adId,
+      advertiser_name: c.pageName,
+      ad_count: adCount,
+      days_running: daysRunning,
+      oldest_date: oldestDate,
+      found_keyword: c.keyword,
+      found_country: c.country,
+      page_categories: c.pageCategories,
+      creatives: c.creatives,
+      source: 'search-card',
+    },
+  }
 }
 
 async function enrichCandidate(
@@ -505,22 +575,40 @@ export async function scrapeNiche(niche: string, opts: ScrapeOptions = {}): Prom
 
   // Recorre país×keyword en paralelo (pool de pages) y devuelve los candidatos
   // con su keyword/country. Los fallos por búsqueda se cuentan, no abortan.
-  async function searchCountries(countriesToSearch: readonly string[]): Promise<Candidate[]> {
+  // `cap` > 0: corta al juntar ese nº de páginas únicas (las keywords restantes
+  // mayormente traen duplicados) — se procesa por chunks para poder frenar.
+  async function searchCountries(countriesToSearch: readonly string[], cap = 0): Promise<Candidate[]> {
     const tasks = countriesToSearch.flatMap((country) =>
       keywords.map((keyword) => ({ keyword, country }))
     )
-    const settled = await runPool(tasks, pages, async ({ keyword, country }, page) => {
-      const found = await collectFromSearch(page, keyword, country, metrics)
-      return found.map((f) => ({ ...f, keyword, country }))
-    })
     const out: Candidate[] = []
-    for (let i = 0; i < settled.length; i++) {
-      const r = settled[i]
-      if (r.status === 'fulfilled') out.push(...r.value)
-      else {
-        metrics.navFailures++
-        const msg = r.reason instanceof Error ? r.reason.message.split('\n')[0] : String(r.reason)
-        console.log(`✗ búsqueda falló [${tasks[i].country}] "${tasks[i].keyword}": ${msg}`)
+    const uniquePages = new Set<string>()
+    const chunkSize = pages.length * 2
+
+    for (let start = 0; start < tasks.length; start += chunkSize) {
+      const chunk = tasks.slice(start, start + chunkSize)
+      const settled = await runPool(chunk, pages, async ({ keyword, country }, page) => {
+        const found = await collectFromSearch(page, keyword, country, metrics)
+        return found.map((f) => ({ ...f, keyword, country }))
+      })
+      for (let i = 0; i < settled.length; i++) {
+        const r = settled[i]
+        if (r.status === 'fulfilled') {
+          out.push(...r.value)
+          for (const c of r.value) uniquePages.add(c.pageId)
+        } else {
+          metrics.navFailures++
+          const msg = r.reason instanceof Error ? r.reason.message.split('\n')[0] : String(r.reason)
+          console.log(`✗ búsqueda falló [${chunk[i].country}] "${chunk[i].keyword}": ${msg}`)
+        }
+      }
+      if (cap > 0 && uniquePages.size >= cap) {
+        const remaining = tasks.length - start - chunk.length
+        if (remaining > 0) {
+          metrics.searchesSkipped += remaining
+          console.log(`  ⏹ tope de búsqueda: ${uniquePages.size} candidatos únicos ≥ ${cap} — ${remaining} búsquedas omitidas`)
+        }
+        break
       }
     }
     return out
@@ -536,7 +624,14 @@ export async function scrapeNiche(niche: string, opts: ScrapeOptions = {}): Prom
 
   try {
     console.log('─── Fase 1: recolectando candidatos ───')
-    let candidates = dedupe(await searchCountries(countries))
+    // Discovery con tope (SEARCH_CAP); PE SIEMPRE completo — es el pool de
+    // competidores locales y no se sacrifica por presupuesto de tiempo.
+    const discoveryCountries = countries.filter((c) => c !== 'PE')
+    const includePe = countries.includes('PE')
+    let candidates = dedupe(await searchCountries(discoveryCountries, SEARCH_CAP))
+    if (includePe) {
+      candidates = dedupe([...candidates, ...(await searchCountries(['PE']))])
+    }
 
     // Fallback del modelo original: si LATAM no dio suficiente data, ampliar
     // a US/ES con las mismas keywords (se re-deduplica el total acumulado).
@@ -544,7 +639,7 @@ export async function scrapeNiche(niche: string, opts: ScrapeOptions = {}): Prom
       console.log(
         `\nSolo ${candidates.length} candidatos en LATAM (<${MIN_CANDIDATES_BEFORE_FALLBACK}) — ampliando a ${FALLBACK_COUNTRIES.join(', ')}`
       )
-      candidates = dedupe([...candidates, ...(await searchCountries(FALLBACK_COUNTRIES))])
+      candidates = dedupe([...candidates, ...(await searchCountries(FALLBACK_COUNTRIES, SEARCH_CAP))])
     }
     console.log(`\nTotal candidatos únicos: ${candidates.length}\n`)
 
@@ -577,18 +672,42 @@ export async function scrapeNiche(niche: string, opts: ScrapeOptions = {}): Prom
     )
 
     console.log('─── Fase 2: enriqueciendo candidatos ───')
-    // Enrich en paralelo (pool de pages). El enrich por nicho dura ahora minutos;
-    // se guarda en lotes al cerrar el nicho (los nichos previos del --all ya
-    // quedaron salvados vía updateNicheAfterScrape).
-    const settled = await runPool(toEnrich, pages, (c, page) => enrichCandidate(page, c, niche, metrics))
     const products: EnrichedProduct[] = []
+
+    // Pool PE: producto directo desde la card, SIN visitar la página (~14s c/u
+    // ahorrados). El matching de competidores usa nombre/creativos (ya
+    // capturados) y validate-pe trae los counts en vivo para los ganadores.
+    const peCands = toEnrich.filter((c) => c.country === 'PE')
+    for (const c of peCands) {
+      const p = productFromCard(c, niche)
+      if (p) {
+        products.push(p)
+        metrics.peFromCard++
+      }
+    }
+    if (peCands.length) console.log(`  ${metrics.peFromCard} anunciantes PE desde la card (0 navegaciones)`)
+
+    // Discovery: solo el top-K por señal de card merece la navegación de
+    // enrich — el análisis procesa 50/corrida; la cola débil es tiempo perdido.
+    const ranked = toEnrich
+      .filter((c) => c.country !== 'PE')
+      .sort((a, b) => cardSignal(b) - cardSignal(a))
+    const toVisit = ENRICH_LIMIT > 0 ? ranked.slice(0, ENRICH_LIMIT) : ranked
+    metrics.enrichSkipped = ranked.length - toVisit.length
+    if (metrics.enrichSkipped > 0) {
+      console.log(`  ⏹ tope de enrich: ${toVisit.length} de ${ranked.length} candidatos (top por señal de card) — ${metrics.enrichSkipped} omitidos`)
+    }
+
+    // Enrich en paralelo (pool de pages). Se guarda en lotes al cerrar el nicho
+    // (los nichos previos del --all ya quedaron salvados vía updateNicheAfterScrape).
+    const settled = await runPool(toVisit, pages, (c, page) => enrichCandidate(page, c, niche, metrics))
     for (let i = 0; i < settled.length; i++) {
       const r = settled[i]
       if (r.status === 'fulfilled') {
         if (r.value) products.push(r.value)
       } else {
         metrics.navFailures++
-        const c = toEnrich[i]
+        const c = toVisit[i]
         const msg = r.reason instanceof Error ? r.reason.message.split('\n')[0] : String(r.reason)
         console.log(`✗ enrich falló (${c.pageId} ${c.pageName}): ${msg}`)
       }
@@ -606,9 +725,9 @@ export async function scrapeNiche(niche: string, opts: ScrapeOptions = {}): Prom
     const discardedTotal = candidates.length - toEnrich.length
     console.log(
       `\n─── Métricas [${niche}] ───\n` +
-      `  búsquedas: ${metrics.searches} | 0-payloads: ${metrics.zeroPayloads} | fallback-DOM: ${metrics.domFallbacks}\n` +
+      `  búsquedas: ${metrics.searches} (omitidas por tope: ${metrics.searchesSkipped}) | 0-payloads: ${metrics.zeroPayloads} | fallback-DOM: ${metrics.domFallbacks}\n` +
       `  Etapa 1: ${discardedTotal} descartados (${discardSummary})\n` +
-      `  enriquecidos: ${metrics.enriched} | navegaciones fallidas: ${metrics.navFailures}`
+      `  enriquecidos: ${metrics.enriched} | PE desde card: ${metrics.peFromCard} | omitidos por tope: ${metrics.enrichSkipped} | navegaciones fallidas: ${metrics.navFailures}`
     )
 
     if (saved > 0) {

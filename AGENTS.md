@@ -40,6 +40,8 @@ GitHub Actions (cron 48h)          Supabase                Vercel (Next.js)
 
 **Concurrencia del scraper.** `PH_CONCURRENCY` (default 3) controla cuántas pages navegan en paralelo dentro del mismo browser context (`launchScraperContext`). Cada navegación gasta ~12s esperando (no CPU), así que N pages dan ~N× throughput sin tocar los timings. ⚠️ La IP residencial es el recurso escaso: no subir de 3 sin evaluar (riesgo de que Meta sirva vacíos o bloquee la IP).
 
+**Presupuesto de tiempo por nicho.** Las búsquedas traen cientos/miles de candidatos pero el análisis procesa `PH_ANALYZE_LIMIT` (50) por corrida — enriquecer la cola larga es trabajo perdido. Topes ($0, 0 = sin tope): `PH_SEARCH_CAP` (default 150) corta la Fase 1 discovery al juntar ese nº de candidatos únicos (PE siempre corre completo, es el pool de competidores); `PH_ENRICH_LIMIT` (default 80) enriquece solo el top-K discovery rankeado por señal de card (prescore P_w sobre collation/startDate). El pool PE se construye **directo desde la card** (`source: 'search-card'`, 0 navegaciones) — el matching usa nombre/creativos y `validate-pe` trae los counts en vivo para los ganadores.
+
 **Garantía de output (regla del modelo original):** la tool debe devolver productos ganadores para TODO nicho consultado.
 
 1. **Expansión de keywords (≥15, 4 direcciones: síntomas · zonas · situaciones · soluciones).** Un nicho nuevo nunca se busca con su keyword literal: `scripts/scrape.ts` resuelve keywords en orden cache DB (`ph_niches.keywords`) → seed estático (`keywords.ts`) → expansión LLM (Haiku, `lib/prompts/expansion-keywords.md`, una llamada por nicho, cacheada).

@@ -23,8 +23,12 @@ export const ProductRawDataSchema = z.object({
   // Opcionales: solo existen en filas scrapeadas con el scraper enriquecido
   page_categories: z.array(z.string()).optional(),
   creatives: z.array(CreativeSnippetSchema).optional(),
-  // Marcador de enriquecimiento: 'dom-fallback' cuando GraphQL dio 0 nodos
-  source: z.literal('dom-fallback').optional(),
+  // Origen de los datos cuando no vienen del enrich estándar:
+  //   'dom-fallback'  — GraphQL dio 0 nodos, extraído del DOM
+  //   'search-card'   — construido desde la card de búsqueda sin visitar la
+  //                     página (pool PE; counts aproximados, validate-pe da
+  //                     los números en vivo después)
+  source: z.enum(['dom-fallback', 'search-card']).optional(),
 })
 export type ProductRawData = z.infer<typeof ProductRawDataSchema>
 
