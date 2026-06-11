@@ -373,16 +373,28 @@ export async function scrapeNiche(niche: string): Promise<void> {
     console.log(`\nTotal candidatos únicos: ${candidates.length}\n`)
 
     console.log('─── Fase 2: enriqueciendo candidatos ───')
-    const products: EnrichedProduct[] = []
+    // Guardado incremental: con cientos de candidatos el enrich tarda horas;
+    // upsert por lotes para que un corte/crash no pierda todo lo ya enriquecido.
+    const SAVE_BATCH = 15
+    let saved = 0
+    let batch: EnrichedProduct[] = []
     for (const c of candidates) {
       const product = await enrichCandidate(page, c, niche)
-      if (product) products.push(product)
+      if (product) batch.push(product)
+      if (batch.length >= SAVE_BATCH) {
+        await upsertProducts(batch)
+        saved += batch.length
+        batch = []
+      }
+    }
+    if (batch.length) {
+      await upsertProducts(batch)
+      saved += batch.length
     }
 
-    if (products.length) {
-      await upsertProducts(products)
-      await updateNicheAfterScrape(niche, products.length)
-      console.log(`\n✓ ${products.length} productos guardados para "${niche}"`)
+    if (saved > 0) {
+      await updateNicheAfterScrape(niche, saved)
+      console.log(`\n✓ ${saved} productos guardados para "${niche}"`)
     } else {
       await upsertNiche(niche, 'active')
       console.log(`\nSin productos encontrados para "${niche}"`)
