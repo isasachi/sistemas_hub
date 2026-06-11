@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { ProductRow, NicheRow, StoredAnalysis } from './types'
+import { prescore } from './prescore'
 
 // Cliente Supabase con service role (bypassa RLS), igual que lib/db.ts del hub.
 // Se usa tanto desde rutas Next como desde los scripts de GitHub Actions.
@@ -126,6 +127,9 @@ export async function upsertProducts(products: UpsertProduct[]): Promise<void> {
 }
 
 // Productos aún sin analizar (score IS NULL) y frescos. Para el batch de Anthropic.
+// Priorización por prescore P_w: con más pendientes que `limit`, entran primero
+// los candidatos con mejor longevidad/volumen — no los más recientes. Supabase no
+// ordena por expresión JSONB, así que se trae un pool amplio y se ordena en JS.
 export async function getProductsToAnalyze(niche: string, limit = 50): Promise<ProductRow[]> {
   const freshAfter = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
   const { data, error } = await getDb()
@@ -135,9 +139,12 @@ export async function getProductsToAnalyze(niche: string, limit = 50): Promise<P
     .is('score', null)
     .gt('scraped_at', freshAfter)
     .order('scraped_at', { ascending: false })
-    .limit(limit)
+    .limit(limit * 3)
   if (error) throw new Error(error.message)
-  return (data as ProductRow[]) ?? []
+  const rows = (data as ProductRow[]) ?? []
+  return rows
+    .sort((a, b) => prescore(b.raw_data) - prescore(a.raw_data))
+    .slice(0, limit)
 }
 
 // Devuelve TODOS los anunciantes de Perú del nicho (la competencia local),

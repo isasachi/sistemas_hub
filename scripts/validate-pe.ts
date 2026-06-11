@@ -11,10 +11,12 @@
 // acota con PH_VALIDATE_LIMIT (candidatos/nicho) y MAX_TERMS (búsquedas c/u).
 import './bootstrap'
 import {
-  launchScraperBrowser,
+  launchScraperContext,
   navigateAndCapture,
   scanAdNodes,
   searchUrl,
+  runPool,
+  CONCURRENCY,
 } from '../lib/product-hunter/scraper'
 import { isLikelyService } from '../lib/product-hunter/competitors'
 import {
@@ -82,7 +84,54 @@ function termsFor(product: ProductRow): string[] {
   return [...out].slice(0, MAX_TERMS)
 }
 
-async function validateNiche(page: Page, niche: string) {
+// Valida UN producto: busca sus términos en PE (secuencial dentro de su page)
+// y reclasifica con datos en vivo. Los errores se loguean, no tumban el pool.
+async function validateProduct(page: Page, product: ProductRow): Promise<void> {
+  const analysis = product.analysis
+  if (!analysis) return
+  const terms = termsFor(product)
+  if (!terms.length) return
+
+  try {
+    const seen = new Map<string, PeCompetitor>()
+    const perTerm: PeValidation['terms'] = []
+    for (const term of terms) {
+      const found = await searchPeAdvertisers(page, term)
+      perTerm.push({ term, competitors: [...found.values()] })
+      for (const [pageId, comp] of found) {
+        const prev = seen.get(pageId)
+        if (!prev || comp.adCount > prev.adCount) seen.set(pageId, comp)
+      }
+    }
+
+    const competitors = [...seen.values()].sort((a, b) => b.adCount - a.adCount)
+    const maxAds = competitors[0]?.adCount ?? 0
+    const scenario = classify(competitors.length, maxAds)
+    const { score, priority } = rescore(product.score ?? 0, scenario)
+
+    const updated = {
+      ...analysis,
+      score,
+      priority,
+      peScenario: scenario,
+      peCompetitors: competitors.slice(0, 10),
+      peValidation: {
+        validated_at: new Date().toISOString(),
+        terms: perTerm,
+        scenario,
+      },
+    }
+    await saveProductAnalysis(product.id, score, updated)
+    console.log(
+      `  ✓ ${analysis.productName} — ${terms.length} búsquedas → ${competitors.length} competidores ` +
+      `→ escenario ${scenario} · score ${product.score} → ${score} · ${priority}`
+    )
+  } catch (e) {
+    console.error(`  ✗ ${analysis.productName}: ${e instanceof Error ? e.message : e}`)
+  }
+}
+
+async function validateNiche(pages: Page[], niche: string) {
   // Dos grupos: los prometedores (alta/media) y el rescate de falsos-D
   // (descartados por el matching de pool pese a validación externa fuerte).
   const promising = await getProductsToValidatePe(niche, VALIDATE_LIMIT)
@@ -93,53 +142,12 @@ async function validateNiche(page: Page, niche: string) {
     return
   }
   console.log(
-    `[${niche}] validando en PE (en vivo): ${promising.length} alta/media + ${strongDiscards.length} rescate-D`
+    `[${niche}] validando en PE (en vivo): ${promising.length} alta/media + ${strongDiscards.length} rescate-D · concurrencia ${pages.length}`
   )
 
-  for (const product of products) {
-    const analysis = product.analysis
-    if (!analysis) continue
-    const terms = termsFor(product)
-    if (!terms.length) continue
-
-    try {
-      const seen = new Map<string, PeCompetitor>()
-      const perTerm: PeValidation['terms'] = []
-      for (const term of terms) {
-        const found = await searchPeAdvertisers(page, term)
-        perTerm.push({ term, competitors: [...found.values()] })
-        for (const [pageId, comp] of found) {
-          const prev = seen.get(pageId)
-          if (!prev || comp.adCount > prev.adCount) seen.set(pageId, comp)
-        }
-      }
-
-      const competitors = [...seen.values()].sort((a, b) => b.adCount - a.adCount)
-      const maxAds = competitors[0]?.adCount ?? 0
-      const scenario = classify(competitors.length, maxAds)
-      const { score, priority } = rescore(product.score ?? 0, scenario)
-
-      const updated = {
-        ...analysis,
-        score,
-        priority,
-        peScenario: scenario,
-        peCompetitors: competitors.slice(0, 10),
-        peValidation: {
-          validated_at: new Date().toISOString(),
-          terms: perTerm,
-          scenario,
-        },
-      }
-      await saveProductAnalysis(product.id, score, updated)
-      console.log(
-        `  ✓ ${analysis.productName} — ${terms.length} búsquedas → ${competitors.length} competidores ` +
-        `→ escenario ${scenario} · score ${product.score} → ${score} · ${priority}`
-      )
-    } catch (e) {
-      console.error(`  ✗ ${analysis.productName}: ${e instanceof Error ? e.message : e}`)
-    }
-  }
+  // Pool concurrente: cada producto hace sus búsquedas secuenciales en su page;
+  // varios productos en paralelo (mismo patrón que el scraper).
+  await runPool(products, pages, (product, page) => validateProduct(page, product))
 }
 
 async function main() {
@@ -152,9 +160,9 @@ async function main() {
       ? [args[nicheIdx + 1]]
       : await getActiveNiches().then((rows) => (rows.length ? rows.map((n) => n.id) : ALL_NICHES))
 
-  const { browser, page } = await launchScraperBrowser()
+  const { browser, pages } = await launchScraperContext(CONCURRENCY)
   try {
-    for (const niche of niches) await validateNiche(page, niche)
+    for (const niche of niches) await validateNiche(pages, niche)
   } finally {
     await browser.close()
   }

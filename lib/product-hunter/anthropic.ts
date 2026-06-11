@@ -4,9 +4,10 @@ import fs from 'fs'
 import path from 'path'
 import { ProductAnalysisSchema, type ProductAnalysis, type ProductRow } from './types'
 
-// ⚠️ COSTO: este módulo SOLO se importa desde scripts/analyze.ts (GitHub Actions).
-// Ninguna ruta de Next/Vercel debe importarlo — el análisis corre en batch en CI,
-// nunca en el path de request del usuario. Ver lib/prompts/buscador-productos.md.
+// ⚠️ COSTO: este módulo SOLO se importa desde los scripts de CI (analyze.ts,
+// pipeline.ts) y desde analysis-runner.ts (que a su vez solo importan scripts).
+// Ninguna ruta de Next/Vercel debe importarlo — el análisis corre en batch en
+// GitHub Actions, nunca en el path de request. Ver lib/prompts/buscador-productos.md.
 //
 // El análisis usa la Message Batches API (50% de descuento en todos los tokens,
 // mismo modelo y params). La latencia no importa: el cron corre cada 12h y
@@ -118,6 +119,13 @@ export async function submitAnalysisBatch(entries: BatchEntry[]): Promise<string
     })),
   })
   return batch.id
+}
+
+// Check no-bloqueante: ¿terminó el batch? Lo usa el pipeline entrelazado para
+// cosechar resultados entre nichos sin detener el scraping.
+export async function isBatchDone(batchId: string): Promise<boolean> {
+  const b = await getAI().messages.batches.retrieve(batchId)
+  return b.processing_status === 'ended'
 }
 
 // Espera a que el batch termine. Típico <1h; el timeout protege el workflow

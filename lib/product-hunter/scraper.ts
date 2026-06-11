@@ -29,11 +29,12 @@ const SCROLL_PASSES = 3
 // gasta ~12s ESPERANDO (no CPU), así que N pages multiplican el throughput ~N×
 // sin tocar los timings. ⚠️ La IP residencial es el recurso escaso: 3 es el
 // balance entre velocidad y riesgo de que Meta sirva vacíos / bloquee la IP.
-const CONCURRENCY = Math.max(1, Number(process.env.PH_CONCURRENCY ?? 3))
+// Exportado: validate-pe.ts usa el mismo pool para sus búsquedas PE en vivo.
+export const CONCURRENCY = Math.max(1, Number(process.env.PH_CONCURRENCY ?? 3))
 
 // Worker-pool de concurrencia acotada: cada page drena un índice compartido
 // hasta agotar los items. Un fallo aislado no tumba el pool (PromiseSettled).
-async function runPool<T, R>(
+export async function runPool<T, R>(
   items: T[],
   pages: Page[],
   fn: (item: T, page: Page) => Promise<R>

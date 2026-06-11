@@ -51,24 +51,19 @@ jobs:
         # instaladas (corres el scraper local). Evita pedir sudo en el runner.
         run: npx playwright install chromium
 
-      # ── Paso 1: scraping (la única llamada LLM aquí es la expansión de
-      #    keywords de nichos nuevos: una llamada Haiku por nicho, cacheada) ──
-      - name: Scrape
+      # ── Paso 1+2: scrape + análisis ──
+      # Con NICHE (cold start puntual): scrape y analyze secuenciales, rápido.
+      # Sin NICHE (cron / siembra masiva): pipeline ENTRELAZADO — al terminar el
+      # scrape de cada nicho se envía su batch de análisis sin esperar y se
+      # cosecha entre nichos (time-to-first-results: ~20 min en vez de horas).
+      # Anthropic solo se gasta aquí (Batches API, 50% dcto). Nunca en Vercel.
+      - name: Scrape + Analyze
         run: |
           if [ -n "$NICHE" ]; then
             npx tsx scripts/scrape.ts --niche "$NICHE"
-          else
-            npx tsx scripts/scrape.ts --all
-          fi
-
-      # ── Paso 2: análisis Anthropic en batch (solo productos sin score) ──
-      # Único punto donde se gasta Anthropic en volumen. Nunca corre en Vercel.
-      - name: Analyze
-        run: |
-          if [ -n "$NICHE" ]; then
             npx tsx scripts/analyze.ts --niche "$NICHE"
           else
-            npx tsx scripts/analyze.ts
+            npx tsx scripts/pipeline.ts --all
           fi
 
       # ── Paso 2.5: garantía de output — nichos sin ganadores se re-scrapean
