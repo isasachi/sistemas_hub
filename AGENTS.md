@@ -31,7 +31,7 @@ GitHub Actions (cron 48h)          Supabase                Vercel (Next.js)
   scripts/analyze.ts  ──score───►  (score/analysis)         (solo lectura, ~200ms)
 ```
 
-- **`lib/product-hunter/`** — `scraper.ts` (Playwright), `anthropic.ts` (análisis), `keyword-expansion.ts` (expansión LLM de keywords), `competitors.ts`, `github.ts` (dispatch on-demand), `db.ts` (Supabase), `types.ts`, `keywords.ts`, `session.ts`.
+- **`lib/product-hunter/`** — `scraper.ts` (Playwright + métricas), `anthropic.ts` (análisis), `keyword-expansion.ts` (expansión LLM de keywords), `quick-discard.ts` (Etapa 1: descarte rápido pre-enrich), `dom-fallback.ts` (fallback DOM cuando GraphQL da 0 nodos), `competitors.ts`, `github.ts` (dispatch on-demand), `db.ts` (Supabase), `types.ts`, `keywords.ts`, `session.ts`.
 - **Schema:** `supabase/migrations/20260609_product_hunter.sql` + `20260611_niche_keywords.sql` (tablas `ph_*` + RPCs). Aplicar en Supabase antes de usar.
 - **Workflow:** `.github/workflows/scrape-productos.yml` (scrape → analyze → expand-uncovered → analyze → validate-pe). Secrets: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`. Env de Vercel para cold start on-demand: `GITHUB_REPO`, `GITHUB_DISPATCH_TOKEN`.
 
@@ -51,3 +51,8 @@ GitHub Actions (cron 48h)          Supabase                Vercel (Next.js)
 4. **Cold start no scrapea inline.** Si el nicho no existe, `search` lo registra como `pending` y el cron lo levanta. Vercel no puede correr Playwright.
 
 **⚠️ Scraper — bug crítico:** NO usar `playwright-stealth` ni equivalentes — rompen el JS de la SPA de Meta (0 respuestas GraphQL). Solo ocultar `navigator.webdriver` con un init script. El scraper intercepta respuestas GraphQL (no parsea el DOM, salvo el `~X results` para el ad_count).
+
+**Arquitectura híbrida (implementada 2026-06-11):**
+- **Etapa 1 pre-enrich:** `quick-discard.ts` filtra desde la card de búsqueda (volumen <40 ads, antigüedad <10 días, servicios). Los candidatos PE siempre pasan (son el pool de competidores). Reduce el enrich de cientos a decenas de navegaciones.
+- **Fallback DOM:** `dom-fallback.ts` activa `querySelectorAll` sobre hrefs cuando GraphQL+inline dan 0 nodos (field `source: 'dom-fallback'` en `raw_data`). Los nodos son degradados (sin creatives) pero aseguran que la búsqueda no se pierda.
+- **Observabilidad:** `scrapeNiche` loguea un resumen de métricas al final de cada corrida (búsquedas, 0-payloads, fallbacks DOM, descartados por motivo, enriquecidos). Detecta roturas de schema GraphQL desde el primer cron.

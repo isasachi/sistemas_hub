@@ -6,7 +6,12 @@ import {
   MIN_CANDIDATES_BEFORE_FALLBACK,
 } from './keywords'
 import { upsertProducts, updateNicheAfterScrape, upsertNiche } from './db'
-import type { CreativeSnippet } from './types'
+import type { AdNode, CreativeSnippet } from './types'
+import { quickDiscard } from './quick-discard'
+import { extractFromDom } from './dom-fallback'
+
+// Re-export para consumidores externos (validate-pe.ts usa el tipo indirectamente)
+export type { AdNode }
 
 // ⚠️ Corre SOLO en GitHub Actions (necesita un browser real). Nunca en Vercel.
 // Portado del scraper Python. Notas críticas conservadas:
@@ -133,19 +138,6 @@ export async function navigateAndCapture(page: Page, url: string): Promise<unkno
 
 // ─── SCANNER DE NODOS ─────────────────────────────────────────────────────────
 
-export interface AdNode {
-  adArchiveID: string
-  pageID: string
-  pageName: string
-  startDate: number | null
-  // Datos ricos del snapshot (Fase 1) — lo que el agente original "leía" del anuncio
-  bodyText: string | null
-  title: string | null
-  ctaText: string | null
-  linkUrl: string | null
-  pageCategories: string[]
-}
-
 // Creativo compacto para raw_data (tipo en types.ts) — truncado para no inflar
 // DB ni tokens del análisis
 const MAX_CREATIVE_BODY = 300
@@ -187,12 +179,14 @@ export function summarizeCreatives(nodes: AdNode[]): CreativeSnippet[] {
 }
 
 // Busca recursivamente nodos que parezcan anuncios. Soporta camelCase y snake_case.
-// page_name vive en el nodo padre (patrón collated_results de Meta) → se propaga.
+// page_name y collation_count viven en el nodo padre (patrón collated_results de
+// Meta) → se propagan a los nodos hijo.
 export function scanAdNodes(
   obj: unknown,
   found: AdNode[] = [],
   parentPageId: string | null = null,
   parentPageName: string | null = null,
+  parentCollationCount: number | null = null,
   depth = 0
 ): AdNode[] {
   if (!obj || typeof obj !== 'object' || depth > 25) return found
@@ -209,6 +203,7 @@ export function scanAdNodes(
       pageID: String(pageId),
       pageName,
       startDate: typeof startDate === 'number' ? startDate : null,
+      collationCount: parentCollationCount,
       ...extractSnapshot(o),
     })
     return found
@@ -216,12 +211,34 @@ export function scanAdNodes(
 
   const ctxPageId = (o.page_id ?? o.pageID ?? parentPageId) as string | null
   const ctxPageName = (o.page_name ?? o.pageName ?? parentPageName) as string | null
+  // collation_count / collationCount viven en el nodo "collated result" (mismo
+  // nivel que page_id). Si no está en este nodo, se hereda del padre.
+  const rawCollation = o.collation_count ?? o.collationCount
+  const ctxCollationCount =
+    typeof rawCollation === 'number' ? rawCollation : parentCollationCount
 
   for (const val of Object.values(o)) {
-    if (Array.isArray(val)) val.forEach((v) => scanAdNodes(v, found, ctxPageId, ctxPageName, depth + 1))
-    else if (val && typeof val === 'object') scanAdNodes(val, found, ctxPageId, ctxPageName, depth + 1)
+    if (Array.isArray(val)) {
+      val.forEach((v) => scanAdNodes(v, found, ctxPageId, ctxPageName, ctxCollationCount, depth + 1))
+    } else if (val && typeof val === 'object') {
+      scanAdNodes(val, found, ctxPageId, ctxPageName, ctxCollationCount, depth + 1)
+    }
   }
   return found
+}
+
+// ─── MÉTRICAS ─────────────────────────────────────────────────────────────────
+
+interface ScrapeMetrics {
+  searches: number
+  zeroPayloads: number
+  domFallbacks: number
+  discarded: Record<string, number>
+  enriched: number
+}
+
+function emptyMetrics(): ScrapeMetrics {
+  return { searches: 0, zeroPayloads: 0, domFallbacks: 0, discarded: {}, enriched: 0 }
 }
 
 // ─── FASE 1: search → candidatos únicos ──────────────────────────────────────
@@ -236,14 +253,27 @@ interface Candidate {
   // Datos ricos capturados en la búsqueda (fallback si el enrich no trae nodos)
   creatives: CreativeSnippet[]
   pageCategories: string[]
+  // Ads count de la card del anunciante — para el quick discard de Etapa 1.
+  // null cuando el payload no incluye el campo (conservador: pasa al enrich).
+  collationCount: number | null
 }
 
 async function collectFromSearch(
-  page: Page, keyword: string, country: string, seen: Set<string>
+  page: Page, keyword: string, country: string, seen: Set<string>, metrics: ScrapeMetrics
 ): Promise<Omit<Candidate, 'keyword' | 'country'>[]> {
+  metrics.searches++
   process.stdout.write(`  [${country}] "${keyword}" ... `)
   const responses = await navigateAndCapture(page, searchUrl(keyword, country))
-  const adNodes = responses.flatMap((r) => scanAdNodes(r))
+  let adNodes = responses.flatMap((r) => scanAdNodes(r))
+
+  if (adNodes.length === 0) {
+    metrics.zeroPayloads++
+    const fallback = await extractFromDom(page)
+    if (fallback.length > 0) {
+      metrics.domFallbacks++
+      adNodes = fallback
+    }
+  }
 
   // Agrupar nodos por página: una página puede aparecer con varios ads y los
   // creativos de todos suman señal para identificar el producto.
@@ -259,6 +289,12 @@ async function collectFromSearch(
     if (seen.has(pageId)) continue
     seen.add(pageId)
     const first = group[0]
+    // collationCount: máximo entre los nodos del grupo (todos deberían tener el
+    // mismo valor propagado del padre; max es defensivo para rarezas de schema).
+    const collationCount = group.reduce<number | null>((max, n) => {
+      if (n.collationCount === null) return max
+      return max === null ? n.collationCount : Math.max(max, n.collationCount)
+    }, null)
     fresh.push({
       pageId,
       pageName: first.pageName,
@@ -266,6 +302,7 @@ async function collectFromSearch(
       startDate: first.startDate,
       creatives: summarizeCreatives(group),
       pageCategories: first.pageCategories,
+      collationCount,
     })
   }
   console.log(`${fresh.length} nuevos (${adNodes.length} nodos)`)
@@ -282,13 +319,31 @@ interface EnrichedProduct {
   raw_data: Record<string, unknown>
 }
 
-async function enrichCandidate(page: Page, c: Candidate, niche: string): Promise<EnrichedProduct | null> {
+async function enrichCandidate(
+  page: Page, c: Candidate, niche: string, metrics: ScrapeMetrics
+): Promise<EnrichedProduct | null> {
   process.stdout.write(`  ${c.pageId}  ${c.pageName} ... `)
   const responses = await navigateAndCapture(page, pageUrl(c.pageId))
   // page_id conocido se propaga como parent: en la vista de página algunos
   // payloads no repiten page_id por nodo.
-  const adNodes = responses.flatMap((r) => scanAdNodes(r, [], c.pageId, c.pageName))
+  let adNodes = responses.flatMap((r) => scanAdNodes(r, [], c.pageId, c.pageName))
     .filter((n) => n.pageID === c.pageId)
+
+  let usedDomFallback = false
+  if (adNodes.length === 0) {
+    metrics.zeroPayloads++
+    const fallback = await extractFromDom(page)
+    // En la vista de página solo hay un anunciante; si el DOM extrae exactamente
+    // una página, la mapeamos al candidato que estamos enriqueciendo.
+    const relevant = fallback.length === 1
+      ? fallback.map((n) => ({ ...n, pageID: c.pageId, pageName: c.pageName }))
+      : fallback.filter((n) => n.pageID === c.pageId)
+    if (relevant.length > 0) {
+      metrics.domFallbacks++
+      usedDomFallback = true
+      adNodes = relevant
+    }
+  }
 
   // Total exacto del payload (search_results_connection.count) > DOM "~X" > nodos
   const exactCount = responses.map((r) => findConnectionCount(r)).find((n) => n !== null) ?? null
@@ -316,6 +371,7 @@ async function enrichCandidate(page: Page, c: Candidate, niche: string): Promise
   const pageCategories = adNodes.find((n) => n.pageCategories.length)?.pageCategories ?? c.pageCategories
 
   console.log(`✓  ${adCount} ads · ${daysRunning ?? '?'} días · ${finalCreatives.length} creativos`)
+  metrics.enriched++
   return {
     id: adId,
     niche,
@@ -332,6 +388,7 @@ async function enrichCandidate(page: Page, c: Candidate, niche: string): Promise
       found_country: c.country,
       page_categories: pageCategories,
       creatives: finalCreatives,
+      ...(usedDomFallback ? { source: 'dom-fallback' } : {}),
     },
   }
 }
@@ -375,6 +432,7 @@ export async function scrapeNiche(niche: string, opts: ScrapeOptions = {}): Prom
   console.log(`\nNiche: "${niche}"  |  ${keywords.length} keywords: ${keywords.join(', ')}\n`)
 
   const { browser, page } = await launchScraperBrowser()
+  const metrics = emptyMetrics()
 
   try {
     const seen = new Set<string>()
@@ -383,7 +441,7 @@ export async function scrapeNiche(niche: string, opts: ScrapeOptions = {}): Prom
     console.log('─── Fase 1: recolectando candidatos ───')
     for (const country of countries) {
       for (const keyword of keywords) {
-        const found = await collectFromSearch(page, keyword, country, seen)
+        const found = await collectFromSearch(page, keyword, country, seen, metrics)
         candidates.push(...found.map((f) => ({ ...f, keyword, country })))
       }
     }
@@ -396,12 +454,40 @@ export async function scrapeNiche(niche: string, opts: ScrapeOptions = {}): Prom
       )
       for (const country of FALLBACK_COUNTRIES) {
         for (const keyword of keywords) {
-          const found = await collectFromSearch(page, keyword, country, seen)
+          const found = await collectFromSearch(page, keyword, country, seen, metrics)
           candidates.push(...found.map((f) => ({ ...f, keyword, country })))
         }
       }
     }
     console.log(`\nTotal candidatos únicos: ${candidates.length}\n`)
+
+    // ── Etapa 1: descarte rápido desde la card ────────────────────────────────
+    // Replica el filtro pre-enrich del agente original: solo los candidatos que
+    // superan el umbral de volumen (≥40 ads) y antigüedad (≥10 días) pasan a
+    // la Fase 2. Los servicios se descartan siempre. Los PE no se descartan
+    // (son el pool de competidores locales y siempre se enriquecen).
+    console.log('─── Etapa 1: descarte rápido ───')
+    const toEnrich: Candidate[] = []
+    for (const c of candidates) {
+      const reason = quickDiscard({
+        pageName: c.pageName,
+        pageCategories: c.pageCategories,
+        collationCount: c.collationCount,
+        startDate: c.startDate,
+        foundCountry: c.country,
+      })
+      if (reason) {
+        metrics.discarded[reason] = (metrics.discarded[reason] ?? 0) + 1
+      } else {
+        toEnrich.push(c)
+      }
+    }
+    const discardSummary = Object.entries(metrics.discarded)
+      .map(([k, v]) => `${k}=${v}`)
+      .join(', ') || 'ninguno'
+    console.log(
+      `  ${candidates.length - toEnrich.length} descartados (${discardSummary}) · ${toEnrich.length} pasan al enrich\n`
+    )
 
     console.log('─── Fase 2: enriqueciendo candidatos ───')
     // Guardado incremental: con cientos de candidatos el enrich tarda horas;
@@ -409,8 +495,8 @@ export async function scrapeNiche(niche: string, opts: ScrapeOptions = {}): Prom
     const SAVE_BATCH = 15
     let saved = 0
     let batch: EnrichedProduct[] = []
-    for (const c of candidates) {
-      const product = await enrichCandidate(page, c, niche)
+    for (const c of toEnrich) {
+      const product = await enrichCandidate(page, c, niche, metrics)
       if (product) batch.push(product)
       if (batch.length >= SAVE_BATCH) {
         await upsertProducts(batch)
@@ -422,6 +508,15 @@ export async function scrapeNiche(niche: string, opts: ScrapeOptions = {}): Prom
       await upsertProducts(batch)
       saved += batch.length
     }
+
+    // ── Resumen de métricas (visible en logs de Actions) ──────────────────────
+    const discardedTotal = candidates.length - toEnrich.length
+    console.log(
+      `\n─── Métricas [${niche}] ───\n` +
+      `  búsquedas: ${metrics.searches} | 0-payloads: ${metrics.zeroPayloads} | fallback-DOM: ${metrics.domFallbacks}\n` +
+      `  Etapa 1: ${discardedTotal} descartados (${discardSummary})\n` +
+      `  enriquecidos: ${metrics.enriched}`
+    )
 
     if (saved > 0) {
       await updateNicheAfterScrape(niche, saved)

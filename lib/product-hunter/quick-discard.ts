@@ -1,0 +1,33 @@
+import { isLikelyService } from './competitors'
+
+// Etapa 1 del agente original (AGENTS_PROMPT.md): descarta anunciantes desde la
+// card de búsqueda sin visitar su página. Reduce el enrich de cientos a decenas.
+// Todos los checks son conservadores: si falta el dato, el candidato pasa.
+
+export const MIN_ADS = 40
+export const MIN_DAYS = 10
+
+export interface QuickDiscardCandidate {
+  pageName: string
+  pageCategories: string[]
+  collationCount: number | null  // de la card del anunciante en búsqueda
+  startDate: number | null       // unix timestamp segundos del ad más antiguo
+  foundCountry: string
+}
+
+// Devuelve el motivo de descarte o null (el candidato avanza al enrich).
+// Reglas en orden de precedencia:
+//   1. Servicio → descartar siempre (no vende producto físico)
+//   2. País PE → NO descartar (es el pool de competidores locales, siempre enrichar)
+//   3. Volumen < 40 ads → descartar si collationCount disponible
+//   4. Muy reciente < 10 días → descartar si startDate disponible
+export function quickDiscard(c: QuickDiscardCandidate): string | null {
+  if (isLikelyService(c.pageName, c.pageCategories)) return 'servicio'
+  if (c.foundCountry === 'PE') return null
+  if (c.collationCount !== null && c.collationCount < MIN_ADS) return 'pocos_anuncios'
+  if (c.startDate !== null) {
+    const daysRunning = Math.floor(Date.now() / 1000 / 86_400 - c.startDate / 86_400)
+    if (daysRunning < MIN_DAYS) return 'muy_reciente'
+  }
+  return null
+}

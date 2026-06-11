@@ -23,6 +23,8 @@ export const ProductRawDataSchema = z.object({
   // Opcionales: solo existen en filas scrapeadas con el scraper enriquecido
   page_categories: z.array(z.string()).optional(),
   creatives: z.array(CreativeSnippetSchema).optional(),
+  // Marcador de enriquecimiento: 'dom-fallback' cuando GraphQL dio 0 nodos
+  source: z.literal('dom-fallback').optional(),
 })
 export type ProductRawData = z.infer<typeof ProductRawDataSchema>
 
@@ -111,6 +113,27 @@ export interface SearchResponse {
   // true cuando no hay ganadores (alta/media) y se muestran los mejores
   // candidatos disponibles por score — la UI lo etiqueta como tal.
   bestEffort?: boolean
+}
+
+// ─── Nodo de anuncio capturado por el scraper ─────────────────────────────────
+// Definido aquí (no en scraper.ts) para que dom-fallback.ts pueda importarlo
+// sin crear una dependencia circular.
+
+export interface AdNode {
+  adArchiveID: string
+  pageID: string
+  pageName: string
+  startDate: number | null
+  // Count de ads de la card del anunciante (Etapa 1 del agente original).
+  // null cuando el payload GraphQL no incluye el campo (comportamiento conservador:
+  // el candidato pasa al enrich sin descarte por volumen).
+  collationCount: number | null
+  // Datos ricos del snapshot (Fase 1)
+  bodyText: string | null
+  title: string | null
+  ctaText: string | null
+  linkUrl: string | null
+  pageCategories: string[]
 }
 
 // ─── Niche ────────────────────────────────────────────────────────────────────
