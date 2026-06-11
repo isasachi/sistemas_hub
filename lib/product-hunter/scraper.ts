@@ -1,6 +1,7 @@
 import { chromium, type Page, type Response } from 'playwright'
 import { loadKeywords, COUNTRIES } from './keywords'
 import { upsertProducts, updateNicheAfterScrape, upsertNiche } from './db'
+import type { CreativeSnippet } from './types'
 
 // ⚠️ Corre SOLO en GitHub Actions (necesita un browser real). Nunca en Vercel.
 // Portado del scraper Python. Notas críticas conservadas:
@@ -16,7 +17,7 @@ const SCROLL_PASSES = 3
 
 // ─── URLS ─────────────────────────────────────────────────────────────────────
 
-function searchUrl(keyword: string, country: string): string {
+export function searchUrl(keyword: string, country: string): string {
   const p = new URLSearchParams({
     active_status: 'active', ad_type: 'all', country,
     is_targeted_country: 'false', media_type: 'all',
@@ -45,9 +46,43 @@ async function readTotalFromDom(page: Page): Promise<number> {
   })
 }
 
+// La PRIMERA tanda de resultados no llega por GraphQL: viene embebida como JSON
+// inline en <script type="application/json"> (payload Relay del SSR). En la vista
+// de página con pocos ads no hay paginación → sin esto el enrich ve 0 nodos.
+// La estructura interna es la misma (search_results_connection → collated_results),
+// así que estos payloads se escanean con el mismo scanAdNodes.
+async function readInlineAdData(page: Page): Promise<unknown[]> {
+  const texts = await page.evaluate(() =>
+    Array.from(document.querySelectorAll('script[type="application/json"]'))
+      .map((s) => s.textContent ?? '')
+      .filter((t) => t.includes('"ad_archive_id"') || t.includes('"search_results_connection"'))
+  )
+  const out: unknown[] = []
+  for (const t of texts) {
+    try { out.push(JSON.parse(t)) } catch { /* script no-JSON */ }
+  }
+  return out
+}
+
+// Busca el total exacto de ads del anunciante: search_results_connection.count.
+// Más confiable que el "~X results" del DOM (que es aproximado).
+function findConnectionCount(obj: unknown, depth = 0): number | null {
+  if (!obj || typeof obj !== 'object' || depth > 25) return null
+  const o = obj as Record<string, unknown>
+  const conn = o.search_results_connection as Record<string, unknown> | undefined
+  if (conn && typeof conn.count === 'number') return conn.count
+  for (const val of Object.values(o)) {
+    if (val && typeof val === 'object') {
+      const hit = findConnectionCount(val, depth + 1)
+      if (hit !== null) return hit
+    }
+  }
+  return null
+}
+
 // Colectamos los Response síncronamente y leemos el body DESPUÉS de navegar
 // (evita race conditions; Playwright bufferea los bodies).
-async function navigateAndCapture(page: Page, url: string): Promise<unknown[]> {
+export async function navigateAndCapture(page: Page, url: string): Promise<unknown[]> {
   const rawResponses: Response[] = []
   const collect = (r: Response) => {
     if (!r.url().includes('facebook.com/api/graphql')) return
@@ -80,18 +115,12 @@ async function navigateAndCapture(page: Page, url: string): Promise<unknown[]> {
     } catch { /* body no legible */ }
   }
 
-  if (rawResponses.length === 0) {
+  // La primera tanda viene inline en el HTML, no por GraphQL (ver readInlineAdData)
+  captured.push(...(await readInlineAdData(page).catch(() => [] as unknown[])))
+
+  if (captured.length === 0) {
     const title = await page.title()
-    console.error(`[DEBUG] 0 GraphQL responses — title="${title}" url=${page.url()}`)
-  } else if (captured.length === 0) {
-    const sample = await rawResponses[0].text().catch(() => '(no legible)')
-    console.error(`[DEBUG] ${rawResponses.length} responses, 0 parseadas. Primeros 500 chars:\n${sample.slice(0, 500)}`)
-  } else {
-    const nodes = captured.flatMap((r) => scanAdNodes(r))
-    if (nodes.length === 0) {
-      const first = captured[0] as Record<string, unknown>
-      console.error(`[DEBUG] ${captured.length} JSONs parseados, 0 nodos. Keys: ${Object.keys(first).join(', ')}`)
-    }
+    console.error(`[DEBUG] 0 payloads (GraphQL+inline) — title="${title}" url=${page.url()}`)
   }
 
   return captured
@@ -99,16 +128,62 @@ async function navigateAndCapture(page: Page, url: string): Promise<unknown[]> {
 
 // ─── SCANNER DE NODOS ─────────────────────────────────────────────────────────
 
-interface AdNode {
+export interface AdNode {
   adArchiveID: string
   pageID: string
   pageName: string
   startDate: number | null
+  // Datos ricos del snapshot (Fase 1) — lo que el agente original "leía" del anuncio
+  bodyText: string | null
+  title: string | null
+  ctaText: string | null
+  linkUrl: string | null
+  pageCategories: string[]
+}
+
+// Creativo compacto para raw_data (tipo en types.ts) — truncado para no inflar
+// DB ni tokens del análisis
+const MAX_CREATIVE_BODY = 300
+const MAX_CREATIVES = 3
+
+function extractSnapshot(o: Record<string, unknown>): Pick<AdNode, 'bodyText' | 'title' | 'ctaText' | 'linkUrl' | 'pageCategories'> {
+  const snap = (o.snapshot ?? null) as Record<string, unknown> | null
+  const body = (snap?.body ?? null) as Record<string, unknown> | null
+  const cards = (Array.isArray(snap?.cards) ? snap?.cards : []) as Record<string, unknown>[]
+  const card = cards[0] ?? null
+  // body.text vive en snapshot.body; en ads carousel el texto está en cards[]
+  const bodyText = (typeof body?.text === 'string' && body.text) || (typeof card?.body === 'string' && card.body) || null
+  const title = (typeof snap?.title === 'string' && snap.title) || (typeof card?.title === 'string' && card.title) || null
+  const ctaText = (typeof snap?.cta_text === 'string' && snap.cta_text) || (typeof card?.cta_text === 'string' && card.cta_text) || null
+  const linkUrl = (typeof snap?.link_url === 'string' && snap.link_url) || (typeof card?.link_url === 'string' && card.link_url) || null
+  const pageCategories = (Array.isArray(snap?.page_categories) ? snap.page_categories : [])
+    .filter((c): c is string => typeof c === 'string')
+  return { bodyText, title, ctaText, linkUrl, pageCategories }
+}
+
+// Resume los creativos únicos de un set de nodos (para raw_data.creatives)
+export function summarizeCreatives(nodes: AdNode[]): CreativeSnippet[] {
+  const seen = new Set<string>()
+  const out: CreativeSnippet[] = []
+  for (const n of nodes) {
+    if (!n.bodyText && !n.title) continue
+    const key = `${n.bodyText ?? ''}|${n.title ?? ''}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push({
+      body: n.bodyText ? n.bodyText.slice(0, MAX_CREATIVE_BODY) : null,
+      title: n.title,
+      cta: n.ctaText,
+      link: n.linkUrl,
+    })
+    if (out.length >= MAX_CREATIVES) break
+  }
+  return out
 }
 
 // Busca recursivamente nodos que parezcan anuncios. Soporta camelCase y snake_case.
 // page_name vive en el nodo padre (patrón collated_results de Meta) → se propaga.
-function scanAdNodes(
+export function scanAdNodes(
   obj: unknown,
   found: AdNode[] = [],
   parentPageId: string | null = null,
@@ -129,6 +204,7 @@ function scanAdNodes(
       pageID: String(pageId),
       pageName,
       startDate: typeof startDate === 'number' ? startDate : null,
+      ...extractSnapshot(o),
     })
     return found
   }
@@ -152,6 +228,9 @@ interface Candidate {
   startDate: number | null
   keyword: string
   country: string
+  // Datos ricos capturados en la búsqueda (fallback si el enrich no trae nodos)
+  creatives: CreativeSnippet[]
+  pageCategories: string[]
 }
 
 async function collectFromSearch(
@@ -161,11 +240,28 @@ async function collectFromSearch(
   const responses = await navigateAndCapture(page, searchUrl(keyword, country))
   const adNodes = responses.flatMap((r) => scanAdNodes(r))
 
-  const fresh: Omit<Candidate, 'keyword' | 'country'>[] = []
+  // Agrupar nodos por página: una página puede aparecer con varios ads y los
+  // creativos de todos suman señal para identificar el producto.
+  const byPage = new Map<string, AdNode[]>()
   for (const node of adNodes) {
-    if (seen.has(node.pageID)) continue
-    seen.add(node.pageID)
-    fresh.push({ pageId: node.pageID, pageName: node.pageName, adId: node.adArchiveID, startDate: node.startDate })
+    const group = byPage.get(node.pageID) ?? []
+    group.push(node)
+    byPage.set(node.pageID, group)
+  }
+
+  const fresh: Omit<Candidate, 'keyword' | 'country'>[] = []
+  for (const [pageId, group] of byPage) {
+    if (seen.has(pageId)) continue
+    seen.add(pageId)
+    const first = group[0]
+    fresh.push({
+      pageId,
+      pageName: first.pageName,
+      adId: first.adArchiveID,
+      startDate: first.startDate,
+      creatives: summarizeCreatives(group),
+      pageCategories: first.pageCategories,
+    })
   }
   console.log(`${fresh.length} nuevos (${adNodes.length} nodos)`)
   return fresh
@@ -184,9 +280,14 @@ interface EnrichedProduct {
 async function enrichCandidate(page: Page, c: Candidate, niche: string): Promise<EnrichedProduct | null> {
   process.stdout.write(`  ${c.pageId}  ${c.pageName} ... `)
   const responses = await navigateAndCapture(page, pageUrl(c.pageId))
-  const adNodes = responses.flatMap((r) => scanAdNodes(r))
+  // page_id conocido se propaga como parent: en la vista de página algunos
+  // payloads no repiten page_id por nodo.
+  const adNodes = responses.flatMap((r) => scanAdNodes(r, [], c.pageId, c.pageName))
+    .filter((n) => n.pageID === c.pageId)
 
-  const adCount = (await readTotalFromDom(page)) || adNodes.length
+  // Total exacto del payload (search_results_connection.count) > DOM "~X" > nodos
+  const exactCount = responses.map((r) => findConnectionCount(r)).find((n) => n !== null) ?? null
+  const adCount = exactCount ?? (await readTotalFromDom(page)) ?? adNodes.length
 
   let daysRunning: number | null = null
   let oldestDate: string | null = null
@@ -204,7 +305,12 @@ async function enrichCandidate(page: Page, c: Candidate, niche: string): Promise
   const adId = c.adId || adNodes[0]?.adArchiveID || null
   if (!adId) { console.log('sin ad_id, omitido'); return null }
 
-  console.log(`✓  ${adCount} ads · ${daysRunning ?? '?'} días`)
+  // Creativos: los de la página del anunciante (más completos) o los de la búsqueda
+  const creatives = summarizeCreatives(adNodes)
+  const finalCreatives = creatives.length ? creatives : c.creatives
+  const pageCategories = adNodes.find((n) => n.pageCategories.length)?.pageCategories ?? c.pageCategories
+
+  console.log(`✓  ${adCount} ads · ${daysRunning ?? '?'} días · ${finalCreatives.length} creativos`)
   return {
     id: adId,
     niche,
@@ -219,16 +325,17 @@ async function enrichCandidate(page: Page, c: Candidate, niche: string): Promise
       oldest_date: oldestDate,
       found_keyword: c.keyword,
       found_country: c.country,
+      page_categories: pageCategories,
+      creatives: finalCreatives,
     },
   }
 }
 
 // ─── MAIN ─────────────────────────────────────────────────────────────────────
 
-export async function scrapeNiche(niche: string): Promise<void> {
-  const keywords = loadKeywords(niche)
-  console.log(`\nNiche: "${niche}"  |  Keywords: ${keywords.join(', ')}\n`)
-
+// Setup compartido del browser (lo usa también la validación PE en vivo).
+// ⚠️ NO usar playwright-stealth — rompe la SPA de Meta. Solo ocultar webdriver.
+export async function launchScraperBrowser() {
   const browser = await chromium.launch({
     headless: true,
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-blink-features=AutomationControlled'],
@@ -239,11 +346,18 @@ export async function scrapeNiche(niche: string): Promise<void> {
     timezoneId: 'America/Lima',
     viewport: { width: 1366, height: 768 },
   })
-  // Ocultar navigator.webdriver SIN playwright-stealth (que rompe la SPA de Meta)
   await context.addInitScript(() => {
     Object.defineProperty(navigator, 'webdriver', { get: () => undefined })
   })
   const page = await context.newPage()
+  return { browser, page }
+}
+
+export async function scrapeNiche(niche: string): Promise<void> {
+  const keywords = loadKeywords(niche)
+  console.log(`\nNiche: "${niche}"  |  Keywords: ${keywords.join(', ')}\n`)
+
+  const { browser, page } = await launchScraperBrowser()
 
   try {
     const seen = new Set<string>()

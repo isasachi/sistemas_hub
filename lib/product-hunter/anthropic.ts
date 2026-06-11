@@ -30,24 +30,43 @@ const ANALYSIS_TOOL: Anthropic.Tool = {
 
 interface AnalyzeInput {
   candidate: ProductRow
-  peCompetitors: { name: string; adCount: number }[]
+  peMatch: {
+    competitors: { name: string; adCount: number }[]
+    poolSize: number
+    servicesExcluded: number
+  }
 }
 
-export async function analyzeProduct({ candidate, peCompetitors }: AnalyzeInput): Promise<ProductAnalysis> {
+export async function analyzeProduct({ candidate, peMatch }: AnalyzeInput): Promise<ProductAnalysis> {
   const raw = candidate.raw_data
+
+  // Creativos reales del anuncio — la señal principal para identificar el producto
+  const creativeLines = (raw.creatives ?? []).flatMap((c, i) => {
+    const lines = [`Creativo ${i + 1}:`]
+    if (c.title) lines.push(`  Título: ${c.title}`)
+    if (c.body) lines.push(`  Texto: ${c.body}`)
+    if (c.cta) lines.push(`  CTA: ${c.cta}`)
+    if (c.link) lines.push(`  Link destino: ${c.link}`)
+    return lines
+  })
+
   const userMessage = [
     'Evalúa este candidato de Meta Ads Library para dropshipping en Perú.',
     '',
     `Anunciante: ${candidate.name}`,
+    `Categorías de la página en Meta: ${raw.page_categories?.length ? raw.page_categories.join(', ') : 'desconocidas'}`,
     `Keyword que lo encontró: ${raw.found_keyword}`,
     `País del anuncio: ${raw.found_country}`,
     `Anuncios activos: ${raw.ad_count}`,
     `Días corriendo el más antiguo: ${raw.days_running ?? 'desconocido'}`,
     '',
-    'Competencia actual en Perú para este nicho (anunciantes con found_country=PE en el pool):',
-    peCompetitors.length
-      ? peCompetitors.map((c) => `- ${c.name}: ${c.adCount} ads`).join('\n')
-      : '- (ninguno registrado)',
+    creativeLines.length ? creativeLines.join('\n') : '(sin creativos capturados — infiere el producto del nombre y la keyword)',
+    '',
+    `Competencia en Perú para ESTE producto (pre-filtrada: de ${peMatch.poolSize} anunciantes PE del nicho, ` +
+      `se excluyeron ${peMatch.servicesExcluded} servicios y se matchearon por producto):`,
+    peMatch.competitors.length
+      ? peMatch.competitors.map((c) => `- ${c.name}: ${c.adCount} ads`).join('\n')
+      : '- (ningún competidor del mismo producto en el pool PE)',
     '',
     'Devuelve el análisis llamando a la tool registrar_analisis.',
   ].join('\n')

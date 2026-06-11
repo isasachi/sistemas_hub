@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import type { ProductRow, NicheRow, ProductAnalysis } from './types'
+import type { ProductRow, NicheRow, StoredAnalysis } from './types'
 
 // Cliente Supabase con service role (bypassa RLS), igual que lib/db.ts del hub.
 // Se usa tanto desde rutas Next como desde los scripts de GitHub Actions.
@@ -115,13 +115,39 @@ export async function getPeCompetitors(niche: string): Promise<ProductRow[]> {
 export async function saveProductAnalysis(
   productId: string,
   score: number,
-  analysis: ProductAnalysis
+  analysis: StoredAnalysis
 ): Promise<void> {
   const { error } = await getDb()
     .from('ph_products')
     .update({ score, analysis, analyzed_at: new Date().toISOString() })
     .eq('id', productId)
   if (error) throw new Error(error.message)
+}
+
+// Candidatos alta/media ya analizados pero aún sin validación PE en vivo (Fase 4).
+export async function getProductsToValidatePe(niche: string, limit = 15): Promise<ProductRow[]> {
+  const { data, error } = await getDb()
+    .from('ph_products')
+    .select('*')
+    .eq('niche', niche)
+    .not('score', 'is', null)
+    .in('analysis->>priority', ['alta', 'media'])
+    .is('analysis->peValidation', null)
+    .order('score', { ascending: false })
+    .limit(limit)
+  if (error) throw new Error(error.message)
+  return (data as ProductRow[]) ?? []
+}
+
+// Borra score/analysis de un nicho para re-analizarlo (ej. tras cambiar el prompt).
+export async function resetNicheAnalysis(niche: string): Promise<number> {
+  const { data, error } = await getDb()
+    .from('ph_products')
+    .update({ score: null, analysis: null, analyzed_at: null })
+    .eq('niche', niche)
+    .select('id')
+  if (error) throw new Error(error.message)
+  return data?.length ?? 0
 }
 
 // ─── SERVE: lectura para el usuario (vía RPC, rápido, sin LLM) ─────────────────

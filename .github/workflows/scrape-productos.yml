@@ -53,3 +53,9 @@ jobs:
       # Único punto donde se gasta Anthropic. Nunca corre en Vercel.
       - name: Analyze
         run: npx tsx scripts/analyze.ts ${{ github.event.inputs.niche && format('--niche {0}', github.event.inputs.niche) || '' }}
+
+      # ── Paso 3: validación PE en vivo (solo candidatos alta/media, $0 LLM) ──
+      # Busca los peSearchTerms de cada candidato prometedor en Meta filtrando
+      # por Perú y reclasifica el escenario con competidores reales de hoy.
+      - name: Validate PE (live)
+        run: npx tsx scripts/validate-pe.ts ${{ github.event.inputs.niche && format('--niche {0}', github.event.inputs.niche) || '' }}

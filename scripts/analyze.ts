@@ -12,9 +12,30 @@ import {
   saveProductAnalysis,
 } from '../lib/product-hunter/db'
 import { analyzeProduct } from '../lib/product-hunter/anthropic'
+import { isLikelyService, matchPeCompetitors } from '../lib/product-hunter/competitors'
 import { ALL_NICHES } from '../lib/product-hunter/keywords'
+import type { ProductAnalysis, ProductRow } from '../lib/product-hunter/types'
 
 const BATCH_LIMIT = Number(process.env.PH_ANALYZE_LIMIT ?? 50)
+
+// Descarte determinista para servicios (clínicas, fisios, médicos): no gastamos
+// una llamada a Anthropic en algo que el filtro detecta gratis.
+function serviceDiscard(candidate: ProductRow): ProductAnalysis {
+  return {
+    score: 5,
+    productName: candidate.name ?? candidate.raw_data.advertiser_name,
+    whatItIs: 'Servicio local (clínica/consultorio/terapia), no un producto físico.',
+    problemSolved: '—',
+    attributes: [],
+    peScenario: 'D',
+    peCompetitors: [],
+    priority: 'descartado',
+    reasoning:
+      'Descartado sin análisis LLM: el nombre o las categorías de la página en Meta ' +
+      'indican que es un servicio local, no un producto importable para dropshipping.',
+    peSearchTerms: [],
+  }
+}
 
 async function analyzeNiche(niche: string) {
   const pending = await getProductsToAnalyze(niche, BATCH_LIMIT)
@@ -23,23 +44,33 @@ async function analyzeNiche(niche: string) {
     return
   }
 
-  // Competencia PE del nicho (se carga una vez, se reusa para todos los candidatos)
-  const peRows = await getPeCompetitors(niche)
-  const peCompetitors = peRows.map((r) => ({
-    name: r.name ?? r.raw_data.advertiser_name,
-    adCount: r.raw_data.ad_count,
-  }))
+  // Pool PE del nicho (una sola query; el matching por producto es por candidato)
+  const pePool = await getPeCompetitors(niche)
 
-  console.log(`[${niche}] analizando ${pending.length} productos (competencia PE: ${peCompetitors.length})`)
+  console.log(`[${niche}] analizando ${pending.length} productos (pool PE: ${pePool.length})`)
+  let llmCalls = 0
+  let skippedServices = 0
   for (const candidate of pending) {
     try {
-      const analysis = await analyzeProduct({ candidate, peCompetitors })
+      // Servicios: descarte gratis, sin LLM
+      if (isLikelyService(candidate.name ?? candidate.raw_data.advertiser_name, candidate.raw_data.page_categories ?? [])) {
+        const analysis = serviceDiscard(candidate)
+        await saveProductAnalysis(candidate.id, analysis.score, analysis)
+        skippedServices++
+        console.log(`  ⊘ ${candidate.name} → servicio, descartado sin LLM`)
+        continue
+      }
+
+      const peMatch = matchPeCompetitors(candidate, pePool)
+      const analysis = await analyzeProduct({ candidate, peMatch })
+      llmCalls++
       await saveProductAnalysis(candidate.id, analysis.score, analysis)
-      console.log(`  ✓ ${candidate.name} → score ${analysis.score} · ${analysis.priority}`)
+      console.log(`  ✓ ${candidate.name} → score ${analysis.score} · ${analysis.priority} · PE match: ${peMatch.competitors.length}`)
     } catch (e) {
       console.error(`  ✗ ${candidate.name}: ${e instanceof Error ? e.message : e}`)
     }
   }
+  console.log(`[${niche}] listo — ${llmCalls} llamadas LLM, ${skippedServices} servicios descartados gratis`)
 }
 
 async function main() {

@@ -2,6 +2,15 @@ import { z } from 'zod'
 
 // ─── Datos crudos del scraper (lo que va en ph_products.raw_data) ─────────────
 
+// Snippet de creativo capturado por el scraper (Fase 1 — datos ricos)
+export const CreativeSnippetSchema = z.object({
+  body: z.string().nullable(),
+  title: z.string().nullable(),
+  cta: z.string().nullable(),
+  link: z.string().nullable(),
+})
+export type CreativeSnippet = z.infer<typeof CreativeSnippetSchema>
+
 export const ProductRawDataSchema = z.object({
   page_id: z.string(),
   ad_id: z.string(),
@@ -11,6 +20,9 @@ export const ProductRawDataSchema = z.object({
   oldest_date: z.string().nullable(),
   found_keyword: z.string(),
   found_country: z.string(),
+  // Opcionales: solo existen en filas scrapeadas con el scraper enriquecido
+  page_categories: z.array(z.string()).optional(),
+  creatives: z.array(CreativeSnippetSchema).optional(),
 })
 export type ProductRawData = z.infer<typeof ProductRawDataSchema>
 
@@ -35,8 +47,25 @@ export const ProductAnalysisSchema = z.object({
   peCompetitors: z.array(PeCompetitorSchema),
   priority: z.enum(['alta', 'media', 'descartado']),
   reasoning: z.string(),         // por qué este score/prioridad
+  // Términos cortos (≤3 palabras) para validar competencia en PE en vivo (Fase 4).
+  // Vacío en candidatos descartados.
+  peSearchTerms: z.array(z.string()).default([]),
 })
 export type ProductAnalysis = z.infer<typeof ProductAnalysisSchema>
+
+// Resultado de la validación PE en vivo (Fase 4) — se agrega a analysis.peValidation
+export const PeValidationSchema = z.object({
+  validated_at: z.string(),
+  terms: z.array(z.object({
+    term: z.string(),
+    competitors: z.array(PeCompetitorSchema),
+  })),
+  scenario: PeScenario,          // escenario recalculado con datos en vivo
+})
+export type PeValidation = z.infer<typeof PeValidationSchema>
+
+// Lo que realmente vive en ph_products.analysis (análisis LLM + validación opcional)
+export type StoredAnalysis = ProductAnalysis & { peValidation?: PeValidation }
 
 // ─── Fila de ph_products tal como vuelve de Supabase ──────────────────────────
 
@@ -47,7 +76,7 @@ export interface ProductRow {
   name: string | null
   raw_data: ProductRawData
   score: number | null
-  analysis: ProductAnalysis | null
+  analysis: StoredAnalysis | null
   scraped_at: string
   analyzed_at: string | null
 }
