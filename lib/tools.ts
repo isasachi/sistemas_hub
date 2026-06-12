@@ -8,6 +8,7 @@ export interface Tool {
   tag: string;
   tagStyle: "brand" | "new" | "utility" | "neutral";
   featured?: boolean;
+  status: "live" | "soon"; // "soon" = muestra <ComingSoon> al abrir su view
 }
 
 export const tools: Tool[] = [
@@ -22,6 +23,7 @@ export const tools: Tool[] = [
     accentColor: "#ff9c4d",
     tag: "Nuevo",
     tagStyle: "new",
+    status: "live",
   },
   {
     name: "Generador de Anuncios",
@@ -35,6 +37,7 @@ export const tools: Tool[] = [
     tag: "IA Real",
     tagStyle: "new",
     featured: true,
+    status: "live",
   },
   {
     name: "Generador de Video Ads",
@@ -45,8 +48,9 @@ export const tools: Tool[] = [
       "Crea scripts profesionales para videos publicitarios con gancho, desarrollo y llamada a la acción optimizados para cada plataforma.",
     icon: "Video",
     accentColor: "#ff9c4d",
-    tag: "Nuevo",
-    tagStyle: "new",
+    tag: "Pronto",
+    tagStyle: "neutral",
+    status: "soon",
   },
   {
     name: "Generador de Branding",
@@ -57,8 +61,9 @@ export const tools: Tool[] = [
       "Define la identidad visual y verbal de tu marca: nombre, colores, tipografía, tono de comunicación y guía de estilo completa.",
     icon: "Sparkles",
     accentColor: "#ff9c4d",
-    tag: "Branding",
+    tag: "Pronto",
     tagStyle: "neutral",
+    status: "soon",
   },
   {
     name: "Calculadora de Costos",
@@ -69,8 +74,9 @@ export const tools: Tool[] = [
       "Calcula el presupuesto óptimo para tus campañas digitales y proyecta métricas clave como CPC, CPM, conversiones y retorno esperado.",
     icon: "DollarSign",
     accentColor: "#ff9c4d",
-    tag: "Utilidad",
-    tagStyle: "utility",
+    tag: "Pronto",
+    tagStyle: "neutral",
+    status: "soon",
   },
   {
     name: "Generador de Landing Pages",
@@ -81,8 +87,9 @@ export const tools: Tool[] = [
       "Crea el contenido y la estructura de una landing page optimizada para convertir: hero, beneficios, testimonios, FAQ y CTA.",
     icon: "LayoutTemplate",
     accentColor: "#ff9c4d",
-    tag: "Landing",
+    tag: "Pronto",
     tagStyle: "neutral",
+    status: "soon",
   },
 ];
 
