@@ -40,23 +40,23 @@ interface SelectFieldProps extends BaseFieldProps {
 type FieldGroupProps = InputFieldProps | TextareaFieldProps | SelectFieldProps;
 
 const fieldClass =
-  "bg-[#131320] border-white/[0.08] text-[#f1f5f9] placeholder:text-[#475569] focus:border-[rgba(245,158,11,0.5)] focus:ring-[rgba(245,158,11,0.12)] focus:ring-2 transition-all duration-200";
+  "bg-[#141414] border-white/[0.06] text-[#f5f5f5] placeholder:text-[#8a8a8a] focus:border-[rgba(255,156,77,0.5)] focus:ring-[rgba(255,156,77,0.12)] focus:ring-2 transition-all duration-200";
 
 export function FieldGroup(props: FieldGroupProps) {
   return (
     <div className="flex flex-col gap-2">
       <label
         htmlFor={props.id}
-        className="text-[13px] font-semibold text-[#f1f5f9]"
+        className="text-[13px] font-semibold text-[#f5f5f5]"
       >
         {props.label}
         {props.required && (
-          <span className="text-[#f59e0b] ml-0.5" aria-hidden>
+          <span className="text-[#ff9c4d] ml-0.5" aria-hidden>
             *
           </span>
         )}
         {props.helper && (
-          <span className="text-[#475569] font-normal ml-1.5">
+          <span className="text-[#8a8a8a] font-normal ml-1.5">
             {props.helper}
           </span>
         )}
@@ -88,12 +88,12 @@ export function FieldGroup(props: FieldGroupProps) {
           <SelectTrigger id={props.id} className={fieldClass}>
             <SelectValue />
           </SelectTrigger>
-          <SelectContent className="bg-[#0d0d18] border-white/[0.08] text-[#f1f5f9]">
+          <SelectContent className="bg-[#0f0f0f] border-white/[0.06] text-[#f5f5f5]">
             {props.options.map((opt) => (
               <SelectItem
                 key={opt.value}
                 value={opt.value}
-                className="focus:bg-white/[0.07] focus:text-[#f1f5f9] cursor-pointer"
+                className="focus:bg-white/[0.07] focus:text-[#f5f5f5] cursor-pointer"
               >
                 {opt.label}
               </SelectItem>

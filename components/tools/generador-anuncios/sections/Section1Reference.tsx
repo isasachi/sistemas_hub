@@ -5,7 +5,7 @@ import { useWizardStore } from '@/store/wizard'
 import { FileUpload } from '@/components/tools/ui/FileUpload'
 import type { ReferenceAnalysis } from '@/lib/types'
 
-const btnPrimary = 'h-11 w-full rounded-xl text-white text-[13px] font-bold bg-brand-gradient hover:opacity-90 disabled:opacity-40 transition-all duration-200 cursor-pointer border-0 font-sans flex items-center justify-center gap-2'
+const btnPrimary = 'h-11 w-full rounded-xl jr-cta text-[13px] font-bold disabled:opacity-40 transition-all duration-200 cursor-pointer border-0 font-sans flex items-center justify-center gap-2'
 
 export default function Section1Reference() {
   const { sessionId, referenceUrl, setReferenceData, setLoading, isLoading } = useWizardStore()
@@ -39,7 +39,7 @@ export default function Section1Reference() {
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-[13px] text-[#94a3b8] leading-relaxed">
+      <p className="text-[13px] text-[#bdbdbd] leading-relaxed">
         Sube el anuncio que quieres replicar. Analizaré su formato, composición, estilo y lógica persuasiva.
       </p>
       <FileUpload label="Seleccionar imagen de referencia" onFile={handleFile} preview={preview} />

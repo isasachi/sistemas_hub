@@ -9,14 +9,14 @@ export function Navbar() {
   const isToolPage = pathname.startsWith("/tools/");
 
   return (
-    <nav className="sticky top-0 z-40 flex items-center justify-between px-8 h-[60px] border-b border-white/[0.08] bg-[#080810]/90 backdrop-blur-[16px]">
+    <nav className="sticky top-0 z-40 flex items-center justify-between px-8 h-[60px] border-b border-white/[0.06] bg-[#0a0a0a]/90 backdrop-blur-[16px]">
       {/* Logo */}
       <Link href="/" className="flex items-center gap-2.5 no-underline group">
-        <div className="w-[34px] h-[34px] rounded-lg flex items-center justify-center bg-brand-gradient shadow-[0_0_16px_rgba(245,158,11,0.3)]">
-          <Zap className="w-[18px] h-[18px] text-white fill-white" />
+        <div className="w-[34px] h-[34px] rounded-lg flex items-center justify-center jr-cta !shadow-[0_4px_14px_rgba(255,142,60,0.3),inset_0_1px_0_rgba(255,255,255,0.65)]">
+          <Zap className="w-[18px] h-[18px] text-[#1c0f03] fill-[#1c0f03]" />
         </div>
-        <span className="text-[15px] font-bold text-[#f1f5f9] tracking-[0.2px]">
-          JR <span className="text-[#f59e0b]">AI Hub</span>
+        <span className="text-[15px] font-bold text-[#f5f5f5] tracking-[0.2px] font-[Poppins]">
+          JR <span className="text-[#ff9c4d]">AI Hub</span>
         </span>
       </Link>
 
@@ -26,7 +26,7 @@ export function Navbar() {
           <li>
             <Link
               href="/"
-              className="text-[#94a3b8] hover:text-[#f1f5f9] hover:bg-white/[0.04] text-sm font-medium px-3.5 py-1.5 rounded-lg transition-all duration-200 no-underline"
+              className="text-[#bdbdbd] hover:text-[#f5f5f5] hover:bg-white/[0.04] text-sm font-medium px-3.5 py-1.5 rounded-lg transition-all duration-200 no-underline"
             >
               Herramientas
             </Link>
@@ -34,7 +34,7 @@ export function Navbar() {
           <li>
             <Link
               href="/#como-funciona"
-              className="text-[#94a3b8] hover:text-[#f1f5f9] hover:bg-white/[0.04] text-sm font-medium px-3.5 py-1.5 rounded-lg transition-all duration-200 no-underline"
+              className="text-[#bdbdbd] hover:text-[#f5f5f5] hover:bg-white/[0.04] text-sm font-medium px-3.5 py-1.5 rounded-lg transition-all duration-200 no-underline"
             >
               Cómo funciona
             </Link>
@@ -44,7 +44,7 @@ export function Navbar() {
               href="https://jrconsulting.com.pe"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-[#94a3b8] hover:text-[#f1f5f9] hover:bg-white/[0.04] text-sm font-medium px-3.5 py-1.5 rounded-lg transition-all duration-200 no-underline"
+              className="text-[#bdbdbd] hover:text-[#f5f5f5] hover:bg-white/[0.04] text-sm font-medium px-3.5 py-1.5 rounded-lg transition-all duration-200 no-underline"
             >
               Sobre JR
             </a>
@@ -56,13 +56,13 @@ export function Navbar() {
       {isToolPage ? (
         <Link
           href="/"
-          className="flex items-center gap-1.5 text-[#94a3b8] hover:text-[#f1f5f9] text-sm font-medium transition-colors duration-200 no-underline"
+          className="flex items-center gap-1.5 text-[#bdbdbd] hover:text-[#f5f5f5] text-sm font-medium transition-colors duration-200 no-underline"
         >
           <ChevronLeft className="w-4 h-4" />
           Volver a herramientas
         </Link>
       ) : (
-        <button className="bg-brand-gradient text-white text-sm font-bold px-5 py-2 rounded-lg shadow-[0_4px_16px_rgba(245,158,11,0.25)] hover:opacity-90 hover:shadow-[0_4px_24px_rgba(245,158,11,0.4)] transition-all duration-200 cursor-pointer border-0">
+        <button className="jr-cta text-sm font-bold px-5 py-2 rounded-full cursor-pointer border-0">
           Comenzar gratis
         </button>
       )}

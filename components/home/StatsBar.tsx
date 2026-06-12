@@ -6,17 +6,23 @@ const stats = [
 
 export function StatsBar() {
   return (
-    <div className="flex items-center justify-center gap-12 px-8 pb-14 border-b border-white/[0.08] flex-wrap">
-      {stats.map((stat) => (
-        <div key={stat.label} className="text-center">
-          <div className="text-[28px] font-extrabold gradient-text leading-none">
-            {stat.value}
+    <div className="px-8 pb-14">
+      <div className="flex items-center justify-center gap-4 flex-wrap">
+        {stats.map((stat) => (
+          <div
+            key={stat.label}
+            className="jr-card rounded-2xl px-8 py-5 text-center min-w-[180px]"
+          >
+            <div className="text-[28px] font-bold gradient-text leading-none font-[Poppins]">
+              {stat.value}
+            </div>
+            <div className="text-[13px] text-[#8a8a8a] font-medium mt-1.5">
+              {stat.label}
+            </div>
           </div>
-          <div className="text-[13px] text-[#475569] font-medium mt-1">
-            {stat.label}
-          </div>
-        </div>
-      ))}
+        ))}
+      </div>
+      <div className="jr-hairline mt-14" />
     </div>
   );
 }

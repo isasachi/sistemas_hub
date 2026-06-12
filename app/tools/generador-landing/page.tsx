@@ -69,10 +69,10 @@ export default function GeneradorLanding() {
   const preview = (
     <PreviewPanel
       icon={LayoutTemplate}
-      accentColor="#60a5fa"
+      accentColor="#ff9c4d"
       placeholderTitle="Tu landing aparecerá aquí"
       placeholderSub="Genera el copy y estructura de todas las secciones de tu landing page."
-      tips={[{ text: <><strong className="text-[#f59e0b]">Tip:</strong> Las landings con garantía explícita convierten hasta 2× más que las que no la tienen.</> }]}
+      tips={[{ text: <><strong className="text-[#ff9c4d]">Tip:</strong> Las landings con garantía explícita convierten hasta 2× más que las que no la tienen.</> }]}
     />
   );
 
@@ -83,8 +83,8 @@ export default function GeneradorLanding() {
           {currentStep === 0 && (
             <div className="flex flex-col gap-5">
               <div>
-                <h2 className="text-[22px] font-extrabold text-[#f1f5f9] tracking-[-0.3px] mb-1">Tu negocio</h2>
-                <p className="text-[14px] text-[#94a3b8]">Base para crear el copy de tu landing page.</p>
+                <h2 className="text-[22px] font-extrabold text-[#f5f5f5] tracking-[-0.3px] mb-1">Tu negocio</h2>
+                <p className="text-[14px] text-[#bdbdbd]">Base para crear el copy de tu landing page.</p>
               </div>
               <FieldGroup type="input" id="negocio" label="Nombre del negocio" required placeholder="Ej: JR Consulting" value={negocio} onChange={setNegocio} />
               <FieldGroup type="textarea" id="oferta" label="¿Qué ofreces exactamente?" required placeholder="Ej: Consultoría de marketing para dueños de ecommerce que quieren aumentar ventas" rows={3} value={oferta} onChange={setOferta} />
@@ -95,15 +95,15 @@ export default function GeneradorLanding() {
           {currentStep === 1 && (
             <div className="flex flex-col gap-5">
               <div>
-                <h2 className="text-[22px] font-extrabold text-[#f1f5f9] tracking-[-0.3px] mb-1">Objetivo y secciones</h2>
-                <p className="text-[14px] text-[#94a3b8]">Define qué quieres lograr y qué secciones incluir.</p>
+                <h2 className="text-[22px] font-extrabold text-[#f5f5f5] tracking-[-0.3px] mb-1">Objetivo y secciones</h2>
+                <p className="text-[14px] text-[#bdbdbd]">Define qué quieres lograr y qué secciones incluir.</p>
               </div>
               <div>
-                <label className="text-[13px] font-semibold text-[#f1f5f9] mb-1 block">Objetivo principal <span className="text-[#f59e0b]">*</span></label>
+                <label className="text-[13px] font-semibold text-[#f5f5f5] mb-1 block">Objetivo principal <span className="text-[#ff9c4d]">*</span></label>
                 <ChipGroup options={["Generar leads", "Venta directa", "Reservar cita", "Registrar usuarios"]} selected={objetivo} onChange={(v) => setObjetivo(v as string)} />
               </div>
               <div>
-                <label className="text-[13px] font-semibold text-[#f1f5f9] mb-1 block">Secciones a incluir <span className="text-[#f59e0b]">*</span></label>
+                <label className="text-[13px] font-semibold text-[#f5f5f5] mb-1 block">Secciones a incluir <span className="text-[#ff9c4d]">*</span></label>
                 <ChipGroup multi options={["Hero", "Problema", "Solución", "Beneficios", "Prueba social", "FAQ", "CTA final"]} selected={secciones} onChange={(v) => setSecciones(v as string[])} />
               </div>
             </div>
@@ -111,10 +111,10 @@ export default function GeneradorLanding() {
 
           {currentStep === 2 && (
             <div className="flex flex-col gap-5">
-              <div><h2 className="text-[22px] font-extrabold text-[#f1f5f9] tracking-[-0.3px] mb-1">Revisa tu configuración</h2></div>
-              <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-5 flex flex-col gap-3 text-[14px]">
+              <div><h2 className="text-[22px] font-extrabold text-[#f5f5f5] tracking-[-0.3px] mb-1">Revisa tu configuración</h2></div>
+              <div className="bg-white/[0.04] border border-white/[0.06] rounded-2xl p-5 flex flex-col gap-3 text-[14px]">
                 {[["Negocio", negocio || "—"], ["Oferta", oferta || "—"], ["Garantía", garantia || "Sin garantía"], ["Objetivo", objetivo], ["Secciones", secciones.join(", ") || "—"]].map(([k, v]) => (
-                  <div key={k} className="flex gap-2"><span className="text-[#475569] font-semibold min-w-[100px]">{k}:</span><span className="text-[#f1f5f9]">{v}</span></div>
+                  <div key={k} className="flex gap-2"><span className="text-[#8a8a8a] font-semibold min-w-[100px]">{k}:</span><span className="text-[#f5f5f5]">{v}</span></div>
                 ))}
               </div>
             </div>
@@ -123,20 +123,20 @@ export default function GeneradorLanding() {
           {currentStep === 3 && (
             <div className="flex flex-col gap-5">
               <div>
-                <h2 className="text-[22px] font-extrabold text-[#f1f5f9] tracking-[-0.3px] mb-1">¡Tu landing está lista!</h2>
-                <p className="text-[14px] text-[#94a3b8]">Copy por sección. Copia cada bloque y úsalo en tu página.</p>
+                <h2 className="text-[22px] font-extrabold text-[#f5f5f5] tracking-[-0.3px] mb-1">¡Tu landing está lista!</h2>
+                <p className="text-[14px] text-[#bdbdbd]">Copy por sección. Copia cada bloque y úsalo en tu página.</p>
               </div>
               <div className="flex flex-col gap-3">
                 {MOCK_LANDING.map((sec) => (
-                  <div key={sec.section} className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-5">
+                  <div key={sec.section} className="bg-white/[0.04] border border-white/[0.06] rounded-2xl p-5">
                     <div className="flex items-center justify-between mb-3">
-                      <span className="text-[11px] font-bold text-[#60a5fa] tracking-[1.5px] uppercase">{sec.section}</span>
-                      <button type="button" onClick={() => copySec(sec.section, sec.content)} className="flex items-center gap-1 text-[#475569] hover:text-[#f59e0b] text-xs font-medium cursor-pointer bg-transparent border-0 transition-colors duration-200 font-sans">
+                      <span className="text-[11px] font-bold text-[#ff9c4d] tracking-[1.5px] uppercase">{sec.section}</span>
+                      <button type="button" onClick={() => copySec(sec.section, sec.content)} className="flex items-center gap-1 text-[#8a8a8a] hover:text-[#ff9c4d] text-xs font-medium cursor-pointer bg-transparent border-0 transition-colors duration-200 font-sans">
                         {copied === sec.section ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                         {copied === sec.section ? "Copiado" : "Copiar"}
                       </button>
                     </div>
-                    <pre className="text-[13px] text-[#94a3b8] leading-[1.65] whitespace-pre-wrap font-sans">{sec.content}</pre>
+                    <pre className="text-[13px] text-[#bdbdbd] leading-[1.65] whitespace-pre-wrap font-sans">{sec.content}</pre>
                   </div>
                 ))}
               </div>

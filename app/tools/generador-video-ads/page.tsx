@@ -52,10 +52,10 @@ export default function GeneradorVideoAds() {
   const preview = (
     <PreviewPanel
       icon={Video}
-      accentColor="#ef4444"
+      accentColor="#ff9c4d"
       placeholderTitle="Tu script aparecerá aquí"
       placeholderSub="Completa los pasos para generar el script estructurado de tu video ad."
-      tips={[{ text: <><strong className="text-[#f59e0b]">Tip:</strong> Los primeros 3 segundos son críticos — el gancho define si el usuario sigue viendo o no.</> }]}
+      tips={[{ text: <><strong className="text-[#ff9c4d]">Tip:</strong> Los primeros 3 segundos son críticos — el gancho define si el usuario sigue viendo o no.</> }]}
     />
   );
 
@@ -66,8 +66,8 @@ export default function GeneradorVideoAds() {
           {currentStep === 0 && (
             <div className="flex flex-col gap-5">
               <div>
-                <h2 className="text-[22px] font-extrabold text-[#f1f5f9] tracking-[-0.3px] mb-1">Tu negocio</h2>
-                <p className="text-[14px] text-[#94a3b8]">Base para crear el script de tu video publicitario.</p>
+                <h2 className="text-[22px] font-extrabold text-[#f5f5f5] tracking-[-0.3px] mb-1">Tu negocio</h2>
+                <p className="text-[14px] text-[#bdbdbd]">Base para crear el script de tu video publicitario.</p>
               </div>
               <FieldGroup type="input" id="negocio" label="Nombre del negocio" required placeholder="Ej: SportMax Perú" value={negocio} onChange={setNegocio} />
               <FieldGroup type="textarea" id="producto" label="¿Qué ofreces?" required placeholder="Ej: Consultoría de marketing para ecommerce" rows={3} value={producto} onChange={setProducto} />
@@ -77,19 +77,19 @@ export default function GeneradorVideoAds() {
           {currentStep === 1 && (
             <div className="flex flex-col gap-5">
               <div>
-                <h2 className="text-[22px] font-extrabold text-[#f1f5f9] tracking-[-0.3px] mb-1">Formato del video</h2>
-                <p className="text-[14px] text-[#94a3b8]">Define cómo será tu video ad.</p>
+                <h2 className="text-[22px] font-extrabold text-[#f5f5f5] tracking-[-0.3px] mb-1">Formato del video</h2>
+                <p className="text-[14px] text-[#bdbdbd]">Define cómo será tu video ad.</p>
               </div>
               <div>
-                <label className="text-[13px] font-semibold text-[#f1f5f9] mb-1 block">Plataforma <span className="text-[#f59e0b]">*</span></label>
+                <label className="text-[13px] font-semibold text-[#f5f5f5] mb-1 block">Plataforma <span className="text-[#ff9c4d]">*</span></label>
                 <ChipGroup options={["TikTok", "Instagram Reels", "Facebook", "YouTube Shorts"]} selected={plataforma} onChange={(v) => setPlataforma(v as string)} />
               </div>
               <div>
-                <label className="text-[13px] font-semibold text-[#f1f5f9] mb-1 block">Duración <span className="text-[#f59e0b]">*</span></label>
+                <label className="text-[13px] font-semibold text-[#f5f5f5] mb-1 block">Duración <span className="text-[#ff9c4d]">*</span></label>
                 <ChipGroup options={["15 segundos", "30 segundos", "60 segundos"]} selected={duracion} onChange={(v) => setDuracion(v as string)} />
               </div>
               <div>
-                <label className="text-[13px] font-semibold text-[#f1f5f9] mb-1 block">Estilo del video <span className="text-[#f59e0b]">*</span></label>
+                <label className="text-[13px] font-semibold text-[#f5f5f5] mb-1 block">Estilo del video <span className="text-[#ff9c4d]">*</span></label>
                 <ChipGroup options={["Educativo", "Testimonial", "Demostración", "Storytelling", "Directo"]} selected={estilo} onChange={(v) => setEstilo(v as string)} />
               </div>
               <FieldGroup type="input" id="cta" label="Call to action final" helper="(opcional)" placeholder="Ej: Reserva tu sesión gratis hoy" value={cta} onChange={setCta} />
@@ -99,11 +99,11 @@ export default function GeneradorVideoAds() {
           {currentStep === 2 && (
             <div className="flex flex-col gap-5">
               <div>
-                <h2 className="text-[22px] font-extrabold text-[#f1f5f9] tracking-[-0.3px] mb-1">Revisa tu configuración</h2>
+                <h2 className="text-[22px] font-extrabold text-[#f5f5f5] tracking-[-0.3px] mb-1">Revisa tu configuración</h2>
               </div>
-              <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-5 flex flex-col gap-3 text-[14px]">
+              <div className="bg-white/[0.04] border border-white/[0.06] rounded-2xl p-5 flex flex-col gap-3 text-[14px]">
                 {[["Negocio", negocio || "—"], ["Producto", producto || "—"], ["Plataforma", plataforma], ["Duración", duracion], ["Estilo", estilo], ["CTA", cta || "—"]].map(([k, v]) => (
-                  <div key={k} className="flex gap-2"><span className="text-[#475569] font-semibold min-w-[100px]">{k}:</span><span className="text-[#f1f5f9]">{v}</span></div>
+                  <div key={k} className="flex gap-2"><span className="text-[#8a8a8a] font-semibold min-w-[100px]">{k}:</span><span className="text-[#f5f5f5]">{v}</span></div>
                 ))}
               </div>
             </div>
@@ -112,15 +112,15 @@ export default function GeneradorVideoAds() {
           {currentStep === 3 && (
             <div className="flex flex-col gap-5">
               <div>
-                <h2 className="text-[22px] font-extrabold text-[#f1f5f9] tracking-[-0.3px] mb-1">¡Script generado!</h2>
-                <p className="text-[14px] text-[#94a3b8]">Estructura lista para grabar. Adapta los textos en corchetes a tu producción.</p>
+                <h2 className="text-[22px] font-extrabold text-[#f5f5f5] tracking-[-0.3px] mb-1">¡Script generado!</h2>
+                <p className="text-[14px] text-[#bdbdbd]">Estructura lista para grabar. Adapta los textos en corchetes a tu producción.</p>
               </div>
-              <div className="relative bg-white/[0.04] border border-white/[0.08] rounded-2xl p-5">
-                <button type="button" onClick={copyScript} className="absolute top-4 right-4 flex items-center gap-1 text-[#475569] hover:text-[#f59e0b] text-xs font-medium cursor-pointer bg-transparent border-0 transition-colors duration-200 font-sans">
+              <div className="relative bg-white/[0.04] border border-white/[0.06] rounded-2xl p-5">
+                <button type="button" onClick={copyScript} className="absolute top-4 right-4 flex items-center gap-1 text-[#8a8a8a] hover:text-[#ff9c4d] text-xs font-medium cursor-pointer bg-transparent border-0 transition-colors duration-200 font-sans">
                   {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                   {copied ? "Copiado" : "Copiar"}
                 </button>
-                <pre className="text-[13px] text-[#94a3b8] leading-[1.7] whitespace-pre-wrap font-sans">{MOCK_SCRIPT}</pre>
+                <pre className="text-[13px] text-[#bdbdbd] leading-[1.7] whitespace-pre-wrap font-sans">{MOCK_SCRIPT}</pre>
               </div>
             </div>
           )}

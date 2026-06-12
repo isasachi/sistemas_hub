@@ -10,7 +10,7 @@ Copia y pega aquí los comentarios tal como están — con errores, emojis y tod
 
 Eso es lo que voy a usar para escribir el texto de tu anuncio con las palabras exactas de tu audiencia. Entre más reales, mejor.`
 
-const btnPrimary = 'h-11 w-full rounded-xl text-white text-[13px] font-bold bg-brand-gradient hover:opacity-90 disabled:opacity-40 transition-all duration-200 cursor-pointer border-0 font-sans flex items-center justify-center gap-2'
+const btnPrimary = 'h-11 w-full rounded-xl jr-cta text-[13px] font-bold disabled:opacity-40 transition-all duration-200 cursor-pointer border-0 font-sans flex items-center justify-center gap-2'
 
 export default function Section3Comments() {
   const { sessionId, setCopyVersions, setLoading, isLoading } = useWizardStore()
@@ -39,19 +39,19 @@ export default function Section3Comments() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="rounded-xl border border-white/[0.08] bg-[#080810] px-4 py-4">
-        <pre className="text-[12px] text-[#94a3b8] whitespace-pre-wrap font-sans leading-relaxed">{TIKTOK_SCRIPT}</pre>
+      <div className="rounded-xl border border-white/[0.06] bg-[#0a0a0a] px-4 py-4">
+        <pre className="text-[12px] text-[#bdbdbd] whitespace-pre-wrap font-sans leading-relaxed">{TIKTOK_SCRIPT}</pre>
       </div>
       <textarea
         value={comments}
         onChange={(e) => setComments(e.target.value)}
         rows={7}
         placeholder="Pega aquí los comentarios..."
-        className="rounded-xl border border-white/[0.08] bg-[#080810] px-4 py-3 text-[13px] text-[#f1f5f9] placeholder:text-[#475569] resize-none focus:outline-none focus:border-[rgba(245,158,11,0.5)] transition-colors"
+        className="rounded-xl border border-white/[0.06] bg-[#0a0a0a] px-4 py-3 text-[13px] text-[#f5f5f5] placeholder:text-[#8a8a8a] resize-none focus:outline-none focus:border-[rgba(255,156,77,0.5)] transition-colors"
       />
       {isLoading && (
         <div className="flex flex-col gap-1.5">
-          <div className="flex justify-between text-[11px] text-[#94a3b8]">
+          <div className="flex justify-between text-[11px] text-[#bdbdbd]">
             <span>Generando copy A/B...</span>
           </div>
           <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">

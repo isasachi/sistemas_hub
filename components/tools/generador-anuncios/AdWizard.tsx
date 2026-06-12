@@ -23,12 +23,12 @@ export default function AdWizard() {
   const progressPct = Math.round((Math.min(step, 4) / 4) * 100)
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#080810]">
+    <div className="flex flex-col min-h-screen bg-[#0a0a0a]">
       {/* Progress bar */}
       <div className="h-[2px] bg-white/[0.06]">
         <div
           className="h-full transition-all duration-700"
-          style={{ width: `${progressPct}%`, background: 'linear-gradient(90deg,#f59e0b,#ef4444)' }}
+          style={{ width: `${progressPct}%`, background: 'linear-gradient(90deg,#ff9c4d,#ff9c4d)' }}
         />
       </div>
 

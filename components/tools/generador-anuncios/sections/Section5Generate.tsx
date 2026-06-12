@@ -14,7 +14,7 @@ const STATUS_LABELS: Record<string, { text: string; pct: number }> = {
 
 const STAGES = ['building_prompt', 'loading_images', 'generating', 'uploading', 'done']
 
-const btnPrimary = 'rounded-xl text-white text-[13px] font-bold bg-brand-gradient hover:opacity-90 disabled:opacity-40 transition-all duration-200 cursor-pointer border-0 font-sans flex items-center justify-center gap-2'
+const btnPrimary = 'rounded-xl jr-cta text-[13px] font-bold disabled:opacity-40 transition-all duration-200 cursor-pointer border-0 font-sans flex items-center justify-center gap-2'
 
 export default function Section5Generate() {
   const { sessionId, imageUrl, setImageUrl, startNewSession } = useWizardStore()
@@ -79,18 +79,18 @@ export default function Section5Generate() {
             url={`/api/sessions/${sessionId}/generate-image`}
             onEvent={handleEvent}
           />
-          <p className="text-[13px] text-[#94a3b8]">Esto puede tomar entre 15 y 40 segundos.</p>
+          <p className="text-[13px] text-[#bdbdbd]">Esto puede tomar entre 15 y 40 segundos.</p>
 
           {/* Progress bar with stage indicators */}
           <div>
-            <div className="flex justify-between text-[11px] text-[#94a3b8] mb-1.5">
+            <div className="flex justify-between text-[11px] text-[#bdbdbd] mb-1.5">
               <span>{STATUS_LABELS[status]?.text ?? status}</span>
-              <span className="text-[#f59e0b] font-bold">{progress}%</span>
+              <span className="text-[#ff9c4d] font-bold">{progress}%</span>
             </div>
             <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden mb-2">
               <div
                 className="h-full rounded-full transition-all duration-700"
-                style={{ width: `${progress}%`, background: 'linear-gradient(90deg,#f59e0b 0%,#ef4444 100%)' }}
+                style={{ width: `${progress}%`, background: 'linear-gradient(90deg,#ff9c4d 0%,#ff9c4d 100%)' }}
               />
             </div>
             <div className="flex gap-1">
@@ -104,21 +104,21 @@ export default function Section5Generate() {
                     style={{
                       background:
                         idx < currentIdx ? '#22c55e' :
-                        idx === currentIdx ? 'linear-gradient(90deg,#f59e0b,#ef4444)' :
+                        idx === currentIdx ? 'linear-gradient(90deg,#ff9c4d,#ff9c4d)' :
                         'rgba(255,255,255,0.08)',
                     }}
                   />
                 )
               })}
             </div>
-            <div className="flex justify-between text-[9px] text-[#475569] mt-1">
+            <div className="flex justify-between text-[9px] text-[#8a8a8a] mt-1">
               <span>prompt</span><span>imágenes</span><span>generando</span><span>guardando</span><span>listo</span>
             </div>
           </div>
 
           {/* Skeleton */}
-          <div className="aspect-[9/16] max-h-[300px] rounded-2xl bg-[#131320] animate-pulse border border-white/[0.06] flex items-center justify-center">
-            <span className="text-[#475569] text-[12px]">generando...</span>
+          <div className="aspect-[9/16] max-h-[300px] rounded-2xl bg-[#141414] animate-pulse border border-white/[0.06] flex items-center justify-center">
+            <span className="text-[#8a8a8a] text-[12px]">generando...</span>
           </div>
         </>
       )}
@@ -137,7 +137,7 @@ export default function Section5Generate() {
 
       {imageUrl && (
         <div className="flex flex-col gap-4">
-          <img src={imageUrl} alt="Anuncio generado" className="w-full rounded-2xl border border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,.6)]" />
+          <img src={imageUrl} alt="Anuncio generado" className="w-full rounded-2xl border border-white/[0.06] shadow-[0_8px_32px_rgba(0,0,0,.6)]" />
           <div className="flex gap-3">
             <button onClick={handleDownload} className={btnPrimary + ' flex-1 h-11'}>
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -145,12 +145,12 @@ export default function Section5Generate() {
               </svg>
               Descargar
             </button>
-            <button onClick={startNewSession} className="h-11 px-4 rounded-xl border border-white/[0.14] text-[#f1f5f9] text-[13px] font-medium hover:bg-white/[0.05] transition-colors cursor-pointer bg-transparent">
+            <button onClick={startNewSession} className="h-11 px-4 rounded-xl border border-white/[0.14] text-[#f5f5f5] text-[13px] font-medium hover:bg-white/[0.05] transition-colors cursor-pointer bg-transparent">
               Nuevo anuncio
             </button>
           </div>
           <div className="border-t border-white/[0.06] pt-4">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-[#475569] mb-2">¿Quieres ajustar algo?</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-[#8a8a8a] mb-2">¿Quieres ajustar algo?</p>
             {error && <div className="mb-2 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-[11px] text-red-400">{error}</div>}
             <div className="flex gap-2">
               <input
@@ -159,7 +159,7 @@ export default function Section5Generate() {
                 value={feedback}
                 onChange={(e) => setFeedback(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && !refining && handleRefine()}
-                className="flex-1 h-10 rounded-xl border border-white/[0.08] bg-[#080810] px-3 text-[13px] text-[#f1f5f9] placeholder:text-[#475569] focus:outline-none focus:border-[rgba(245,158,11,0.5)] transition-colors"
+                className="flex-1 h-10 rounded-xl border border-white/[0.06] bg-[#0a0a0a] px-3 text-[13px] text-[#f5f5f5] placeholder:text-[#8a8a8a] focus:outline-none focus:border-[rgba(255,156,77,0.5)] transition-colors"
               />
               <button
                 onClick={handleRefine}

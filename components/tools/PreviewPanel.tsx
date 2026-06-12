@@ -26,13 +26,13 @@ export function PreviewPanel({
   isReady = false,
 }: PreviewPanelProps) {
   return (
-    <div className="bg-[#0d0d18] px-9 py-10 flex flex-col min-h-full">
+    <div className="bg-[#0f0f0f] px-9 py-10 flex flex-col min-h-full">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <span className="text-[11px] font-bold text-[#475569] tracking-[1.5px] uppercase">
+        <span className="text-[11px] font-bold text-[#8a8a8a] tracking-[1.5px] uppercase">
           Vista previa
         </span>
-        <span className="text-[10px] font-bold bg-[rgba(245,158,11,0.1)] border border-[rgba(245,158,11,0.2)] text-[#f59e0b] px-2.5 py-0.5 rounded-full tracking-[0.5px] uppercase">
+        <span className="text-[10px] font-bold bg-[rgba(255,156,77,0.1)] border border-[rgba(255,156,77,0.2)] text-[#ff9c4d] px-2.5 py-0.5 rounded-full tracking-[0.5px] uppercase">
           En vivo
         </span>
       </div>
@@ -48,10 +48,10 @@ export function PreviewPanel({
           >
             <Icon className="w-6 h-6" style={{ color: accentColor }} />
           </div>
-          <p className="text-[15px] font-bold text-[#f1f5f9] mb-2">
+          <p className="text-[15px] font-bold text-[#f5f5f5] mb-2">
             {placeholderTitle}
           </p>
-          <p className="text-[13px] text-[#475569] leading-[1.5] max-w-[240px]">
+          <p className="text-[13px] text-[#8a8a8a] leading-[1.5] max-w-[240px]">
             {placeholderSub}
           </p>
         </div>
@@ -66,14 +66,14 @@ export function PreviewPanel({
               className={[
                 "flex gap-2.5 items-start rounded-xl p-3.5 border text-[12px] leading-[1.55]",
                 tip.variant === "success"
-                  ? "bg-[rgba(59,130,246,0.05)] border-[rgba(59,130,246,0.15)] text-[#94a3b8]"
-                  : "bg-[rgba(245,158,11,0.06)] border-[rgba(245,158,11,0.14)] text-[#94a3b8]",
+                  ? "bg-[rgba(59,130,246,0.05)] border-[rgba(59,130,246,0.15)] text-[#bdbdbd]"
+                  : "bg-[rgba(255,156,77,0.06)] border-[rgba(255,156,77,0.14)] text-[#bdbdbd]",
               ].join(" ")}
             >
               <Info
                 className="w-4 h-4 flex-shrink-0 mt-0.5"
                 style={{
-                  color: tip.variant === "success" ? "#60a5fa" : "#f59e0b",
+                  color: tip.variant === "success" ? "#ff9c4d" : "#ff9c4d",
                 }}
               />
               <span>{tip.text}</span>

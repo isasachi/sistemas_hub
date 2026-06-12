@@ -24,10 +24,10 @@ export function StepIndicator({ steps, currentStep }: StepIndicatorProps) {
                 className={[
                   "w-[30px] h-[30px] rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 transition-all duration-200",
                   done
-                    ? "bg-[rgba(245,158,11,0.15)] border border-[rgba(245,158,11,0.4)] text-[#f59e0b]"
+                    ? "bg-[rgba(255,156,77,0.15)] border border-[rgba(255,156,77,0.4)] text-[#ff9c4d]"
                     : active
-                    ? "bg-brand-gradient border-0 text-white shadow-[0_0_16px_rgba(245,158,11,0.4)]"
-                    : "bg-[#0d0d18] border border-white/[0.08] text-[#475569]",
+                    ? "jr-cta border-0 shadow-[0_0_16px_rgba(255,156,77,0.4)]"
+                    : "bg-[#0f0f0f] border border-white/[0.06] text-[#8a8a8a]",
                 ].join(" ")}
               >
                 {done ? (
@@ -41,7 +41,7 @@ export function StepIndicator({ steps, currentStep }: StepIndicatorProps) {
               <span
                 className={[
                   "text-xs font-semibold whitespace-nowrap",
-                  active ? "text-[#f1f5f9]" : "text-[#475569]",
+                  active ? "text-[#f5f5f5]" : "text-[#8a8a8a]",
                 ].join(" ")}
               >
                 {step.label}
@@ -54,7 +54,7 @@ export function StepIndicator({ steps, currentStep }: StepIndicatorProps) {
                 className={[
                   "flex-1 h-px mx-3 min-w-[20px] transition-colors duration-200",
                   done
-                    ? "bg-[rgba(245,158,11,0.3)]"
+                    ? "bg-[rgba(255,156,77,0.3)]"
                     : "bg-white/[0.08]",
                 ].join(" ")}
               />

@@ -22,20 +22,20 @@ const statusStyles: Record<SectionStatus, {
   iconColor: string
 }> = {
   locked: {
-    border: 'border border-dashed border-white/[0.08]',
+    border: 'border border-dashed border-white/[0.06]',
     headerBg: '',
     opacity: 'opacity-45',
     iconBg: 'bg-white/[0.04]',
     iconBorder: 'border-white/[0.1]',
-    iconColor: 'text-[#475569]',
+    iconColor: 'text-[#8a8a8a]',
   },
   active: {
-    border: 'border border-[rgba(245,158,11,0.4)] shadow-[0_0_0_1px_rgba(245,158,11,0.08)]',
-    headerBg: 'bg-[rgba(245,158,11,0.06)]',
+    border: 'border border-[rgba(255,156,77,0.4)] shadow-[0_0_0_1px_rgba(255,156,77,0.08)]',
+    headerBg: 'bg-[rgba(255,156,77,0.06)]',
     opacity: '',
-    iconBg: 'bg-[rgba(245,158,11,0.15)]',
-    iconBorder: 'border-[rgba(245,158,11,0.4)]',
-    iconColor: 'text-[#f59e0b]',
+    iconBg: 'bg-[rgba(255,156,77,0.15)]',
+    iconBorder: 'border-[rgba(255,156,77,0.4)]',
+    iconColor: 'text-[#ff9c4d]',
   },
   completed: {
     border: 'border border-[rgba(34,197,94,0.25)]',
@@ -76,21 +76,21 @@ export default function AccordionSection({
           )}
         </div>
         <div className="flex-1 min-w-0">
-          <p className={`text-[13px] font-bold ${status === 'locked' ? 'text-[#475569]' : 'text-[#f1f5f9]'}`}>
+          <p className={`text-[13px] font-bold ${status === 'locked' ? 'text-[#8a8a8a]' : 'text-[#f5f5f5]'}`}>
             {title}
           </p>
           {status === 'completed' && summary && (
-            <p className="text-[11px] text-[#94a3b8] mt-0.5 truncate">{summary}</p>
+            <p className="text-[11px] text-[#bdbdbd] mt-0.5 truncate">{summary}</p>
           )}
         </div>
         {canReopen && (
-          <span className="text-[10px] text-[#475569] shrink-0">▼ editar</span>
+          <span className="text-[10px] text-[#8a8a8a] shrink-0">▼ editar</span>
         )}
       </div>
 
       {/* Body */}
       {isOpen && (
-        <div className="bg-[#0d0d18] px-4 pb-5 pt-4">
+        <div className="bg-[#0f0f0f] px-4 pb-5 pt-4">
           {children}
         </div>
       )}

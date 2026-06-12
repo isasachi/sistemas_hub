@@ -40,10 +40,10 @@ export default function CalculadoraCostos() {
   const preview = (
     <PreviewPanel
       icon={DollarSign}
-      accentColor="#34d399"
+      accentColor="#ff9c4d"
       placeholderTitle="Tu proyección aparecerá aquí"
       placeholderSub="Completa los datos de tu campaña para ver el ROI estimado."
-      tips={[{ text: <><strong className="text-[#f59e0b]">Tip:</strong> Un presupuesto mínimo de S/1,500/mes es lo recomendado para campañas de conversión en Perú.</> }]}
+      tips={[{ text: <><strong className="text-[#ff9c4d]">Tip:</strong> Un presupuesto mínimo de S/1,500/mes es lo recomendado para campañas de conversión en Perú.</> }]}
     />
   );
 
@@ -54,19 +54,19 @@ export default function CalculadoraCostos() {
           {currentStep === 0 && (
             <div className="flex flex-col gap-5">
               <div>
-                <h2 className="text-[22px] font-extrabold text-[#f1f5f9] tracking-[-0.3px] mb-1">Tu campaña</h2>
-                <p className="text-[14px] text-[#94a3b8]">Define el objetivo y las plataformas de tu campaña.</p>
+                <h2 className="text-[22px] font-extrabold text-[#f5f5f5] tracking-[-0.3px] mb-1">Tu campaña</h2>
+                <p className="text-[14px] text-[#bdbdbd]">Define el objetivo y las plataformas de tu campaña.</p>
               </div>
               <div>
-                <label className="text-[13px] font-semibold text-[#f1f5f9] mb-1 block">Objetivo principal <span className="text-[#f59e0b]">*</span></label>
+                <label className="text-[13px] font-semibold text-[#f5f5f5] mb-1 block">Objetivo principal <span className="text-[#ff9c4d]">*</span></label>
                 <ChipGroup options={["Ventas directas", "Generación de leads", "Tráfico web", "Reconocimiento de marca"]} selected={objetivo} onChange={(v) => setObjetivo(v as string)} />
               </div>
               <div>
-                <label className="text-[13px] font-semibold text-[#f1f5f9] mb-1 block">Plataformas <span className="text-[#f59e0b]">*</span></label>
+                <label className="text-[13px] font-semibold text-[#f5f5f5] mb-1 block">Plataformas <span className="text-[#ff9c4d]">*</span></label>
                 <ChipGroup multi options={["Facebook", "Instagram", "TikTok", "Google Ads", "YouTube"]} selected={plataformas} onChange={(v) => setPlataformas(v as string[])} />
               </div>
               <div>
-                <label className="text-[13px] font-semibold text-[#f1f5f9] mb-1 block">Duración de campaña <span className="text-[#f59e0b]">*</span></label>
+                <label className="text-[13px] font-semibold text-[#f5f5f5] mb-1 block">Duración de campaña <span className="text-[#ff9c4d]">*</span></label>
                 <ChipGroup options={["7 días", "15 días", "30 días", "60 días", "90 días"]} selected={duracion} onChange={(v) => setDuracion(v as string)} />
               </div>
             </div>
@@ -75,8 +75,8 @@ export default function CalculadoraCostos() {
           {currentStep === 1 && (
             <div className="flex flex-col gap-5">
               <div>
-                <h2 className="text-[22px] font-extrabold text-[#f1f5f9] tracking-[-0.3px] mb-1">Presupuesto</h2>
-                <p className="text-[14px] text-[#94a3b8]">Indica tu inversión para calcular las métricas esperadas.</p>
+                <h2 className="text-[22px] font-extrabold text-[#f5f5f5] tracking-[-0.3px] mb-1">Presupuesto</h2>
+                <p className="text-[14px] text-[#bdbdbd]">Indica tu inversión para calcular las métricas esperadas.</p>
               </div>
               <FieldGroup type="input" id="presupuesto" label="Presupuesto total (S/)" required placeholder="Ej: 3000" value={presupuesto} onChange={setPresupuesto} />
               <FieldGroup type="input" id="ticket" label="Precio promedio de tu producto (S/)" helper="(para calcular ROI)" placeholder="Ej: 100" value={ticket} onChange={setTicket} />
@@ -85,10 +85,10 @@ export default function CalculadoraCostos() {
 
           {currentStep === 2 && (
             <div className="flex flex-col gap-5">
-              <div><h2 className="text-[22px] font-extrabold text-[#f1f5f9] tracking-[-0.3px] mb-1">Revisa tu configuración</h2></div>
-              <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-5 flex flex-col gap-3 text-[14px]">
+              <div><h2 className="text-[22px] font-extrabold text-[#f5f5f5] tracking-[-0.3px] mb-1">Revisa tu configuración</h2></div>
+              <div className="bg-white/[0.04] border border-white/[0.06] rounded-2xl p-5 flex flex-col gap-3 text-[14px]">
                 {[["Objetivo", objetivo], ["Plataformas", plataformas.join(", ")], ["Duración", duracion], ["Presupuesto", presupuesto ? `S/ ${presupuesto}` : "—"], ["Ticket promedio", ticket ? `S/ ${ticket}` : "—"]].map(([k, v]) => (
-                  <div key={k} className="flex gap-2"><span className="text-[#475569] font-semibold min-w-[120px]">{k}:</span><span className="text-[#f1f5f9]">{v}</span></div>
+                  <div key={k} className="flex gap-2"><span className="text-[#8a8a8a] font-semibold min-w-[120px]">{k}:</span><span className="text-[#f5f5f5]">{v}</span></div>
                 ))}
               </div>
             </div>
@@ -97,28 +97,28 @@ export default function CalculadoraCostos() {
           {currentStep === 3 && (
             <div className="flex flex-col gap-5">
               <div>
-                <h2 className="text-[22px] font-extrabold text-[#f1f5f9] tracking-[-0.3px] mb-1">Proyección de tu campaña</h2>
-                <p className="text-[14px] text-[#94a3b8]">Estimaciones basadas en benchmarks del mercado peruano.</p>
+                <h2 className="text-[22px] font-extrabold text-[#f5f5f5] tracking-[-0.3px] mb-1">Proyección de tu campaña</h2>
+                <p className="text-[14px] text-[#bdbdbd]">Estimaciones basadas en benchmarks del mercado peruano.</p>
               </div>
-              <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-5">
+              <div className="bg-white/[0.04] border border-white/[0.06] rounded-2xl p-5">
                 <div className="flex items-center gap-2 mb-4">
-                  <span className="text-[11px] font-bold text-[#475569] tracking-[1.5px] uppercase">Resumen</span>
-                  <span className="text-[10px] font-bold bg-[rgba(52,211,153,0.1)] border border-[rgba(52,211,153,0.2)] text-[#34d399] px-2 py-0.5 rounded-full">
+                  <span className="text-[11px] font-bold text-[#8a8a8a] tracking-[1.5px] uppercase">Resumen</span>
+                  <span className="text-[10px] font-bold bg-[rgba(52,211,153,0.1)] border border-[rgba(52,211,153,0.2)] text-[#ff9c4d] px-2 py-0.5 rounded-full">
                     {MOCK_RESULT.presupuestoTotal} · {MOCK_RESULT.duracion}
                   </span>
                 </div>
                 <div className="flex flex-col gap-3">
                   {MOCK_RESULT.metricas.map((m) => (
                     <div key={m.label} className="flex items-center justify-between py-2 border-b border-white/[0.06] last:border-0">
-                      <span className="text-[13px] text-[#94a3b8]">{m.label}</span>
-                      <span className="text-[13px] font-bold text-[#f1f5f9]">{m.value}</span>
+                      <span className="text-[13px] text-[#bdbdbd]">{m.label}</span>
+                      <span className="text-[13px] font-bold text-[#f5f5f5]">{m.value}</span>
                     </div>
                   ))}
                 </div>
               </div>
-              <div className="bg-[rgba(245,158,11,0.06)] border border-[rgba(245,158,11,0.14)] rounded-2xl p-4">
-                <p className="text-[12px] text-[#94a3b8] leading-[1.6]">
-                  <strong className="text-[#f59e0b]">Recomendación:</strong>{" "}
+              <div className="bg-[rgba(255,156,77,0.06)] border border-[rgba(255,156,77,0.14)] rounded-2xl p-4">
+                <p className="text-[12px] text-[#bdbdbd] leading-[1.6]">
+                  <strong className="text-[#ff9c4d]">Recomendación:</strong>{" "}
                   {MOCK_RESULT.recomendacion}
                 </p>
               </div>

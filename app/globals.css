@@ -1,16 +1,16 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Lato:wght@400;500;700&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
 @custom-variant dark (&:is(.dark *));
 
-/* ── JR AI Hub Design Tokens ──────────────────────────────── */
+/* ── JR AI Hub Design Tokens (fiel a jrconsulting.com.pe) ── */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: 'Plus Jakarta Sans', -apple-system, sans-serif;
-  --font-heading: 'Plus Jakarta Sans', -apple-system, sans-serif;
+  --font-sans: 'Lato', -apple-system, sans-serif;
+  --font-heading: 'Poppins', -apple-system, sans-serif;
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -33,52 +33,53 @@
   --radius-xl: calc(var(--radius) * 1.4);
 
   /* JR brand tokens */
-  --color-brand-amber: #f59e0b;
-  --color-brand-red: #ef4444;
+  --color-brand-amber: #ff9c4d;
+  --color-brand-red: #ff7a2f;
   --color-surface: rgba(255, 255, 255, 0.04);
   --color-surface-hover: rgba(255, 255, 255, 0.07);
-  --color-border-brand: rgba(245, 158, 11, 0.28);
+  --color-border-brand: rgba(255, 156, 77, 0.28);
 }
 
-/* ── OLED Dark theme as default ──────────────────────────── */
+/* ── Dark theme neutro (negro puro, como el sitio JR) ────── */
 :root {
-  --background: #080810;
-  --foreground: #f1f5f9;
-  --card: #131320;
-  --card-foreground: #f1f5f9;
-  --popover: #0d0d18;
-  --popover-foreground: #f1f5f9;
-  --primary: #f59e0b;
-  --primary-foreground: #ffffff;
-  --secondary: #131320;
-  --secondary-foreground: #f1f5f9;
-  --muted: #0d0d18;
-  --muted-foreground: #94a3b8;
-  --accent: #131320;
-  --accent-foreground: #f1f5f9;
-  --destructive: #ef4444;
-  --border: rgba(255, 255, 255, 0.08);
+  --background: #0a0a0a;
+  --foreground: #f5f5f5;
+  --card: #111111;
+  --card-foreground: #f5f5f5;
+  --popover: #0f0f0f;
+  --popover-foreground: #f5f5f5;
+  --primary: #ff9c4d;
+  --primary-foreground: #1c0f03;
+  --secondary: #141414;
+  --secondary-foreground: #f5f5f5;
+  --muted: #0f0f0f;
+  --muted-foreground: #bdbdbd;
+  --accent: #141414;
+  --accent-foreground: #f5f5f5;
+  --destructive: #e93d3d;
+  --border: rgba(255, 255, 255, 0.06);
   --input: rgba(255, 255, 255, 0.06);
-  --ring: rgba(245, 158, 11, 0.5);
-  --radius: 0.75rem;
+  --ring: rgba(255, 156, 77, 0.5);
+  --radius: 0.875rem;
 
   /* JR brand */
-  --brand-amber: #f59e0b;
-  --brand-red: #ef4444;
-  --brand-gradient: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%);
-  --glow-amber: rgba(245, 158, 11, 0.15);
+  --brand-amber: #ff9c4d;
+  --brand-red: #ff7a2f;
+  --brand-gradient: linear-gradient(90deg, #ff9c4d 0%, #ff7a2f 50%, #ff9c4d 100%);
+  --glow-amber: rgba(255, 142, 60, 0.25);
+  --positive: #2ccf6f;
 
   /* Text utilities */
-  --fg-subtle: #475569;
-  --fg-muted: #94a3b8;
+  --fg-subtle: #8a8a8a;
+  --fg-muted: #bdbdbd;
 
   /* Backgrounds */
-  --bg-deep: #080810;
-  --bg-base: #0d0d18;
-  --bg-elevated: #131320;
+  --bg-deep: #0a0a0a;
+  --bg-base: #0f0f0f;
+  --bg-elevated: #141414;
   --surface: rgba(255, 255, 255, 0.04);
   --surface-hover: rgba(255, 255, 255, 0.07);
-  --border-brand: rgba(245, 158, 11, 0.28);
+  --border-brand: rgba(255, 156, 77, 0.28);
 
   /* Motion */
   --ease-smooth: cubic-bezier(0.16, 1, 0.3, 1);
@@ -87,24 +88,24 @@
 
 /* .dark kept for Shadcn components that need it */
 .dark {
-  --background: #080810;
-  --foreground: #f1f5f9;
-  --card: #131320;
-  --card-foreground: #f1f5f9;
-  --popover: #0d0d18;
-  --popover-foreground: #f1f5f9;
-  --primary: #f59e0b;
-  --primary-foreground: #ffffff;
-  --secondary: #131320;
-  --secondary-foreground: #f1f5f9;
-  --muted: #0d0d18;
-  --muted-foreground: #94a3b8;
-  --accent: #131320;
-  --accent-foreground: #f1f5f9;
-  --destructive: #ef4444;
-  --border: rgba(255, 255, 255, 0.08);
+  --background: #0a0a0a;
+  --foreground: #f5f5f5;
+  --card: #111111;
+  --card-foreground: #f5f5f5;
+  --popover: #0f0f0f;
+  --popover-foreground: #f5f5f5;
+  --primary: #ff9c4d;
+  --primary-foreground: #1c0f03;
+  --secondary: #141414;
+  --secondary-foreground: #f5f5f5;
+  --muted: #0f0f0f;
+  --muted-foreground: #bdbdbd;
+  --accent: #141414;
+  --accent-foreground: #f5f5f5;
+  --destructive: #e93d3d;
+  --border: rgba(255, 255, 255, 0.06);
   --input: rgba(255, 255, 255, 0.06);
-  --ring: rgba(245, 158, 11, 0.5);
+  --ring: rgba(255, 156, 77, 0.5);
 }
 
 @layer base {
@@ -114,21 +115,76 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
+    font-family: 'Lato', -apple-system, sans-serif;
+    letter-spacing: 0.2px;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Poppins', -apple-system, sans-serif;
+    letter-spacing: 0;
+  }
 }
 
-/* ── Gradient text utility ───────────────────────────────── */
+/* ── Texto metálico de titulares (blanco→gris del sitio) ─── */
 .gradient-text {
-  background: var(--brand-gradient);
+  background: linear-gradient(180deg, #ffffff 0%, #e9e9e9 45%, #bdbdbd 95%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
-/* ── Brand gradient bg utility ───────────────────────────── */
+/* ── Texto naranja de marca ──────────────────────────────── */
+.accent-text {
+  background: linear-gradient(90deg, #ff9c4d 0%, #ff7a2f 60%, #ff9c4d 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Fondo gradiente de marca ────────────────────────────── */
 .bg-brand-gradient {
   background: var(--brand-gradient);
+}
+
+/* ── CTA glossy naranja (botón firma del sitio JR) ───────── */
+.jr-cta {
+  background: linear-gradient(180deg, #ffb066 0%, #ff8e3c 45%, #ff7a2f 100%);
+  color: #1c0f03;
+  box-shadow:
+    0 10px 24px rgba(255, 142, 60, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.65);
+  transition: box-shadow var(--duration-fast) var(--ease-smooth),
+    transform var(--duration-fast) var(--ease-smooth),
+    filter var(--duration-fast) var(--ease-smooth);
+}
+.jr-cta:hover {
+  box-shadow:
+    0 14px 36px rgba(255, 142, 60, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  transform: translateY(-1px);
+  filter: brightness(1.04);
+}
+
+/* ── Card de vidrio sutil (superficie del sitio JR) ──────── */
+.jr-card {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.01));
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow:
+    0 2px 14px rgba(0, 0, 0, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+/* ── Grid técnico de fondo (células 92px + glow central) ─── */
+.jr-grid {
+  background:
+    radial-gradient(60% 40% at 50% 46%, rgba(255, 255, 255, 0.045), transparent 60%),
+    repeating-linear-gradient(to right, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 92px),
+    repeating-linear-gradient(to bottom, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 92px);
+}
+
+/* ── Hairline divisor con desvanecido lateral ────────────── */
+.jr-hairline {
+  height: 1px;
+  background: linear-gradient(to right, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0));
 }

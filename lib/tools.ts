@@ -19,7 +19,7 @@ export const tools: Tool[] = [
     longDescription:
       "Escribe un nicho y la herramienta te muestra productos que ya están funcionando en México, Colombia, Chile, Argentina y Ecuador, con su situación de competencia real en Perú y señales de validación (anuncios activos, días corriendo).",
     icon: "PackageSearch",
-    accentColor: "#2dd4bf",
+    accentColor: "#ff9c4d",
     tag: "Nuevo",
     tagStyle: "new",
   },
@@ -31,7 +31,7 @@ export const tools: Tool[] = [
     longDescription:
       "Carga un anuncio de referencia y la foto de tu producto. La IA analiza la composición, estilo y copy, luego genera un nuevo anuncio con tu marca — fiel al original pero 100% tuyo.",
     icon: "ImagePlus",
-    accentColor: "#f59e0b",
+    accentColor: "#ff9c4d",
     tag: "IA Real",
     tagStyle: "new",
     featured: true,
@@ -44,7 +44,7 @@ export const tools: Tool[] = [
     longDescription:
       "Crea scripts profesionales para videos publicitarios con gancho, desarrollo y llamada a la acción optimizados para cada plataforma.",
     icon: "Video",
-    accentColor: "#ef4444",
+    accentColor: "#ff9c4d",
     tag: "Nuevo",
     tagStyle: "new",
   },
@@ -56,7 +56,7 @@ export const tools: Tool[] = [
     longDescription:
       "Define la identidad visual y verbal de tu marca: nombre, colores, tipografía, tono de comunicación y guía de estilo completa.",
     icon: "Sparkles",
-    accentColor: "#a78bfa",
+    accentColor: "#ff9c4d",
     tag: "Branding",
     tagStyle: "neutral",
   },
@@ -68,7 +68,7 @@ export const tools: Tool[] = [
     longDescription:
       "Calcula el presupuesto óptimo para tus campañas digitales y proyecta métricas clave como CPC, CPM, conversiones y retorno esperado.",
     icon: "DollarSign",
-    accentColor: "#34d399",
+    accentColor: "#ff9c4d",
     tag: "Utilidad",
     tagStyle: "utility",
   },
@@ -80,7 +80,7 @@ export const tools: Tool[] = [
     longDescription:
       "Crea el contenido y la estructura de una landing page optimizada para convertir: hero, beneficios, testimonios, FAQ y CTA.",
     icon: "LayoutTemplate",
-    accentColor: "#60a5fa",
+    accentColor: "#ff9c4d",
     tag: "Landing",
     tagStyle: "neutral",
   },
