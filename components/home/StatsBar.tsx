@@ -1,5 +1,5 @@
 const stats = [
-  { value: "5", label: "Herramientas de IA" },
+  { value: "6", label: "Herramientas de IA" },
   { value: "10×", label: "Más rápido que manual" },
   { value: "100%", label: "En español" },
 ];

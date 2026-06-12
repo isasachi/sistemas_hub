@@ -50,16 +50,16 @@ export function HeroSection() {
       {/* CTAs */}
       <div className="relative z-10 flex items-center justify-center gap-3 flex-wrap">
         <Link
-          href="#herramientas"
+          href="/signup"
           className="jr-cta text-[15px] font-bold px-8 py-3.5 rounded-full no-underline"
         >
-          Explorar herramientas →
+          Comenzar gratis →
         </Link>
         <a
-          href="#como-funciona"
+          href="#herramientas"
           className="bg-transparent text-[#bdbdbd] border border-white/[0.12] hover:text-[#f5f5f5] hover:border-white/[0.25] hover:bg-white/[0.04] text-[15px] font-medium px-6 py-3.5 rounded-full transition-all duration-200 no-underline"
         >
-          Ver cómo funciona
+          Ver herramientas
         </a>
       </div>
     </section>

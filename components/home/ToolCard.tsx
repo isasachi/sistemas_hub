@@ -36,7 +36,6 @@ export function ToolCard({ tool }: ToolCardProps) {
         "group relative block rounded-2xl jr-card p-6 no-underline overflow-hidden",
         "transition-all duration-200",
         "hover:border-[rgba(255,156,77,0.28)] hover:bg-white/[0.04] hover:-translate-y-0.5 hover:shadow-[0_10px_35px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.04)]",
-        tool.featured ? "col-span-2" : "",
       ].join(" ")}
     >
       {/* Hairline superior que se enciende al hover */}
