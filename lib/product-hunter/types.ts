@@ -172,4 +172,6 @@ export interface NicheRow {
   keywords: string[] | null
   // true si ya corrió la pasada ampliada US/ES (garantía de output).
   expanded: boolean
+  // Cursor de rotación de keywords por cron (plan 13 parte C). Default 0.
+  keyword_cursor: number
 }

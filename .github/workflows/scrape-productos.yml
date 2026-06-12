@@ -33,6 +33,9 @@ jobs:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       # Nicho objetivo: input manual o payload del repository_dispatch (cold start)
       NICHE: ${{ github.event.inputs.niche || github.event.client_payload.niche || '' }}
+      # Rotación de keywords (plan 13 C): solo en el cron programado. El re-scrape
+      # manual (workflow_dispatch) y el cold-start usan TODAS las keywords.
+      PH_KEYWORD_ROTATION: ${{ github.event_name == 'schedule' && '1' || '' }}
       # Para abaratar el análisis: descomentar y usar Haiku
       # PH_ANTHROPIC_MODEL: claude-haiku-4-5-20251001
     steps:

@@ -6,33 +6,48 @@
 import {
   getNicheStatus,
   saveNicheKeywords,
+  saveNicheCursor,
   getTopCountriesForNiche,
 } from '../lib/product-hunter/db'
 import { seedKeywords } from '../lib/product-hunter/keywords'
 import { expandNicheKeywords } from '../lib/product-hunter/keyword-expansion'
+import { rotateKeywords } from '../lib/product-hunter/keyword-rotation'
 
 // Países de descubrimiento cuando el nicho no tiene historial en DB.
 // MX y CO son los mercados LATAM más grandes y activos en e-commerce.
 const DEFAULT_DISCOVERY = ['MX', 'CO'] as const
 
-// Keywords del nicho (modelo original: ≥15 en 4 direcciones):
+// Rotación de keywords (plan 13 parte C): opt-in para el cron (PH_KEYWORD_ROTATION=1).
+// El seed/re-scrape manual la deja OFF → usa TODAS las keywords (máximo inventario).
+const ROTATE = process.env.PH_KEYWORD_ROTATION === '1'
+const ROTATE_WINDOW = Math.max(1, Number(process.env.PH_KEYWORD_WINDOW ?? 10))
+
+// Pool completo de keywords del nicho (modelo original: ≥15 en 4 direcciones):
 //   1. cache en ph_niches.keywords  →  2. seed estático (keywords.ts)
 //   →  3. expansión LLM (Haiku, una sola vez, queda cacheada en DB).
 export async function resolveKeywords(niche: string): Promise<string[]> {
   const row = await getNicheStatus(niche)
-  if (row?.keywords?.length) return row.keywords
 
-  const seed = seedKeywords(niche)
-  if (seed) {
-    await saveNicheKeywords(niche, seed)
-    return seed
+  let pool = row?.keywords?.length ? row.keywords : null
+  if (!pool) {
+    const seed = seedKeywords(niche)
+    if (seed) {
+      await saveNicheKeywords(niche, seed)
+      pool = seed
+    } else {
+      console.log(`[${niche}] sin keywords — expandiendo con LLM (una sola vez)...`)
+      pool = await expandNicheKeywords(niche)
+      await saveNicheKeywords(niche, pool)
+      console.log(`[${niche}] ${pool.length} keywords generadas: ${pool.join(', ')}`)
+    }
   }
 
-  console.log(`[${niche}] sin keywords — expandiendo con LLM (una sola vez)...`)
-  const expanded = await expandNicheKeywords(niche)
-  await saveNicheKeywords(niche, expanded)
-  console.log(`[${niche}] ${expanded.length} keywords generadas: ${expanded.join(', ')}`)
-  return expanded
+  // Seed/re-scrape (ROTATE off): todas las keywords. Cron (ROTATE on): ventana rotativa.
+  if (!ROTATE) return pool
+  const { selected, nextCursor } = rotateKeywords(pool, row?.keyword_cursor ?? 0, ROTATE_WINDOW)
+  await saveNicheCursor(niche, nextCursor)
+  console.log(`[${niche}] rotación: ${selected.length}/${pool.length} keywords (cursor → ${nextCursor})`)
+  return selected
 }
 
 // Selecciona los 2 países de descubrimiento óptimos para el nicho más PE.

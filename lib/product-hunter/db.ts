@@ -50,6 +50,15 @@ export async function saveNicheKeywords(niche: string, keywords: string[]): Prom
   if (error) throw new Error(error.message)
 }
 
+// Avanza el cursor de rotación de keywords del nicho (plan 13 parte C).
+export async function saveNicheCursor(niche: string, cursor: number): Promise<void> {
+  const { error } = await getDb()
+    .from('ph_niches')
+    .update({ keyword_cursor: cursor })
+    .eq('id', niche)
+  if (error) throw new Error(error.message)
+}
+
 // Marca que el nicho ya corrió la pasada ampliada US/ES (garantía de output).
 export async function markNicheExpanded(niche: string): Promise<void> {
   const { error } = await getDb()
