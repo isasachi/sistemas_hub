@@ -1,9 +1,12 @@
-import { type NextRequest } from 'next/server'
+import { NextResponse, type NextRequest } from 'next/server'
 import { updateSession } from '@/lib/supabase/middleware'
 
 // Convención Next 16: el antiguo `middleware.ts` se renombró a `proxy.ts`.
 // Refresca la sesión de Supabase y aplica el gating de rutas en cada request.
 export async function proxy(request: NextRequest) {
+  // Bypass temporal: AUTH_DISABLED=true abre /dashboard y /tools/* sin login
+  // (demo). No crea el cliente Supabase, así que tampoco depende de la anon key.
+  if (process.env.AUTH_DISABLED === 'true') return NextResponse.next()
   return await updateSession(request)
 }
 

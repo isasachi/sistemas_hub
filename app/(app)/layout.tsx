@@ -10,6 +10,11 @@ export default async function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
+  // Bypass temporal: AUTH_DISABLED=true entra como invitado, sin sesión.
+  if (process.env.AUTH_DISABLED === "true") {
+    return <AppShell user={{ label: "Invitado" }}>{children}</AppShell>;
+  }
+
   const user = await getUser();
   if (!user) redirect("/login");
 

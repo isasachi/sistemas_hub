@@ -37,20 +37,31 @@ export function Navbar() {
         </li>
       </ul>
 
-      {/* Right side: auth CTAs */}
+      {/* Right side: auth CTAs (o link temporal al dashboard si AUTH_DISABLED) */}
       <div className="flex items-center gap-2">
-        <Link
-          href="/login"
-          className="text-[#bdbdbd] hover:text-[#f5f5f5] text-sm font-medium px-4 py-2 rounded-lg hover:bg-white/[0.04] transition-all duration-200 no-underline"
-        >
-          Iniciar sesión
-        </Link>
-        <Link
-          href="/signup"
-          className="jr-cta text-sm font-bold px-5 py-2 rounded-full no-underline"
-        >
-          Comenzar gratis
-        </Link>
+        {process.env.AUTH_DISABLED === "true" ? (
+          <Link
+            href="/dashboard"
+            className="jr-cta text-sm font-bold px-5 py-2 rounded-full no-underline"
+          >
+            Entrar al dashboard →
+          </Link>
+        ) : (
+          <>
+            <Link
+              href="/login"
+              className="text-[#bdbdbd] hover:text-[#f5f5f5] text-sm font-medium px-4 py-2 rounded-lg hover:bg-white/[0.04] transition-all duration-200 no-underline"
+            >
+              Iniciar sesión
+            </Link>
+            <Link
+              href="/signup"
+              className="jr-cta text-sm font-bold px-5 py-2 rounded-full no-underline"
+            >
+              Comenzar gratis
+            </Link>
+          </>
+        )}
       </div>
     </nav>
   );

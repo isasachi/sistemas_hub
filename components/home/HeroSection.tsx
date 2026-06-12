@@ -50,10 +50,10 @@ export function HeroSection() {
       {/* CTAs */}
       <div className="relative z-10 flex items-center justify-center gap-3 flex-wrap">
         <Link
-          href="/signup"
+          href={process.env.AUTH_DISABLED === "true" ? "/dashboard" : "/signup"}
           className="jr-cta text-[15px] font-bold px-8 py-3.5 rounded-full no-underline"
         >
-          Comenzar gratis →
+          {process.env.AUTH_DISABLED === "true" ? "Entrar al dashboard →" : "Comenzar gratis →"}
         </Link>
         <a
           href="#herramientas"
