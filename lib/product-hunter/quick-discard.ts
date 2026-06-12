@@ -32,6 +32,18 @@ export function quickDiscard(c: QuickDiscardCandidate): string | null {
   return null
 }
 
+// Casi-ganador (plan 13 parte E): un producto que goldenDiscard rechazó pero
+// tiene tracción suficiente para vigilar — un anunciante escalando pasa de ~20
+// a 40+ ads en 2-4 semanas. Se guarda en la watchlist para re-chequear, en vez
+// de perderlo. Umbrales por debajo de las reglas de oro pero no triviales.
+export const NEAR_ADS = 20
+export const NEAR_DAYS = 5
+
+export function isNearWinner(adCount: number, daysRunning: number | null): boolean {
+  if (daysRunning === null) return false
+  return adCount >= NEAR_ADS && daysRunning >= NEAR_DAYS
+}
+
 // ⚠️ REGLAS DE ORO (Etapa 2, post-enrich) — requisito explícito del usuario:
 // NINGÚN producto entra a ph_products sin cumplir ≥40 ads y ≥10 días activos.
 // A diferencia de la Etapa 1 (card, conservadora con datos faltantes), aquí

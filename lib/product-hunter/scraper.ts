@@ -5,9 +5,9 @@ import {
   FALLBACK_COUNTRIES,
   MIN_CANDIDATES_BEFORE_FALLBACK,
 } from './keywords'
-import { upsertProducts, upsertPePool, updateNicheAfterScrape, upsertNiche } from './db'
+import { upsertProducts, upsertPePool, upsertWatchlist, updateNicheAfterScrape, upsertNiche } from './db'
 import type { AdNode, CreativeSnippet } from './types'
-import { quickDiscard, goldenDiscard } from './quick-discard'
+import { quickDiscard, goldenDiscard, isNearWinner } from './quick-discard'
 import { extractFromDom } from './dom-fallback'
 import { prescore } from './prescore'
 
@@ -89,7 +89,7 @@ export function searchUrl(keyword: string, country: string): string {
   return `https://www.facebook.com/ads/library/?${p}`
 }
 
-function pageUrl(pageId: string): string {
+export function pageUrl(pageId: string): string {
   const p = new URLSearchParams({
     active_status: 'active', ad_type: 'all', country: 'ALL',
     is_targeted_country: 'false', media_type: 'all', search_type: 'page',
@@ -129,7 +129,7 @@ async function readInlineAdData(page: Page): Promise<unknown[]> {
 
 // Busca el total exacto de ads del anunciante: search_results_connection.count.
 // Más confiable que el "~X results" del DOM (que es aproximado).
-function findConnectionCount(obj: unknown, depth = 0): number | null {
+export function findConnectionCount(obj: unknown, depth = 0): number | null {
   if (!obj || typeof obj !== 'object' || depth > 25) return null
   const o = obj as Record<string, unknown>
   const conn = o.search_results_connection as Record<string, unknown> | undefined
@@ -684,6 +684,7 @@ export async function scrapeNiche(niche: string, opts: ScrapeOptions = {}): Prom
 
     console.log('─── Fase 2: enriqueciendo candidatos ───')
     const products: EnrichedProduct[] = []
+    const watchlist: (EnrichedProduct & { reason: string })[] = []
 
     // Pool PE → tabla ph_pe_pool, directo desde la card y SIN visitar la página.
     // ⚠️ REGLA DE ORO: un anunciante PE NUNCA entra a ph_products — solo
@@ -723,6 +724,11 @@ export async function scrapeNiche(niche: string, opts: ScrapeOptions = {}): Prom
         const reason = goldenDiscard(raw.ad_count, raw.days_running)
         if (reason) {
           metrics.discarded[`oro_${reason}`] = (metrics.discarded[`oro_${reason}`] ?? 0) + 1
+          // Casi-ganador (plan 13 E): tracción suficiente → a la watchlist para
+          // re-chequear, en vez de perderlo. El cron lo promueve si madura.
+          if (isNearWinner(raw.ad_count, raw.days_running)) {
+            watchlist.push({ ...r.value, reason: `oro_${reason}` })
+          }
           console.log(`  ⊘ ${r.value.name} → ${raw.ad_count} ads · ${raw.days_running ?? '?'} días — regla de oro (${reason})`)
         } else {
           products.push(r.value)
@@ -743,6 +749,10 @@ export async function scrapeNiche(niche: string, opts: ScrapeOptions = {}): Prom
       saved += batch.length
     }
 
+    // Casi-ganadores → watchlist (plan 13 E): inventario futuro, se promueven
+    // cuando maduran (scripts/recheck-watchlist.ts en el cron).
+    if (watchlist.length) await upsertWatchlist(watchlist)
+
     // ── Resumen de métricas (visible en logs de Actions) ──────────────────────
     // Recalculado al final: incluye los descartes de regla de oro (oro_*) de Fase 2.
     const finalDiscardSummary = Object.entries(metrics.discarded)
@@ -754,7 +764,7 @@ export async function scrapeNiche(niche: string, opts: ScrapeOptions = {}): Prom
       `  búsquedas: ${metrics.searches} (omitidas por tope: ${metrics.searchesSkipped}) | 0-payloads: ${metrics.zeroPayloads} | fallback-DOM: ${metrics.domFallbacks}\n` +
       `  descartados: ${discardedTotal} (${finalDiscardSummary})\n` +
       `  enriquecidos: ${metrics.enriched} | PE al pool: ${metrics.peFromCard} | omitidos por tope: ${metrics.enrichSkipped} | navegaciones fallidas: ${metrics.navFailures}\n` +
-      `  guardados en ph_products (cumplen reglas de oro): ${products.length}`
+      `  guardados en ph_products (cumplen reglas de oro): ${products.length} | a watchlist (casi-ganadores): ${watchlist.length}`
     )
 
     if (saved > 0) {

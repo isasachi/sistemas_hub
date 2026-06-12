@@ -98,3 +98,14 @@ jobs:
           else
             npx tsx scripts/validate-pe.ts
           fi
+
+      # ── Paso 4: re-chequeo de watchlist (plan 13 E, $0 LLM) ──
+      # Casi-ganadores que maduraron (≥40 ads · ≥10 días) se promueven a
+      # ph_products; el análisis los toma en la próxima corrida.
+      - name: Recheck watchlist
+        run: |
+          if [ -n "$NICHE" ]; then
+            npx tsx scripts/recheck-watchlist.ts --niche "$NICHE"
+          else
+            npx tsx scripts/recheck-watchlist.ts
+          fi

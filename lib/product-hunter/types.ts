@@ -101,6 +101,20 @@ export interface PePoolRow {
   scraped_at: string
 }
 
+// ─── Fila de ph_watchlist (casi-ganadores — plan 13 parte E) ──────────────────
+// Productos descartados por reglas de oro pero con tracción; el cron los
+// re-chequea y promueve a ph_products cuando maduran.
+export interface WatchlistRow {
+  id: string
+  niche: string
+  page_id: string | null
+  name: string | null
+  raw_data: ProductRawData
+  reason: string
+  first_seen: string
+  last_checked: string
+}
+
 // ─── Lo que la ruta /search devuelve al frontend ──────────────────────────────
 // Solo metadatos — sin slides HTML.
 

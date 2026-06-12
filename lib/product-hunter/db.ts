@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import type { ProductRow, NicheRow, PePoolRow, StoredAnalysis } from './types'
+import type { ProductRow, NicheRow, PePoolRow, WatchlistRow, StoredAnalysis } from './types'
 import { prescore } from './prescore'
 import { sanitizeJsonDeep, cleanJsonText } from './json-clean'
 
@@ -278,6 +278,69 @@ export async function getTopCountriesForNiche(niche: string, limit = 2): Promise
     .sort((a, b) => b[1] - a[1])
     .slice(0, limit)
     .map(([country]) => country)
+}
+
+// ─── WATCHLIST (casi-ganadores — plan 13 parte E) ─────────────────────────────
+
+interface WatchlistInput {
+  id: string
+  niche: string
+  page_id: string
+  name: string
+  raw_data: Record<string, unknown>
+  reason: string
+}
+
+// Guarda casi-ganadores (sanitizado jsonb). No pisa first_seen en conflicto:
+// solo refresca raw_data/reason del último avistamiento.
+export async function upsertWatchlist(rows: WatchlistInput[]): Promise<void> {
+  if (!rows.length) return
+  const now = new Date().toISOString()
+  const clean = rows.map((r) => ({
+    id: r.id,
+    niche: r.niche,
+    page_id: r.page_id,
+    name: cleanJsonText(r.name),
+    raw_data: sanitizeJsonDeep(r.raw_data),
+    reason: r.reason,
+    last_checked: now,
+  }))
+  const { error } = await getDb().from('ph_watchlist').upsert(clean, { onConflict: 'id' })
+  if (error) throw new Error(error.message)
+}
+
+// Entradas de watchlist vencidas para re-chequear (last_checked > maxAgeDays).
+export async function getWatchlistToRecheck(niche: string, maxAgeDays = 5, limit = 15): Promise<WatchlistRow[]> {
+  const before = new Date(Date.now() - maxAgeDays * 86_400_000).toISOString()
+  const { data, error } = await getDb()
+    .from('ph_watchlist')
+    .select('*')
+    .eq('niche', niche)
+    .lt('last_checked', before)
+    .order('last_checked', { ascending: true })
+    .limit(limit)
+  if (error) throw new Error(error.message)
+  return (data as WatchlistRow[]) ?? []
+}
+
+export async function touchWatchlist(id: string): Promise<void> {
+  const { error } = await getDb()
+    .from('ph_watchlist')
+    .update({ last_checked: new Date().toISOString() })
+    .eq('id', id)
+  if (error) throw new Error(error.message)
+}
+
+export async function removeFromWatchlist(ids: string[]): Promise<void> {
+  if (!ids.length) return
+  const { error } = await getDb().from('ph_watchlist').delete().in('id', ids)
+  if (error) throw new Error(error.message)
+}
+
+export async function getActiveNicheIds(): Promise<string[]> {
+  const { data, error } = await getDb().from('ph_niches').select('id')
+  if (error) throw new Error(error.message)
+  return ((data as { id: string }[]) ?? []).map((n) => n.id)
 }
 
 // Borra score/analysis de un nicho para re-analizarlo (ej. tras cambiar el prompt).

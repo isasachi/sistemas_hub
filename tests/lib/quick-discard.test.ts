@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { quickDiscard, goldenDiscard, MIN_ADS, MIN_DAYS } from '@/lib/product-hunter/quick-discard'
+import { quickDiscard, goldenDiscard, isNearWinner, MIN_ADS, MIN_DAYS, NEAR_ADS, NEAR_DAYS } from '@/lib/product-hunter/quick-discard'
 import type { QuickDiscardCandidate } from '@/lib/product-hunter/quick-discard'
 
 const NOW_SECONDS = Math.floor(Date.now() / 1000)
@@ -95,5 +95,23 @@ describe('goldenDiscard (reglas de oro post-enrich — estrictas)', () => {
 
   it('descarta antigüedad DESCONOCIDA (estricto, sin excepción conservadora)', () => {
     expect(goldenDiscard(100, null)).toBe('muy_reciente')
+  })
+})
+
+describe('isNearWinner (watchlist — casi-ganadores)', () => {
+  it('con tracción (≥20 ads y ≥5 días) → vigilar', () => {
+    expect(isNearWinner(NEAR_ADS, NEAR_DAYS)).toBe(true)
+    expect(isNearWinner(35, 8)).toBe(true)   // subiendo hacia 40
+    expect(isNearWinner(60, 7)).toBe(true)   // volumen ok, días subiendo
+  })
+
+  it('sin tracción → no vigilar (no inflar la watchlist con ruido)', () => {
+    expect(isNearWinner(10, 30)).toBe(false) // muy pocos ads
+    expect(isNearWinner(50, 2)).toBe(false)  // demasiado reciente
+    expect(isNearWinner(NEAR_ADS - 1, 30)).toBe(false)
+  })
+
+  it('antigüedad desconocida → no vigilar', () => {
+    expect(isNearWinner(100, null)).toBe(false)
   })
 })
