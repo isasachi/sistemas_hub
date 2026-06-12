@@ -86,8 +86,14 @@ export async function POST(req: NextRequest) {
   // el workflow vía GitHub API para que el runner lo levante en minutos; si el
   // dispatch falla o no está configurado, el cron de 12h lo levanta igual.
   if (!nicheRow) {
-    await upsertNiche(niche, 'pending')
-    await triggerNicheScrape(niche)
+    // Kill-switch temporal (PH_COLD_START_DISABLED=1): durante el seed/depuración
+    // NO aceptamos nichos nuevos para no ensuciar la cola — ni se crea el registro
+    // ni se dispara el workflow. La UX no cambia (sigue diciendo "en cola"); el
+    // nicho se capturará en el próximo seed manual. Quitar la flag al terminar.
+    if (process.env.PH_COLD_START_DISABLED !== '1') {
+      await upsertNiche(niche, 'pending')
+      await triggerNicheScrape(niche)
+    }
     // queued: true → nicho genuinamente NUEVO (la UI dice "lo encolamos").
     const payload: SearchResponse = { niche, status: 'pending', products: [], totalUnseen: 0, queued: true }
     const res = NextResponse.json(payload)
