@@ -17,9 +17,10 @@ function getAI() {
   return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 }
 
-// Sonnet 4.6 por defecto (lo que se estimó en costos). Para abaratar:
-// PH_ANTHROPIC_MODEL=claude-haiku-4-5-20251001
-const MODEL = process.env.PH_ANTHROPIC_MODEL ?? 'claude-sonnet-4-6'
+// Haiku 4.5 por defecto (calidad suficiente para el scoring y mucho más barato;
+// validado en el re-scrape del 2026-06-12: ganadores en los 26 nichos). Para
+// subir la calidad puntualmente: PH_ANTHROPIC_MODEL=claude-sonnet-4-6
+const MODEL = process.env.PH_ANTHROPIC_MODEL ?? 'claude-haiku-4-5-20251001'
 
 export const SYSTEM_PROMPT = fs.readFileSync(
   path.join(process.cwd(), 'lib/prompts/buscador-productos.md'),

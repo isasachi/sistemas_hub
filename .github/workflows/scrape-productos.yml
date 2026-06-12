@@ -36,8 +36,9 @@ jobs:
       # Rotación de keywords (plan 13 C): solo en el cron programado. El re-scrape
       # manual (workflow_dispatch) y el cold-start usan TODAS las keywords.
       PH_KEYWORD_ROTATION: ${{ github.event_name == 'schedule' && '1' || '' }}
-      # Para abaratar el análisis: descomentar y usar Haiku
-      # PH_ANTHROPIC_MODEL: claude-haiku-4-5-20251001
+      # El análisis usa Haiku 4.5 por defecto (ver lib/product-hunter/anthropic.ts).
+      # Para subir la calidad puntualmente: descomentar y usar Sonnet.
+      # PH_ANTHROPIC_MODEL: claude-sonnet-4-6
     steps:
       - uses: actions/checkout@v4
 
