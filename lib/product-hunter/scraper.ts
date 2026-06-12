@@ -24,7 +24,10 @@ export type { AdNode }
 const NAV_TIMEOUT = 30_000
 const WAIT_MS = 8_000
 const SCROLL_WAIT = 1_500
-const SCROLL_PASSES = 3
+// Pasadas de scroll por navegación (cada una ~SCROLL_WAIT carga más nodos).
+// Configurable (plan 13 parte D) para experimentar nodos/búsqueda SIN cambiar el
+// default 3 — subir vía PH_SCROLL_PASSES y comparar la métrica antes de fijarlo.
+const SCROLL_PASSES = Math.max(1, Number(process.env.PH_SCROLL_PASSES ?? 3))
 
 // Navegaciones en paralelo dentro del mismo browser context. Cada navegación
 // gasta ~12s ESPERANDO (no CPU), así que N pages multiplican el throughput ~N×
@@ -40,11 +43,15 @@ export const CONCURRENCY = Math.max(1, Number(process.env.PH_CONCURRENCY ?? 3))
 
 // Corta la Fase 1 discovery al juntar este nº de candidatos únicos (las
 // keywords restantes mayormente traen duplicados). PE nunca se corta.
-const SEARCH_CAP = Math.max(0, Number(process.env.PH_SEARCH_CAP ?? 150))
+// Default 300 (plan 13 parte B): ventana amplia para más inventario; bajar por
+// env en corridas con presupuesto de tiempo apretado.
+const SEARCH_CAP = Math.max(0, Number(process.env.PH_SEARCH_CAP ?? 300))
 
 // Solo el top-K de candidatos discovery (por señal de card, prescore P_w)
 // recibe la navegación de enrich (~14s c/u). El resto se descarta.
-const ENRICH_LIMIT = Math.max(0, Number(process.env.PH_ENRICH_LIMIT ?? 80))
+// Default 150 (plan 13 parte B): ~3× el batch de análisis, deja margen para que
+// el goldenDiscard post-enrich descarte sin quedarse corto de ganadores.
+const ENRICH_LIMIT = Math.max(0, Number(process.env.PH_ENRICH_LIMIT ?? 150))
 
 // Worker-pool de concurrencia acotada: cada page drena un índice compartido
 // hasta agotar los items. Un fallo aislado no tumba el pool (PromiseSettled).
@@ -578,8 +585,12 @@ export async function scrapeNiche(niche: string, opts: ScrapeOptions = {}): Prom
   // `cap` > 0: corta al juntar ese nº de páginas únicas (las keywords restantes
   // mayormente traen duplicados) — se procesa por chunks para poder frenar.
   async function searchCountries(countriesToSearch: readonly string[], cap = 0): Promise<Candidate[]> {
-    const tasks = countriesToSearch.flatMap((country) =>
-      keywords.map((keyword) => ({ keyword, country }))
+    // Intercalado keyword×país (no país×keywords): así el SEARCH_CAP corta
+    // keywords tardías cubriendo TODOS los países de las primeras, en vez de
+    // llenarse con un país y dejar los demás sin correr (bug visto en rodilla:
+    // el cap se llenó con MX y CO nunca corrió).
+    const tasks = keywords.flatMap((keyword) =>
+      countriesToSearch.map((country) => ({ keyword, country }))
     )
     const out: Candidate[] = []
     const uniquePages = new Set<string>()
