@@ -1,0 +1,169 @@
+# Sprint de carga — 166 nichos nuevos validados con matchNiche contra los 26
+# existentes + dedup interno (2026-06-12). 1 nicho por línea; # = comentario.
+# Correr con: bash scripts/run-sprint.sh  (batches de ~22, ~8.5h c/u)
+muñeca
+ciatica
+artritis
+circulacion
+ronquidos
+digestion
+hinchazon
+hemorroides
+prostata
+menopausia
+tiroides
+presion arterial
+diabetes
+colesterol
+inmunidad
+manchas piel
+labios
+pestañas
+cejas
+uñas
+depilacion
+bronceado
+maquillaje
+perfumes
+barba
+afeitado
+alisado cabello
+estrias
+poros
+tonificar
+gimnasio casa
+pilates
+running
+ciclismo
+natacion
+boxeo
+crossfit
+estiramiento
+proteina
+colageno
+creatina
+vitaminas
+magnesio
+omega 3
+dormir
+almohadas
+colchon
+sabanas
+limpieza hogar
+jardin
+plantas interior
+terraza
+iluminacion
+decoracion
+lavanderia
+home office
+closet
+alfombras
+cortinas
+espejos
+macetas
+huerto urbano
+humidificador
+purificador aire
+ventilador
+calefactor
+difusor
+cuadros
+lampara sal
+cafe
+reposteria
+parrilla
+termos
+meal prep
+utensilios cocina
+licuados
+audifonos
+fotografia
+proyectores
+parlantes bluetooth
+smartwatch
+drones
+teclados
+webcam
+cables
+moto
+detailing auto
+camping auto
+bicicleta electrica
+scooter electrico
+camping
+pesca
+senderismo
+playa
+equipaje
+instrumentos musicales
+manualidades
+costura
+tejido
+pintura arte
+juegos mesa
+coleccionables
+embarazo
+lactancia
+juguetes
+utiles escolares
+niños
+seguridad infantil
+perros
+gatos
+acuario
+aves
+depiladora laser
+secador cabello
+rizador
+mascarilla led
+terapia frio calor
+audicion
+regalos
+navidad
+san valentin
+halloween
+bodas
+cumpleaños
+fiestas
+lentes sol
+relojes
+carteras
+mochilas
+zapatillas
+ropa deportiva
+ropa interior
+fajas
+trajes baño
+accesorios cabello
+botellas agua
+paraguas
+organizador viaje
+joyeria
+aretes
+collares
+anillos
+gorras
+medias
+pijamas
+disfraces
+sandalias
+guantes
+piscina
+inflables
+patines
+skate
+mancuernas
+bandas resistencia
+cuerda saltar
+binoculares
+telescopio
+linternas
+navajas
+supervivencia
+tablet
+microfono
+aro de luz
+tripode
+terrario
+pintura casa
