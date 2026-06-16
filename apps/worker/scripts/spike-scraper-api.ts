@@ -9,14 +9,23 @@
 //   OXYLABS_USER=xxx OXYLABS_PASS=yyy npx tsx scripts/spike-scraper-api.ts "dolor rodilla" MX
 //
 // Reusa searchUrl + scanAdNodes del scraper real → el test es 1:1 con producción.
-import { scanAdNodes, searchUrl } from '../lib/product-hunter/scraper'
+import { scanAdNodes, searchUrl, pageUrl } from '../lib/product-hunter/scraper'
 import { writeFileSync } from 'node:fs'
 
 const USER = process.env.OXYLABS_USER
 const PASS = process.env.OXYLABS_PASS
 const GEO  = process.env.OXYLABS_GEO  // opcional: país del proxy de salida (ej. "MX")
-const keyword = process.argv[2] ?? 'dolor rodilla'
-const country = process.argv[3] ?? 'MX'
+
+// Flags:
+//   --no-render          probar SIN render JS (más barato — ¿el SSR ya trae el inline?)
+//   --page <pageId>      modo ENRICH: scrapea la página del anunciante en vez de la búsqueda
+const args = process.argv.slice(2)
+const noRender = args.includes('--no-render')
+const pIdx = args.indexOf('--page')
+const pageId = pIdx >= 0 ? args[pIdx + 1] : null
+const pos = args.filter((a, i) => !a.startsWith('--') && i !== pIdx + 1)
+const keyword = pos[0] ?? 'dolor rodilla'
+const country = pos[1] ?? 'MX'
 const OUT = '/tmp/oxylabs-spike.html'
 
 // Replica de readInlineAdData (scraper.ts) pero sobre un string HTML en vez de
@@ -63,11 +72,12 @@ function deepFind(root: unknown, key: string): unknown {
     console.error('Faltan OXYLABS_USER / OXYLABS_PASS (creds del trial de Oxylabs).')
     process.exit(1)
   }
-  const target = searchUrl(keyword, country)
-  console.log(`▶ keyword="${keyword}" país=${country}`)
-  console.log(`  target: ${target}\n`)
+  const target = pageId ? pageUrl(pageId) : searchUrl(keyword, country)
+  console.log(pageId ? `▶ ENRICH pageId=${pageId}` : `▶ keyword="${keyword}" país=${country}`)
+  console.log(`  render=${noRender ? 'OFF' : 'html'} · target: ${target}\n`)
 
-  const body: Record<string, unknown> = { source: 'universal', url: target, render: 'html' }
+  const body: Record<string, unknown> = { source: 'universal', url: target }
+  if (!noRender) body.render = 'html'
   if (GEO) body.geo_location = GEO
 
   const t0 = Date.now()
@@ -119,6 +129,10 @@ function deepFind(root: unknown, key: string): unknown {
   } else {
     console.log('  (no se halló un nodo con ad_archive_id en el inline)')
   }
+  // El count TOTAL del anunciante/búsqueda (lo que usa goldenDiscard ≥40) vive en
+  // search_results_connection — clave en modo enrich.
+  const conn = deepFind(payloads, 'search_results_connection')
+  console.log(`  search_results_connection: ${conn ? JSON.stringify(conn).slice(0, 160) : '∅'}`)
   if (nodes.length) {
     const s = nodes[0] as { pageID?: string; pageName?: string; collationCount?: number | null; creatives?: unknown[] }
     console.log('  muestra nodo[0]:', JSON.stringify({
