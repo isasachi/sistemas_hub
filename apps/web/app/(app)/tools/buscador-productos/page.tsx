@@ -154,8 +154,9 @@ export default function BuscadorProductos() {
       setResult(data);
 
       // Marcar como vistos los mostrados (se hunden y reaparecen tras 7 días).
-      // NO marcamos los bestEffort: son candidatos de relleno, no ganadores.
-      if (data.status === "ready" && !data.bestEffort && data.products.length) {
+      // Con la composición 1/7/2 todos los mostrados son ganadores reales (en
+      // bestEffort solo la slot alta está promovida), así que se consumen igual.
+      if (data.status === "ready" && data.products.length) {
         fetch("/api/buscador-productos/seen", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -268,7 +269,7 @@ export default function BuscadorProductos() {
           <div className="flex flex-col gap-4">
             {result.bestEffort && (
               <div className="bg-[rgba(255,156,77,0.08)] border border-[rgba(255,156,77,0.2)] rounded-xl p-4 text-[13px] text-[#ffb877] leading-[1.6]">
-                Aún no encontramos ganadores validados para este nicho — te mostramos los mejores candidatos disponibles mientras ampliamos la búsqueda a más países y keywords.
+                Ninguno alcanzó prioridad alta en este nicho — el de mayor score se muestra en la slot de alta. El resto son ganadores validados.
               </div>
             )}
             {result.allSeen && !result.bestEffort && (
@@ -279,7 +280,7 @@ export default function BuscadorProductos() {
             <div className="flex items-center justify-between">
               <span className="text-[12px] text-[#8a8a8a]">
                 {result.products.length} productos
-                {!result.bestEffort && result.totalUnseen > 0 && ` · ${result.totalUnseen} nuevos para ti`}
+                {result.totalUnseen > 0 && ` · ${result.totalUnseen} nuevos para ti`}
               </span>
             </div>
             {result.products.map((p) => <ProductCardView key={p.id} p={p} />)}

@@ -9,6 +9,7 @@ import {
 import { matchNiche } from '@/lib/product-hunter/niche-match'
 import { readUserId, newUserId, PH_USER_COOKIE } from '@/lib/product-hunter/session'
 import { checkAndRecordSearch } from '@/lib/product-hunter/quota'
+import { composeWinnersView } from '@/lib/product-hunter/compose-view'
 import type { ProductRow, ProductCard, SearchResponse } from '@ph/shared'
 
 // ⚠️ Esta ruta SOLO lee de Supabase. No llama a Anthropic ni corre Playwright,
@@ -109,22 +110,19 @@ export async function POST(req: NextRequest) {
     return res
   }
 
-  const rows = await getUnseenProducts(niche, userId, 20)
+  // Pool profundo (40) para que la composición 1/7/2 tenga de dónde elegir cada
+  // tier; composeWinnersView recorta a 10 con el esquema 1 alta / 7 media / 2 baja.
+  const rows = await getUnseenProducts(niche, userId, 40)
   const cards = rows.map(toCard).filter((c): c is ProductCard => c !== null)
   // Ganadores frescos para el usuario (honesto: pasa reglas de oro + no visto en 7d)
   const totalUnseen = await countUnseenProducts(niche, userId)
 
-  // Garantía de output: priorizar ganadores (alta/media/baja). Si no hay ninguno,
-  // mostrar los mejores candidatos por score con la etiqueta bestEffort en vez
-  // de una respuesta vacía (el pipeline amplía la red en paralelo vía CI).
-  // Alta y media son "ganadores"; baja se muestra como tercer nivel pero no
-  // cambia la lógica de bestEffort (bestEffort = ningún alta/media disponible).
-  const winners = cards.filter((c) => c.priority === 'alta' || c.priority === 'media')
-  const products = cards  // baja siempre visible
-  const bestEffort = !winners.length && cards.length > 0
+  // Vista de ganadores: SIEMPRE 10 con esquema 1/7/2 (flex si un tier no alcanza).
+  // bestEffort = no había ningún alta y se promovió el mejor del pool a esa slot.
+  const { products, bestEffort } = composeWinnersView(cards)
   // El pool nunca se vacía (ph_unseen_products re-muestra lo visto): si hay
-  // ganadores en pantalla pero ninguno es fresco para el usuario, se lo decimos.
-  const allSeen = winners.length > 0 && totalUnseen === 0
+  // productos en pantalla pero ninguno es fresco para el usuario, se lo decimos.
+  const allSeen = products.length > 0 && totalUnseen === 0
 
   // products vacío SOLO si el nicho existe pero aún no tiene productos
   // analizados (scrapeado/en cola, análisis pendiente) — NO es un nicho nuevo,
