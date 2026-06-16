@@ -44,9 +44,15 @@ export async function resolveKeywords(niche: string): Promise<string[]> {
 
   // Seed/re-scrape (ROTATE off): todas las keywords. Cron (ROTATE on): ventana rotativa.
   if (!ROTATE) return pool
-  const { selected, nextCursor } = rotateKeywords(pool, row?.keyword_cursor ?? 0, ROTATE_WINDOW)
+  // Clamp adaptativo: la condición de no-solape entre corridas consecutivas es
+  // N ≥ 2·window. Con pools chicos, una ventana fija (15) repetiría las mismas
+  // keywords cada vuelta (rotación de mentira). Topamos la ventana a floor(N/2)
+  // para garantizar dos mitades disjuntas. Pool 18 → 9; pool 24 → 12; window 15
+  // solo toma efecto pleno con pools ≥30.
+  const effectiveWindow = Math.min(ROTATE_WINDOW, Math.max(1, Math.floor(pool.length / 2)))
+  const { selected, nextCursor } = rotateKeywords(pool, row?.keyword_cursor ?? 0, effectiveWindow)
   await saveNicheCursor(niche, nextCursor)
-  console.log(`[${niche}] rotación: ${selected.length}/${pool.length} keywords (cursor → ${nextCursor})`)
+  console.log(`[${niche}] rotación: ${selected.length}/${pool.length} keywords (ventana ${effectiveWindow}, cursor → ${nextCursor})`)
   return selected
 }
 

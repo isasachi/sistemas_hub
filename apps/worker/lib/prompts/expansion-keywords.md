@@ -34,7 +34,7 @@ Si el nicho no es de salud/cuerpo (ej: "cocina", "mascotas"), adapta las direcci
 
 ## Reglas
 
-- **Mínimo 15 keywords, idealmente 18-22**, combinando ambas capas.
+- **Mínimo 15 keywords, idealmente 22-26**, combinando ambas capas. Pools más ricos permiten rotar ventanas disjuntas entre corridas (el daemon rota ~15/vuelta sin repetir).
 - **Diversidad real:** cada keyword debe abrir una búsqueda distinta con potencial de mostrar productos diferentes. No variaciones pequeñas del mismo término.
 - **Cortas:** 1 a 3 palabras. Las búsquedas largas devuelven 0 resultados en Meta Ads Library.
 - **Español neutro LATAM**, en minúsculas, sin tildes.

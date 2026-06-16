@@ -84,7 +84,12 @@ export function buildAnalyzeParams({ candidate, peMatch }: AnalyzeInput): Anthro
     // Scoring reproducible: en casos borderline el muestreo por defecto puede
     // oscilar entre media/descartado con el mismo input (visto en pruebas).
     temperature: 0,
-    system: SYSTEM_PROMPT,
+    // Prompt caching: el prefijo fijo (tools + system) es idéntico en TODOS los
+    // análisis. Con cache_control en el bloque system, el primer request escribe
+    // el cache (1.25x) y los siguientes leen tools+system a 0.1x (orden canónico
+    // tools → system → messages). El daemon 24/7 amortiza el cache. El user
+    // message (per-producto) queda dinámico fuera del cache. Ver AGENTS.md.
+    system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
     tools: [ANALYSIS_TOOL],
     tool_choice: { type: 'tool', name: ANALYSIS_TOOL.name },
     messages: [{ role: 'user', content: userMessage }],

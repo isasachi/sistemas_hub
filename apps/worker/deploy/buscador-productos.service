@@ -1,0 +1,33 @@
+# Unit del daemon del scraper buscador-productos.
+#
+# Instalar en el VPS:
+#   sudo cp apps/worker/deploy/buscador-productos.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now buscador-productos
+# Observar:
+#   journalctl -u buscador-productos -f
+#
+# Ajustar User/WorkingDirectory al path real del clon en el VPS si difiere.
+# Secretos (ANTHROPIC_API_KEY, SUPABASE_*) en apps/worker/.env.local — NO acá:
+# bootstrap.ts los carga vía dotenv (dotenv no pisa vars ya presentes, así que
+# duplicarlos en Environment= sería una resolución no-obvia). Los PH_* del daemon
+# se exportan dentro de worker-loop.sh.
+
+[Unit]
+Description=Buscador de Productos scraper daemon
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=isasachi
+WorkingDirectory=/home/isasachi/chamba/sistemas_hub/apps/worker
+ExecStart=/usr/bin/env bash scripts/worker-loop.sh
+Restart=always
+RestartSec=30
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=buscador-productos
+
+[Install]
+WantedBy=multi-user.target

@@ -9,7 +9,7 @@ let _db: SupabaseClient | null = null
 function getDb(): SupabaseClient {
   if (!_db) {
     _db = createClient(
-      process.env.SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
       { auth: { persistSession: false } }
     )
@@ -101,9 +101,12 @@ export async function getActiveNiches(): Promise<NicheRow[]> {
   return (data as NicheRow[]) ?? []
 }
 
-// Para el cron: nichos pendientes o vencidos (TTL 30 días).
+// Para el daemon: nichos pendientes o vencidos. El TTL es configurable vía
+// PH_REFRESH_DAYS (default 30 = comportamiento histórico; el daemon del VPS lo
+// baja a 7 para inventario fresco semanal).
 export async function getNichesToRefresh(): Promise<NicheRow[]> {
-  const staleBefore = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+  const days = Number(process.env.PH_REFRESH_DAYS ?? 30)
+  const staleBefore = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
   const { data, error } = await getDb()
     .from('ph_niches')
     .select('*')
@@ -243,7 +246,7 @@ export async function getStrongDiscardsToValidate(niche: string, limit = 10): Pr
     .select('*')
     .eq('niche', niche)
     .not('score', 'is', null)
-    .eq('analysis->>priority', 'descartado')
+    .in('analysis->>priority', ['descartado', 'baja'])
     .eq('analysis->>peScenario', 'D')
     .is('analysis->peValidation', null)
     .neq('raw_data->>found_country', 'PE')
