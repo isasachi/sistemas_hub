@@ -17,6 +17,7 @@ import {
   scanAdNodes,
   searchUrl,
   runPool,
+  noteNavResult,
 } from './scraper'
 import { isLikelyService } from './competitors'
 import {
@@ -54,6 +55,7 @@ async function searchPeAdvertisers(
 ): Promise<{ competitors: Map<string, PeCompetitor>; valid: boolean }> {
   const responses = await navigateAndCapture(page, searchUrl(term, 'PE'))
   const nodes = responses.flatMap((r) => scanAdNodes(r))
+  noteNavResult(nodes.length)  // cool-down: una racha de probes sin nodos = block
   const valid = nodes.length > 0 ? true : (await readResultsMarker(page)) !== null
   const byPage = new Map<string, { name: string; count: number; categories: string[] }>()
   for (const n of nodes) {

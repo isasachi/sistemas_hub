@@ -43,10 +43,13 @@ export const CONCURRENCY = Math.max(1, Number(process.env.PH_CONCURRENCY ?? 3))
 // TODA navegación — discovery Y validación PE, que comparten la IP del proceso):
 //   1. Jitter: un delay aleatorio antes de cada navegación desincroniza las N
 //      pages (sin esto, al arrancar disparan una ráfaga simultánea = el spike).
-//   2. Cool-down: un 0-payload es una navegación "ok" que vuelve vacía — la señal
-//      del throttle. Tras PH_ZERO_STREAK 0-payloads consecutivos, pausa TODAS las
-//      pages PH_COOLDOWN_MS para que la IP se enfríe; si sigue vacío, re-escala.
-// Un payload no-vacío resetea la racha. Todo configurable; 0 desactiva.
+//   2. Cool-down: una navegación que vuelve SIN nodos (tras agotar GraphQL+DOM)
+//      es la señal del throttle. Tras PH_ZERO_STREAK navegaciones-sin-nodos
+//      consecutivas, pausa TODAS las pages PH_COOLDOWN_MS para que la IP se
+//      enfríe; si sigue vacío, re-escala. La señal la alimentan los callers vía
+//      noteNavResult (nodos post-fallback), NO navigateAndCapture (payload crudo
+//      no distingue block de respuesta sin nodos). Una nav con nodos resetea la
+//      racha. Todo configurable; 0 desactiva.
 const JITTER_MS = Math.max(0, Number(process.env.PH_JITTER_MS ?? 500))
 const ZERO_STREAK_LIMIT = Math.max(0, Number(process.env.PH_ZERO_STREAK ?? 8))
 const COOLDOWN_MS = Math.max(0, Number(process.env.PH_COOLDOWN_MS ?? 90_000))
@@ -110,8 +113,18 @@ export function makeRateController(opts: { streakLimit: number; cooldownMs: numb
 const rateControl = makeRateController({ streakLimit: ZERO_STREAK_LIMIT, cooldownMs: COOLDOWN_MS })
 rateControl.onCooldown = (seconds) =>
   console.warn(
-    `\n  ⏸ rate-control: ${ZERO_STREAK_LIMIT} 0-payloads seguidos (probable soft-block de Meta) — enfriando ${seconds}s`
+    `\n  ⏸ rate-control: ${ZERO_STREAK_LIMIT} navegaciones sin nodos seguidas (probable soft-block de Meta) — enfriando ${seconds}s`
   )
+
+// Registra el resultado de UNA navegación para el cool-down. Se llama desde los
+// callers con el conteo de nodos POST-fallback (no desde navigateAndCapture con
+// el payload crudo): un soft-block puede devolver un payload no-vacío pero SIN
+// nodos, que `captured.length` no detectaría; y un GraphQL-vacío recuperado por
+// DOM (página renderizó = no bloqueada) NO debe contar como cero. nodes=0 tras
+// agotar GraphQL+DOM = la señal real de block. Exportado para pe-validation.ts.
+export function noteNavResult(nodeCount: number) {
+  rateControl.note(nodeCount)
+}
 
 // ─── Presupuesto de tiempo por nicho ──────────────────────────────────────────
 // Las búsquedas traen cientos/miles de candidatos pero el análisis solo procesa
@@ -294,8 +307,9 @@ export async function navigateAndCapture(page: Page, url: string): Promise<unkno
     console.error(`[DEBUG] 0 payloads (GraphQL+inline) — title="${title}" url=${page.url()}`)
   }
 
-  // Alimenta el controlador: racha de 0-payloads → cool-down (ver gate()).
-  rateControl.note(captured.length)
+  // El cool-down NO se alimenta acá (payload crudo no distingue block de
+  // contenido sin nodos): los callers llaman noteNavResult con el conteo de
+  // nodos post-fallback. Ver la sección "Rate control".
   return captured
 }
 
@@ -459,6 +473,7 @@ async function collectFromSearch(
       metrics.searchZeros++
     }
   }
+  noteNavResult(adNodes.length)  // cool-down: nodos post-fallback (0 = block real)
 
   // Agrupar nodos por página: una página puede aparecer con varios ads y los
   // creativos de todos suman señal para identificar el producto.
@@ -571,6 +586,7 @@ async function enrichCandidate(
       adNodes = relevant
     }
   }
+  noteNavResult(adNodes.length)  // cool-down: nodos post-fallback (0 = block real)
 
   // Total exacto del payload (search_results_connection.count) > DOM "~X" > nodos
   const exactCount = responses.map((r) => findConnectionCount(r)).find((n) => n !== null) ?? null
