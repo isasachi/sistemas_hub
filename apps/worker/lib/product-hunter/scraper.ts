@@ -36,6 +36,63 @@ const SCROLL_PASSES = Math.max(1, Number(process.env.PH_SCROLL_PASSES ?? 3))
 // Exportado: validate-pe.ts usa el mismo pool para sus búsquedas PE en vivo.
 export const CONCURRENCY = Math.max(1, Number(process.env.PH_CONCURRENCY ?? 3))
 
+// ─── Rate control: anti-bloqueo de Meta (P1) ─────────────────────────────────
+// Meta hace soft-block por IP cuando el VOLUMEN de requests/tiempo sube (no por
+// un request puntual). El daemon sostenido + más países/keywords es justo el
+// perfil que castiga. Dos defensas, ambas en navigateAndCapture (choke point de
+// TODA navegación — discovery Y validación PE, que comparten la IP del proceso):
+//   1. Jitter: un delay aleatorio antes de cada navegación desincroniza las N
+//      pages (sin esto, al arrancar disparan una ráfaga simultánea = el spike).
+//   2. Cool-down: un 0-payload es una navegación "ok" que vuelve vacía — la señal
+//      del throttle. Tras PH_ZERO_STREAK 0-payloads consecutivos, pausa TODAS las
+//      pages PH_COOLDOWN_MS para que la IP se enfríe; si sigue vacío, re-escala.
+// Un payload no-vacío resetea la racha. Todo configurable; 0 desactiva.
+const JITTER_MS = Math.max(0, Number(process.env.PH_JITTER_MS ?? 500))
+const ZERO_STREAK_LIMIT = Math.max(0, Number(process.env.PH_ZERO_STREAK ?? 8))
+const COOLDOWN_MS = Math.max(0, Number(process.env.PH_COOLDOWN_MS ?? 90_000))
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
+
+// Factory (reloj inyectable para testear). `note()` registra el resultado de una
+// navegación y dispara el cool-down; `gateMs()` devuelve cuántos ms falta esperar
+// (decisión pura — el caller hace el sleep). Exportado solo para los tests.
+export function makeRateController(opts: { streakLimit: number; cooldownMs: number; now?: () => number }) {
+  const now = opts.now ?? Date.now
+  const enabled = opts.streakLimit > 0 && opts.cooldownMs > 0
+  return {
+    consecutiveZero: 0,
+    coolDownUntil: 0,
+    onCooldown: undefined as undefined | ((seconds: number) => void),
+    note(payloads: number) {
+      if (!enabled) return
+      if (payloads > 0) {
+        this.consecutiveZero = 0
+        return
+      }
+      this.consecutiveZero++
+      // Solo dispara si no estamos ya enfriando (evita que las N navs en vuelo
+      // re-disparen). Resetea la racha: post-cooldown empieza limpio y, si sigue
+      // bloqueado, vuelve a acumular → otro cool-down (escalado natural).
+      if (this.consecutiveZero >= opts.streakLimit && now() >= this.coolDownUntil) {
+        this.coolDownUntil = now() + opts.cooldownMs
+        this.consecutiveZero = 0
+        this.onCooldown?.(opts.cooldownMs / 1000)
+      }
+    },
+    gateMs(): number {
+      return Math.max(0, this.coolDownUntil - now())
+    },
+  }
+}
+
+// Controlador compartido por todo el proceso (singleton de módulo) — discovery y
+// PE validation pegan a la misma IP, así que el cool-down las protege a ambas.
+const rateControl = makeRateController({ streakLimit: ZERO_STREAK_LIMIT, cooldownMs: COOLDOWN_MS })
+rateControl.onCooldown = (seconds) =>
+  console.warn(
+    `\n  ⏸ rate-control: ${ZERO_STREAK_LIMIT} 0-payloads seguidos (probable soft-block de Meta) — enfriando ${seconds}s`
+  )
+
 // ─── Presupuesto de tiempo por nicho ──────────────────────────────────────────
 // Las búsquedas traen cientos/miles de candidatos pero el análisis solo procesa
 // PH_ANALYZE_LIMIT (50) por corrida — enriquecer la cola larga de candidatos
@@ -171,6 +228,12 @@ async function gotoWithRetry(page: Page, url: string): Promise<void> {
 // Colectamos los Response síncronamente y leemos el body DESPUÉS de navegar
 // (evita race conditions; Playwright bufferea los bodies).
 export async function navigateAndCapture(page: Page, url: string): Promise<unknown[]> {
+  // Rate control (P1): respeta un cool-down global activo y desincroniza las pages
+  // con jitter antes de navegar. Ver la sección "Rate control" arriba.
+  const cooldown = rateControl.gateMs()
+  if (cooldown > 0) await sleep(cooldown)
+  if (JITTER_MS) await sleep(Math.random() * JITTER_MS)
+
   const rawResponses: Response[] = []
   const collect = (r: Response) => {
     if (!r.url().includes('facebook.com/api/graphql')) return
@@ -211,6 +274,8 @@ export async function navigateAndCapture(page: Page, url: string): Promise<unkno
     console.error(`[DEBUG] 0 payloads (GraphQL+inline) — title="${title}" url=${page.url()}`)
   }
 
+  // Alimenta el controlador: racha de 0-payloads → cool-down (ver gate()).
+  rateControl.note(captured.length)
   return captured
 }
 
