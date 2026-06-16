@@ -33,6 +33,31 @@ function extractInlineJson(html: string): unknown[] {
   return out
 }
 
+// Busca el primer OBJETO que tenga `key` como propiedad directa (= un nodo de ad).
+function findFirst(root: unknown, key: string): Record<string, unknown> | null {
+  const stack: unknown[] = [root]
+  while (stack.length) {
+    const v = stack.pop()
+    if (v && typeof v === 'object') {
+      if (!Array.isArray(v) && key in (v as Record<string, unknown>)) return v as Record<string, unknown>
+      stack.push(...Object.values(v as Record<string, unknown>))
+    }
+  }
+  return null
+}
+// Busca el primer VALOR de `key` en cualquier nivel (para sondear campos anidados).
+function deepFind(root: unknown, key: string): unknown {
+  const stack: unknown[] = [root]
+  while (stack.length) {
+    const v = stack.pop()
+    if (v && typeof v === 'object') {
+      if (!Array.isArray(v) && key in (v as Record<string, unknown>)) return (v as Record<string, unknown>)[key]
+      stack.push(...Object.values(v as Record<string, unknown>))
+    }
+  }
+  return undefined
+}
+
 ;(async () => {
   if (!USER || !PASS) {
     console.error('Faltan OXYLABS_USER / OXYLABS_PASS (creds del trial de Oxylabs).')
@@ -78,6 +103,22 @@ function extractInlineJson(html: string): unknown[] {
   const payloads = extractInlineJson(html)
   const nodes = payloads.flatMap((p) => scanAdNodes(p))
   console.log(`  payloads inline con data: ${payloads.length} · nodos de anuncio extraídos: ${nodes.length}`)
+
+  // 2b) ¿Qué campos RICOS trae el SSR de verdad? (decide si los datos están y
+  //     solo hay que re-mapear, o si genuinamente faltan y hace falta enrich).
+  console.log('\n── Campos crudos del SSR (¿ad_count / fechas / creativos?) ──')
+  const rawAd = findFirst(payloads, 'ad_archive_id')
+  if (rawAd) {
+    console.log('  keys del nodo:', Object.keys(rawAd).join(', '))
+    const probe = (k: string) => { const v = deepFind(rawAd, k); return v === undefined ? '∅' : JSON.stringify(v).slice(0, 80) }
+    for (const k of ['collation_count', 'collation_id', 'is_active', 'start_date', 'end_date',
+                     'total_active_time', 'snapshot', 'cards', 'body', 'page_id', 'page_name',
+                     'impressions', 'reach_estimate', 'spend']) {
+      console.log(`    ${k.padEnd(20)} ${probe(k)}`)
+    }
+  } else {
+    console.log('  (no se halló un nodo con ad_archive_id en el inline)')
+  }
   if (nodes.length) {
     const s = nodes[0] as { pageID?: string; pageName?: string; collationCount?: number | null; creatives?: unknown[] }
     console.log('  muestra nodo[0]:', JSON.stringify({
