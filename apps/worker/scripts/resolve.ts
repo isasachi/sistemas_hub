@@ -13,9 +13,14 @@ import { seedKeywords } from '@ph/shared'
 import { expandNicheKeywords } from '../lib/product-hunter/keyword-expansion'
 import { rotateKeywords } from '../lib/product-hunter/keyword-rotation'
 
-// Países de descubrimiento cuando el nicho no tiene historial en DB.
-// MX y CO son los mercados LATAM más grandes y activos en e-commerce.
-const DEFAULT_DISCOVERY = ['MX', 'CO'] as const
+// Países de descubrimiento para el nicho (ordenados por volumen de e-commerce
+// LATAM). Antes solo MX+CO (2): la concurrencia del scraper quedaba ociosa y se
+// perdía terreno. Ahora cubrimos LATAM completo para maximizar productos reales
+// y diversidad — el core del producto es "ganador en LATAM aún no saturado en PE".
+// Costo: el scrape/enrich es $0; el análisis (Anthropic) escala con los productos
+// reales hallados, acotado por PH_ANALYZE_LIMIT (50/nicho/run). PE se añade aparte.
+const DEFAULT_DISCOVERY = ['MX', 'CO', 'CL', 'AR', 'EC'] as const
+const DISCOVERY_COUNT = DEFAULT_DISCOVERY.length
 
 // Rotación de keywords (plan 13 parte C): opt-in para el cron (PH_KEYWORD_ROTATION=1).
 // El seed/re-scrape manual la deja OFF → usa TODAS las keywords (máximo inventario).
@@ -56,23 +61,22 @@ export async function resolveKeywords(niche: string): Promise<string[]> {
   return selected
 }
 
-// Selecciona los 2 países de descubrimiento óptimos para el nicho más PE.
-//
-// Lógica: usa los 2 países donde el nicho ya tiene más productos ganadores
-// (alta/media en el análisis previo). Para nichos nuevos sin historial, usa
-// MX + CO (los mercados LATAM con mayor volumen de e-commerce).
-// PE siempre se añade al final — es el pool de competidores locales.
+// Países de descubrimiento del nicho (LATAM completo) + PE para el pool de
+// competidores. Prioriza los países donde el nicho ya tiene más ganadores
+// (alta/media previos) y completa con DEFAULT_DISCOVERY hasta DISCOVERY_COUNT.
+// PE siempre se añade al final — es el pool de competidores locales, no fuente
+// de productos.
 export async function resolveCountries(niche: string): Promise<string[]> {
-  const top = await getTopCountriesForNiche(niche, 2)
+  const top = await getTopCountriesForNiche(niche, DISCOVERY_COUNT)
 
-  // Completar con defaults si el historial no alcanza 2 países
+  // Completar con defaults hasta DISCOVERY_COUNT países de descubrimiento
   const discovery = [...top]
   for (const def of DEFAULT_DISCOVERY) {
-    if (discovery.length >= 2) break
+    if (discovery.length >= DISCOVERY_COUNT) break
     if (!discovery.includes(def)) discovery.push(def)
   }
 
-  const source = top.length >= 2 ? 'historial DB' : top.length === 1 ? 'DB + default' : 'defaults'
+  const source = top.length >= DISCOVERY_COUNT ? 'historial DB' : top.length ? 'DB + defaults' : 'defaults'
   console.log(`[${niche}] países: ${[...discovery, 'PE'].join(', ')} (${source})`)
   return [...discovery, 'PE']
 }
