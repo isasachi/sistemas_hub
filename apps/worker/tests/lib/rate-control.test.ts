@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { makeRateController } from '@/lib/product-hunter/scraper'
+import { makeRateController, isBlockCompromised } from '@/lib/product-hunter/scraper'
 
 // Reloj inyectable: avanzamos el tiempo a mano para testear el cool-down sin timers.
 function fixedClock(start = 0) {
@@ -70,5 +70,29 @@ describe('makeRateController', () => {
     const rc = makeRateController({ streakLimit: 0, cooldownMs: 1000, now: clk.now })
     for (let i = 0; i < 20; i++) rc.note(0)
     expect(rc.gateMs()).toBe(0)
+  })
+})
+
+describe('isBlockCompromised', () => {
+  const ratio = 0.6
+  const min = 8
+
+  it('detecta el run de varices (247/268 ≈ 92% vacías)', () => {
+    // searchZeros reales del run bloqueado vs total de búsquedas
+    expect(isBlockCompromised(126, 110, ratio, min)).toBe(true)
+  })
+
+  it('NO marca un run sano (nariz: pocas vacías)', () => {
+    expect(isBlockCompromised(69, 11, ratio, min)).toBe(false)
+  })
+
+  it('no juzga runs por debajo de la muestra mínima', () => {
+    // 5 de 5 vacías = 100%, pero <8 búsquedas → no concluye (evita falso positivo)
+    expect(isBlockCompromised(5, 5, ratio, min)).toBe(false)
+  })
+
+  it('justo en el umbral cuenta como bloqueado', () => {
+    expect(isBlockCompromised(10, 6, ratio, min)).toBe(true)   // 60% == ratio
+    expect(isBlockCompromised(10, 5, ratio, min)).toBe(false)  // 50% < ratio
   })
 })

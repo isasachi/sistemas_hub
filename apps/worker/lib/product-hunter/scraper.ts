@@ -51,6 +51,26 @@ const JITTER_MS = Math.max(0, Number(process.env.PH_JITTER_MS ?? 500))
 const ZERO_STREAK_LIMIT = Math.max(0, Number(process.env.PH_ZERO_STREAK ?? 8))
 const COOLDOWN_MS = Math.max(0, Number(process.env.PH_COOLDOWN_MS ?? 90_000))
 
+// Backstop a nivel run (P2): si una fracción ≥ PH_BLOCK_RATIO de las búsquedas del
+// nicho quedó vacía tras GraphQL+DOM, el run está block-comprometido → scrapeNiche
+// lo reporta y el pipeline saltea su validación PE (no fabricar escenario A con
+// probes bloqueados) y re-encola el nicho. Marker-independiente: complementa el
+// guard per-probe de pe-validation.ts, que sí depende del marcador "~results".
+const BLOCK_RATIO = Math.min(1, Math.max(0, Number(process.env.PH_BLOCK_RATIO ?? 0.6)))
+const MIN_SEARCHES_FOR_BLOCK = 8  // muestra mínima para juzgar (evita falsos en runs chicos)
+
+// Pure (exportada para test): ¿el run quedó block-comprometido? Ratio de búsquedas
+// vacías-tras-DOM ≥ umbral, con muestra mínima (runs chicos no se juzgan → false).
+export function isBlockCompromised(
+  searches: number,
+  searchZeros: number,
+  ratio = BLOCK_RATIO,
+  minSearches = MIN_SEARCHES_FOR_BLOCK
+): boolean {
+  if (searches < minSearches) return false
+  return searchZeros / searches >= ratio
+}
+
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 
 // Factory (reloj inyectable para testear). `note()` registra el resultado de una
@@ -375,6 +395,10 @@ export function scanAdNodes(
 interface ScrapeMetrics {
   searches: number
   zeroPayloads: number
+  // Búsquedas vacías tras agotar GraphQL Y DOM-fallback (señal de block, P2): si
+  // el DOM recuperó nodos la página renderizó (no bloqueada). Ratio alto sobre el
+  // total de búsquedas = soft-block del run → el caller saltea la validación PE.
+  searchZeros: number
   domFallbacks: number
   discarded: Record<string, number>
   enriched: number
@@ -389,7 +413,7 @@ interface ScrapeMetrics {
 
 function emptyMetrics(): ScrapeMetrics {
   return {
-    searches: 0, zeroPayloads: 0, domFallbacks: 0, discarded: {}, enriched: 0,
+    searches: 0, zeroPayloads: 0, searchZeros: 0, domFallbacks: 0, discarded: {}, enriched: 0,
     navFailures: 0, searchesSkipped: 0, enrichSkipped: 0, peFromCard: 0,
   }
 }
@@ -430,6 +454,9 @@ async function collectFromSearch(
     if (fallback.length > 0) {
       metrics.domFallbacks++
       adNodes = fallback
+    } else {
+      // Ni GraphQL ni DOM → búsqueda realmente vacía o bloqueada (señal de block).
+      metrics.searchZeros++
     }
   }
 
@@ -639,7 +666,15 @@ export interface ScrapeOptions {
   countries?: readonly string[]
 }
 
-export async function scrapeNiche(niche: string, opts: ScrapeOptions = {}): Promise<void> {
+// Resultado del scrape de un nicho. `blocked` (P2): el run quedó block-comprometido
+// (ratio alto de búsquedas vacías) → el caller debe saltear la validación PE y
+// re-encolar. `saved`: productos que cumplieron reglas de oro y se persistieron.
+export interface ScrapeResult {
+  blocked: boolean
+  saved: number
+}
+
+export async function scrapeNiche(niche: string, opts: ScrapeOptions = {}): Promise<ScrapeResult> {
   const keywords = opts.keywords ?? seedKeywords(niche) ?? [niche]
   const countries = opts.countries ?? COUNTRIES
   const useFallback = !opts.countries
@@ -829,7 +864,7 @@ export async function scrapeNiche(niche: string, opts: ScrapeOptions = {}): Prom
     const discardedTotal = Object.values(metrics.discarded).reduce((a, b) => a + b, 0)
     console.log(
       `\n─── Métricas [${niche}] ───\n` +
-      `  búsquedas: ${metrics.searches} (omitidas por tope: ${metrics.searchesSkipped}) | 0-payloads: ${metrics.zeroPayloads} | fallback-DOM: ${metrics.domFallbacks}\n` +
+      `  búsquedas: ${metrics.searches} (omitidas por tope: ${metrics.searchesSkipped}) | 0-payloads: ${metrics.zeroPayloads} | vacías-tras-DOM: ${metrics.searchZeros} | fallback-DOM: ${metrics.domFallbacks}\n` +
       `  descartados: ${discardedTotal} (${finalDiscardSummary})\n` +
       `  enriquecidos: ${metrics.enriched} | PE al pool: ${metrics.peFromCard} | omitidos por tope: ${metrics.enrichSkipped} | navegaciones fallidas: ${metrics.navFailures}\n` +
       `  guardados en ph_products (cumplen reglas de oro): ${products.length} | a watchlist (casi-ganadores): ${watchlist.length}`
@@ -842,6 +877,17 @@ export async function scrapeNiche(niche: string, opts: ScrapeOptions = {}): Prom
       await upsertNiche(niche, 'active')
       console.log(`\nSin productos encontrados para "${niche}"`)
     }
+
+    // Backstop P2: ¿run block-comprometido? (ratio de búsquedas vacías tras DOM).
+    const blocked = isBlockCompromised(metrics.searches, metrics.searchZeros)
+    if (blocked) {
+      const pct = Math.round((metrics.searchZeros / metrics.searches) * 100)
+      console.warn(
+        `  ⚠ run block-comprometido: ${metrics.searchZeros}/${metrics.searches} búsquedas vacías ` +
+        `(${pct}% ≥ ${Math.round(BLOCK_RATIO * 100)}%) — el pipeline saltea su validación PE y re-encola`
+      )
+    }
+    return { blocked, saved }
   } finally {
     await browser.close()
   }

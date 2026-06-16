@@ -21,7 +21,7 @@
 // analyze.ts — solo cambia el orden, no el volumen de llamadas.
 import './bootstrap' // env + polyfill WebSocket — debe ir primero
 import { scrapeNiche, launchScraperContext, CONCURRENCY } from '../lib/product-hunter/scraper'
-import { getNichesToRefresh, getActiveNiches, ALL_NICHES } from '@ph/shared'
+import { getNichesToRefresh, getActiveNiches, ALL_NICHES, upsertNiche } from '@ph/shared'
 import { resolveKeywords, resolveCountries } from './resolve'
 import {
   submitAnalysisBatch,
@@ -96,6 +96,7 @@ async function main() {
 
   let pending: PendingBatch[] = []
   const processed: string[] = []
+  const blockedNiches = new Set<string>()  // P2: runs block-comprometidos
   let ok = 0
   let failed = 0
 
@@ -106,7 +107,8 @@ async function main() {
 
       const keywords = await resolveKeywords(niche)
       const countries = await resolveCountries(niche)
-      await scrapeNiche(niche, { keywords, countries })
+      const { blocked } = await scrapeNiche(niche, { keywords, countries })
+      if (blocked) blockedNiches.add(niche)
 
       const { entries, names } = await collectNiche(niche)
       if (entries.length) {
@@ -133,13 +135,23 @@ async function main() {
     await harvest(pending, true)
   }
 
-  // Validación PE del bloque: con los 15 ya analizados/persistidos, validar la
+  // Backstop P2: los runs block-comprometidos NO se validan en PE (un probe
+  // bloqueado fabricaría escenario A falso — viola la regla de oro "no pautado en
+  // PE" sin verificar). Se re-encolan para un re-scrape limpio; sus productos
+  // quedan sin peValidation → la validate-pe del tail los retoma en un run sano.
+  const toValidate = processed.filter((n) => !blockedNiches.has(n))
+  if (blockedNiches.size) {
+    console.warn(`\n⚠ ${blockedNiches.size} nicho(s) block-comprometido(s): ${[...blockedNiches].join(', ')} — sin validación PE, re-encolados`)
+    for (const niche of blockedNiches) await upsertNiche(niche, 'pending')
+  }
+
+  // Validación PE del bloque: con los analizados/persistidos, validar la
   // competencia en vivo reusando UN browser caliente ($0 LLM). Gate PH_NO_PE.
-  if (!NO_PE && processed.length) {
-    console.log(`\n─── Validación PE del bloque (${processed.length} nichos) ───`)
+  if (!NO_PE && toValidate.length) {
+    console.log(`\n─── Validación PE del bloque (${toValidate.length} nichos) ───`)
     const { browser, pages } = await launchScraperContext(CONCURRENCY)
     try {
-      for (const niche of processed) await validateNiche(pages, niche)
+      for (const niche of toValidate) await validateNiche(pages, niche)
     } catch (e) {
       console.error(`✗ validación PE del bloque: ${e instanceof Error ? e.message.split('\n')[0] : e}`)
     } finally {
