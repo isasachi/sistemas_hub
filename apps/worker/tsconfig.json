@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["esnext", "dom", "dom.iterable"],
+    "types": ["node"],
+    "paths": {
+      "@/*": ["./*"],
+      "@ph/shared": ["../../packages/shared/index.ts"]
+    }
+  },
+  "include": ["**/*.ts"],
+  "exclude": ["node_modules"]
+}
