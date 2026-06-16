@@ -32,10 +32,29 @@ const VALIDATE_LIMIT = Number(process.env.PH_VALIDATE_LIMIT ?? 15)
 const VALIDATE_D_LIMIT = Number(process.env.PH_VALIDATE_D_LIMIT ?? 10)
 const MAX_TERMS = 4
 
+// Distingue "0 resultados" REAL de un bloqueo de Meta. En una búsqueda vacía
+// genuina la SPA renderiza el marcador "~0 results"; bajo soft-block la página no
+// carga el JS y no hay marcador. (readTotalFromDom del scraper colapsa ambos a 0,
+// perdiendo la señal — acá leemos el marcador crudo: número si renderizó, null si no.)
+async function readResultsMarker(page: Page): Promise<number | null> {
+  return page.evaluate(() => {
+    const m = document.body.innerText.match(/~?([\d,]+)\s*results?/i)
+    return m ? parseInt(m[1].replace(/,/g, ''), 10) : null
+  })
+}
+
 // Busca un término en PE y devuelve los anunciantes-vendedores (sin servicios).
-async function searchPeAdvertisers(page: Page, term: string): Promise<Map<string, PeCompetitor>> {
+// `valid` = el probe obtuvo respuesta confiable: vino data por GraphQL, o la
+// página renderizó el marcador de resultados (incluso 0). Sin nodos Y sin
+// marcador = bloqueo, NO un mercado PE vacío — el caller no puede concluir
+// "sin competencia" a partir de un probe inválido.
+async function searchPeAdvertisers(
+  page: Page,
+  term: string
+): Promise<{ competitors: Map<string, PeCompetitor>; valid: boolean }> {
   const responses = await navigateAndCapture(page, searchUrl(term, 'PE'))
   const nodes = responses.flatMap((r) => scanAdNodes(r))
+  const valid = nodes.length > 0 ? true : (await readResultsMarker(page)) !== null
   const byPage = new Map<string, { name: string; count: number; categories: string[] }>()
   for (const n of nodes) {
     const prev = byPage.get(n.pageID)
@@ -47,7 +66,7 @@ async function searchPeAdvertisers(page: Page, term: string): Promise<Map<string
     if (isLikelyService(a.name, a.categories)) continue
     out.set(pageId, { name: a.name, adCount: a.count })
   }
-  return out
+  return { competitors: out, valid }
 }
 
 // Escenario determinista según competidores distintos encontrados en vivo.
@@ -93,8 +112,10 @@ async function validateProduct(page: Page, product: ProductRow): Promise<void> {
   try {
     const seen = new Map<string, PeCompetitor>()
     const perTerm: PeValidation['terms'] = []
+    let allValid = true
     for (const term of terms) {
-      const found = await searchPeAdvertisers(page, term)
+      const { competitors: found, valid } = await searchPeAdvertisers(page, term)
+      if (!valid) allValid = false
       perTerm.push({ term, competitors: [...found.values()] })
       for (const [pageId, comp] of found) {
         const prev = seen.get(pageId)
@@ -103,6 +124,21 @@ async function validateProduct(page: Page, product: ProductRow): Promise<void> {
     }
 
     const competitors = [...seen.values()].sort((a, b) => b.adCount - a.adCount)
+
+    // Guard anti-bloqueo: "0 competidores" solo significa "sin competencia en PE"
+    // si TODOS los probes respondieron. Con algún probe bloqueado, el 0 puede ser
+    // competencia oculta por el throttle → NO declarar escenario A (regla de oro
+    // "no pautado en PE" sin verificar). No persistimos peValidation: el producto
+    // queda en la cola de getProductsToValidatePe y se re-valida en un run limpio.
+    // (Con competidores>0 sí clasificamos: un probe bloqueado solo habría sumado
+    // más competencia, así que B/C/D sobre data parcial es conservador.)
+    if (competitors.length === 0 && !allValid) {
+      console.log(
+        `  ⊘ ${analysis.productName} — PE inconcluso (probe bloqueado, 0 competidores no confiable) — se re-validará`
+      )
+      return
+    }
+
     const maxAds = competitors[0]?.adCount ?? 0
     const scenario = classify(competitors.length, maxAds)
     const { score, priority } = rescore(product.score ?? 0, scenario)
