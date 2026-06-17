@@ -645,9 +645,62 @@ async function enrichCandidate(
 // (comparten sesión/cookies; cada page navega y captura GraphQL de forma
 // independiente). ⚠️ NO usar playwright-stealth — rompe la SPA de Meta. Solo
 // ocultar webdriver.
+// ─── Proxy + media-blocking (deploy con IP residencial/ISP) ──────────────────
+// El scraper DEBE salir por un proxy ISP/residencial (PH_PROXY) — las IPs de
+// datacenter las bloquea Meta (origen del daemon muerto en el VPS). Formato:
+// "host:port:user:pass" (lista) o "http://user:pass@host:port".
+export interface ProxyConfig { server: string; username?: string; password?: string }
+
+export function parseProxyEnv(): ProxyConfig | undefined {
+  const raw = (process.env.PH_PROXY ?? '').trim()
+  if (raw) {
+    if (raw.includes('://')) {
+      const u = new URL(raw)
+      return {
+        server: `${u.protocol}//${u.host}`,
+        username: u.username ? decodeURIComponent(u.username) : undefined,
+        password: u.password ? decodeURIComponent(u.password) : undefined,
+      }
+    }
+    const [host, port, user, pass] = raw.split(':')
+    if (host && port) return { server: `http://${host}:${port}`, username: user, password: pass }
+  }
+  if (process.env.PROXY_SERVER) {
+    return { server: process.env.PROXY_SERVER, username: process.env.PROXY_USERNAME, password: process.env.PROXY_PASSWORD }
+  }
+  return undefined
+}
+
+// Media-blocking (PH_BLOCK_MEDIA, default ON; '0' lo apaga). Aborta imágenes/
+// video/audio/fuentes a nivel de RED vía CDP Network.setBlockedURLs — NO con
+// page.route('**/*'), que desactiva el cache HTTP y termina gastando MÁS banda
+// (re-baja los bundles JS por navegación; medido). setBlockedURLs preserva cache.
+// NO bloquea CSS/JS (la SPA y el marcador "~X results" dependen de ellos).
+// Beneficio en KVM2 (2 vCPU): menos RAM/CPU por page (sin decode de imágenes) →
+// el cuello de botella sube, habilitando más concurrencia.
+const BLOCK_MEDIA = process.env.PH_BLOCK_MEDIA !== '0'
+const BLOCKED_MEDIA_URLS = [
+  '*.jpg*', '*.jpeg*', '*.png*', '*.gif*', '*.webp*', '*.bmp*', '*.ico*', '*.svg*',
+  '*.mp4*', '*.webm*', '*.m4v*', '*.mov*', '*.avi*', '*.mkv*',
+  '*.mp3*', '*.m4a*', '*.aac*', '*.ogg*',
+  '*.woff*', '*.woff2*', '*.ttf*', '*.otf*', '*.eot*',
+]
+
+async function applyMediaBlock(page: Page): Promise<void> {
+  const client = await page.context().newCDPSession(page)
+  await client.send('Network.enable')
+  await client.send('Network.setBlockedURLs', { urls: BLOCKED_MEDIA_URLS })
+}
+
 export async function launchScraperContext(pageCount = 1) {
+  const proxy = parseProxyEnv()
+  console.log(
+    `[scraper] proxy: ${proxy ? proxy.server : '⚠ NINGUNO (IP directa — Meta bloqueará)'}` +
+      ` · media-block: ${BLOCK_MEDIA ? 'on' : 'off'} · conc: ${pageCount}`,
+  )
   const browser = await chromium.launch({
     headless: true,
+    ...(proxy ? { proxy } : {}),
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-blink-features=AutomationControlled'],
   })
   const context = await browser.newContext({
@@ -661,7 +714,9 @@ export async function launchScraperContext(pageCount = 1) {
   })
   const pages: Page[] = []
   for (let i = 0; i < Math.max(1, pageCount); i++) {
-    pages.push(await context.newPage())
+    const page = await context.newPage()
+    if (BLOCK_MEDIA) await applyMediaBlock(page)
+    pages.push(page)
   }
   return { browser, pages }
 }

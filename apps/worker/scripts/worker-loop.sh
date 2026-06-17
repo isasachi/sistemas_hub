@@ -24,21 +24,24 @@
 set -uo pipefail
 
 # ─── Configuración del daemon ────────────────────────────────────────────────
+# ⚠️ El scraper DEBE salir por un proxy ISP/residencial: PH_PROXY se setea en
+# .env.local (NO acá — es secreto). Sin él, Meta bloquea la IP del VPS.
+export PH_BLOCK_MEDIA="${PH_BLOCK_MEDIA:-1}"             # aborta imágenes/video/fuentes (CDP) → menos RAM/CPU por page
 export PH_KEYWORD_ROTATION="${PH_KEYWORD_ROTATION:-1}"   # ventana rotativa siempre-on
 export PH_KEYWORD_WINDOW="${PH_KEYWORD_WINDOW:-15}"      # clampeado a floor(pool/2) en resolve.ts
 export PH_REFRESH_DAYS="${PH_REFRESH_DAYS:-7}"           # activos reentran a la cola cada 7 días
-export PH_SEARCH_CAP="${PH_SEARCH_CAP:-500}"
-export PH_ENRICH_LIMIT="${PH_ENRICH_LIMIT:-300}"
-export PH_NICHE_BATCH="${PH_NICHE_BATCH:-15}"            # tamaño del bloque (= nichos por proceso fresco)
+export PH_SEARCH_CAP="${PH_SEARCH_CAP:-300}"             # corta discovery (cards, $0 RAM)
+export PH_ENRICH_LIMIT="${PH_ENRICH_LIMIT:-150}"         # default documentado; el análisis solo procesa 50/run
+export PH_NICHE_BATCH="${PH_NICHE_BATCH:-10}"            # bloque = nichos por proceso fresco (menor = menos leak de RAM)
+export PH_BATCH_REST="${PH_BATCH_REST:-60}"             # respiro entre bloques para reclamar RAM
 
-# ⚠️ CONCURRENCIA POR RAMPA. Lo "probado" del scraper live (20 pages) era perfil
-# BURSTY (ráfagas de ~70s); el daemon es SOSTENIDO 24/7, que es lo que Meta
-# bloquea por volumen/tiempo. Arrancar modesto (15) y subir hacia el objetivo 30
-# SOLO mientras los GraphQL-vacíos sigan ~0 sobre horas (scrapeNiche loguea
-# 0-payloads/DOM-fallbacks por corrida) y la RAM aguante (free -m). Si los vacíos
-# trepan o hay OOM, bajar un escalón. Override sin redeploy: editar este export
-# o pasar PH_CONCURRENCY en el environment del unit.
-export PH_CONCURRENCY="${PH_CONCURRENCY:-15}"
+# CONCURRENCIA — KVM2 (2 vCPU / 8 GB) + 1 proxy ISP + media-blocking.
+# El cuello de botella es el CPU (2 vCPU), NO la RAM (a conc 10 ~4 GB). Default 10
+# (validado: el proxy aguantó conc 8 stress sin degradar; conc 10 da CPU holgado
+# ~1.25 cores). Subir a 12→15 SOLO en soak vigilando: load average <~1.8 (top),
+# cooldowns/0-nodos del proxio ~0, y latencia de nav estable. Override sin
+# redeploy: editar este export o pasar PH_CONCURRENCY en el environment del unit.
+export PH_CONCURRENCY="${PH_CONCURRENCY:-10}"
 
 LIST="${NICHES_FILE:-niches.txt}"
 SLEEP_BETWEEN="${SLEEP_BETWEEN:-3600}"        # pausa entre ciclos cuando la cola se vacía
