@@ -1,169 +1,965 @@
-# Sprint de carga — 166 nichos nuevos validados con matchNiche contra los 26
-# existentes + dedup interno (2026-06-12). 1 nicho por línea; # = comentario.
-# Correr con: bash scripts/run-sprint.sh  (batches de ~22, ~8.5h c/u)
+# Lista maestra de nichos — siembra del daemon (1 por línea, # = comentario).
+# Reescrita 2026-06-17: ~1000 nichos, PARTES DEL CUERPO priorizadas arriba.
+# El daemon siembra esto como `pending` (idempotente; salta los que ya existen).
+
+# ════════════════════════════════════════════════════════════════════
+# 1. PARTES DEL CUERPO / ANATOMÍA (prioridad — se procesan primero)
+# ════════════════════════════════════════════════════════════════════
+
+# — Tren superior: cuello, hombros, brazos, manos —
+cuello
+dolor de cuello
+cervical
+contractura cervical
+torticolis
+hombro
+dolor de hombro
+manguito rotador
+hombro congelado
+bursitis hombro
+brazo
+biceps
+triceps
+codo
+codo de tenista
+codo de golfista
+antebrazo
 muñeca
+dolor de muñeca
+tunel carpiano
+tendinitis muñeca
+mano
+manos
+artritis manos
+dedos
+dedo gatillo
+dolor de manos
+articulaciones dedos
+
+# — Columna y espalda —
+espalda
+dolor de espalda
+espalda baja
+dolor lumbar
+lumbago
+columna
+hernia discal
+hernia de disco
+escoliosis
+cifosis
+lordosis
+nervio ciatico
 ciatica
-artritis
-circulacion
-ronquidos
-digestion
-hinchazon
-hemorroides
-prostata
-menopausia
-tiroides
-presion arterial
-diabetes
-colesterol
-inmunidad
-manchas piel
-labios
+dolor dorsal
+rigidez de espalda
+postura
+mala postura
+corrector de postura
+joroba
+
+# — Cadera, pelvis, glúteos —
+cadera
+dolor de cadera
+bursitis cadera
+pelvis
+suelo pelvico
+gluteos
+levantamiento de gluteos
+ingle
+hernia inguinal
+
+# — Tren inferior: piernas, rodillas, pies —
+pierna
+piernas
+dolor de piernas
+piernas cansadas
+piernas hinchadas
+muslo
+muslos
+isquiotibiales
+cuadriceps
+rodilla
+dolor de rodilla
+rodillera
+menisco
+ligamento rodilla
+artrosis de rodilla
+pantorrilla
+pantorrillas
+calambres
+gemelos
+espinilla
+tobillo
+dolor de tobillo
+esguince de tobillo
+tendon de aquiles
+pie
+pies
+dolor de pies
+fascitis plantar
+talon
+espolon calcaneo
+juanetes
+hongos en los pies
+pie diabetico
+plantillas ortopedicas
+dedos del pie
+callos
+durezas
+uñas encarnadas
+pie plano
+metatarsalgia
+neuroma de morton
+pies frios
+pies cansados
+
+# — Cabeza y rostro —
+cabeza
+dolor de cabeza
+migraña
+cefalea
+cara
+rostro
+papada
+doble menton
+menton
+mejillas
+pomulos
+frente
+arrugas frente
+mandibula
+
+# — Ojos y zona ocular —
+ojos
+ojeras
+bolsas en los ojos
+ojos cansados
+vista cansada
+ojo seco
 pestañas
 cejas
+parpados
+parpados caidos
+lagrimeo
+conjuntivitis
+
+# — Nariz, oídos, garganta —
+nariz
+nariz tapada
+congestion nasal
+ronquidos
+oidos
+oreja
+cera en los oidos
+tinnitus
+audicion
+zumbido de oidos
+garganta
+dolor de garganta
+ronquera
+afonia
+
+# — Boca y dientes —
+boca
+labios
+labios resecos
+dientes
+blanqueamiento dental
+encias
+sangrado de encias
+mal aliento
+lengua
+aftas
+bruxismo
+sensibilidad dental
+sarro
+placa dental
+ortodoncia
+
+# — Cuello/escote, pecho, torso —
+escote
+pecho
+busto
+senos
+levantamiento de busto
+costillas
+
+# — Abdomen y cintura —
+abdomen
+vientre
+grasa abdominal
+abdominales
+ombligo
+hernia umbilical
+cintura
+flancos
+michelines
+hinchazon abdominal
+
+# — Piel (por zona y condición) —
+piel
+piel grasa
+piel seca
+piel mixta
+piel sensible
+manchas en la piel
+melasma
+paño
+rosacea
+dermatitis
+eczema
+psoriasis
+urticaria
+poros abiertos
+puntos negros
+acne
+acne hormonal
+cicatrices de acne
+marcas de acne
+estrias
+celulitis
+flacidez
+varices
+arañitas vasculares
+queratosis
+lunares
+verrugas
+foliculitis
+piel de naranja
+manchas de sol
+quemaduras solares
+
+# — Cabello y cuero cabelludo —
+cabello
+caida del cabello
+calvicie
+alopecia
+caspa
+canas
+cuero cabelludo
+cabello seco
+cabello graso
+frizz
+puntas abiertas
+cabello maltratado
+crecimiento del cabello
+cabello fino
+caida de cabello mujer
+caida de cabello hombre
+
+# — Uñas, axilas, vello —
 uñas
+hongos en las uñas
+uñas quebradizas
+uñas debiles
+axilas
+sudoracion excesiva
+hiperhidrosis
+manchas en axilas
+vello
 depilacion
-bronceado
-maquillaje
-perfumes
+vello facial
 barba
 afeitado
-alisado cabello
-estrias
-poros
-tonificar
-gimnasio casa
-pilates
-running
-ciclismo
-natacion
-boxeo
-crossfit
-estiramiento
-proteina
+vello corporal
+
+# — Articulaciones y músculos (general) —
+articulaciones
+dolor articular
+tendinitis
+bursitis
+musculos
+dolor muscular
+contracturas
+esguinces
+desgarros
+recuperacion muscular
+
+# ════════════════════════════════════════════════════════════════════
+# 2. CONDICIONES DE SALUD Y BIENESTAR
+# ════════════════════════════════════════════════════════════════════
+artritis
+artrosis
+reumatismo
+fibromialgia
+osteoporosis
+gota
+acido urico
+hemorroides
+prostata
+incontinencia urinaria
+menopausia
+menstruacion
+colicos menstruales
+sofocos
+sindrome premenstrual
+tiroides
+hipotiroidismo
+hipertiroidismo
+diabetes
+presion arterial
+hipertension
+colesterol
+trigliceridos
+circulacion
+mala circulacion
+retencion de liquidos
+hinchazon de piernas
+edema
+anemia
+deficiencia de hierro
+insomnio
+apnea del sueño
+trastornos del sueño
+fatiga cronica
+cansancio
+estres
+ansiedad
+depresion
+ataques de panico
+vertigo
+mareos
+reflujo
+acidez estomacal
+gastritis
+ulcera
+estreñimiento
+colon irritable
+diarrea
+gases
+digestion
+hinchazon
+higado graso
+calculos renales
+infeccion urinaria
+candidiasis
+alergias
+rinitis
+sinusitis
+asma
+bronquitis
+tos
+resfriado
+gripe
+inmunidad
+defensas bajas
+sistema inmune
+metabolismo lento
+sobrepeso
+obesidad
+bajar de peso
+quemar grasa
+control de apetito
+ansiedad por comer
+falta de energia
+concentracion
+memoria
+claridad mental
+libido
+disfuncion erectil
+fertilidad
+salud intestinal
+salud hormonal
+salud renal
+salud cardiovascular
+desintoxicacion
+detox
+
+# ════════════════════════════════════════════════════════════════════
+# 3. SUPLEMENTOS Y NUTRICIÓN
+# ════════════════════════════════════════════════════════════════════
 colageno
-creatina
-vitaminas
 magnesio
 omega 3
-dormir
+probioticos
+vitamina c
+vitamina d
+vitamina b12
+complejo b
+multivitaminico
+zinc
+calcio
+hierro
+acido folico
+biotina
+melatonina
+ashwagandha
+curcuma
+jengibre
+moringa
+espirulina
+chlorella
+maca
+ginseng
+valeriana
+glucosamina
+condroitina
+creatina
+proteina
+proteina vegetal
+bcaa
+pre entreno
+quemador de grasa
+fibra
+psyllium
+enzimas digestivas
+antioxidantes
+resveratrol
+coenzima q10
+electrolitos
+
+# ════════════════════════════════════════════════════════════════════
+# 4. BELLEZA Y CUIDADO PERSONAL
+# ════════════════════════════════════════════════════════════════════
+rutina facial
+limpieza facial
+exfoliacion
+mascarillas faciales
+serum facial
+acido hialuronico
+retinol
+vitamina c serum
+niacinamida
+protector solar
+antiarrugas
+antienvejecimiento
+hidratacion facial
+contorno de ojos
+crema hidratante
+tonico facial
+agua micelar
+parches para ojeras
+maquillaje
+base de maquillaje
+corrector
+labial
+mascara de pestañas
+delineador
+rubor
+iluminador
+brochas de maquillaje
+esponjas de maquillaje
+desmaquillante
+primer facial
+polvo compacto
+sombras
+pestañas postizas
+extensiones de pestañas
+lifting de pestañas
+tinte de cejas
+laminado de cejas
+microblading
+esmaltes
+uñas acrilicas
+uñas en gel
+manicure
+pedicure
+shampoo
+acondicionador
+tratamiento capilar
+mascarilla capilar
+aceite capilar
+serum capilar
+alisado de cabello
+keratina
+botox capilar
+tinte de cabello
+decoloracion
+plancha de cabello
+secador de cabello
+rizador
+cepillo alisador
+gorro termico
+depiladora
+depilacion laser
+cera depilatoria
+crema depilatoria
+perfumes
+perfume de mujer
+perfume de hombre
+desodorante
+bronceado
+autobronceante
+exfoliante corporal
+crema corporal
+manteca corporal
+aceite corporal
+
+# ════════════════════════════════════════════════════════════════════
+# 5. FITNESS Y DEPORTE
+# ════════════════════════════════════════════════════════════════════
+gimnasio en casa
+mancuernas
+pesas
+discos
+barra olimpica
+bandas de resistencia
+kettlebell
+barra de dominadas
+banco de ejercicios
+maquina de abdominales
+rueda abdominal
+cuerda para saltar
+step
+yoga
+mat de yoga
+bloques de yoga
+pilates
+spinning
+bicicleta estatica
+caminadora
+eliptica
+running
+zapatillas para correr
+ropa deportiva
+leggings deportivos
+top deportivo
+short deportivo
+ciclismo
+bicicleta
+casco de bicicleta
+natacion
+gorro de natacion
+gafas de natacion
+boxeo
+guantes de boxeo
+saco de boxeo
+crossfit
+calistenia
+estiramiento
+foam roller
+masajeador muscular
+pistola de masaje
+electroestimulador
+banda de tobillo
+tobilleras
+muñequeras deportivas
+rodilleras deportivas
+faja lumbar
+cinturon de levantamiento
+guantes de gimnasio
+botella deportiva
+shaker
+hidratacion deportiva
+
+# ════════════════════════════════════════════════════════════════════
+# 6. HOGAR — COCINA
+# ════════════════════════════════════════════════════════════════════
+utensilios de cocina
+ollas
+sartenes
+sarten antiadherente
+set de cuchillos
+tabla de cortar
+organizador de cocina
+especiero
+recipientes hermeticos
+taper
+licuadora
+batidora
+procesadora de alimentos
+freidora de aire
+olla a presion
+olla electrica
+sandwichera
+wafflera
+cafetera
+hervidor electrico
+exprimidor
+extractor de jugos
+balanza de cocina
+dispensador de agua
+escurridor
+rallador
+pelador
+moldes de reposteria
+manga pastelera
+termo
+loncheras
+botellas de agua
+filtro de agua
+purificador de agua
+dispensador de cereal
+organizador de especias
+porta utensilios
+gancho de cocina
+mandil
+guantes de cocina
+
+# ════════════════════════════════════════════════════════════════════
+# 7. HOGAR — BAÑO, DORMITORIO, SALA
+# ════════════════════════════════════════════════════════════════════
+accesorios de baño
+organizador de baño
+cortina de baño
+alfombra de baño
+dispensador de jabon
+toallero
+espejo de baño
+porta cepillos
+canasta de ducha
+cabezal de ducha
 almohadas
+almohada cervical
+almohada ortopedica
+almohada de lactancia
 colchon
+protector de colchon
+topper de colchon
 sabanas
-limpieza hogar
-jardin
-plantas interior
-terraza
-iluminacion
+edredon
+cobija
+cobertor
+manta electrica
+frazada
+organizador de closet
+perchas
+zapatero
+organizador de cajones
+funda de ropa
 decoracion
-lavanderia
-home office
-closet
+cuadros decorativos
+espejos decorativos
+jarrones
+plantas artificiales
+cojines
+fundas de cojines
 alfombras
+tapetes
 cortinas
-espejos
-macetas
-huerto urbano
+persianas
+iluminacion
+lamparas
+lampara de pie
+lampara de mesa
+luces led
+tira led
+lampara de sal
+vela aromatica
+difusor de aromas
 humidificador
-purificador aire
+purificador de aire
 ventilador
 calefactor
-difusor
-cuadros
-lampara sal
-cafe
-reposteria
-parrilla
-termos
-meal prep
-utensilios cocina
-licuados
-audifonos
-fotografia
-proyectores
-parlantes bluetooth
-smartwatch
-drones
-teclados
-webcam
-cables
-moto
-detailing auto
-camping auto
-bicicleta electrica
-scooter electrico
-camping
-pesca
-senderismo
-playa
-equipaje
-instrumentos musicales
-manualidades
-costura
-tejido
-pintura arte
-juegos mesa
-coleccionables
-embarazo
-lactancia
-juguetes
-utiles escolares
-niños
-seguridad infantil
+aire acondicionado portatil
+estante flotante
+repisa
+organizador de escritorio
+silla de oficina
+silla ergonomica
+escritorio
+soporte para laptop
+
+# ════════════════════════════════════════════════════════════════════
+# 8. HOGAR — LIMPIEZA, ORGANIZACIÓN, JARDÍN
+# ════════════════════════════════════════════════════════════════════
+productos de limpieza
+mopa
+trapeador
+aspiradora
+aspiradora robot
+aspiradora de mano
+limpiavidrios
+limpiador a vapor
+escoba
+recogedor
+cepillo de limpieza
+quitamanchas
+desinfectante
+ambientador
+cajas organizadoras
+organizadores
+etiquetas
+ganchos adhesivos
+organizador de cables
+organizador de zapatos
+macetas
+herramientas de jardin
+sistema de riego
+huerto urbano
+semillas
+fertilizante
+tijeras de podar
+manguera
+regadera
+luces solares de jardin
+terraza
+muebles de jardin
+
+# ════════════════════════════════════════════════════════════════════
+# 9. MASCOTAS
+# ════════════════════════════════════════════════════════════════════
 perros
+comida para perros
+juguetes para perros
+correa para perro
+collar para perro
+arnes para perro
+cama para perros
+casa para perros
+cortauñas para perro
+cepillo para perro
+shampoo para perro
+ropa para perros
+transportadora para mascotas
+comedero para perro
+bebedero para perro
+pañales para perro
 gatos
-acuario
+arena para gatos
+arenero
+rascador para gatos
+juguetes para gatos
+comedero automatico
+fuente de agua para mascotas
+cama para gatos
 aves
-depiladora laser
-secador cabello
-rizador
-mascarilla led
-terapia frio calor
-audicion
-regalos
-navidad
-san valentin
-halloween
-bodas
-cumpleaños
-fiestas
-lentes sol
+jaula para aves
+peces
+acuario
+filtro de acuario
+alimento para peces
+collar antipulgas
+correa retractil
+tapete de entrenamiento
+
+# ════════════════════════════════════════════════════════════════════
+# 10. BEBÉS Y NIÑOS
+# ════════════════════════════════════════════════════════════════════
+pañales
+biberones
+chupetes
+cuna
+moises
+coche de bebe
+silla de auto para bebe
+mochila portabebe
+fular portabebe
+monitor de bebe
+esterilizador de biberones
+calienta biberones
+extractor de leche
+juguetes para bebe
+mordedores
+bañera para bebe
+cambiador
+organizador de pañales
+ropa de bebe
+zapatos de bebe
+termometro para bebe
+aspirador nasal para bebe
+silla de comer
+corral para bebe
+andador
+juguetes educativos
+juegos de mesa
+rompecabezas
+bloques de construccion
+utiles escolares
+mochila escolar
+cartuchera
+lonchera escolar
+pizarra para niños
+libros para colorear
+
+# ════════════════════════════════════════════════════════════════════
+# 11. TECNOLOGÍA Y ACCESORIOS
+# ════════════════════════════════════════════════════════════════════
+audifonos
+audifonos bluetooth
+audifonos inalambricos
+parlante bluetooth
+smartwatch
+banda inteligente
+reloj inteligente
+cargador
+cargador inalambrico
+power bank
+cables usb
+soporte para celular
+soporte de auto para celular
+tripode
+aro de luz
+microfono
+webcam
+teclado
+teclado mecanico
+mouse
+mouse inalambrico
+gaming
+audifonos gamer
+silla gamer
+proyector
+tablet
+lector de libros
+estabilizador de celular
+lente para celular
+hub usb
+adaptador
+regulador de voltaje
+camara de seguridad
+camara wifi
+foco inteligente
+enchufe inteligente
+control remoto universal
+mini impresora
+impresora portatil
+
+# ════════════════════════════════════════════════════════════════════
+# 12. MODA Y ACCESORIOS
+# ════════════════════════════════════════════════════════════════════
+lentes de sol
+lentes con filtro azul
+lentes de lectura
 relojes
+relojes para hombre
+relojes para mujer
 carteras
+billeteras
+billetera antirrobo
 mochilas
-zapatillas
-ropa deportiva
-ropa interior
-fajas
-trajes baño
-accesorios cabello
-botellas agua
-paraguas
-organizador viaje
+mochila antirrobo
+maletas
+maleta de viaje
+organizador de viaje
+neceser
 joyeria
 aretes
 collares
 anillos
+pulseras
 gorras
-medias
-pijamas
-disfraces
-sandalias
+sombreros
+bufandas
 guantes
-piscina
-inflables
-patines
-skate
-mancuernas
-bandas resistencia
-cuerda saltar
-binoculares
-telescopio
-linternas
-navajas
-supervivencia
-tablet
-microfono
-aro de luz
-tripode
-terrario
-pintura casa
+medias
+calcetines
+calcetines de compresion
+medias de compresion
+ropa interior
+ropa interior moldeadora
+fajas
+faja reductora
+faja postparto
+body shaper
+sosten
+brasier sin costura
+leggings
+pijamas
+batas
+zapatillas
+sandalias
+pantuflas
+cinturones
+correas
+
+# ════════════════════════════════════════════════════════════════════
+# 13. ORTOPEDIA Y SOPORTE FÍSICO
+# ════════════════════════════════════════════════════════════════════
+plantillas
+soporte lumbar
+collarin cervical
+cabestrillo
+muñequera ortopedica
+tobillera ortopedica
+rodillera ortopedica
+codera
+faja abdominal
+corrector de juanetes
+separador de dedos
+talonera
+soporte para arco plantar
+cojin ortopedico
+cojin para coxis
+cojin lumbar
+silla de ruedas
+andadera
+baston
+muletas
+venda elastica
+vendaje
+inmovilizador
+ferula
+soporte para muñeca
+
+# ════════════════════════════════════════════════════════════════════
+# 14. BIENESTAR, MASAJE Y RELAJACIÓN
+# ════════════════════════════════════════════════════════════════════
+masajeador
+masajeador de cuello
+masajeador de pies
+masajeador de espalda
+masajeador cervical
+silla de masaje
+cojin masajeador
+pistola masajeadora
+rodillo de masaje
+esterilla de acupresion
+terapia de frio y calor
+compresa termica
+bolsa de agua caliente
+parche de calor
+banda de gel frio
+sauna portatil
+faja sauna
+manta termica
+aromaterapia
+aceites esenciales
+sales de baño
+antiestres
+juguetes antiestres
+mejorar el sueño
+antifaz para dormir
+tapones para oidos
+sonido blanco
+
+# ════════════════════════════════════════════════════════════════════
+# 15. COCINA SALUDABLE, BEBIDAS Y SNACKS
+# ════════════════════════════════════════════════════════════════════
+cafe
+te
+infusiones
+te verde
+te de jengibre
+batidos
+smoothies
+jugos detox
+agua saborizada
+matcha
+cacao
+miel
+endulzante natural
+stevia
+proteina en polvo
+barras de proteina
+frutos secos
+granola
+avena
+semillas de chia
+linaza
+colageno hidrolizado
+
+# ════════════════════════════════════════════════════════════════════
+# 16. AUTO, MOTO Y HERRAMIENTAS
+# ════════════════════════════════════════════════════════════════════
+accesorios para auto
+organizador de auto
+camara de retroceso
+aspiradora para auto
+cojin para asiento de auto
+fundas de asiento
+ambientador para auto
+inflador de llantas
+cables de bateria
+kit de herramientas
+taladro
+destornillador electrico
+multimetro
+linterna
+linterna recargable
+cinta metrica laser
+nivel laser
+moto
+casco de moto
+guantes de moto
+candado para moto

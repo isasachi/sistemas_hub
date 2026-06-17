@@ -26,6 +26,9 @@ const DISCOVERY_COUNT = DEFAULT_DISCOVERY.length
 // El seed/re-scrape manual la deja OFF → usa TODAS las keywords (máximo inventario).
 const ROTATE = process.env.PH_KEYWORD_ROTATION === '1'
 const ROTATE_WINDOW = Math.max(1, Number(process.env.PH_KEYWORD_WINDOW ?? 10))
+// Cap del pool de keywords por nicho (PH_KEYWORD_CAP, 0 = sin cap). Acota el nº
+// de keywords usadas/run para controlar el volumen de búsqueda (kw × países).
+const KEYWORD_CAP = Math.max(0, Number(process.env.PH_KEYWORD_CAP ?? 0))
 
 // Pool completo de keywords del nicho (modelo original: ≥15 en 4 direcciones):
 //   1. cache en ph_niches.keywords  →  2. seed estático (keywords.ts)
@@ -46,6 +49,9 @@ export async function resolveKeywords(niche: string): Promise<string[]> {
       console.log(`[${niche}] ${pool.length} keywords generadas: ${pool.join(', ')}`)
     }
   }
+
+  // Cap del pool (PH_KEYWORD_CAP): acota cuántas keywords se usan por nicho.
+  if (KEYWORD_CAP > 0 && pool.length > KEYWORD_CAP) pool = pool.slice(0, KEYWORD_CAP)
 
   // Seed/re-scrape (ROTATE off): todas las keywords. Cron (ROTATE on): ventana rotativa.
   if (!ROTATE) return pool

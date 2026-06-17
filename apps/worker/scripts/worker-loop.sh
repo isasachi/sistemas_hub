@@ -70,6 +70,12 @@ drain_queue() {
       log "bloque $n rc=$rc — pausa breve y reintento con proceso fresco"
       sleep 10
     fi
+    # Descanso entre bloques (PH_BATCH_REST, default 0 = sin pausa) — pacing gentil
+    # para que la IP "respire" entre batches. La cola-vacía retorna ANTES de esto.
+    if [ "${PH_BATCH_REST:-0}" -gt 0 ]; then
+      log "descanso entre bloques: ${PH_BATCH_REST}s"
+      sleep "${PH_BATCH_REST}"
+    fi
   done
   log "⚠ drain alcanzó MAX_DRAIN_CHUNKS=$MAX_DRAIN_CHUNKS — corto el ciclo (reintenta tras sleep)"
   return 1
