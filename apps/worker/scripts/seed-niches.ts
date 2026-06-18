@@ -9,27 +9,47 @@
 // ⚠️ NO llama LLM ni scrapea — solo escribe filas pending. $0.
 import './bootstrap'
 import fs from 'fs'
-import { upsertNiche, getNicheStatus } from '@ph/shared'
+import path from 'path'
+import { fileURLToPath } from 'url'
+import { upsertNiche, updateNichePriority, getNicheStatus } from '@ph/shared'
+
+export interface SeedNiche {
+  niche: string
+  priority: number
+}
 
 // Normaliza un nicho igual que el resto del pipeline: trim + minúsculas.
 function normalize(s: string): string {
   return s.trim().toLowerCase().replace(/\s+/g, ' ')
 }
 
+// `# @priority N` — directiva que fija la prioridad de los nichos que la siguen
+// (hasta la próxima directiva). Es una línea de comentario, así que DEBE
+// matchearse ANTES del strip de comentarios (sino se pierde silenciosamente y
+// todo queda en priority 0). N negativo o no-numérico → ignorado.
+const PRIORITY_DIRECTIVE = /^#\s*@priority\s+(-?\d+)\s*$/
+
 // Lee nichos de un archivo: 1 por línea, ignora vacíos y comentarios (#).
-// Soporta también CSV simple (toma la primera columna).
-function readFromFile(path: string): string[] {
+// Soporta CSV simple (toma la primera columna) y la directiva `# @priority N`.
+export function readFromFile(path: string): SeedNiche[] {
   const text = fs.readFileSync(path, 'utf-8')
-  return text
-    .split('\n')
-    .map((line) => line.split(',')[0])
-    .map(normalize)
-    .filter((l) => l && !l.startsWith('#'))
+  const out: SeedNiche[] = []
+  let priority = 0
+  for (const line of text.split('\n')) {
+    const directive = PRIORITY_DIRECTIVE.exec(line.trim())
+    if (directive) {
+      priority = Number(directive[1])
+      continue
+    }
+    const niche = normalize(line.split(',')[0])
+    if (niche && !niche.startsWith('#')) out.push({ niche, priority })
+  }
+  return out
 }
 
-function parseArgs(argv: string[]): { niches: string[]; dryRun: boolean } {
+function parseArgs(argv: string[]): { niches: SeedNiche[]; dryRun: boolean } {
   const dryRun = argv.includes('--dry-run')
-  const niches: string[] = []
+  const niches: SeedNiche[] = []
 
   const fromIdx = argv.indexOf('--from')
   if (fromIdx !== -1 && argv[fromIdx + 1]) {
@@ -38,7 +58,7 @@ function parseArgs(argv: string[]): { niches: string[]; dryRun: boolean } {
 
   const nichesIdx = argv.indexOf('--niches')
   if (nichesIdx !== -1 && argv[nichesIdx + 1]) {
-    niches.push(...argv[nichesIdx + 1].split(',').map(normalize))
+    niches.push(...argv[nichesIdx + 1].split(',').map((n) => ({ niche: normalize(n), priority: 0 })))
   }
 
   // Posicionales: cualquier arg que no sea flag ni valor de flag.
@@ -50,12 +70,17 @@ function parseArgs(argv: string[]): { niches: string[]; dryRun: boolean } {
   argv.forEach((a, i) => {
     if (consumed.has(i) || a.startsWith('--')) return
     const n = normalize(a)
-    if (n) niches.push(n)
+    if (n) niches.push({ niche: n, priority: 0 })
   })
 
-  // Dedupe preservando orden, descarta vacíos.
-  const seen = new Set<string>()
-  const deduped = niches.filter((n) => n && !seen.has(n) && (seen.add(n), true))
+  // Dedupe por nombre preservando orden; ante duplicados conserva la prioridad
+  // más alta vista. Descarta vacíos.
+  const byNiche = new Map<string, number>()
+  for (const { niche, priority } of niches) {
+    if (!niche) continue
+    byNiche.set(niche, Math.max(byNiche.get(niche) ?? -Infinity, priority))
+  }
+  const deduped = [...byNiche].map(([niche, priority]) => ({ niche, priority }))
   return { niches: deduped, dryRun }
 }
 
@@ -67,8 +92,14 @@ async function main() {
     process.exit(1)
   }
 
-  console.log(`${niches.length} nichos a sembrar${dryRun ? ' (dry-run, sin escribir)' : ''}:`)
-  for (const n of niches) console.log(`  · ${n}`)
+  const withPriority = niches.filter((n) => n.priority > 0).length
+  console.log(
+    `${niches.length} nichos a sembrar${dryRun ? ' (dry-run, sin escribir)' : ''}` +
+    `${withPriority ? ` (${withPriority} con prioridad>0)` : ''}:`
+  )
+  for (const { niche, priority } of niches) {
+    console.log(`  · ${niche}${priority ? ` [p${priority}]` : ''}`)
+  }
 
   if (dryRun) {
     console.log('\nDry-run: no se escribió nada.')
@@ -77,15 +108,22 @@ async function main() {
 
   let added = 0
   let existing = 0
+  let repriced = 0
   let failed = 0
-  for (const niche of niches) {
+  for (const { niche, priority } of niches) {
     try {
-      // No degradar nichos ya existentes (un active→pending forzaría re-scrape).
-      if (await getNicheStatus(niche)) {
+      // No degradar nichos ya existentes (un active→pending forzaría re-scrape),
+      // pero SÍ propagar la prioridad de niches.txt si cambió (fuente de verdad).
+      const current = await getNicheStatus(niche)
+      if (current) {
         existing++
+        if (current.priority !== priority) {
+          await updateNichePriority(niche, priority)
+          repriced++
+        }
         continue
       }
-      await upsertNiche(niche, 'pending')
+      await upsertNiche(niche, 'pending', priority)
       added++
     } catch (e) {
       failed++
@@ -94,9 +132,15 @@ async function main() {
   }
   console.log(
     `\n✓ ${niches.length} nichos procesados: ${added} nuevos (pending) · ${existing} ya existían` +
-    `${failed ? ` · ${failed} fallidos` : ''}.`
+    `${repriced ? ` · ${repriced} re-priorizados` : ''}${failed ? ` · ${failed} fallidos` : ''}.`
   )
   console.log('Drena la cola con: PH_CONCURRENCY=3 npx tsx scripts/scrape.ts --all')
 }
 
-main().catch((e) => { console.error(e); process.exit(1) })
+// Solo corre al ejecutarse directamente (tsx scripts/seed-niches.ts …); al
+// importarse desde los tests (readFromFile) NO dispara main() ni process.exit.
+const invokedDirectly =
+  process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+if (invokedDirectly) {
+  main().catch((e) => { console.error(e); process.exit(1) })
+}

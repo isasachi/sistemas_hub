@@ -192,4 +192,7 @@ export interface NicheRow {
   expanded: boolean
   // Cursor de rotación de keywords por cron (plan 13 parte C). Default 0.
   keyword_cursor: number
+  // Prioridad de scrapeo: mayor = entra antes al drain. Default 0. Las partes
+  // del cuerpo se siembran con priority>0 vía `# @priority N` en niches.txt.
+  priority: number
 }

@@ -24,10 +24,25 @@ export async function getNicheStatus(niche: string): Promise<NicheRow | null> {
   return (data as NicheRow) ?? null
 }
 
-export async function upsertNiche(niche: string, status: 'pending' | 'active'): Promise<void> {
+export async function upsertNiche(
+  niche: string,
+  status: 'pending' | 'active',
+  priority = 0,
+): Promise<void> {
   const { error } = await getDb()
     .from('ph_niches')
-    .upsert({ id: niche, status }, { onConflict: 'id' })
+    .upsert({ id: niche, status, priority }, { onConflict: 'id' })
+  if (error) throw new Error(error.message)
+}
+
+// Actualiza SOLO la prioridad de un nicho existente, sin tocar status (no
+// degrada active→pending). El seed la usa para que niches.txt sea la fuente de
+// verdad de la prioridad incluso en filas ya sembradas.
+export async function updateNichePriority(niche: string, priority: number): Promise<void> {
+  const { error } = await getDb()
+    .from('ph_niches')
+    .update({ priority })
+    .eq('id', niche)
   if (error) throw new Error(error.message)
 }
 
@@ -111,6 +126,13 @@ export async function getNichesToRefresh(): Promise<NicheRow[]> {
     .from('ph_niches')
     .select('*')
     .or(`status.eq.pending,and(status.eq.active,last_scraped.lt.${staleBefore})`)
+    // Drain determinista: prioridad alta primero (partes del cuerpo), luego el
+    // nunca/menos-recientemente scrapeado, desempate por id. pipeline.ts hace
+    // slice(0, NICHE_BATCH) sobre este orden → la prioridad entra a los primeros
+    // bloques de cada ciclo.
+    .order('priority', { ascending: false })
+    .order('last_scraped', { ascending: true, nullsFirst: true })
+    .order('id', { ascending: true })
   if (error) throw new Error(error.message)
   return (data as NicheRow[]) ?? []
 }

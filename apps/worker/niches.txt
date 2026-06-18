@@ -5,6 +5,7 @@
 # ════════════════════════════════════════════════════════════════════
 # 1. PARTES DEL CUERPO / ANATOMÍA (prioridad — se procesan primero)
 # ════════════════════════════════════════════════════════════════════
+# @priority 1   ← entran a los primeros bloques del drain (seed-niches.ts)
 
 # — Tren superior: cuello, hombros, brazos, manos —
 cuello
@@ -275,6 +276,7 @@ esguinces
 desgarros
 recuperacion muscular
 
+# @priority 0   ← fin de la prioridad; el resto de secciones va a prioridad normal
 # ════════════════════════════════════════════════════════════════════
 # 2. CONDICIONES DE SALUD Y BIENESTAR
 # ════════════════════════════════════════════════════════════════════
