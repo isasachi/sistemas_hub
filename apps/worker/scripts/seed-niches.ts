@@ -26,8 +26,10 @@ function normalize(s: string): string {
 // `# @priority N` — directiva que fija la prioridad de los nichos que la siguen
 // (hasta la próxima directiva). Es una línea de comentario, así que DEBE
 // matchearse ANTES del strip de comentarios (sino se pierde silenciosamente y
-// todo queda en priority 0). N negativo o no-numérico → ignorado.
-const PRIORITY_DIRECTIVE = /^#\s*@priority\s+(-?\d+)\s*$/
+// todo queda en priority 0). Tolera un comentario inline tras el número
+// (`# @priority 1  ← nota`), pero rechaza basura pegada (`@priority 12abc`).
+// N negativo o no-numérico → ignorado.
+const PRIORITY_DIRECTIVE = /^#\s*@priority\s+(-?\d+)(?:\s.*)?$/
 
 // Lee nichos de un archivo: 1 por línea, ignora vacíos y comentarios (#).
 // Soporta CSV simple (toma la primera columna) y la directiva `# @priority N`.
