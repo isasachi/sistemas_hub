@@ -56,14 +56,14 @@ export const tools: Tool[] = [
     name: "Generador de Branding",
     slug: "generador-branding",
     description:
-      "Paleta de colores, naming, voz de marca y guías visuales para tu negocio.",
+      "Crea la identidad de tu marca: dirección, logo, etiqueta y mockup del producto final.",
     longDescription:
-      "Define la identidad visual y verbal de tu marca: nombre, colores, tipografía, tono de comunicación y guía de estilo completa.",
+      "Cuéntanos tu negocio y la IA define una dirección de marca (paleta + tipografía + concepto), genera opciones de logo para elegir, diseña tu etiqueta y la monta en el envase para mostrarte el producto terminado.",
     icon: "Sparkles",
     accentColor: "#ff9c4d",
-    tag: "Pronto",
-    tagStyle: "neutral",
-    status: "soon",
+    tag: "IA Real",
+    tagStyle: "new",
+    status: "live",
   },
   {
     name: "Calculadora de Costos",

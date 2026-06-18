@@ -6,6 +6,7 @@ interface SSEEvent {
   status: string;
   message?: string;
   imageUrl?: string;
+  images?: string[];
   retryable?: boolean;
 }
 

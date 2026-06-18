@@ -17,11 +17,17 @@ export const STEP5_PROMPT = fs.readFileSync(
   'utf-8'
 )
 
+export const BRANDING_SYSTEM_PROMPT = fs.readFileSync(
+  path.join(process.cwd(), 'lib/prompts/branding-system.md'),
+  'utf-8'
+)
+
 export async function callStructured<T>(
   schemaName: string,
   schema: z.ZodSchema<T>,
   parts: Part[],
-  maxRetries = 3
+  maxRetries = 3,
+  systemInstruction: string = SYSTEM_PROMPT
 ): Promise<T> {
   let lastError: unknown = new Error(`callStructured(${schemaName}): no attempts`)
   for (let i = 0; i < maxRetries; i++) {
@@ -30,7 +36,7 @@ export async function callStructured<T>(
         model: 'gemini-2.5-flash',
         contents: [{ role: 'user', parts }],
         config: {
-          systemInstruction: SYSTEM_PROMPT,
+          systemInstruction,
           responseMimeType: 'application/json',
           responseSchema: z.toJSONSchema(schema) as Schema,
         },
@@ -55,6 +61,31 @@ export async function callReasoning(systemPrompt: string, userMessage: string): 
   return res.text ?? ''
 }
 
+// Generación de imagen genérica (texto→imagen o imágenes+texto). La usa el
+// generador de branding: logo (solo texto), etiqueta (logo + texto), mockup
+// (etiqueta + envase + texto). Reintenta ante fallos transitorios de red/empty
+// (igual que callStructured) — las llamadas de imagen no son idempotentes pero
+// solo reintentamos cuando NO hubo resultado. Devuelve '' si nunca produjo imagen.
+export async function generateImage(parts: Part[], maxRetries = 3): Promise<string> {
+  let lastError: unknown = null
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      const res = await getAI().models.generateContent({
+        model: 'gemini-3.1-flash-image',
+        contents: [{ role: 'user', parts }],
+        config: { responseModalities: [Modality.IMAGE] },
+      })
+      const imagePart = res.candidates?.[0]?.content?.parts?.find((p: Part) => p.inlineData)
+      const data = imagePart?.inlineData?.data
+      if (data) return data
+    } catch (e) {
+      lastError = e
+    }
+  }
+  if (lastError) throw lastError
+  return ''
+}
+
 export async function editImage(
   refBase64: string, refMime: string,
   productBase64: string, productMime: string,
@@ -68,7 +99,7 @@ export async function editImage(
     { text: instruction },
   ]
   const res = await getAI().models.generateContent({
-    model: 'gemini-3.1-flash-image-preview',
+    model: 'gemini-3.1-flash-image',
     contents: [{ role: 'user', parts }],
     config: { responseModalities: [Modality.IMAGE] },
   })
@@ -99,7 +130,7 @@ export async function refineImage(
     },
   ]
   const res = await getAI().models.generateContent({
-    model: 'gemini-3.1-flash-image-preview',
+    model: 'gemini-3.1-flash-image',
     contents: [{ role: 'user', parts }],
     config: { responseModalities: [Modality.IMAGE] },
   })
