@@ -35,16 +35,17 @@ export PH_ENRICH_LIMIT="${PH_ENRICH_LIMIT:-150}"         # default documentado; 
 export PH_NICHE_BATCH="${PH_NICHE_BATCH:-10}"            # bloque = nichos por proceso fresco (menor = menos leak de RAM)
 export PH_BATCH_REST="${PH_BATCH_REST:-60}"             # respiro entre bloques para reclamar RAM
 
-# CONCURRENCIA — KVM2 (2 vCPU / 8 GB) + 1 proxy ISP + media-blocking.
-# El cuello de botella es el CPU (2 vCPU), NO la RAM (a conc 10 ~4 GB). Default 10
-# (validado: el proxy aguantó conc 8 stress sin degradar; conc 10 da CPU holgado
-# ~1.25 cores). Subir a 12→15 SOLO en soak vigilando: load average <~1.8 (top),
-# cooldowns/0-nodos del proxio ~0, y latencia de nav estable. Override sin
-# redeploy: editar este export o pasar PH_CONCURRENCY en el environment del unit.
-export PH_CONCURRENCY="${PH_CONCURRENCY:-10}"
+# CONCURRENCIA — scraping LOCAL por IP residencial nativa (sin proxy; el proxy
+# ISP del VPS fue hard-bloqueado por Meta el 2026-06-18, ver memoria). La IP
+# residencial nativa aguantó conc 15 × 13.5h sin bloqueo; arrancamos conservador
+# en 5 (es la conexión de casa — un block aquí afecta el internet real). El
+# hard-abort del rate-controller corta el sondeo si Meta llegara a throttlear.
+# Override: editar este export o pasar PH_CONCURRENCY en el environment.
+export PH_CONCURRENCY="${PH_CONCURRENCY:-5}"
 
 LIST="${NICHES_FILE:-niches.txt}"
 SLEEP_BETWEEN="${SLEEP_BETWEEN:-3600}"        # pausa entre ciclos cuando la cola se vacía
+BLOCK_COOLDOWN="${PH_BLOCK_COOLDOWN:-3600}"   # enfriamiento largo tras un block persistente (hard-abort)
 PIPELINE_TIMEOUT="${PIPELINE_TIMEOUT:-36000}" # tope por bloque (10h) — un browser colgado no es crash
 STEP_TIMEOUT="${STEP_TIMEOUT:-7200}"          # tope por script de refinamiento (2h)
 MAX_DRAIN_CHUNKS="${MAX_DRAIN_CHUNKS:-500}"   # backstop anti-loop por ciclo
@@ -52,6 +53,8 @@ MAX_DRAIN_CHUNKS="${MAX_DRAIN_CHUNKS:-500}"   # backstop anti-loop por ciclo
 log() { echo "[$(date '+%F %T')] $*"; }
 
 # Drena la cola en bloques frescos hasta el centinela PH_QUEUE_EMPTY.
+# Retorna: 0 = cola vacía/drenada · 1 = tope de chunks · 2 = block persistente
+# (hard-abort: la IP está muerta; main() salta el refinamiento y enfría largo).
 drain_queue() {
   local n=0 rc logf
   while [ "$n" -lt "$MAX_DRAIN_CHUNKS" ]; do
@@ -61,6 +64,13 @@ drain_queue() {
     # tee → stream live a journald Y guarda para detectar el centinela.
     timeout "$PIPELINE_TIMEOUT" npx tsx scripts/pipeline.ts --all 2>&1 | tee "$logf"
     rc=${PIPESTATUS[0]}
+    # Hard-abort: re-lanzar otro bloque solo re-sondearía la IP muerta. Cortamos
+    # el drain y dejamos que main() enfríe largo (BLOCK_COOLDOWN).
+    if grep -q 'PH_PERSISTENT_BLOCK' "$logf"; then
+      rm -f "$logf"
+      log "🛑 block PERSISTENTE (PH_PERSISTENT_BLOCK) — corto el drain; el ciclo enfriará largo"
+      return 2
+    fi
     if grep -q 'PH_QUEUE_EMPTY' "$logf"; then
       rm -f "$logf"
       log "cola vacía (PH_QUEUE_EMPTY) — drain completo en $n iteración(es)"
@@ -106,6 +116,17 @@ main() {
 
     # 2. Drenar la cola en bloques frescos (scrape+analyze+validate-PE por bloque).
     drain_queue
+    drain_rc=$?
+
+    # Hard-abort: block persistente → la IP está muerta. Saltamos el refinamiento
+    # (expand/analyze/validate-pe/recheck también scrapean = re-sondearían) y
+    # enfriamos largo antes de reintentar. Si la IP no se recupera, el próximo
+    # ciclo vuelve a abortar barato (tope PH_MAX_COOLDOWNS) y re-enfría.
+    if [ "$drain_rc" -eq 2 ]; then
+      log "──── ciclo: ABORTADO por block persistente · enfriando ${BLOCK_COOLDOWN}s ────"
+      sleep "$BLOCK_COOLDOWN"
+      continue
+    fi
 
     # 3. Cola de refinamiento, una vez por ciclo.
     refine_step expand-uncovered.ts

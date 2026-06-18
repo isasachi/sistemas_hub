@@ -183,7 +183,9 @@ export interface AdNode {
 
 export interface NicheRow {
   id: string
-  status: 'pending' | 'active'
+  // 'archived' = fuera de la cola de scrapeo (no está en la lista curada). Sus
+  // productos se conservan/sirven; getNichesToRefresh/getActiveNiches lo excluyen.
+  status: 'pending' | 'active' | 'archived'
   last_scraped: string | null
   product_count: number
   // Keywords expandidas (≥15, modelo original) — seed estático o LLM en CI.

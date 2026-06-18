@@ -73,6 +73,57 @@ describe('makeRateController', () => {
   })
 })
 
+describe('makeRateController — hard-abort (block persistente)', () => {
+  // Dispara UN cool-down: streakLimit ceros, luego avanza el reloj para que el
+  // gate expire (requisito de note() para re-disparar el próximo).
+  function tripCooldown(rc: ReturnType<typeof makeRateController>, clk: ReturnType<typeof fixedClock>) {
+    for (let i = 0; i < CFG.streakLimit; i++) rc.note(0)
+    clk.advance(CFG.cooldownMs)
+  }
+
+  it('tras maxCooldowns cool-downs SIN recuperar → persistentemente bloqueado', () => {
+    const clk = fixedClock()
+    const rc = makeRateController({ ...CFG, maxCooldowns: 3, now: clk.now })
+    tripCooldown(rc, clk)
+    expect(rc.isPersistentlyBlocked()).toBe(false)
+    tripCooldown(rc, clk)
+    expect(rc.isPersistentlyBlocked()).toBe(false)
+    tripCooldown(rc, clk)                       // 3er cool-down sin recuperar
+    expect(rc.isPersistentlyBlocked()).toBe(true)
+  })
+
+  it('una recuperación (payload>0) resetea el contador → no se declara block', () => {
+    const clk = fixedClock()
+    const rc = makeRateController({ ...CFG, maxCooldowns: 3, now: clk.now })
+    tripCooldown(rc, clk)
+    tripCooldown(rc, clk)
+    rc.note(9)                                   // recuperó nodos → contador a 0
+    tripCooldown(rc, clk)
+    tripCooldown(rc, clk)
+    expect(rc.isPersistentlyBlocked()).toBe(false) // solo 2 seguidos desde el reset
+  })
+
+  it('onPersistentBlock se invoca UNA vez con el conteo de cool-downs', () => {
+    const clk = fixedClock()
+    const rc = makeRateController({ ...CFG, maxCooldowns: 2, now: clk.now })
+    let calls = 0; let count = -1
+    rc.onPersistentBlock = (c) => { calls++; count = c }
+    tripCooldown(rc, clk)
+    tripCooldown(rc, clk)                         // 2º → dispara
+    tripCooldown(rc, clk)                         // sigue bloqueado, NO re-dispara el callback
+    expect(calls).toBe(1)
+    expect(count).toBe(2)
+    expect(rc.isPersistentlyBlocked()).toBe(true)
+  })
+
+  it('maxCooldowns 0 (default) deshabilita el hard-abort', () => {
+    const clk = fixedClock()
+    const rc = makeRateController({ ...CFG, now: clk.now })  // sin maxCooldowns
+    for (let i = 0; i < 10; i++) tripCooldown(rc, clk)
+    expect(rc.isPersistentlyBlocked()).toBe(false)
+  })
+})
+
 describe('isBlockCompromised', () => {
   const ratio = 0.6
   const min = 8

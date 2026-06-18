@@ -12,9 +12,10 @@ import { createClient } from '@supabase/supabase-js'
   )
   const head = (b: ReturnType<typeof db.from>) => b.select('*', { count: 'exact', head: true })
 
-  const { count: pending } = await head(db.from('ph_niches')).eq('status', 'pending')
-  const { count: active }  = await head(db.from('ph_niches')).eq('status', 'active')
-  const { count: prod }    = await head(db.from('ph_products'))
+  const { count: pending }  = await head(db.from('ph_niches')).eq('status', 'pending')
+  const { count: active }   = await head(db.from('ph_niches')).eq('status', 'active')
+  const { count: archived } = await head(db.from('ph_niches')).eq('status', 'archived')
+  const { count: prod }     = await head(db.from('ph_products'))
   const dist: Record<string, number | null> = {}
   for (const p of ['alta', 'media', 'baja']) {
     const { count } = await head(db.from('ph_products')).eq('analysis->>priority', p)
@@ -23,6 +24,7 @@ import { createClient } from '@supabase/supabase-js'
 
   console.log(`  Nichos pending (cola por drenar): ${pending ?? '?'}`)
   console.log(`  Nichos active:                    ${active ?? '?'}`)
+  console.log(`  Nichos archived (fuera de cola):  ${archived ?? '?'}`)
   console.log(`  Productos totales:                ${prod ?? '?'}`)
   console.log(`  Ganadores: ${dist.alta ?? '?'} alta · ${dist.media ?? '?'} media · ${dist.baja ?? '?'} baja`)
 })().catch((e) => {

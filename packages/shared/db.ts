@@ -24,14 +24,22 @@ export async function getNicheStatus(niche: string): Promise<NicheRow | null> {
   return (data as NicheRow) ?? null
 }
 
+// `priority` es OPCIONAL a propósito: si se omite NO se incluye en el payload,
+// así el upsert preserva la prioridad existente (Supabase no toca columnas
+// ausentes). Incluirla siempre con default 0 borraría la prioridad en cada
+// upsertNiche del flujo (scrapeNiche 'active' sin productos, re-encole de
+// pipeline) → un nicho de parte del cuerpo perdería su priority. Solo el seed
+// la pasa explícita.
 export async function upsertNiche(
   niche: string,
   status: 'pending' | 'active',
-  priority = 0,
+  priority?: number,
 ): Promise<void> {
+  const row: { id: string; status: string; priority?: number } = { id: niche, status }
+  if (priority !== undefined) row.priority = priority
   const { error } = await getDb()
     .from('ph_niches')
-    .upsert({ id: niche, status, priority }, { onConflict: 'id' })
+    .upsert(row, { onConflict: 'id' })
   if (error) throw new Error(error.message)
 }
 
@@ -114,6 +122,27 @@ export async function getActiveNiches(): Promise<NicheRow[]> {
     .eq('status', 'active')
   if (error) throw new Error(error.message)
   return (data as NicheRow[]) ?? []
+}
+
+// Todos los nichos (id + status) — para herramientas de mantenimiento que
+// necesitan el set completo (ej. archive-niches.ts diffea contra niches.txt).
+export async function getAllNiches(): Promise<Pick<NicheRow, 'id' | 'status'>[]> {
+  const { data, error } = await getDb().from('ph_niches').select('id, status')
+  if (error) throw new Error(error.message)
+  return (data as Pick<NicheRow, 'id' | 'status'>[]) ?? []
+}
+
+// Marca nichos como 'archived' (los saca de la cola de scrapeo sin borrar sus
+// productos). Idempotente; en lotes para no exceder límites de la API.
+export async function archiveNiches(ids: string[]): Promise<void> {
+  for (let i = 0; i < ids.length; i += 200) {
+    const batch = ids.slice(i, i + 200)
+    const { error } = await getDb()
+      .from('ph_niches')
+      .update({ status: 'archived' })
+      .in('id', batch)
+    if (error) throw new Error(error.message)
+  }
 }
 
 // Para el daemon: nichos pendientes o vencidos. El TTL es configurable vía

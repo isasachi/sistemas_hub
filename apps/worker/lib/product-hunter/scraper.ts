@@ -53,6 +53,13 @@ export const CONCURRENCY = Math.max(1, Number(process.env.PH_CONCURRENCY ?? 3))
 const JITTER_MS = Math.max(0, Number(process.env.PH_JITTER_MS ?? 500))
 const ZERO_STREAK_LIMIT = Math.max(0, Number(process.env.PH_ZERO_STREAK ?? 8))
 const COOLDOWN_MS = Math.max(0, Number(process.env.PH_COOLDOWN_MS ?? 90_000))
+// Hard-abort: el cool-down de 90s NO des-bloquea un block persistente; re-sondear
+// en loop mantiene la IP caliente y escala soft→hard (lección del 2026-06-18: el
+// daemon sondeó una IP muerta 70+ min). Tras PH_MAX_COOLDOWNS cool-downs SIN
+// recuperar (ninguna nav con nodos entre ellos), el controlador se declara
+// persistentemente bloqueado → navigateAndCapture deja de navegar, el run aborta
+// y el daemon duerme largo en vez de martillar. 0 = desactivado.
+const MAX_COOLDOWNS = Math.max(0, Number(process.env.PH_MAX_COOLDOWNS ?? 3))
 
 // Backstop a nivel run (P2): si una fracción ≥ PH_BLOCK_RATIO de las búsquedas del
 // nicho quedó vacía tras GraphQL+DOM, el run está block-comprometido → scrapeNiche
@@ -79,17 +86,29 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 // Factory (reloj inyectable para testear). `note()` registra el resultado de una
 // navegación y dispara el cool-down; `gateMs()` devuelve cuántos ms falta esperar
 // (decisión pura — el caller hace el sleep). Exportado solo para los tests.
-export function makeRateController(opts: { streakLimit: number; cooldownMs: number; now?: () => number }) {
+export function makeRateController(opts: {
+  streakLimit: number
+  cooldownMs: number
+  maxCooldowns?: number
+  now?: () => number
+}) {
   const now = opts.now ?? Date.now
   const enabled = opts.streakLimit > 0 && opts.cooldownMs > 0
+  const maxCooldowns = Math.max(0, opts.maxCooldowns ?? 0)
   return {
     consecutiveZero: 0,
     coolDownUntil: 0,
+    cooldownsWithoutRecovery: 0,   // cool-downs seguidos sin una nav con nodos entremedio
+    persistentlyBlocked: false,    // hard-abort: ≥ maxCooldowns sin recuperar
     onCooldown: undefined as undefined | ((seconds: number) => void),
+    onPersistentBlock: undefined as undefined | ((cooldowns: number) => void),
     note(payloads: number) {
       if (!enabled) return
       if (payloads > 0) {
+        // Recuperación: una nav con nodos limpia tanto la racha como el contador
+        // de cool-downs sin recuperar (la IP respondió → no está muerta).
         this.consecutiveZero = 0
+        this.cooldownsWithoutRecovery = 0
         return
       }
       this.consecutiveZero++
@@ -99,22 +118,57 @@ export function makeRateController(opts: { streakLimit: number; cooldownMs: numb
       if (this.consecutiveZero >= opts.streakLimit && now() >= this.coolDownUntil) {
         this.coolDownUntil = now() + opts.cooldownMs
         this.consecutiveZero = 0
+        this.cooldownsWithoutRecovery++
         this.onCooldown?.(opts.cooldownMs / 1000)
+        // Hard-abort: N cool-downs seguidos sin que ninguna nav recuperara nodos =
+        // block persistente, no throttle transitorio. Una sola vez (latch).
+        if (maxCooldowns > 0 && this.cooldownsWithoutRecovery >= maxCooldowns && !this.persistentlyBlocked) {
+          this.persistentlyBlocked = true
+          this.onPersistentBlock?.(this.cooldownsWithoutRecovery)
+        }
       }
     },
     gateMs(): number {
       return Math.max(0, this.coolDownUntil - now())
+    },
+    isPersistentlyBlocked(): boolean {
+      return this.persistentlyBlocked
     },
   }
 }
 
 // Controlador compartido por todo el proceso (singleton de módulo) — discovery y
 // PE validation pegan a la misma IP, así que el cool-down las protege a ambas.
-const rateControl = makeRateController({ streakLimit: ZERO_STREAK_LIMIT, cooldownMs: COOLDOWN_MS })
+const rateControl = makeRateController({
+  streakLimit: ZERO_STREAK_LIMIT,
+  cooldownMs: COOLDOWN_MS,
+  maxCooldowns: MAX_COOLDOWNS,
+})
 rateControl.onCooldown = (seconds) =>
   console.warn(
     `\n  ⏸ rate-control: ${ZERO_STREAK_LIMIT} navegaciones sin nodos seguidas (probable soft-block de Meta) — enfriando ${seconds}s`
   )
+rateControl.onPersistentBlock = (cooldowns) =>
+  console.error(
+    `\n  🛑 rate-control: ${cooldowns} cool-downs seguidos sin recuperar — block PERSISTENTE. ` +
+    `Abortando navegación (no seguir martillando la IP); el run aborta y el daemon duerme largo.`
+  )
+
+// Error que lanza navigateAndCapture cuando el controlador se declaró
+// persistentemente bloqueado: corta TODA navegación posterior (discovery y PE)
+// del proceso para no re-sondear una IP muerta. El caller (pipeline) lo detecta
+// y emite el centinela PH_PERSISTENT_BLOCK para que el daemon enfríe.
+export class PersistentBlockError extends Error {
+  constructor() {
+    super('PERSISTENT_BLOCK: navegación abortada (block persistente de Meta)')
+    this.name = 'PersistentBlockError'
+  }
+}
+
+// ¿El controlador (singleton del proceso) está persistentemente bloqueado?
+export function isPersistentlyBlocked(): boolean {
+  return rateControl.isPersistentlyBlocked()
+}
 
 // Registra el resultado de UNA navegación para el cool-down. Se llama desde los
 // callers con el conteo de nodos POST-fallback (no desde navigateAndCapture con
@@ -261,6 +315,10 @@ async function gotoWithRetry(page: Page, url: string): Promise<void> {
 // Colectamos los Response síncronamente y leemos el body DESPUÉS de navegar
 // (evita race conditions; Playwright bufferea los bodies).
 export async function navigateAndCapture(page: Page, url: string): Promise<unknown[]> {
+  // Hard-abort: si el proceso ya se declaró persistentemente bloqueado, no
+  // navegamos más — re-sondear sostiene el block. Fast-fail: cada tarea en vuelo
+  // o pendiente lanza al instante, drenando el pool sin tocar la IP.
+  if (rateControl.isPersistentlyBlocked()) throw new PersistentBlockError()
   // Rate control (P1): respeta un cool-down global activo y desincroniza las pages
   // con jitter antes de navegar. Ver la sección "Rate control" arriba.
   const cooldown = rateControl.gateMs()
@@ -743,6 +801,10 @@ export interface ScrapeOptions {
 export interface ScrapeResult {
   blocked: boolean
   saved: number
+  // Hard-abort: el proceso quedó persistentemente bloqueado durante este nicho
+  // (≥ PH_MAX_COOLDOWNS cool-downs sin recuperar). El caller debe abortar el
+  // bloque entero — los nichos restantes compartirían la IP muerta.
+  persistentBlock: boolean
 }
 
 export async function scrapeNiche(niche: string, opts: ScrapeOptions = {}): Promise<ScrapeResult> {
@@ -958,7 +1020,7 @@ export async function scrapeNiche(niche: string, opts: ScrapeOptions = {}): Prom
         `(${pct}% ≥ ${Math.round(BLOCK_RATIO * 100)}%) — el pipeline saltea su validación PE y re-encola`
       )
     }
-    return { blocked, saved }
+    return { blocked, saved, persistentBlock: isPersistentlyBlocked() }
   } finally {
     await browser.close()
   }

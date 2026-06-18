@@ -97,6 +97,7 @@ async function main() {
   let pending: PendingBatch[] = []
   const processed: string[] = []
   const blockedNiches = new Set<string>()  // P2: runs block-comprometidos
+  let persistentBlock = false              // hard-abort: IP muerta, abortar bloque
   let ok = 0
   let failed = 0
 
@@ -107,8 +108,19 @@ async function main() {
 
       const keywords = await resolveKeywords(niche)
       const countries = await resolveCountries(niche)
-      const { blocked } = await scrapeNiche(niche, { keywords, countries })
+      const { blocked, persistentBlock: pb } = await scrapeNiche(niche, { keywords, countries })
       if (blocked) blockedNiches.add(niche)
+
+      // Hard-abort: el proceso quedó persistentemente bloqueado (IP muerta). Los
+      // nichos restantes compartirían la misma IP → abortamos el bloque entero.
+      // Este nicho se re-encola (como block-comprometido, sin validación PE); los
+      // no procesados siguen `pending`/`stale` en DB y los toma el próximo drain.
+      if (pb) {
+        persistentBlock = true
+        blockedNiches.add(niche)
+        console.error(`\n🛑 [${niche}]: block persistente — abortando el bloque (los nichos restantes quedan en cola)`)
+        break
+      }
 
       const { entries, names } = await collectNiche(niche)
       if (entries.length) {
@@ -147,7 +159,8 @@ async function main() {
 
   // Validación PE del bloque: con los analizados/persistidos, validar la
   // competencia en vivo reusando UN browser caliente ($0 LLM). Gate PH_NO_PE.
-  if (!NO_PE && toValidate.length) {
+  // Saltada si hay block persistente: la IP está muerta, todo probe abortaría.
+  if (!NO_PE && !persistentBlock && toValidate.length) {
     console.log(`\n─── Validación PE del bloque (${toValidate.length} nichos) ───`)
     const { browser, pages } = await launchScraperContext(CONCURRENCY)
     try {
@@ -160,6 +173,10 @@ async function main() {
   }
 
   console.log(`\n═══ Pipeline: ${ok} nichos OK · ${failed} fallidos ═══`)
+
+  // Centinela del hard-abort: el daemon (worker-loop.sh) lo detecta y duerme
+  // largo en vez de relanzar otro bloque que re-sondee la IP muerta.
+  if (persistentBlock) console.log('PH_PERSISTENT_BLOCK')
 }
 
 main().catch((e) => { console.error(e); process.exit(1) })
