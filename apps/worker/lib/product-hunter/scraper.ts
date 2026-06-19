@@ -5,7 +5,7 @@ import {
   FALLBACK_COUNTRIES,
   MIN_CANDIDATES_BEFORE_FALLBACK,
 } from '@ph/shared'
-import { upsertProducts, upsertPePool, upsertWatchlist, updateNicheAfterScrape, upsertNiche } from '@ph/shared'
+import { upsertProducts, upsertPePool, upsertWatchlist, updateNicheAfterScrape } from '@ph/shared'
 import type { AdNode, CreativeSnippet } from '@ph/shared'
 import { quickDiscard, goldenDiscard, isNearWinner } from './quick-discard'
 import { extractFromDom } from './dom-fallback'
@@ -1007,7 +1007,10 @@ export async function scrapeNiche(niche: string, opts: ScrapeOptions = {}): Prom
       await updateNicheAfterScrape(niche, saved)
       console.log(`\n✓ ${saved} productos guardados para "${niche}"`)
     } else {
-      await upsertNiche(niche, 'active')
+      // update-only (como con productos): marca active + last_scraped sin tocar
+      // priority ni crear la fila. Antes upsertNiche(active) no seteaba
+      // last_scraped → el nicho sin productos reentraba a la cola de inmediato.
+      await updateNicheAfterScrape(niche, 0)
       console.log(`\nSin productos encontrados para "${niche}"`)
     }
 

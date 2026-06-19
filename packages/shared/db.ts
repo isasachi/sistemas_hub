@@ -67,22 +67,30 @@ export async function setNicheCanonical(niche: string, canonicalId: string): Pro
   if (error) throw new Error(error.message)
 }
 
+// ⚠️ UPDATE-only (NO upsert): un write de scrape NUNCA debe CREAR la fila del
+// nicho. La creación es exclusiva del seed (con priority) o del cold-start
+// (upsertNiche). Si esta función usara upsert y la fila estuviera ausente, la
+// INSERTaría con priority=0 (default de la columna) → un nicho de parte del
+// cuerpo perdería su prioridad al scrapearse (bug 2026-06-19). El nicho SIEMPRE
+// existe acá: viene de getNichesToRefresh o fue sembrado/cold-started.
 export async function updateNicheAfterScrape(niche: string, productCount: number): Promise<void> {
   const { error } = await getDb()
     .from('ph_niches')
-    .upsert(
-      { id: niche, status: 'active', last_scraped: new Date().toISOString(), product_count: productCount },
-      { onConflict: 'id' }
-    )
+    .update({ status: 'active', last_scraped: new Date().toISOString(), product_count: productCount })
+    .eq('id', niche)
   if (error) throw new Error(error.message)
 }
 
 // Guarda las keywords expandidas del nicho (cache: una expansión por nicho).
-// Upsert: el nicho puede no existir aún cuando se corre --niche a mano.
+// UPDATE-only por la misma razón que updateNicheAfterScrape: no debe crear la
+// fila (la nacería en priority 0). El nicho ya existe cuando se resuelven sus
+// keywords (viene de la cola / fue sembrado). En --niche manual sobre un nicho
+// inexistente, pipeline.ts lo upsertea como pending antes de resolver.
 export async function saveNicheKeywords(niche: string, keywords: string[]): Promise<void> {
   const { error } = await getDb()
     .from('ph_niches')
-    .upsert({ id: niche, keywords }, { onConflict: 'id' })
+    .update({ keywords })
+    .eq('id', niche)
   if (error) throw new Error(error.message)
 }
 

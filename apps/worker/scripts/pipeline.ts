@@ -79,6 +79,10 @@ async function main() {
   if (nicheIdx !== -1 && args[nicheIdx + 1]) {
     niches = [args[nicheIdx + 1]]
     const row = await getNicheStatus(niches[0])
+    // Los writes de scrape son update-only (no crean la fila). En --niche manual
+    // sobre un nicho inexistente, lo sembramos como pending para que existan al
+    // escribir. (En --all los niches vienen de la cola → ya existen.)
+    if (!row) await upsertNiche(niches[0], 'pending')
     if (!row || !row.last_scraped) newNiches.add(niches[0])
   } else if (args.includes('--all')) {
     const toRefresh = await getNichesToRefresh()
