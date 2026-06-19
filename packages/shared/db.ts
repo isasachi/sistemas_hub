@@ -54,6 +54,19 @@ export async function updateNichePriority(niche: string, priority: number): Prom
   if (error) throw new Error(error.message)
 }
 
+// Marca un nicho como ALIAS de otro (dedup semántico). Estado terminal: el
+// filtro canonical_id IS NULL de getNichesToRefresh lo saca de la cola para
+// siempre. status='archived' como defensa extra (también lo excluye). El gate
+// del worker garantiza que canonicalId es una raíz (canonical_id null) → no hay
+// cadenas; la resolución en serving es de un solo salto.
+export async function setNicheCanonical(niche: string, canonicalId: string): Promise<void> {
+  const { error } = await getDb()
+    .from('ph_niches')
+    .update({ canonical_id: canonicalId, status: 'archived' })
+    .eq('id', niche)
+  if (error) throw new Error(error.message)
+}
+
 export async function updateNicheAfterScrape(niche: string, productCount: number): Promise<void> {
   const { error } = await getDb()
     .from('ph_niches')
@@ -154,6 +167,7 @@ export async function getNichesToRefresh(): Promise<NicheRow[]> {
   const { data, error } = await getDb()
     .from('ph_niches')
     .select('*')
+    .is('canonical_id', null) // los alias (dedup) nunca re-entran a la cola
     .or(`status.eq.pending,and(status.eq.active,last_scraped.lt.${staleBefore})`)
     // Drain determinista: prioridad alta primero (partes del cuerpo), luego el
     // nunca/menos-recientemente scrapeado, desempate por id. pipeline.ts hace

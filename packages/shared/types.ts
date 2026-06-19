@@ -197,4 +197,8 @@ export interface NicheRow {
   // Prioridad de scrapeo: mayor = entra antes al drain. Default 0. Las partes
   // del cuerpo se siembran con priority>0 vía `# @priority N` en niches.txt.
   priority: number
+  // Dedup semántico: si está seteado, este nicho es un ALIAS de otro (mismo
+  // mercado, ej. "calvicie"→"alopecia"). No se scrapea ni se sirve solo; el
+  // route `search` resuelve el canónico y muestra su pool. null = es canónico.
+  canonical_id: string | null
 }

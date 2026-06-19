@@ -91,6 +91,14 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Dedup semántico: si el nicho resuelto es un ALIAS de otro mercado
+  // (canonical_id, seteado por el gate del worker), servimos el pool del
+  // canónico. Un solo salto — canonical_id apunta siempre a una raíz.
+  if (nicheRow?.canonical_id) {
+    niche = nicheRow.canonical_id
+    nicheRow = await getNicheStatus(nicheRow.canonical_id)
+  }
+
   // Cold start: ni el nicho ni una variación conocida existen. Lo encolamos como
   // pending (NO scrapeamos aquí, Vercel no puede correr Playwright). El daemon del
   // VPS (systemd, 24/7) poll-ea getNichesToRefresh() — que devuelve los pending —

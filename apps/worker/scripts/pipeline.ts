@@ -21,7 +21,8 @@
 // analyze.ts — solo cambia el orden, no el volumen de llamadas.
 import './bootstrap' // env + polyfill WebSocket — debe ir primero
 import { scrapeNiche, launchScraperContext, CONCURRENCY } from '../lib/product-hunter/scraper'
-import { getNichesToRefresh, getActiveNiches, ALL_NICHES, upsertNiche } from '@ph/shared'
+import { getNichesToRefresh, getActiveNiches, getNicheStatus, setNicheCanonical, ALL_NICHES, upsertNiche } from '@ph/shared'
+import { findCanonicalMarket } from '../lib/product-hunter/niche-dedup'
 import { resolveKeywords, resolveCountries } from './resolve'
 import {
   submitAnalysisBatch,
@@ -37,6 +38,8 @@ const NO_BATCH = process.env.PH_NO_BATCH === '1'
 const NICHE_BATCH = Math.max(1, Number(process.env.PH_NICHE_BATCH ?? 15))
 // Saltar la validación PE del bloque (debug).
 const NO_PE = process.env.PH_NO_PE === '1'
+// Saltar el gate semántico de dedup (debug / re-scrape manual).
+const NO_DEDUP = process.env.PH_NO_DEDUP === '1'
 
 interface PendingBatch {
   batchId: string
@@ -69,14 +72,22 @@ async function main() {
   const nicheIdx = args.indexOf('--niche')
 
   let niches: string[]
+  // Nichos NUEVOS (nunca scrapeados) del bloque → corren el gate de dedup antes
+  // de scrapear. Los refresh (last_scraped ya seteado) lo saltan: en estado
+  // estable casi todo es refresh → ~0 llamadas Haiku de dedup.
+  let newNiches = new Set<string>()
   if (nicheIdx !== -1 && args[nicheIdx + 1]) {
     niches = [args[nicheIdx + 1]]
+    const row = await getNicheStatus(niches[0])
+    if (!row || !row.last_scraped) newNiches.add(niches[0])
   } else if (args.includes('--all')) {
     const toRefresh = await getNichesToRefresh()
     if (toRefresh.length) {
       // Bloque: solo los primeros N. El resto lo toma la próxima invocación
       // (proceso fresco) del daemon.
-      niches = toRefresh.slice(0, NICHE_BATCH).map((n) => n.id)
+      const block = toRefresh.slice(0, NICHE_BATCH)
+      niches = block.map((n) => n.id)
+      newNiches = new Set(block.filter((n) => !n.last_scraped).map((n) => n.id))
     } else {
       // Cola vacía. ¿DB genuinamente vacía (bootstrap) o todo al día?
       const active = await getActiveNiches()
@@ -94,17 +105,42 @@ async function main() {
     process.exit(1)
   }
 
+  // Candidatos del gate de dedup: mercados ya establecidos (nichos activos). Se
+  // lee una vez; un nicho nuevo solo puede aliasar hacia una raíz, no hacia otro
+  // nuevo del mismo bloque → sin cadenas. Vacío si no hay nichos nuevos.
+  const dedupCandidates =
+    !NO_DEDUP && newNiches.size
+      ? (await getActiveNiches()).map((n) => n.id)
+      : []
+
   let pending: PendingBatch[] = []
   const processed: string[] = []
   const blockedNiches = new Set<string>()  // P2: runs block-comprometidos
   let persistentBlock = false              // hard-abort: IP muerta, abortar bloque
   let ok = 0
   let failed = 0
+  let aliased = 0
 
   for (const niche of niches) {
     try {
       // Cosecha no-bloqueante: persistir lo que ya terminó mientras scrapeábamos
       pending = await harvest(pending)
+
+      // Gate de dedup (solo nichos nuevos): si es el mismo mercado que un nicho
+      // existente, aliasar y SALTAR scrape+análisis (no se gasta scrape ni LLM
+      // de análisis en un duplicado). Captura hermanos con/sin raíz común.
+      if (newNiches.has(niche) && dedupCandidates.length) {
+        const canonical = await findCanonicalMarket(niche, dedupCandidates).catch((e) => {
+          console.error(`✗ dedup [${niche}]: ${e instanceof Error ? e.message.split('\n')[0] : e}`)
+          return null // best-effort: si el gate falla, se scrapea normal
+        })
+        if (canonical) {
+          await setNicheCanonical(niche, canonical)
+          console.log(`[${niche}] → alias de [${canonical}] (mismo mercado) — sin scrape ni análisis`)
+          aliased++
+          continue
+        }
+      }
 
       const keywords = await resolveKeywords(niche)
       const countries = await resolveCountries(niche)
@@ -172,7 +208,7 @@ async function main() {
     }
   }
 
-  console.log(`\n═══ Pipeline: ${ok} nichos OK · ${failed} fallidos ═══`)
+  console.log(`\n═══ Pipeline: ${ok} nichos OK · ${failed} fallidos${aliased ? ` · ${aliased} aliased (dedup)` : ''} ═══`)
 
   // Centinela del hard-abort: el daemon (worker-loop.sh) lo detecta y duerme
   // largo en vez de relanzar otro bloque que re-sondee la IP muerta.
