@@ -64,7 +64,7 @@ export default function Section4Copy() {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/sessions/${sessionId}/confirm-copy`, {
+      const res = await fetch(`/api/generador-anuncios/sessions/${sessionId}/confirm-copy`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ version: selected }),

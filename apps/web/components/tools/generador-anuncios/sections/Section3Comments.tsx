@@ -22,7 +22,7 @@ export default function Section3Comments() {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/sessions/${sessionId}/generate-copy`, {
+      const res = await fetch(`/api/generador-anuncios/sessions/${sessionId}/generate-copy`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ comments }),

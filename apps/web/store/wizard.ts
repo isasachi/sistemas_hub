@@ -119,7 +119,7 @@ export const useWizardStore = create<WizardState & WizardActions>((set) => ({
 
   startNewSession: async () => {
     set({ ...initialState })
-    const res = await fetch('/api/sessions', { method: 'POST' })
+    const res = await fetch('/api/generador-anuncios/sessions', { method: 'POST' })
     const { id } = (await res.json()) as { id: string }
     set({ sessionId: id })
   },

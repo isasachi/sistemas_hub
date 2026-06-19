@@ -48,7 +48,7 @@ export default function Section2Product() {
       form.append('whatItDoes', answers.whatItDoes)
       form.append('targetAudience', answers.targetAudience)
 
-      const res = await fetch(`/api/sessions/${sessionId}/analyze-product`, { method: 'POST', body: form })
+      const res = await fetch(`/api/generador-anuncios/sessions/${sessionId}/analyze-product`, { method: 'POST', body: form })
       const data = await res.json() as { scan?: ProductScan; productUrl?: string; logoUrl?: string | null; error?: string }
       if (!res.ok) throw new Error(data.error ?? 'Error al analizar el producto')
       setProductData({

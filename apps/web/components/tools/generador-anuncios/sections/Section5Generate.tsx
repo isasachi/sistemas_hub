@@ -50,7 +50,7 @@ export default function Section5Generate() {
     setRefining(true)
     setError(null)
     try {
-      const res = await fetch(`/api/sessions/${sessionId}/refine-image`, {
+      const res = await fetch(`/api/generador-anuncios/sessions/${sessionId}/refine-image`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ feedback: feedback.trim() }),
@@ -76,7 +76,7 @@ export default function Section5Generate() {
         <>
           <SSEStatus
             key={sseKey.current}
-            url={`/api/sessions/${sessionId}/generate-image`}
+            url={`/api/generador-anuncios/sessions/${sessionId}/generate-image`}
             onEvent={handleEvent}
           />
           <p className="text-[13px] text-[#bdbdbd]">Esto puede tomar entre 15 y 40 segundos.</p>

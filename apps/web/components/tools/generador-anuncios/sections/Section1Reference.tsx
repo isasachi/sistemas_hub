@@ -26,7 +26,7 @@ export default function Section1Reference() {
     try {
       const form = new FormData()
       form.append('reference', file)
-      const res = await fetch(`/api/sessions/${sessionId}/analyze-reference`, { method: 'POST', body: form })
+      const res = await fetch(`/api/generador-anuncios/sessions/${sessionId}/analyze-reference`, { method: 'POST', body: form })
       const data = await res.json() as { analysis?: ReferenceAnalysis; referenceUrl?: string; error?: string }
       if (!res.ok) throw new Error(data.error ?? 'Error al analizar la imagen')
       setReferenceData({ referenceUrl: data.referenceUrl!, referenceAnalysis: data.analysis! })
