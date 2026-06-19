@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight, Download, Sparkles, Info } from "lucide-react";
 import {
   calcular,
-  precioMinimoEstimado,
+  precioSugerido,
   type CalcInputs,
   type Funnel,
 } from "@/lib/calculadora-costos/model";
@@ -175,9 +175,9 @@ export default function CalculadoraCostos() {
       body: (
         <div className="flex flex-col gap-4">
           {f("operacion.precioVenta", "Precio de venta", "money", "El precio al que le vendes una unidad a tu cliente final.")}
-          <button type="button" onClick={() => set("operacion.precioVenta", precioMinimoEstimado(op, 0.35))}
+          <button type="button" onClick={() => set("operacion.precioVenta", precioSugerido(op, 0.35, result.embudo.cpaReal))}
             className="self-start flex items-center gap-1.5 text-[12px] text-[#ff9c4d] hover:underline">
-            <Sparkles className="w-3.5 h-3.5" /> No sé qué precio poner — calcúlalo por mí (margen 35%)
+            <Sparkles className="w-3.5 h-3.5" /> No sé qué precio poner — sugiérelo (cubre costos + ads, margen 35%)
           </button>
           {f("operacion.costoProducto", "Costo del producto", "money", "Lo que te cuesta a ti comprar o producir una unidad.")}
         </div>

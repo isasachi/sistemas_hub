@@ -156,9 +156,17 @@ export function calcular(input: CalcInputs): CalcResult {
   };
 }
 
-// Asistente de precio (hoja ESTABLECIENDO PRECIOS): precio mínimo desde costos + margen.
-// costoIntermediación / (1 - margen). margen en 0..1 (<1).
-export function precioMinimoEstimado(op: Pick<OperacionInputs, "costoProducto" | "flete" | "fullfillment">, margen: number): number {
-  const costoIntermediacion = op.costoProducto + op.flete + op.fullfillment;
-  return margen >= 1 ? Infinity : costoIntermediacion / (1 - margen);
+// Asistente de precio (hoja ESTABLECIENDO PRECIOS): precio sugerido desde costos directos
+// + el costo de adquisición por venta (CPA, lo que en la hoja era "costo por compra estimado"),
+// aplicando el margen y redondeando a un precio "charm" terminado en 9 (como los del modelo).
+// margen en 0..1 (<1). cpaPorVenta = costo de publicidad por venta entregada.
+export function precioSugerido(
+  op: Pick<OperacionInputs, "costoProducto" | "flete" | "fullfillment">,
+  margen: number,
+  cpaPorVenta = 0,
+): number {
+  const base = op.costoProducto + op.flete + op.fullfillment + cpaPorVenta;
+  if (margen >= 1) return Infinity;
+  const raw = base / (1 - margen);
+  return Math.ceil(raw / 10) * 10 - 1; // termina en 9 (149, 119…) como el modelo original
 }

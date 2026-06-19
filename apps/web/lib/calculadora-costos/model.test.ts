@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { calcular, normalizarPct, type CalcInputs } from "./model";
+import { calcular, normalizarPct, precioSugerido, type CalcInputs } from "./model";
 
 // Inputs y outputs tomados literalmente de las hojas del archivo fuente.
 const leads: CalcInputs = {
@@ -76,6 +76,20 @@ describe("calcular — MENSAJES (vs hoja ANALISIS FINANCIERO - MENSAJES)", () =>
     expect(r.pg.profitBruto).toBeCloseTo(26748.7, 1);
     expect(r.pg.profitNeto).toBeCloseTo(16748.7, 1);
     expect(r.pg.capitalMinimo).toBeCloseTo(8312.9, 1);
+  });
+});
+
+describe("precioSugerido", () => {
+  it("reproduce el precio real del modelo (costos 40+13+4 + CPA 35, margen 35% → 149)", () => {
+    expect(precioSugerido({ costoProducto: 40, flete: 13, fullfillment: 4 }, 0.35, 35)).toBe(149);
+  });
+  it("termina en 9 y cubre el CPA", () => {
+    const p = precioSugerido({ costoProducto: 40, flete: 16, fullfillment: 5 }, 0.35, 50);
+    expect(p % 10).toBe(9);
+    expect(p).toBe(179); // (40+16+5+50)/0.65 = 170.8 → charm 179
+  });
+  it("sin CPA cae al piso de costos directos", () => {
+    expect(precioSugerido({ costoProducto: 18, flete: 0, fullfillment: 5 }, 0.35, 0)).toBe(39); // 23/0.65=35.4 → 39
   });
 });
 
