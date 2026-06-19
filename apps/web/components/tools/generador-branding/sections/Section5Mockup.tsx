@@ -15,9 +15,10 @@ const STATUS_TEXT: Record<string, string> = {
 }
 
 export default function Section5Mockup() {
-  const { sessionId, mockupUrl, setContainer, setMockup } = useBrandingStore()
+  const { sessionId, mockupUrl, labelData, setContainer, setMockup } = useBrandingStore()
   const [mode, setMode] = useState<'describe' | 'upload'>('describe')
-  const [desc, setDesc] = useState('')
+  // Prefill con el formato de empaque ya indicado en el paso de la etiqueta.
+  const [desc, setDesc] = useState(labelData?.packagingFormat ?? '')
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)

@@ -1,4 +1,4 @@
-import type { Direction } from './types'
+import type { Direction, LabelData } from './types'
 
 // Constructores puros (sin LLM, $0) que arman las instrucciones de generación de
 // imagen a partir de la dirección de marca aprobada. Mantienen un prompt rico y
@@ -45,24 +45,38 @@ export const LOGO_VARIANTS: string[] = [
   'minimal lettermark — bold geometric, lots of whitespace',
 ]
 
-// Etapa 4 — etiqueta. Recibe el logo elegido como imagen de entrada (Image 1).
+// Etapa 4 — etiqueta. Image 1 = logo elegido. Image 2 (opcional) = etiqueta de
+// referencia subida por el usuario, para imitar estilo/convenciones del rubro.
 export function buildLabelInstruction(
   d: Direction,
   brandName: string,
-  labelBrief: string
+  productName: string,
+  data: LabelData,
+  hasReference: boolean
 ): string {
+  const ld = (label: string, v: string) => (v.trim() ? `- ${label}: ${v.trim()}` : '')
   return [
     `Image 1 is the approved brand logo. Use it as-is (do not redraw the mark).`,
-    `Design a flat, print-ready PRODUCT LABEL artwork for "${brandName}".`,
+    hasReference
+      ? `Image 2 is a reference label the client likes — match its information density, layout conventions and shelf-appeal, but do NOT copy its brand, name or artwork.`
+      : '',
+    `Design a flat, print-ready PRODUCT LABEL artwork. Brand "${brandName}", product "${productName}".`,
     brandBlock(d, brandName),
-    `Product / label brief: ${labelBrief}.`,
+    `Packaging format the label must fit: ${data.packagingFormat.trim() || 'standard retail packaging'}.`,
+    ``,
+    `Label content (render this real text, correctly spelled — do NOT invent placeholders):`,
+    `- Product name: ${productName}`,
+    ld('Highlight / variety / tagline', data.highlight),
+    ld('Net weight / volume', data.netWeight),
+    ld('Units / quantity', data.units),
+    ld('Ingredients / composition (small print)', data.ingredients),
     ``,
     `Requirements:`,
     `- Place the provided logo prominently and integrate the palette and typography.`,
     `- This is the flat label design (front face), shown straight-on, not on a container yet.`,
-    `- Include realistic label elements: product name, a short tagline, and small placeholder net-weight/info text consistent with the category.`,
-    `- Cohesive, retail-quality, premium finish. Correct spelling.`,
-  ].join('\n')
+    `- Proportions and layout suited to the packaging format above.`,
+    `- Cohesive, retail-quality, premium finish.`,
+  ].filter(Boolean).join('\n')
 }
 
 // Etapa 5 — mockup. Image 1 = etiqueta. Image 2 (opcional) = envase subido.
@@ -90,6 +104,7 @@ export function buildMockupInstruction(
     ``,
     `Requirements:`,
     `- Studio product shot: soft realistic lighting, subtle reflections and shadow, neutral or palette-tinted background.`,
+    `- Keep the container's true geometry and proportions — do NOT distort, warp, stretch or deform the package shape. Only the label wraps to follow the surface.`,
     `- The label must look physically printed on the container, not pasted flat.`,
     `- Single hero product, centered, e-commerce ready. No extra text overlays.`,
   ].join('\n')

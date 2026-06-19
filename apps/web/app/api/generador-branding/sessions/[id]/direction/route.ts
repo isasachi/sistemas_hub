@@ -19,6 +19,7 @@ export async function POST(
 
   let body: {
     brandName?: string
+    productName?: string
     productCategory?: string
     targetAudience?: string
     personality?: string[]
@@ -30,6 +31,7 @@ export async function POST(
   }
 
   const brandName = body.brandName?.trim()
+  const productName = body.productName?.trim()
   const productCategory = body.productCategory?.trim()
   const targetAudience = body.targetAudience?.trim()
   const personality = (body.personality ?? []).map((p) => p.trim()).filter(Boolean)
@@ -43,6 +45,7 @@ export async function POST(
         `Define la DIRECCIÓN DE MARCA para este negocio. Devuelve JSON que cumpla el esquema Direction.`,
         ``,
         `Marca: ${brandName}`,
+        `Nombre del producto: ${productName || 'no especificado'}`,
         `Producto / categoría: ${productCategory}`,
         `Público objetivo: ${targetAudience || 'no especificado'}`,
         `Personalidad deseada: ${personality.length ? personality.join(', ') : 'no especificada'}`,
@@ -68,6 +71,7 @@ export async function POST(
   await updateBrandingSession(id, {
     step: Math.max(session.step, 1),
     brand_name: brandName,
+    product_name: productName ?? null,
     product_category: productCategory,
     target_audience: targetAudience ?? null,
     personality,

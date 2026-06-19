@@ -1,7 +1,9 @@
 'use client'
 
 import { create } from 'zustand'
-import type { Direction, BrandingSessionResponse } from '@/lib/branding/types'
+import type { Direction, LabelData, BrandingSessionResponse } from '@/lib/branding/types'
+
+export const SESSION_KEY = 'branding_session_id'
 
 // Máquina de pasos del wizard de branding. `step` = nº de secciones completadas;
 // la sección activa es `step` (espeja store/wizard.ts del generador de anuncios).
@@ -12,6 +14,7 @@ interface BrandingState {
   step: number
   // brief
   brandName: string | null
+  productName: string | null
   productCategory: string | null
   targetAudience: string | null
   personality: string[]
@@ -23,6 +26,8 @@ interface BrandingState {
   logoUrl: string | null
   // etiqueta
   labelBrief: string | null
+  labelData: LabelData | null
+  labelReferenceUrl: string | null
   labelUrl: string | null
   // mockup
   containerMode: 'describe' | 'upload' | null
@@ -35,6 +40,7 @@ interface BrandingActions {
   setStep: (step: number) => void
   setBrief: (data: {
     brandName: string
+    productName: string
     productCategory: string
     targetAudience: string
     personality: string[]
@@ -44,7 +50,8 @@ interface BrandingActions {
   approveDirection: () => void
   setLogoOptions: (logoOptions: string[]) => void
   selectLogo: (logoUrl: string) => void
-  setLabel: (data: { labelBrief: string; labelUrl: string }) => void
+  setLabelReference: (url: string | null) => void
+  setLabel: (data: { labelData: LabelData; labelUrl: string }) => void
   setContainer: (data: { containerMode: 'describe' | 'upload'; containerDesc: string | null; containerUrl: string | null }) => void
   setMockup: (mockupUrl: string) => void
   hydrateFromSession: (s: BrandingSessionResponse) => void
@@ -55,6 +62,7 @@ const initialState: BrandingState = {
   sessionId: null,
   step: 0,
   brandName: null,
+  productName: null,
   productCategory: null,
   targetAudience: null,
   personality: [],
@@ -63,6 +71,8 @@ const initialState: BrandingState = {
   logoOptions: [],
   logoUrl: null,
   labelBrief: null,
+  labelData: null,
+  labelReferenceUrl: null,
   labelUrl: null,
   containerMode: null,
   containerDesc: null,
@@ -77,8 +87,8 @@ export const useBrandingStore = create<BrandingState & BrandingActions>((set) =>
 
   // El brief queda guardado; la dirección llega aparte (setDirection) tras la
   // llamada estructurada, pero NO avanza de paso hasta que el usuario la aprueba.
-  setBrief: ({ brandName, productCategory, targetAudience, personality, briefNotes }) =>
-    set({ brandName, productCategory, targetAudience, personality, briefNotes, step: 1 }),
+  setBrief: ({ brandName, productName, productCategory, targetAudience, personality, briefNotes }) =>
+    set({ brandName, productName, productCategory, targetAudience, personality, briefNotes, step: 1 }),
 
   setDirection: (direction) => set({ direction }),
 
@@ -88,18 +98,22 @@ export const useBrandingStore = create<BrandingState & BrandingActions>((set) =>
 
   selectLogo: (logoUrl) => set({ logoUrl, step: 3 }),
 
-  setLabel: ({ labelBrief, labelUrl }) => set({ labelBrief, labelUrl, step: 4 }),
+  setLabelReference: (url) => set({ labelReferenceUrl: url }),
+
+  setLabel: ({ labelData, labelUrl }) => set({ labelData, labelUrl, step: 4 }),
 
   setContainer: ({ containerMode, containerDesc, containerUrl }) =>
     set({ containerMode, containerDesc, containerUrl }),
 
   setMockup: (mockupUrl) => set({ mockupUrl, step: 5 }),
 
-  hydrateFromSession: (s) =>
+  hydrateFromSession: (s) => {
+    if (typeof window !== 'undefined') localStorage.setItem(SESSION_KEY, s.id)
     set({
       sessionId: s.id,
       step: s.step,
       brandName: s.brand_name,
+      productName: s.product_name,
       productCategory: s.product_category,
       targetAudience: s.target_audience,
       personality: s.personality ?? [],
@@ -108,17 +122,21 @@ export const useBrandingStore = create<BrandingState & BrandingActions>((set) =>
       logoOptions: s.logo_options ?? [],
       logoUrl: s.logo_url,
       labelBrief: s.label_brief,
+      labelData: s.label_data,
+      labelReferenceUrl: s.label_reference_url,
       labelUrl: s.label_url,
       containerMode: s.container_mode,
       containerDesc: s.container_desc,
       containerUrl: s.container_url,
       mockupUrl: s.mockup_url,
-    }),
+    })
+  },
 
   startNewSession: async () => {
     set({ ...initialState })
     const res = await fetch('/api/generador-branding/sessions', { method: 'POST' })
     const { id } = (await res.json()) as { id: string }
+    if (typeof window !== 'undefined') localStorage.setItem(SESSION_KEY, id)
     set({ sessionId: id })
   },
 }))

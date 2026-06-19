@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect } from 'react'
-import { useBrandingStore } from '@/store/branding'
+import { useBrandingStore, SESSION_KEY } from '@/store/branding'
+import type { BrandingSessionResponse } from '@/lib/branding/types'
 import AccordionSection from '@/components/tools/generador-anuncios/AccordionSection'
 import Section1Brief from './sections/Section1Brief'
 import Section2Direction from './sections/Section2Direction'
@@ -17,10 +18,18 @@ function getStatus(sectionStep: number, currentStep: number): 'locked' | 'active
 }
 
 export default function BrandingWizard() {
-  const { step, startNewSession, setStep, brandName, productCategory, direction, logoUrl, labelUrl, mockupUrl } =
+  const { step, startNewSession, hydrateFromSession, setStep, brandName, productCategory, direction, logoUrl, labelUrl, mockupUrl } =
     useBrandingStore()
 
-  useEffect(() => { startNewSession() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // Reanudar: si hay un id guardado y la sesión existe, rehidratar; si no, una nueva.
+  useEffect(() => {
+    const saved = localStorage.getItem(SESSION_KEY)
+    if (!saved) { startNewSession(); return }
+    fetch(`/api/generador-branding/sessions/${saved}`)
+      .then((r) => (r.ok ? (r.json() as Promise<BrandingSessionResponse>) : Promise.reject()))
+      .then((s) => hydrateFromSession(s))
+      .catch(() => startNewSession())
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const progressPct = Math.round((Math.min(step, 5) / 5) * 100)
 

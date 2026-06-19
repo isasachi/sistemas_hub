@@ -2,8 +2,9 @@ import { NextRequest } from 'next/server'
 import { getBrandingSession, updateBrandingSession } from '@/lib/branding/db'
 import { fetchAsBase64, uploadToStorage } from '@/lib/storage'
 import { generateImage } from '@/lib/gemini'
-import { DirectionSchema } from '@/lib/branding/types'
+import { DirectionSchema, type LabelData } from '@/lib/branding/types'
 import { buildLabelInstruction } from '@/lib/branding/instructions'
+import type { Part } from '@google/genai'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -15,7 +16,7 @@ export async function POST(
 ) {
   const { id } = await params
 
-  let body: { labelBrief?: string } = {}
+  let body: { labelData?: LabelData } = {}
   try { body = await req.json() } catch { /* sin body: reusa el guardado */ }
 
   const stream = new ReadableStream({
@@ -29,22 +30,27 @@ export async function POST(
           send({ status: 'error', message: 'Falta el logo o la dirección de marca' })
           return controller.close()
         }
-        const labelBrief = (body.labelBrief?.trim() || session.label_brief || '').trim()
-        if (!labelBrief) {
-          send({ status: 'error', message: 'Falta describir la etiqueta' })
+        const labelData = (body.labelData ?? session.label_data) as LabelData | null
+        if (!labelData?.packagingFormat?.trim()) {
+          send({ status: 'error', message: 'Falta el formato del empaque' })
           return controller.close()
         }
 
         const direction = DirectionSchema.parse(session.direction)
+        const productName = (session.product_name || session.brand_name).trim()
 
         send({ status: 'loading_images' })
+        const parts: Part[] = []
         const logo = await fetchAsBase64(session.logo_url)
+        parts.push({ inlineData: { mimeType: logo.mimeType, data: logo.data } })
+        if (session.label_reference_url) {
+          const ref = await fetchAsBase64(session.label_reference_url)
+          parts.push({ inlineData: { mimeType: ref.mimeType, data: ref.data } })
+        }
+        parts.push({ text: buildLabelInstruction(direction, session.brand_name, productName, labelData, !!session.label_reference_url) })
 
         send({ status: 'generating' })
-        const b64 = await generateImage([
-          { inlineData: { mimeType: logo.mimeType, data: logo.data } },
-          { text: buildLabelInstruction(direction, session.brand_name, labelBrief) },
-        ])
+        const b64 = await generateImage(parts)
         if (!b64) {
           send({ status: 'error', message: 'La generación devolvió un resultado vacío', retryable: true })
           return controller.close()
@@ -55,7 +61,7 @@ export async function POST(
 
         await updateBrandingSession(id, {
           step: Math.max(session.step, 4),
-          label_brief: labelBrief,
+          label_data: labelData,
           label_url: labelUrl,
         })
 
