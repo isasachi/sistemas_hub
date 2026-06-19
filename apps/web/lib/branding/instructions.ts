@@ -17,18 +17,35 @@ function brandBlock(d: Direction, brandName: string): string {
   ].join('\n')
 }
 
-// Etapa 3 — logo. Texto→imagen, sin imágenes de entrada. `variant` desvía cada
-// opción de la tanda para que las 3-4 salgan distintas entre sí.
+// Bloque de referencia: patrones estructurales extraídos por `analyzeReference`.
+// Es TEXTO, no la imagen cruda — el modelo de imagen copia literalmente cualquier
+// referencia que se le pase, así que solo transferimos estructura, nunca contenido.
+function referenceBlock(analysis: string | null | undefined): string {
+  if (!analysis?.trim()) return ''
+  return [
+    ``,
+    `Reference design patterns to emulate — STRUCTURE ONLY. Do NOT adopt the product type,`,
+    `subject, flavor, ingredients, materials, text or colors of any reference; use ONLY the`,
+    `brand palette and product defined above. Borrow only these abstract patterns:`,
+    analysis.trim(),
+  ].join('\n')
+}
+
+// Etapa 3 — logo. Texto→imagen. `variant` desvía cada opción de la tanda para que
+// las 3-4 salgan distintas; `referenceAnalysis` (opcional) aporta patrones de un
+// logo de referencia subido por el usuario (estructura, no copia literal).
 export function buildLogoInstruction(
   d: Direction,
   brandName: string,
-  variant: string
+  variant: string,
+  referenceAnalysis?: string | null
 ): string {
   return [
     `Design a professional, production-ready LOGO for a small business.`,
     brandBlock(d, brandName),
     `Logo direction: ${d.logoDirection}.`,
     `Variant focus for this option: ${variant}.`,
+    referenceBlock(referenceAnalysis),
     ``,
     `Requirements:`,
     `- Clean vector-style mark, centered, on a solid flat neutral background (off-white #F5F2EC).`,
@@ -45,24 +62,24 @@ export const LOGO_VARIANTS: string[] = [
   'minimal lettermark — bold geometric, lots of whitespace',
 ]
 
-// Etapa 4 — etiqueta. Image 1 = logo elegido. Image 2 (opcional) = etiqueta de
-// referencia subida por el usuario, para imitar estilo/convenciones del rubro.
+// Etapa 4 — etiqueta. Image 1 = logo elegido (única imagen de entrada). La
+// referencia de etiqueta entra como TEXTO (`referenceAnalysis`), no como imagen:
+// el modelo copiaba literalmente la imagen de referencia (ref de chocolate →
+// producto de chocolate); ahora solo transferimos patrones estructurales.
 export function buildLabelInstruction(
   d: Direction,
   brandName: string,
   productName: string,
   data: LabelData,
-  hasReference: boolean
+  referenceAnalysis?: string | null
 ): string {
   const ld = (label: string, v: string) => (v.trim() ? `- ${label}: ${v.trim()}` : '')
   return [
     `Image 1 is the approved brand logo. Use it as-is (do not redraw the mark).`,
-    hasReference
-      ? `Image 2 is a reference label the client likes — match its information density, layout conventions and shelf-appeal, but do NOT copy its brand, name or artwork.`
-      : '',
     `Design a flat, print-ready PRODUCT LABEL artwork. Brand "${brandName}", product "${productName}".`,
     brandBlock(d, brandName),
     `Packaging format the label must fit: ${data.packagingFormat.trim() || 'standard retail packaging'}.`,
+    referenceBlock(referenceAnalysis),
     ``,
     `Label content (render this real text, correctly spelled — do NOT invent placeholders):`,
     `- Product name: ${productName}`,

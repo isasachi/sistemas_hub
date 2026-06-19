@@ -39,7 +39,7 @@ export async function POST(
         for (let i = 0; i < LOGO_VARIANTS.length; i++) {
           try {
             const b64 = await generateImage([
-              { text: buildLogoInstruction(direction, brandName, LOGO_VARIANTS[i]) },
+              { text: buildLogoInstruction(direction, brandName, LOGO_VARIANTS[i], session.logo_reference_analysis) },
             ])
             if (!b64) { console.error(`[logo ${i}] empty result (no image part)`); continue }
             const url = await uploadToStorage(id, Buffer.from(b64, 'base64'), 'image/png', `logo-${i}`)

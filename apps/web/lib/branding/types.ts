@@ -54,10 +54,13 @@ export interface BrandingSessionResponse {
   // logo
   logo_options: string[] | null
   logo_url: string | null
+  logo_reference_url: string | null
+  logo_reference_analysis: string | null
   // etiqueta
   label_brief: string | null
   label_data: LabelData | null
   label_reference_url: string | null
+  label_reference_analysis: string | null
   label_url: string | null
   // mockup
   container_mode: 'describe' | 'upload' | null

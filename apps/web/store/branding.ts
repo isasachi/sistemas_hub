@@ -24,6 +24,7 @@ interface BrandingState {
   // logo
   logoOptions: string[]
   logoUrl: string | null
+  logoReferenceUrl: string | null
   // etiqueta
   labelBrief: string | null
   labelData: LabelData | null
@@ -49,6 +50,7 @@ interface BrandingActions {
   setDirection: (direction: Direction) => void
   approveDirection: () => void
   setLogoOptions: (logoOptions: string[]) => void
+  setLogoReference: (url: string | null) => void
   selectLogo: (logoUrl: string) => void
   setLabelReference: (url: string | null) => void
   setLabel: (data: { labelData: LabelData; labelUrl: string }) => void
@@ -70,6 +72,7 @@ const initialState: BrandingState = {
   direction: null,
   logoOptions: [],
   logoUrl: null,
+  logoReferenceUrl: null,
   labelBrief: null,
   labelData: null,
   labelReferenceUrl: null,
@@ -96,6 +99,8 @@ export const useBrandingStore = create<BrandingState & BrandingActions>((set) =>
 
   setLogoOptions: (logoOptions) => set({ logoOptions }),
 
+  setLogoReference: (url) => set({ logoReferenceUrl: url }),
+
   selectLogo: (logoUrl) => set({ logoUrl, step: 3 }),
 
   setLabelReference: (url) => set({ labelReferenceUrl: url }),
@@ -121,6 +126,7 @@ export const useBrandingStore = create<BrandingState & BrandingActions>((set) =>
       direction: s.direction,
       logoOptions: s.logo_options ?? [],
       logoUrl: s.logo_url,
+      logoReferenceUrl: s.logo_reference_url,
       labelBrief: s.label_brief,
       labelData: s.label_data,
       labelReferenceUrl: s.label_reference_url,

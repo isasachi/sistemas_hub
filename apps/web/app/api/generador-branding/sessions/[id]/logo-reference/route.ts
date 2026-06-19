@@ -6,9 +6,9 @@ import { analyzeReference } from '@/lib/branding/reference'
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-// Etapa 4 (pre-etiqueta) — guarda una etiqueta de referencia y la analiza UNA vez
-// (espeja container/route.ts). El SSE de `label` usa el ANÁLISIS de texto, no la
-// imagen cruda — pasar la imagen hacía que el modelo copiara el producto literal.
+// Etapa 3 (pre-logo) — guarda un logo de referencia y lo analiza UNA vez (espeja
+// label-reference/route.ts). El SSE de `logo` usa el ANÁLISIS de texto, no la
+// imagen cruda, para aprender patrones sin copiar el logo de referencia literal.
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -29,12 +29,12 @@ export async function POST(
 
   const bytes = Buffer.from(await file.arrayBuffer())
   const mime = file.type || 'image/png'
-  const referenceUrl = await uploadToStorage(id, bytes, mime, 'label-ref')
-  const analysis = await analyzeReference(bytes.toString('base64'), mime, 'label')
+  const referenceUrl = await uploadToStorage(id, bytes, mime, 'logo-ref')
+  const analysis = await analyzeReference(bytes.toString('base64'), mime, 'logo')
 
   await updateBrandingSession(id, {
-    label_reference_url: referenceUrl,
-    label_reference_analysis: analysis,
+    logo_reference_url: referenceUrl,
+    logo_reference_analysis: analysis,
   })
   return NextResponse.json({ referenceUrl })
 }
