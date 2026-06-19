@@ -1,0 +1,236 @@
+# Partes del cuerpo — lista curada (1 por línea, # = comentario).
+# Destilada 2026-06-19 desde la taxonomía anatómica completa.
+# Curación: SOLO se quitaron repeticiones y equivalentes semánticos. NO se
+# filtró por potencial de mercado — entran todas las partes, incluida la
+# micro-anatomía clínica y la sección de enfermedades/condiciones generales.
+# Sembrar con: npx tsx scripts/seed-niches.ts --from niches-partes-cuerpo.txt
+# (idempotente — salta los que ya existen en ph_niches).
+#
+# Merges semánticos aplicados:
+#   páncreas endocrino → pancreas · tiroides (×2) → tiroides · articulaciones (×2)
+#   intestino grueso/colon → colon · columna vertebral → columna
+#   espalda baja/zona lumbar → espalda baja · semen y fertilidad → fertilidad
+#   postura corporal → postura
+
+# @priority 2   ← prioridad alta: el daemon los drena antes que el resto (pending p1/p0)
+
+# — Cabeza, rostro, cabello —
+cabello
+cuero cabelludo
+frente
+sienes
+craneo
+cerebro
+rostro
+mejillas
+menton
+mandibula
+
+# — Ojos y zona ocular —
+ojos
+retina
+cornea
+cristalino
+nervio optico
+parpados
+cejas
+pestañas
+ojeras
+conductos lagrimales
+
+# — Oidos, nariz, boca —
+orejas
+oido externo
+oido medio
+oido interno
+nariz
+fosas nasales
+senos paranasales
+labios
+boca
+dientes
+encias
+lengua
+paladar
+glandulas salivales
+garganta
+amigdalas
+laringe
+cuerdas vocales
+
+# — Cuello, hombros, espalda —
+cuello
+nuca
+tiroides
+ganglios del cuello
+hombro
+omoplatos
+espalda alta
+espalda media
+espalda baja
+columna
+discos intervertebrales
+medula espinal
+
+# — Pecho y respiratorio —
+pecho
+costillas
+esternon
+pulmones
+bronquios
+traquea
+pleura
+diafragma
+alveolos
+
+# — Corazon, sangre, circulacion —
+corazon
+arterias
+venas
+capilares
+sangre
+globulos rojos
+globulos blancos
+plaquetas
+sistema linfatico
+
+# — Brazos y manos —
+brazo
+axilas
+codo
+antebrazo
+muñeca
+mano
+palmas
+dedos de la mano
+uñas de las manos
+articulaciones
+
+# — Abdomen y digestivo —
+abdomen
+estomago
+esofago
+intestino delgado
+colon
+recto
+ano
+apendice
+higado
+vesicula biliar
+conductos biliares
+pancreas
+bazo
+peritoneo
+ombligo
+
+# — Riñones y sistema urinario —
+riñones
+ureteres
+vejiga
+uretra
+orina
+suelo pelvico
+
+# — Sistema reproductor femenino —
+vulva
+vagina
+clitoris
+cuello uterino
+utero
+endometrio
+ovarios
+trompas de falopio
+senos
+pezones
+menstruacion
+menopausia
+
+# — Sistema reproductor masculino —
+pene
+glande
+prepucio
+testiculos
+escroto
+prostata
+vesiculas seminales
+epididimo
+conductos deferentes
+fertilidad
+
+# — Cadera, pelvis, piernas —
+pelvis
+cadera
+gluteos
+ingle
+muslo
+cuadriceps
+isquiotibiales
+rodilla
+rotula
+pantorrilla
+tibia
+perone
+tobillo
+talon
+tendon de aquiles
+pie
+planta del pie
+dedos del pie
+uñas de los pies
+
+# — Piel y tejidos externos —
+piel
+poros
+foliculos pilosos
+glandulas sebaceas
+glandulas sudoriparas
+tejido adiposo
+cicatrices
+estrias
+lunares
+verrugas
+heridas
+ulceras por presion
+
+# — Huesos, musculos, articulaciones —
+huesos
+musculos
+tendones
+ligamentos
+cartilago
+fascia
+bursas
+postura
+
+# — Nervios y neurologico —
+nervios perifericos
+nervio ciatico
+nervio mediano
+nervio cubital
+sistema nervioso autonomo
+equilibrio
+memoria
+sueño
+
+# — Endocrino, metabolismo, hormonas —
+glandulas suprarrenales
+hipofisis
+paratiroides
+hormonas sexuales
+metabolismo
+glucosa sanguinea
+
+# — Sistemas generales —
+sistema inmunitario
+
+# — Enfermedades / condiciones generales —
+enfermedades autoinmunes
+infecciones
+inflamacion
+cancer
+obesidad
+diabetes
+hipertension
+colesterol alto
+artritis
+osteoporosis
