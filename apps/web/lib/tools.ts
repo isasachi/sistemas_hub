@@ -69,14 +69,14 @@ export const tools: Tool[] = [
     name: "Calculadora de Costos",
     slug: "calculadora-costos",
     description:
-      "Estima tu presupuesto de campañas y proyecta el ROI esperado.",
+      "Proyecta el P&G completo de tu campaña e-com y exporta el análisis a Excel.",
     longDescription:
-      "Calcula el presupuesto óptimo para tus campañas digitales y proyecta métricas clave como CPC, CPM, conversiones y retorno esperado.",
+      "Responde unas preguntas sobre tus costos, embudo (leads o mensajes) y ofertas. La calculadora arma tu estado de resultados completo — profit, márgenes, ROAS, ROI, CPA máximo y capital mínimo — y te deja exportar todo a un Excel idéntico al modelo.",
     icon: "DollarSign",
     accentColor: "#ff9c4d",
-    tag: "Pronto",
-    tagStyle: "neutral",
-    status: "soon",
+    tag: "Nuevo",
+    tagStyle: "new",
+    status: "live",
   },
   {
     name: "Generador de Landing Pages",
