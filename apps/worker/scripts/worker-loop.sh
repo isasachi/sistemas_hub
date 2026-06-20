@@ -23,6 +23,14 @@
 
 set -uo pipefail
 
+# Bajo systemd el PATH es mínimo y no trae node/npx (instalado vía nvm). Si falta,
+# carga nvm para resolver npx/tsx. Inofensivo cuando ya están en PATH (nohup/VPS).
+if ! command -v npx >/dev/null 2>&1; then
+  export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+  # shellcheck disable=SC1091
+  [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" >/dev/null 2>&1
+fi
+
 # ─── Configuración del daemon ────────────────────────────────────────────────
 # ⚠️ El scraper DEBE salir por un proxy ISP/residencial: PH_PROXY se setea en
 # .env.local (NO acá — es secreto). Sin él, Meta bloquea la IP del VPS.
