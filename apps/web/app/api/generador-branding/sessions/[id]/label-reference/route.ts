@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getBrandingSession, updateBrandingSession } from '@/lib/branding/db'
 import { uploadToStorage } from '@/lib/storage'
-import { analyzeReference } from '@/lib/branding/reference'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-// Etapa 4 (pre-etiqueta) — guarda una etiqueta de referencia y la analiza UNA vez
-// (espeja container/route.ts). El SSE de `label` usa el ANÁLISIS de texto, no la
-// imagen cruda — pasar la imagen hacía que el modelo copiara el producto literal.
+// Etapa 4 (pre-etiqueta) — guarda una etiqueta de referencia. El SSE de `label` pasa
+// la imagen cruda como style reference (Image 2); no se analiza a texto.
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -30,11 +28,7 @@ export async function POST(
   const bytes = Buffer.from(await file.arrayBuffer())
   const mime = file.type || 'image/png'
   const referenceUrl = await uploadToStorage(id, bytes, mime, 'label-ref')
-  const analysis = await analyzeReference(bytes.toString('base64'), mime, 'label')
 
-  await updateBrandingSession(id, {
-    label_reference_url: referenceUrl,
-    label_reference_analysis: analysis,
-  })
+  await updateBrandingSession(id, { label_reference_url: referenceUrl })
   return NextResponse.json({ referenceUrl })
 }

@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getBrandingSession, updateBrandingSession } from '@/lib/branding/db'
 import { uploadToStorage } from '@/lib/storage'
-import { analyzeReference } from '@/lib/branding/reference'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-// Etapa 3 (pre-logo) — guarda un logo de referencia y lo analiza UNA vez (espeja
-// label-reference/route.ts). El SSE de `logo` usa el ANÁLISIS de texto, no la
-// imagen cruda, para aprender patrones sin copiar el logo de referencia literal.
+// Etapa 3 (pre-logo) — guarda un logo de referencia (espeja label-reference). El SSE
+// de `logo` pasa la imagen cruda como style reference (Image 1); no se analiza a texto.
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -30,11 +28,7 @@ export async function POST(
   const bytes = Buffer.from(await file.arrayBuffer())
   const mime = file.type || 'image/png'
   const referenceUrl = await uploadToStorage(id, bytes, mime, 'logo-ref')
-  const analysis = await analyzeReference(bytes.toString('base64'), mime, 'logo')
 
-  await updateBrandingSession(id, {
-    logo_reference_url: referenceUrl,
-    logo_reference_analysis: analysis,
-  })
+  await updateBrandingSession(id, { logo_reference_url: referenceUrl })
   return NextResponse.json({ referenceUrl })
 }
