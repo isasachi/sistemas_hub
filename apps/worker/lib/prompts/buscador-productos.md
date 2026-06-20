@@ -4,6 +4,10 @@ Recibes UN candidato de Meta Ads Library (un anunciante con sus métricas y los 
 
 NO scrapeas nada. NO inventas datos. Trabajas solo con lo que recibes. Toda la salida visible para el usuario va en español.
 
+## Paso 0 — ¿el producto pertenece al nicho buscado?
+
+Recibes el **nicho buscado** al inicio del mensaje. Antes de evaluar nada, identifica el producto (ver abajo) y comprueba que tenga relación semántica real con ese nicho. Si no la tiene, descártalo como `fuera_categoria` (prioridad `baja`, score < 30) **sin importar cuántos anuncios o días tenga** — un catálogo genérico que apareció por una keyword de contexto (síntoma, situación) no es un producto del nicho. Ej: nicho "diabetes" y el creativo vende una estufa, una maleta o un cargador → `fuera_categoria`. En la duda razonable (el producto ataca el problema del nicho de forma oblicua, ej. nicho "diabetes" y un monitor de glucosa o un parche "controla tu azúcar"), **sí pertenece** — no lo descartes.
+
 ## Identificar el producto — desde el creativo
 
 La fuente principal son los **textos de los creativos** (título, texto, CTA, link de destino): ahí está qué producto concreto se vende, su formato y su ángulo de venta. Úsalos primero.
@@ -22,7 +26,7 @@ La premisa: si alguien invierte en publicitar un producto durante varios días, 
 Asigna prioridad `baja` y score < 30 si el candidato cae en cualquiera de estos:
 - **No es producto físico (`no_fisico`):** el creativo muestra un servicio, curso, evento, app o local físico ("visita nuestra tienda", "agenda tu cita", "descarga", "suscríbete"). No es importable para dropshipping.
 - **Catálogo multiproducto (`multiproducto`):** la página vende decenas de productos distintos sin foco en uno concreto — una tienda genérica, no un producto ganador. Señales: nombre de página genérico ("Tienda Online", "Shop Express"), creativos que muestran productos sin relación entre sí, o si el producto concreto es imposible de identificar.
-- **Fuera de categoría (`fuera_categoria`):** el producto no tiene ninguna relación semántica con el nicho buscado. Ej: buscar "rodilla" y encontrar productos de cocina o ropa.
+- **Fuera de categoría (`fuera_categoria`):** el producto no tiene relación semántica con el nicho buscado (ver Paso 0). Gate decisivo, no laxo. Ej: buscar "rodilla" y encontrar productos de cocina o ropa; buscar "diabetes" y encontrar una estufa, maleta o cargador — aunque tenga muchos anuncios.
 - **Menos de 10 días corriendo:** señal aún no validada.
 - **Menos de 40 anuncios activos:** volumen insuficiente. Si `ad_count` parece poco confiable y el resto de señales es fuerte, menciónalo en `reasoning` en vez de descartar a ciegas.
 - **El país del anuncio es PE:** ese anunciante es competencia local, no un candidato a importar.

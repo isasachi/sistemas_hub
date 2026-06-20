@@ -1,8 +1,19 @@
+import fs from 'fs'
+import path from 'path'
 import type { Direction, LabelData } from './types'
 
 // Constructores puros (sin LLM, $0) que arman las instrucciones de generación de
 // imagen a partir de la dirección de marca aprobada. Mantienen un prompt rico y
 // consistente entre logo / etiqueta / mockup sin gastar una llamada de reasoning.
+
+// Arquitectura canónica de etiqueta (estructura/zonas/jerarquía). Se lee una vez al
+// cargar el módulo (solo lo importan routes server, nodejs runtime). Guía el path
+// SIN referencia: cuando el usuario no sube una etiqueta de referencia, esta es la
+// estructura por defecto, adaptable por mercado (omite el grupo ENVASADO si no aplica).
+const LABEL_ARCHITECTURE = fs.readFileSync(
+  path.join(process.cwd(), 'lib/prompts/label-architecture.md'),
+  'utf-8'
+).trim()
 
 function paletteLine(d: Direction): string {
   return d.palette.map((c) => `${c.hex} (${c.name} — ${c.usage})`).join('; ')
@@ -81,8 +92,19 @@ function labelStyleRefBlock(): string {
   ].join('\n')
 }
 
+// Sin referencia de etiqueta: el modelo sigue la arquitectura canónica destilada.
+function labelArchitectureBlock(): string {
+  return [
+    ``,
+    `Follow this canonical PRODUCT LABEL architecture for structure, zones and placement`,
+    `(adapt elements to the product and market; omit what doesn't apply):`,
+    LABEL_ARCHITECTURE,
+  ].join('\n')
+}
+
 // Etapa 4 — etiqueta. Image 1 = logo elegido. Image 2 (opcional) = etiqueta de
 // referencia subida por el usuario, como style reference (`hasReferenceImage`).
+// Sin referencia, se usa la arquitectura canónica (`labelArchitectureBlock`).
 export function buildLabelInstruction(
   d: Direction,
   brandName: string,
@@ -96,7 +118,7 @@ export function buildLabelInstruction(
     `Design a flat, print-ready PRODUCT LABEL artwork. Brand "${brandName}", product "${productName}".`,
     brandBlock(d, brandName),
     `Packaging format the label must fit: ${data.packagingFormat.trim() || 'standard retail packaging'}.`,
-    hasReferenceImage ? labelStyleRefBlock() : '',
+    hasReferenceImage ? labelStyleRefBlock() : labelArchitectureBlock(),
     ``,
     `Label content (render this real text, correctly spelled — do NOT invent placeholders):`,
     `- Product name: ${productName}`,
@@ -107,7 +129,7 @@ export function buildLabelInstruction(
     ``,
     `Requirements:`,
     `- Place the provided logo prominently and integrate the palette and typography.`,
-    `- This is the flat label design (front face), shown straight-on, not on a container yet.`,
+    `- This is the flat label artwork (the full unrolled face — primary display + information panel together), shown straight-on, not on a container yet.`,
     `- Proportions and layout suited to the packaging format above.`,
     `- Cohesive, retail-quality, premium finish.`,
   ].filter(Boolean).join('\n')

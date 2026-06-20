@@ -60,6 +60,7 @@ export function buildAnalyzeParams({ candidate, peMatch }: AnalyzeInput): Anthro
   const userMessage = [
     'Evalúa este candidato de Meta Ads Library para dropshipping en Perú.',
     '',
+    `Nicho buscado: ${candidate.niche}`,
     `Anunciante: ${candidate.name}`,
     `Categorías de la página en Meta: ${raw.page_categories?.length ? raw.page_categories.join(', ') : 'desconocidas'}`,
     `Keyword que lo encontró: ${raw.found_keyword}`,
