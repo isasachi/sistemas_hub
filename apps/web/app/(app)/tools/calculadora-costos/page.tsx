@@ -77,7 +77,7 @@ function Field({
 }) {
   const display = kind === "pct" ? value * 100 : value;
   return (
-    <label className="flex flex-col gap-1.5">
+    <label className="flex flex-col gap-1.5 justify-between">
       <span className="flex items-center gap-1.5 text-[13px] text-[#bdbdbd]">
         {label}
         <Help text={help} />
