@@ -31,21 +31,39 @@ function referenceBlock(analysis: string | null | undefined): string {
   ].join('\n')
 }
 
-// Etapa 3 — logo. Texto→imagen. `variant` desvía cada opción de la tanda para que
-// las 3-4 salgan distintas; `referenceAnalysis` (opcional) aporta patrones de un
-// logo de referencia subido por el usuario (estructura, no copia literal).
+// Bloque de referencia DEL LOGO: aquí la imagen cruda SÍ entra como Image 1 (style
+// reference). Decisión del usuario: "la referencia manda el vibe" — emula estética,
+// color y mood; la paleta de marca queda subordinada. Se ignora explícitamente el
+// fondo/foto/escena para no importar el cielo/manos de una referencia que es una
+// foto de producto (el viejo bug "ref de chocolate → producto de chocolate").
+function logoStyleRefBlock(): string {
+  return [
+    ``,
+    `Image 1 is a STYLE reference. Emulate its overall aesthetic — color treatment and`,
+    `mood, typographic personality, shape & mark language, and energy.`,
+    `DISREGARD its background, photography, hands, packaging, product, scene, and any`,
+    `literal text/subject — design a clean LOGO for OUR brand, not a copy of the reference.`,
+    `Lead with the reference's color mood; the brand palette above is secondary, used only`,
+    `where it doesn't fight the reference's energy. The brand NAME must be rendered`,
+    `correctly, legibly and prominently.`,
+  ].join('\n')
+}
+
+// Etapa 3 — logo. `variant` desvía cada opción de la tanda para que las 3-4 salgan
+// distintas; `hasReferenceImage` indica que el caller pasó la imagen de referencia
+// como Image 1 (entonces se emite el bloque de estilo en vez de texto abstracto).
 export function buildLogoInstruction(
   d: Direction,
   brandName: string,
   variant: string,
-  referenceAnalysis?: string | null
+  hasReferenceImage?: boolean
 ): string {
   return [
     `Design a professional, production-ready LOGO for a small business.`,
     brandBlock(d, brandName),
     `Logo direction: ${d.logoDirection}.`,
     `Variant focus for this option: ${variant}.`,
-    referenceBlock(referenceAnalysis),
+    hasReferenceImage ? logoStyleRefBlock() : '',
     ``,
     `Requirements:`,
     `- Clean vector-style mark, centered, on a solid flat neutral background (off-white #F5F2EC).`,

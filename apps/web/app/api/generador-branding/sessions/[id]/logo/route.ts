@@ -1,9 +1,10 @@
 import { NextRequest } from 'next/server'
 import { getBrandingSession, updateBrandingSession } from '@/lib/branding/db'
-import { uploadToStorage } from '@/lib/storage'
+import { fetchAsBase64, uploadToStorage } from '@/lib/storage'
 import { generateImage } from '@/lib/gemini'
 import { DirectionSchema } from '@/lib/branding/types'
 import { buildLogoInstruction, LOGO_VARIANTS } from '@/lib/branding/instructions'
+import type { Part } from '@google/genai'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -30,6 +31,12 @@ export async function POST(
         const direction = DirectionSchema.parse(session.direction)
         const brandName = session.brand_name
 
+        // La imagen de referencia (si existe) entra como Image 1: style reference.
+        // Se carga UNA vez fuera del loop (la generación es secuencial por OOM).
+        const ref = session.logo_reference_url
+          ? await fetchAsBase64(session.logo_reference_url)
+          : null
+
         send({ status: 'generating' })
 
         // Secuencial a propósito: cada logo es un base64 grande (~750 KB); generar
@@ -38,9 +45,11 @@ export async function POST(
         const logos: string[] = []
         for (let i = 0; i < LOGO_VARIANTS.length; i++) {
           try {
-            const b64 = await generateImage([
-              { text: buildLogoInstruction(direction, brandName, LOGO_VARIANTS[i], session.logo_reference_analysis) },
-            ])
+            const text: Part = { text: buildLogoInstruction(direction, brandName, LOGO_VARIANTS[i], !!ref) }
+            const parts: Part[] = ref
+              ? [{ inlineData: { mimeType: ref.mimeType, data: ref.data } }, text]
+              : [text]
+            const b64 = await generateImage(parts)
             if (!b64) { console.error(`[logo ${i}] empty result (no image part)`); continue }
             const url = await uploadToStorage(id, Buffer.from(b64, 'base64'), 'image/png', `logo-${i}`)
             logos.push(url)
