@@ -17,20 +17,6 @@ function brandBlock(d: Direction, brandName: string): string {
   ].join('\n')
 }
 
-// Bloque de referencia: patrones estructurales extraídos por `analyzeReference`.
-// Es TEXTO, no la imagen cruda — el modelo de imagen copia literalmente cualquier
-// referencia que se le pase, así que solo transferimos estructura, nunca contenido.
-function referenceBlock(analysis: string | null | undefined): string {
-  if (!analysis?.trim()) return ''
-  return [
-    ``,
-    `Reference design patterns to emulate — STRUCTURE ONLY. Do NOT adopt the product type,`,
-    `subject, flavor, ingredients, materials, text or colors of any reference; use ONLY the`,
-    `brand palette and product defined above. Borrow only these abstract patterns:`,
-    analysis.trim(),
-  ].join('\n')
-}
-
 // Bloque de referencia DEL LOGO: aquí la imagen cruda SÍ entra como Image 1 (style
 // reference). Decisión del usuario: "la referencia manda el vibe" — emula estética,
 // color y mood; la paleta de marca queda subordinada. Se ignora explícitamente el
@@ -80,16 +66,29 @@ export const LOGO_VARIANTS: string[] = [
   'minimal lettermark — bold geometric, lots of whitespace',
 ]
 
-// Etapa 4 — etiqueta. Image 1 = logo elegido (única imagen de entrada). La
-// referencia de etiqueta entra como TEXTO (`referenceAnalysis`), no como imagen:
-// el modelo copiaba literalmente la imagen de referencia (ref de chocolate →
-// producto de chocolate); ahora solo transferimos patrones estructurales.
+// Bloque de referencia DE LA ETIQUETA: la imagen cruda entra como Image 2 (Image 1
+// es el logo). Misma decisión que el logo: "la referencia manda el vibe" — emula
+// estética/color/mood; ignora el producto/escena literal de la referencia.
+function labelStyleRefBlock(): string {
+  return [
+    ``,
+    `Image 2 is a STYLE reference for the label. Emulate its overall aesthetic — color`,
+    `treatment and mood, typographic personality, layout energy and shelf appeal.`,
+    `DISREGARD its background, photography, scene, and any literal product, text, flavor`,
+    `or ingredients — render OUR product content and brand defined above, not a copy.`,
+    `Lead with the reference's color mood; the brand palette above is secondary, used only`,
+    `where it doesn't fight the reference's energy. Keep the provided logo (Image 1) as-is.`,
+  ].join('\n')
+}
+
+// Etapa 4 — etiqueta. Image 1 = logo elegido. Image 2 (opcional) = etiqueta de
+// referencia subida por el usuario, como style reference (`hasReferenceImage`).
 export function buildLabelInstruction(
   d: Direction,
   brandName: string,
   productName: string,
   data: LabelData,
-  referenceAnalysis?: string | null
+  hasReferenceImage?: boolean
 ): string {
   const ld = (label: string, v: string) => (v.trim() ? `- ${label}: ${v.trim()}` : '')
   return [
@@ -97,7 +96,7 @@ export function buildLabelInstruction(
     `Design a flat, print-ready PRODUCT LABEL artwork. Brand "${brandName}", product "${productName}".`,
     brandBlock(d, brandName),
     `Packaging format the label must fit: ${data.packagingFormat.trim() || 'standard retail packaging'}.`,
-    referenceBlock(referenceAnalysis),
+    hasReferenceImage ? labelStyleRefBlock() : '',
     ``,
     `Label content (render this real text, correctly spelled — do NOT invent placeholders):`,
     `- Product name: ${productName}`,

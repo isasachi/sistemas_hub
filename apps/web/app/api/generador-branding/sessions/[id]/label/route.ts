@@ -40,13 +40,16 @@ export async function POST(
         const productName = (session.product_name || session.brand_name).trim()
 
         send({ status: 'loading_images' })
-        // Solo el logo entra como imagen. La referencia de etiqueta entra como
-        // texto (label_reference_analysis) — pasar la imagen cruda hacía que el
-        // modelo copiara el producto/sabor/color de la referencia.
+        // Image 1 = logo. Image 2 (opcional) = etiqueta de referencia, como style
+        // reference: emula su estética/color/mood (ver buildLabelInstruction).
         const parts: Part[] = []
         const logo = await fetchAsBase64(session.logo_url)
         parts.push({ inlineData: { mimeType: logo.mimeType, data: logo.data } })
-        parts.push({ text: buildLabelInstruction(direction, session.brand_name, productName, labelData, session.label_reference_analysis) })
+        const ref = session.label_reference_url
+          ? await fetchAsBase64(session.label_reference_url)
+          : null
+        if (ref) parts.push({ inlineData: { mimeType: ref.mimeType, data: ref.data } })
+        parts.push({ text: buildLabelInstruction(direction, session.brand_name, productName, labelData, !!ref) })
 
         send({ status: 'generating' })
         const b64 = await generateImage(parts)
