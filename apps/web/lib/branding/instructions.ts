@@ -23,8 +23,11 @@ function brandBlock(d: Direction, brandName: string): string {
   return [
     `Brand name: "${brandName}".`,
     `Brand concept: ${d.concept}.`,
-    `Color palette (use these exact hex values): ${paletteLine(d)}.`,
-    `Typography: headings in "${d.typography.headline}", body in "${d.typography.body}".`,
+    // Lo de abajo es GUÍA DE DISEÑO, no contenido a imprimir — el modelo a veces
+    // rinde literalmente los hex y los nombres de fuente como texto en la etiqueta.
+    `Design guidance (apply visually — NEVER print these words/codes on the artwork):`,
+    `- Color palette (use these exact hex values): ${paletteLine(d)}.`,
+    `- Typography: headings in "${d.typography.headline}", body in "${d.typography.body}".`,
   ].join('\n')
 }
 
@@ -38,8 +41,12 @@ function logoStyleRefBlock(): string {
     ``,
     `Image 1 is a STYLE reference. Emulate its overall aesthetic — color treatment and`,
     `mood, typographic personality, shape & mark language, and energy.`,
-    `DISREGARD its background, photography, hands, packaging, product, scene, and any`,
-    `literal text/subject — design a clean LOGO for OUR brand, not a copy of the reference.`,
+    `If Image 1 is a clean logo, emulate it directly. If Image 1 is a product photo or`,
+    `MOCKUP, FIRST locate the actual brand logo printed on the packaging (it may be small —`,
+    `e.g. the top area or a corner of the label) and treat THAT printed logo as the PRIMARY`,
+    `reference: its lettering, mark, colors and proportions.`,
+    `DISREGARD the background, photography, hands, container, product and scene — design a`,
+    `clean LOGO for OUR brand, not a copy of the reference's packaging.`,
     `Lead with the reference's color mood; the brand palette above is secondary, used only`,
     `where it doesn't fight the reference's energy. The brand NAME must be rendered`,
     `correctly, legibly and prominently.`,
@@ -83,8 +90,10 @@ export const LOGO_VARIANTS: string[] = [
 function labelStyleRefBlock(): string {
   return [
     ``,
-    `Image 2 is a STYLE reference for the label. Emulate its overall aesthetic — color`,
-    `treatment and mood, typographic personality, layout energy and shelf appeal.`,
+    `Image 2 is a STYLE reference for the label. Take its WHOLE vibe: color treatment and`,
+    `mood, typographic personality, illustration/graphic style, AND its composition —`,
+    `layout, element distribution, density and shelf appeal. The reference dictates the`,
+    `structure; do NOT impose any fixed panel template.`,
     `DISREGARD its background, photography, scene, and any literal product, text, flavor`,
     `or ingredients — render OUR product content and brand defined above, not a copy.`,
     `Lead with the reference's color mood; the brand palette above is secondary, used only`,
@@ -96,8 +105,8 @@ function labelStyleRefBlock(): string {
 function labelArchitectureBlock(): string {
   return [
     ``,
-    `Follow this canonical PRODUCT LABEL architecture for structure, zones and placement`,
-    `(adapt elements to the product and market; omit what doesn't apply):`,
+    `Follow this PRODUCT LABEL architecture (JSON spec) for structure, zones and proportions;`,
+    `fill its placeholders with the real content below (adapt/omit zones per product & market):`,
     LABEL_ARCHITECTURE,
   ].join('\n')
 }
@@ -129,7 +138,12 @@ export function buildLabelInstruction(
     ``,
     `Requirements:`,
     `- Place the provided logo prominently and integrate the palette and typography.`,
-    `- This is the flat label artwork (the full unrolled face — primary display + information panel together), shown straight-on, not on a container yet.`,
+    // El modelo rinde el meta-texto del prompt (nombres de campo, hex, fuentes) como
+    // texto impreso — visto en producción. Regla dura para que solo imprima copy real.
+    `- NEVER print on the label any prompt label or guidance: field names ("Ingredients", "Net weight", "Highlight"…), the words "typography"/"palette"/"composition", font names, hex color codes, or any instruction text. Print ONLY the real product copy and the brand name. No lorem ipsum, no "Sample/Dummy Text", no placeholders.`,
+    hasReferenceImage
+      ? `- This is the flat label artwork shown straight-on, not on a container yet; its layout follows the style reference.`
+      : `- This is the flat label artwork (the full unrolled face — primary display + information panel together), shown straight-on, not on a container yet.`,
     `- Proportions and layout suited to the packaging format above.`,
     `- Cohesive, retail-quality, premium finish.`,
   ].filter(Boolean).join('\n')

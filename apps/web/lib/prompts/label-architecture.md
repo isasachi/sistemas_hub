@@ -1,49 +1,59 @@
-Canonical PRODUCT LABEL architecture — distilled from reference labels. Defines WHICH
-elements a label carries and WHERE they go (zones + hierarchy). This is a DESIGN/mockup
-spec, not a legal-compliance guide: render plausible, realistic content. Adapt the
-elements to the product and the destination market; OMIT any that don't apply.
-
-## Spatial zones
-
-The flat label artwork contains two integrated zones (like an unrolled wraparound read end to end):
-
-1. PRIMARY DISPLAY PANEL — what sells the product. Front face, highest visual hierarchy.
-2. INFORMATION PANEL — the functional/regulatory copy. Side or back, small ordered text.
-
-## CORE group — ALWAYS present (primary display panel)
-
-- Logo / brand mark — prominent, top or centered.
-- Product denomination (what it IS — "Zumo de frutas", "Leche fresca") — large, legible.
-- Variety / flavor / tagline highlight — if applicable.
-- Key product image or illustration — appetite / usage cue.
-- Net quantity (weight/volume) — emphasized, lower corner ("250 ml", "1 litro").
-
-## PACKAGED-FOOD group — CONDITIONAL (information panel)
-
-Include ONLY when the product is a packaged FOOD item. Omit the whole group (or any
-element that doesn't fit) for services, non-food products, or fresh/loose/bulk goods.
-
-- Ingredients list — small print; emphasize quantitative callouts when present.
-- Allergens — EMPHASIZED (bold/caps), within or right after the ingredients.
-- Nutrition facts — in a boxed table (per serving or per 100 g/ml per the market).
-- Storage conditions ("Conservar en refrigeración").
-- Mode of use / preparation ("Agitar antes de servir").
-- Best-before / expiry date ("Consumir preferentemente antes de:").
-- Lot / batch code (traceability).
-- Company name & address.
-- Country of origin / provenance.
-- Alcohol content — drinks above 1.2% vol only.
-
-## Hierarchy & rhythm
-
-- The primary panel dominates: brand + denomination first, net quantity as the anchor.
-- The information panel is dense but orderly: separated blocks, uniform small type, the
-  nutrition table framed.
-- Carry the brand palette and typography across both panels.
-
-## Market adaptation
-
-Render the destination market's regulatory format (nutrition-table layout, warning seals /
-octágonos, allergen rules) when it applies. If the product is NOT a packaged food, drop the
-nutrition table, ingredients, allergens and the rest of the PACKAGED-FOOD group, and leave a
-clean label with just the CORE group.
+{
+  "label_architecture": {
+    "derived_from": "wraparound retail product label (canned/jarred beverage reference)",
+    "intent": "Base blueprint for a flat, print-ready product label. Fill every placeholder with the REAL product data provided below; adapt or omit zones by product type and destination market.",
+    "format": {
+      "type": "flat unrolled wraparound label, shown straight-on",
+      "aspect": "wide rectangle ~2.5:1 (adapt to the packaging format)",
+      "bleed": "edge-to-edge background, no white frame or margin"
+    },
+    "background": {
+      "fill": "solid primary brand color",
+      "texture": "subtle low-contrast halftone / dot pattern",
+      "decoration": "scattered ingredient illustrations (e.g. fruit slices, leaves) in the brand palette, flowing across the panels"
+    },
+    "zones": [
+      {
+        "id": "information_panel",
+        "position": "left band, ~30% width",
+        "content": "nutrition facts inside a clean white box (serving size, calories, % daily value, fats, sodium, carbohydrates, sugars, protein, footnote); plus ingredients, allergens and storage when it is a packaged food",
+        "conditional": "packaged food / drink only — omit this whole zone otherwise",
+        "typography": "tiny regulatory sans"
+      },
+      {
+        "id": "primary_display",
+        "position": "center band, ~40% width, the visual focus",
+        "content": [
+          "brand logo placed inside a high-contrast rounded cartouche/badge so it stays legible over the colored, patterned background",
+          "product name / variety / flavor",
+          "net content (weight or volume)",
+          "optional circular quality seal / stamp badge"
+        ],
+        "typography": "bold rounded display for the brand and flavor; medium weight for the descriptor",
+        "hierarchy": "largest, most dominant element on the label"
+      },
+      {
+        "id": "back_panel",
+        "position": "right band, ~30% width",
+        "content": [
+          "short product description paragraph (body copy)",
+          "barcode",
+          "company name / legal small print",
+          "recycling and regulatory marks"
+        ],
+        "conditional": "packaged retail product only",
+        "typography": "small clean sans, left-aligned"
+      }
+    ],
+    "color": {
+      "source": "use the provided brand palette EXACTLY",
+      "contrast_rule": "place text on solid fills or cartouches to guarantee legibility over patterned/illustrated areas"
+    },
+    "rules": [
+      "Render ONLY the real provided product copy and the brand name. NEVER print field names, font names, hex color codes, the words 'typography'/'palette'/'composition', lorem ipsum, 'Sample/Dummy/Plain Text', or any placeholder or instruction text.",
+      "The reference this is derived from contains dummy text and a dummy barcode — those are STRUCTURE only, never reproduce them.",
+      "Correct spelling, retail-quality, premium finish.",
+      "Adapt to the product and market: for a NON-packaged or non-food product keep ONLY the primary_display zone and drop the nutrition, barcode and legal zones."
+    ]
+  }
+}
