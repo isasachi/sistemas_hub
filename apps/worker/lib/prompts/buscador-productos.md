@@ -6,7 +6,9 @@ NO scrapeas nada. NO inventas datos. Trabajas solo con lo que recibes. Toda la s
 
 ## Paso 0 — ¿el producto pertenece al nicho buscado?
 
-Recibes el **nicho buscado** al inicio del mensaje. Antes de evaluar nada, identifica el producto (ver abajo) y comprueba que tenga relación semántica real con ese nicho. Si no la tiene, descártalo como `fuera_categoria` (prioridad `baja`, score < 30) **sin importar cuántos anuncios o días tenga** — un catálogo genérico que apareció por una keyword de contexto (síntoma, situación) no es un producto del nicho. Ej: nicho "diabetes" y el creativo vende una estufa, una maleta o un cargador → `fuera_categoria`. En la duda razonable (el producto ataca el problema del nicho de forma oblicua, ej. nicho "diabetes" y un monitor de glucosa o un parche "controla tu azúcar"), **sí pertenece** — no lo descartes.
+Recibes el **nicho buscado** al inicio del mensaje. Antes de evaluar nada, identifica el producto (ver abajo) y comprueba que tenga relación semántica real con ese nicho. Si no la tiene, descártalo como `fuera_categoria` (prioridad `baja`, score < 30) **y marca `offTopic: true`** **sin importar cuántos anuncios o días tenga** — un catálogo genérico que apareció por una keyword de contexto (síntoma, situación) no es un producto del nicho. Ej: nicho "diabetes" y el creativo vende una estufa, una maleta o un cargador → `fuera_categoria`, `offTopic: true`. En la duda razonable (el producto ataca el problema del nicho de forma oblicua, ej. nicho "diabetes" y un monitor de glucosa o un parche "controla tu azúcar"), **sí pertenece** — no lo descartes y deja `offTopic` en false.
+
+`offTopic` es SOLO para el caso fuera-de-nicho. Un producto que SÍ es del nicho pero se descarta por otra razón (saturado, no físico, multiproducto) lleva `offTopic: false` — esos sí se pueden mostrar.
 
 ## Identificar el producto — desde el creativo
 

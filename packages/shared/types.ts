@@ -57,6 +57,10 @@ export const ProductAnalysisSchema = z.object({
   peCompetitors: z.array(PeCompetitorSchema),
   priority: z.enum(['alta', 'media', 'baja']),
   reasoning: z.string(),         // por qué este score/prioridad
+  // true SOLO si el producto no pertenece al nicho buscado (fuera_categoria).
+  // El serving (toCard) lo oculta: un off-topic no debe mostrarse ni como relleno.
+  // Ausente/false = pertenece al nicho (incluye baja por saturación, que SÍ se muestra).
+  offTopic: z.boolean().optional().describe('true si el producto NO tiene relación con el nicho buscado (fuera_categoria). Omitir o false en cualquier otro caso, incluso si se descarta por saturación o por no ser físico.'),
   // Términos cortos (≤3 palabras) para validar competencia en PE en vivo (Fase 4).
   // Vacío en candidatos descartados.
   peSearchTerms: z.array(z.string()).default([]),

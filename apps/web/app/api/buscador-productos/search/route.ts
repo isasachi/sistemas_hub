@@ -19,6 +19,7 @@ import type { ProductRow, ProductCard, SearchResponse } from '@ph/shared'
 function toCard(row: ProductRow): ProductCard | null {
   if (!row.analysis || row.score == null) return null // aún sin analizar → no se muestra
   const a = row.analysis
+  if (a.offTopic) return null // fuera del nicho buscado → no se muestra ni como relleno baja
   const r = row.raw_data
   // ⚠️ REGLAS DE ORO — defensa en profundidad: aunque el scraper ya no guarda
   // productos que las violen, las filas viejas tampoco deben mostrarse JAMÁS:

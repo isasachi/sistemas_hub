@@ -79,6 +79,7 @@ export async function collectNiche(niche: string): Promise<NicheCollection> {
         peScenario: 'D',
         peCompetitors: [],
         priority: 'baja',
+        offTopic: true,
         reasoning: 'Descartado sin análisis LLM: el nombre y los creativos no tienen solapamiento léxico con el nicho buscado.',
         peSearchTerms: [],
       }
