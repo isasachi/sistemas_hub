@@ -47,6 +47,25 @@ function brandBlock(d: Direction, brandName: string): string {
   ].join('\n')
 }
 
+// Baseline curado: tokens del exemplar de la biblioteca (design-system.md) que el
+// LLM eligió por use_case, guardados en `direction.designSystem`. Se aplica SOLO en el
+// path SIN ref del usuario (la ref del usuario manda cuando existe). Para label se omite
+// `layout` (la arquitectura es dueña de las zonas); para logo entra completo.
+function designSystemBlock(d: Direction, opts?: { omitLayout?: boolean }): string {
+  const ds = d.designSystem
+  if (!ds) return ''
+  return [
+    ``,
+    `Ground the visual style in this proven design system (reference: ${ds.reference}).`,
+    `Apply its tokens to OUR brand — do NOT copy its name or literal content:`,
+    `- Typography: ${ds.typography}`,
+    `- Spacing & density: ${ds.spacing}`,
+    `- Component style: ${ds.components}`,
+    opts?.omitLayout ? '' : `- Layout: ${ds.layout}`,
+    `- Visual personality: ${ds.personality}`,
+  ].filter(Boolean).join('\n')
+}
+
 // Bloque de referencia DEL LOGO: aquí la imagen cruda SÍ entra como Image 1 (style
 // reference). Decisión del usuario: "la referencia manda el vibe" — emula estética,
 // color y mood; la paleta de marca queda subordinada. Se ignora explícitamente el
@@ -85,7 +104,7 @@ export function buildLogoInstruction(
     brandBlock(d, brandName),
     `Logo direction: ${d.logoDirection}.`,
     `Variant focus for this option: ${variant}.`,
-    hasReferenceImage ? logoStyleRefBlock(refDna) : '',
+    hasReferenceImage ? logoStyleRefBlock(refDna) : designSystemBlock(d),
     ``,
     `Requirements:`,
     `- Clean vector-style mark, centered, on a solid flat neutral background (off-white #F5F2EC).`,
@@ -148,7 +167,9 @@ export function buildLabelInstruction(
     `Design a flat, print-ready PRODUCT LABEL artwork. Brand "${brandName}", product "${productName}".`,
     brandBlock(d, brandName),
     `Packaging format the label must fit: ${data.packagingFormat.trim() || 'standard retail packaging'}.`,
-    hasReferenceImage ? labelStyleRefBlock(refDna) : labelArchitectureBlock(),
+    hasReferenceImage
+      ? labelStyleRefBlock(refDna)
+      : [labelArchitectureBlock(), designSystemBlock(d, { omitLayout: true })].join('\n'),
     ``,
     `Label content (render this real text, correctly spelled — do NOT invent placeholders):`,
     `- Product name: ${productName}`,

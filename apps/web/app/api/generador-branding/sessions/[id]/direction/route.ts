@@ -1,3 +1,5 @@
+import fs from 'fs'
+import path from 'path'
 import { NextRequest, NextResponse } from 'next/server'
 import { getBrandingSession, updateBrandingSession } from '@/lib/branding/db'
 import { callStructured, BRANDING_SYSTEM_PROMPT } from '@/lib/gemini'
@@ -6,6 +8,14 @@ import type { Part } from '@google/genai'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
+
+// Biblioteca curada de referencias de diseño (9 exemplars reales). Se lee una vez
+// al cargar el módulo. El LLM elige por use_case la(s) que mejor matchean la marca
+// y ancla en ellas la sugerencia (paleta/tipografía/componentes/personalidad).
+const DESIGN_SYSTEM = fs.readFileSync(
+  path.join(process.cwd(), 'lib/branding/design-system.md'),
+  'utf-8'
+).trim()
 
 // Etapa 2 — genera (o regenera) la dirección de marca a partir del brief.
 // Llamada estructurada, rápida (~3-6s), sin imágenes → cabe en el timeout de Vercel.
@@ -54,8 +64,17 @@ export async function POST(
           ? `\nAjustes pedidos por el usuario sobre la propuesta anterior: ${body.feedback.trim()}`
           : '',
         ``,
+        `BIBLIOTECA DE REFERENCIAS DE DISEÑO (exemplars reales de empaque). Elige la(s) 1-2`,
+        `cuyo use_case mejor matchee este producto/público/personalidad y ANCLA tu propuesta`,
+        `en ellas (paleta, tipografía, estilo de componentes, personalidad). NO copies su`,
+        `marca ni contenido literal — transfiere el sistema visual. Si ninguna encaja bien,`,
+        `diseña libre y omite designSystem.`,
+        DESIGN_SYSTEM,
+        ``,
         `Entrega: concepto, rationale, una paleta de 3-6 colores (hex reales con nombre y uso),`,
-        `tipografía (titular + cuerpo + por qué), dirección de logo y un summaryForUser cálido en español.`,
+        `tipografía (titular + cuerpo + por qué), dirección de logo, un summaryForUser cálido`,
+        `en español, y designSystem (el exemplar elegido con sus tokens typography/spacing/`,
+        `components/layout/personality; omítelo solo si ninguno encaja).`,
       ].join('\n'),
     },
   ]

@@ -32,6 +32,18 @@ export const DesignDnaSchema = z.object({
 })
 export type DesignDna = z.infer<typeof DesignDnaSchema>
 
+// Tokens de estilo del exemplar de la biblioteca curada (design-system.md) que el
+// LLM eligió por use_case. Opcional (backward-compatible; direction es jsonb).
+// Lo consume `instructions.ts` en el path SIN ref del usuario (baseline de calidad).
+export const DesignSystemRefSchema = z.object({
+  reference: z.string(),    // "NIBRAY (kids supplement)" — qué exemplar y por qué
+  typography: z.string(),
+  spacing: z.string(),
+  components: z.string(),
+  layout: z.string(),
+  personality: z.string(),
+})
+
 export const DirectionSchema = z.object({
   concept: z.string(),                          // concepto/vibe en una frase
   rationale: z.string(),                         // por qué esta dirección para esta marca
@@ -39,6 +51,7 @@ export const DirectionSchema = z.object({
   typography: TypographySchema,
   logoDirection: z.string(),                    // cómo debería verse/sentirse el logo
   summaryForUser: z.string(),                   // resumen amable en español para mostrar
+  designSystem: DesignSystemRefSchema.optional(), // exemplar curado que ancla el estilo
 })
 export type Direction = z.infer<typeof DirectionSchema>
 
