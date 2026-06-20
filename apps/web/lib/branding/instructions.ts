@@ -135,23 +135,38 @@ export function buildLabelInstruction(
   ].filter(Boolean).join('\n')
 }
 
-// Etapa 5 — mockup. Image 1 = etiqueta. Image 2 (opcional) = envase subido.
+// Envase vacío para el modo "describir": sin geometría de envase el wrap del mockup
+// falla (recompone la etiqueta plana). Generamos un envase vacío desde la descripción
+// y lo usamos como Image 2 → el mockup pasa por el MISMO path que ya funciona en upload.
+export function buildContainerInstruction(desc: string | null): string {
+  return [
+    `Photorealistic studio photo of a single EMPTY, UNLABELED retail product container.`,
+    `Container: ${desc?.trim() || 'a container appropriate for the product'}.`,
+    `Blank surface — absolutely NO label, NO text, NO graphics on it; plain packaging material.`,
+    `Centered, straight-on, seamless neutral studio background, soft realistic lighting and shadow.`,
+    `Keep realistic proportions and geometry for that container type.`,
+  ].join('\n')
+}
+
+// Etapa 5 — mockup. Image 1 = etiqueta. Image 2 = envase (subido o generado). El head
+// se elige por SI hay imagen de envase: con envase (incluido el generado en describir)
+// se ancla en él; sin envase es el fallback (raro: solo si la generación del envase falló).
 export function buildMockupInstruction(
   d: Direction,
   brandName: string,
-  opts: { mode: 'describe' | 'upload'; containerDesc: string | null }
+  opts: { hasContainerImage: boolean; containerDesc: string | null }
 ): string {
-  const head =
-    opts.mode === 'upload'
-      ? [
-          `Image 1 is the flat product label artwork. Image 2 is the real container the client will use.`,
-          `Apply the label from Image 1 onto the container in Image 2, wrapped realistically (curvature, lighting, perspective, shadows).`,
-        ]
-      : [
-          `Image 1 is the flat product label artwork.`,
-          `Render a realistic product container described as: ${opts.containerDesc ?? 'a container appropriate for the product'}.`,
-          `Apply the label onto that container, wrapped realistically (curvature, lighting, perspective).`,
-        ]
+  const head = opts.hasContainerImage
+    ? [
+        `Image 1 is the flat product label artwork. Image 2 is the real container the client will use.`,
+        `Apply the label from Image 1 onto the container in Image 2, wrapped realistically (curvature, lighting, perspective, shadows).`,
+        `Keep Image 2's container exactly — its true shape, geometry and contents. Discard the label's flat background; take ONLY its printed design.`,
+      ]
+    : [
+        `Image 1 is the flat product label artwork.`,
+        `Render a realistic product container described as: ${opts.containerDesc ?? 'a container appropriate for the product'}.`,
+        `Apply the label onto that container, wrapped realistically (curvature, lighting, perspective).`,
+      ]
 
   return [
     ...head,

@@ -3,7 +3,7 @@ import { getBrandingSession, updateBrandingSession } from '@/lib/branding/db'
 import { fetchAsBase64, uploadToStorage } from '@/lib/storage'
 import { generateImage } from '@/lib/gemini'
 import { DirectionSchema } from '@/lib/branding/types'
-import { buildMockupInstruction } from '@/lib/branding/instructions'
+import { buildMockupInstruction, buildContainerInstruction } from '@/lib/branding/instructions'
 import type { Part } from '@google/genai'
 
 export const dynamic = 'force-dynamic'
@@ -34,17 +34,23 @@ export async function POST(
         const direction = DirectionSchema.parse(session.direction)
 
         send({ status: 'loading_images' })
-        const [label, container] = await Promise.all([
-          fetchAsBase64(session.label_url),
-          session.container_url ? fetchAsBase64(session.container_url) : Promise.resolve(null),
-        ])
+        const label = await fetchAsBase64(session.label_url)
+        let container = session.container_url ? await fetchAsBase64(session.container_url) : null
+
+        // Modo describir: sin imagen de envase el wrap recompone la etiqueta plana.
+        // Generamos un envase vacío desde la descripción para darle geometría que anclar.
+        if (!container && session.container_mode === 'describe') {
+          send({ status: 'building_container' })
+          const cb64 = await generateImage([{ text: buildContainerInstruction(session.container_desc) }])
+          if (cb64) container = { mimeType: 'image/png', data: cb64 }
+        }
 
         const parts: Part[] = [
           { inlineData: { mimeType: label.mimeType, data: label.data } },
           ...(container ? [{ inlineData: { mimeType: container.mimeType, data: container.data } } as Part] : []),
           {
             text: buildMockupInstruction(direction, session.brand_name, {
-              mode: session.container_mode,
+              hasContainerImage: !!container,
               containerDesc: session.container_desc,
             }),
           },

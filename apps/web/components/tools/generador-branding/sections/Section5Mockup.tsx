@@ -10,6 +10,7 @@ const btnPrimary =
 
 const STATUS_TEXT: Record<string, string> = {
   loading_images: 'Cargando etiqueta y envase...',
+  building_container: 'Preparando el envase...',
   generating: 'Montando el producto...',
   uploading: 'Guardando...',
 }
