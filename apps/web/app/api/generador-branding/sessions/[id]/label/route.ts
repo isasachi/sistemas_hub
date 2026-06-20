@@ -4,6 +4,7 @@ import { fetchAsBase64, uploadToStorage } from '@/lib/storage'
 import { generateImage } from '@/lib/gemini'
 import { DirectionSchema, type LabelData } from '@/lib/branding/types'
 import { buildLabelInstruction } from '@/lib/branding/instructions'
+import { parseDesignDna } from '@/lib/branding/style-extract'
 import type { Part } from '@google/genai'
 
 export const dynamic = 'force-dynamic'
@@ -49,7 +50,8 @@ export async function POST(
           ? await fetchAsBase64(session.label_reference_url)
           : null
         if (ref) parts.push({ inlineData: { mimeType: ref.mimeType, data: ref.data } })
-        parts.push({ text: buildLabelInstruction(direction, session.brand_name, productName, labelData, !!ref) })
+        const refDna = parseDesignDna(session.label_reference_analysis)
+        parts.push({ text: buildLabelInstruction(direction, session.brand_name, productName, labelData, !!ref, refDna) })
 
         send({ status: 'generating' })
         const b64 = await generateImage(parts)

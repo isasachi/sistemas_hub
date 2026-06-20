@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getBrandingSession, updateBrandingSession } from '@/lib/branding/db'
 import { uploadToStorage } from '@/lib/storage'
+import { analyzeStyleReference } from '@/lib/branding/style-extract'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-// Etapa 4 (pre-etiqueta) — guarda una etiqueta de referencia. El SSE de `label` pasa
-// la imagen cruda como style reference (Image 2); no se analiza a texto.
+// Etapa 4 (pre-etiqueta) — guarda una etiqueta de referencia + extrae su Design DNA
+// quirúrgico. El SSE de `label` pasa la imagen como Image 2 Y el DNA como spec.
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -29,6 +30,13 @@ export async function POST(
   const mime = file.type || 'image/png'
   const referenceUrl = await uploadToStorage(id, bytes, mime, 'label-ref')
 
-  await updateBrandingSession(id, { label_reference_url: referenceUrl })
+  let dna = null
+  try { dna = await analyzeStyleReference(bytes.toString('base64'), mime, 'label') }
+  catch (e) { console.error('[label-ref] DNA extraction failed:', e) }
+
+  await updateBrandingSession(id, {
+    label_reference_url: referenceUrl,
+    label_reference_analysis: dna ? JSON.stringify(dna) : null,
+  })
   return NextResponse.json({ referenceUrl })
 }

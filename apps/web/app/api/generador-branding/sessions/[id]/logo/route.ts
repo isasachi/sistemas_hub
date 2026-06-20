@@ -4,6 +4,7 @@ import { fetchAsBase64, uploadToStorage } from '@/lib/storage'
 import { generateImage } from '@/lib/gemini'
 import { DirectionSchema } from '@/lib/branding/types'
 import { buildLogoInstruction, LOGO_VARIANTS } from '@/lib/branding/instructions'
+import { parseDesignDna } from '@/lib/branding/style-extract'
 import type { Part } from '@google/genai'
 
 export const dynamic = 'force-dynamic'
@@ -36,6 +37,7 @@ export async function POST(
         const ref = session.logo_reference_url
           ? await fetchAsBase64(session.logo_reference_url)
           : null
+        const refDna = parseDesignDna(session.logo_reference_analysis)
 
         send({ status: 'generating' })
 
@@ -45,7 +47,7 @@ export async function POST(
         const logos: string[] = []
         for (let i = 0; i < LOGO_VARIANTS.length; i++) {
           try {
-            const text: Part = { text: buildLogoInstruction(direction, brandName, LOGO_VARIANTS[i], !!ref) }
+            const text: Part = { text: buildLogoInstruction(direction, brandName, LOGO_VARIANTS[i], !!ref, refDna) }
             const parts: Part[] = ref
               ? [{ inlineData: { mimeType: ref.mimeType, data: ref.data } }, text]
               : [text]

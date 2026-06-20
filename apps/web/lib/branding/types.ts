@@ -16,6 +16,22 @@ export const TypographySchema = z.object({
 })
 export type Typography = z.infer<typeof TypographySchema>
 
+// ─── Design DNA: extracción quirúrgica de estilo (refs del usuario + biblioteca) ──
+// Mismo esquema para el extractor runtime (style-extract.ts, gemini-2.5-flash sobre
+// la ref del usuario) y para las cards curadas (design-system.md). Altitud accionable
+// (lo que el modelo de imagen PUEDE ejecutar), no medidas en píxeles.
+export const DesignDnaSchema = z.object({
+  typography: z.string(),   // familias, peso, caja, tracking, pairing — accionable
+  palette: z.string(),      // hex + roles
+  spacing: z.string(),      // densidad, ritmo, márgenes
+  repetition: z.string(),   // motivos/elementos repetidos
+  components: z.string(),   // badges/pills/cartuchos/sellos/tags
+  layout: z.string(),       // reglas de layout, alineación, grilla, zonas
+  personality: z.string(),  // identidad / personalidad visual
+  logoDesc: z.string().optional(), // solo refs de LOGO: descripción quirúrgica del logo localizado en el mockup
+})
+export type DesignDna = z.infer<typeof DesignDnaSchema>
+
 export const DirectionSchema = z.object({
   concept: z.string(),                          // concepto/vibe en una frase
   rationale: z.string(),                         // por qué esta dirección para esta marca

@@ -1,6 +1,22 @@
 import fs from 'fs'
 import path from 'path'
-import type { Direction, LabelData } from './types'
+import type { Direction, LabelData, DesignDna } from './types'
+
+// Render del Design DNA (extraído de la ref del usuario) a texto para el prompt de
+// imagen. Puro ($0). Para label se omite `layout` (la arquitectura es dueña de las
+// zonas); para logo entra completo.
+function designDnaToPrompt(dna: DesignDna, opts?: { omitLayout?: boolean }): string {
+  return [
+    dna.logoDesc ? `- Logo to replicate (redraw it for OUR brand name): ${dna.logoDesc}` : '',
+    `- Typography: ${dna.typography}`,
+    `- Color treatment: ${dna.palette}`,
+    `- Spacing & density: ${dna.spacing}`,
+    `- Repetition / motifs: ${dna.repetition}`,
+    `- Component style: ${dna.components}`,
+    opts?.omitLayout ? '' : `- Layout: ${dna.layout}`,
+    `- Visual personality: ${dna.personality}`,
+  ].filter(Boolean).join('\n')
+}
 
 // Constructores puros (sin LLM, $0) que arman las instrucciones de generación de
 // imagen a partir de la dirección de marca aprobada. Mantienen un prompt rico y
@@ -36,38 +52,40 @@ function brandBlock(d: Direction, brandName: string): string {
 // color y mood; la paleta de marca queda subordinada. Se ignora explícitamente el
 // fondo/foto/escena para no importar el cielo/manos de una referencia que es una
 // foto de producto (el viejo bug "ref de chocolate → producto de chocolate").
-function logoStyleRefBlock(): string {
+function logoStyleRefBlock(dna?: DesignDna | null): string {
   return [
     ``,
-    `Image 1 is a STYLE reference. Emulate its overall aesthetic — color treatment and`,
-    `mood, typographic personality, shape & mark language, and energy.`,
-    `If Image 1 is a clean logo, emulate it directly. If Image 1 is a product photo or`,
-    `MOCKUP, FIRST locate the actual brand logo printed on the packaging (it may be small —`,
-    `e.g. the top area or a corner of the label) and treat THAT printed logo as the PRIMARY`,
-    `reference: its lettering, mark, colors and proportions.`,
+    `Image 1 is a STYLE reference. Replicate its design DNA, then apply OUR brand for a`,
+    `perfect match. If Image 1 is a clean logo, emulate it directly. If it is a product`,
+    `photo or MOCKUP, locate the actual brand logo printed on the packaging (it may be`,
+    `small — a corner of the label) and treat THAT printed logo as the PRIMARY reference.`,
+    dna
+      ? `Replicate these EXACT extracted principles (then swap in OUR brand name):\n${designDnaToPrompt(dna)}`
+      : `Emulate its lettering, mark, colors, proportions and energy.`,
     `DISREGARD the background, photography, hands, container, product and scene — design a`,
     `clean LOGO for OUR brand, not a copy of the reference's packaging.`,
-    `Lead with the reference's color mood; the brand palette above is secondary, used only`,
-    `where it doesn't fight the reference's energy. The brand NAME must be rendered`,
-    `correctly, legibly and prominently.`,
+    `Lead with the reference's design DNA; the brand palette above is secondary, used only`,
+    `where it doesn't fight the reference. The brand NAME must be rendered correctly,`,
+    `legibly and prominently.`,
   ].join('\n')
 }
 
 // Etapa 3 — logo. `variant` desvía cada opción de la tanda para que las 3-4 salgan
-// distintas; `hasReferenceImage` indica que el caller pasó la imagen de referencia
-// como Image 1 (entonces se emite el bloque de estilo en vez de texto abstracto).
+// distintas; con imagen de referencia (Image 1) se emite el style-block, enriquecido
+// con el Design DNA quirúrgico (`refDna`) extraído de la ref si está disponible.
 export function buildLogoInstruction(
   d: Direction,
   brandName: string,
   variant: string,
-  hasReferenceImage?: boolean
+  hasReferenceImage?: boolean,
+  refDna?: DesignDna | null
 ): string {
   return [
     `Design a professional, production-ready LOGO for a small business.`,
     brandBlock(d, brandName),
     `Logo direction: ${d.logoDirection}.`,
     `Variant focus for this option: ${variant}.`,
-    hasReferenceImage ? logoStyleRefBlock() : '',
+    hasReferenceImage ? logoStyleRefBlock(refDna) : '',
     ``,
     `Requirements:`,
     `- Clean vector-style mark, centered, on a solid flat neutral background (off-white #F5F2EC).`,
@@ -87,18 +105,20 @@ export const LOGO_VARIANTS: string[] = [
 // Bloque de referencia DE LA ETIQUETA: la imagen cruda entra como Image 2 (Image 1
 // es el logo). Misma decisión que el logo: "la referencia manda el vibe" — emula
 // estética/color/mood; ignora el producto/escena literal de la referencia.
-function labelStyleRefBlock(): string {
+function labelStyleRefBlock(dna?: DesignDna | null): string {
   return [
     ``,
-    `Image 2 is a STYLE reference for the label. Take its WHOLE vibe: color treatment and`,
-    `mood, typographic personality, illustration/graphic style, AND its composition —`,
-    `layout, element distribution, density and shelf appeal. The reference dictates the`,
-    `structure; do NOT impose any fixed panel template.`,
+    `Image 2 is a STYLE reference for the label. Take its WHOLE vibe AND composition —`,
+    `typography, color, illustration/graphic style, component style, element distribution`,
+    `and density. The reference dictates the structure; do NOT impose any fixed template.`,
+    dna
+      ? `Replicate these EXACT extracted principles (then apply OUR content/brand):\n${designDnaToPrompt(dna)}`
+      : ``,
     `DISREGARD its background, photography, scene, and any literal product, text, flavor`,
     `or ingredients — render OUR product content and brand defined above, not a copy.`,
-    `Lead with the reference's color mood; the brand palette above is secondary, used only`,
-    `where it doesn't fight the reference's energy. Keep the provided logo (Image 1) as-is.`,
-  ].join('\n')
+    `Lead with the reference's design DNA; the brand palette above is secondary, used only`,
+    `where it doesn't fight the reference. Keep the provided logo (Image 1) as-is.`,
+  ].filter(Boolean).join('\n')
 }
 
 // Sin referencia de etiqueta: el modelo sigue la arquitectura canónica destilada.
@@ -119,7 +139,8 @@ export function buildLabelInstruction(
   brandName: string,
   productName: string,
   data: LabelData,
-  hasReferenceImage?: boolean
+  hasReferenceImage?: boolean,
+  refDna?: DesignDna | null
 ): string {
   const ld = (label: string, v: string) => (v.trim() ? `- ${label}: ${v.trim()}` : '')
   return [
@@ -127,7 +148,7 @@ export function buildLabelInstruction(
     `Design a flat, print-ready PRODUCT LABEL artwork. Brand "${brandName}", product "${productName}".`,
     brandBlock(d, brandName),
     `Packaging format the label must fit: ${data.packagingFormat.trim() || 'standard retail packaging'}.`,
-    hasReferenceImage ? labelStyleRefBlock() : labelArchitectureBlock(),
+    hasReferenceImage ? labelStyleRefBlock(refDna) : labelArchitectureBlock(),
     ``,
     `Label content (render this real text, correctly spelled — do NOT invent placeholders):`,
     `- Product name: ${productName}`,

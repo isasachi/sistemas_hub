@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getBrandingSession, updateBrandingSession } from '@/lib/branding/db'
 import { uploadToStorage } from '@/lib/storage'
+import { analyzeStyleReference } from '@/lib/branding/style-extract'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-// Etapa 3 (pre-logo) — guarda un logo de referencia (espeja label-reference). El SSE
-// de `logo` pasa la imagen cruda como style reference (Image 1); no se analiza a texto.
+// Etapa 3 (pre-logo) — guarda un logo de referencia + extrae su Design DNA quirúrgico
+// (gemini-2.5-flash; localiza el logo si la ref es un mockup). El SSE de `logo` pasa
+// la imagen como Image 1 Y el DNA como spec → replica el estilo + aplica la marca.
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -29,6 +31,13 @@ export async function POST(
   const mime = file.type || 'image/png'
   const referenceUrl = await uploadToStorage(id, bytes, mime, 'logo-ref')
 
-  await updateBrandingSession(id, { logo_reference_url: referenceUrl })
+  let dna = null
+  try { dna = await analyzeStyleReference(bytes.toString('base64'), mime, 'logo') }
+  catch (e) { console.error('[logo-ref] DNA extraction failed:', e) }
+
+  await updateBrandingSession(id, {
+    logo_reference_url: referenceUrl,
+    logo_reference_analysis: dna ? JSON.stringify(dna) : null,
+  })
   return NextResponse.json({ referenceUrl })
 }
