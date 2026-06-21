@@ -39,7 +39,8 @@ export PH_KEYWORD_ROTATION="${PH_KEYWORD_ROTATION:-1}"   # ventana rotativa siem
 export PH_KEYWORD_WINDOW="${PH_KEYWORD_WINDOW:-15}"      # clampeado a floor(pool/2) en resolve.ts
 export PH_REFRESH_DAYS="${PH_REFRESH_DAYS:-7}"           # activos reentran a la cola cada 7 días
 export PH_SEARCH_CAP="${PH_SEARCH_CAP:-300}"             # corta discovery (cards, $0 RAM)
-export PH_ENRICH_LIMIT="${PH_ENRICH_LIMIT:-150}"         # default documentado; el análisis solo procesa 50/run
+export PH_ENRICH_LIMIT="${PH_ENRICH_LIMIT:-150}"         # default documentado para discovery
+export PH_ANALYZE_LIMIT="${PH_ANALYZE_LIMIT:-200}"       # productos analizados por nicho/run (batch plano = mismo costo, más rápido el drenado)
 export PH_NICHE_BATCH="${PH_NICHE_BATCH:-10}"            # bloque = nichos por proceso fresco (menor = menos leak de RAM)
 export PH_BATCH_REST="${PH_BATCH_REST:-60}"             # respiro entre bloques para reclamar RAM
 
