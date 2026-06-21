@@ -31,7 +31,10 @@ export async function uploadToStorage(
   const { error } = await storage.upload(path, buffer, { contentType: mimeType, upsert: true })
   if (error) throw new Error(`Storage upload failed: ${error.message}`)
   const { data } = storage.getPublicUrl(path)
-  return data.publicUrl
+  // El path es determinista + upsert, así que regenerar reescribe los bytes pero deja la
+  // MISMA URL → el browser/CDN sirve la imagen vieja cacheada (y React no ve cambio de src).
+  // Cache-bust por generación: cambia el string en cada upload sin dejar objetos huérfanos.
+  return `${data.publicUrl}?v=${Date.now()}`
 }
 
 export async function fetchAsBase64(url: string): Promise<{ data: string; mimeType: string }> {
