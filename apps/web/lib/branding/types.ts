@@ -37,6 +37,7 @@ export type DesignDna = z.infer<typeof DesignDnaSchema>
 // Lo consume `instructions.ts` en el path SIN ref del usuario (baseline de calidad).
 export const DesignSystemRefSchema = z.object({
   reference: z.string(),    // "NIBRAY (kids supplement)" — qué exemplar y por qué
+  logo: z.string().optional(), // cómo construir el LOGO en ese estilo (mark/lockup) — opcional (compat)
   typography: z.string(),
   spacing: z.string(),
   components: z.string(),

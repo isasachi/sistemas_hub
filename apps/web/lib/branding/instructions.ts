@@ -51,17 +51,20 @@ function brandBlock(d: Direction, brandName: string): string {
 // LLM eligió por use_case, guardados en `direction.designSystem`. Se aplica SOLO en el
 // path SIN ref del usuario (la ref del usuario manda cuando existe). Para label se omite
 // `layout` (la arquitectura es dueña de las zonas); para logo entra completo.
-function designSystemBlock(d: Direction, opts?: { omitLayout?: boolean }): string {
+function designSystemBlock(d: Direction, opts?: { forLabel?: boolean }): string {
   const ds = d.designSystem
   if (!ds) return ''
+  const forLabel = opts?.forLabel
   return [
     ``,
     `Ground the visual style in this proven design system (reference: ${ds.reference}).`,
     `Apply its tokens to OUR brand — do NOT copy its name or literal content:`,
+    // El token `logo` solo aplica al paso de logo; la etiqueta usa estilo, no construcción de marca.
+    !forLabel && ds.logo ? `- Logo construction: ${ds.logo}` : '',
     `- Typography: ${ds.typography}`,
     `- Spacing & density: ${ds.spacing}`,
     `- Component style: ${ds.components}`,
-    opts?.omitLayout ? '' : `- Layout: ${ds.layout}`,
+    forLabel ? '' : `- Layout: ${ds.layout}`, // la arquitectura es dueña del layout de la etiqueta
     `- Visual personality: ${ds.personality}`,
   ].filter(Boolean).join('\n')
 }
@@ -169,7 +172,7 @@ export function buildLabelInstruction(
     `Packaging format the label must fit: ${data.packagingFormat.trim() || 'standard retail packaging'}.`,
     hasReferenceImage
       ? labelStyleRefBlock(refDna)
-      : [labelArchitectureBlock(), designSystemBlock(d, { omitLayout: true })].join('\n'),
+      : [labelArchitectureBlock(), designSystemBlock(d, { forLabel: true })].join('\n'),
     ``,
     `Label content (render this real text, correctly spelled — do NOT invent placeholders):`,
     `- Product name: ${productName}`,

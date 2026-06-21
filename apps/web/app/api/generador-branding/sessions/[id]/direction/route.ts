@@ -73,8 +73,9 @@ export async function POST(
         ``,
         `Entrega: concepto, rationale, una paleta de 3-6 colores (hex reales con nombre y uso),`,
         `tipografía (titular + cuerpo + por qué), dirección de logo, un summaryForUser cálido`,
-        `en español, y designSystem (el exemplar elegido con sus tokens typography/spacing/`,
-        `components/layout/personality; omítelo solo si ninguno encaja).`,
+        `en español, y designSystem (el exemplar elegido con sus tokens logo/typography/`,
+        `spacing/components/layout/personality; el token logo describe cómo construir la`,
+        `marca/logo en ese estilo. Omítelo solo si ninguno encaja).`,
       ].join('\n'),
     },
   ]
