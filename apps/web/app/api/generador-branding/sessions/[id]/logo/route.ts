@@ -3,7 +3,7 @@ import { getBrandingSession, updateBrandingSession } from '@/lib/branding/db'
 import { fetchAsBase64, uploadToStorage } from '@/lib/storage'
 import { generateImage } from '@/lib/gemini'
 import { DirectionSchema } from '@/lib/branding/types'
-import { buildLogoInstruction, LOGO_VARIANTS } from '@/lib/branding/instructions'
+import { buildLogoInstruction, LOGO_VARIANTS, REF_LOGO_VARIANTS } from '@/lib/branding/instructions'
 import { parseDesignDna } from '@/lib/branding/style-extract'
 import type { Part } from '@google/genai'
 
@@ -44,10 +44,12 @@ export async function POST(
         // Secuencial a propósito: cada logo es un base64 grande (~750 KB); generar
         // las 4 a la vez multiplica el pico de memoria. De a uno —generar, subir,
         // soltar— mantiene el pico bajo y emitimos progreso a medida que salen.
+        // Con ref: variaciones sutiles que conservan el diseño de la ref. Sin ref: 4 estructuras distintas.
+        const variants = ref ? REF_LOGO_VARIANTS : LOGO_VARIANTS
         const logos: string[] = []
-        for (let i = 0; i < LOGO_VARIANTS.length; i++) {
+        for (let i = 0; i < variants.length; i++) {
           try {
-            const text: Part = { text: buildLogoInstruction(direction, brandName, LOGO_VARIANTS[i], !!ref, refDna) }
+            const text: Part = { text: buildLogoInstruction(direction, brandName, variants[i], !!ref, refDna) }
             const parts: Part[] = ref
               ? [{ inlineData: { mimeType: ref.mimeType, data: ref.data } }, text]
               : [text]
@@ -55,7 +57,7 @@ export async function POST(
             if (!b64) { console.error(`[logo ${i}] empty result (no image part)`); continue }
             const url = await uploadToStorage(id, Buffer.from(b64, 'base64'), 'image/png', `logo-${i}`)
             logos.push(url)
-            send({ status: 'progress', done: logos.length, total: LOGO_VARIANTS.length })
+            send({ status: 'progress', done: logos.length, total: variants.length })
           } catch (e) {
             console.error(`[logo ${i}] threw:`, e)
           }

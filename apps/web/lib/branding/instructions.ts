@@ -3,8 +3,8 @@ import path from 'path'
 import type { Direction, LabelData, DesignDna } from './types'
 
 // Render del Design DNA (extraído de la ref del usuario) a texto para el prompt de
-// imagen. Puro ($0). Para label se omite `layout` (la arquitectura es dueña de las
-// zonas); para logo entra completo.
+// imagen. Puro ($0). Lo usa SOLO el path de ETIQUETA (`omitLayout`: la arquitectura es
+// dueña de las zonas). El logo usa solo `dna.logoDesc` (ver logoStyleRefBlock).
 function designDnaToPrompt(dna: DesignDna, opts?: { omitLayout?: boolean }): string {
   return [
     dna.logoDesc ? `- Logo to replicate (redraw it for OUR brand name): ${dna.logoDesc}` : '',
@@ -69,27 +69,29 @@ function designSystemBlock(d: Direction, opts?: { forLabel?: boolean }): string 
   ].filter(Boolean).join('\n')
 }
 
-// Bloque de referencia DEL LOGO: aquí la imagen cruda SÍ entra como Image 1 (style
-// reference). Decisión del usuario: "la referencia manda el vibe" — emula estética,
-// color y mood; la paleta de marca queda subordinada. Se ignora explícitamente el
-// fondo/foto/escena para no importar el cielo/manos de una referencia que es una
-// foto de producto (el viejo bug "ref de chocolate → producto de chocolate").
+// Bloque de referencia DEL LOGO: la imagen entra como Image 1. Separación clave (pedido
+// del usuario): la REF aporta el DISEÑO/ESTRUCTURA del logo (preciso); la IDENTIDAD DE
+// MARCA (paleta + tipografía del brandBlock) aporta los COLORES y la TIPOGRAFÍA. Antes la
+// paleta de marca quedaba "secondary" → no se aplicaba; ahora es autoritativa para color/tipo.
 function logoStyleRefBlock(dna?: DesignDna | null): string {
   return [
     ``,
-    `Image 1 is a STYLE reference. Replicate its design DNA, then apply OUR brand for a`,
-    `perfect match. If Image 1 is a clean logo, emulate it directly. If it is a product`,
-    `photo or MOCKUP, locate the actual brand logo printed on the packaging (it may be`,
-    `small — a corner of the label) and treat THAT printed logo as the PRIMARY reference.`,
-    dna
-      ? `Replicate these EXACT extracted principles (then swap in OUR brand name):\n${designDnaToPrompt(dna)}`
-      : `Emulate its lettering, mark, colors, proportions and energy.`,
-    `DISREGARD the background, photography, hands, container, product and scene — design a`,
-    `clean LOGO for OUR brand, not a copy of the reference's packaging.`,
-    `Lead with the reference's design DNA; the brand palette above is secondary, used only`,
-    `where it doesn't fight the reference. The brand NAME must be rendered correctly,`,
-    `legibly and prominently.`,
-  ].join('\n')
+    `Image 1 is a reference. Design a CLEAN, ISOLATED LOGO — a single mark/wordmark on a`,
+    `plain background. Do NOT reproduce the packaging or label: no background pattern, no`,
+    `ingredient text, no product descriptors, no count/flavor badges, no label layout.`,
+    `If Image 1 is a clean logo, replicate its design. If it is a product photo or MOCKUP,`,
+    `locate the actual brand logo on the packaging and replicate ONLY that logo.`,
+    dna?.logoDesc
+      ? `Replicate this logo's construction PRECISELY — its mark, lettering, lockup and proportions (NOT its colors or font):\n${dna.logoDesc}`
+      : `Replicate the reference logo's mark, lettering, lockup and proportions precisely.`,
+    `CRITICAL — render it in OUR brand identity, NOT the reference's: use ONLY the brand`,
+    `palette (the EXACT hex values above) for color and the brand typography for the`,
+    `lettering. Override any colors or fonts from the reference — e.g. do NOT keep a`,
+    `rainbow/multicolor wordmark if our palette is different; recolor it with our palette.`,
+    `The reference gives the DESIGN/STRUCTURE; our identity gives the COLOR and TYPE.`,
+    `Render the brand NAME correctly, legibly and prominently. DISREGARD the reference's`,
+    `background, photography, hands, container, product and scene.`,
+  ].filter(Boolean).join('\n')
 }
 
 // Etapa 3 — logo. `variant` desvía cada opción de la tanda para que las 3-4 salgan
@@ -102,11 +104,16 @@ export function buildLogoInstruction(
   hasReferenceImage?: boolean,
   refDna?: DesignDna | null
 ): string {
+  // Con ref: NO se inyecta `logoDirection` ni el variant ESTRUCTURAL (empujan el logo
+  // lejos del diseño de la ref → imprecisión). El variant pasa a ser una variación sutil
+  // que conserva la estructura de la ref. Sin ref: comportamiento normal (variant + direction).
   return [
-    `Design a professional, production-ready LOGO for a small business.`,
+    `Design a professional, production-ready LOGO for "${brandName}".`,
     brandBlock(d, brandName),
-    `Logo direction: ${d.logoDirection}.`,
-    `Variant focus for this option: ${variant}.`,
+    hasReferenceImage ? '' : `Logo direction: ${d.logoDirection}.`,
+    hasReferenceImage
+      ? `This is one option of a set — keep the reference's design; vary ONLY subtly: ${variant}.`
+      : `Variant focus for this option: ${variant}.`,
     hasReferenceImage ? logoStyleRefBlock(refDna) : designSystemBlock(d),
     ``,
     `Requirements:`,
@@ -114,14 +121,23 @@ export function buildLogoInstruction(
     `- Legible, correctly spelled brand name. No lorem ipsum, no random extra text.`,
     `- Simple, memorable, scalable; works small. Modern, not clip-art.`,
     `- Square composition with generous padding around the mark.`,
-  ].join('\n')
+  ].filter(Boolean).join('\n')
 }
 
+// Sin ref: 4 estructuras DISTINTAS (la tanda explora opciones).
 export const LOGO_VARIANTS: string[] = [
   'wordmark — typographic logo with a subtle custom detail',
   'icon + wordmark lockup — a simple symbol above the name',
   'monogram / emblem — initials inside a contained shape',
   'minimal lettermark — bold geometric, lots of whitespace',
+]
+
+// Con ref: 4 variaciones SUTILES que conservan el diseño de la ref (no divergen su estructura).
+export const REF_LOGO_VARIANTS: string[] = [
+  'the primary lockup, closest to the reference',
+  'a slightly bolder / heavier-weight take',
+  'a more compact, tighter-spaced take',
+  'a cleaner, more simplified take with the mark emphasized',
 ]
 
 // Bloque de referencia DE LA ETIQUETA: la imagen cruda entra como Image 2 (Image 1
