@@ -5,11 +5,11 @@ import type { Direction, LabelData, DesignDna } from './types'
 // Render del Design DNA (extraído de la ref del usuario) a texto para el prompt de
 // imagen. Puro ($0). Lo usa SOLO el path de ETIQUETA (`omitLayout`: la arquitectura es
 // dueña de las zonas). El logo usa solo `dna.logoDesc` (ver logoStyleRefBlock).
-function designDnaToPrompt(dna: DesignDna, opts?: { omitLayout?: boolean }): string {
+function designDnaToPrompt(dna: DesignDna, opts?: { omitLayout?: boolean; omitTypeAndPalette?: boolean }): string {
   return [
     dna.logoDesc ? `- Logo to replicate (redraw it for OUR brand name): ${dna.logoDesc}` : '',
-    `- Typography: ${dna.typography}`,
-    `- Color treatment: ${dna.palette}`,
+    opts?.omitTypeAndPalette ? '' : `- Typography: ${dna.typography}`,
+    opts?.omitTypeAndPalette ? '' : `- Color treatment: ${dna.palette}`,
     `- Spacing & density: ${dna.spacing}`,
     `- Repetition / motifs: ${dna.repetition}`,
     `- Component style: ${dna.components}`,
@@ -49,8 +49,10 @@ function brandBlock(d: Direction, brandName: string): string {
 
 // Baseline curado: tokens del exemplar de la biblioteca (design-system.md) que el
 // LLM eligió por use_case, guardados en `direction.designSystem`. Se aplica SOLO en el
-// path SIN ref del usuario (la ref del usuario manda cuando existe). Para label se omite
-// `layout` (la arquitectura es dueña de las zonas); para logo entra completo.
+// path SIN ref del usuario (la ref del usuario manda cuando existe). AISLADO por artefacto:
+// el logo usa solo lógica de logo (construcción + tipografía + spacing + personalidad); la
+// etiqueta usa lógica de etiqueta (tipografía + spacing + components + personalidad). `layout`
+// nunca entra (la etiqueta lo da la arquitectura; el logo no tiene zonas).
 function designSystemBlock(d: Direction, opts?: { forLabel?: boolean }): string {
   const ds = d.designSystem
   if (!ds) return ''
@@ -63,8 +65,7 @@ function designSystemBlock(d: Direction, opts?: { forLabel?: boolean }): string 
     !forLabel && ds.logo ? `- Logo construction: ${ds.logo}` : '',
     `- Typography: ${ds.typography}`,
     `- Spacing & density: ${ds.spacing}`,
-    `- Component style: ${ds.components}`,
-    forLabel ? '' : `- Layout: ${ds.layout}`, // la arquitectura es dueña del layout de la etiqueta
+    forLabel ? `- Component style: ${ds.components}` : '', // furniture de etiqueta (badges/pills) — no para el logo
     `- Visual personality: ${ds.personality}`,
   ].filter(Boolean).join('\n')
 }
@@ -141,21 +142,25 @@ export const REF_LOGO_VARIANTS: string[] = [
 ]
 
 // Bloque de referencia DE LA ETIQUETA: la imagen cruda entra como Image 2 (Image 1
-// es el logo). Misma decisión que el logo: "la referencia manda el vibe" — emula
-// estética/color/mood; ignora el producto/escena literal de la referencia.
+// es el logo). Espejo del logo con-ref (pedido del usuario): la REF aporta la ESTRUCTURA
+// (composición/ilustración/componentes/densidad/layout); la IDENTIDAD DE MARCA (paleta +
+// tipografía del brandBlock) aporta COLOR y TIPOGRAFÍA, haciendo override de las del ref.
+// Por eso `designDnaToPrompt` omite typography y palette del DNA del ref.
 function labelStyleRefBlock(dna?: DesignDna | null): string {
   return [
     ``,
-    `Image 2 is a STYLE reference for the label. Take its WHOLE vibe AND composition —`,
-    `typography, color, illustration/graphic style, component style, element distribution`,
-    `and density. The reference dictates the structure; do NOT impose any fixed template.`,
+    `Image 2 is a STYLE reference for the label. Take its composition, illustration/graphic`,
+    `style, component style, element distribution and density — but NOT its colors or fonts.`,
+    `The reference dictates the structure; do NOT impose any fixed template.`,
     dna
-      ? `Replicate these EXACT extracted principles (then apply OUR content/brand):\n${designDnaToPrompt(dna)}`
+      ? `Replicate these EXACT extracted principles (then apply OUR content/brand):\n${designDnaToPrompt(dna, { omitTypeAndPalette: true })}`
       : ``,
+    `CRITICAL — render it in OUR brand identity, NOT the reference's: use ONLY the brand`,
+    `palette (the EXACT hex values above) for color and the brand typography. Override any`,
+    `colors or fonts from the reference — do NOT keep its color scheme or typefaces.`,
     `DISREGARD its background, photography, scene, and any literal product, text, flavor`,
     `or ingredients — render OUR product content and brand defined above, not a copy.`,
-    `Lead with the reference's design DNA; the brand palette above is secondary, used only`,
-    `where it doesn't fight the reference. Keep the provided logo (Image 1) as-is.`,
+    `Keep the provided logo (Image 1) as-is.`,
   ].filter(Boolean).join('\n')
 }
 
