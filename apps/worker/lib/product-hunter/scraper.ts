@@ -8,6 +8,7 @@ import {
 import { upsertProducts, upsertPePool, upsertWatchlist, updateNicheAfterScrape } from '@ph/shared'
 import type { AdNode, CreativeSnippet } from '@ph/shared'
 import { quickDiscard, goldenDiscard, isNearWinner } from './quick-discard'
+import { isOffTopic } from './offtopic'
 import { extractFromDom } from './dom-fallback'
 import { prescore } from '@ph/shared'
 
@@ -973,7 +974,15 @@ export async function scrapeNiche(niche: string, opts: ScrapeOptions = {}): Prom
         // ⚠️ REGLAS DE ORO (Etapa 2): con los datos EXACTOS del enrich, el
         // filtro es estricto — <40 ads, <10 días o antigüedad desconocida
         // NUNCA se guardan en ph_products (requisito explícito del usuario).
-        const raw = r.value.raw_data as { ad_count: number; days_running: number | null; main_product_ad_count?: number | null }
+        const raw = r.value.raw_data as { ad_count: number; days_running: number | null; main_product_ad_count?: number | null; found_keyword: string; creatives?: Array<{ body: string | null; title: string | null; cta: string | null; link: string | null }> }
+        // Off-topic (determinista, $0): solapamiento léxico nulo con el nicho → NO
+        // entra a ph_products. Antes este check corría post-write en analysis-runner
+        // y dejaba la fila basura en la DB; ahora se descarta pre-write.
+        if (isOffTopic(r.value.name, raw.creatives ?? [], niche, raw.found_keyword)) {
+          metrics.discarded.offtopic = (metrics.discarded.offtopic ?? 0) + 1
+          console.log(`  ⊘ ${r.value.name} → off-topic (sin solapamiento con "${niche}")`)
+          continue
+        }
         const reason = goldenDiscard(raw.ad_count, raw.days_running, raw.main_product_ad_count)
         if (reason) {
           metrics.discarded[`oro_${reason}`] = (metrics.discarded[`oro_${reason}`] ?? 0) + 1

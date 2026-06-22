@@ -70,6 +70,8 @@ export async function collectNiche(niche: string): Promise<NicheCollection> {
       console.log(`  ⊘ ${name} → servicio, descartado sin LLM`)
       continue
     }
+    // Backstop $0: el gate primario off-topic ahora es pre-write en scraper.ts
+    // (goldenDiscard site). Esto solo atrapa filas legadas escritas antes de ese fix.
     const creatives = (candidate.raw_data.creatives ?? []) as Array<{ body: string | null; title: string | null; cta: string | null; link: string | null }>
     if (isOffTopic(name, creatives, niche, candidate.raw_data.found_keyword)) {
       const analysis: ProductAnalysis = {
