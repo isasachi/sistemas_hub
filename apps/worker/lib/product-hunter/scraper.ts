@@ -29,6 +29,10 @@ const SCROLL_WAIT = 1_500
 // default 3 — subir vía PH_SCROLL_PASSES y comparar la métrica antes de fijarlo.
 const SCROLL_PASSES = Math.max(1, Number(process.env.PH_SCROLL_PASSES ?? 3))
 
+// Tope de respuestas GraphQL retenidas por navegación (cada una se bufferea entera
+// con r.text()). Evita que una página muy paginada × PH_CONCURRENCY infle la RAM.
+const MAX_GRAPHQL_RESPONSES = Math.max(1, Number(process.env.PH_MAX_GRAPHQL_RESPONSES ?? 40))
+
 // Navegaciones en paralelo dentro del mismo browser context. Cada navegación
 // gasta ~12s ESPERANDO (no CPU), así que N pages multiplican el throughput ~N×
 // sin tocar los timings. ⚠️ La IP residencial es el recurso escaso: 3 es el
@@ -329,6 +333,11 @@ export async function navigateAndCapture(page: Page, url: string): Promise<unkno
   const collect = (r: Response) => {
     if (!r.url().includes('facebook.com/api/graphql')) return
     if (r.status() !== 200) return
+    // ponytail: cap por-nav. Cada r.text() bufferea el body entero y N pages
+    // navegan en paralelo (PH_CONCURRENCY) — sin tope, una página pesada infla
+    // la RAM y contribuye a los OOM del daemon. 40 cubre ~3-5 scroll passes;
+    // subir si una keyword legítima pagina más allá.
+    if (rawResponses.length >= MAX_GRAPHQL_RESPONSES) return
     rawResponses.push(r)
   }
 
@@ -761,22 +770,30 @@ export async function launchScraperContext(pageCount = 1) {
     ...(proxy ? { proxy } : {}),
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-blink-features=AutomationControlled'],
   })
-  const context = await browser.newContext({
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
-    locale: 'es-419',
-    timezoneId: 'America/Lima',
-    viewport: { width: 1366, height: 768 },
-  })
-  await context.addInitScript(() => {
-    Object.defineProperty(navigator, 'webdriver', { get: () => undefined })
-  })
-  const pages: Page[] = []
-  for (let i = 0; i < Math.max(1, pageCount); i++) {
-    const page = await context.newPage()
-    if (BLOCK_MEDIA) await applyMediaBlock(page)
-    pages.push(page)
+  // Si la creación de context/pages falla a media (ej. newPage en la page 2+), el
+  // browser ya lanzado quedaría huérfano → Chromium zombie acumulándose en el daemon
+  // 24/7 (OOM). Cerrar antes de propagar.
+  try {
+    const context = await browser.newContext({
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+      locale: 'es-419',
+      timezoneId: 'America/Lima',
+      viewport: { width: 1366, height: 768 },
+    })
+    await context.addInitScript(() => {
+      Object.defineProperty(navigator, 'webdriver', { get: () => undefined })
+    })
+    const pages: Page[] = []
+    for (let i = 0; i < Math.max(1, pageCount); i++) {
+      const page = await context.newPage()
+      if (BLOCK_MEDIA) await applyMediaBlock(page)
+      pages.push(page)
+    }
+    return { browser, pages }
+  } catch (err) {
+    await browser.close().catch(() => {})
+    throw err
   }
-  return { browser, pages }
 }
 
 // Wrapper de una sola page (validación PE en vivo, debug-graphql).

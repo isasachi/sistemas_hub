@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { getSession, updateSession } from '@/lib/db'
 import { fetchAsBase64, uploadToStorage } from '@/lib/storage'
 import { refineImage } from '@/lib/gemini'
+import { genQuotaResponse } from '@/lib/gen-quota'
 
 const BodySchema = z.object({ feedback: z.string().min(1).max(1000) })
 
@@ -11,6 +12,10 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
+
+  const blocked = await genQuotaResponse('anuncios-refine')
+  if (blocked) return blocked
+
   const session = await getSession(id)
   if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (!session.image_url || !session.reference_url || !session.product_url)

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { callStructured, BRANDING_SYSTEM_PROMPT } from '@/lib/gemini'
+import { genQuotaResponse } from '@/lib/gen-quota'
 import type { Part } from '@google/genai'
 
 export const dynamic = 'force-dynamic'
@@ -11,6 +12,9 @@ const NamesSchema = z.object({ names: z.array(z.string()).min(4).max(6) })
 // Sugiere nombres de MARCA o de PRODUCTO. Llamada estructurada con Gemini (rápida,
 // sin imágenes) — efímera, no persiste: el usuario elige uno y recién ahí se guarda.
 export async function POST(req: NextRequest) {
+  const blocked = await genQuotaResponse('branding-names')
+  if (blocked) return blocked
+
   let body: {
     kind?: 'brand' | 'product'
     category?: string

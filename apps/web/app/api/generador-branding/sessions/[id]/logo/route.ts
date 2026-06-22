@@ -5,6 +5,7 @@ import { generateImage } from '@/lib/gemini'
 import { DirectionSchema } from '@/lib/branding/types'
 import { buildLogoInstruction, LOGO_VARIANTS, REF_LOGO_VARIANTS } from '@/lib/branding/instructions'
 import { parseDesignDna } from '@/lib/branding/style-extract'
+import { genQuotaResponse } from '@/lib/gen-quota'
 import type { Part } from '@google/genai'
 
 export const dynamic = 'force-dynamic'
@@ -17,6 +18,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
+
+  const blocked = await genQuotaResponse('branding-logo')
+  if (blocked) return blocked
 
   const stream = new ReadableStream({
     async start(controller) {

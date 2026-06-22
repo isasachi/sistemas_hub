@@ -37,7 +37,26 @@ export async function uploadToStorage(
   return `${data.publicUrl}?v=${Date.now()}`
 }
 
+// Hosts permitidos para fetchAsBase64 = el host del proyecto Supabase (de donde
+// salen las URLs del bucket). Evita SSRF: hoy todas las *_url las produce
+// uploadToStorage, pero esto blinda contra un futuro write-path de URL externa o
+// una fila legada manipulada. Lazy: el env está garantizado en runtime.
+let _allowedHosts: Set<string> | null = null
+function allowedHosts(): Set<string> {
+  if (!_allowedHosts) {
+    _allowedHosts = new Set(
+      [process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_URL]
+        .filter((u): u is string => !!u)
+        .map((u) => new URL(u).host),
+    )
+  }
+  return _allowedHosts
+}
+
 export async function fetchAsBase64(url: string): Promise<{ data: string; mimeType: string }> {
+  let host: string
+  try { host = new URL(url).host } catch { throw new Error('Invalid image URL') }
+  if (!allowedHosts().has(host)) throw new Error(`Refused to fetch non-storage URL: ${host}`)
   const res = await fetch(url)
   if (!res.ok) throw new Error(`Failed to fetch image: ${res.status}`)
   const mimeType = res.headers.get('content-type') ?? 'image/jpeg'

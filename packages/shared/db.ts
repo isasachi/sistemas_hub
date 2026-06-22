@@ -294,6 +294,24 @@ export async function saveProductAnalysis(
   if (error) throw new Error(error.message)
 }
 
+// Variante additive-only para la reconciliación de batches huérfanos: escribe
+// SOLO si el producto sigue sin score (`is('score', null)`), así no clobbea un
+// re-análisis fresco ni un reset intencional. Devuelve true si escribió.
+export async function saveProductAnalysisIfUnscored(
+  productId: string,
+  score: number,
+  analysis: StoredAnalysis
+): Promise<boolean> {
+  const { data, error } = await getDb()
+    .from('ph_products')
+    .update({ score, analysis: sanitizeJsonDeep(analysis), analyzed_at: new Date().toISOString() })
+    .eq('id', productId)
+    .is('score', null)
+    .select('id')
+  if (error) throw new Error(error.message)
+  return (data?.length ?? 0) > 0
+}
+
 // Candidatos alta/media ya analizados pero aún sin validación PE en vivo (Fase 4).
 export async function getProductsToValidatePe(niche: string, limit = 15): Promise<ProductRow[]> {
   const { data, error } = await getDb()

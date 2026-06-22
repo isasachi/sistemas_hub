@@ -128,6 +128,21 @@ export async function submitAnalysisBatch(entries: BatchEntry[]): Promise<string
   return batch.id
 }
 
+// Batches ya terminados creados en las últimas `windowHours`. Para reconciliar al
+// arrancar el pipeline los batches HUÉRFANOS: enviados antes de un kill/timeout
+// (worker-loop espera kills a media tanda), terminados server-side, nunca
+// cosechados → sus productos quedaron score NULL y el próximo ciclo los re-enviaría
+// = DOBLE COBRO. La lista viene newest-first, así que cortamos al pasar la ventana.
+export async function listRecentEndedBatches(windowHours = 6): Promise<string[]> {
+  const cutoff = Date.now() - windowHours * 3600_000
+  const ids: string[] = []
+  for await (const b of getAI().messages.batches.list({ limit: 100 })) {
+    if (new Date(b.created_at).getTime() < cutoff) break
+    if (b.processing_status === 'ended') ids.push(b.id)
+  }
+  return ids
+}
+
 // Check no-bloqueante: ¿terminó el batch? Lo usa el pipeline entrelazado para
 // cosechar resultados entre nichos sin detener el scraping.
 export async function isBatchDone(batchId: string): Promise<boolean> {

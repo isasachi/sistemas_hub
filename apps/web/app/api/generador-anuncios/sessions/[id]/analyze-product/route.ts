@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession, updateSession } from '@/lib/db'
 import { uploadToStorage } from '@/lib/storage'
 import { callStructured } from '@/lib/gemini'
+import { genQuotaResponse } from '@/lib/gen-quota'
 import { ProductScanSchema, ReferenceAnalysisSchema } from '@/lib/types'
 import type { Part } from '@google/genai'
 
@@ -10,6 +11,10 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
+
+  const blocked = await genQuotaResponse('anuncios-product')
+  if (blocked) return blocked
+
   const session = await getSession(id)
   if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (!session.reference_analysis)

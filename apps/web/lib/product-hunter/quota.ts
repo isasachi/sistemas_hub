@@ -7,11 +7,12 @@
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { ProductRow, ProductCard } from '@ph/shared'
+import { toCard } from './to-card'
 
 export const DAILY_LIMIT = 3
 
 let _db: SupabaseClient | null = null
-function getDb(): SupabaseClient {
+export function getDb(): SupabaseClient {
   if (!_db) {
     _db = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL!,
@@ -124,38 +125,6 @@ export async function checkAndRecordSearch(
 }
 
 // ─── Resultados del día (para el consolidado) ─────────────────────────────────
-
-function toCard(row: ProductRow): ProductCard | null {
-  if (!row.analysis || row.score == null) return null
-  const a = row.analysis
-  const r = row.raw_data
-  if (r.found_country === 'PE') return null
-  if (r.ad_count < 40) return null
-  if (r.days_running === null || r.days_running < 10) return null
-  const pageParams = new URLSearchParams({
-    active_status: 'active', ad_type: 'all', country: 'ALL',
-    is_targeted_country: 'false', media_type: 'all', search_type: 'page',
-    'sort_data[mode]': 'total_impressions', 'sort_data[direction]': 'desc',
-    view_all_page_id: r.page_id,
-  })
-  return {
-    id: row.id,
-    advertiserName: row.name ?? r.advertiser_name,
-    productName: a.productName,
-    whatIs: a.whatItIs,
-    problemSolved: a.problemSolved,
-    adCount: r.ad_count,
-    daysRunning: r.days_running,
-    foundCountry: r.found_country,
-    attributes: a.attributes,
-    peScenario: a.peScenario,
-    peCompetitors: a.peCompetitors,
-    priority: a.priority,
-    score: row.score,
-    adUrl: `https://www.facebook.com/ads/library/?id=${r.ad_id}`,
-    pageUrl: `https://www.facebook.com/ads/library/?${pageParams}`,
-  }
-}
 
 const PRIORITY_ORDER: Record<string, number> = { alta: 0, media: 1, baja: 2, descartado: 2 }
 

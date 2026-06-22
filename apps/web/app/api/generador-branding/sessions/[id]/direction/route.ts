@@ -3,6 +3,7 @@ import path from 'path'
 import { NextRequest, NextResponse } from 'next/server'
 import { getBrandingSession, updateBrandingSession } from '@/lib/branding/db'
 import { callStructured, BRANDING_SYSTEM_PROMPT } from '@/lib/gemini'
+import { genQuotaResponse } from '@/lib/gen-quota'
 import { DirectionSchema } from '@/lib/branding/types'
 import type { Part } from '@google/genai'
 
@@ -24,6 +25,10 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
+
+  const blocked = await genQuotaResponse('branding-direction')
+  if (blocked) return blocked
+
   const session = await getBrandingSession(id)
   if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 

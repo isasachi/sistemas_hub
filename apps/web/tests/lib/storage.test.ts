@@ -23,6 +23,8 @@ vi.stubGlobal('fetch', mockFetch)
 beforeEach(() => {
   vi.clearAllMocks()
   vi.resetModules()
+  process.env.SUPABASE_URL = 'https://test.supabase.co'
+  process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co'
 })
 
 describe('uploadToStorage', () => {
@@ -63,7 +65,7 @@ describe('fetchAsBase64', () => {
       arrayBuffer: vi.fn().mockResolvedValue(ab),
     })
     const { fetchAsBase64 } = await import('@/lib/storage')
-    const result = await fetchAsBase64('https://test.example.com/img.png')
+    const result = await fetchAsBase64('https://test.supabase.co/storage/v1/object/public/ad-uploads/s1/img.png')
     expect(result.mimeType).toBe('image/png')
     expect(result.data).toBe(fakeBytes.toString('base64'))
   })
@@ -71,6 +73,12 @@ describe('fetchAsBase64', () => {
   it('throws on non-ok response', async () => {
     mockFetch.mockResolvedValue({ ok: false, status: 404 })
     const { fetchAsBase64 } = await import('@/lib/storage')
-    await expect(fetchAsBase64('https://bad.url/img.jpg')).rejects.toThrow('Failed to fetch image')
+    await expect(fetchAsBase64('https://test.supabase.co/img.jpg')).rejects.toThrow('Failed to fetch image')
+  })
+
+  it('rechaza URLs fuera del host del bucket (anti-SSRF)', async () => {
+    const { fetchAsBase64 } = await import('@/lib/storage')
+    await expect(fetchAsBase64('https://evil.example.com/internal')).rejects.toThrow('non-storage URL')
+    expect(mockFetch).not.toHaveBeenCalled()
   })
 })
