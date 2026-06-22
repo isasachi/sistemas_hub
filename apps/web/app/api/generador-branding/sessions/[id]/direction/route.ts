@@ -91,7 +91,10 @@ export async function POST(
   await updateBrandingSession(id, {
     step: Math.max(session.step, 1),
     brand_name: brandName,
-    product_name: productName ?? null,
+    // Solo escribir product_name si el caller lo manda. Section2 (regenerar dirección) no
+    // lo incluye en el body → sin este guard, `?? null` lo borraba y la etiqueta caía al
+    // brand_name. El brief inicial (Section1) sí lo manda, así que se preserva.
+    ...(productName ? { product_name: productName } : {}),
     product_category: productCategory,
     target_audience: targetAudience ?? null,
     personality,
