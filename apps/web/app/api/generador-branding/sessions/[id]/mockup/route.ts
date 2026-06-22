@@ -4,6 +4,7 @@ import { fetchAsBase64, uploadToStorage } from '@/lib/storage'
 import { generateImage } from '@/lib/gemini'
 import { DirectionSchema } from '@/lib/branding/types'
 import { buildMockupInstruction, buildContainerInstruction } from '@/lib/branding/instructions'
+import { genQuotaResponse } from '@/lib/gen-quota'
 import type { Part } from '@google/genai'
 
 export const dynamic = 'force-dynamic'
@@ -15,6 +16,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
+
+  const blocked = await genQuotaResponse('branding-mockup')
+  if (blocked) return blocked
 
   const stream = new ReadableStream({
     async start(controller) {

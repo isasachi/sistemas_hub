@@ -7,10 +7,12 @@ import {
   getProductsToAnalyze,
   getPeCompetitors,
   saveProductAnalysis,
+  saveProductAnalysisIfUnscored,
 } from '@ph/shared'
 import {
   analyzeProduct,
   batchAnalysisResults,
+  listRecentEndedBatches,
   type BatchEntry,
 } from './anthropic'
 import { isLikelyService, matchPeCompetitors } from './competitors'
@@ -108,6 +110,33 @@ export async function analyzeDirect(entries: BatchEntry[], names: Map<string, st
       console.error(`  ✗ ${names.get(e.customId)}: ${err instanceof Error ? err.message : err}`)
     }
   }
+}
+
+// Reconcilia batches HUÉRFANOS al arrancar (antes de scrapear): cosecha los
+// terminados recientes y rescata SOLO los productos que siguen score NULL
+// (additive-only vía saveProductAnalysisIfUnscored — nunca clobbea un re-análisis
+// fresco). Cierra el agujero de costo: sin esto, un batch enviado y luego matado a
+// media tanda dejaba productos NULL que el próximo ciclo re-enviaba = doble cobro.
+//
+// ponytail: sin estado propio (custom_id = product id; el guard score-null evita
+// re-escribir). Techo: re-lee batches ya cosechados dentro de la ventana (red, no
+// LLM). Upgrade si pesa: persistir los batchId cosechados. Ventana vía PH_RECONCILE_WINDOW_HOURS.
+export async function reconcileOrphanBatches(): Promise<number> {
+  const windowHours = Number(process.env.PH_RECONCILE_WINDOW_HOURS ?? 6)
+  const batchIds = await listRecentEndedBatches(windowHours)
+  if (!batchIds.length) return 0
+  let rescued = 0
+  for (const batchId of batchIds) {
+    try {
+      for await (const r of batchAnalysisResults(batchId)) {
+        if (r.analysis && (await saveProductAnalysisIfUnscored(r.customId, r.analysis.score, r.analysis))) rescued++
+      }
+    } catch (e) {
+      console.error(`✗ reconcile batch ${batchId}: ${e instanceof Error ? e.message.split('\n')[0] : e}`)
+    }
+  }
+  if (rescued) console.log(`♻ reconciliación de batches huérfanos: ${rescued} productos rescatados (evita re-análisis)`)
+  return rescued
 }
 
 // Persiste los resultados de un batch terminado. Los fallidos quedan con score

@@ -20,7 +20,7 @@
 // ⚠️ COSTO: misma Batches API (50% descuento) y mismo gate score IS NULL que
 // analyze.ts — solo cambia el orden, no el volumen de llamadas.
 import './bootstrap' // env + polyfill WebSocket — debe ir primero
-import { scrapeNiche, launchScraperContext, CONCURRENCY } from '../lib/product-hunter/scraper'
+import { scrapeNiche, launchScraperContext, CONCURRENCY, isPersistentlyBlocked } from '../lib/product-hunter/scraper'
 import { getNichesToRefresh, getActiveNiches, getNicheStatus, setNicheCanonical, ALL_NICHES, upsertNiche } from '@ph/shared'
 import { findCanonicalMarket } from '../lib/product-hunter/niche-dedup'
 import { resolveKeywords, resolveCountries } from './resolve'
@@ -29,7 +29,7 @@ import {
   waitForBatch,
   isBatchDone,
 } from '../lib/product-hunter/anthropic'
-import { collectNiche, analyzeDirect, persistBatchResults } from '../lib/product-hunter/analysis-runner'
+import { collectNiche, analyzeDirect, persistBatchResults, reconcileOrphanBatches } from '../lib/product-hunter/analysis-runner'
 import { validateNiche } from '../lib/product-hunter/pe-validation'
 
 const NO_BATCH = process.env.PH_NO_BATCH === '1'
@@ -70,6 +70,15 @@ async function harvest(pending: PendingBatch[], block = false): Promise<PendingB
 async function main() {
   const args = process.argv.slice(2)
   const nicheIdx = args.indexOf('--niche')
+
+  // Reconciliación de batches huérfanos ANTES de scrapear: rescata productos de
+  // batches enviados en un proceso anterior que murió a media tanda (kill/timeout
+  // —worker-loop los espera) antes de cosechar. Sin esto quedarían score NULL y el
+  // gate de getProductsToAnalyze los re-enviaría = doble cobro. Gate PH_NO_BATCH.
+  if (!NO_BATCH) {
+    try { await reconcileOrphanBatches() }
+    catch (e) { console.error(`reconcile huérfanos falló (sigo): ${e instanceof Error ? e.message.split('\n')[0] : e}`) }
+  }
 
   let niches: string[]
   // Nichos NUEVOS (nunca scrapeados) del bloque → corren el gate de dedup antes
@@ -204,7 +213,17 @@ async function main() {
     console.log(`\n─── Validación PE del bloque (${toValidate.length} nichos) ───`)
     const { browser, pages } = await launchScraperContext(CONCURRENCY)
     try {
-      for (const niche of toValidate) await validateNiche(pages, niche)
+      for (const niche of toValidate) {
+        // El latch puede dispararse DURANTE la validación (un probe persiste el
+        // block). Sin este chequeo el loop seguiría martillando la IP muerta y
+        // worker-loop nunca recibiría el centinela → no dormiría el cooldown largo.
+        if (isPersistentlyBlocked()) {
+          persistentBlock = true
+          console.error(`\n🛑 block persistente durante la validación PE — cortando (restan ${toValidate.length - toValidate.indexOf(niche)} nichos)`)
+          break
+        }
+        await validateNiche(pages, niche)
+      }
     } catch (e) {
       console.error(`✗ validación PE del bloque: ${e instanceof Error ? e.message.split('\n')[0] : e}`)
     } finally {

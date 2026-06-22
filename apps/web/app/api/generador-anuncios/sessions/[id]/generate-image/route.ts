@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { getSession, updateSession } from '@/lib/db'
 import { fetchAsBase64, uploadToStorage } from '@/lib/storage'
 import { editImage, callReasoning, STEP5_PROMPT } from '@/lib/gemini'
+import { genQuotaResponse } from '@/lib/gen-quota'
 import { ReferenceAnalysisSchema, ProductScanSchema, ConfirmedCopySchema } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
@@ -12,6 +13,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
+
+  const blocked = await genQuotaResponse('anuncios-image')
+  if (blocked) return blocked
 
   const stream = new ReadableStream({
     async start(controller) {

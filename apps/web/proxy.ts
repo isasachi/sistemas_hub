@@ -16,7 +16,8 @@ export const config = {
      * Corre en todas las rutas excepto:
      * - _next/static, _next/image (assets de build)
      * - favicon y archivos estáticos comunes
-     * - /api/* (las rutas API hacen su propio chequeo de identidad)
+     * - /api/* (no pasan por el gate de auth; las rutas que llaman Gemini se
+     *   protegen con genQuotaResponse — tope global+por-usuario, ver lib/gen-quota.ts)
      */
     '/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
   ],

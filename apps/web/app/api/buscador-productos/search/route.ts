@@ -10,47 +10,12 @@ import { matchNiche } from '@/lib/product-hunter/niche-match'
 import { readUserId, newUserId, PH_USER_COOKIE } from '@/lib/product-hunter/session'
 import { checkAndRecordSearch } from '@/lib/product-hunter/quota'
 import { composeWinnersView } from '@/lib/product-hunter/compose-view'
-import type { ProductRow, ProductCard, SearchResponse } from '@ph/shared'
+import { toCard } from '@/lib/product-hunter/to-card'
+import type { ProductCard, SearchResponse } from '@ph/shared'
 
 // ⚠️ Esta ruta SOLO lee de Supabase. No llama a Anthropic ni corre Playwright,
 // así que responde en ~200ms y cabe sobrado en el timeout de Vercel Hobby (10s).
-// El análisis y el scraping ocurren en batch en GitHub Actions, no aquí.
-
-function toCard(row: ProductRow): ProductCard | null {
-  if (!row.analysis || row.score == null) return null // aún sin analizar → no se muestra
-  const a = row.analysis
-  if (a.offTopic) return null // fuera del nicho buscado → no se muestra ni como relleno baja
-  const r = row.raw_data
-  // ⚠️ REGLAS DE ORO — defensa en profundidad: aunque el scraper ya no guarda
-  // productos que las violen, las filas viejas tampoco deben mostrarse JAMÁS:
-  // ≥40 ads · ≥10 días activos (desconocido = fuera) · no pautado en Perú.
-  if (r.found_country === 'PE') return null
-  if (r.ad_count < 40) return null
-  if (r.days_running === null || r.days_running < 10) return null
-  const pageParams = new URLSearchParams({
-    active_status: 'active', ad_type: 'all', country: 'ALL',
-    is_targeted_country: 'false', media_type: 'all', search_type: 'page',
-    'sort_data[mode]': 'total_impressions', 'sort_data[direction]': 'desc',
-    view_all_page_id: r.page_id,
-  })
-  return {
-    id: row.id,
-    advertiserName: row.name ?? r.advertiser_name,
-    productName: a.productName,
-    whatIs: a.whatItIs,
-    problemSolved: a.problemSolved,
-    adCount: r.ad_count,
-    daysRunning: r.days_running,
-    foundCountry: r.found_country,
-    attributes: a.attributes,
-    peScenario: a.peScenario,
-    peCompetitors: a.peCompetitors,
-    priority: a.priority,
-    score: row.score,
-    adUrl: `https://www.facebook.com/ads/library/?id=${r.ad_id}`,
-    pageUrl: `https://www.facebook.com/ads/library/?${pageParams}`,
-  }
-}
+// El análisis y el scraping ocurren en batch en el daemon del VPS, no aquí.
 
 export async function POST(req: NextRequest) {
   let body: { niche?: string }
