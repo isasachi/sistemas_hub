@@ -1,0 +1,32 @@
+# Unit del daemon del scraper buscador-productos — variante USER unit.
+#
+# Para correr LOCAL (WSL / máquina personal, sin sudo) en vez del system unit:
+#   mkdir -p ~/.config/systemd/user
+#   cp apps/worker/deploy/buscador-productos.user.service ~/.config/systemd/user/buscador-productos.service
+#   loginctl enable-linger "$USER"          # arranca al boot de WSL sin sesión abierta
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now buscador-productos
+# Observar:
+#   journalctl --user -u buscador-productos -f
+#
+# Diferencias vs el system unit (deploy/buscador-productos.service, para VPS):
+#  - sin User= (corre como el usuario del manager) · WantedBy=default.target
+#  - sin After=network-online.target (es target del system manager; el loop
+#    reintenta solo, así que no hace falta)
+# Secretos (ANTHROPIC_API_KEY, SUPABASE_*) en apps/worker/.env.local — NO acá:
+# bootstrap.ts los carga vía dotenv. Los PH_* se exportan dentro de worker-loop.sh.
+# Ajustar WorkingDirectory al path real del clon si difiere.
+
+[Unit]
+Description=Buscador de Productos scraper daemon (user)
+
+[Service]
+Type=simple
+WorkingDirectory=/home/isasachi/chamba/sistemas_hub/apps/worker
+ExecStart=/usr/bin/env bash scripts/worker-loop.sh
+Restart=always
+RestartSec=30
+SyslogIdentifier=buscador-productos
+
+[Install]
+WantedBy=default.target
