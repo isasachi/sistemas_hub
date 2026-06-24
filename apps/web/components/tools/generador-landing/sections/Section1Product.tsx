@@ -1,0 +1,68 @@
+'use client'
+
+import { useState } from 'react'
+import { useLandingStore } from '@/store/landing'
+import { FieldGroup } from '@/components/tools/ui/FieldGroup'
+import { ChipGroup } from '@/components/tools/ui/ChipGroup'
+
+const btnPrimary =
+  'rounded-xl jr-cta text-[13px] font-bold disabled:opacity-40 transition-all duration-200 cursor-pointer border-0 font-sans flex items-center justify-center gap-2 h-11 w-full'
+
+const TONE_OPTIONS = ['Profesional', 'Cercano', 'Divertido', 'Lujoso', 'Urgente', 'Confiable']
+
+export default function Section1Product() {
+  const { sessionId, productName, price, benefits, audience, tone, setDetails } = useLandingStore()
+  const [name, setName] = useState(productName ?? '')
+  const [priceV, setPriceV] = useState(price ?? '')
+  const [benefitsV, setBenefitsV] = useState(benefits ?? '')
+  const [audienceV, setAudienceV] = useState(audience ?? '')
+  const [toneV, setToneV] = useState<string[]>(tone)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function submit() {
+    if (!sessionId || saving || !name.trim()) return
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/generador-landing/sessions/${sessionId}/details`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productName: name, price: priceV, benefits: benefitsV, audience: audienceV, tone: toneV }),
+      })
+      const data = (await res.json()) as { error?: string }
+      if (!res.ok) throw new Error(data.error ?? 'No se pudo guardar')
+      setDetails({ productName: name, price: priceV, benefits: benefitsV, audience: audienceV, tone: toneV })
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!sessionId) return null
+
+  return (
+    <div className="flex flex-col gap-4">
+      <FieldGroup type="input" id="ld-name" label="Nombre del producto" required value={name} onChange={setName}
+        placeholder="Ej: Serum facial de vitamina C" />
+      <FieldGroup type="input" id="ld-price" label="Precio / oferta" helper="(opcional)" value={priceV} onChange={setPriceV}
+        placeholder="Ej: S/89 · Envío gratis · 2x1" />
+      <FieldGroup type="textarea" id="ld-benefits" label="Beneficios clave" helper="(opcional)" value={benefitsV} onChange={setBenefitsV}
+        rows={3} placeholder="Ej: Reduce manchas, hidrata, resultados en 2 semanas" />
+      <FieldGroup type="input" id="ld-audience" label="Público objetivo" helper="(opcional)" value={audienceV} onChange={setAudienceV}
+        placeholder="Ej: Mujeres 25-45 con piel sensible" />
+
+      <div className="flex flex-col gap-2">
+        <label className="text-[13px] font-semibold text-[#f5f5f5]">Tono <span className="text-[#8a8a8a] font-normal ml-1.5">(opcional)</span></label>
+        <ChipGroup options={TONE_OPTIONS} selected={toneV} multi onChange={(v) => setToneV(v as string[])} />
+      </div>
+
+      {error && <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-[12px] text-red-400">{error}</div>}
+
+      <button onClick={submit} disabled={saving || !name.trim()} className={btnPrimary}>
+        {saving ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Guardando...</> : 'Continuar'}
+      </button>
+    </div>
+  )
+}

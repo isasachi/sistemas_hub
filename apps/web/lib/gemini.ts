@@ -66,14 +66,25 @@ export async function callReasoning(systemPrompt: string, userMessage: string): 
 // (etiqueta + envase + texto). Reintenta ante fallos transitorios de red/empty
 // (igual que callStructured) — las llamadas de imagen no son idempotentes pero
 // solo reintentamos cuando NO hubo resultado. Devuelve '' si nunca produjo imagen.
-export async function generateImage(parts: Part[], maxRetries = 3): Promise<string> {
+// `opts.aspectRatio` (ej '9:16') controla el formato — lo usa el generador de landing
+// para secciones portrait; omitido = formato libre del modelo (branding).
+export async function generateImage(
+  parts: Part[],
+  maxRetries = 3,
+  opts?: { aspectRatio?: string; imageSize?: string }
+): Promise<string> {
   let lastError: unknown = null
   for (let i = 0; i < maxRetries; i++) {
     try {
       const res = await getAI().models.generateContent({
         model: 'gemini-3.1-flash-image',
         contents: [{ role: 'user', parts }],
-        config: { responseModalities: [Modality.IMAGE] },
+        config: {
+          responseModalities: [Modality.IMAGE],
+          ...(opts?.aspectRatio
+            ? { imageConfig: { aspectRatio: opts.aspectRatio, imageSize: opts.imageSize ?? '2K' } }
+            : {}),
+        },
       })
       const imagePart = res.candidates?.[0]?.content?.parts?.find((p: Part) => p.inlineData)
       const data = imagePart?.inlineData?.data

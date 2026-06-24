@@ -1,0 +1,103 @@
+'use client'
+
+import { useState } from 'react'
+import { useLandingStore } from '@/store/landing'
+import { ChipGroup } from '@/components/tools/ui/ChipGroup'
+import { SECTION_LABELS, SectionType, type SectionCopy } from '@/lib/landing/types'
+
+const btnPrimary =
+  'rounded-xl jr-cta text-[13px] font-bold disabled:opacity-40 transition-all duration-200 cursor-pointer border-0 font-sans flex items-center justify-center gap-2 h-11 w-full'
+const btnGhost =
+  'h-10 px-4 rounded-xl border border-white/[0.14] text-[#f5f5f5] text-[13px] font-medium hover:bg-white/[0.05] transition-colors cursor-pointer bg-transparent'
+
+const TYPES = SectionType.options
+const LABEL_TO_TYPE = Object.fromEntries(TYPES.map((t) => [SECTION_LABELS[t], t])) as Record<string, SectionType>
+const OPTIONS = TYPES.map((t) => SECTION_LABELS[t])
+
+function CopyCard({ c }: { c: SectionCopy }) {
+  return (
+    <div className="rounded-xl border border-white/[0.08] bg-[#141414] px-4 py-3 flex flex-col gap-1">
+      <p className="text-[11px] uppercase tracking-wide text-[#8a8a8a]">{SECTION_LABELS[c.type]}</p>
+      <p className="text-[14px] font-bold text-[#f5f5f5]">{c.headline}</p>
+      {c.subheadline && <p className="text-[12px] text-[#bdbdbd]">{c.subheadline}</p>}
+      {c.bullets?.length ? (
+        <ul className="text-[12px] text-[#bdbdbd] list-disc pl-4">{c.bullets.map((b, i) => <li key={i}>{b}</li>)}</ul>
+      ) : null}
+      {c.cards?.length ? (
+        <div className="flex flex-col gap-1 mt-1">{c.cards.map((card, i) => (
+          <p key={i} className="text-[12px] text-[#bdbdbd]"><span className="font-semibold text-[#f5f5f5]">{card.title}:</span> {card.body}</p>
+        ))}</div>
+      ) : null}
+      {c.cta && <p className="text-[12px] text-[#ff9c4d] font-semibold mt-1">[ {c.cta} ]</p>}
+    </div>
+  )
+}
+
+export default function Section3Sections() {
+  const { sessionId, selectedSections, copy, setSelectedSections, setCopy, approveCopy } = useLandingStore()
+  const [picked, setPicked] = useState<string[]>(selectedSections.map((t) => SECTION_LABELS[t]))
+  const [feedback, setFeedback] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const types = picked.map((l) => LABEL_TO_TYPE[l]).filter(Boolean)
+
+  async function runCopy() {
+    if (!sessionId || loading || types.length === 0) return
+    setLoading(true)
+    setError(null)
+    try {
+      setSelectedSections(types)
+      const res = await fetch(`/api/generador-landing/sessions/${sessionId}/copy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sections: types, feedback: feedback.trim() || undefined }),
+      })
+      const data = (await res.json()) as { copy?: SectionCopy[]; error?: string }
+      if (!res.ok) throw new Error(data.error ?? 'No se pudo generar el copy')
+      setCopy(data.copy ?? [])
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (!sessionId) return null
+
+  return (
+    <div className="flex flex-col gap-4">
+      <p className="text-[13px] text-[#bdbdbd]">Elige las secciones de tu landing (en el orden que las toques).</p>
+      <ChipGroup options={OPTIONS} selected={picked} multi onChange={(v) => setPicked(v as string[])} />
+
+      {copy.length === 0 ? (
+        <button onClick={runCopy} disabled={loading || types.length === 0} className={btnPrimary}>
+          {loading ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Escribiendo copy...</> : 'Generar copy'}
+        </button>
+      ) : (
+        <>
+          <div className="flex flex-col gap-2">{copy.map((c) => <CopyCard key={c.type} c={c} />)}</div>
+
+          <textarea
+            value={feedback}
+            onChange={(e) => setFeedback(e.target.value)}
+            rows={2}
+            placeholder="¿Ajustar el copy? Escribe qué cambiar y regenera (opcional)"
+            className="bg-[#141414] border border-white/[0.06] rounded-xl px-3 py-2 text-[13px] text-[#f5f5f5] placeholder:text-[#8a8a8a] focus:border-[rgba(255,156,77,0.5)] outline-none"
+          />
+
+          {error && <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-[12px] text-red-400">{error}</div>}
+
+          <div className="flex gap-2">
+            <button onClick={runCopy} disabled={loading} className={btnGhost}>
+              {loading ? 'Regenerando...' : '↻ Regenerar copy'}
+            </button>
+            <button onClick={approveCopy} disabled={loading} className={btnPrimary + ' flex-1'}>Aprobar y generar</button>
+          </div>
+        </>
+      )}
+
+      {error && copy.length === 0 && <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-[12px] text-red-400">{error}</div>}
+    </div>
+  )
+}

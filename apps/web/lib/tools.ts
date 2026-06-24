@@ -87,9 +87,9 @@ export const tools: Tool[] = [
       "Crea el contenido y la estructura de una landing page optimizada para convertir: hero, beneficios, testimonios, FAQ y CTA.",
     icon: "LayoutTemplate",
     accentColor: "#ff9c4d",
-    tag: "Pronto",
-    tagStyle: "neutral",
-    status: "soon",
+    tag: "IA Real",
+    tagStyle: "new",
+    status: "live",
   },
 ];
 
