@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useBrandingStore, SESSION_KEY } from '@/store/branding'
 import type { BrandingSessionResponse } from '@/lib/branding/types'
 import AccordionSection from '@/components/tools/generador-anuncios/AccordionSection'
@@ -11,9 +11,11 @@ import Section4Label from './sections/Section4Label'
 import Section5Mockup from './sections/Section5Mockup'
 import Section6Guide from './sections/Section6Guide'
 
-function getStatus(sectionStep: number, currentStep: number): 'locked' | 'active' | 'completed' {
-  if (currentStep >= sectionStep + 1) return 'completed'
+// `maxStep` = paso más avanzado alcanzado; una sección ya visitada queda 'completed'
+// (reabrible) aunque retrocedas, para navegar adelante/atrás sin reenviar (re-quemar LLM).
+function getStatus(sectionStep: number, currentStep: number, maxStep: number): 'locked' | 'active' | 'completed' {
   if (currentStep === sectionStep) return 'active'
+  if (maxStep > sectionStep) return 'completed'
   return 'locked'
 }
 
@@ -30,6 +32,9 @@ export default function BrandingWizard() {
       .then((s) => hydrateFromSession(s))
       .catch(() => startNewSession())
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const maxStep = useRef(0)
+  maxStep.current = Math.max(maxStep.current, step)
 
   const progressPct = Math.round((Math.min(step, 5) / 5) * 100)
 
@@ -48,7 +53,7 @@ export default function BrandingWizard() {
         <AccordionSection
           index={1}
           title="Tu marca"
-          status={getStatus(0, step)}
+          status={getStatus(0, step, maxStep.current)}
           summary={brandName && productCategory ? `${brandName} · ${productCategory}` : undefined}
           onReopen={() => setStep(0)}
         >
@@ -59,7 +64,7 @@ export default function BrandingWizard() {
         <AccordionSection
           index={2}
           title="Dirección de marca"
-          status={getStatus(1, step)}
+          status={getStatus(1, step, maxStep.current)}
           summary={direction ? direction.concept : undefined}
           onReopen={() => setStep(1)}
         >
@@ -70,7 +75,7 @@ export default function BrandingWizard() {
         <AccordionSection
           index={3}
           title="Logo"
-          status={getStatus(2, step)}
+          status={getStatus(2, step, maxStep.current)}
           summary={logoUrl ? 'Logo elegido' : undefined}
           onReopen={() => setStep(2)}
         >
@@ -81,7 +86,7 @@ export default function BrandingWizard() {
         <AccordionSection
           index={4}
           title="Etiqueta"
-          status={getStatus(3, step)}
+          status={getStatus(3, step, maxStep.current)}
           summary={labelUrl ? 'Etiqueta lista' : undefined}
           onReopen={() => setStep(3)}
         >
@@ -92,18 +97,20 @@ export default function BrandingWizard() {
         <AccordionSection
           index={5}
           title="Mockup del producto"
-          status={getStatus(4, step)}
+          status={getStatus(4, step, maxStep.current)}
           summary={mockupUrl ? 'Mockup listo' : undefined}
           onReopen={() => setStep(4)}
         >
           <Section5Mockup />
         </AccordionSection>
 
-        {/* 6 — Guía de marca (final, no colapsa) */}
+        {/* 6 — Guía de marca (final): reabrible una vez alcanzada (maxStep) */}
         <AccordionSection
           index={6}
           title={mockupUrl ? '¡Tu marca está lista!' : 'Guía de marca'}
-          status={step >= 5 ? 'active' : 'locked'}
+          status={step === 5 ? 'active' : maxStep.current >= 5 ? 'completed' : 'locked'}
+          summary={mockupUrl ? 'Marca lista' : undefined}
+          onReopen={() => setStep(5)}
         >
           <Section6Guide />
         </AccordionSection>
