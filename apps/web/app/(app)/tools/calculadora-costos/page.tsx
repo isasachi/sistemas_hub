@@ -107,6 +107,7 @@ export default function CalculadoraCostos() {
   const [form, setForm] = useState<CalcInputs>(structuredClone(DEFAULTS.leads));
   const [touched, setTouched] = useState<Set<string>>(new Set());
   const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const result = useMemo(() => calcular(form), [form]);
   const isEst = (key: string) => !touched.has(key);
@@ -295,8 +296,13 @@ export default function CalculadoraCostos() {
       title: "Tus resultados",
       intro: "",
       body: (
-        <Dashboard result={result} funnel={form.funnel} exporting={exporting}
-          onExport={async () => { setExporting(true); try { await exportarXlsx(form); } finally { setExporting(false); } }} />
+        <Dashboard result={result} funnel={form.funnel} exporting={exporting} exportError={exportError}
+          onExport={async () => {
+            setExporting(true); setExportError(null);
+            try { await exportarXlsx(form); }
+            catch { setExportError("No se pudo generar el Excel. Inténtalo de nuevo."); }
+            finally { setExporting(false); }
+          }} />
       ),
     },
   ];
@@ -309,7 +315,7 @@ export default function CalculadoraCostos() {
   return (
     <div className="min-h-screen flex flex-col bg-[#0a0a0a]">
       <div className="px-8 py-3.5 border-b border-white/[0.06] flex items-center gap-2 text-[13px]">
-        <Link href="/" className="text-[#8a8a8a] hover:text-[#bdbdbd] no-underline">Herramientas</Link>
+        <Link href="/dashboard" className="text-[#8a8a8a] hover:text-[#bdbdbd] no-underline">Dashboard</Link>
         <ChevronRight className="w-3.5 h-3.5 text-[#8a8a8a]" />
         <span className="text-[#f5f5f5] font-semibold">Calculadora de Costos</span>
       </div>
@@ -398,9 +404,9 @@ function Card({ label, value, help }: { label: string; value: string; help: stri
 }
 
 function Dashboard({
-  result, funnel, onExport, exporting,
+  result, funnel, onExport, exporting, exportError,
 }: {
-  result: ReturnType<typeof calcular>; funnel: Funnel; onExport: () => void; exporting: boolean;
+  result: ReturnType<typeof calcular>; funnel: Funnel; onExport: () => void; exporting: boolean; exportError: string | null;
 }) {
   const { pg, embudo } = result;
   const pn = pg.profitNeto;
@@ -482,11 +488,16 @@ function Dashboard({
         </div>
       </div>
 
-      <button type="button" disabled={exporting} onClick={onExport}
-        className="self-start flex items-center gap-2 jr-cta text-[14px] font-bold px-6 py-3 rounded-xl border-0 cursor-pointer disabled:opacity-60">
-        <Download className="w-4 h-4" />
-        {exporting ? "Generando Excel…" : "Exportar análisis a Excel"}
-      </button>
+      <div className="flex flex-col gap-2 items-start">
+        <button type="button" disabled={exporting} onClick={onExport}
+          className="flex items-center gap-2 jr-cta text-[14px] font-bold px-6 py-3 rounded-xl border-0 cursor-pointer disabled:opacity-60">
+          <Download className="w-4 h-4" />
+          {exporting ? "Generando Excel…" : "Exportar análisis a Excel"}
+        </button>
+        {exportError && (
+          <p role="alert" className="text-[13px] text-[#f87171]">{exportError}</p>
+        )}
+      </div>
     </div>
   );
 }

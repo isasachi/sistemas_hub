@@ -47,15 +47,20 @@ export function normalizeKeyword(raw: string): string {
 // ─── Cuota + bloqueo de keyword ───────────────────────────────────────────────
 
 export type QuotaResult =
-  | { ok: true;  count: number }
-  | { ok: false; code: 'quota' | 'duplicate'; message: string }
+  | { ok: true;  count: number; recheck?: boolean }
+  | { ok: false; code: 'quota'; message: string }
 
 /**
- * Verifica la cuota y la keyword repetida, y si todo está ok registra la búsqueda.
- * Se registra al INICIO (no al completarse), así las búsquedas fallidas/canceladas
- * también consumen cuota (evita bucles de abuso por reintentos).
+ * Verifica la cuota y registra la búsqueda. Se registra al INICIO (no al
+ * completarse), así las búsquedas fallidas/canceladas también consumen cuota
+ * (evita bucles de abuso por reintentos).
  *
- * Devuelve `{ ok: true, count }` donde `count` incluye la búsqueda recién registrada.
+ * Re-buscar la MISMA keyword el mismo día NO consume cuota (`recheck: true`):
+ * es el camino para revisar un nicho que quedó "en cola/analizando" sin que la
+ * espera cueste una de las 3/día — la ruta solo lee Supabase ($0). Por eso el
+ * recheck se permite incluso al límite (no es una búsqueda nueva).
+ *
+ * Devuelve `{ ok: true, count }` con la búsqueda recién registrada incluida.
  * Fail-open: si la DB falla, deja pasar para no bloquear al usuario.
  */
 export async function checkAndRecordSearch(
@@ -81,14 +86,8 @@ export async function checkAndRecordSearch(
 
   const todayCount = count ?? 0
 
-  if (todayCount >= DAILY_LIMIT) {
-    return {
-      ok:      false,
-      code:    'quota',
-      message: `Llegaste al límite de ${DAILY_LIMIT} búsquedas por hoy. Vuelve mañana.`,
-    }
-  }
-
+  // Recheck: ya buscó esta keyword hoy → pase libre (no cuenta, no registra),
+  // aun al límite. Se ANTEPONE al gate de cuota a propósito.
   const { data: existing } = await db
     .from('ph_user_searches')
     .select('id')
@@ -97,11 +96,13 @@ export async function checkAndRecordSearch(
     .eq('keyword_norm', norm)
     .maybeSingle()
 
-  if (existing) {
+  if (existing) return { ok: true, count: todayCount, recheck: true }
+
+  if (todayCount >= DAILY_LIMIT) {
     return {
       ok:      false,
-      code:    'duplicate',
-      message: 'Ya buscaste esa categoría hoy. Prueba con otra palabra clave.',
+      code:    'quota',
+      message: `Llegaste al límite de ${DAILY_LIMIT} búsquedas por hoy. Vuelve mañana.`,
     }
   }
 
@@ -110,13 +111,8 @@ export async function checkAndRecordSearch(
     .insert({ user_id: userId, keyword: rawKeyword, keyword_norm: norm, search_day: day })
 
   if (insertError) {
-    if (insertError.code === '23505') {
-      return {
-        ok:      false,
-        code:    'duplicate',
-        message: 'Ya buscaste esa categoría hoy. Prueba con otra palabra clave.',
-      }
-    }
+    // Carrera: otro request insertó la misma keyword a la vez → es un recheck.
+    if (insertError.code === '23505') return { ok: true, count: todayCount, recheck: true }
     console.error('[quota] error registrando búsqueda:', insertError.message)
     return { ok: true, count: todayCount + 1 }
   }

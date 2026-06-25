@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react'
 import { useWizardStore, SESSION_KEY } from '@/store/wizard'
 import type { SessionResponse } from '@/lib/types'
+import { SessionErrorRetry } from '@/components/tools/ui/SessionErrorRetry'
 import AccordionSection from './AccordionSection'
 import Section1Reference from './sections/Section1Reference'
 import Section2Product from './sections/Section2Product'
@@ -19,7 +20,7 @@ function getStatus(sectionStep: number, currentStep: number, maxStep: number): '
 }
 
 export default function AdWizard() {
-  const { step, imageUrl, startNewSession, hydrateFromSession, setStep, referenceAnalysis, productName, targetAudience, confirmedCopy } = useWizardStore()
+  const { step, imageUrl, sessionId, sessionError, startNewSession, hydrateFromSession, setStep, referenceAnalysis, productName, targetAudience, confirmedCopy } = useWizardStore()
 
   // Reanudar: si hay un id guardado y la sesión existe, rehidratar; si no, una nueva.
   useEffect(() => {
@@ -35,6 +36,14 @@ export default function AdWizard() {
   maxStep.current = Math.max(maxStep.current, step)
 
   const progressPct = Math.round((Math.min(step, 4) / 4) * 100)
+
+  if (sessionError && !sessionId) {
+    return (
+      <div className="flex flex-col min-h-screen bg-[#0a0a0a]">
+        <SessionErrorRetry onRetry={startNewSession} />
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col min-h-screen bg-[#0a0a0a]">

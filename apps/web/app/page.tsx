@@ -20,7 +20,7 @@ export default function Home() {
             <div className="flex items-center gap-2 mb-2.5">
               <div className="h-px w-10 bg-white/[0.12]" />
               <span className="text-[11px] font-bold text-[#8a8a8a] tracking-[2px] uppercase">
-                Las 6 herramientas
+                Las {tools.length} herramientas
               </span>
               <div className="h-px w-10 bg-white/[0.12]" />
             </div>

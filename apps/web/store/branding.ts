@@ -11,6 +11,7 @@ export const SESSION_KEY = 'branding_session_id'
 
 interface BrandingState {
   sessionId: string | null
+  sessionError: boolean
   step: number
   // brief
   brandName: string | null
@@ -62,6 +63,7 @@ interface BrandingActions {
 
 const initialState: BrandingState = {
   sessionId: null,
+  sessionError: false,
   step: 0,
   brandName: null,
   productName: null,
@@ -140,9 +142,15 @@ export const useBrandingStore = create<BrandingState & BrandingActions>((set) =>
 
   startNewSession: async () => {
     set({ ...initialState })
-    const res = await fetch('/api/generador-branding/sessions', { method: 'POST' })
-    const { id } = (await res.json()) as { id: string }
-    if (typeof window !== 'undefined') localStorage.setItem(SESSION_KEY, id)
-    set({ sessionId: id })
+    try {
+      const res = await fetch('/api/generador-branding/sessions', { method: 'POST' })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const { id } = (await res.json()) as { id: string }
+      if (!id) throw new Error('Sin id de sesión')
+      if (typeof window !== 'undefined') localStorage.setItem(SESSION_KEY, id)
+      set({ sessionId: id })
+    } catch {
+      set({ sessionError: true })
+    }
   },
 }))

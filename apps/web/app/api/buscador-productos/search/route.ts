@@ -2,11 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import {
   getUnseenProducts,
   countUnseenProducts,
+  countPendingAnalysis,
   getNicheStatus,
   getAllNicheKeywords,
   upsertNiche,
   isBlocked,
 } from '@ph/shared'
+import { resolveSearchStatus } from '@/lib/product-hunter/search-status'
 import { matchNiche } from '@/lib/product-hunter/niche-match'
 import { readUserId, newUserId, PH_USER_COOKIE } from '@/lib/product-hunter/session'
 import { checkAndRecordSearch } from '@/lib/product-hunter/quota'
@@ -113,10 +115,16 @@ export async function POST(req: NextRequest) {
   // productos en pantalla pero ninguno es fresco para el usuario, se lo decimos.
   const allSeen = products.length > 0 && totalUnseen === 0
 
-  // products vacío SOLO si el nicho existe pero aún no tiene productos
-  // analizados (scrapeado/en cola, análisis pendiente) — NO es un nicho nuevo,
-  // así que pending va SIN queued (la UI dice "analizando", no "encolado").
-  const status: SearchResponse['status'] = products.length ? 'ready' : 'pending'
+  // products vacío: distinguir "ya analizado, sin ganadores" de "aún analizando".
+  // updateNicheAfterScrape marca status='active' tras CADA scrape, pero el análisis
+  // LLM corre en un pase aparte; toCard descarta los productos sin score, así que
+  // 0 cards podría ser mitad-de-análisis. countPendingAnalysis (score=null) lo
+  // desambigua: solo 'empty' cuando NO queda nada por analizar. .catch → 'pending'
+  // (comportamiento previo, nunca 500 por esta línea). Antes: "analizando" eterno.
+  const pendingAnalysis = products.length || nicheRow.status !== 'active'
+    ? 0
+    : await countPendingAnalysis(niche).catch(() => 1)
+  const status = resolveSearchStatus(products.length, nicheRow.status, pendingAnalysis)
 
   const payload: SearchResponse = { niche, status, products, totalUnseen, bestEffort, allSeen }
   const res = NextResponse.json(payload)

@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react'
 import { useBrandingStore, SESSION_KEY } from '@/store/branding'
 import type { BrandingSessionResponse } from '@/lib/branding/types'
+import { SessionErrorRetry } from '@/components/tools/ui/SessionErrorRetry'
 import AccordionSection from '@/components/tools/generador-anuncios/AccordionSection'
 import Section1Brief from './sections/Section1Brief'
 import Section2Direction from './sections/Section2Direction'
@@ -20,7 +21,7 @@ function getStatus(sectionStep: number, currentStep: number, maxStep: number): '
 }
 
 export default function BrandingWizard() {
-  const { step, startNewSession, hydrateFromSession, setStep, brandName, productCategory, direction, logoUrl, labelUrl, mockupUrl } =
+  const { step, sessionId, sessionError, startNewSession, hydrateFromSession, setStep, brandName, productCategory, direction, logoUrl, labelUrl, mockupUrl } =
     useBrandingStore()
 
   // Reanudar: si hay un id guardado y la sesión existe, rehidratar; si no, una nueva.
@@ -37,6 +38,14 @@ export default function BrandingWizard() {
   maxStep.current = Math.max(maxStep.current, step)
 
   const progressPct = Math.round((Math.min(step, 5) / 5) * 100)
+
+  if (sessionError && !sessionId) {
+    return (
+      <div className="flex flex-col min-h-screen bg-[#0a0a0a]">
+        <SessionErrorRetry onRetry={startNewSession} />
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col min-h-screen bg-[#0a0a0a]">

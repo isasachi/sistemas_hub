@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react'
 import { useLandingStore, SESSION_KEY } from '@/store/landing'
 import type { LandingSessionResponse } from '@/lib/landing/types'
 import { SECTION_LABELS } from '@/lib/landing/types'
+import { SessionErrorRetry } from '@/components/tools/ui/SessionErrorRetry'
 import AccordionSection from '@/components/tools/generador-anuncios/AccordionSection'
 import Section1Product from './sections/Section1Product'
 import Section2Photos from './sections/Section2Photos'
@@ -21,7 +22,7 @@ function getStatus(sectionStep: number, currentStep: number, maxStep: number): '
 }
 
 export default function LandingWizard() {
-  const { step, startNewSession, hydrateFromSession, setStep, productName, productPhotoUrls, template, selectedSections, sections } =
+  const { step, sessionId, sessionError, startNewSession, hydrateFromSession, setStep, productName, productPhotoUrls, template, selectedSections, sections } =
     useLandingStore()
 
   useEffect(() => {
@@ -37,6 +38,14 @@ export default function LandingWizard() {
   maxStep.current = Math.max(maxStep.current, step)
 
   const progressPct = Math.round((Math.min(step, 4) / 4) * 100)
+
+  if (sessionError && !sessionId) {
+    return (
+      <div className="flex flex-col min-h-screen bg-[#0a0a0a]">
+        <SessionErrorRetry onRetry={startNewSession} />
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col min-h-screen bg-[#0a0a0a]">

@@ -1,16 +1,7 @@
 import Link from "next/link";
-import { ArrowUpRight, Activity, Video, Sparkles, DollarSign, LayoutTemplate, ImagePlus, PackageSearch } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import type { Tool } from "@/lib/tools";
-
-const iconMap: Record<string, React.ComponentType<{ className?: string; style?: React.CSSProperties }>> = {
-  Activity,
-  Video,
-  Sparkles,
-  DollarSign,
-  LayoutTemplate,
-  ImagePlus,
-  PackageSearch,
-};
+import { toolIcon } from "@/lib/tool-icons";
 
 const tagStyles: Record<string, string> = {
   brand:
@@ -27,17 +18,11 @@ interface ToolCardProps {
 }
 
 export function ToolCard({ tool }: ToolCardProps) {
-  const Icon = iconMap[tool.icon] ?? Activity;
+  const Icon = toolIcon(tool.icon);
+  const isSoon = tool.status === "soon";
 
-  return (
-    <Link
-      href={`/tools/${tool.slug}`}
-      className={[
-        "group relative block rounded-2xl jr-card p-6 no-underline overflow-hidden",
-        "transition-all duration-200",
-        "hover:border-[rgba(255,156,77,0.28)] hover:bg-white/[0.04] hover:-translate-y-0.5 hover:shadow-[0_10px_35px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.04)]",
-      ].join(" ")}
-    >
+  const inner = (
+    <>
       {/* Hairline superior que se enciende al hover */}
       <div
         aria-hidden
@@ -68,6 +53,32 @@ export function ToolCard({ tool }: ToolCardProps) {
       >
         {tool.tag}
       </span>
+    </>
+  );
+
+  // Coming-soon: no es navegable (antes parecía clickable y llevaba a un dead-end).
+  if (isSoon) {
+    return (
+      <div
+        aria-disabled
+        className="group relative block rounded-2xl jr-card p-6 overflow-hidden opacity-55 cursor-default"
+      >
+        {inner}
+      </div>
+    );
+  }
+
+  return (
+    <Link
+      href={`/tools/${tool.slug}`}
+      className={[
+        "group relative block rounded-2xl jr-card p-6 no-underline overflow-hidden",
+        "transition-all duration-200",
+        "hover:border-[rgba(255,156,77,0.28)] hover:bg-white/[0.04] hover:-translate-y-0.5 hover:shadow-[0_10px_35px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.04)]",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(255,156,77,0.6)] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0a]",
+      ].join(" ")}
+    >
+      {inner}
     </Link>
   );
 }

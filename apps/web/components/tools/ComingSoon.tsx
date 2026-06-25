@@ -1,28 +1,10 @@
 import Link from "next/link";
-import {
-  PackageSearch,
-  ImagePlus,
-  Video,
-  Sparkles,
-  DollarSign,
-  LayoutTemplate,
-  ArrowLeft,
-  Clock,
-  type LucideIcon,
-} from "lucide-react";
+import { ArrowLeft, Clock } from "lucide-react";
 import type { Tool } from "@/lib/tools";
-
-const iconMap: Record<string, LucideIcon> = {
-  PackageSearch,
-  ImagePlus,
-  Video,
-  Sparkles,
-  DollarSign,
-  LayoutTemplate,
-};
+import { toolIcon } from "@/lib/tool-icons";
 
 export function ComingSoon({ tool }: { tool: Tool }) {
-  const Icon = iconMap[tool.icon] ?? Sparkles;
+  const Icon = toolIcon(tool.icon);
 
   return (
     <div className="min-h-[calc(100vh-56px)] md:min-h-screen flex items-center justify-center px-6 py-16 jr-grid">

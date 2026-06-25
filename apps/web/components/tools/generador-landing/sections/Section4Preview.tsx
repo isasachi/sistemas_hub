@@ -127,7 +127,13 @@ export default function Section4Preview() {
       }
       setDone(i + 1)
     }
-    if (failed === copy.length) setError('No se pudo generar ninguna sección')
+    if (failed > 0) {
+      setError(
+        failed === copy.length
+          ? 'No se pudo generar ninguna sección. Intenta de nuevo.'
+          : `${failed} de ${copy.length} secciones fallaron. Usa "Regenerar todo" para reintentar.`
+      )
+    }
     setGenerating(false)
   }
 
@@ -170,7 +176,7 @@ export default function Section4Preview() {
         <p className="text-[12px] text-[#bdbdbd]">Generando secciones... {done}/{copy.length}</p>
       )}
 
-      {error && <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-[12px] text-red-400">{error}</div>}
+      {error && <div role="alert" className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-[12px] text-red-400">{error}</div>}
 
       {(sections.length > 0 || generating) && (
         <>
