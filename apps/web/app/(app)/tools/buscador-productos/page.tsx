@@ -129,6 +129,7 @@ export default function BuscadorProductos() {
   }, []);
 
   const search = useCallback(async () => {
+    if (loading) return; // evita doble-submit por Enter repetido → quema la cuota de 3/día
     const q = niche.trim();
     if (!q) return;
     setLoading(true);
@@ -168,7 +169,7 @@ export default function BuscadorProductos() {
     } finally {
       setLoading(false);
     }
-  }, [niche, fetchToday]);
+  }, [niche, fetchToday, loading]);
 
   return (
     <div className="min-h-screen flex flex-col bg-[#0a0a0a]">
@@ -226,6 +227,7 @@ export default function BuscadorProductos() {
                 onChange={(e) => setNiche(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && search()}
                 placeholder="Escribe un nicho..."
+                aria-label="Nicho a buscar"
                 className="flex-1 bg-transparent py-3 text-[14px] text-[#f5f5f5] placeholder:text-[#8a8a8a] outline-none"
               />
             </div>
@@ -233,17 +235,19 @@ export default function BuscadorProductos() {
               onClick={search}
               disabled={loading || !niche.trim()}
               className="jr-cta px-5 rounded-xl text-[14px] font-bold disabled:opacity-40 cursor-pointer border-0 flex items-center gap-2">
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Buscar"}
+              {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+              Buscar
             </button>
           </div>
         )}
 
         {/* Error */}
         {error && !quotaExhausted && (
-          <div className="bg-[rgba(233,61,61,0.08)] border border-[rgba(233,61,61,0.2)] rounded-xl p-4 text-[13px] text-[#fca5a5] mb-4">{error}</div>
+          <div role="alert" className="bg-[rgba(233,61,61,0.08)] border border-[rgba(233,61,61,0.2)] rounded-xl p-4 text-[13px] text-[#fca5a5] mb-4">{error}</div>
         )}
         {error && quotaExhausted && null /* quota message ya está arriba */}
 
+        <div aria-live="polite">
         {result?.status === "pending" && (
           <div className="text-center py-16">
             <PackageSearch className="w-10 h-10 mx-auto mb-3 text-[#8a8a8a]" />
@@ -262,6 +266,16 @@ export default function BuscadorProductos() {
                 </p>
               </>
             )}
+          </div>
+        )}
+
+        {result?.status === "empty" && (
+          <div className="text-center py-16">
+            <PackageSearch className="w-10 h-10 mx-auto mb-3 text-[#8a8a8a]" />
+            <h3 className="text-[16px] font-bold text-[#f5f5f5] mb-1">Sin ganadores en este nicho</h3>
+            <p className="text-[13px] text-[#bdbdbd] max-w-[380px] mx-auto leading-[1.6]">
+              Revisamos <span className="text-[#f5f5f5]">{result.niche}</span> y por ahora no encontramos productos que cumplan las reglas (≥40 anuncios, ≥10 días, sin pauta en Perú). Prueba con otro nicho.
+            </p>
           </div>
         )}
 
@@ -286,6 +300,7 @@ export default function BuscadorProductos() {
             {result.products.map((p) => <ProductCardView key={p.id} p={p} />)}
           </div>
         )}
+        </div>
       </main>
     </div>
   );

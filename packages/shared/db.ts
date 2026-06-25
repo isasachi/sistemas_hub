@@ -125,6 +125,22 @@ export async function countNicheWinners(niche: string): Promise<number> {
   return count ?? 0
 }
 
+// Productos del nicho aún sin analizar (score IS NULL) y frescos — los mismos que
+// getProductsToAnalyze tomaría. Señal score-INDEPENDIENTE de "análisis en curso":
+// como toCard descarta los score=null, 0 cards NO basta para decir 'empty' (podría
+// estar a media-análisis). >0 → seguimos analizando; 0 → ya está todo analizado.
+export async function countPendingAnalysis(niche: string): Promise<number> {
+  const freshAfter = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+  const { count, error } = await getDb()
+    .from('ph_products')
+    .select('id', { count: 'exact', head: true })
+    .eq('niche', niche)
+    .is('score', null)
+    .gt('scraped_at', freshAfter)
+  if (error) throw new Error(error.message)
+  return count ?? 0
+}
+
 // Todos los nichos (id + keywords, cualquier status) — para resolver la consulta
 // del usuario a un nicho existente antes del cold start (niche-match.ts).
 // Incluye pending: una variación de un nicho en cola no debe crear un duplicado.

@@ -10,6 +10,7 @@ export const SESSION_KEY = 'landing_session_id'
 
 interface LandingState {
   sessionId: string | null
+  sessionError: boolean
   step: number
   productName: string | null
   price: string | null
@@ -39,6 +40,7 @@ interface LandingActions {
 
 const initialState: LandingState = {
   sessionId: null,
+  sessionError: false,
   step: 0,
   productName: null,
   price: null,
@@ -99,9 +101,15 @@ export const useLandingStore = create<LandingState & LandingActions>((set) => ({
 
   startNewSession: async () => {
     set({ ...initialState })
-    const res = await fetch('/api/generador-landing/sessions', { method: 'POST' })
-    const { id } = (await res.json()) as { id: string }
-    if (typeof window !== 'undefined') localStorage.setItem(SESSION_KEY, id)
-    set({ sessionId: id })
+    try {
+      const res = await fetch('/api/generador-landing/sessions', { method: 'POST' })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const { id } = (await res.json()) as { id: string }
+      if (!id) throw new Error('Sin id de sesión')
+      if (typeof window !== 'undefined') localStorage.setItem(SESSION_KEY, id)
+      set({ sessionId: id })
+    } catch {
+      set({ sessionError: true })
+    }
   },
 }))

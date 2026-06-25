@@ -30,6 +30,7 @@ export async function POST(
   if (!comments) return NextResponse.json({ error: 'Missing comments' }, { status: 400 })
   if (comments.length > 8000) return NextResponse.json({ error: 'Comments too long (max 8000 chars)' }, { status: 400 })
 
+  try {
   const refAnalysis = ReferenceAnalysisSchema.parse(session.reference_analysis)
   const productScan = ProductScanSchema.parse(session.product_scan)
   const { data: refB64, mimeType: refMime } = await fetchAsBase64(session.reference_url!)
@@ -73,4 +74,8 @@ export async function POST(
   const copyVersions = await callStructured('copy_versions', CopyVersionsSchema, parts)
   await updateSession(id, { step: 3, tiktok_comments: comments, copy_versions: copyVersions })
   return NextResponse.json({ copyVersions })
+  } catch (err) {
+    console.error('[generate-copy]', err)
+    return NextResponse.json({ error: 'No se pudo generar el copy. Inténtalo de nuevo.' }, { status: 500 })
+  }
 }

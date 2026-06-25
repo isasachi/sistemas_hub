@@ -55,19 +55,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     },
   ]
 
-  const result = await callStructured(
-    'landing_copy',
-    LandingCopySchema,
-    parts,
-    3,
-    LANDING_SYSTEM_PROMPT
-  )
+  try {
+    const result = await callStructured(
+      'landing_copy',
+      LandingCopySchema,
+      parts,
+      3,
+      LANDING_SYSTEM_PROMPT
+    )
 
-  await updateLandingSession(id, {
-    step: Math.max(session.step, 2),
-    selected_sections: sections,
-    copy: result.sections,
-  })
+    await updateLandingSession(id, {
+      step: Math.max(session.step, 2),
+      selected_sections: sections,
+      copy: result.sections,
+    })
 
-  return NextResponse.json({ copy: result.sections })
+    return NextResponse.json({ copy: result.sections })
+  } catch (err) {
+    console.error('[landing-copy]', err)
+    return NextResponse.json({ error: 'No se pudo generar el copy. Inténtalo de nuevo.' }, { status: 500 })
+  }
 }

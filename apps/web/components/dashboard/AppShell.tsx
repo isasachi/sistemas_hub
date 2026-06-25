@@ -1,33 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  LayoutDashboard,
-  PackageSearch,
-  ImagePlus,
-  Video,
-  Sparkles,
-  DollarSign,
-  LayoutTemplate,
-  LogOut,
-  Zap,
-  Menu,
-  X,
-  type LucideIcon,
-} from "lucide-react";
+import { LayoutDashboard, LogOut, Zap, Menu, X } from "lucide-react";
 import { tools } from "@/lib/tools";
+import { toolIcon } from "@/lib/tool-icons";
 import { signOut } from "@/app/actions/auth";
-
-const iconMap: Record<string, LucideIcon> = {
-  PackageSearch,
-  ImagePlus,
-  Video,
-  Sparkles,
-  DollarSign,
-  LayoutTemplate,
-};
 
 interface AppShellProps {
   user: { label: string };
@@ -37,6 +16,14 @@ interface AppShellProps {
 export function AppShell({ user, children }: AppShellProps) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+
+  // Esc cierra el drawer móvil.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
 
   const navItem = (href: string, active: boolean) =>
     [
@@ -77,7 +64,7 @@ export function AppShell({ user, children }: AppShellProps) {
         </span>
 
         {tools.map((tool) => {
-          const Icon = iconMap[tool.icon] ?? PackageSearch;
+          const Icon = toolIcon(tool.icon);
           const href = `/tools/${tool.slug}`;
           const active = pathname === href;
           return (
@@ -135,7 +122,12 @@ export function AppShell({ user, children }: AppShellProps) {
             onClick={() => setOpen(false)}
             aria-hidden
           />
-          <aside className="md:hidden fixed inset-y-0 left-0 w-[248px] z-50 flex flex-col border-r border-white/[0.06] bg-[#0c0c0c]">
+          <aside
+            role="dialog"
+            aria-modal="true"
+            aria-label="Menú de navegación"
+            className="md:hidden fixed inset-y-0 left-0 w-[248px] z-50 flex flex-col border-r border-white/[0.06] bg-[#0c0c0c]"
+          >
             {sidebar}
           </aside>
         </>

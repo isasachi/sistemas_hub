@@ -7,6 +7,7 @@ export const SESSION_KEY = 'anuncios_session_id'
 
 interface WizardState {
   sessionId: string | null
+  sessionError: boolean
   step: number
   isLoading: boolean
   referenceUrl: string | null
@@ -45,6 +46,7 @@ interface WizardActions {
 
 const initialState: WizardState = {
   sessionId: null,
+  sessionError: false,
   step: 0,
   isLoading: false,
   referenceUrl: null,
@@ -123,9 +125,15 @@ export const useWizardStore = create<WizardState & WizardActions>((set) => ({
 
   startNewSession: async () => {
     set({ ...initialState })
-    const res = await fetch('/api/generador-anuncios/sessions', { method: 'POST' })
-    const { id } = (await res.json()) as { id: string }
-    if (typeof window !== 'undefined') localStorage.setItem(SESSION_KEY, id)
-    set({ sessionId: id })
+    try {
+      const res = await fetch('/api/generador-anuncios/sessions', { method: 'POST' })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const { id } = (await res.json()) as { id: string }
+      if (!id) throw new Error('Sin id de sesión')
+      if (typeof window !== 'undefined') localStorage.setItem(SESSION_KEY, id)
+      set({ sessionId: id })
+    } catch {
+      set({ sessionError: true })
+    }
   },
 }))
