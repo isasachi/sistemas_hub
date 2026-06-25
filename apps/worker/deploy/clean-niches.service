@@ -1,0 +1,24 @@
+# Oneshot: barre ph_niches y bloquea typos/sensibles (clean-niches.ts).
+# Lo dispara clean-niches.timer cada 12h. Variante USER unit (sin sudo), igual
+# que buscador-productos.user.service.
+#
+# Instalar (local / WSL):
+#   cp apps/worker/deploy/clean-niches.service ~/.config/systemd/user/
+#   cp apps/worker/deploy/clean-niches.timer   ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now clean-niches.timer
+# Correr a mano una vez:  systemctl --user start clean-niches.service
+# Ver log:                journalctl --user -u clean-niches -f
+#
+# Bajo systemd el PATH es mínimo y no trae node/npx (vía nvm), así que el
+# ExecStart carga nvm antes de npx — mismo patrón que worker-loop.sh.
+# Secretos (SUPABASE_*) en apps/worker/.env.local — los carga bootstrap.ts.
+
+[Unit]
+Description=Buscador de Productos — limpieza de nichos (typos/sensibles)
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/isasachi/chamba/sistemas_hub/apps/worker
+ExecStart=/usr/bin/env bash -c 'export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" >/dev/null 2>&1; exec npx tsx scripts/clean-niches.ts'
+SyslogIdentifier=clean-niches

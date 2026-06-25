@@ -5,6 +5,7 @@ import {
   getNicheStatus,
   getAllNicheKeywords,
   upsertNiche,
+  isBlocked,
 } from '@ph/shared'
 import { matchNiche } from '@/lib/product-hunter/niche-match'
 import { readUserId, newUserId, PH_USER_COOKIE } from '@/lib/product-hunter/session'
@@ -24,6 +25,14 @@ export async function POST(req: NextRequest) {
   }
   const query = body.niche?.trim().toLowerCase().replace(/\s+/g, ' ')
   if (!query) return NextResponse.json({ error: 'Falta el nicho' }, { status: 400 })
+
+  // Término bloqueado (typo/genérico o anatomía sexual/explícita — blocklist en
+  // @ph/shared): respuesta vacía, NO se crea ni se sirve. Cierra la ventana de
+  // 12h del cron clean-niches (un sensible no llega a scrapearse). Los nichos ya
+  // marcados 'blocked' cuyo id ≠ query los corta el guard de status más abajo.
+  if (isBlocked(query)) {
+    return NextResponse.json({ niche: query, status: 'pending', products: [], totalUnseen: 0 } as SearchResponse)
+  }
 
   // Identidad del usuario
   let userId = await readUserId()
@@ -63,6 +72,12 @@ export async function POST(req: NextRequest) {
   if (nicheRow?.canonical_id) {
     niche = nicheRow.canonical_id
     nicheRow = await getNicheStatus(nicheRow.canonical_id)
+  }
+
+  // Nicho ya marcado 'blocked' (el query resolvió a uno vía keyword/id): no se
+  // sirve ni se re-encola. Mismo cuerpo vacío que el término bloqueado directo.
+  if (nicheRow?.status === 'blocked') {
+    return NextResponse.json({ niche, status: 'pending', products: [], totalUnseen: 0 } as SearchResponse)
   }
 
   // Cold start: ni el nicho ni una variación conocida existen. Lo encolamos como

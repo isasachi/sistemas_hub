@@ -189,7 +189,9 @@ export interface NicheRow {
   id: string
   // 'archived' = fuera de la cola de scrapeo (no está en la lista curada). Sus
   // productos se conservan/sirven; getNichesToRefresh/getActiveNiches lo excluyen.
-  status: 'pending' | 'active' | 'archived'
+  // 'blocked' = typo/genérico o anatomía sexual/explícita (ver blocklist.ts). Como
+  // 'archived' sale de la cola, pero ADEMÁS /search no lo sirve ni lo re-encola.
+  status: 'pending' | 'active' | 'archived' | 'blocked'
   last_scraped: string | null
   product_count: number
   // Keywords expandidas (≥15, modelo original) — seed estático o LLM en CI.

@@ -148,9 +148,18 @@ export async function getActiveNiches(): Promise<NicheRow[]> {
 // Todos los nichos (id + status) — para herramientas de mantenimiento que
 // necesitan el set completo (ej. archive-niches.ts diffea contra niches.txt).
 export async function getAllNiches(): Promise<Pick<NicheRow, 'id' | 'status'>[]> {
-  const { data, error } = await getDb().from('ph_niches').select('id, status')
-  if (error) throw new Error(error.message)
-  return (data as Pick<NicheRow, 'id' | 'status'>[]) ?? []
+  // Pagina: Supabase topa cada request a 1000 filas. Sin esto, una tabla >1000
+  // se trunca silenciosamente (archive/clean dejarían fuera nichos).
+  const out: Pick<NicheRow, 'id' | 'status'>[] = []
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await getDb()
+      .from('ph_niches').select('id, status').range(from, from + 999)
+    if (error) throw new Error(error.message)
+    const page = (data as Pick<NicheRow, 'id' | 'status'>[]) ?? []
+    out.push(...page)
+    if (page.length < 1000) break
+  }
+  return out
 }
 
 // Marca nichos como 'archived' (los saca de la cola de scrapeo sin borrar sus
@@ -161,6 +170,20 @@ export async function archiveNiches(ids: string[]): Promise<void> {
     const { error } = await getDb()
       .from('ph_niches')
       .update({ status: 'archived' })
+      .in('id', batch)
+    if (error) throw new Error(error.message)
+  }
+}
+
+// Marca nichos como 'blocked' (typos/sensibles, ver blocklist.ts). Como archive
+// los saca de la cola, pero el guard de /search ADEMÁS deja de servir sus
+// productos. Idempotente; en lotes. Reversible: volver status a 'pending'.
+export async function blockNiches(ids: string[]): Promise<void> {
+  for (let i = 0; i < ids.length; i += 200) {
+    const batch = ids.slice(i, i + 200)
+    const { error } = await getDb()
+      .from('ph_niches')
+      .update({ status: 'blocked' })
       .in('id', batch)
     if (error) throw new Error(error.message)
   }
