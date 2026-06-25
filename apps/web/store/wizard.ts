@@ -3,6 +3,8 @@
 import { create } from 'zustand'
 import type { ReferenceAnalysis, ProductScan, CopyVersions, ConfirmedCopy, SessionResponse } from '@/lib/types'
 
+export const SESSION_KEY = 'anuncios_session_id'
+
 interface WizardState {
   sessionId: string | null
   step: number
@@ -100,7 +102,8 @@ export const useWizardStore = create<WizardState & WizardActions>((set) => ({
     set(resets)
   },
 
-  hydrateFromSession: (session) =>
+  hydrateFromSession: (session) => {
+    if (typeof window !== 'undefined') localStorage.setItem(SESSION_KEY, session.id)
     set({
       sessionId: session.id,
       step: session.step,
@@ -115,12 +118,14 @@ export const useWizardStore = create<WizardState & WizardActions>((set) => ({
       copyVersions: session.copy_versions,
       confirmedCopy: session.confirmed_copy,
       imageUrl: session.image_url,
-    }),
+    })
+  },
 
   startNewSession: async () => {
     set({ ...initialState })
     const res = await fetch('/api/generador-anuncios/sessions', { method: 'POST' })
     const { id } = (await res.json()) as { id: string }
+    if (typeof window !== 'undefined') localStorage.setItem(SESSION_KEY, id)
     set({ sessionId: id })
   },
 }))

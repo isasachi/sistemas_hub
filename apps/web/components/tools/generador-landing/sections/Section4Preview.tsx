@@ -102,7 +102,7 @@ function SectionCard({ section }: { section: LandingSection }) {
 }
 
 export default function Section4Preview() {
-  const { sessionId, copy, sections, setSectionImage } = useLandingStore()
+  const { sessionId, copy, sections, setSectionImage, startNewSession } = useLandingStore()
   const [generating, setGenerating] = useState(false)
   const [done, setDone] = useState(0)
   const [error, setError] = useState<string | null>(null)
@@ -196,6 +196,7 @@ export default function Section4Preview() {
                 {downloading ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Descargando...</> : '↓ Descargar secciones'}
               </button>
               <button onClick={generate} className={btnGhost}>↻ Regenerar todo</button>
+              <button onClick={startNewSession} className={btnGhost}>Nueva landing</button>
             </div>
           )}
         </>

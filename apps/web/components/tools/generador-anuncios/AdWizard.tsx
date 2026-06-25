@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect } from 'react'
-import { useWizardStore } from '@/store/wizard'
+import { useEffect, useRef } from 'react'
+import { useWizardStore, SESSION_KEY } from '@/store/wizard'
+import type { SessionResponse } from '@/lib/types'
 import AccordionSection from './AccordionSection'
 import Section1Reference from './sections/Section1Reference'
 import Section2Product from './sections/Section2Product'
@@ -9,16 +10,29 @@ import Section3Comments from './sections/Section3Comments'
 import Section4Copy from './sections/Section4Copy'
 import Section5Generate from './sections/Section5Generate'
 
-function getStatus(sectionStep: number, currentStep: number): 'locked' | 'active' | 'completed' {
-  if (currentStep >= sectionStep + 1) return 'completed'
+// `maxStep` = paso más avanzado alcanzado; una sección ya visitada queda 'completed'
+// (reabrible) aunque retrocedas, para navegar adelante/atrás sin reenviar (re-quemar LLM).
+function getStatus(sectionStep: number, currentStep: number, maxStep: number): 'locked' | 'active' | 'completed' {
   if (currentStep === sectionStep) return 'active'
+  if (maxStep > sectionStep) return 'completed'
   return 'locked'
 }
 
 export default function AdWizard() {
-  const { step, imageUrl, startNewSession, setStep, referenceAnalysis, productName, targetAudience, confirmedCopy } = useWizardStore()
+  const { step, imageUrl, startNewSession, hydrateFromSession, setStep, referenceAnalysis, productName, targetAudience, confirmedCopy } = useWizardStore()
 
-  useEffect(() => { startNewSession() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // Reanudar: si hay un id guardado y la sesión existe, rehidratar; si no, una nueva.
+  useEffect(() => {
+    const saved = localStorage.getItem(SESSION_KEY)
+    if (!saved) { startNewSession(); return }
+    fetch(`/api/generador-anuncios/sessions/${saved}`)
+      .then((r) => (r.ok ? (r.json() as Promise<SessionResponse>) : Promise.reject()))
+      .then((s) => hydrateFromSession(s))
+      .catch(() => startNewSession())
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const maxStep = useRef(0)
+  maxStep.current = Math.max(maxStep.current, step)
 
   const progressPct = Math.round((Math.min(step, 4) / 4) * 100)
 
@@ -37,7 +51,7 @@ export default function AdWizard() {
         <AccordionSection
           index={1}
           title="Anuncio de referencia"
-          status={getStatus(0, step)}
+          status={getStatus(0, step, maxStep.current)}
           summary={referenceAnalysis ? `${referenceAnalysis.format.ratio} · ${referenceAnalysis.format.platform} · ${referenceAnalysis.style}` : undefined}
           onReopen={() => setStep(0)}
         >
@@ -48,7 +62,7 @@ export default function AdWizard() {
         <AccordionSection
           index={2}
           title="Producto + información"
-          status={getStatus(1, step)}
+          status={getStatus(1, step, maxStep.current)}
           summary={productName && targetAudience ? `${productName} · ${targetAudience}` : undefined}
           onReopen={() => setStep(1)}
         >
@@ -59,7 +73,7 @@ export default function AdWizard() {
         <AccordionSection
           index={3}
           title="Comentarios de TikTok"
-          status={getStatus(2, step)}
+          status={getStatus(2, step, maxStep.current)}
           summary={step >= 3 ? 'Copy A/B generado' : undefined}
           onReopen={() => setStep(2)}
         >
@@ -70,18 +84,20 @@ export default function AdWizard() {
         <AccordionSection
           index={4}
           title="Elegir versión de copy"
-          status={getStatus(3, step)}
+          status={getStatus(3, step, maxStep.current)}
           summary={confirmedCopy ? `Versión ${confirmedCopy.version} confirmada` : undefined}
           onReopen={() => setStep(3)}
         >
           <Section4Copy />
         </AccordionSection>
 
-        {/* Section 5 — stays open once reached; never collapses */}
+        {/* Section 5 — terminal: reabrible una vez alcanzada (maxStep) */}
         <AccordionSection
           index={5}
           title={imageUrl ? '¡Anuncio listo!' : 'Generar anuncio'}
-          status={step >= 4 ? 'active' : 'locked'}
+          status={step === 4 ? 'active' : maxStep.current >= 4 ? 'completed' : 'locked'}
+          summary={imageUrl ? 'Anuncio generado' : undefined}
+          onReopen={() => setStep(4)}
         >
           <Section5Generate />
         </AccordionSection>

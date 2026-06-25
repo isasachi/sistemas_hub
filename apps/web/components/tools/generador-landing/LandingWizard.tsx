@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useLandingStore, SESSION_KEY } from '@/store/landing'
 import type { LandingSessionResponse } from '@/lib/landing/types'
 import { SECTION_LABELS } from '@/lib/landing/types'
@@ -12,9 +12,11 @@ import Section3Sections from './sections/Section3Sections'
 import Section4Preview from './sections/Section4Preview'
 import { TEMPLATE_BY_ID } from '@/lib/landing/templates'
 
-function getStatus(sectionStep: number, currentStep: number): 'locked' | 'active' | 'completed' {
-  if (currentStep >= sectionStep + 1) return 'completed'
+// `maxStep` = paso más avanzado alcanzado; una sección ya visitada queda 'completed'
+// (reabrible) aunque retrocedas, para navegar adelante/atrás sin reenviar (re-quemar LLM).
+function getStatus(sectionStep: number, currentStep: number, maxStep: number): 'locked' | 'active' | 'completed' {
   if (currentStep === sectionStep) return 'active'
+  if (maxStep > sectionStep) return 'completed'
   return 'locked'
 }
 
@@ -31,6 +33,9 @@ export default function LandingWizard() {
       .catch(() => startNewSession())
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const maxStep = useRef(0)
+  maxStep.current = Math.max(maxStep.current, step)
+
   const progressPct = Math.round((Math.min(step, 4) / 4) * 100)
 
   return (
@@ -46,7 +51,7 @@ export default function LandingWizard() {
         <AccordionSection
           index={1}
           title="Tu producto"
-          status={getStatus(0, step)}
+          status={getStatus(0, step, maxStep.current)}
           summary={productName ?? undefined}
           onReopen={() => setStep(0)}
         >
@@ -56,7 +61,7 @@ export default function LandingWizard() {
         <AccordionSection
           index={2}
           title="Fotos del producto"
-          status={getStatus(1, step)}
+          status={getStatus(1, step, maxStep.current)}
           summary={productPhotoUrls.length ? `${productPhotoUrls.length} foto(s)` : undefined}
           onReopen={() => setStep(1)}
         >
@@ -66,7 +71,7 @@ export default function LandingWizard() {
         <AccordionSection
           index={3}
           title="Plantilla"
-          status={getStatus(2, step)}
+          status={getStatus(2, step, maxStep.current)}
           summary={template ? TEMPLATE_BY_ID[template]?.label : undefined}
           onReopen={() => setStep(2)}
         >
@@ -76,7 +81,7 @@ export default function LandingWizard() {
         <AccordionSection
           index={4}
           title="Secciones de tu landing"
-          status={getStatus(3, step)}
+          status={getStatus(3, step, maxStep.current)}
           summary={selectedSections.length ? selectedSections.map((s) => SECTION_LABELS[s]).join(' · ') : undefined}
           onReopen={() => setStep(3)}
         >
@@ -86,7 +91,9 @@ export default function LandingWizard() {
         <AccordionSection
           index={5}
           title={sections.length ? '¡Tu landing está lista!' : 'Tu landing'}
-          status={step >= 4 ? 'active' : 'locked'}
+          status={step === 4 ? 'active' : maxStep.current >= 4 ? 'completed' : 'locked'}
+          summary={sections.length ? 'Landing lista' : undefined}
+          onReopen={() => setStep(4)}
         >
           <Section4Preview />
         </AccordionSection>
