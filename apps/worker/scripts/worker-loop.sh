@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
-# Daemon del scraper buscador-productos — corre 24/7 bajo systemd en el VPS.
-# Reemplaza el cron de GitHub Actions. Cada ciclo:
+# Daemon del scraper buscador-productos — corre bajo systemd en bloques de trabajo
+# de WORK_WINDOW (6h) seguidos de REST (1h) de descanso, en ciclo (ya no 24/7).
+# Reemplaza el cron de GitHub Actions. Cada ciclo dentro de la ventana de trabajo:
 #   1. Siembra la lista curada maestra (niches.txt) como pending — idempotente.
 #   2. Drena la cola en BLOQUES frescos: llama pipeline.ts --all (proceso nuevo =
 #      browser reseteado) hasta ver el centinela PH_QUEUE_EMPTY. Cada bloque
@@ -10,8 +11,9 @@
 #   3. Cola de refinamiento, UNA vez por ciclo: expand-uncovered → analyze →
 #      recheck-watchlist. (validate-pe YA NO va aquí: corre por-bloque dentro de
 #      pipeline.ts.)
-#   4. Duerme SLEEP_BETWEEN y repite. Con PH_REFRESH_DAYS=7 los activos reentran
-#      a la cola cada semana → inventario fresco sostenido.
+#   4. Duerme SLEEP_BETWEEN y repite hasta cumplir WORK_WINDOW; entonces descansa
+#      REST (1h) antes del próximo bloque. Con PH_REFRESH_DAYS=7 los activos
+#      reentran a la cola cada semana → inventario fresco sostenido.
 #
 # Observabilidad: todo va por stdout/stderr a journald (systemd). Ver:
 #   journalctl -u buscador-productos -f
@@ -54,6 +56,8 @@ export PH_CONCURRENCY="${PH_CONCURRENCY:-5}"
 
 LIST="${NICHES_FILE:-niches.txt}"
 SLEEP_BETWEEN="${SLEEP_BETWEEN:-3600}"        # pausa entre ciclos cuando la cola se vacía
+WORK_WINDOW="${PH_WORK_WINDOW:-21600}"        # ventana de trabajo por bloque (6h) — luego descansa
+REST="${PH_REST:-3600}"                       # descanso entre bloques (1h)
 BLOCK_COOLDOWN="${PH_BLOCK_COOLDOWN:-3600}"   # enfriamiento largo tras un block persistente (hard-abort)
 PIPELINE_TIMEOUT="${PIPELINE_TIMEOUT:-36000}" # tope por bloque (10h) — un browser colgado no es crash
 STEP_TIMEOUT="${STEP_TIMEOUT:-7200}"          # tope por script de refinamiento (2h)
@@ -115,41 +119,49 @@ main() {
   [ -f "$LIST" ] || log "⚠ no existe $LIST — sin lista curada; solo se procesarán pending de cold-start"
 
   while true; do
-    log "──── ciclo: inicio ────"
+    # Bloque de trabajo: cicla seed→drain→refine hasta agotar WORK_WINDOW (6h),
+    # luego descansa REST (1h). $SECONDS es el reloj del shell (builtin, $0 deps).
+    work_start=$SECONDS
+    while [ $(( SECONDS - work_start )) -lt "$WORK_WINDOW" ]; do
+      log "──── ciclo: inicio (ventana ${WORK_WINDOW}s · transcurrido $(( SECONDS - work_start ))s) ────"
 
-    # 1. Sembrar la lista curada maestra (idempotente; salta existentes, no degrada active).
-    if [ -f "$LIST" ]; then
-      timeout "$STEP_TIMEOUT" npx tsx scripts/seed-niches.ts --from "$LIST" \
-        || log "⚠ seed-niches devolvió error (sigo)"
-    fi
+      # 1. Sembrar la lista curada maestra (idempotente; salta existentes, no degrada active).
+      if [ -f "$LIST" ]; then
+        timeout "$STEP_TIMEOUT" npx tsx scripts/seed-niches.ts --from "$LIST" \
+          || log "⚠ seed-niches devolvió error (sigo)"
+      fi
 
-    # 2. Drenar la cola en bloques frescos (scrape+analyze+validate-PE por bloque).
-    drain_queue
-    drain_rc=$?
+      # 2. Drenar la cola en bloques frescos (scrape+analyze+validate-PE por bloque).
+      drain_queue
+      drain_rc=$?
 
-    # Hard-abort: block persistente → la IP está muerta. Saltamos el refinamiento
-    # (expand/analyze/validate-pe/recheck también scrapean = re-sondearían) y
-    # enfriamos largo antes de reintentar. Si la IP no se recupera, el próximo
-    # ciclo vuelve a abortar barato (tope PH_MAX_COOLDOWNS) y re-enfría.
-    if [ "$drain_rc" -eq 2 ]; then
-      log "──── ciclo: ABORTADO por block persistente · enfriando ${BLOCK_COOLDOWN}s ────"
-      sleep "$BLOCK_COOLDOWN"
-      continue
-    fi
+      # Hard-abort: block persistente → la IP está muerta. Saltamos el refinamiento
+      # (expand/analyze/validate-pe/recheck también scrapean = re-sondearían) y
+      # enfriamos largo antes de reintentar. Si la IP no se recupera, el próximo
+      # ciclo vuelve a abortar barato (tope PH_MAX_COOLDOWNS) y re-enfría.
+      if [ "$drain_rc" -eq 2 ]; then
+        log "──── ciclo: ABORTADO por block persistente · enfriando ${BLOCK_COOLDOWN}s ────"
+        sleep "$BLOCK_COOLDOWN"
+        continue
+      fi
 
-    # 3. Cola de refinamiento, una vez por ciclo.
-    refine_step expand-uncovered.ts
-    refine_step analyze.ts
-    # validate-pe como RED DE SEGURIDAD ($0 LLM): la validación PE principal corre
-    # por-bloque dentro de pipeline.ts, pero expand-uncovered.ts crea productos en
-    # nichos recién re-scrapeados (last_scraped fresco) que NO reentran a un bloque
-    # por ~PH_REFRESH_DAYS días. Esta pasada les pone su escenario A/B/C/D en el
-    # mismo ciclo; salta barato los nichos que el per-bloque ya validó.
-    refine_step validate-pe.ts
-    refine_step recheck-watchlist.ts
+      # 3. Cola de refinamiento, una vez por ciclo.
+      refine_step expand-uncovered.ts
+      refine_step analyze.ts
+      # validate-pe como RED DE SEGURIDAD ($0 LLM): la validación PE principal corre
+      # por-bloque dentro de pipeline.ts, pero expand-uncovered.ts crea productos en
+      # nichos recién re-scrapeados (last_scraped fresco) que NO reentran a un bloque
+      # por ~PH_REFRESH_DAYS días. Esta pasada les pone su escenario A/B/C/D en el
+      # mismo ciclo; salta barato los nichos que el per-bloque ya validó.
+      refine_step validate-pe.ts
+      refine_step recheck-watchlist.ts
 
-    log "──── ciclo: fin · durmiendo ${SLEEP_BETWEEN}s ────"
-    sleep "$SLEEP_BETWEEN"
+      log "──── ciclo: fin · durmiendo ${SLEEP_BETWEEN}s ────"
+      sleep "$SLEEP_BETWEEN"
+    done
+
+    log "──── ventana de trabajo cumplida (~${WORK_WINDOW}s) · descanso ${REST}s ────"
+    sleep "$REST"
   done
 }
 
