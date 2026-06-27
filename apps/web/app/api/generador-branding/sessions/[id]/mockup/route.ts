@@ -4,7 +4,8 @@ import { fetchAsBase64, uploadToStorage } from '@/lib/storage'
 import { generateImage } from '@/lib/gemini'
 import { DirectionSchema } from '@/lib/branding/types'
 import { buildMockupInstruction, buildContainerInstruction } from '@/lib/branding/instructions'
-import { genQuotaResponse } from '@/lib/gen-quota'
+import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
+import { readUserId } from '@/lib/product-hunter/session'
 import type { Part } from '@google/genai'
 
 export const dynamic = 'force-dynamic'
@@ -12,13 +13,17 @@ export const runtime = 'nodejs'
 
 // Etapa 5 — aplica la etiqueta al envase (descrito o subido) → mockup final. SSE.
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
 
-  const blocked = await genQuotaResponse('branding-mockup')
+  let precision = ''
+  try { const b = await req.json(); precision = (b?.prompt ?? '').trim() } catch { /* sin body */ }
+
+  const { blocked, regensLeft } = await checkGenQuota(id, 'branding-mockup')
   if (blocked) return blocked
+  const userId = await readUserId()
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -59,6 +64,7 @@ export async function POST(
             }),
           },
         ]
+        if (precision) parts.push({ text: `\nAjuste solicitado por el usuario (priorízalo): ${precision}` })
 
         send({ status: 'generating' })
         const b64 = await generateImage(parts)
@@ -71,8 +77,8 @@ export async function POST(
         const mockupUrl = await uploadToStorage(id, Buffer.from(b64, 'base64'), 'image/png', 'mockup')
 
         await updateBrandingSession(id, { step: Math.max(session.step, 5), mockup_url: mockupUrl })
-
-        send({ status: 'done', imageUrl: mockupUrl })
+        await recordGenQuota(id, 'branding-mockup', userId)
+        send({ status: 'done', imageUrl: mockupUrl, regensLeft })
       } catch (err) {
         send({ status: 'error', message: String(err), retryable: true })
       } finally {

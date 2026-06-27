@@ -3,9 +3,10 @@ import { z } from 'zod'
 import { getSession, updateSession } from '@/lib/db'
 import { fetchAsBase64, uploadToStorage } from '@/lib/storage'
 import { refineImage } from '@/lib/gemini'
-import { genQuotaResponse } from '@/lib/gen-quota'
+import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
+import { readUserId } from '@/lib/product-hunter/session'
 
-const BodySchema = z.object({ feedback: z.string().min(1).max(1000) })
+const BodySchema = z.object({ feedback: z.string().max(1000).optional() })
 
 export async function POST(
   req: NextRequest,
@@ -13,8 +14,9 @@ export async function POST(
 ) {
   const { id } = await params
 
-  const blocked = await genQuotaResponse('anuncios-refine')
+  const { blocked, regensLeft } = await checkGenQuota(id, 'anuncios-image')
   if (blocked) return blocked
+  const userId = await readUserId()
 
   const session = await getSession(id)
   if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -23,11 +25,11 @@ export async function POST(
 
   let body: unknown
   try { body = await req.json() } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+    body = {}
   }
   const parsed = BodySchema.safeParse(body)
   if (!parsed.success)
-    return NextResponse.json({ error: 'feedback required (max 1000 chars)' }, { status: 400 })
+    return NextResponse.json({ error: 'feedback max 1000 chars' }, { status: 400 })
 
   const [ref, product, logo, result] = await Promise.all([
     fetchAsBase64(session.reference_url),
@@ -41,7 +43,7 @@ export async function POST(
     product.data, product.mimeType,
     logo?.data ?? null, logo?.mimeType ?? null,
     result.data, result.mimeType,
-    parsed.data.feedback
+    parsed.data.feedback ?? ''
   )
 
   if (!b64) return NextResponse.json({ error: 'Refinement returned empty result' }, { status: 422 })
@@ -49,5 +51,6 @@ export async function POST(
   const imageBuffer = Buffer.from(b64, 'base64')
   const imageUrl = await uploadToStorage(id, imageBuffer, 'image/png', `result-${Date.now()}`)
   await updateSession(id, { image_url: imageUrl })
-  return NextResponse.json({ imageUrl })
+  await recordGenQuota(id, 'anuncios-image', userId)
+  return NextResponse.json({ imageUrl, regensLeft })
 }

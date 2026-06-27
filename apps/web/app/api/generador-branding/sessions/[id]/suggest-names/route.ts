@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { callStructured, BRANDING_SYSTEM_PROMPT } from '@/lib/gemini'
-import { genQuotaResponse } from '@/lib/gen-quota'
+import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
+import { readUserId } from '@/lib/product-hunter/session'
 import type { Part } from '@google/genai'
 
 export const dynamic = 'force-dynamic'
@@ -12,8 +13,9 @@ const NamesSchema = z.object({ names: z.array(z.string()).min(4).max(6) })
 // Sugiere nombres de MARCA o de PRODUCTO. Llamada estructurada con Gemini (rápida,
 // sin imágenes) — efímera, no persiste: el usuario elige uno y recién ahí se guarda.
 export async function POST(req: NextRequest) {
-  const blocked = await genQuotaResponse('branding-names')
+  const { blocked } = await checkGenQuota(null, 'branding-names')
   if (blocked) return blocked
+  const userId = await readUserId()
 
   let body: {
     kind?: 'brand' | 'product'
@@ -22,11 +24,13 @@ export async function POST(req: NextRequest) {
     personality?: string[]
     idea?: string
     brandName?: string
+    prompt?: string
   }
   try { body = await req.json() } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
+  const precision = (body.prompt ?? '').trim()
   const kind = body.kind === 'product' ? 'product' : 'brand'
   const category = body.category?.trim()
   if (!category)
@@ -48,6 +52,7 @@ export async function POST(req: NextRequest) {
         `Público objetivo: ${body.audience?.trim() || 'no especificado'}`,
         `Personalidad deseada: ${personality.length ? personality.join(', ') : 'no especificada'}`,
         body.idea?.trim() ? `Idea/estilo de nombre que tiene en mente: ${body.idea.trim()}` : '',
+        precision ? `Ajuste pedido: ${precision}` : '',
         ``,
         `Reglas: nombres cortos, memorables, pronunciables en español (mercado peruano/LATAM),`,
         `sin marcas registradas obvias. Solo el nombre, sin descripción.`,
@@ -57,6 +62,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const { names } = await callStructured('name_suggestions', NamesSchema, parts, 3, BRANDING_SYSTEM_PROMPT)
+    await recordGenQuota(null, 'branding-names', userId)
     return NextResponse.json({ names })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })

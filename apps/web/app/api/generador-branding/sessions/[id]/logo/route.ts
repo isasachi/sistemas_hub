@@ -5,7 +5,8 @@ import { generateImage } from '@/lib/gemini'
 import { DirectionSchema } from '@/lib/branding/types'
 import { buildLogoInstruction, LOGO_VARIANTS, REF_LOGO_VARIANTS } from '@/lib/branding/instructions'
 import { parseDesignDna } from '@/lib/branding/style-extract'
-import { genQuotaResponse } from '@/lib/gen-quota'
+import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
+import { readUserId } from '@/lib/product-hunter/session'
 import type { Part } from '@google/genai'
 
 export const dynamic = 'force-dynamic'
@@ -14,13 +15,17 @@ export const runtime = 'nodejs'
 // Etapa 3 — genera una tanda de logos (uno por variante) en paralelo. SSE porque
 // son varias llamadas de imagen y excederían el timeout de Vercel en un request normal.
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
 
-  const blocked = await genQuotaResponse('branding-logo')
+  let precision = ''
+  try { const b = await req.json(); precision = (b?.prompt ?? '').trim() } catch { /* sin body */ }
+
+  const { blocked, regensLeft } = await checkGenQuota(id, 'branding-logo')
   if (blocked) return blocked
+  const userId = await readUserId()
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -57,6 +62,7 @@ export async function POST(
             const parts: Part[] = ref
               ? [{ inlineData: { mimeType: ref.mimeType, data: ref.data } }, text]
               : [text]
+            if (precision) parts.push({ text: `\nAjuste solicitado por el usuario (priorízalo): ${precision}` })
             const b64 = await generateImage(parts)
             if (!b64) { console.error(`[logo ${i}] empty result (no image part)`); continue }
             const url = await uploadToStorage(id, Buffer.from(b64, 'base64'), 'image/png', `logo-${i}`)
@@ -73,7 +79,8 @@ export async function POST(
         }
 
         await updateBrandingSession(id, { logo_options: logos })
-        send({ status: 'done', images: logos })
+        await recordGenQuota(id, 'branding-logo', userId)
+        send({ status: 'done', images: logos, regensLeft })
       } catch (err) {
         send({ status: 'error', message: String(err), retryable: true })
       } finally {

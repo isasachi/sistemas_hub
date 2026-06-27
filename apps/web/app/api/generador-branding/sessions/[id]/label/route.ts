@@ -5,7 +5,8 @@ import { generateImage } from '@/lib/gemini'
 import { DirectionSchema, type LabelData } from '@/lib/branding/types'
 import { buildLabelInstruction } from '@/lib/branding/instructions'
 import { parseDesignDna } from '@/lib/branding/style-extract'
-import { genQuotaResponse } from '@/lib/gen-quota'
+import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
+import { readUserId } from '@/lib/product-hunter/session'
 import type { Part } from '@google/genai'
 
 export const dynamic = 'force-dynamic'
@@ -18,11 +19,13 @@ export async function POST(
 ) {
   const { id } = await params
 
-  const blocked = await genQuotaResponse('branding-label')
+  const { blocked, regensLeft } = await checkGenQuota(id, 'branding-label')
   if (blocked) return blocked
+  const userId = await readUserId()
 
-  let body: { labelData?: LabelData } = {}
+  let body: { labelData?: LabelData; prompt?: string } = {}
   try { body = await req.json() } catch { /* sin body: reusa el guardado */ }
+  const precision = (body.prompt ?? '').trim()
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -56,6 +59,7 @@ export async function POST(
         if (ref) parts.push({ inlineData: { mimeType: ref.mimeType, data: ref.data } })
         const refDna = parseDesignDna(session.label_reference_analysis)
         parts.push({ text: buildLabelInstruction(direction, session.brand_name, productName, labelData, !!ref, refDna) })
+        if (precision) parts.push({ text: `\nAjuste solicitado por el usuario (priorízalo): ${precision}` })
 
         send({ status: 'generating' })
         const b64 = await generateImage(parts)
@@ -72,8 +76,8 @@ export async function POST(
           label_data: labelData,
           label_url: labelUrl,
         })
-
-        send({ status: 'done', imageUrl: labelUrl })
+        await recordGenQuota(id, 'branding-label', userId)
+        send({ status: 'done', imageUrl: labelUrl, regensLeft })
       } catch (err) {
         send({ status: 'error', message: String(err), retryable: true })
       } finally {

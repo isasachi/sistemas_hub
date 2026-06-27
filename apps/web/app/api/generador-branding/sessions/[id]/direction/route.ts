@@ -3,7 +3,8 @@ import path from 'path'
 import { NextRequest, NextResponse } from 'next/server'
 import { getBrandingSession, updateBrandingSession } from '@/lib/branding/db'
 import { callStructured, BRANDING_SYSTEM_PROMPT } from '@/lib/gemini'
-import { genQuotaResponse } from '@/lib/gen-quota'
+import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
+import { readUserId } from '@/lib/product-hunter/session'
 import { DirectionSchema } from '@/lib/branding/types'
 import type { Part } from '@google/genai'
 
@@ -26,8 +27,9 @@ export async function POST(
 ) {
   const { id } = await params
 
-  const blocked = await genQuotaResponse('branding-direction')
+  const { blocked } = await checkGenQuota(id, 'branding-direction')
   if (blocked) return blocked
+  const userId = await readUserId()
 
   const session = await getBrandingSession(id)
   if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -40,11 +42,13 @@ export async function POST(
     personality?: string[]
     briefNotes?: string
     feedback?: string
+    prompt?: string
   }
   try { body = await req.json() } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
+  const precision = (body.prompt ?? '').trim()
   const brandName = body.brandName?.trim()
   const productName = body.productName?.trim()
   const productCategory = body.productCategory?.trim()
@@ -68,6 +72,7 @@ export async function POST(
         body.feedback?.trim()
           ? `\nAjustes pedidos por el usuario sobre la propuesta anterior: ${body.feedback.trim()}`
           : '',
+        precision ? `Ajuste pedido: ${precision}` : '',
         ``,
         `BIBLIOTECA DE REFERENCIAS DE DISEÑO (exemplars reales de empaque). Elige la(s) 1-2`,
         `cuyo use_case mejor matchee este producto/público/personalidad y ANCLA tu propuesta`,
@@ -107,5 +112,6 @@ export async function POST(
     direction,
   })
 
+  await recordGenQuota(id, 'branding-direction', userId)
   return NextResponse.json({ direction })
 }
