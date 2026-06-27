@@ -4,6 +4,7 @@ import { useRef, useState } from 'react'
 import { useBrandingStore } from '@/store/branding'
 import { SSEStatus } from '@/components/tools/ui/SSEStatus'
 import { FileUpload } from '@/components/tools/ui/FileUpload'
+import { RegenControls } from '@/components/tools/ui/RegenControls'
 
 const btnPrimary =
   'rounded-xl jr-cta text-[13px] font-bold disabled:opacity-40 transition-all duration-200 cursor-pointer border-0 font-sans flex items-center justify-center gap-2'
@@ -16,7 +17,7 @@ const STATUS_TEXT: Record<string, string> = {
 }
 
 export default function Section5Mockup() {
-  const { sessionId, mockupUrl, labelData, setContainer, setMockup } = useBrandingStore()
+  const { sessionId, mockupUrl, labelData, setContainer, setMockup, regens, setRegen } = useBrandingStore()
   const [mode, setMode] = useState<'describe' | 'upload'>('describe')
   // Prefill con el formato de empaque ya indicado en el paso de la etiqueta.
   const [desc, setDesc] = useState(labelData?.packagingFormat ?? '')
@@ -27,6 +28,7 @@ export default function Section5Mockup() {
   const [status, setStatus] = useState('generating')
   const [result, setResult] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [prompt, setPrompt] = useState('')
   const sseKey = useRef(0)
 
   function onFile(f: File) {
@@ -34,10 +36,11 @@ export default function Section5Mockup() {
     setPreview(URL.createObjectURL(f))
   }
 
-  function handleEvent(e: { status: string; imageUrl?: string; message?: string }) {
+  function handleEvent(e: { status: string; imageUrl?: string; message?: string; regensLeft?: number }) {
     setStatus(e.status)
     if (e.status === 'done' && e.imageUrl) {
       setResult(e.imageUrl)
+      if (typeof e.regensLeft === 'number') setRegen('branding-mockup', e.regensLeft)
       setGenerating(false)
     }
     if (e.status === 'error') {
@@ -126,6 +129,7 @@ export default function Section5Mockup() {
           <SSEStatus
             key={sseKey.current}
             url={`/api/generador-branding/sessions/${sessionId}/mockup`}
+            body={{ prompt: prompt.trim() || undefined }}
             onEvent={handleEvent}
           />
           <p className="text-[12px] text-[#bdbdbd]">{STATUS_TEXT[status] ?? 'Generando...'}</p>
@@ -140,17 +144,16 @@ export default function Section5Mockup() {
       {result && !generating && (
         <>
           <img src={result} alt="Mockup del producto" className="w-full rounded-2xl border border-white/[0.08]" />
-          <div className="flex gap-3">
-            <button onClick={() => setMockup(result)} className={btnPrimary + ' flex-1 h-11'}>
-              Ver guía de marca →
-            </button>
-            <button
-              onClick={generate}
-              className="h-11 px-4 rounded-xl border border-white/[0.14] text-[#f5f5f5] text-[13px] font-medium hover:bg-white/[0.05] transition-colors cursor-pointer bg-transparent"
-            >
-              ↻ Regenerar
-            </button>
-          </div>
+          <button onClick={() => setMockup(result)} className={btnPrimary + ' h-11 w-full'}>
+            Ver guía de marca →
+          </button>
+          <RegenControls
+            regensLeft={regens['branding-mockup'] ?? 3}
+            prompt={prompt}
+            onPromptChange={setPrompt}
+            onRegenerate={generate}
+            busy={saving || generating}
+          />
         </>
       )}
 

@@ -4,12 +4,13 @@ import { useRef, useState } from 'react'
 import { useBrandingStore } from '@/store/branding'
 import { SSEStatus } from '@/components/tools/ui/SSEStatus'
 import { FileUpload } from '@/components/tools/ui/FileUpload'
+import { RegenControls } from '@/components/tools/ui/RegenControls'
 
 const btnPrimary =
   'rounded-xl jr-cta text-[13px] font-bold disabled:opacity-40 transition-all duration-200 cursor-pointer border-0 font-sans flex items-center justify-center gap-2'
 
 export default function Section3Logo() {
-  const { sessionId, logoOptions, logoUrl, setLogoOptions, setLogoReference, selectLogo } = useBrandingStore()
+  const { sessionId, logoOptions, logoUrl, setLogoOptions, setLogoReference, selectLogo, regens, setRegen } = useBrandingStore()
   const [generating, setGenerating] = useState(false)
   const [saving, setSaving] = useState(false)
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
@@ -17,6 +18,7 @@ export default function Section3Logo() {
   const [picking, setPicking] = useState<string | null>(null)
   const [refFile, setRefFile] = useState<File | null>(null)
   const [refPreview, setRefPreview] = useState<string | null>(null)
+  const [prompt, setPrompt] = useState('')
   const sseKey = useRef(0)
 
   function onRefFile(f: File) {
@@ -24,12 +26,13 @@ export default function Section3Logo() {
     setRefPreview(URL.createObjectURL(f))
   }
 
-  function handleEvent(e: { status: string; images?: string[]; message?: string; done?: number; total?: number }) {
+  function handleEvent(e: { status: string; images?: string[]; message?: string; done?: number; total?: number; regensLeft?: number }) {
     if (e.status === 'progress' && typeof e.done === 'number' && typeof e.total === 'number') {
       setProgress({ done: e.done, total: e.total })
     }
     if (e.status === 'done' && e.images) {
       setLogoOptions(e.images)
+      if (typeof e.regensLeft === 'number') setRegen('branding-logo', e.regensLeft)
       setGenerating(false)
     }
     if (e.status === 'error') {
@@ -108,6 +111,7 @@ export default function Section3Logo() {
           <SSEStatus
             key={sseKey.current}
             url={`/api/generador-branding/sessions/${sessionId}/logo`}
+            body={{ prompt: prompt.trim() || undefined }}
             onEvent={handleEvent}
           />
           <p className="text-[12px] text-[#bdbdbd]">
@@ -163,13 +167,13 @@ export default function Section3Logo() {
             })}
           </div>
 
-          <button
-            onClick={generate}
-            disabled={!!picking || saving}
-            className="h-10 px-4 rounded-xl border border-white/[0.14] text-[#f5f5f5] text-[13px] font-medium hover:bg-white/[0.05] transition-colors cursor-pointer bg-transparent self-start"
-          >
-            ↻ Generar otras opciones
-          </button>
+          <RegenControls
+            regensLeft={regens['branding-logo'] ?? 3}
+            prompt={prompt}
+            onPromptChange={setPrompt}
+            onRegenerate={generate}
+            busy={saving || generating}
+          />
         </>
       )}
 

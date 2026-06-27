@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react'
 import { useLandingStore, SESSION_KEY } from '@/store/landing'
 import type { LandingSessionResponse } from '@/lib/landing/types'
+import { fetchRegens } from '@/lib/gen-quota-client'
 import { SECTION_LABELS } from '@/lib/landing/types'
 import { SessionErrorRetry } from '@/components/tools/ui/SessionErrorRetry'
 import AccordionSection from '@/components/tools/generador-anuncios/AccordionSection'
@@ -22,7 +23,7 @@ function getStatus(sectionStep: number, currentStep: number, maxStep: number): '
 }
 
 export default function LandingWizard() {
-  const { step, sessionId, sessionError, startNewSession, hydrateFromSession, setStep, productName, productPhotoUrls, template, selectedSections, sections } =
+  const { step, sessionId, sessionError, startNewSession, hydrateFromSession, setStep, setRegens, productName, productPhotoUrls, template, selectedSections, sections } =
     useLandingStore()
 
   useEffect(() => {
@@ -33,6 +34,10 @@ export default function LandingWizard() {
       .then((s) => hydrateFromSession(s))
       .catch(() => startNewSession())
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (sessionId) fetchRegens(sessionId).then(setRegens)
+  }, [sessionId, setRegens])
 
   const maxStep = useRef(0)
   maxStep.current = Math.max(maxStep.current, step)

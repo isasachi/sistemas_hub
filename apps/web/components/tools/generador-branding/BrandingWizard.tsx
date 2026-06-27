@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react'
 import { useBrandingStore, SESSION_KEY } from '@/store/branding'
 import type { BrandingSessionResponse } from '@/lib/branding/types'
+import { fetchRegens } from '@/lib/gen-quota-client'
 import { SessionErrorRetry } from '@/components/tools/ui/SessionErrorRetry'
 import AccordionSection from '@/components/tools/generador-anuncios/AccordionSection'
 import Section1Brief from './sections/Section1Brief'
@@ -21,7 +22,7 @@ function getStatus(sectionStep: number, currentStep: number, maxStep: number): '
 }
 
 export default function BrandingWizard() {
-  const { step, sessionId, sessionError, startNewSession, hydrateFromSession, setStep, brandName, productCategory, direction, logoUrl, labelUrl, mockupUrl } =
+  const { step, sessionId, sessionError, startNewSession, hydrateFromSession, setStep, setRegens, brandName, productCategory, direction, logoUrl, labelUrl, mockupUrl } =
     useBrandingStore()
 
   // Reanudar: si hay un id guardado y la sesión existe, rehidratar; si no, una nueva.
@@ -33,6 +34,10 @@ export default function BrandingWizard() {
       .then((s) => hydrateFromSession(s))
       .catch(() => startNewSession())
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (sessionId) fetchRegens(sessionId).then(setRegens)
+  }, [sessionId, setRegens])
 
   const maxStep = useRef(0)
   maxStep.current = Math.max(maxStep.current, step)

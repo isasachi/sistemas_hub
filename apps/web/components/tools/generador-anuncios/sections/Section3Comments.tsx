@@ -15,6 +15,7 @@ const btnPrimary = 'h-11 w-full rounded-xl jr-cta text-[13px] font-bold disabled
 export default function Section3Comments() {
   const { sessionId, setCopyVersions, setLoading, isLoading } = useWizardStore()
   const [comments, setComments] = useState('')
+  const [prompt, setPrompt] = useState('')
   const [error, setError] = useState<string | null>(null)
 
   async function handleSubmit() {
@@ -25,7 +26,7 @@ export default function Section3Comments() {
       const res = await fetch(`/api/generador-anuncios/sessions/${sessionId}/generate-copy`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ comments }),
+        body: JSON.stringify({ comments, prompt: prompt.trim() || undefined }),
       })
       const data = await res.json() as { copyVersions?: CopyVersions; error?: string }
       if (!res.ok) throw new Error(data.error ?? 'Error al generar el copy')
@@ -62,6 +63,13 @@ export default function Section3Comments() {
       {error && (
         <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-[12px] text-red-400">{error}</div>
       )}
+      <textarea
+        value={prompt}
+        onChange={(e) => setPrompt(e.target.value)}
+        rows={2}
+        placeholder="Opcional: ajuste para el copy — ej: más directo, tono juvenil"
+        className="rounded-xl border border-white/[0.06] bg-[#0a0a0a] px-4 py-3 text-[13px] text-[#f5f5f5] placeholder:text-[#8a8a8a] resize-none focus:outline-none focus:border-[rgba(255,156,77,0.5)] transition-colors"
+      />
       <button onClick={handleSubmit} disabled={!comments.trim() || isLoading} className={btnPrimary}>
         {isLoading ? (
           <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Generando versiones...</>
