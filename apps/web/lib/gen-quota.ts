@@ -77,8 +77,14 @@ export async function checkGenQuota(
   return { blocked: null, regensLeft: regensLeftFor(used + 1) }
 }
 
-/** Registra una generación exitosa (1 fila). Llamar SOLO tras generar OK. */
+/** Registra una generación exitosa (1 fila). Llamar SOLO tras generar OK.
+ * NUNCA lanza: envuelve en try/catch para proteger al caller (la generación ya fue exitosa).
+ */
 export async function recordGenQuota(sessionId: string | null, kind: string, userId: string | null): Promise<void> {
-  const { error } = await getDb().from('ph_gen_usage').insert({ user_id: userId, kind, gen_day: limaSearchDay(), session_id: sessionId })
-  if (error) console.error('[gen-quota] registrando:', error.message)
+  try {
+    const { error } = await getDb().from('ph_gen_usage').insert({ user_id: userId, kind, gen_day: limaSearchDay(), session_id: sessionId })
+    if (error) console.error('[gen-quota] registrando:', error.message)
+  } catch (err) {
+    console.error('[gen-quota] registrando:', err instanceof Error ? err.message : String(err))
+  }
 }

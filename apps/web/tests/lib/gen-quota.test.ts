@@ -18,6 +18,8 @@ vi.mock('@supabase/supabase-js', () => ({
         return chain
       },
       insert: (row: { session_id: string | null; kind: string; gen_day: string }) => {
+        // Sentinel: lanza para simular fallo DB
+        if (row.kind === '__test-db-throw') throw new Error('simulated DB error')
         rows.push(row); return Promise.resolve({ error: null })
       },
     }),
@@ -74,5 +76,14 @@ describe('texto', () => {
   it('igual escribe fila (cuenta al backstop global)', async () => {
     await gen('s1', 'branding-names')
     expect(rows.length).toBe(1)
+  })
+})
+
+describe('recordGenQuota resilencia', () => {
+  it('nunca rechaza incluso si insert lanza (sentinel kind __test-db-throw)', async () => {
+    // El mock lanzará si kind='__test-db-throw'
+    // Sin try/catch en recordGenQuota, esta llamada rechazaría.
+    // Con la fix, resuelve a undefined.
+    await expect(recordGenQuota('s1', '__test-db-throw', 'u1')).resolves.toBeUndefined()
   })
 })
