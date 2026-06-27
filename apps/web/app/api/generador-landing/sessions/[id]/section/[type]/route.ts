@@ -6,7 +6,8 @@ import { buildSectionInstruction } from '@/lib/landing/instructions'
 import { extractLandingStyle } from '@/lib/landing/style-extract'
 import { TEMPLATE_BY_ID } from '@/lib/landing/templates'
 import { SectionCopySchema, SectionType, type LandingSection } from '@/lib/landing/types'
-import { genQuotaResponse } from '@/lib/gen-quota'
+import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
+import { readUserId } from '@/lib/product-hunter/session'
 import type { Part } from '@google/genai'
 
 export const dynamic = 'force-dynamic'
@@ -21,15 +22,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const parsedType = SectionType.safeParse(type)
   if (!parsedType.success) return NextResponse.json({ error: 'Tipo de sección inválido' }, { status: 400 })
 
-  const blocked = await genQuotaResponse('landing-section')
+  const kind = `landing-section:${type}`
+  const { blocked, regensLeft } = await checkGenQuota(id, kind)
   if (blocked) return blocked
+  const userId = await readUserId()
 
   const session = await getLandingSession(id)
   if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   // El copy puede venir en el body (edición) o tomarse del copy aprobado de la sesión.
-  let body: { copy?: unknown; order?: number } = {}
+  let body: { copy?: unknown; order?: number; prompt?: string } = {}
   try { body = await req.json() } catch { /* body opcional */ }
+  const precision = (body.prompt ?? '').trim()
 
   let copy = SectionCopySchema.safeParse(body.copy).success ? SectionCopySchema.parse(body.copy) : null
   if (!copy) {
@@ -69,6 +73,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     ...photoParts,
     { text: buildSectionInstruction(copy, photoParts.length > 0, templateStyle, palette, typography) },
   ]
+  if (precision) parts.push({ text: '\nAjuste solicitado por el usuario (priorízalo): ' + precision })
   const b64 = await generateImage(parts, 3, { aspectRatio: '9:16' })
   if (!b64) return NextResponse.json({ error: 'No se pudo generar la sección', retryable: true }, { status: 502 })
 
@@ -84,6 +89,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   else sections.push(section)
 
   await updateLandingSession(id, { step: Math.max(session.step, 3), sections })
-
-  return NextResponse.json({ section })
+  await recordGenQuota(id, kind, userId)
+  return NextResponse.json({ section, regensLeft })
 }
