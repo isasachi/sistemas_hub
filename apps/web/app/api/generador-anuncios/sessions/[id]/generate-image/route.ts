@@ -2,20 +2,25 @@ import { NextRequest } from 'next/server'
 import { getSession, updateSession } from '@/lib/db'
 import { fetchAsBase64, uploadToStorage } from '@/lib/storage'
 import { editImage, callReasoning, STEP5_PROMPT } from '@/lib/gemini'
-import { genQuotaResponse } from '@/lib/gen-quota'
+import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
+import { readUserId } from '@/lib/product-hunter/session'
 import { ReferenceAnalysisSchema, ProductScanSchema, ConfirmedCopySchema } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
 
-  const blocked = await genQuotaResponse('anuncios-image')
+  let precision = ''
+  try { const b = await req.json(); precision = (b?.prompt ?? '').trim() } catch { /* sin body */ }
+
+  const { blocked, regensLeft } = await checkGenQuota(id, 'anuncios-image')
   if (blocked) return blocked
+  const userId = await readUserId()
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -65,7 +70,8 @@ export async function POST(
           ...confirmedCopy.breakdown.map((e) => `  ${e.element}: "${e.text}"`),
         ].join('\n')
 
-        const editInstruction = await callReasoning(STEP5_PROMPT, contextForReasoning)
+        let editInstruction = await callReasoning(STEP5_PROMPT, contextForReasoning)
+        if (precision) editInstruction += `\nAjuste solicitado por el usuario (priorízalo): ${precision}`
 
         // Step 2: load images
         send({ status: 'loading_images' })
@@ -95,8 +101,8 @@ export async function POST(
         const imageUrl = await uploadToStorage(id, imageBuffer, 'image/png', 'result')
 
         await updateSession(id, { step: 5, edit_instruction: editInstruction, image_url: imageUrl })
-
-        send({ status: 'done', imageUrl })
+        await recordGenQuota(id, 'anuncios-image', userId)
+        send({ status: 'done', imageUrl, regensLeft })
       } catch (err) {
         send({ status: 'error', message: String(err), retryable: true })
       } finally {
