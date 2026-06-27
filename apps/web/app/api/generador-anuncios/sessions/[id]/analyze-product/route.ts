@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession, updateSession } from '@/lib/db'
 import { uploadToStorage } from '@/lib/storage'
 import { callStructured } from '@/lib/gemini'
-import { genQuotaResponse } from '@/lib/gen-quota'
+import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
+import { readUserId } from '@/lib/product-hunter/session'
 import { ProductScanSchema, ReferenceAnalysisSchema } from '@/lib/types'
 import type { Part } from '@google/genai'
 
@@ -12,8 +13,9 @@ export async function POST(
 ) {
   const { id } = await params
 
-  const blocked = await genQuotaResponse('anuncios-product')
+  const { blocked } = await checkGenQuota(id, 'anuncios-product')
   if (blocked) return blocked
+  const userId = await readUserId()
 
   const session = await getSession(id)
   if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -32,6 +34,7 @@ export async function POST(
 
   const logoFile = formData.get('logo') as File | null
 
+  const precision = ((formData.get('prompt') as string | null) ?? '').trim()
   const productName = (formData.get('productName') as string | null)?.trim()
   const whatItDoes = (formData.get('whatItDoes') as string | null)?.trim()
   const targetAudience = (formData.get('targetAudience') as string | null)?.trim()
@@ -65,6 +68,7 @@ export async function POST(
         `What it does: ${whatItDoes}`,
         `Target audience: ${targetAudience}`,
         logoB64 ? 'A brand logo is also provided.' : 'No logo provided.',
+        precision ? `Ajuste pedido: ${precision}` : '',
         'Analyze the product image. Return ProductScan JSON.',
       ].join('\n'),
     },
@@ -89,5 +93,6 @@ export async function POST(
     target_audience: targetAudience,
   })
 
+  await recordGenQuota(id, 'anuncios-product', userId)
   return NextResponse.json({ scan, productUrl, logoUrl })
 }

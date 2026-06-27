@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession, updateSession } from '@/lib/db'
 import { callStructured } from '@/lib/gemini'
-import { genQuotaResponse } from '@/lib/gen-quota'
+import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
+import { readUserId } from '@/lib/product-hunter/session'
 import { fetchAsBase64 } from '@/lib/storage'
 import { CopyVersionsSchema, ReferenceAnalysisSchema, ProductScanSchema } from '@/lib/types'
 import type { Part } from '@google/genai'
@@ -12,8 +13,9 @@ export async function POST(
 ) {
   const { id } = await params
 
-  const blocked = await genQuotaResponse('anuncios-copy')
+  const { blocked } = await checkGenQuota(id, 'anuncios-copy')
   if (blocked) return blocked
+  const userId = await readUserId()
 
   const session = await getSession(id)
   if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -22,11 +24,12 @@ export async function POST(
   if (!session.product_name || !session.what_it_does || !session.target_audience)
     return NextResponse.json({ error: 'Missing product answers' }, { status: 409 })
 
-  let body: { comments?: unknown }
+  let body: { comments?: unknown; prompt?: string }
   try { body = await req.json() } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
   const comments = typeof body.comments === 'string' ? body.comments.trim() : ''
+  const precision = (body.prompt ?? '').trim()
   if (!comments) return NextResponse.json({ error: 'Missing comments' }, { status: 400 })
   if (comments.length > 8000) return NextResponse.json({ error: 'Comments too long (max 8000 chars)' }, { status: 400 })
 
@@ -67,12 +70,14 @@ export async function POST(
         '  - Use a continuous phrase from one comment, not a collage from multiple.',
         '  - If no comment maps cleanly to a slot, copy Version A text unchanged.',
         '  - Never invent reviews, numbers, or guarantees.',
+        precision ? `\nAjuste pedido: ${precision}` : '',
       ].join('\n'),
     },
   ]
 
   const copyVersions = await callStructured('copy_versions', CopyVersionsSchema, parts)
   await updateSession(id, { step: 3, tiktok_comments: comments, copy_versions: copyVersions })
+  await recordGenQuota(id, 'anuncios-copy', userId)
   return NextResponse.json({ copyVersions })
   } catch (err) {
     console.error('[generate-copy]', err)

@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getBrandingSession } from '@/lib/branding/db'
 import { createLandingSession, getLandingSession, updateLandingSession } from '@/lib/landing/db'
 import { generateLandingCopy } from '@/lib/landing/copy'
-import { genQuotaResponse } from '@/lib/gen-quota'
+import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
+import { readUserId } from '@/lib/product-hunter/session'
 import type { SectionType } from '@/lib/landing/types'
 
 export const dynamic = 'force-dynamic'
@@ -37,15 +38,17 @@ const TEMPLATE_MAP: Record<string, string> = {
 const DEFAULT_SECTIONS: SectionType[] = ['hero', 'beneficios', 'oferta', 'testimonios', 'garantia', 'cta-final']
 
 export async function POST(req: NextRequest) {
-  const blocked = await genQuotaResponse('landing-copy')
+  const { blocked } = await checkGenQuota(null, 'landing-copy')
   if (blocked) return blocked
+  const userId = await readUserId()
 
-  let body: { brandingSessionId?: string }
+  let body: { brandingSessionId?: string; prompt?: string }
   try { body = await req.json() } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
   if (!body.brandingSessionId)
     return NextResponse.json({ error: 'Falta brandingSessionId' }, { status: 400 })
+  const precision = (body.prompt ?? '').trim()
 
   const bs = await getBrandingSession(body.brandingSessionId)
   if (!bs) return NextResponse.json({ error: 'Sesión de branding no encontrada' }, { status: 404 })
@@ -75,8 +78,9 @@ export async function POST(req: NextRequest) {
   try {
     const session = await getLandingSession(id)
     if (!session) throw new Error('Sesión de landing no encontrada tras crear')
-    const copy = await generateLandingCopy(session, DEFAULT_SECTIONS)
+    const copy = await generateLandingCopy(session, DEFAULT_SECTIONS, precision || undefined)
     await updateLandingSession(id, { copy, step: 4 })
+    await recordGenQuota(id, 'landing-copy', userId)
   } catch (err) {
     console.error('[from-branding copy]', err)
     // Sin copy: la sesión queda pre-llenada en el paso de secciones; el usuario

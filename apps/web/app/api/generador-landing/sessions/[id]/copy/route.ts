@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLandingSession, updateLandingSession } from '@/lib/landing/db'
 import { generateLandingCopy } from '@/lib/landing/copy'
-import { genQuotaResponse } from '@/lib/gen-quota'
+import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
+import { readUserId } from '@/lib/product-hunter/session'
 import { SectionType } from '@/lib/landing/types'
 
 export const dynamic = 'force-dynamic'
@@ -12,13 +13,14 @@ export const runtime = 'nodejs'
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
 
-  const blocked = await genQuotaResponse('landing-copy')
+  const { blocked } = await checkGenQuota(id, 'landing-copy')
   if (blocked) return blocked
+  const userId = await readUserId()
 
   const session = await getLandingSession(id)
   if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  let body: { sections?: string[]; feedback?: string }
+  let body: { sections?: string[]; feedback?: string; prompt?: string }
   try { body = await req.json() } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
@@ -27,8 +29,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (sections.length === 0)
     return NextResponse.json({ error: 'Elige al menos una sección' }, { status: 400 })
 
+  const precision = (body.prompt ?? '').trim()
+  const feedbackText = [body.feedback, precision].filter(Boolean).join('\n') || undefined
+
   try {
-    const copy = await generateLandingCopy(session, sections, body.feedback)
+    const copy = await generateLandingCopy(session, sections, feedbackText)
 
     await updateLandingSession(id, {
       step: Math.max(session.step, 2),
@@ -36,6 +41,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       copy,
     })
 
+    await recordGenQuota(id, 'landing-copy', userId)
     return NextResponse.json({ copy })
   } catch (err) {
     console.error('[landing-copy]', err)
