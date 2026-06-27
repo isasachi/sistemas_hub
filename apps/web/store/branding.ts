@@ -36,6 +36,8 @@ interface BrandingState {
   containerDesc: string | null
   containerUrl: string | null
   mockupUrl: string | null
+  // regeneraciones por kind
+  regens: Record<string, number>
 }
 
 interface BrandingActions {
@@ -59,6 +61,8 @@ interface BrandingActions {
   setMockup: (mockupUrl: string) => void
   hydrateFromSession: (s: BrandingSessionResponse) => void
   startNewSession: () => Promise<void>
+  setRegens: (m: Record<string, number>) => void
+  setRegen: (kind: string, n: number) => void
 }
 
 const initialState: BrandingState = {
@@ -83,6 +87,7 @@ const initialState: BrandingState = {
   containerDesc: null,
   containerUrl: null,
   mockupUrl: null,
+  regens: {},
 }
 
 export const useBrandingStore = create<BrandingState & BrandingActions>((set) => ({
@@ -139,6 +144,9 @@ export const useBrandingStore = create<BrandingState & BrandingActions>((set) =>
       mockupUrl: s.mockup_url,
     })
   },
+
+  setRegens: (regens) => set({ regens }),
+  setRegen: (kind, n) => set((s) => ({ regens: { ...s.regens, [kind]: n } })),
 
   startNewSession: async () => {
     set({ ...initialState })

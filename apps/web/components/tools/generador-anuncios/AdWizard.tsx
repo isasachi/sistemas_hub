@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react'
 import { useWizardStore, SESSION_KEY } from '@/store/wizard'
 import type { SessionResponse } from '@/lib/types'
+import { fetchRegens } from '@/lib/gen-quota-client'
 import { SessionErrorRetry } from '@/components/tools/ui/SessionErrorRetry'
 import AccordionSection from './AccordionSection'
 import Section1Reference from './sections/Section1Reference'
@@ -20,7 +21,7 @@ function getStatus(sectionStep: number, currentStep: number, maxStep: number): '
 }
 
 export default function AdWizard() {
-  const { step, imageUrl, sessionId, sessionError, startNewSession, hydrateFromSession, setStep, referenceAnalysis, productName, targetAudience, confirmedCopy } = useWizardStore()
+  const { step, imageUrl, sessionId, sessionError, startNewSession, hydrateFromSession, setStep, setRegens, referenceAnalysis, productName, targetAudience, confirmedCopy } = useWizardStore()
 
   // Reanudar: si hay un id guardado y la sesión existe, rehidratar; si no, una nueva.
   useEffect(() => {
@@ -31,6 +32,10 @@ export default function AdWizard() {
       .then((s) => hydrateFromSession(s))
       .catch(() => startNewSession())
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (sessionId) fetchRegens(sessionId).then(setRegens)
+  }, [sessionId, setRegens])
 
   const maxStep = useRef(0)
   maxStep.current = Math.max(maxStep.current, step)

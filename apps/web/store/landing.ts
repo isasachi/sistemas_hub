@@ -22,6 +22,7 @@ interface LandingState {
   selectedSections: SectionType[]
   copy: SectionCopy[]
   sections: LandingSection[]
+  regens: Record<string, number>
 }
 
 interface LandingActions {
@@ -36,6 +37,8 @@ interface LandingActions {
   setSections: (sections: LandingSection[]) => void
   hydrateFromSession: (s: LandingSessionResponse) => void
   startNewSession: () => Promise<void>
+  setRegens: (m: Record<string, number>) => void
+  setRegen: (kind: string, n: number) => void
 }
 
 const initialState: LandingState = {
@@ -52,6 +55,7 @@ const initialState: LandingState = {
   selectedSections: [],
   copy: [],
   sections: [],
+  regens: {},
 }
 
 export const useLandingStore = create<LandingState & LandingActions>((set) => ({
@@ -98,6 +102,9 @@ export const useLandingStore = create<LandingState & LandingActions>((set) => ({
       sections: (s.sections ?? []).slice().sort((a, b) => a.order - b.order),
     })
   },
+
+  setRegens: (regens) => set({ regens }),
+  setRegen: (kind, n) => set((s) => ({ regens: { ...s.regens, [kind]: n } })),
 
   startNewSession: async () => {
     set({ ...initialState })
