@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react'
 import { useWizardStore } from '@/store/wizard'
 import { SSEStatus } from '@/components/tools/ui/SSEStatus'
+import { RegenControls } from '@/components/tools/ui/RegenControls'
 
 const STATUS_LABELS: Record<string, { text: string; pct: number }> = {
   building_prompt: { text: 'Preparando instrucciones...', pct: 15 },
@@ -17,7 +18,7 @@ const STAGES = ['building_prompt', 'loading_images', 'generating', 'uploading', 
 const btnPrimary = 'rounded-xl jr-cta text-[13px] font-bold disabled:opacity-40 transition-all duration-200 cursor-pointer border-0 font-sans flex items-center justify-center gap-2'
 
 export default function Section5Generate() {
-  const { sessionId, imageUrl, setImageUrl, startNewSession } = useWizardStore()
+  const { sessionId, imageUrl, setImageUrl, startNewSession, regens, setRegen } = useWizardStore()
   const [status, setStatus] = useState<string>('building_prompt')
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
@@ -25,11 +26,14 @@ export default function Section5Generate() {
   const [refining, setRefining] = useState(false)
   const sseKey = useRef(0)
 
-  function handleEvent(event: { status: string; imageUrl?: string; message?: string }) {
+  function handleEvent(event: { status: string; imageUrl?: string; message?: string; regensLeft?: number }) {
     const info = STATUS_LABELS[event.status]
     if (info) setProgress(info.pct)
     setStatus(event.status)
-    if (event.status === 'done' && event.imageUrl) setImageUrl(event.imageUrl)
+    if (event.status === 'done' && event.imageUrl) {
+      setImageUrl(event.imageUrl)
+      if (typeof event.regensLeft === 'number') setRegen('anuncios-image', event.regensLeft)
+    }
     if (event.status === 'error') setError(event.message ?? 'Error al generar')
   }
 
@@ -46,7 +50,7 @@ export default function Section5Generate() {
   }
 
   async function handleRefine() {
-    if (!sessionId || !feedback.trim() || refining) return
+    if (!sessionId || refining) return
     setRefining(true)
     setError(null)
     try {
@@ -55,9 +59,10 @@ export default function Section5Generate() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ feedback: feedback.trim() }),
       })
-      const data = await res.json() as { imageUrl?: string; error?: string }
+      const data = await res.json() as { imageUrl?: string; regensLeft?: number; error?: string }
       if (!res.ok) throw new Error(data.error ?? 'Error al aplicar cambios')
       setImageUrl(data.imageUrl!)
+      if (typeof data.regensLeft === 'number') setRegen('anuncios-image', data.regensLeft)
       setFeedback('')
     } catch (err) {
       setError((err as Error).message)
@@ -152,23 +157,14 @@ export default function Section5Generate() {
           <div className="border-t border-white/[0.06] pt-4">
             <p className="text-[10px] font-bold uppercase tracking-widest text-[#8a8a8a] mb-2">¿Quieres ajustar algo?</p>
             {error && <div className="mb-2 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-[11px] text-red-400">{error}</div>}
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder="Ej: fondo más oscuro, CTA más grande..."
-                value={feedback}
-                onChange={(e) => setFeedback(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && !refining && handleRefine()}
-                className="flex-1 h-10 rounded-xl border border-white/[0.06] bg-[#0a0a0a] px-3 text-[13px] text-[#f5f5f5] placeholder:text-[#8a8a8a] focus:outline-none focus:border-[rgba(255,156,77,0.5)] transition-colors"
-              />
-              <button
-                onClick={handleRefine}
-                disabled={!feedback.trim() || refining}
-                className={btnPrimary + ' h-10 px-4 shrink-0'}
-              >
-                {refining ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'Aplicar'}
-              </button>
-            </div>
+            <RegenControls
+              regensLeft={regens['anuncios-image'] ?? 3}
+              prompt={feedback}
+              onPromptChange={setFeedback}
+              onRegenerate={handleRefine}
+              busy={refining}
+              label="↻ Regenerar anuncio"
+            />
           </div>
         </div>
       )}
