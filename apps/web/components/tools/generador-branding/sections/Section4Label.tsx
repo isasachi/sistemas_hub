@@ -5,6 +5,7 @@ import { useBrandingStore } from '@/store/branding'
 import { SSEStatus } from '@/components/tools/ui/SSEStatus'
 import { FileUpload } from '@/components/tools/ui/FileUpload'
 import { FieldGroup } from '@/components/tools/ui/FieldGroup'
+import { RegenControls } from '@/components/tools/ui/RegenControls'
 import type { LabelData } from '@/lib/branding/types'
 
 const btnPrimary =
@@ -17,7 +18,7 @@ const STATUS_TEXT: Record<string, string> = {
 }
 
 export default function Section4Label() {
-  const { sessionId, labelUrl, labelData, setLabel, setLabelReference } = useBrandingStore()
+  const { sessionId, labelUrl, labelData, setLabel, setLabelReference, regens, setRegen } = useBrandingStore()
   const [packagingFormat, setPackagingFormat] = useState(labelData?.packagingFormat ?? '')
   const [ingredients, setIngredients] = useState(labelData?.ingredients ?? '')
   const [netWeight, setNetWeight] = useState(labelData?.netWeight ?? '')
@@ -31,18 +32,20 @@ export default function Section4Label() {
   const [status, setStatus] = useState('generating')
   const [result, setResult] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [prompt, setPrompt] = useState('')
   const sseKey = useRef(0)
-  const bodyRef = useRef<{ labelData: LabelData }>({ labelData: { packagingFormat: '', ingredients: '', netWeight: '', units: '', highlight: '' } })
+  const bodyRef = useRef<{ labelData: LabelData; prompt?: string }>({ labelData: { packagingFormat: '', ingredients: '', netWeight: '', units: '', highlight: '' } })
 
   function onRefFile(f: File) {
     setRefFile(f)
     setRefPreview(URL.createObjectURL(f))
   }
 
-  function handleEvent(e: { status: string; imageUrl?: string; message?: string }) {
+  function handleEvent(e: { status: string; imageUrl?: string; message?: string; regensLeft?: number }) {
     setStatus(e.status)
     if (e.status === 'done' && e.imageUrl) {
       setResult(e.imageUrl)
+      if (typeof e.regensLeft === 'number') setRegen('branding-label', e.regensLeft)
       setGenerating(false)
     }
     if (e.status === 'error') {
@@ -76,6 +79,7 @@ export default function Section4Label() {
           units: units.trim(),
           highlight: highlight.trim(),
         },
+        prompt: prompt.trim() || undefined,
       }
       setStatus('generating')
       setGenerating(true)
@@ -152,17 +156,16 @@ export default function Section4Label() {
       {result && !generating && (
         <>
           <img src={result} alt="Etiqueta generada" className="w-full rounded-2xl border border-white/[0.08]" />
-          <div className="flex gap-3">
-            <button onClick={() => setLabel({ labelData: bodyRef.current.labelData, labelUrl: result })} className={btnPrimary + ' flex-1 h-11'}>
-              Usar esta etiqueta →
-            </button>
-            <button
-              onClick={generate}
-              className="h-11 px-4 rounded-xl border border-white/[0.14] text-[#f5f5f5] text-[13px] font-medium hover:bg-white/[0.05] transition-colors cursor-pointer bg-transparent"
-            >
-              ↻ Regenerar
-            </button>
-          </div>
+          <button onClick={() => setLabel({ labelData: bodyRef.current.labelData, labelUrl: result })} className={btnPrimary + ' h-11 w-full'}>
+            Usar esta etiqueta →
+          </button>
+          <RegenControls
+            regensLeft={regens['branding-label'] ?? 3}
+            prompt={prompt}
+            onPromptChange={setPrompt}
+            onRegenerate={generate}
+            busy={saving || generating}
+          />
         </>
       )}
 
