@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { getBrandingSession, updateBrandingSession } from '@/lib/branding/db'
 import { fetchAsBase64, uploadToStorage } from '@/lib/storage'
-import { generateImage } from '@/lib/gemini'
+import { generateImage, editWithPrompt } from '@/lib/gemini'
 import { DirectionSchema, type LabelData } from '@/lib/branding/types'
 import { buildLabelInstruction } from '@/lib/branding/instructions'
 import { parseDesignDna } from '@/lib/branding/style-extract'
@@ -48,21 +48,29 @@ export async function POST(
         const productName = (session.product_name || session.brand_name).trim()
 
         send({ status: 'loading_images' })
-        // Image 1 = logo. Image 2 (opcional) = etiqueta de referencia, como style
-        // reference: emula su estética/color/mood (ver buildLabelInstruction).
-        const parts: Part[] = []
-        const logo = await fetchAsBase64(session.logo_url)
-        parts.push({ inlineData: { mimeType: logo.mimeType, data: logo.data } })
-        const ref = session.label_reference_url
-          ? await fetchAsBase64(session.label_reference_url)
-          : null
-        if (ref) parts.push({ inlineData: { mimeType: ref.mimeType, data: ref.data } })
-        const refDna = parseDesignDna(session.label_reference_analysis)
-        parts.push({ text: buildLabelInstruction(direction, session.brand_name, productName, labelData, !!ref, refDna) })
-        if (precision) parts.push({ text: `\nAjuste solicitado por el usuario (priorízalo): ${precision}` })
+        // Regen con prompt sobre una etiqueta ya generada = edición exclusiva: solo ese
+        // cambio, el resto idéntico (no rehacer desde cero). Sin prompt o sin etiqueta
+        // previa, genera completa: logo (Image 1) + etiqueta de referencia opcional.
+        let b64: string
+        if (precision && session.label_url) {
+          const prev = await fetchAsBase64(session.label_url)
+          send({ status: 'generating' })
+          b64 = await editWithPrompt(prev.data, prev.mimeType, precision)
+        } else {
+          const parts: Part[] = []
+          const logo = await fetchAsBase64(session.logo_url)
+          parts.push({ inlineData: { mimeType: logo.mimeType, data: logo.data } })
+          const ref = session.label_reference_url
+            ? await fetchAsBase64(session.label_reference_url)
+            : null
+          if (ref) parts.push({ inlineData: { mimeType: ref.mimeType, data: ref.data } })
+          const refDna = parseDesignDna(session.label_reference_analysis)
+          parts.push({ text: buildLabelInstruction(direction, session.brand_name, productName, labelData, !!ref, refDna) })
+          if (precision) parts.push({ text: `\nAjuste solicitado por el usuario (priorízalo): ${precision}` })
 
-        send({ status: 'generating' })
-        const b64 = await generateImage(parts)
+          send({ status: 'generating' })
+          b64 = await generateImage(parts)
+        }
         if (!b64) {
           send({ status: 'error', message: 'La generación devolvió un resultado vacío', retryable: true })
           return controller.close()

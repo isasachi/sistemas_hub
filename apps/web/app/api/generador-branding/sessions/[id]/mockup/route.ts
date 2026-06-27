@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { getBrandingSession, updateBrandingSession } from '@/lib/branding/db'
 import { fetchAsBase64, uploadToStorage } from '@/lib/storage'
-import { generateImage } from '@/lib/gemini'
+import { generateImage, editWithPrompt } from '@/lib/gemini'
 import { DirectionSchema } from '@/lib/branding/types'
 import { buildMockupInstruction, buildContainerInstruction } from '@/lib/branding/instructions'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
@@ -43,31 +43,42 @@ export async function POST(
         const direction = DirectionSchema.parse(session.direction)
 
         send({ status: 'loading_images' })
-        const label = await fetchAsBase64(session.label_url)
-        let container = session.container_url ? await fetchAsBase64(session.container_url) : null
 
-        // Modo describir: sin imagen de envase el wrap recompone la etiqueta plana.
-        // Generamos un envase vacío desde la descripción para darle geometría que anclar.
-        if (!container && session.container_mode === 'describe') {
-          send({ status: 'building_container' })
-          const cb64 = await generateImage([{ text: buildContainerInstruction(session.container_desc) }])
-          if (cb64) container = { mimeType: 'image/png', data: cb64 }
+        // Regen con prompt sobre un mockup ya generado = edición exclusiva: solo ese
+        // cambio, el resto idéntico. Sin prompt o sin mockup previo, compone desde la
+        // etiqueta + el envase.
+        let b64: string
+        if (precision && session.mockup_url) {
+          const prev = await fetchAsBase64(session.mockup_url)
+          send({ status: 'generating' })
+          b64 = await editWithPrompt(prev.data, prev.mimeType, precision)
+        } else {
+          const label = await fetchAsBase64(session.label_url)
+          let container = session.container_url ? await fetchAsBase64(session.container_url) : null
+
+          // Modo describir: sin imagen de envase el wrap recompone la etiqueta plana.
+          // Generamos un envase vacío desde la descripción para darle geometría que anclar.
+          if (!container && session.container_mode === 'describe') {
+            send({ status: 'building_container' })
+            const cb64 = await generateImage([{ text: buildContainerInstruction(session.container_desc) }])
+            if (cb64) container = { mimeType: 'image/png', data: cb64 }
+          }
+
+          const parts: Part[] = [
+            { inlineData: { mimeType: label.mimeType, data: label.data } },
+            ...(container ? [{ inlineData: { mimeType: container.mimeType, data: container.data } } as Part] : []),
+            {
+              text: buildMockupInstruction(direction, session.brand_name, {
+                hasContainerImage: !!container,
+                containerDesc: session.container_desc,
+              }),
+            },
+          ]
+          if (precision) parts.push({ text: `\nAjuste solicitado por el usuario (priorízalo): ${precision}` })
+
+          send({ status: 'generating' })
+          b64 = await generateImage(parts)
         }
-
-        const parts: Part[] = [
-          { inlineData: { mimeType: label.mimeType, data: label.data } },
-          ...(container ? [{ inlineData: { mimeType: container.mimeType, data: container.data } } as Part] : []),
-          {
-            text: buildMockupInstruction(direction, session.brand_name, {
-              hasContainerImage: !!container,
-              containerDesc: session.container_desc,
-            }),
-          },
-        ]
-        if (precision) parts.push({ text: `\nAjuste solicitado por el usuario (priorízalo): ${precision}` })
-
-        send({ status: 'generating' })
-        const b64 = await generateImage(parts)
         if (!b64) {
           send({ status: 'error', message: 'La generación devolvió un resultado vacío', retryable: true })
           return controller.close()

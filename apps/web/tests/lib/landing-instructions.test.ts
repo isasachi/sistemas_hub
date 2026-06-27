@@ -7,26 +7,24 @@ const TEMPLATE = 'TEMPLATE_STYLE_MARKER'
 const BRAND_HEX = '#0A2540'
 
 describe('buildSectionInstruction', () => {
-  it('inyecta paleta + tipografía como predominantes y degrada la plantilla a estructura', () => {
+  it('solo la paleta de marca predomina; la tipografía la aporta la plantilla', () => {
     const out = buildSectionInstruction(
       COPY, true, TEMPLATE,
       [{ name: 'Azul', hex: BRAND_HEX, usage: 'principal' }],
-      { headline: 'BoldSans', body: 'Humanist' },
     )
-    // La plantilla NO tiñe colores: pasa a estructura/layout.
-    expect(out).toContain('STRUCTURE & LAYOUT')
+    // La plantilla aporta estructura + tipografía (no colores).
+    expect(out).toContain('STRUCTURE, LAYOUT & TYPOGRAPHY')
     expect(out).toContain(TEMPLATE)
-    // La paleta predomina y pisa la plantilla.
+    // La paleta de marca predomina y pisa la plantilla.
     expect(out).toContain('COLOR PALETTE (predominant')
     expect(out).toContain(BRAND_HEX)
-    expect(out).toContain('TYPOGRAPHY (predominant)')
-    expect(out).toContain('BoldSans')
+    // La tipografía de marca NO se inyecta como predominante.
+    expect(out).not.toContain('TYPOGRAPHY (predominant)')
   })
 
-  it('sin paleta/tipografía no emite los bloques de marca (solo plantilla)', () => {
+  it('sin paleta no emite el bloque de marca (solo plantilla)', () => {
     const out = buildSectionInstruction(COPY, true, TEMPLATE)
-    expect(out).toContain('STRUCTURE & LAYOUT')
+    expect(out).toContain('STRUCTURE, LAYOUT & TYPOGRAPHY')
     expect(out).not.toContain('COLOR PALETTE (predominant')
-    expect(out).not.toContain('TYPOGRAPHY (predominant)')
   })
 })
