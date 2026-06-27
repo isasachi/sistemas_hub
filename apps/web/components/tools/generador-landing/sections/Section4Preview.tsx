@@ -2,8 +2,9 @@
 
 import { useState } from 'react'
 import { useLandingStore } from '@/store/landing'
-import { SECTION_LABELS, type LandingSection, type SectionCopy } from '@/lib/landing/types'
+import { SECTION_LABELS, type LandingSection, type SectionCopy, type SectionType } from '@/lib/landing/types'
 import { Smartphone, Monitor } from 'lucide-react'
+import { RegenControls } from '@/components/tools/ui/RegenControls'
 
 const btnPrimary =
   'rounded-xl jr-cta text-[13px] font-bold disabled:opacity-40 transition-all duration-200 cursor-pointer border-0 font-sans flex items-center justify-center gap-2 h-11 w-full'
@@ -13,23 +14,26 @@ const fieldClass =
   'bg-[#141414] border border-white/[0.06] rounded-lg px-3 py-2 text-[13px] text-[#f5f5f5] placeholder:text-[#8a8a8a] focus:border-[rgba(255,156,77,0.5)] outline-none w-full'
 
 // POST una sección (genera o regenera). Reusado por el loop inicial y por el editor.
-async function genSection(sessionId: string, type: string, copy: SectionCopy, order: number): Promise<LandingSection> {
+async function genSection(
+  sessionId: string, type: SectionType, copy: SectionCopy, order: number, prompt?: string,
+): Promise<{ section: LandingSection; regensLeft?: number }> {
   const res = await fetch(`/api/generador-landing/sessions/${sessionId}/section/${type}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ copy, order }),
+    body: JSON.stringify({ copy, order, prompt: prompt?.trim() || undefined }),
   })
-  const data = (await res.json()) as { section?: LandingSection; error?: string }
+  const data = (await res.json()) as { section?: LandingSection; regensLeft?: number; error?: string }
   if (!res.ok || !data.section) throw new Error(data.error ?? 'No se pudo generar la sección')
-  return data.section
+  return { section: data.section, regensLeft: data.regensLeft }
 }
 
 function SectionCard({ section }: { section: LandingSection }) {
-  const { sessionId, setSectionImage } = useLandingStore()
+  const { sessionId, setSectionImage, regens, setRegen } = useLandingStore()
   const [editing, setEditing] = useState(false)
   const [copy, setCopy] = useState<SectionCopy>(section.copy)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [prompt, setPrompt] = useState('')
 
   function setBullet(i: number, v: string) {
     setCopy((c) => ({ ...c, bullets: (c.bullets ?? []).map((b, j) => (j === i ? v : b)) }))
@@ -43,8 +47,9 @@ function SectionCard({ section }: { section: LandingSection }) {
     setSaving(true)
     setError(null)
     try {
-      const updated = await genSection(sessionId, section.type, copy, section.order)
+      const { section: updated, regensLeft } = await genSection(sessionId, section.type, copy, section.order, prompt)
       setSectionImage(updated)
+      if (typeof regensLeft === 'number') setRegen(`landing-section:${section.type}`, regensLeft)
       setEditing(false)
     } catch (err) {
       setError((err as Error).message)
@@ -92,9 +97,14 @@ function SectionCard({ section }: { section: LandingSection }) {
               onChange={(e) => setCopy({ ...copy, cta: e.target.value || undefined })} placeholder="Botón" />
           )}
           {error && <p className="text-[12px] text-red-400">{error}</p>}
-          <button onClick={regenerate} disabled={saving} className={btnGhost + ' justify-center'}>
-            {saving ? 'Regenerando...' : '↻ Regenerar sección'}
-          </button>
+          <RegenControls
+            regensLeft={regens[`landing-section:${section.type}`] ?? 3}
+            prompt={prompt}
+            onPromptChange={setPrompt}
+            onRegenerate={regenerate}
+            busy={saving}
+            label="↻ Regenerar sección"
+          />
         </div>
       )}
     </div>
@@ -102,7 +112,7 @@ function SectionCard({ section }: { section: LandingSection }) {
 }
 
 export default function Section4Preview() {
-  const { sessionId, copy, sections, setSectionImage, startNewSession } = useLandingStore()
+  const { sessionId, copy, sections, setSectionImage, startNewSession, setRegen } = useLandingStore()
   const [generating, setGenerating] = useState(false)
   const [done, setDone] = useState(0)
   const [error, setError] = useState<string | null>(null)
@@ -119,8 +129,9 @@ export default function Section4Preview() {
     let failed = 0
     for (let i = 0; i < copy.length; i++) {
       try {
-        const section = await genSection(sessionId, copy[i].type, copy[i], i)
+        const { section, regensLeft } = await genSection(sessionId, copy[i].type, copy[i], i)
         setSectionImage(section)
+        if (typeof regensLeft === 'number') setRegen(`landing-section:${copy[i].type}`, regensLeft)
       } catch (err) {
         failed++
         console.error(err)
