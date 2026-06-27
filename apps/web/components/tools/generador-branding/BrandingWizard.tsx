@@ -39,7 +39,11 @@ export default function BrandingWizard() {
     if (sessionId) fetchRegens(sessionId).then(setRegens)
   }, [sessionId, setRegens])
 
+  // Resetear el "paso más avanzado" al cambiar de sesión: sin esto el ref persiste y
+  // una sesión nueva (step 0) deja todas las secciones abiertas/'completed'.
   const maxStep = useRef(0)
+  const prevSession = useRef(sessionId)
+  if (prevSession.current !== sessionId) { prevSession.current = sessionId; maxStep.current = 0 }
   maxStep.current = Math.max(maxStep.current, step)
 
   const progressPct = Math.round((Math.min(step, 5) / 5) * 100)
@@ -62,7 +66,9 @@ export default function BrandingWizard() {
         />
       </div>
 
-      <div className="flex-1 max-w-xl mx-auto w-full px-4 py-8 flex flex-col gap-3">
+      {/* key por sesión: una sesión nueva remonta las secciones → su useState local
+          (sembrado del store) se reinicia y no arrastra datos de la sesión anterior. */}
+      <div key={sessionId ?? 'new'} className="flex-1 max-w-xl mx-auto w-full px-4 py-8 flex flex-col gap-3">
         {/* 1 — Brief */}
         <AccordionSection
           index={1}
