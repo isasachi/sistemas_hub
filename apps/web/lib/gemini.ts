@@ -128,6 +128,13 @@ export async function editWithPrompt(
   return generateImage(parts, 3, opts)
 }
 
+// Fidelidad de producto en el ad final (anuncios): el producto real (Image 2) pasa tal
+// cual al ad, reemplazando al producto que tuviera la referencia (Image 1); si la
+// referencia no muestra producto físico, se inserta de forma natural. Anclado en el
+// choke point para garantizarlo aunque el instructivo de razonamiento sea débil.
+const PRODUCT_RULE =
+  'PRODUCT FIDELITY (mandatory): Image 2 is the REAL product. Render it in the final ad EXACTLY as it appears in Image 2 — identical shape, proportions, colors, finish and label (every text and graphic printed on the label reproduced faithfully; do not simplify, alter or omit any detail). This product MUST REPLACE whatever product appears in Image 1 (the reference ad), taking over its physical position and integration. If Image 1 shows no physical product, insert the product from Image 2 into the scene naturally and believably. Never invent, redraw, restyle or substitute the product.'
+
 export async function editImage(
   refBase64: string, refMime: string,
   productBase64: string, productMime: string,
@@ -139,6 +146,7 @@ export async function editImage(
     { inlineData: { mimeType: productMime, data: productBase64 } },
     ...(logoBase64 && logoMime ? [{ inlineData: { mimeType: logoMime, data: logoBase64 } } as Part] : []),
     { text: instruction },
+    { text: PRODUCT_RULE },
     { text: SPANISH_RULE },
   ]
   const res = await getAI().models.generateContent({
