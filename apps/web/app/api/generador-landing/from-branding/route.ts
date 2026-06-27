@@ -1,0 +1,87 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { getBrandingSession } from '@/lib/branding/db'
+import { createLandingSession, getLandingSession, updateLandingSession } from '@/lib/landing/db'
+import { generateLandingCopy } from '@/lib/landing/copy'
+import { genQuotaResponse } from '@/lib/gen-quota'
+import type { SectionType } from '@/lib/landing/types'
+
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
+// Handoff branding → landing: crea una sesión de landing pre-llenada con los datos
+// de la marca, genera el copy y la deja en el preview (step 4). Toda la preparación
+// es server-side: las URLs de mockup/logo (Storage) se escriben directo a
+// product_photo_urls (la ruta de fotos solo acepta uploads binarios), y la
+// paleta/tipografía de la marca se copian para que predominen sobre la plantilla.
+
+// ponytail: lookup chico; las chips de personalidad del branding mapean a las 6 de
+// tono de landing. Fallback Profesional. El usuario lo edita en el wizard.
+const TONE_MAP: Record<string, string> = {
+  Premium: 'Lujoso', Elegante: 'Lujoso',
+  Divertido: 'Divertido', Juvenil: 'Divertido',
+  Cálido: 'Cercano', Natural: 'Cercano', Artesanal: 'Cercano',
+  Confiable: 'Confiable',
+  Moderno: 'Profesional', Minimalista: 'Profesional',
+  Atrevido: 'Urgente',
+}
+
+// ponytail: la paleta ya predomina sobre la plantilla (que solo da estructura), así
+// que el template es secundario. Heurística simple por personalidad; fallback neutro.
+const TEMPLATE_MAP: Record<string, string> = {
+  Premium: 'wellness-dark', Elegante: 'wellness-dark', Confiable: 'wellness-dark',
+  Natural: 'vital-green', Artesanal: 'vital-green',
+  Divertido: 'kids-adventure', Juvenil: 'kids-adventure',
+  Moderno: 'sport-blue', Atrevido: 'industrial', Minimalista: 'wellness-magenta',
+}
+
+const DEFAULT_SECTIONS: SectionType[] = ['hero', 'beneficios', 'oferta', 'testimonios', 'garantia', 'cta-final']
+
+export async function POST(req: NextRequest) {
+  const blocked = await genQuotaResponse('landing-copy')
+  if (blocked) return blocked
+
+  let body: { brandingSessionId?: string }
+  try { body = await req.json() } catch {
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+  }
+  if (!body.brandingSessionId)
+    return NextResponse.json({ error: 'Falta brandingSessionId' }, { status: 400 })
+
+  const bs = await getBrandingSession(body.brandingSessionId)
+  if (!bs) return NextResponse.json({ error: 'Sesión de branding no encontrada' }, { status: 404 })
+
+  const personality = bs.personality ?? []
+  const tone = [...new Set(personality.map((p) => TONE_MAP[p] ?? 'Profesional'))]
+  const template = personality.map((p) => TEMPLATE_MAP[p]).find(Boolean) ?? 'wellness-dark'
+  const photo = bs.mockup_url || bs.logo_url
+  const direction = bs.direction
+
+  const id = await createLandingSession()
+  await updateLandingSession(id, {
+    product_name: bs.product_name ?? bs.brand_name ?? null,
+    audience: bs.target_audience ?? null,
+    // ponytail: el branding captura vibe, no beneficios; el copy LLM lo completa.
+    benefits: bs.brief_notes || direction?.summaryForUser || direction?.concept || null,
+    price: '',
+    tone,
+    product_photo_urls: photo ? [photo] : [],
+    template,
+    palette: direction?.palette ?? null,
+    typography: direction ? { headline: direction.typography.headline, body: direction.typography.body } : null,
+    selected_sections: DEFAULT_SECTIONS,
+    step: 3,
+  })
+
+  try {
+    const session = await getLandingSession(id)
+    if (!session) throw new Error('Sesión de landing no encontrada tras crear')
+    const copy = await generateLandingCopy(session, DEFAULT_SECTIONS)
+    await updateLandingSession(id, { copy, step: 4 })
+  } catch (err) {
+    console.error('[from-branding copy]', err)
+    // Sin copy: la sesión queda pre-llenada en el paso de secciones; el usuario
+    // genera el copy manualmente. No abortamos el handoff.
+  }
+
+  return NextResponse.json({ id })
+}

@@ -45,6 +45,21 @@ export const LandingCopySchema = z.object({
   sections: z.array(SectionCopySchema),
 })
 
+// ─── Estilo de marca (paleta + tipografía) ───────────────────────────────────
+// Predomina sobre la plantilla en la generación de imagen. Mismo shape que
+// `direction.palette`/`direction.typography` del branding → el handoff mapea directo.
+export const LandingStyleSchema = z.object({
+  palette: z.array(z.object({
+    name: z.string(),
+    hex: z.string(),
+    usage: z.string().optional(),
+  })).min(1).max(6),
+  typography: z.object({ headline: z.string(), body: z.string() }),
+})
+export type LandingStyle = z.infer<typeof LandingStyleSchema>
+export type LandingPalette = LandingStyle['palette']
+export type LandingTypography = LandingStyle['typography']
+
 // Sección renderizada: copy + imagen.
 export interface LandingSection {
   type: SectionType
@@ -69,4 +84,6 @@ export interface LandingSessionResponse {
   selected_sections: SectionType[] | null
   copy: SectionCopy[] | null
   sections: LandingSection[] | null
+  palette: LandingPalette | null
+  typography: LandingTypography | null
 }
