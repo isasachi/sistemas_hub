@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLandingSession, updateLandingSession } from '@/lib/landing/db'
 import { fetchAsBase64, uploadToStorage } from '@/lib/storage'
-import { generateImage } from '@/lib/gemini'
+import { generateImage, editWithPrompt } from '@/lib/gemini'
 import { buildSectionInstruction } from '@/lib/landing/instructions'
 import { extractLandingStyle } from '@/lib/landing/style-extract'
 import { TEMPLATE_BY_ID } from '@/lib/landing/templates'
@@ -43,38 +43,47 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!copy || copy.type !== parsedType.data)
     return NextResponse.json({ error: 'Falta el copy de la sección' }, { status: 400 })
 
-  // Fotos del producto como input (fidelidad).
-  const photoParts: Part[] = []
-  let firstPhoto: { data: string; mimeType: string } | null = null
-  for (const url of session.product_photo_urls ?? []) {
-    const { data, mimeType } = await fetchAsBase64(url)
-    if (!firstPhoto) firstPhoto = { data, mimeType }
-    photoParts.push({ inlineData: { mimeType, data } })
-  }
-
-  // Estilo de marca: del handoff de branding (ya seteado) o derivado de la foto.
-  // ponytail: deriva una vez y cachea en la sesión; el loop de secciones es
-  // secuencial (cliente), así que no hay carrera read-modify-write.
-  let palette = session.palette
-  let typography = session.typography
-  if ((!palette || !typography) && firstPhoto) {
-    try {
-      const style = await extractLandingStyle(firstPhoto.data, firstPhoto.mimeType)
-      palette = style.palette
-      typography = style.typography
-      await updateLandingSession(id, { palette, typography })
-    } catch (err) {
-      console.error('[landing-style]', err) // sin estilo: cae al teñido de la plantilla
+  // Regen con prompt sobre una sección ya generada = edición exclusiva: solo ese cambio,
+  // el resto pixel-idéntico (y nos ahorra fetch de fotos + extracción de estilo). Sin
+  // prompt o sin imagen previa, genera la sección desde cero.
+  const existing = (session.sections ?? []).find((s) => s.type === parsedType.data)
+  let b64: string
+  if (precision && existing?.imageUrl) {
+    const prev = await fetchAsBase64(existing.imageUrl)
+    b64 = await editWithPrompt(prev.data, prev.mimeType, precision, { aspectRatio: '9:16' })
+  } else {
+    // Fotos del producto como input (fidelidad).
+    const photoParts: Part[] = []
+    let firstPhoto: { data: string; mimeType: string } | null = null
+    for (const url of session.product_photo_urls ?? []) {
+      const { data, mimeType } = await fetchAsBase64(url)
+      if (!firstPhoto) firstPhoto = { data, mimeType }
+      photoParts.push({ inlineData: { mimeType, data } })
     }
-  }
 
-  const templateStyle = session.template ? TEMPLATE_BY_ID[session.template]?.style : undefined
-  const parts: Part[] = [
-    ...photoParts,
-    { text: buildSectionInstruction(copy, photoParts.length > 0, templateStyle, palette, typography) },
-  ]
-  if (precision) parts.push({ text: '\nAjuste solicitado por el usuario (priorízalo): ' + precision })
-  const b64 = await generateImage(parts, 3, { aspectRatio: '9:16' })
+    // Estilo de marca: del handoff de branding (ya seteado) o derivado de la foto.
+    // ponytail: deriva una vez y cachea en la sesión; el loop de secciones es
+    // secuencial (cliente), así que no hay carrera read-modify-write.
+    let palette = session.palette
+    let typography = session.typography
+    if ((!palette || !typography) && firstPhoto) {
+      try {
+        const style = await extractLandingStyle(firstPhoto.data, firstPhoto.mimeType)
+        palette = style.palette
+        typography = style.typography
+        await updateLandingSession(id, { palette, typography })
+      } catch (err) {
+        console.error('[landing-style]', err) // sin estilo: cae al teñido de la plantilla
+      }
+    }
+
+    const templateStyle = session.template ? TEMPLATE_BY_ID[session.template]?.style : undefined
+    const parts: Part[] = [
+      ...photoParts,
+      { text: buildSectionInstruction(copy, photoParts.length > 0, templateStyle, palette) },
+    ]
+    b64 = await generateImage(parts, 3, { aspectRatio: '9:16' })
+  }
   if (!b64) return NextResponse.json({ error: 'No se pudo generar la sección', retryable: true }, { status: 502 })
 
   const imageUrl = await uploadToStorage(id, Buffer.from(b64, 'base64'), 'image/png', `section-${copy.type}`)
