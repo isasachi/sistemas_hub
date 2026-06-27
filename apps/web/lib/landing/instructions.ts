@@ -1,4 +1,4 @@
-import type { SectionCopy, SectionType } from './types'
+import type { SectionCopy, SectionType, LandingPalette, LandingTypography } from './types'
 
 // Builders puros ($0) para el prompt de imagen de cada sección de la landing.
 // Clon en espíritu de branding/instructions.ts: spec por tipo + copy aprobado +
@@ -37,17 +37,37 @@ function copyBlock(copy: SectionCopy): string {
 
 // `hasPhoto` decide la frase del producto: con foto de input se renderiza fiel; sin
 // foto (no debería pasar — el wizard exige ≥1) se describe genérico.
-// `templateStyle` (opcional): estética de la plantilla elegida; tiñe TODA la sección.
-export function buildSectionInstruction(copy: SectionCopy, hasPhoto: boolean, templateStyle?: string): string {
+// `templateStyle`: la plantilla aporta ESTRUCTURA/layout/motivos (no los colores).
+// `palette`/`typography` (de la marca o derivadas de la foto) PREDOMINAN: colores y
+// fuentes de la marca pisan los de la plantilla.
+export function buildSectionInstruction(
+  copy: SectionCopy,
+  hasPhoto: boolean,
+  templateStyle?: string,
+  palette?: LandingPalette | null,
+  typography?: LandingTypography | null,
+): string {
+  const paletteLine = palette?.length
+    ? `COLOR PALETTE (predominant — use these as the dominant colors throughout this section, overriding any colors implied by the template): ${palette
+        .map((c) => `${c.hex}${c.name ? ` (${c.name}${c.usage ? `, ${c.usage}` : ''})` : ''}`)
+        .join('; ')}.`
+    : ''
+  const typoLine = typography
+    ? `TYPOGRAPHY (predominant): headlines in a ${typography.headline} style, body text in a ${typography.body} style.`
+    : ''
   return [
     `Design a single vertical landing-page SECTION as one high-resolution image,`,
     `mobile-first, portrait orientation, premium e-commerce style for the Peruvian market.`,
     SECTION_SPECS[copy.type],
-    templateStyle ? `VISUAL STYLE (apply throughout this section): ${templateStyle}` : '',
+    templateStyle
+      ? `STRUCTURE & LAYOUT (follow the composition, motifs and mood — but NOT the specific colors): ${templateStyle}`
+      : '',
+    paletteLine,
+    typoLine,
     hasPhoto
       ? `Image 1 is the REAL product. Render it faithfully — same shape, label and colors; do NOT invent a different product. You may place it in a tasteful scene/background.`
       : `Compose around a generic attractive product placeholder.`,
-    templateStyle ? '' : `Clean modern layout, generous spacing, warm trustworthy palette, legible sans-serif typography.`,
+    templateStyle || paletteLine ? '' : `Clean modern layout, generous spacing, warm trustworthy palette, legible sans-serif typography.`,
     ``,
     `Copy to render (and ONLY this copy):`,
     copyBlock(copy),

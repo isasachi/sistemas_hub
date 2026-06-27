@@ -1,5 +1,7 @@
 'use client'
 
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { useBrandingStore } from '@/store/branding'
 
 async function downloadImage(url: string, filename: string) {
@@ -14,10 +16,32 @@ async function downloadImage(url: string, filename: string) {
 }
 
 export default function Section6Guide() {
-  const { brandName, direction, logoUrl, labelUrl, mockupUrl, startNewSession } = useBrandingStore()
+  const { sessionId, brandName, direction, logoUrl, labelUrl, mockupUrl, startNewSession } = useBrandingStore()
+  const router = useRouter()
+  const [landingLoading, setLandingLoading] = useState(false)
 
   if (!direction) return null
   const slug = (brandName ?? 'marca').toLowerCase().replace(/\s+/g, '-')
+
+  async function createLanding() {
+    if (!sessionId || landingLoading) return
+    setLandingLoading(true)
+    try {
+      const res = await fetch('/api/generador-landing/from-branding', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ brandingSessionId: sessionId }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const { id } = (await res.json()) as { id: string }
+      if (!id) throw new Error('Sin id de sesión')
+      localStorage.setItem('landing_session_id', id)
+      router.push('/tools/generador-landing')
+    } catch {
+      setLandingLoading(false)
+      alert('No se pudo crear la landing. Inténtalo de nuevo.')
+    }
+  }
 
   const Asset = ({ url, label, file }: { url: string; label: string; file: string }) => (
     <div className="flex flex-col gap-2">
@@ -77,12 +101,23 @@ export default function Section6Guide() {
         </div>
       </div>
 
-      <button
-        onClick={startNewSession}
-        className="h-11 px-4 rounded-xl border border-white/[0.14] text-[#f5f5f5] text-[13px] font-medium hover:bg-white/[0.05] transition-colors cursor-pointer bg-transparent self-start"
-      >
-        Crear otra marca
-      </button>
+      <div className="flex flex-wrap gap-3">
+        {(mockupUrl || logoUrl) && (
+          <button
+            onClick={createLanding}
+            disabled={landingLoading}
+            className="h-11 px-4 rounded-xl bg-[#ff9c4d] text-[#1a1205] text-[13px] font-semibold hover:bg-[#ffae6b] transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-default self-start"
+          >
+            {landingLoading ? 'Creando landing…' : 'Crear landing con esta marca'}
+          </button>
+        )}
+        <button
+          onClick={startNewSession}
+          className="h-11 px-4 rounded-xl border border-white/[0.14] text-[#f5f5f5] text-[13px] font-medium hover:bg-white/[0.05] transition-colors cursor-pointer bg-transparent self-start"
+        >
+          Crear otra marca
+        </button>
+      </div>
     </div>
   )
 }
