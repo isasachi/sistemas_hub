@@ -3,11 +3,16 @@
  * Sin esto, los endpoints de generación (app/api/.../route.ts) que generan
  * imágenes/texto eran world-callable sin tope → un curl en loop = gasto LLM ilimitado.
  *
- * Dos topes diarios (día America/Lima, reusa limaSearchDay de product-hunter/quota):
- *   GLOBAL  — backstop de costo: un atacante que limpia cookies NO lo evade.
- *   POR-USER — fairness por navegador (cookie ph_uid) / usuario auth.
+ * Dos capas (1 fila en ph_gen_usage por generación, keyed por session_id + kind):
+ *   PER-STEP (solo imagen) — 1 gen libre + 3 regens por (sesión, step). UX visible
+ *     vía regensLeft; el step es `kind`, la instancia de tool es `session_id`.
+ *   GLOBAL diario (día America/Lima, reusa limaSearchDay) — backstop de costo
+ *     anti-abuso: cuenta imagen + texto; un atacante con sesiones infinitas choca aquí.
+ *   Texto: regens ilimitadas (no toca el pool de 3) pero sí cuenta al backstop global.
  *
- * Tabla: ph_gen_usage — supabase/migrations/20260622000001_ph_gen_usage.sql
+ * checkGenQuota lee y decide ANTES de generar; recordGenQuota inserta DESPUÉS de un
+ * éxito (un fallo no quema una regen). Tabla: ph_gen_usage —
+ * migraciones 20260622000001_ph_gen_usage.sql + 20260626000002_ph_gen_usage_session.sql.
  */
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
