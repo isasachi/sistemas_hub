@@ -1,90 +1,78 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-// Estado del "DB" mockeado. Las dos queries de conteo se distinguen por si se
-// aplicó un .eq('user_id', ...) (per-user) o no (global).
-const state = vi.hoisted(() => ({
-  globalCount: 0,
-  userCount: 0,
-  globalErr: null as { message: string } | null,
-  inserts: [] as Record<string, unknown>[],
-}))
-
+// Mock supabase: una tabla en memoria de filas { session_id, kind, gen_day }.
+const rows: Array<{ session_id: string | null; kind: string; gen_day: string }> = []
 vi.mock('@supabase/supabase-js', () => ({
-  createClient: vi.fn(() => ({
-    from: () => {
-      const filters: Record<string, unknown> = {}
-      const builder: Record<string, unknown> = {
-        select: () => builder,
-        eq: (col: string, val: unknown) => { filters[col] = val; return builder },
-        insert: (row: Record<string, unknown>) => {
-          state.inserts.push(row)
-          return Promise.resolve({ error: null })
-        },
-        // El builder de count es thenable: resuelve { count, error } según los filtros.
-        then: (resolve: (v: unknown) => unknown) => {
-          const isUser = 'user_id' in filters
-          return Promise.resolve({
-            count: isUser ? state.userCount : state.globalCount,
-            error: isUser ? null : state.globalErr,
-          }).then(resolve)
-        },
-      }
-      return builder
-    },
-  })),
+  createClient: () => ({
+    from: () => ({
+      // .select(count) encadena .eq(...).eq(...) y resuelve { count }
+      select: (_c: string, _o: unknown) => {
+        const filters: Array<[string, unknown]> = []
+        const chain = {
+          eq(col: string, val: unknown) { filters.push([col, val]); return chain },
+          then(res: (v: { count: number; error: null }) => void) {
+            const n = rows.filter((r) => filters.every(([c, v]) => (r as Record<string, unknown>)[c] === v)).length
+            res({ count: n, error: null })
+          },
+        }
+        return chain
+      },
+      insert: (row: { session_id: string | null; kind: string; gen_day: string }) => {
+        rows.push(row); return Promise.resolve({ error: null })
+      },
+    }),
+  }),
 }))
+vi.mock('../../lib/product-hunter/quota', () => ({ limaSearchDay: () => '2026-06-26' }))
+vi.mock('../../lib/product-hunter/session', () => ({ readUserId: async () => 'u1' }))
 
-// gen-quota importa session.ts (→ next/headers); lo cortamos para no cargar el runtime de Next.
-vi.mock('next/headers', () => ({ cookies: vi.fn() }))
+import { checkGenQuota, recordGenQuota, GEN_PER_STEP_LIMIT, isImageKind } from '../../lib/gen-quota'
 
-beforeEach(() => {
-  vi.clearAllMocks()
-  state.globalCount = 0
-  state.userCount = 0
-  state.globalErr = null
-  state.inserts = []
-  process.env.SUPABASE_SERVICE_ROLE_KEY = 'test'
-  process.env.SUPABASE_URL = 'http://test'
+beforeEach(() => { rows.length = 0 })
+
+// Simula el ciclo real: check → (si pasa) gen → record.
+async function gen(sessionId: string | null, kind: string) {
+  const { blocked, regensLeft } = await checkGenQuota(sessionId, kind)
+  if (blocked) return { blocked: true as const, regensLeft }
+  await recordGenQuota(sessionId, kind, 'u1')
+  return { blocked: false as const, regensLeft }
+}
+
+describe('isImageKind', () => {
+  it('match por prefijo para landing-section:tipo', () => {
+    expect(isImageKind('landing-section:hero')).toBe(true)
+    expect(isImageKind('branding-logo')).toBe(true)
+    expect(isImageKind('branding-names')).toBe(false)
+  })
 })
 
-describe('guardGeneration', () => {
-  it('permite y registra cuando ambos topes están bajo el límite', async () => {
-    const { guardGeneration } = await import('@/lib/gen-quota')
-    const r = await guardGeneration('user-1', 'branding-logo')
-    expect(r.ok).toBe(true)
-    expect(state.inserts).toHaveLength(1)
-    expect(state.inserts[0]).toMatchObject({ user_id: 'user-1', kind: 'branding-logo' })
+describe('cuota per-step (imagen)', () => {
+  it('permite 1 gen + 3 regens y bloquea la 5a', async () => {
+    const out = []
+    for (let i = 0; i < 5; i++) out.push(await gen('s1', 'branding-logo'))
+    expect(out.map((o) => o.blocked)).toEqual([false, false, false, false, true])
+    expect(out.slice(0, 4).map((o) => o.regensLeft)).toEqual([3, 2, 1, 0])
   })
 
-  it('corta por tope GLOBAL aunque el usuario sea nuevo (un atacante que limpia cookies no lo evade)', async () => {
-    const { guardGeneration, GLOBAL_DAILY_LIMIT } = await import('@/lib/gen-quota')
-    state.globalCount = GLOBAL_DAILY_LIMIT
-    const r = await guardGeneration(null, 'branding-logo')
-    expect(r.ok).toBe(false)
-    expect(state.inserts).toHaveLength(0) // no registra cuando rechaza
+  it('contadores independientes por kind y por session', async () => {
+    for (let i = 0; i < 4; i++) await gen('s1', 'branding-logo')
+    expect((await gen('s1', 'branding-logo')).blocked).toBe(true)
+    expect((await gen('s1', 'branding-mockup')).blocked).toBe(false) // otro kind
+    expect((await gen('s2', 'branding-logo')).blocked).toBe(false)    // otra session
   })
 
-  it('corta por tope POR-USUARIO con global aún disponible', async () => {
-    const { guardGeneration, USER_DAILY_LIMIT } = await import('@/lib/gen-quota')
-    state.globalCount = 0
-    state.userCount = USER_DAILY_LIMIT
-    const r = await guardGeneration('heavy-user', 'branding-logo')
-    expect(r.ok).toBe(false)
-    expect(state.inserts).toHaveLength(0)
-  })
+  it('GEN_PER_STEP_LIMIT es 4', () => { expect(GEN_PER_STEP_LIMIT).toBe(4) })
+})
 
-  it('fail-open ante error de DB (no bloquea al usuario por un fallo transitorio)', async () => {
-    const { guardGeneration } = await import('@/lib/gen-quota')
-    state.globalErr = { message: 'connection reset' }
-    const r = await guardGeneration('user-1', 'branding-logo')
-    expect(r.ok).toBe(true)
+describe('texto', () => {
+  it('nunca bloquea per-step y regensLeft es null', async () => {
+    const out = []
+    for (let i = 0; i < 8; i++) out.push(await gen('s1', 'branding-names'))
+    expect(out.every((o) => !o.blocked)).toBe(true)
+    expect(out[0].regensLeft).toBeNull()
   })
-
-  it('sin userId solo evalúa el tope global (no consulta per-user)', async () => {
-    const { guardGeneration, USER_DAILY_LIMIT } = await import('@/lib/gen-quota')
-    state.userCount = USER_DAILY_LIMIT + 5 // irrelevante: sin userId no se mira
-    const r = await guardGeneration(null, 'anuncios-image')
-    expect(r.ok).toBe(true)
-    expect(state.inserts).toHaveLength(1)
+  it('igual escribe fila (cuenta al backstop global)', async () => {
+    await gen('s1', 'branding-names')
+    expect(rows.length).toBe(1)
   })
 })

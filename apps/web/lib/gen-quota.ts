@@ -12,10 +12,6 @@
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { limaSearchDay } from './product-hunter/quota'
-import { readUserId } from './product-hunter/session'
-
-export const GLOBAL_DAILY_LIMIT = Number(process.env.GEN_GLOBAL_DAILY_LIMIT ?? 200)
-export const USER_DAILY_LIMIT = Number(process.env.GEN_USER_DAILY_LIMIT ?? 10)
 
 let _db: SupabaseClient | null = null
 function getDb(): SupabaseClient {
@@ -29,67 +25,60 @@ function getDb(): SupabaseClient {
   return _db
 }
 
-export type GenGuard = { ok: true } | { ok: false; message: string }
+export const GEN_GLOBAL_DAILY_LIMIT = Number(process.env.GEN_GLOBAL_DAILY_LIMIT ?? 500)
+export const GEN_PER_STEP_LIMIT = Number(process.env.GEN_PER_STEP_LIMIT ?? 4) // 1 libre + 3 regens
 
-/**
- * Verifica ambos topes y, si pasan, registra la generación (1 fila = 1 request).
- *
- * ponytail: count-then-insert no es atómico → bajo ráfaga concurrente el tope puede
- * sobrepasarse por ~(concurrencia) filas. Aceptable para un backstop de costo (acota
- * el gasto a ~limit+burst). Upgrade: RPC con lock si se necesita el tope exacto.
- *
- * ponytail: fail-open ante error DB (igual que checkAndRecordSearch). El abuso real
- * es DB-up + atacante, y con DB-up el tope corta. Upgrade a fail-closed si aparece
- * abuso con DB caída.
- */
-export async function guardGeneration(userId: string | null, kind: string): Promise<GenGuard> {
-  const db = getDb()
-  const day = limaSearchDay()
+// Steps de imagen (los caros). Match por prefijo: landing-section incluye `:${type}`.
+export const IMAGE_KINDS = ['branding-logo', 'branding-mockup', 'branding-label', 'anuncios-image', 'landing-section']
+export function isImageKind(kind: string): boolean {
+  return IMAGE_KINDS.some((k) => kind === k || kind.startsWith(k + ':'))
+}
 
-  const { count: globalCount, error: gErr } = await db
-    .from('ph_gen_usage')
-    .select('*', { count: 'exact', head: true })
-    .eq('gen_day', day)
-
-  if (gErr) {
-    console.error('[gen-quota] error contando global:', gErr.message)
-    return { ok: true }
-  }
-  if ((globalCount ?? 0) >= GLOBAL_DAILY_LIMIT) {
-    return { ok: false, message: 'El servicio alcanzó su límite diario de generaciones. Vuelve mañana.' }
-  }
-
-  if (userId) {
-    const { count: userCount, error: uErr } = await db
-      .from('ph_gen_usage')
-      .select('*', { count: 'exact', head: true })
-      .eq('gen_day', day)
-      .eq('user_id', userId)
-
-    if (!uErr && (userCount ?? 0) >= USER_DAILY_LIMIT) {
-      return { ok: false, message: `Llegaste al límite de ${USER_DAILY_LIMIT} generaciones por hoy. Vuelve mañana.` }
-    }
-  }
-
-  const { error: insErr } = await db
-    .from('ph_gen_usage')
-    .insert({ user_id: userId, kind, gen_day: day })
-  if (insErr) console.error('[gen-quota] error registrando generación:', insErr.message)
-
-  return { ok: true }
+// regens restantes DESPUÉS de la gen nº `count+1` para un step con `count` filas previas.
+export function regensLeftFor(count: number): number {
+  return Math.max(0, GEN_PER_STEP_LIMIT - Math.max(1, count))
 }
 
 /**
- * Azúcar para las rutas: lee la identidad, aplica el guard, y devuelve un
- * Response 429 listo si excede (o null si puede proceder). Sirve para rutas
- * JSON y SSE por igual (se llama ANTES de crear el stream).
+ * Lee los contadores y decide ANTES de generar. NO inserta nada.
+ * - blocked: un Response 429 listo (texto en español) o null si puede proceder.
+ * - regensLeft: regens que quedarán tras esta gen (imagen) o null (texto = ilimitado).
  *
- *   const blocked = await genQuotaResponse('branding-logo')
- *   if (blocked) return blocked
+ * ponytail: count-then-insert no atómico → bajo ráfaga el tope puede pasarse por
+ * ~concurrencia filas. Aceptable para un backstop de costo. ponytail: fail-open ante
+ * error DB (igual que el resto del hub): con DB caída no bloqueamos.
  */
-export async function genQuotaResponse(kind: string): Promise<Response | null> {
-  const userId = await readUserId()
-  const guard = await guardGeneration(userId, kind)
-  if (guard.ok) return null
-  return Response.json({ error: guard.message }, { status: 429 })
+export async function checkGenQuota(
+  sessionId: string | null,
+  kind: string,
+): Promise<{ blocked: Response | null; regensLeft: number | null }> {
+  const db = getDb()
+  const day = limaSearchDay()
+
+  // 1. Backstop global diario (cuenta imagen + texto).
+  const { count: globalCount, error: gErr } = await db
+    .from('ph_gen_usage').select('*', { count: 'exact', head: true }).eq('gen_day', day)
+  if (gErr) { console.error('[gen-quota] global:', gErr.message); return { blocked: null, regensLeft: null } }
+  if ((globalCount ?? 0) >= GEN_GLOBAL_DAILY_LIMIT) {
+    return { blocked: Response.json({ error: 'El servicio alcanzó su límite diario de generaciones. Vuelve mañana.' }, { status: 429 }), regensLeft: null }
+  }
+
+  // 2. Texto: sin tope per-step.
+  if (!isImageKind(kind) || !sessionId) return { blocked: null, regensLeft: null }
+
+  // 3. Per-step (imagen): count(session_id, kind).
+  const { count: stepCount, error: sErr } = await db
+    .from('ph_gen_usage').select('*', { count: 'exact', head: true }).eq('session_id', sessionId).eq('kind', kind)
+  if (sErr) { console.error('[gen-quota] step:', sErr.message); return { blocked: null, regensLeft: null } }
+  const used = stepCount ?? 0
+  if (used >= GEN_PER_STEP_LIMIT) {
+    return { blocked: Response.json({ error: `Llegaste al límite de ${GEN_PER_STEP_LIMIT - 1} regeneraciones para este paso.` }, { status: 429 }), regensLeft: 0 }
+  }
+  return { blocked: null, regensLeft: regensLeftFor(used + 1) }
+}
+
+/** Registra una generación exitosa (1 fila). Llamar SOLO tras generar OK. */
+export async function recordGenQuota(sessionId: string | null, kind: string, userId: string | null): Promise<void> {
+  const { error } = await getDb().from('ph_gen_usage').insert({ user_id: userId, kind, gen_day: limaSearchDay(), session_id: sessionId })
+  if (error) console.error('[gen-quota] registrando:', error.message)
 }
