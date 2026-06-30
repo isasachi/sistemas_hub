@@ -4,7 +4,6 @@ import { fetchAsBase64, uploadToStorage } from '@/lib/storage'
 import { generateImage, editWithPrompt } from '@/lib/gemini'
 import { buildSectionInstruction } from '@/lib/landing/instructions'
 import { extractLandingStyle } from '@/lib/landing/style-extract'
-import { TEMPLATE_BY_ID } from '@/lib/landing/templates'
 import { SectionCopySchema, SectionType, type LandingSection } from '@/lib/landing/types'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
@@ -73,14 +72,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         typography = style.typography
         await updateLandingSession(id, { palette, typography })
       } catch (err) {
-        console.error('[landing-style]', err) // sin estilo: cae al teñido de la plantilla
+        console.error('[landing-style]', err) // sin estilo: el modelo elige paleta cohesiva
       }
     }
 
-    const templateStyle = session.template ? TEMPLATE_BY_ID[session.template]?.style : undefined
     const parts: Part[] = [
       ...photoParts,
-      { text: buildSectionInstruction(copy, photoParts.length > 0, templateStyle, palette) },
+      { text: buildSectionInstruction(copy, photoParts.length > 0, palette) },
     ]
     b64 = await generateImage(parts, 3, { aspectRatio: '9:16' })
   }
