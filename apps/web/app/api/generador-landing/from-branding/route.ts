@@ -8,8 +8,9 @@ export const runtime = 'nodejs'
 
 // Handoff branding → landing: crea una sesión de landing pre-llenada con los datos de
 // la marca (producto, fotos del mockup/logo, paleta/tipografía, tono) y la deja en el
-// paso de PLANTILLA (step 2) para que el usuario elija la plantilla y continúe el
-// wizard (secciones → copy → preview). Sin LLM aquí → sin costo ni cuota; el copy se
+// paso de SECCIONES (step 2) para que el usuario continúe el wizard (secciones → copy
+// → preview). La plantilla ya no es un paso: la estructura la da la plantilla maestra
+// interna. Sin LLM aquí → sin costo ni cuota; el copy se
 // genera más adelante en el wizard. Las URLs de mockup/logo (Storage) se escriben
 // directo a product_photo_urls (la ruta de fotos solo acepta uploads binarios).
 
@@ -22,16 +23,6 @@ const TONE_MAP: Record<string, string> = {
   Confiable: 'Confiable',
   Moderno: 'Profesional', Minimalista: 'Profesional',
   Atrevido: 'Urgente',
-}
-
-// ponytail: la paleta ya predomina sobre la plantilla (que solo da estructura), así
-// que el template es una sugerencia. Heurística simple por personalidad; el usuario
-// la confirma o cambia en el paso de plantilla. Fallback neutro.
-const TEMPLATE_MAP: Record<string, string> = {
-  Premium: 'wellness-dark', Elegante: 'wellness-dark', Confiable: 'wellness-dark',
-  Natural: 'vital-green', Artesanal: 'vital-green',
-  Divertido: 'kids-adventure', Juvenil: 'kids-adventure',
-  Moderno: 'sport-blue', Atrevido: 'industrial', Minimalista: 'wellness-magenta',
 }
 
 const DEFAULT_SECTIONS: SectionType[] = ['hero', 'beneficios', 'oferta', 'testimonios', 'garantia', 'cta-final']
@@ -49,7 +40,6 @@ export async function POST(req: NextRequest) {
 
   const personality = bs.personality ?? []
   const tone = [...new Set(personality.map((p) => TONE_MAP[p] ?? 'Profesional'))]
-  const template = personality.map((p) => TEMPLATE_MAP[p]).find(Boolean) ?? 'wellness-dark'
   const photo = bs.mockup_url || bs.logo_url
   const direction = bs.direction
 
@@ -62,11 +52,10 @@ export async function POST(req: NextRequest) {
     price: '',
     tone,
     product_photo_urls: photo ? [photo] : [],
-    template,
     palette: direction?.palette ?? null,
     typography: direction ? { headline: direction.typography.headline, body: direction.typography.body } : null,
     selected_sections: DEFAULT_SECTIONS,
-    // Para en el paso de PLANTILLA: el usuario elige la plantilla y sigue el wizard.
+    // Para en el paso de SECCIONES: el usuario sigue el wizard (secciones → copy → preview).
     step: 2,
   })
 

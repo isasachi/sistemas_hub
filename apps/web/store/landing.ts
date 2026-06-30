@@ -6,7 +6,8 @@ import type { SectionType, SectionCopy, LandingSection, LandingSessionResponse }
 export const SESSION_KEY = 'landing_session_id'
 
 // Máquina de pasos del wizard de landing. `step` = nº de secciones completadas.
-//   0 Producto · 1 Fotos · 2 Plantilla · 3 Secciones+copy · 4 Preview (final)
+//   0 Producto · 1 Fotos · 2 Secciones+copy · 3 Preview (final)
+//   La plantilla ya no es un paso: el análisis es interno (plantilla maestra).
 
 interface LandingState {
   sessionId: string | null
@@ -18,7 +19,6 @@ interface LandingState {
   audience: string | null
   tone: string[]
   productPhotoUrls: string[]
-  template: string | null
   selectedSections: SectionType[]
   copy: SectionCopy[]
   sections: LandingSection[]
@@ -29,7 +29,6 @@ interface LandingActions {
   setStep: (step: number) => void
   setDetails: (data: { productName: string; price: string; benefits: string; audience: string; tone: string[] }) => void
   setPhotos: (urls: string[]) => void
-  setTemplate: (template: string) => void
   setSelectedSections: (sections: SectionType[]) => void
   setCopy: (copy: SectionCopy[]) => void
   approveCopy: () => void
@@ -51,7 +50,6 @@ const initialState: LandingState = {
   audience: null,
   tone: [],
   productPhotoUrls: [],
-  template: null,
   selectedSections: [],
   copy: [],
   sections: [],
@@ -68,13 +66,11 @@ export const useLandingStore = create<LandingState & LandingActions>((set) => ({
 
   setPhotos: (urls) => set({ productPhotoUrls: urls, step: 2 }),
 
-  setTemplate: (template) => set({ template, step: 3 }),
-
   setSelectedSections: (selectedSections) => set({ selectedSections }),
 
   setCopy: (copy) => set({ copy }),
 
-  approveCopy: () => set({ step: 4 }),
+  approveCopy: () => set({ step: 3 }),
 
   // Upsert por tipo: el evento progress del SSE va llenando el array.
   setSectionImage: (section) =>
@@ -96,7 +92,6 @@ export const useLandingStore = create<LandingState & LandingActions>((set) => ({
       audience: s.audience,
       tone: s.tone ?? [],
       productPhotoUrls: s.product_photo_urls ?? [],
-      template: s.template,
       selectedSections: s.selected_sections ?? [],
       copy: s.copy ?? [],
       sections: (s.sections ?? []).slice().sort((a, b) => a.order - b.order),
