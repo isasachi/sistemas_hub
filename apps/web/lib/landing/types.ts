@@ -86,4 +86,7 @@ export interface LandingSessionResponse {
   sections: LandingSection[] | null
   palette: LandingPalette | null
   typography: LandingTypography | null
+  // Estilo gráfico de marca (concept + logoDirection del branding en el handoff tool-to-tool):
+  // guía los devices/motivos que el modelo genera. Null en el flujo de producto suelto.
+  brand_style: string | null
 }

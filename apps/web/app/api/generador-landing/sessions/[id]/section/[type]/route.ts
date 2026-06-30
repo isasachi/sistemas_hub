@@ -78,7 +78,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const parts: Part[] = [
       ...photoParts,
-      { text: buildSectionInstruction(copy, photoParts.length > 0, palette) },
+      { text: buildSectionInstruction(copy, photoParts.length > 0, palette, typography, session.brand_style) },
     ]
     b64 = await generateImage(parts, 3, { aspectRatio: '9:16' })
   }
