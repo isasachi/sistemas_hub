@@ -37,7 +37,7 @@ const MASTER_LAYOUT = [
   `• CTA: ONE prominent rounded button/pill in the accent color with a short label; right after the subheadline OR just below the product — never both, never floating.`,
   `• Product: the faithful hero anchor, large, centered or to one side; multiplied into the pack for pack offers.`,
   `• Beneficiary: where it fits, the product's beneficiary showing the result — a person fitting the audience, or the animal/subject for pet and similar products.`,
-  `• Copy-driven items: render the benefit / trust / price / badge / stat items the copy provides (and ONLY those, never invented) as tidy cards or rows; close with a bold tagline if the copy ends with one.`,
+  `• Copy-driven items: render the benefit / trust / price / badge / stat items the copy provides (and ONLY those, never invented) as tidy cards or rows; close with a bold tagline if the copy ends with one. If the copy has no such items, render NONE — do not add a benefit grid, feature chips or captioned icons to fill the layout.`,
   `• Composition: text top-anchored, product center/bottom, generous margins, clear top→bottom reading order (brand → headline → subheadline → CTA → product); keep the headline > subheadline > body size order.`,
 ].join('\n')
 
@@ -51,9 +51,9 @@ const DESIGN_SYSTEM = [
   `• Depth: stage background → beneficiary → product/cards as distinct planes, each lifted with soft contact shadows and glow so nothing looks pasted-on. Clean, confident, directional lighting.`,
   `• Product finish: crisp and well-lit, with realistic reflections and a soft grounding shadow or glow halo — magazine-grade render.`,
   `• Surfaces: soft frosted-glass / glassmorphism cards — translucent, well-rounded, a subtle inner glow, a 1px light border and a soft drop shadow. Airy, premium, legible.`,
-  `• Graphic devices: render badges, ribbons, seals/medals, savings tags and benefit/trust icons glossy and dimensional in the brand palette (never generic clip-art) — benefit icons as a colored gradient circle with a simple SYMBOL (check, drop, star, %), and value/urgency/trust marks with a warm metallic finish. These devices are DECORATIVE — they carry NO lettering of their own; use symbols, not words (do not write "gold", "badge", "seal", "value" on them). Struck-through "antes" prices only when the copy supplies them.`,
+  `• Graphic devices: render badges, ribbons, seals/medals, savings tags and benefit/trust icons glossy and dimensional in the brand palette (never generic clip-art) — benefit icons as a colored gradient circle with a simple SYMBOL (check, drop, star, %), and value/urgency/trust marks with a warm metallic finish. Render a device ONLY where the copy supplies that item (a benefit, a price, a trust point) — never as default furniture to fill space. These devices are DECORATIVE — they carry NO lettering of their own; use symbols, not words (do not write "gold", "badge", "seal", "value" on them). Struck-through "antes" prices only when the copy supplies them.`,
   `• Type treatment: heavy, tight headline with strong weight contrast down to subhead and body, oversized heavy price numbers, high contrast and perfectly legible.`,
-  `• Polish: DR media is information-rich but organized — fill the canvas with a confident focal hierarchy and tight rhythm, finished to a glossy, premium, magazine-grade quality.`,
+  `• Polish: richness comes from the PROVIDED COPY, the product scale, the atmosphere and generous whitespace — NOT from padding. A section with little copy stays clean and sparse (big product, glow, beneficiary, breathing room); never fabricate benefit grids, feature chips, icon rows or captions to fill the canvas. Finish everything to a glossy, premium, magazine-grade quality.`,
 ].join('\n')
 
 // Disciplina de texto (CRÍTICA): el design system mete vocabulario denso (badges, seals,
