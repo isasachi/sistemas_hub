@@ -101,29 +101,17 @@ function brandBlock(
   return `BRAND — the look comes from the product/brand; apply it THROUGH the design system and generate any badges, seals, icons and props in this palette (never generic stock):\n${lines.join('\n')}`
 }
 
-// `product` decide la frase de fidelidad, a DOS ROLES cuando hay placa canónica:
-//   'canonical' — Imagen 1 es la placa canónica (ancla de identidad idéntica en toda la
-//                 landing); Imágenes 2+ son las referencias originales, de donde el modelo
-//                 toma los recursos gráficos que acompañan al producto (puede reusarlos,
-//                 pero NO son el producto). Esta separación evita que la extracción y la
-//                 regla de "usar los acompañantes" interfieran.
-//   'raw'       — solo fotos crudas (fallback si la extracción falló): render fiel inline.
-//   'none'      — sin foto (no debería pasar; el wizard exige ≥1): placeholder genérico.
-// La marca aporta paleta/tipografía/estilo; el design system, el craft; el master layout,
-// la estructura. El copy/fidelidad van end-weighted (lo más crítico, al final).
+// `hasPhoto` decide la frase del producto: con foto de input se renderiza fiel; sin foto
+// (no debería pasar — el wizard exige ≥1) se describe genérico. La marca aporta paleta,
+// tipografía y estilo gráfico; el design system aporta el craft; el master layout, la
+// estructura. El copy/fidelidad van end-weighted (lo más crítico, al final).
 export function buildSectionInstruction(
   copy: SectionCopy,
-  product: 'canonical' | 'raw' | 'none',
+  hasPhoto: boolean,
   palette?: LandingPalette | null,
   typography?: LandingTypography | null,
   brandStyle?: string | null,
 ): string {
-  const productLine =
-    product === 'canonical'
-      ? `Image 1 is the CANONICAL PRODUCT — the exact product this whole landing sells. Reproduce it with total fidelity and IDENTICALLY in every section: same shape, proportions, colors, finish and every label detail (all printed text, logos and graphics on the packaging, spelled and placed exactly as in Image 1). Do NOT redraw, restyle, simplify, translate or invent any label. The remaining images are the original reference: you MAY reuse the accompanying graphic resources they show around the product (props, ingredient shots, decorative motifs) as decorative elements, but they are NOT the product — never substitute or blend them into it. Place the product in the scene per the design system above.`
-      : product === 'raw'
-        ? `Image 1 is the REAL product. Render it faithfully and identically across sections — same shape, proportions, colors and every label detail (all printed text, logos and graphics reproduced exactly); do NOT invent, simplify or restyle it. You may reuse graphic resources accompanying it in the image as decorative elements, but never alter the product itself. Place it in the scene per the design system above.`
-        : `Compose around a generic attractive product placeholder.`
   return [
     `Design a single vertical landing-page SECTION as one high-resolution image,`,
     `mobile-first, portrait orientation, premium e-commerce styling.`,
@@ -131,7 +119,9 @@ export function buildSectionInstruction(
     MASTER_LAYOUT,
     DESIGN_SYSTEM,
     brandBlock(palette, typography, brandStyle),
-    productLine,
+    hasPhoto
+      ? `Image 1 is the REAL product. Render it faithfully — same shape, label and colors; do NOT invent a different product. Place it in the scene per the design system above.`
+      : `Compose around a generic attractive product placeholder.`,
     ``,
     `Copy to render (and ONLY this copy):`,
     copyBlock(copy),

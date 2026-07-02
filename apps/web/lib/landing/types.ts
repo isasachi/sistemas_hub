@@ -89,8 +89,4 @@ export interface LandingSessionResponse {
   // Estilo gráfico de marca (concept + logoDirection del branding en el handoff tool-to-tool):
   // guía los devices/motivos que el modelo genera. Null en el flujo de producto suelto.
   brand_style: string | null
-  // Placa canónica del producto: extracción quirúrgica (producto aislado + labels)
-  // derivada una vez por sesión y usada como ancla idéntica en todas las secciones.
-  // Null hasta que la primera sección la deriva (o si la extracción falla).
-  product_canonical_url: string | null
 }
