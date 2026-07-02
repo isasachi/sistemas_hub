@@ -42,6 +42,11 @@ export async function POST(req: NextRequest) {
   const tone = [...new Set(personality.map((p) => TONE_MAP[p] ?? 'Profesional'))]
   const photo = bs.mockup_url || bs.logo_url
   const direction = bs.direction
+  // Estilo gráfico de marca para los devices/motivos que el modelo genera en la landing:
+  // concept (vibe) + personalidad visual + logoDirection. Solo en el handoff tool-to-tool.
+  const brandStyle = [direction?.concept, personality.join(', '), direction?.logoDirection]
+    .filter(Boolean)
+    .join('. ') || null
 
   const id = await createLandingSession()
   await updateLandingSession(id, {
@@ -54,6 +59,7 @@ export async function POST(req: NextRequest) {
     product_photo_urls: photo ? [photo] : [],
     palette: direction?.palette ?? null,
     typography: direction ? { headline: direction.typography.headline, body: direction.typography.body } : null,
+    brand_style: brandStyle,
     selected_sections: DEFAULT_SECTIONS,
     // Para en el paso de SECCIONES: el usuario sigue el wizard (secciones → copy → preview).
     step: 2,
