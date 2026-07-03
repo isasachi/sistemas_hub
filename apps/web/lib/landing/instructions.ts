@@ -60,7 +60,7 @@ const DESIGN_SYSTEM = [
 // gold, premium…) que el modelo tiende a RENDERIZAR como texto en la imagen. Estas reglas
 // van end-weighted (al final, lo más prominente) y nombran los modos de fuga concretos.
 const TEXT_RULES = [
-  'TEXT DISCIPLINE (critical): every visible word in the image must come ONLY from the Copy block below, spelled correctly in neutral Spanish.',
+  'TEXT DISCIPLINE (critical): every visible word in the image must come ONLY from the Copy block below (plus the product\'s own printed labels), spelled correctly in neutral Spanish.',
   'Badges, seals, ribbons, icons and price tags carry NO words of their own — decorate them with symbols (✓, ★, %), never with labels, unless that exact word appears in the copy.',
   'NEVER render instruction or design words (e.g. "badge", "seal", "gold", "value", "guarantee", "premium", "e-commerce", "market", "ingredients", "specification", "dimensional", "section", "palette", "typography"), field names ("headline", "bullets", "cta"), hex codes, font names, lorem ipsum, or any wording from this prompt.',
   'Do not duplicate, pad or invent text the copy does not contain. Keep every word short and highly legible.',

@@ -12,6 +12,7 @@ import type { Part } from '@google/genai'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
+export const maxDuration = 60 // path source = gen imagen (~15s) + bbox de visión (~2s) + crop; cabe en 60s.
 // UNA imagen por request (~15s) → cabe en el cap de Vercel Hobby (60s). El cliente
 // llama esta ruta una vez por sección, secuencialmente, en vez de un SSE que genera
 // las 8 en un solo request (que excedería el cap). Sirve para generar Y regenerar.

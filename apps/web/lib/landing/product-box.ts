@@ -1,5 +1,4 @@
 import { z } from 'zod'
-import sharp from 'sharp'
 import { callStructured } from '@/lib/gemini'
 import type { Part } from '@google/genai'
 
@@ -48,20 +47,28 @@ export async function extractProductBox(base64: string, mimeType: string): Promi
 }
 
 // Recorta el producto del buffer del render, con ~6% de padding, clamp a los bordes.
+// sharp trae binario nativo: se importa DINÁMICO dentro de la función y con try/catch, para
+// que un fallo de carga en Vercel devuelva el render completo (fallback real) en vez de
+// romper el módulo en import-time y 500-ear TODA generación de sección.
 export async function cropProduct(buffer: Buffer, box: ProductBox): Promise<Buffer> {
-  const img = sharp(buffer)
-  const meta = await img.metadata()
-  const W = meta.width ?? 0
-  const H = meta.height ?? 0
-  if (!W || !H) return buffer
-  const padX = box.w * 0.06
-  const padY = box.h * 0.06
-  const left = Math.max(0, Math.round((box.x - padX) * W))
-  const top = Math.max(0, Math.round((box.y - padY) * H))
-  const right = Math.min(W, Math.round((box.x + box.w + padX) * W))
-  const bottom = Math.min(H, Math.round((box.y + box.h + padY) * H))
-  const width = right - left
-  const height = bottom - top
-  if (width < 1 || height < 1) return buffer
-  return img.extract({ left, top, width, height }).png().toBuffer()
+  try {
+    const sharp = (await import('sharp')).default
+    const img = sharp(buffer)
+    const meta = await img.metadata()
+    const W = meta.width ?? 0
+    const H = meta.height ?? 0
+    if (!W || !H) return buffer
+    const padX = box.w * 0.06
+    const padY = box.h * 0.06
+    const left = Math.max(0, Math.round((box.x - padX) * W))
+    const top = Math.max(0, Math.round((box.y - padY) * H))
+    const right = Math.min(W, Math.round((box.x + box.w + padX) * W))
+    const bottom = Math.min(H, Math.round((box.y + box.h + padY) * H))
+    const width = right - left
+    const height = bottom - top
+    if (width < 1 || height < 1) return buffer
+    return await img.extract({ left, top, width, height }).png().toBuffer()
+  } catch {
+    return buffer // sharp no cargó o el extract falló → render completo (nunca peor que hoy)
+  }
 }
