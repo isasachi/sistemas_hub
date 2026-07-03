@@ -127,16 +127,27 @@ export default function Section4Preview() {
     setDone(0)
     setError(null)
     let failed = 0
-    for (let i = 0; i < copy.length; i++) {
+    // El ancla de producto (consistencia+fidelidad entre secciones) la siembra la PRIMERA
+    // sección generada (route: mode 'source'). Generamos primero la sección con el producto
+    // único más grande y limpio → ancla buena; las demás la calcan. El orden de DISPLAY no
+    // cambia (order = índice original; el store ordena por `order`). ponytail: prioridad fija;
+    // oferta (multiplica el producto a un pack) y las small-product van al final para no
+    // sembrar el ancla salvo que no haya nada mejor seleccionado.
+    const ANCHOR_PRIORITY: SectionType[] = ['hero', 'cta-final', 'beneficios', 'antes-despues', 'garantia', 'oferta', 'faq', 'testimonios']
+    const genOrder = copy
+      .map((c, i) => ({ c, order: i }))
+      .sort((a, b) => ANCHOR_PRIORITY.indexOf(a.c.type) - ANCHOR_PRIORITY.indexOf(b.c.type))
+    let done = 0
+    for (const { c, order } of genOrder) {
       try {
-        const { section, regensLeft } = await genSection(sessionId, copy[i].type, copy[i], i)
+        const { section, regensLeft } = await genSection(sessionId, c.type, c, order)
         setSectionImage(section)
-        if (typeof regensLeft === 'number') setRegen(`landing-section:${copy[i].type}`, regensLeft)
+        if (typeof regensLeft === 'number') setRegen(`landing-section:${c.type}`, regensLeft)
       } catch (err) {
         failed++
         console.error(err)
       }
-      setDone(i + 1)
+      setDone(++done)
     }
     if (failed > 0) {
       setError(

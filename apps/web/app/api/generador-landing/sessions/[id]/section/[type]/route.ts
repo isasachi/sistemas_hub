@@ -80,8 +80,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // generada sale de las fotos crudas ('source': reproduce el producto con TODOS sus labels
     // reales) y su render limpio se cachea como ancla. Las demás calcan ese producto
     // ('anchored': Imagen 1 = ancla, Imagen 2+ = fotos reales como ground-truth de labels).
-    // El cliente genera secuencialmente → sin carrera. ponytail: el ancla se fija una vez;
-    // regenerar la sección-fuente no lo re-ancla — basta para consistencia.
+    // El cliente genera secuencialmente Y en orden de prioridad de ancla (Section4Preview:
+    // hero/producto-único-grande primero) → la 1ª 'source' es siempre anchor-worthy, sin
+    // carrera. ponytail: el ancla se fija una vez; regenerar en fresco la sección-fuente la
+    // re-ancla contra su propio render viejo (no re-deriva). Si el ancla saliera mala, hoy
+    // no hay reset — aceptable v1; upgrade: botón "re-anclar" que limpie product_canonical_url.
     const parts: Part[] = [...photoParts]
     let mode: 'source' | 'anchored' | 'none' = photoParts.length ? 'source' : 'none'
     if (session.product_canonical_url) {
