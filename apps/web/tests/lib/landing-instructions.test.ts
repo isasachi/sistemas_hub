@@ -35,16 +35,31 @@ describe('buildSectionInstruction', () => {
     expect(out).not.toContain('build everything from these brand colors')
   })
 
-  it('modo source reproduce TODOS los labels reales; anchored calca el ancla (Imagen 1)', () => {
+  it('modo source reproduce TODOS los labels reales; anchored calca un recorte del producto sin layout', () => {
     const source = buildSectionInstruction(COPY, 'source')
     const anchored = buildSectionInstruction(COPY, 'anchored')
     // source parte de la foto real y preserva todos los labels (fidelidad), sin inventar.
     expect(source).toContain('REAL product')
     expect(source).toContain('every secondary label')
     expect(source).toContain('Invent NOTHING')
-    // anchored calca el producto ya renderrado en Imagen 1 (consistencia) + usa la foto como ground-truth.
-    expect(anchored).toContain('previous section')
+    // anchored: Imagen 1 es un recorte aislado del producto (consistencia SIN clonar el layout).
+    expect(anchored).toContain('ISOLATED CROP')
+    expect(anchored).toContain('do NOT copy any framing, background or composition')
     expect(anchored).toContain('ground-truth')
     expect(anchored).not.toBe(source)
+  })
+
+  it('el texto de etiquetas se inyecta como ground-truth solo cuando se provee', () => {
+    const labels = 'EÚNOIA\nNiacinamida · Pantenol · Colágeno\n30ml / 1.85 fl oz'
+    const withLabels = buildSectionInstruction(COPY, 'source', null, null, null, labels)
+    const without = buildSectionInstruction(COPY, 'source', null, null, null, null)
+    expect(withLabels).toContain('PRODUCT LABEL TEXT (authoritative ground-truth)')
+    expect(withLabels).toContain('Niacinamida · Pantenol · Colágeno')
+    expect(without).not.toContain('PRODUCT LABEL TEXT')
+    // vacío/whitespace no inyecta.
+    expect(buildSectionInstruction(COPY, 'source', null, null, null, '  ')).not.toContain('PRODUCT LABEL TEXT')
+    // también aplica en anchored, no en none.
+    expect(buildSectionInstruction(COPY, 'anchored', null, null, null, labels)).toContain('PRODUCT LABEL TEXT')
+    expect(buildSectionInstruction(COPY, 'none', null, null, null, labels)).not.toContain('PRODUCT LABEL TEXT')
   })
 })

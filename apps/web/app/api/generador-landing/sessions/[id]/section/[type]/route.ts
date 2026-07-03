@@ -4,6 +4,7 @@ import { fetchAsBase64, uploadToStorage } from '@/lib/storage'
 import { generateImage, editWithPrompt } from '@/lib/gemini'
 import { buildSectionInstruction } from '@/lib/landing/instructions'
 import { extractLandingStyle } from '@/lib/landing/style-extract'
+import { extractProductBox, cropProduct } from '@/lib/landing/product-box'
 import { SectionCopySchema, SectionType, type LandingSection } from '@/lib/landing/types'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
@@ -79,12 +80,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // Ancla de producto para consistencia + fidelidad entre secciones. La PRIMERA sección
     // generada sale de las fotos crudas ('source': reproduce el producto con TODOS sus labels
     // reales) y su render limpio se cachea como ancla. Las demás calcan ese producto
-    // ('anchored': Imagen 1 = ancla, Imagen 2+ = fotos reales como ground-truth de labels).
-    // El cliente genera secuencialmente Y en orden de prioridad de ancla (Section4Preview:
-    // hero/producto-único-grande primero) → la 1ª 'source' es siempre anchor-worthy, sin
-    // carrera. ponytail: el ancla se fija una vez; regenerar en fresco la sección-fuente la
-    // re-ancla contra su propio render viejo (no re-deriva). Si el ancla saliera mala, hoy
-    // no hay reset — aceptable v1; upgrade: botón "re-anclar" que limpie product_canonical_url.
+    // ('anchored': Imagen 1 = RECORTE del producto del ancla, Imagen 2+ = fotos reales como
+    // ground-truth de labels). El cliente genera secuencialmente Y en orden de prioridad de
+    // ancla (Section4Preview: hero/producto-único-grande primero) → la 1ª 'source' es siempre
+    // anchor-worthy, sin carrera. ponytail: el ancla se fija una vez; regenerar en fresco la
+    // sección-fuente la re-ancla contra su propio recorte viejo (no re-deriva). Si el ancla
+    // saliera mala, hoy no hay reset — v1; upgrade: botón "re-anclar" que limpie la columna.
     const parts: Part[] = [...photoParts]
     let mode: 'source' | 'anchored' | 'none' = photoParts.length ? 'source' : 'none'
     if (session.product_canonical_url) {
@@ -92,12 +93,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       parts.unshift({ inlineData: { mimeType: anchor.mimeType, data: anchor.data } })
       mode = 'anchored'
     }
-    parts.push({ text: buildSectionInstruction(copy, mode, palette, typography, session.brand_style) })
+    parts.push({ text: buildSectionInstruction(copy, mode, palette, typography, session.brand_style, session.product_labels) })
     b64 = await generateImage(parts, 3, { aspectRatio: '9:16' })
 
-    // Cachea el ancla desde la primera sección-fuente exitosa.
+    // Cachea el ancla desde la primera sección-fuente exitosa, RECORTADA al producto (sin el
+    // layout de la sección) para que las demás calquen el producto sin clonar su estructura.
+    // Fallback al render completo si el bbox/recorte falla (nunca peor que hoy).
     if (b64 && mode === 'source') {
-      const anchorUrl = await uploadToStorage(id, Buffer.from(b64, 'base64'), 'image/png', 'product-canonical')
+      const buf = Buffer.from(b64, 'base64')
+      const box = await extractProductBox(b64, 'image/png')
+      const anchorBuf = box ? await cropProduct(buf, box).catch(() => buf) : buf
+      const anchorUrl = await uploadToStorage(id, anchorBuf, 'image/png', 'product-canonical')
       await updateLandingSession(id, { product_canonical_url: anchorUrl })
     }
   }

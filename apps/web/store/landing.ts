@@ -18,6 +18,7 @@ interface LandingState {
   benefits: string | null
   audience: string | null
   tone: string[]
+  productLabels: string | null
   productPhotoUrls: string[]
   selectedSections: SectionType[]
   copy: SectionCopy[]
@@ -27,7 +28,7 @@ interface LandingState {
 
 interface LandingActions {
   setStep: (step: number) => void
-  setDetails: (data: { productName: string; price: string; benefits: string; audience: string; tone: string[] }) => void
+  setDetails: (data: { productName: string; price: string; benefits: string; audience: string; tone: string[]; productLabels: string }) => void
   setPhotos: (urls: string[]) => void
   setSelectedSections: (sections: SectionType[]) => void
   setCopy: (copy: SectionCopy[]) => void
@@ -49,6 +50,7 @@ const initialState: LandingState = {
   benefits: null,
   audience: null,
   tone: [],
+  productLabels: null,
   productPhotoUrls: [],
   selectedSections: [],
   copy: [],
@@ -61,8 +63,8 @@ export const useLandingStore = create<LandingState & LandingActions>((set) => ({
 
   setStep: (step) => set({ step }),
 
-  setDetails: ({ productName, price, benefits, audience, tone }) =>
-    set({ productName, price, benefits, audience, tone, step: 1 }),
+  setDetails: ({ productName, price, benefits, audience, tone, productLabels }) =>
+    set({ productName, price, benefits, audience, tone, productLabels, step: 1 }),
 
   setPhotos: (urls) => set({ productPhotoUrls: urls, step: 2 }),
 
@@ -91,6 +93,7 @@ export const useLandingStore = create<LandingState & LandingActions>((set) => ({
       benefits: s.benefits,
       audience: s.audience,
       tone: s.tone ?? [],
+      productLabels: s.product_labels,
       productPhotoUrls: s.product_photo_urls ?? [],
       selectedSections: s.selected_sections ?? [],
       copy: s.copy ?? [],

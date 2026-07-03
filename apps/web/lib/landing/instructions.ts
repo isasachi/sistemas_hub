@@ -105,25 +105,33 @@ function brandBlock(
 //   'source'   — primera sección: Image 1 es la FOTO REAL. Render fiel de TODOS sus labels
 //                reales (wordmark + sublabels + tamaño), inventando nada. Su render limpio
 //                se cachea como ancla para las demás secciones.
-//   'anchored' — resto: Image 1 es el ancla (una sección ya renderrada de esta misma
-//                landing) → calca el producto EXACTO; Image 2 es la foto real = ground-truth
-//                de labels. Da consistencia (todas calcan el ancla) + fidelidad (labels reales).
+//   'anchored' — resto: Image 1 es el RECORTE del producto (aislado del render del ancla, sin
+//                layout) → calca el producto EXACTO; Image 2+ son las fotos reales =
+//                ground-truth de labels. Da consistencia (todas calcan el mismo recorte) sin
+//                arrastrar la estructura del hero — cada sección arma su layout desde su spec.
 //   'none'     — sin foto (no debería pasar; el wizard exige ≥1): placeholder genérico.
-// La marca aporta paleta/tipografía/estilo; el design system, el craft; el master layout, la
-// estructura. El copy/fidelidad van end-weighted (lo más crítico, al final).
+// `productLabels` (opcional) = texto exacto de las etiquetas tipeado por el usuario; se inyecta
+// como ground-truth autoritativo → el modelo pinta las palabras correctas en vez de confabular
+// texto ilegible de la foto. La marca aporta paleta/tipografía/estilo; el design system, el
+// craft; el master layout, la estructura. El copy/fidelidad van end-weighted (lo más crítico).
 export function buildSectionInstruction(
   copy: SectionCopy,
   productMode: 'source' | 'anchored' | 'none',
   palette?: LandingPalette | null,
   typography?: LandingTypography | null,
   brandStyle?: string | null,
+  productLabels?: string | null,
 ): string {
   const productLine =
     productMode === 'source'
       ? `Image 1 is the REAL product — the exact object this landing sells. Reproduce it and ALL the text and graphics actually PRINTED ON IT faithfully and exactly: its main wordmark AND every secondary label, ingredient line, tagline and size/volume, spelled, styled and placed as in Image 1 — do not simplify, drop, translate or restyle any of them, and keep them legible. Invent NOTHING that is not printed on the product (no fake descriptors, sizes or ingredient names). If Image 1 is an ad or infographic, the product is the physical object only — the section copy, captions, callouts and any text or lines pointing AT the product from outside are NOT part of its label; never render those onto it. Place it in the scene per the design system above.`
       : productMode === 'anchored'
-        ? `Image 1 shows THIS landing's product already rendered in a previous section. Reproduce that exact product IDENTICALLY: same shape, proportions, colors, finish and every label — all printed text big and small, spelled, styled and placed exactly as in Image 1. Images 2 and later are the real product photo(s) — use them as the ground-truth for label wording and detail. Ignore Image 1's background, copy, headline and layout — those belong to the other section; render ONLY the copy specified below and never copy Image 1's text onto this section or onto the product. Do NOT invent, drop, restyle or redraw the product. Place it in the scene per the design system above.`
+        ? `Image 1 is an ISOLATED CROP of THIS landing's product (the product alone, cut out of another section — it carries NO layout, headline, cards or scene of its own). Reproduce that exact product IDENTICALLY: same shape, proportions, colors, finish and every label — all printed text big and small, spelled, styled and placed exactly as in Image 1. Images 2 and later are the real product photo(s) — use them as the ground-truth for label wording and detail. Image 1 is ONLY a product reference: do NOT copy any framing, background or composition from it — this section's entire layout comes from its own section spec and the master layout above. Do NOT invent, drop, restyle or redraw the product. Place it in the scene per the design system above.`
         : `Compose around a generic attractive product placeholder.`
+  const labelBlock =
+    productMode !== 'none' && productLabels && productLabels.trim()
+      ? `\nPRODUCT LABEL TEXT (authoritative ground-truth): the exact text printed on the product is, line by line:\n${productLabels.trim()}\nRender these exact words correctly and legibly on the product, in the positions they occupy in the reference; use this as the source of truth wherever the label is small or unclear in the photo. Do not put any other words on the product.`
+      : ``
   return [
     `Design a single vertical landing-page SECTION as one high-resolution image,`,
     `mobile-first, portrait orientation, premium e-commerce styling.`,
@@ -131,7 +139,7 @@ export function buildSectionInstruction(
     MASTER_LAYOUT,
     DESIGN_SYSTEM,
     brandBlock(palette, typography, brandStyle),
-    productLine,
+    productLine + labelBlock,
     ``,
     `Copy to render (and ONLY this copy):`,
     copyBlock(copy),

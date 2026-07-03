@@ -93,4 +93,8 @@ export interface LandingSessionResponse {
   // demás secciones para que el producto salga IDÉNTICO (consistencia) con todos sus labels
   // reales (fidelidad). Se cachea una vez; null hasta que se genera la primera sección.
   product_canonical_url: string | null
+  // Texto exacto de las etiquetas impresas en el producto (una línea por renglón), tipeado
+  // por el usuario. Ground-truth para el prompt de imagen → el modelo renderiza las palabras
+  // correctas en vez de confabular texto ilegible de la foto. Null = copiar de la foto.
+  product_labels: string | null
 }

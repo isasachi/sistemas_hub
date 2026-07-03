@@ -10,7 +10,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const session = await getLandingSession(id)
   if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  let body: { productName?: string; price?: string; benefits?: string; audience?: string; tone?: string[] }
+  let body: { productName?: string; price?: string; benefits?: string; audience?: string; tone?: string[]; productLabels?: string }
   try { body = await req.json() } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
@@ -25,6 +25,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     benefits: body.benefits?.trim() ?? null,
     audience: body.audience?.trim() ?? null,
     tone: (body.tone ?? []).map((t) => t.trim()).filter(Boolean),
+    product_labels: body.productLabels?.trim() || null,
   })
   return NextResponse.json({ ok: true })
 }
