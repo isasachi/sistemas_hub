@@ -89,4 +89,8 @@ export interface LandingSessionResponse {
   // Estilo gráfico de marca (concept + logoDirection del branding en el handoff tool-to-tool):
   // guía los devices/motivos que el modelo genera. Null en el flujo de producto suelto.
   brand_style: string | null
+  // Ancla de producto: render limpio de la 1ª sección generada, reusado como Imagen 1 en las
+  // demás secciones para que el producto salga IDÉNTICO (consistencia) con todos sus labels
+  // reales (fidelidad). Se cachea una vez; null hasta que se genera la primera sección.
+  product_canonical_url: string | null
 }

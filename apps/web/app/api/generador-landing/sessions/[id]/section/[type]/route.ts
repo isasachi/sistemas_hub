@@ -76,11 +76,27 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
     }
 
-    const parts: Part[] = [
-      ...photoParts,
-      { text: buildSectionInstruction(copy, photoParts.length > 0, palette, typography, session.brand_style) },
-    ]
+    // Ancla de producto para consistencia + fidelidad entre secciones. La PRIMERA sección
+    // generada sale de las fotos crudas ('source': reproduce el producto con TODOS sus labels
+    // reales) y su render limpio se cachea como ancla. Las demás calcan ese producto
+    // ('anchored': Imagen 1 = ancla, Imagen 2+ = fotos reales como ground-truth de labels).
+    // El cliente genera secuencialmente → sin carrera. ponytail: el ancla se fija una vez;
+    // regenerar la sección-fuente no lo re-ancla — basta para consistencia.
+    const parts: Part[] = [...photoParts]
+    let mode: 'source' | 'anchored' | 'none' = photoParts.length ? 'source' : 'none'
+    if (session.product_canonical_url) {
+      const anchor = await fetchAsBase64(session.product_canonical_url)
+      parts.unshift({ inlineData: { mimeType: anchor.mimeType, data: anchor.data } })
+      mode = 'anchored'
+    }
+    parts.push({ text: buildSectionInstruction(copy, mode, palette, typography, session.brand_style) })
     b64 = await generateImage(parts, 3, { aspectRatio: '9:16' })
+
+    // Cachea el ancla desde la primera sección-fuente exitosa.
+    if (b64 && mode === 'source') {
+      const anchorUrl = await uploadToStorage(id, Buffer.from(b64, 'base64'), 'image/png', 'product-canonical')
+      await updateLandingSession(id, { product_canonical_url: anchorUrl })
+    }
   }
   if (!b64) return NextResponse.json({ error: 'No se pudo generar la sección', retryable: true }, { status: 502 })
 
