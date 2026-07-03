@@ -120,7 +120,7 @@ export function buildSectionInstruction(
     DESIGN_SYSTEM,
     brandBlock(palette, typography, brandStyle),
     hasPhoto
-      ? `Image 1 is the REAL product. Render it faithfully — same shape, label and colors; do NOT invent a different product. Place it in the scene per the design system above.`
+      ? `Image 1 is the REAL product — the exact object this landing sells. Render it faithfully and IDENTICALLY in every section: same shape, proportions, colors and finish. Its label is ONLY what is printed on the product itself in Image 1 (its wordmark / brand name) — reproduce that and NOTHING else: never add, invent or guess other packaging text (product descriptors, taglines, sizes or volumes, ingredient names), and never render the section copy or benefit text onto the product. If Image 1 is an ad or infographic, the product is the physical object only — captions, callouts and any text or lines pointing at it are NOT part of its label; do not copy them onto it. Do NOT redraw it as a different product. Place it in the scene per the design system above.`
       : `Compose around a generic attractive product placeholder.`,
     ``,
     `Copy to render (and ONLY this copy):`,
