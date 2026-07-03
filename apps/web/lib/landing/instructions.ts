@@ -35,7 +35,7 @@ const MASTER_LAYOUT = [
   `• Headline: the largest, heaviest text, top third, 1-3 short lines, with a single word set in the brand accent color for emphasis. It dominates, and appears ONCE — never also repeated in a banner, ribbon, sticker or as a closing tagline/footer.`,
   `• Subheadline: right under the headline, smaller and lighter, 1-2 lines, outcome-focused — one block with the headline.`,
   `• CTA: ONE prominent rounded button/pill in the accent color with a short label; right after the subheadline OR just below the product — never both, never floating.`,
-  `• Product: the faithful hero anchor, large, centered or to one side; multiplied into the pack for pack offers.`,
+  `• Product: the faithful hero anchor, large, centered or to one side. Show a SINGLE unit by default; multiply it into a multi-unit pack ONLY for an explicit multi-pack offer (an OFFER section whose copy names a multi-unit tier) — never in a hero or any other section.`,
   `• Beneficiary: where it fits, the product's beneficiary showing the result — a person fitting the audience, or the animal/subject for pet and similar products.`,
   `• Copy-driven items: render the benefit / trust / price / badge / stat items the copy provides (and ONLY those, never invented) as tidy cards or rows; close with a bold tagline if the copy ends with one. If the copy has no such items, render NONE — do not add a benefit grid, feature chips or captioned icons to fill the layout.`,
   `• Composition: text top-anchored, product center/bottom, generous margins, clear top→bottom reading order (brand → headline → subheadline → CTA → product); keep the headline > subheadline > body size order.`,
@@ -62,7 +62,7 @@ const DESIGN_SYSTEM = [
 const TEXT_RULES = [
   'TEXT DISCIPLINE (critical): every visible word in the image must come ONLY from the Copy block below (plus the product\'s own printed labels), spelled correctly in neutral Spanish.',
   'Badges, seals, ribbons, icons and price tags carry NO words of their own — decorate them with symbols (✓, ★, %), never with labels, unless that exact word appears in the copy.',
-  'NEVER render instruction or design words (e.g. "badge", "seal", "gold", "value", "guarantee", "premium", "e-commerce", "market", "ingredients", "specification", "dimensional", "section", "palette", "typography"), field or role names ("headline", "subheadline", "key word", "benefit", "bullets", "cta"), bracketed annotations or labels (e.g. "[keyWord: ...]"), hex codes, font names, lorem ipsum, or any wording from this prompt.',
+  'NEVER render instruction or design words (e.g. "badge", "seal", "gold", "value", "guarantee", "premium", "e-commerce", "market", "ingredients", "specification", "dimensional", "section", "palette", "typography"), field or role names ("headline", "subheadline", "bullets", "cta"), any bracketed field label or annotation wrapping a copy line, hex codes, font names, lorem ipsum, or any wording from this prompt.',
   'Render each copy string EXACTLY ONCE and render exactly as many cards / price tiers as the copy lists — never duplicate, pad or invent an extra one. The image\'s only text is the Copy-block strings plus the product\'s own printed labels. Keep every word short and highly legible.',
 ].join(' ')
 
