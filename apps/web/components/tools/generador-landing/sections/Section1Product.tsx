@@ -11,12 +11,13 @@ const btnPrimary =
 const TONE_OPTIONS = ['Profesional', 'Cercano', 'Divertido', 'Lujoso', 'Urgente', 'Confiable']
 
 export default function Section1Product() {
-  const { sessionId, productName, price, benefits, audience, tone, setDetails } = useLandingStore()
+  const { sessionId, productName, price, benefits, audience, tone, productLabels, setDetails } = useLandingStore()
   const [name, setName] = useState(productName ?? '')
   const [priceV, setPriceV] = useState(price ?? '')
   const [benefitsV, setBenefitsV] = useState(benefits ?? '')
   const [audienceV, setAudienceV] = useState(audience ?? '')
   const [toneV, setToneV] = useState<string[]>(tone)
+  const [labelsV, setLabelsV] = useState(productLabels ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -28,11 +29,11 @@ export default function Section1Product() {
       const res = await fetch(`/api/generador-landing/sessions/${sessionId}/details`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ productName: name, price: priceV, benefits: benefitsV, audience: audienceV, tone: toneV }),
+        body: JSON.stringify({ productName: name, price: priceV, benefits: benefitsV, audience: audienceV, tone: toneV, productLabels: labelsV }),
       })
       const data = (await res.json()) as { error?: string }
       if (!res.ok) throw new Error(data.error ?? 'No se pudo guardar')
-      setDetails({ productName: name, price: priceV, benefits: benefitsV, audience: audienceV, tone: toneV })
+      setDetails({ productName: name, price: priceV, benefits: benefitsV, audience: audienceV, tone: toneV, productLabels: labelsV })
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -52,6 +53,10 @@ export default function Section1Product() {
         rows={3} placeholder="Ej: Reduce manchas, hidrata, resultados en 2 semanas" />
       <FieldGroup type="input" id="ld-audience" label="Público objetivo" helper="(opcional)" value={audienceV} onChange={setAudienceV}
         placeholder="Ej: Mujeres 25-45 con piel sensible" />
+      <FieldGroup type="textarea" id="ld-labels" label="Texto de las etiquetas del producto"
+        helper="(opcional — una línea por renglón; mejora la fidelidad del texto en el envase)"
+        value={labelsV} onChange={setLabelsV} rows={4}
+        placeholder={'Ej:\nEÚNOIA\nNiacinamida · Pantenol · Colágeno\nACNÉ + HIDRATACIÓN\n30ml / 1.85 fl oz'} />
 
       <div className="flex flex-col gap-2">
         <label className="text-[13px] font-semibold text-[#f5f5f5]">Tono <span className="text-[#8a8a8a] font-normal ml-1.5">(opcional)</span></label>
