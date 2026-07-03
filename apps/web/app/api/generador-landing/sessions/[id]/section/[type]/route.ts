@@ -4,7 +4,6 @@ import { fetchAsBase64, uploadToStorage } from '@/lib/storage'
 import { generateImage, editWithPrompt } from '@/lib/gemini'
 import { buildSectionInstruction } from '@/lib/landing/instructions'
 import { extractLandingStyle } from '@/lib/landing/style-extract'
-import { extractProductPlate } from '@/lib/landing/product-extract'
 import { SectionCopySchema, SectionType, type LandingSection } from '@/lib/landing/types'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
@@ -12,13 +11,9 @@ import type { Part } from '@google/genai'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-export const maxDuration = 60 // Vercel Hobby: techo permitido. Ver nota de timing abajo.
 // UNA imagen por request (~15s) → cabe en el cap de Vercel Hobby (60s). El cliente
 // llama esta ruta una vez por sección, secuencialmente, en vez de un SSE que genera
 // las 8 en un solo request (que excedería el cap). Sirve para generar Y regenerar.
-// Excepción: la PRIMERA sección de una sesión deriva la placa canónica del producto
-// inline → dos generaciones (placa ~15s + sección ~15s ≈ 33s), aún holgado en 60s.
-// Las demás secciones leen la placa cacheada (product_canonical_url) → una sola imagen.
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string; type: string }> }) {
   const { id, type } = await params
@@ -56,12 +51,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const prev = await fetchAsBase64(existing.imageUrl)
     b64 = await editWithPrompt(prev.data, prev.mimeType, precision, { aspectRatio: '9:16' })
   } else {
-    // Fotos crudas del producto (referencia original → recursos gráficos acompañantes).
-    const rawPhotos: { data: string; mimeType: string }[] = []
+    // Fotos del producto como input (fidelidad).
+    const photoParts: Part[] = []
+    let firstPhoto: { data: string; mimeType: string } | null = null
     for (const url of session.product_photo_urls ?? []) {
-      rawPhotos.push(await fetchAsBase64(url))
+      const { data, mimeType } = await fetchAsBase64(url)
+      if (!firstPhoto) firstPhoto = { data, mimeType }
+      photoParts.push({ inlineData: { mimeType, data } })
     }
-    const firstPhoto = rawPhotos[0] ?? null
 
     // Estilo de marca: del handoff de branding (ya seteado) o derivado de la foto.
     // ponytail: deriva una vez y cachea en la sesión; el loop de secciones es
@@ -79,37 +76,30 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
     }
 
-    // Placa canónica del producto: extracción quirúrgica una vez por sesión (ancla de
-    // identidad idéntica en toda la landing). Derive-once + cache, igual patrón que el
-    // estilo. Si falla, canonical queda null y caemos a las fotos crudas (nunca peor).
-    let canonical: { data: string; mimeType: string } | null = null
+    // Ancla de producto para consistencia + fidelidad entre secciones. La PRIMERA sección
+    // generada sale de las fotos crudas ('source': reproduce el producto con TODOS sus labels
+    // reales) y su render limpio se cachea como ancla. Las demás calcan ese producto
+    // ('anchored': Imagen 1 = ancla, Imagen 2+ = fotos reales como ground-truth de labels).
+    // El cliente genera secuencialmente Y en orden de prioridad de ancla (Section4Preview:
+    // hero/producto-único-grande primero) → la 1ª 'source' es siempre anchor-worthy, sin
+    // carrera. ponytail: el ancla se fija una vez; regenerar en fresco la sección-fuente la
+    // re-ancla contra su propio render viejo (no re-deriva). Si el ancla saliera mala, hoy
+    // no hay reset — aceptable v1; upgrade: botón "re-anclar" que limpie product_canonical_url.
+    const parts: Part[] = [...photoParts]
+    let mode: 'source' | 'anchored' | 'none' = photoParts.length ? 'source' : 'none'
     if (session.product_canonical_url) {
-      canonical = await fetchAsBase64(session.product_canonical_url)
-    } else if (rawPhotos.length) {
-      try {
-        const plate = await extractProductPlate(rawPhotos)
-        if (plate) {
-          const url = await uploadToStorage(id, Buffer.from(plate, 'base64'), 'image/png', 'product-canonical')
-          await updateLandingSession(id, { product_canonical_url: url })
-          canonical = { data: plate, mimeType: 'image/png' }
-        }
-      } catch (err) {
-        console.error('[landing-canonical]', err) // sin placa: fallback a fotos crudas
-      }
+      const anchor = await fetchAsBase64(session.product_canonical_url)
+      parts.unshift({ inlineData: { mimeType: anchor.mimeType, data: anchor.data } })
+      mode = 'anchored'
     }
-
-    // Imagen 1 = placa canónica (identidad) · Imágenes 2+ = referencias originales
-    // (recursos gráficos acompañantes). Sin placa: solo fotos crudas.
-    const productParts: Part[] = [
-      ...(canonical ? [{ inlineData: { mimeType: canonical.mimeType, data: canonical.data } } as Part] : []),
-      ...rawPhotos.map((p) => ({ inlineData: { mimeType: p.mimeType, data: p.data } } as Part)),
-    ]
-    const productMode = canonical ? 'canonical' : rawPhotos.length ? 'raw' : 'none'
-    const parts: Part[] = [
-      ...productParts,
-      { text: buildSectionInstruction(copy, productMode, palette, typography, session.brand_style) },
-    ]
+    parts.push({ text: buildSectionInstruction(copy, mode, palette, typography, session.brand_style) })
     b64 = await generateImage(parts, 3, { aspectRatio: '9:16' })
+
+    // Cachea el ancla desde la primera sección-fuente exitosa.
+    if (b64 && mode === 'source') {
+      const anchorUrl = await uploadToStorage(id, Buffer.from(b64, 'base64'), 'image/png', 'product-canonical')
+      await updateLandingSession(id, { product_canonical_url: anchorUrl })
+    }
   }
   if (!b64) return NextResponse.json({ error: 'No se pudo generar la sección', retryable: true }, { status: 502 })
 

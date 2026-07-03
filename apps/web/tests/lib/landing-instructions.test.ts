@@ -8,7 +8,7 @@ const TYPO = { headline: 'bold condensed sans', body: 'clean humanist sans' }
 
 describe('buildSectionInstruction', () => {
   it('inyecta layout + design system y reparte la paleta/tipografía de marca sobre los roles', () => {
-    const out = buildSectionInstruction(COPY, 'canonical', [{ name: 'Azul', hex: BRAND_HEX, usage: 'principal' }], TYPO)
+    const out = buildSectionInstruction(COPY, 'source', [{ name: 'Azul', hex: BRAND_HEX, usage: 'principal' }], TYPO)
     // Esqueleto (qué/dónde).
     expect(out).toContain('MASTER LAYOUT')
     // Capa de craft que de-generaliza (cómo se renderiza).
@@ -23,28 +23,28 @@ describe('buildSectionInstruction', () => {
   })
 
   it('estilo gráfico de marca (handoff) se inyecta cuando se provee', () => {
-    const out = buildSectionInstruction(COPY, 'canonical', null, null, 'minimal premium skincare, soft botanical motifs')
+    const out = buildSectionInstruction(COPY, 'source', null, null, 'minimal premium skincare, soft botanical motifs')
     expect(out).toContain('Brand identity')
     expect(out).toContain('soft botanical motifs')
   })
 
   it('sin marca igual inyecta layout + design system', () => {
-    const out = buildSectionInstruction(COPY, 'canonical')
+    const out = buildSectionInstruction(COPY, 'source')
     expect(out).toContain('MASTER LAYOUT')
     expect(out).toContain('DESIGN SYSTEM')
     expect(out).not.toContain('build everything from these brand colors')
   })
 
-  it('placa canónica: doble rol — producto idéntico + acompañantes reusables pero NO el producto', () => {
-    const out = buildSectionInstruction(COPY, 'canonical')
-    expect(out).toContain('CANONICAL PRODUCT')
-    expect(out).toContain('IDENTICALLY in every section')
-    expect(out).toContain('accompanying graphic resources')
-    expect(out).toContain('they are NOT the product')
-  })
-
-  it('fallback raw (sin placa): fidelidad inline; none: placeholder', () => {
-    expect(buildSectionInstruction(COPY, 'raw')).toContain('Image 1 is the REAL product')
-    expect(buildSectionInstruction(COPY, 'none')).toContain('generic attractive product placeholder')
+  it('modo source reproduce TODOS los labels reales; anchored calca el ancla (Imagen 1)', () => {
+    const source = buildSectionInstruction(COPY, 'source')
+    const anchored = buildSectionInstruction(COPY, 'anchored')
+    // source parte de la foto real y preserva todos los labels (fidelidad), sin inventar.
+    expect(source).toContain('REAL product')
+    expect(source).toContain('every secondary label')
+    expect(source).toContain('Invent NOTHING')
+    // anchored calca el producto ya renderrado en Imagen 1 (consistencia) + usa la foto como ground-truth.
+    expect(anchored).toContain('previous section')
+    expect(anchored).toContain('ground-truth')
+    expect(anchored).not.toBe(source)
   })
 })

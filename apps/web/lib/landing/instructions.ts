@@ -101,28 +101,28 @@ function brandBlock(
   return `BRAND — the look comes from the product/brand; apply it THROUGH the design system and generate any badges, seals, icons and props in this palette (never generic stock):\n${lines.join('\n')}`
 }
 
-// `product` decide la frase de fidelidad, a DOS ROLES cuando hay placa canónica:
-//   'canonical' — Imagen 1 es la placa canónica (ancla de identidad idéntica en toda la
-//                 landing); Imágenes 2+ son las referencias originales, de donde el modelo
-//                 toma los recursos gráficos que acompañan al producto (puede reusarlos,
-//                 pero NO son el producto). Esta separación evita que la extracción y la
-//                 regla de "usar los acompañantes" interfieran.
-//   'raw'       — solo fotos crudas (fallback si la extracción falló): render fiel inline.
-//   'none'      — sin foto (no debería pasar; el wizard exige ≥1): placeholder genérico.
-// La marca aporta paleta/tipografía/estilo; el design system, el craft; el master layout,
-// la estructura. El copy/fidelidad van end-weighted (lo más crítico, al final).
+// `productMode` decide la frase del producto y qué imágenes se pasan (ver la ruta):
+//   'source'   — primera sección: Image 1 es la FOTO REAL. Render fiel de TODOS sus labels
+//                reales (wordmark + sublabels + tamaño), inventando nada. Su render limpio
+//                se cachea como ancla para las demás secciones.
+//   'anchored' — resto: Image 1 es el ancla (una sección ya renderrada de esta misma
+//                landing) → calca el producto EXACTO; Image 2 es la foto real = ground-truth
+//                de labels. Da consistencia (todas calcan el ancla) + fidelidad (labels reales).
+//   'none'     — sin foto (no debería pasar; el wizard exige ≥1): placeholder genérico.
+// La marca aporta paleta/tipografía/estilo; el design system, el craft; el master layout, la
+// estructura. El copy/fidelidad van end-weighted (lo más crítico, al final).
 export function buildSectionInstruction(
   copy: SectionCopy,
-  product: 'canonical' | 'raw' | 'none',
+  productMode: 'source' | 'anchored' | 'none',
   palette?: LandingPalette | null,
   typography?: LandingTypography | null,
   brandStyle?: string | null,
 ): string {
   const productLine =
-    product === 'canonical'
-      ? `Image 1 is the CANONICAL PRODUCT — the exact product this whole landing sells. Reproduce it with total fidelity and IDENTICALLY in every section: same shape, proportions, colors, finish and every label detail (all printed text, logos and graphics on the packaging, spelled and placed exactly as in Image 1). Do NOT redraw, restyle, simplify, translate or invent any label. The remaining images are the original reference: you MAY reuse the accompanying graphic resources they show around the product (props, ingredient shots, decorative motifs) as decorative elements, but they are NOT the product — never substitute or blend them into it. Place the product in the scene per the design system above.`
-      : product === 'raw'
-        ? `Image 1 is the REAL product. Render it faithfully and identically across sections — same shape, proportions, colors and every label detail (all printed text, logos and graphics reproduced exactly); do NOT invent, simplify or restyle it. You may reuse graphic resources accompanying it in the image as decorative elements, but never alter the product itself. Place it in the scene per the design system above.`
+    productMode === 'source'
+      ? `Image 1 is the REAL product — the exact object this landing sells. Reproduce it and ALL the text and graphics actually PRINTED ON IT faithfully and exactly: its main wordmark AND every secondary label, ingredient line, tagline and size/volume, spelled, styled and placed as in Image 1 — do not simplify, drop, translate or restyle any of them, and keep them legible. Invent NOTHING that is not printed on the product (no fake descriptors, sizes or ingredient names). If Image 1 is an ad or infographic, the product is the physical object only — the section copy, captions, callouts and any text or lines pointing AT the product from outside are NOT part of its label; never render those onto it. Place it in the scene per the design system above.`
+      : productMode === 'anchored'
+        ? `Image 1 shows THIS landing's product already rendered in a previous section. Reproduce that exact product IDENTICALLY: same shape, proportions, colors, finish and every label — all printed text big and small, spelled, styled and placed exactly as in Image 1. Images 2 and later are the real product photo(s) — use them as the ground-truth for label wording and detail. Ignore Image 1's background, copy, headline and layout — those belong to the other section; render ONLY the copy specified below and never copy Image 1's text onto this section or onto the product. Do NOT invent, drop, restyle or redraw the product. Place it in the scene per the design system above.`
         : `Compose around a generic attractive product placeholder.`
   return [
     `Design a single vertical landing-page SECTION as one high-resolution image,`,
