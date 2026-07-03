@@ -16,7 +16,7 @@ import type { SectionCopy, SectionType, LandingPalette, LandingTypography } from
 // composición y solo replica lo esencial.
 const SECTION_SPECS: Record<SectionType, string> = {
   hero: 'HERO section: the product as the hero, large and central, headline in the top third, with the product\'s beneficiary (a person fitting the target audience, or the pet/subject for pet products) conveying the desired result. First impression — aspirational, high contrast. The product is the star.',
-  oferta: 'OFFER section: drive the purchase. Show the product (multiplied into the pack when the offer is a multi-pack), a bold price treatment and price-tier cards in a row (each: quantity label, big price, its own CTA button); visually ELEVATE the recommended/best-value tier. Render the value & urgency cues the copy provides — a "solo hoy" banner, a struck-through "antes" price, a savings % badge, a "mejor valor"/"recomendado" seal. Energetic, conversion-focused.',
+  oferta: 'OFFER section: drive the purchase. Show the product (multiplied into the pack when the offer is a multi-pack), a bold price treatment and EXACTLY the price-tier cards the copy lists — one card per tier, in a row (each: quantity label, big price, its own CTA button), never adding, padding or duplicating a tier; visually ELEVATE the recommended/best-value tier. Add value & urgency cues ONLY when the copy supplies them — a struck-through "antes" price, a savings % badge, a "mejor valor"/"recomendado" seal — and never turn the headline into a second banner. Energetic, conversion-focused.',
   'antes-despues': 'BEFORE/AFTER section: two clearly labelled paired states (problem vs result) split side by side, each with a person in that state and a short list of its symptoms/results, divided by a clean diagonal or line. Keep the real product visible at the center as the cause of the result.',
   beneficios: 'BENEFITS section: present 3-5 benefits as a clean card of rows (icon + bold phrase + lighter detail), icon callouts arranged around the centered product, OR a comparison table (this product ✓ vs common alternatives ✗) — pick what fits. The real product prominent, with supporting proof props (ingredients/specs) and the beneficiary welcome. Trustworthy, airy.',
   testimonios: 'TESTIMONIALS section: short review cards, each with 5 gold stars, an italic quote and a customer name with location, a small avatar photo and a verified check badge. Warm, social-proof feel. Product may appear small as accent.',
@@ -32,8 +32,8 @@ const SECTION_SPECS: Record<SectionType, string> = {
 // una sola estructura en nichos y paletas opuestos.
 const MASTER_LAYOUT = [
   `MASTER LAYOUT — the fixed skeleton every section shares; reason about the exact placement for THIS product/niche, never copy one fixed look:`,
-  `• Headline: the largest, heaviest text, top third, 1-3 short lines, with one key word in the brand accent. It dominates.`,
-  `• Subheadline: right under the headline, smaller and lighter, 1-2 lines, benefit-driven — one block with the headline.`,
+  `• Headline: the largest, heaviest text, top third, 1-3 short lines, with a single word set in the brand accent color for emphasis. It dominates, and appears ONCE — never also repeated in a banner, ribbon, sticker or as a closing tagline/footer.`,
+  `• Subheadline: right under the headline, smaller and lighter, 1-2 lines, outcome-focused — one block with the headline.`,
   `• CTA: ONE prominent rounded button/pill in the accent color with a short label; right after the subheadline OR just below the product — never both, never floating.`,
   `• Product: the faithful hero anchor, large, centered or to one side; multiplied into the pack for pack offers.`,
   `• Beneficiary: where it fits, the product's beneficiary showing the result — a person fitting the audience, or the animal/subject for pet and similar products.`,
@@ -62,8 +62,8 @@ const DESIGN_SYSTEM = [
 const TEXT_RULES = [
   'TEXT DISCIPLINE (critical): every visible word in the image must come ONLY from the Copy block below (plus the product\'s own printed labels), spelled correctly in neutral Spanish.',
   'Badges, seals, ribbons, icons and price tags carry NO words of their own — decorate them with symbols (✓, ★, %), never with labels, unless that exact word appears in the copy.',
-  'NEVER render instruction or design words (e.g. "badge", "seal", "gold", "value", "guarantee", "premium", "e-commerce", "market", "ingredients", "specification", "dimensional", "section", "palette", "typography"), field names ("headline", "bullets", "cta"), hex codes, font names, lorem ipsum, or any wording from this prompt.',
-  'Do not duplicate, pad or invent text the copy does not contain. Keep every word short and highly legible.',
+  'NEVER render instruction or design words (e.g. "badge", "seal", "gold", "value", "guarantee", "premium", "e-commerce", "market", "ingredients", "specification", "dimensional", "section", "palette", "typography"), field or role names ("headline", "subheadline", "key word", "benefit", "bullets", "cta"), bracketed annotations or labels (e.g. "[keyWord: ...]"), hex codes, font names, lorem ipsum, or any wording from this prompt.',
+  'Render each copy string EXACTLY ONCE and render exactly as many cards / price tiers as the copy lists — never duplicate, pad or invent an extra one. The image\'s only text is the Copy-block strings plus the product\'s own printed labels. Keep every word short and highly legible.',
 ].join(' ')
 
 function copyBlock(copy: SectionCopy): string {
