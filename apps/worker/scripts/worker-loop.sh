@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Daemon del scraper buscador-productos — corre bajo systemd en bloques de trabajo
-# de WORK_WINDOW (6h) seguidos de REST (1h) de descanso, en ciclo (ya no 24/7).
+# de WORK_WINDOW (5h) seguidos de REST (1h) de descanso, en ciclo (ya no 24/7).
 # Reemplaza el cron de GitHub Actions. Cada ciclo dentro de la ventana de trabajo:
 #   1. Siembra la lista curada maestra (niches.txt) como pending — idempotente.
 #   2. Drena la cola en BLOQUES frescos: llama pipeline.ts --all (proceso nuevo =
@@ -11,8 +11,8 @@
 #   3. Cola de refinamiento, UNA vez por ciclo: expand-uncovered → analyze →
 #      recheck-watchlist. (validate-pe YA NO va aquí: corre por-bloque dentro de
 #      pipeline.ts.)
-#   4. Duerme SLEEP_BETWEEN y repite hasta cumplir WORK_WINDOW; entonces descansa
-#      REST (1h) antes del próximo bloque. Con PH_REFRESH_DAYS=7 los activos
+#   4. Duerme SLEEP_BETWEEN y repite hasta cumplir WORK_WINDOW (5h); entonces
+#      descansa REST (1h) antes del próximo bloque. Con PH_REFRESH_DAYS=7 los activos
 #      reentran a la cola cada semana → inventario fresco sostenido.
 #
 # Observabilidad: todo va por stdout/stderr a journald (systemd). Ver:
@@ -41,8 +41,8 @@ export PH_KEYWORD_ROTATION="${PH_KEYWORD_ROTATION:-1}"   # ventana rotativa siem
 export PH_KEYWORD_WINDOW="${PH_KEYWORD_WINDOW:-15}"      # clampeado a floor(pool/2) en resolve.ts
 export PH_REFRESH_DAYS="${PH_REFRESH_DAYS:-7}"           # activos reentran a la cola cada 7 días
 export PH_SEARCH_CAP="${PH_SEARCH_CAP:-300}"             # corta discovery (cards, $0 RAM)
-export PH_ENRICH_LIMIT="${PH_ENRICH_LIMIT:-150}"         # default documentado para discovery
-export PH_ANALYZE_LIMIT="${PH_ANALYZE_LIMIT:-200}"       # productos analizados por nicho/run (batch plano = mismo costo, más rápido el drenado)
+export PH_ENRICH_LIMIT="${PH_ENRICH_LIMIT:-250}"         # top-K discovery a enriquecer (por señal de card)
+export PH_ANALYZE_LIMIT="${PH_ANALYZE_LIMIT:-250}"       # productos analizados por nicho/run (batch plano = mismo costo, más rápido el drenado)
 export PH_NICHE_BATCH="${PH_NICHE_BATCH:-10}"            # bloque = nichos por proceso fresco (menor = menos leak de RAM)
 export PH_BATCH_REST="${PH_BATCH_REST:-60}"             # respiro entre bloques para reclamar RAM
 
@@ -56,7 +56,7 @@ export PH_CONCURRENCY="${PH_CONCURRENCY:-5}"
 
 LIST="${NICHES_FILE:-niches.txt}"
 SLEEP_BETWEEN="${SLEEP_BETWEEN:-3600}"        # pausa entre ciclos cuando la cola se vacía
-WORK_WINDOW="${PH_WORK_WINDOW:-21600}"        # ventana de trabajo por bloque (6h) — luego descansa
+WORK_WINDOW="${PH_WORK_WINDOW:-18000}"        # ventana de trabajo por bloque (5h) — luego descansa
 REST="${PH_REST:-3600}"                       # descanso entre bloques (1h)
 BLOCK_COOLDOWN="${PH_BLOCK_COOLDOWN:-3600}"   # enfriamiento largo tras un block persistente (hard-abort)
 PIPELINE_TIMEOUT="${PIPELINE_TIMEOUT:-36000}" # tope por bloque (10h) — un browser colgado no es crash
@@ -119,7 +119,7 @@ main() {
   [ -f "$LIST" ] || log "⚠ no existe $LIST — sin lista curada; solo se procesarán pending de cold-start"
 
   while true; do
-    # Bloque de trabajo: cicla seed→drain→refine hasta agotar WORK_WINDOW (6h),
+    # Bloque de trabajo: cicla seed→drain→refine hasta agotar WORK_WINDOW (5h),
     # luego descansa REST (1h). $SECONDS es el reloj del shell (builtin, $0 deps).
     work_start=$SECONDS
     while [ $(( SECONDS - work_start )) -lt "$WORK_WINDOW" ]; do
