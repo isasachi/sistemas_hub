@@ -16,11 +16,24 @@ export default function Section2Photos() {
   ])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [dims, setDims] = useState<({ w: number; h: number } | null)[]>([null, null, null])
 
-  function onFile(i: number, f: File) {
+  // Piso de resolución: con fotos chicas el producto sale inconsistente entre secciones —
+  // el detalle de las etiquetas no existe en el input y cada sección lo confabula distinto.
+  // Una foto tipo 1080px sale perfecta; una de ~400px, no. Avisamos (no bloqueamos).
+  const MIN_SHORT = 800
+
+  async function onFile(i: number, f: File) {
     setFiles((prev) => prev.map((x, j) => (j === i ? f : x)))
     setPreviews((prev) => prev.map((x, j) => (j === i ? URL.createObjectURL(f) : x)))
+    try {
+      const bmp = await createImageBitmap(f)
+      setDims((prev) => prev.map((x, j) => (j === i ? { w: bmp.width, h: bmp.height } : x)))
+      bmp.close?.()
+    } catch { /* si no se puede medir, no avisamos */ }
   }
+
+  const smallPhoto = dims.find((d, i) => files[i] && d && Math.min(d.w, d.h) < MIN_SHORT) as { w: number; h: number } | undefined
 
   const hasAny = files.some(Boolean) || productPhotoUrls.length > 0
 
@@ -51,12 +64,19 @@ export default function Section2Photos() {
     <div className="flex flex-col gap-4">
       <p className="text-[13px] text-[#bdbdbd]">
         Sube 1 a 3 fotos reales de tu producto. La IA construirá cada sección alrededor de ellas — el producto se mantiene fiel.
+        <span className="text-[#8a8a8a]"> Mejor una foto <strong className="text-[#bdbdbd] font-semibold">grande, nítida y de cerca</strong> del producto (lado corto ≥ 800px): de eso depende que el producto salga consistente entre secciones.</span>
       </p>
       <div className="flex gap-3">
         {[0, 1, 2].map((i) => (
           <FileUpload key={i} label={i === 0 ? 'Foto principal' : 'Otra foto'} onFile={(f) => onFile(i, f)} preview={previews[i]} variant={i === 0 ? 'primary' : 'ghost'} />
         ))}
       </div>
+
+      {smallPhoto && (
+        <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-[12px] text-amber-300/90">
+          Esa foto es chica ({smallPhoto.w}×{smallPhoto.h}px). El texto de las etiquetas no se ve con detalle, así que el producto puede salir <strong>inconsistente entre secciones</strong>. Para mejor resultado: subí una foto más grande y nítida (lado corto ≥ 800px), o escribí las etiquetas exactas del producto en el paso <strong>“Tu producto”</strong>.
+        </div>
+      )}
 
       {error && <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-[12px] text-red-400">{error}</div>}
 
