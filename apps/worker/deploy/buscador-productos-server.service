@@ -1,0 +1,43 @@
+# Unit del daemon del scraper — variante SERVER (VM IBM Cloud Classic).
+#
+# Diferencias vs deploy/buscador-productos.service (VPS genérico):
+#  - Egress por Tailscale exit node (máquina de casa), NO por proxy → SIN PH_PROXY.
+#  - Requires=tailscaled + guard de egress (require-egress.sh): si el túnel está
+#    caído, NO arranca (evita fugar la IP de datacenter de IBM → hard-block de Meta).
+#
+# Instalar en el server:
+#   sudo cp apps/worker/deploy/buscador-productos-server.service \
+#           /etc/systemd/system/buscador-productos.service
+#   # editar User=, WorkingDirectory= y la IP pública de IBM del ExecStartPre
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now buscador-productos
+# Observar:
+#   journalctl -u buscador-productos -f
+#
+# ⚠️ ANTES de habilitar: dejá Tailscale enrutando (tailscale up --exit-node=...) y
+# verificá el egress a mano:  curl https://api.ipify.org  → debe ser tu IP de casa.
+# Secretos (ANTHROPIC_API_KEY, SUPABASE_*) en apps/worker/.env.local (dotenv).
+# NO pongas PH_PROXY. Los PH_* del daemon se exportan en worker-loop.sh.
+
+[Unit]
+Description=Buscador de Productos scraper daemon (server IBM, egress vía Tailscale exit node)
+After=network-online.target tailscaled.service
+Wants=network-online.target
+Requires=tailscaled.service
+
+[Service]
+Type=simple
+User=REEMPLAZA_USUARIO
+WorkingDirectory=/home/REEMPLAZA_USUARIO/sistemas_hub/apps/worker
+# Guard de egress: falla si el túnel no enruta (Restart=always reintenta cada 30s).
+# Reemplazá la IP por la IP pública real de la VM IBM.
+ExecStartPre=/usr/bin/env bash deploy/require-egress.sh REEMPLAZA_IP_PUBLICA_IBM
+ExecStart=/usr/bin/env bash scripts/worker-loop.sh
+Restart=always
+RestartSec=30
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=buscador-productos
+
+[Install]
+WantedBy=multi-user.target

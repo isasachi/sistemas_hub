@@ -38,12 +38,12 @@ fi
 # .env.local (NO acá — es secreto). Sin él, Meta bloquea la IP del VPS.
 export PH_BLOCK_MEDIA="${PH_BLOCK_MEDIA:-1}"             # aborta imágenes/video/fuentes (CDP) → menos RAM/CPU por page
 export PH_KEYWORD_ROTATION="${PH_KEYWORD_ROTATION:-1}"   # ventana rotativa siempre-on
-export PH_KEYWORD_WINDOW="${PH_KEYWORD_WINDOW:-15}"      # clampeado a floor(pool/2) en resolve.ts
+export PH_KEYWORD_WINDOW="${PH_KEYWORD_WINDOW:-25}"      # clampeado a floor(pool/2) en resolve.ts
 export PH_REFRESH_DAYS="${PH_REFRESH_DAYS:-7}"           # activos reentran a la cola cada 7 días
-export PH_SEARCH_CAP="${PH_SEARCH_CAP:-300}"             # corta discovery (cards, $0 RAM)
-export PH_ENRICH_LIMIT="${PH_ENRICH_LIMIT:-250}"         # top-K discovery a enriquecer (por señal de card)
-export PH_ANALYZE_LIMIT="${PH_ANALYZE_LIMIT:-250}"       # productos analizados por nicho/run (batch plano = mismo costo, más rápido el drenado)
-export PH_NICHE_BATCH="${PH_NICHE_BATCH:-10}"            # bloque = nichos por proceso fresco (menor = menos leak de RAM)
+export PH_SEARCH_CAP="${PH_SEARCH_CAP:-600}"             # corta discovery (cards, $0 RAM)
+export PH_ENRICH_LIMIT="${PH_ENRICH_LIMIT:-300}"         # top-K discovery a enriquecer (por señal de card)
+export PH_ANALYZE_LIMIT="${PH_ANALYZE_LIMIT:-300}"       # productos analizados por nicho/run (batch plano = mismo costo, más rápido el drenado)
+export PH_NICHE_BATCH="${PH_NICHE_BATCH:-15}"            # bloque = nichos por proceso fresco (menor = menos leak de RAM)
 export PH_BATCH_REST="${PH_BATCH_REST:-60}"             # respiro entre bloques para reclamar RAM
 
 # CONCURRENCIA — scraping LOCAL por IP residencial nativa (sin proxy; el proxy
@@ -52,7 +52,7 @@ export PH_BATCH_REST="${PH_BATCH_REST:-60}"             # respiro entre bloques 
 # en 5 (es la conexión de casa — un block aquí afecta el internet real). El
 # hard-abort del rate-controller corta el sondeo si Meta llegara a throttlear.
 # Override: editar este export o pasar PH_CONCURRENCY en el environment.
-export PH_CONCURRENCY="${PH_CONCURRENCY:-5}"
+export PH_CONCURRENCY="${PH_CONCURRENCY:-15}"
 
 LIST="${NICHES_FILE:-niches.txt}"
 SLEEP_BETWEEN="${SLEEP_BETWEEN:-3600}"        # pausa entre ciclos cuando la cola se vacía
