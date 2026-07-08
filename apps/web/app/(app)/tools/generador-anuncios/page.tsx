@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
-import AdWizard from "@/components/tools/generador-anuncios/AdWizard";
+import SessionHistory from "@/components/tools/ui/SessionHistory";
+import { SESSION_KEY } from "@/store/wizard";
 
 export default function GeneradorAnuncios() {
   return (
@@ -15,7 +16,7 @@ export default function GeneradorAnuncios() {
         <ChevronRight className="w-3.5 h-3.5 text-[#8a8a8a]" />
         <span className="text-[#f5f5f5] font-semibold">Generador de Anuncios</span>
       </div>
-      <AdWizard />
+      <SessionHistory slug="generador-anuncios" sessionKey={SESSION_KEY} />
     </div>
   );
 }

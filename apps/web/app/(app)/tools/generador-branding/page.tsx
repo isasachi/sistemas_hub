@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
-import BrandingWizard from "@/components/tools/generador-branding/BrandingWizard";
+import SessionHistory from "@/components/tools/ui/SessionHistory";
+import { SESSION_KEY } from "@/store/branding";
 
 export default function GeneradorBranding() {
   return (
@@ -15,7 +16,7 @@ export default function GeneradorBranding() {
         <ChevronRight className="w-3.5 h-3.5 text-[#8a8a8a]" />
         <span className="text-[#f5f5f5] font-semibold">Generador de Branding</span>
       </div>
-      <BrandingWizard />
+      <SessionHistory slug="generador-branding" sessionKey={SESSION_KEY} />
     </div>
   );
 }
