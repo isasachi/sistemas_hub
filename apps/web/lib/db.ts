@@ -13,14 +13,34 @@ function getDb(): SupabaseClient {
   return _db
 }
 
-export async function createSession(): Promise<string> {
+export async function createSession(userId?: string): Promise<string> {
   const { data, error } = await getDb()
     .from('sessions')
-    .insert({ step: 0 })
+    .insert({ step: 0, user_id: userId ?? null })
     .select('id')
     .single()
   if (error) throw new Error(error.message)
   return data.id as string
+}
+
+// Fila de preview para el historial (columnas mínimas, no toda la sesión).
+export interface AnuncioListRow {
+  id: string
+  created_at: string
+  step: number
+  product_name: string | null
+  image_url: string | null
+}
+
+export async function listSessions(userId: string): Promise<AnuncioListRow[]> {
+  const { data, error } = await getDb()
+    .from('sessions')
+    .select('id, created_at, step, product_name, image_url')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(24)
+  if (error) return []
+  return (data ?? []) as AnuncioListRow[]
 }
 
 export async function getSession(id: string): Promise<SessionResponse | null> {

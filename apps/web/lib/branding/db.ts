@@ -16,14 +16,35 @@ function getDb(): SupabaseClient {
   return _db
 }
 
-export async function createBrandingSession(): Promise<string> {
+export async function createBrandingSession(userId?: string): Promise<string> {
   const { data, error } = await getDb()
     .from('branding_sessions')
-    .insert({ step: 0 })
+    .insert({ step: 0, user_id: userId ?? null })
     .select('id')
     .single()
   if (error) throw new Error(error.message)
   return data.id as string
+}
+
+// Fila de preview para el historial (columnas mínimas, no toda la sesión).
+export interface BrandingListRow {
+  id: string
+  created_at: string
+  step: number
+  brand_name: string | null
+  logo_url: string | null
+  mockup_url: string | null
+}
+
+export async function listBrandingSessions(userId: string): Promise<BrandingListRow[]> {
+  const { data, error } = await getDb()
+    .from('branding_sessions')
+    .select('id, created_at, step, brand_name, logo_url, mockup_url')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(24)
+  if (error) return []
+  return (data ?? []) as BrandingListRow[]
 }
 
 export async function getBrandingSession(id: string): Promise<BrandingSessionResponse | null> {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getBrandingSession } from '@/lib/branding/db'
 import { createLandingSession, updateLandingSession } from '@/lib/landing/db'
+import { readUserId } from '@/lib/product-hunter/session'
 import type { SectionType } from '@/lib/landing/types'
 
 export const dynamic = 'force-dynamic'
@@ -48,7 +49,7 @@ export async function POST(req: NextRequest) {
     .filter(Boolean)
     .join('. ') || null
 
-  const id = await createLandingSession()
+  const id = await createLandingSession((await readUserId()) ?? undefined)
   await updateLandingSession(id, {
     product_name: bs.product_name ?? bs.brand_name ?? null,
     audience: bs.target_audience ?? null,

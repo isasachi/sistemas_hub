@@ -1,0 +1,76 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
+import { ChevronRight, RotateCw } from "lucide-react";
+import { calcular, type CalcInputs } from "@/lib/calculadora-costos/model";
+import { exportarXlsx } from "@/lib/calculadora-costos/export-xlsx";
+import ResultsDashboard from "@/components/tools/calculadora-costos/ResultsDashboard";
+
+export default function CalcDetalle() {
+  const { id } = useParams<{ id: string }>();
+  const router = useRouter();
+  const [row, setRow] = useState<{ created_at: string; inputs: CalcInputs } | null | undefined>(undefined);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch(`/api/calculadora-costos/sessions/${id}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then(setRow)
+      .catch(() => setRow(null));
+  }, [id]);
+
+  const result = row?.inputs ? calcular(row.inputs) : null;
+
+  return (
+    <div className="min-h-screen flex flex-col bg-[#0a0a0a]">
+      <div className="px-8 py-3.5 border-b border-white/[0.06] flex items-center gap-2 text-[13px]">
+        <Link href="/dashboard" className="text-[#8a8a8a] hover:text-[#bdbdbd] no-underline">Dashboard</Link>
+        <ChevronRight className="w-3.5 h-3.5 text-[#8a8a8a]" />
+        <Link href="/tools/calculadora-costos" className="text-[#8a8a8a] hover:text-[#bdbdbd] no-underline">Calculadora de Costos</Link>
+        <ChevronRight className="w-3.5 h-3.5 text-[#8a8a8a]" />
+        <span className="text-[#f5f5f5] font-semibold">Sesión</span>
+      </div>
+
+      <div className="max-w-[720px] w-full mx-auto px-6 md:px-10 py-10">
+        {row === undefined && <p className="text-[13px] text-[#8a8a8a]">Cargando…</p>}
+        {row === null && <p className="text-[13px] text-[#8a8a8a]">No se encontró la sesión.</p>}
+        {row && result && (
+          <>
+            <div className="flex items-start justify-between gap-4 mb-6">
+              <div>
+                <h1 className="text-[22px] font-bold text-[#f5f5f5]">
+                  {row.inputs.funnel === "leads" ? "Cálculo por leads" : "Cálculo por mensajes"}
+                </h1>
+                <p className="text-[12px] text-[#8a8a8a] mt-1">
+                  {new Date(row.created_at).toLocaleDateString("es-PE", { day: "numeric", month: "long", year: "numeric" })} · solo lectura
+                </p>
+              </div>
+              <button
+                onClick={() => router.push(`/tools/calculadora-costos/wizard?sesion=${id}`)}
+                className="flex items-center gap-2 rounded-xl bg-[#ff9c4d] px-4 py-2 text-[13px] font-bold text-[#0a0a0a] hover:bg-[#ffb066] transition-colors flex-shrink-0"
+              >
+                <RotateCw className="w-4 h-4" /> Reanudar sesión
+              </button>
+            </div>
+
+            <ResultsDashboard
+              result={result}
+              funnel={row.inputs.funnel}
+              exporting={exporting}
+              exportError={exportError}
+              onExport={async () => {
+                setExporting(true); setExportError(null);
+                try { await exportarXlsx(row.inputs); }
+                catch { setExportError("No se pudo generar el Excel. Inténtalo de nuevo."); }
+                finally { setExporting(false); }
+              }}
+            />
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
