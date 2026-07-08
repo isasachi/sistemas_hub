@@ -20,6 +20,24 @@ const SCENARIO_TEXT: Record<string, string> = {
   D: "Mercado saturado en Perú",
 };
 
+function TopPickCard({ p }: { p: ProductCard }) {
+  return (
+    <div className="min-w-[240px] max-w-[240px] bg-white/[0.04] border border-white/[0.06] rounded-2xl p-4 flex flex-col gap-3">
+      <div className="flex items-start justify-between gap-2">
+        <h3 className="text-[14px] font-extrabold text-[#f5f5f5] tracking-[-0.2px] leading-tight line-clamp-2">{p.productName}</h3>
+        <span className="text-[11px] font-extrabold whitespace-nowrap" style={{ color: ACCENT }}>{Math.round(p.score)}</span>
+      </div>
+      <div className="text-[12px] text-[#bdbdbd] leading-[1.5]">
+        <span className="font-bold text-[#f5f5f5]">{p.adCount}</span> anuncios · {SCENARIO_TEXT[p.peScenario]}
+      </div>
+      <a href={p.adUrl} target="_blank" rel="noopener noreferrer"
+        className="jr-cta mt-auto flex items-center justify-center gap-1.5 text-[12px] font-bold rounded-xl py-2 no-underline">
+        Ver anuncio <ExternalLink className="w-3 h-3" />
+      </a>
+    </div>
+  );
+}
+
 function ProductCardView({ p }: { p: ProductCard }) {
   const prio = PRIORITY_STYLE[p.priority] ?? PRIORITY_STYLE.media;
   return (
@@ -103,6 +121,15 @@ export default function BuscadorProductos() {
   const [quotaExhausted, setQuotaExhausted] = useState(false);
   const [todayProducts, setTodayProducts] = useState<ProductCard[]>([]);
   const [showToday, setShowToday] = useState(false);
+
+  // Top picks de la semana (showcase, no gasta cuota ni marca visto)
+  const [topPicks, setTopPicks] = useState<ProductCard[]>([]);
+  useEffect(() => {
+    fetch("/api/buscador-productos/top-picks")
+      .then((r) => r.json())
+      .then((d) => setTopPicks(d.products ?? []))
+      .catch(() => {});
+  }, []);
 
   // Al cargar: restaurar consolidado si el usuario ya agotó las 3 búsquedas hoy
   useEffect(() => {
@@ -190,6 +217,19 @@ export default function BuscadorProductos() {
             <p className="text-[12px] text-[#8a8a8a] mt-1">3 búsquedas por día · reset a medianoche hora Lima</p>
           )}
         </div>
+
+        {/* Top picks de la semana */}
+        {topPicks.length > 0 && (
+          <div className="mb-8">
+            <div className="flex items-center gap-1.5 mb-3">
+              <TrendingUp className="w-4 h-4" style={{ color: ACCENT }} />
+              <span className="text-[13px] font-bold text-[#f5f5f5]">Top picks de la semana</span>
+            </div>
+            <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
+              {topPicks.map((p) => <TopPickCard key={p.id} p={p} />)}
+            </div>
+          </div>
+        )}
 
         {/* Cuota agotada */}
         {quotaExhausted && (
