@@ -351,6 +351,28 @@ export async function saveProductAnalysisIfUnscored(
   return (data?.length ?? 0) > 0
 }
 
+// Top ganadores frescos de TODOS los nichos (showcase "top picks de la semana").
+// Primera lectura cross-niche: espeja getProductsToValidatePe sin filtrar por
+// nicho. Sobre-trae (limit×5) para sobrevivir el filtro de toCard + dedupe por
+// nicho que hace el caller. Reglas de oro pre-filtradas en SQL (el dedupe final
+// y las nulls de toCard las resuelve la ruta).
+export async function getTopPicks(limit = 6): Promise<ProductRow[]> {
+  const since = new Date(Date.now() - 7 * 864e5).toISOString()
+  const { data, error } = await getDb()
+    .from('ph_products')
+    .select('*')
+    .not('score', 'is', null)
+    .eq('analysis->>priority', 'alta')
+    .neq('raw_data->>found_country', 'PE')
+    .gte('scraped_at', since)
+    .gte('raw_data->ad_count', 40)   // -> numérico, como getStrongDiscardsToValidate
+    .gte('raw_data->days_running', 10)
+    .order('score', { ascending: false })
+    .limit(limit * 5)
+  if (error) throw new Error(error.message)
+  return (data as ProductRow[]) ?? []
+}
+
 // Candidatos alta/media ya analizados pero aún sin validación PE en vivo (Fase 4).
 export async function getProductsToValidatePe(niche: string, limit = 15): Promise<ProductRow[]> {
   const { data, error } = await getDb()
