@@ -46,19 +46,19 @@ export PH_ANALYZE_LIMIT="${PH_ANALYZE_LIMIT:-300}"       # productos analizados 
 export PH_NICHE_BATCH="${PH_NICHE_BATCH:-15}"            # bloque = nichos por proceso fresco (menor = menos leak de RAM)
 export PH_BATCH_REST="${PH_BATCH_REST:-60}"             # respiro entre bloques para reclamar RAM
 
-# CONCURRENCIA — scraping LOCAL por IP residencial nativa (sin proxy; el proxy
-# ISP del VPS fue hard-bloqueado por Meta el 2026-06-18, ver memoria). La IP
-# residencial nativa aguantó conc 15 × 13.5h sin bloqueo; arrancamos conservador
-# en 5 (es la conexión de casa — un block aquí afecta el internet real). El
-# hard-abort del rate-controller corta el sondeo si Meta llegara a throttlear.
+# CONCURRENCIA — egress vía Tailscale exit node (IP residencial de casa, sin proxy).
+# ⚠️ Conc 15 sostenido 24/7 cocinó la IP el 2026-07-09: 20/20 ciclos en
+# PH_PERSISTENT_BLOCK, 0 trabajo útil. Bajado a 5 para reducir presión por-IP.
+# Es la conexión de casa — un block afecta el internet real. El hard-abort del
+# rate-controller corta el sondeo si Meta throttlea; cooldown largo (6h) da respiro.
 # Override: editar este export o pasar PH_CONCURRENCY en el environment.
-export PH_CONCURRENCY="${PH_CONCURRENCY:-15}"
+export PH_CONCURRENCY="${PH_CONCURRENCY:-5}"
 
 LIST="${NICHES_FILE:-niches.txt}"
 SLEEP_BETWEEN="${SLEEP_BETWEEN:-3600}"        # pausa entre ciclos cuando la cola se vacía
 WORK_WINDOW="${PH_WORK_WINDOW:-18000}"        # ventana de trabajo por bloque (5h) — luego descansa
 REST="${PH_REST:-3600}"                       # descanso entre bloques (1h)
-BLOCK_COOLDOWN="${PH_BLOCK_COOLDOWN:-3600}"   # enfriamiento largo tras un block persistente (hard-abort)
+BLOCK_COOLDOWN="${PH_BLOCK_COOLDOWN:-21600}"  # enfriamiento largo (6h) tras un block persistente (hard-abort) — 1h no dejaba enfriar la IP residencial
 PIPELINE_TIMEOUT="${PIPELINE_TIMEOUT:-36000}" # tope por bloque (10h) — un browser colgado no es crash
 STEP_TIMEOUT="${STEP_TIMEOUT:-7200}"          # tope por script de refinamiento (2h)
 MAX_DRAIN_CHUNKS="${MAX_DRAIN_CHUNKS:-500}"   # backstop anti-loop por ciclo
