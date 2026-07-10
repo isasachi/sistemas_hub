@@ -12,6 +12,7 @@ interface AuthFormProps {
   mode: Mode;
   action: (prev: AuthState, formData: FormData) => Promise<AuthState>;
   next?: string;
+  initialError?: string;
 }
 
 const COPY = {
@@ -46,8 +47,11 @@ function GoogleIcon() {
   );
 }
 
-export function AuthForm({ mode, action, next }: AuthFormProps) {
-  const [state, formAction, pending] = useActionState<AuthState, FormData>(action, {});
+export function AuthForm({ mode, action, next, initialError }: AuthFormProps) {
+  const [state, formAction, pending] = useActionState<AuthState, FormData>(
+    action,
+    initialError ? { error: initialError } : {},
+  );
   const [showPw, setShowPw] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const c = COPY[mode];

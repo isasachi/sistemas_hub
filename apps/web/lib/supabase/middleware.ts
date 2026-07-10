@@ -34,19 +34,31 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
+  // Restricción temporal: si LOGIN_ALLOWLIST está seteada, solo esos emails
+  // tienen acceso. Un usuario logueado fuera de la lista se trata como anónimo
+  // (queda bloqueado en /login con aviso). Vacía = sin restricción.
+  const allowlist = (process.env.LOGIN_ALLOWLIST ?? '')
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean)
+  const restricted =
+    allowlist.length > 0 && user != null && !allowlist.includes((user.email ?? '').toLowerCase())
+  const activeUser = restricted ? null : user
+
   const { pathname } = request.nextUrl
   const isProtected = pathname.startsWith('/dashboard') || pathname.startsWith('/tools')
   const isAuthPage = pathname === '/login' || pathname === '/signup'
   const isHome = pathname === '/'
 
-  if (!user && isProtected) {
+  if (!activeUser && isProtected) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
-    url.searchParams.set('next', pathname)
+    if (restricted) url.searchParams.set('error', 'restricted')
+    else url.searchParams.set('next', pathname)
     return NextResponse.redirect(url)
   }
 
-  if (user && (isAuthPage || isHome)) {
+  if (activeUser && (isAuthPage || isHome)) {
     const url = request.nextUrl.clone()
     url.pathname = '/dashboard'
     url.search = ''
