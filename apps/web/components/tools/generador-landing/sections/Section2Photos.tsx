@@ -74,7 +74,7 @@ export default function Section2Photos() {
 
       {smallPhoto && (
         <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-[12px] text-amber-300/90">
-          Esa foto es chica ({smallPhoto.w}×{smallPhoto.h}px). El texto de las etiquetas no se ve con detalle, así que el producto puede salir <strong>inconsistente entre secciones</strong>. Para mejor resultado: subí una foto más grande y nítida (lado corto ≥ 800px), o escribí las etiquetas exactas del producto en el paso <strong>“Tu producto”</strong>.
+          Esa foto es pequeña ({smallPhoto.w}×{smallPhoto.h}px). El texto de las etiquetas no se ve con detalle, así que el producto puede salir <strong>inconsistente entre secciones</strong>. Para mejor resultado: sube una foto más grande y nítida (lado corto ≥ 800px), o escribe las etiquetas exactas del producto en el paso <strong>“Tu producto”</strong>.
         </div>
       )}
 

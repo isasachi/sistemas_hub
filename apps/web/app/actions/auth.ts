@@ -10,7 +10,7 @@ export type AuthState = {
   notice?: string
 }
 
-const emailSchema = z.email({ error: 'Ingresá un email válido.' })
+const emailSchema = z.email({ error: 'Ingresa un email válido.' })
 const passwordSchema = z
   .string()
   .min(8, { error: 'La contraseña debe tener al menos 8 caracteres.' })
@@ -41,7 +41,7 @@ export async function signIn(_prev: AuthState, formData: FormData): Promise<Auth
   const supabase = await createClient()
   const { error } = await supabase.auth.signInWithPassword({ email, password })
   if (error) {
-    return { error: 'Credenciales incorrectas. Revisá los datos o creá una cuenta.' }
+    return { error: 'Credenciales incorrectas. Revisa los datos o crea una cuenta.' }
   }
 
   redirect(safeNext(next))
@@ -60,7 +60,7 @@ export async function signUp(_prev: AuthState, formData: FormData): Promise<Auth
   // Si la confirmación por email está activa, no hay sesión todavía.
   if (!data.session) {
     return {
-      notice: 'Cuenta creada. Revisá tu email para confirmar la cuenta y luego iniciá sesión.',
+      notice: 'Cuenta creada. Revisa tu email para confirmar la cuenta y luego inicia sesión.',
     }
   }
 

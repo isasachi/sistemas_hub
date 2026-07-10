@@ -17,22 +17,22 @@ interface AuthFormProps {
 
 const COPY = {
   login: {
-    title: "Iniciá sesión",
-    subtitle: "Accedé a tus herramientas de marketing con IA.",
+    title: "Inicia sesión",
+    subtitle: "Accede a tus herramientas de marketing con IA.",
     submit: "Entrar",
     google: "Continuar con Google",
-    altText: "¿No tenés cuenta?",
+    altText: "¿No tienes cuenta?",
     altLink: "/signup",
-    altCta: "Creá una",
+    altCta: "Crea una",
   },
   signup: {
-    title: "Creá tu cuenta",
-    subtitle: "Empezá a usar las herramientas en minutos.",
+    title: "Crea tu cuenta",
+    subtitle: "Empieza a usar las herramientas en minutos.",
     submit: "Crear cuenta",
-    google: "Registrate con Google",
-    altText: "¿Ya tenés cuenta?",
+    google: "Regístrate con Google",
+    altText: "¿Ya tienes cuenta?",
     altLink: "/login",
-    altCta: "Iniciá sesión",
+    altCta: "Inicia sesión",
   },
 } as const;
 

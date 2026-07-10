@@ -302,7 +302,7 @@ export default function BuscadorProductos() {
               <>
                 <h3 className="text-[16px] font-bold text-[#f5f5f5] mb-1">Analizando este nicho</h3>
                 <p className="text-[13px] text-[#bdbdbd] max-w-[380px] mx-auto leading-[1.6]">
-                  Ya tenemos anuncios de <span className="text-[#f5f5f5]">{result.niche}</span> y los estamos analizando. Los productos validados aparecerán acá en breve — vuelve más tarde.
+                  Ya tenemos anuncios de <span className="text-[#f5f5f5]">{result.niche}</span> y los estamos analizando. Los productos validados aparecerán aquí en breve — vuelve más tarde.
                 </p>
               </>
             )}

@@ -2,8 +2,8 @@ import { AuthForm } from "@/components/auth/AuthForm";
 import { signIn } from "@/app/actions/auth";
 
 const ERRORS: Record<string, string> = {
-  restricted: "El acceso está limitado temporalmente. Pedí tus credenciales al administrador.",
-  oauth: "No se pudo iniciar sesión con Google. Intentá de nuevo.",
+  restricted: "El acceso está limitado temporalmente. Pide tus credenciales al administrador.",
+  oauth: "No se pudo iniciar sesión con Google. Intenta de nuevo.",
 };
 
 export default async function LoginPage({
