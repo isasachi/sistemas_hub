@@ -27,11 +27,11 @@ Requires=tailscaled.service
 
 [Service]
 Type=simple
-User=REEMPLAZA_USUARIO
-WorkingDirectory=/home/REEMPLAZA_USUARIO/sistemas_hub/apps/worker
+User=root
+WorkingDirectory=/root/sistemas_hub/apps/worker
 # Guard de egress: falla si el túnel no enruta (Restart=always reintenta cada 30s).
 # Reemplazá la IP por la IP pública real de la VM IBM.
-ExecStartPre=/usr/bin/env bash deploy/require-egress.sh REEMPLAZA_IP_PUBLICA_IBM
+ExecStartPre=/usr/bin/env bash deploy/require-egress.sh 169.62.150.51
 ExecStart=/usr/bin/env bash scripts/worker-loop.sh
 Restart=always
 RestartSec=30
