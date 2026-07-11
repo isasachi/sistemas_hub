@@ -1,0 +1,46 @@
+# Unit del poller de research por URL (feature "pega un anuncio") — variante
+# SERVER (VM IBM Cloud Classic), igual entorno que buscador-productos-server.service.
+# Corre APARTE del daemon de nichos, en el mismo server, con la MISMA salida.
+#
+# ⚠️ Egress por Tailscale exit node (máquina de casa), NO por proxy → SIN PH_PROXY.
+#    El guard require-egress.sh es OBLIGATORIO: sin él, el poller navegaría Meta
+#    desde la IP de datacenter de IBM → hard-block + fuga de IP (lo mismo que el
+#    daemon evita). Requires=tailscaled + ExecStartPre con la IP pública de la VM.
+#
+# ⚠️ Comparte la IP con el daemon de nichos (rate-controller es por-proceso, no
+#    compartido). La cuota 3/día + pocas navegaciones por request lo mantienen
+#    bursty. Si aparecen bloqueos, ver la nota en url-research-loop.sh.
+#
+# Instalar en el server:
+#   sudo cp apps/worker/deploy/url-research.service /etc/systemd/system/
+#   # editar User=, WorkingDirectory= y la IP pública de IBM del ExecStartPre si difieren
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now url-research
+# Observar:
+#   journalctl -u url-research -f
+#
+# Secretos (ANTHROPIC_API_KEY, SUPABASE_*) en apps/worker/.env.local (dotenv).
+# ⚠️ La cuenta Anthropic debe tener crédito o cada research falla con billing error.
+
+[Unit]
+Description=Buscador de Productos — poller research por URL (server IBM, egress Tailscale)
+After=network-online.target tailscaled.service
+Wants=network-online.target
+Requires=tailscaled.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/sistemas_hub/apps/worker
+# Guard de egress: falla si el túnel no enruta (Restart=always reintenta cada 30s).
+# Reemplazá la IP por la IP pública real de la VM IBM.
+ExecStartPre=/usr/bin/env bash deploy/require-egress.sh 169.62.150.51
+ExecStart=/usr/bin/env bash scripts/url-research-loop.sh
+Restart=always
+RestartSec=30
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=url-research
+
+[Install]
+WantedBy=multi-user.target

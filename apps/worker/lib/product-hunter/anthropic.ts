@@ -41,11 +41,23 @@ export interface AnalyzeInput {
     poolSize: number
     servicesExcluded: number
   }
+  // Flujo "research por URL": el usuario pegó el anuncio directamente, NO hay
+  // nicho de referencia. Neutraliza el Paso 0 del prompt (fuera-de-categoría /
+  // offTopic), que si no marcaría cualquier producto como off-topic contra el
+  // nicho sintético. El producto se evalúa por sus propios méritos.
+  standalone?: boolean
 }
 
 // Params idénticos para el path directo y el de Batches — un solo origen.
-export function buildAnalyzeParams({ candidate, peMatch }: AnalyzeInput): Anthropic.Messages.MessageCreateParamsNonStreaming {
+export function buildAnalyzeParams({ candidate, peMatch, standalone }: AnalyzeInput): Anthropic.Messages.MessageCreateParamsNonStreaming {
   const raw = candidate.raw_data
+
+  // Línea de nicho: en el flujo normal es el nicho buscado (activa el Paso 0 del
+  // prompt); en el flujo standalone (URL pegada) no hay nicho → lo desactivamos
+  // explícitamente para que no marque el producto como fuera-de-categoría.
+  const nicheLine = standalone
+    ? 'Producto STANDALONE: el usuario pegó este anuncio directamente, NO hay nicho de referencia. NO apliques el Paso 0 (fuera_categoria) ni marques offTopic — identifica el producto por sus creativos y evalúalo por sus propios méritos.'
+    : `Nicho buscado: ${candidate.niche}`
 
   // Creativos reales del anuncio — la señal principal para identificar el producto
   const creativeLines = (raw.creatives ?? []).flatMap((c, i) => {
@@ -60,7 +72,7 @@ export function buildAnalyzeParams({ candidate, peMatch }: AnalyzeInput): Anthro
   const userMessage = [
     'Evalúa este candidato de Meta Ads Library para dropshipping en Perú.',
     '',
-    `Nicho buscado: ${candidate.niche}`,
+    nicheLine,
     `Anunciante: ${candidate.name}`,
     `Categorías de la página en Meta: ${raw.page_categories?.length ? raw.page_categories.join(', ') : 'desconocidas'}`,
     `Keyword que lo encontró: ${raw.found_keyword}`,

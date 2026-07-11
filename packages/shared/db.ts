@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import type { ProductRow, NicheRow, PePoolRow, WatchlistRow, StoredAnalysis } from './types'
+import type { ProductRow, NicheRow, PePoolRow, WatchlistRow, StoredAnalysis, UrlResearchRow, UrlResearchResult } from './types'
 import { prescore } from './prescore'
 import { sanitizeJsonDeep, cleanJsonText } from './json-clean'
 
@@ -548,5 +548,73 @@ export async function markSeen(userId: string, productIds: string[]): Promise<vo
   const { error } = await getDb()
     .from('ph_user_seen')
     .upsert(rows, { onConflict: 'user_id,product_id' })
+  if (error) throw new Error(error.message)
+}
+
+// ─── RESEARCH POR URL (cola independiente de la de nichos) ────────────────────
+
+// Encola una request de research por URL (la ruta web). Devuelve su id para que
+// el frontend haga polling. No scrapea — Vercel no puede.
+export async function insertUrlResearch(
+  userId: string | null,
+  url: string,
+  pageId: string | null,
+  adId: string | null,
+): Promise<string> {
+  const { data, error } = await getDb()
+    .from('ph_url_research')
+    .insert({ user_id: userId, url, page_id: pageId, ad_id: adId, status: 'pending' })
+    .select('id')
+    .single()
+  if (error) throw new Error(error.message)
+  return (data as { id: string }).id
+}
+
+export async function getUrlResearch(id: string): Promise<UrlResearchRow | null> {
+  const { data } = await getDb().from('ph_url_research').select('*').eq('id', id).maybeSingle()
+  return (data as UrlResearchRow) ?? null
+}
+
+// Toma la request pendiente más vieja y la marca 'processing' de forma atómica
+// (el UPDATE condicional .eq('status','pending') gana la carrera si dos pollers
+// corrieran a la vez — hoy es un solo servicio, pero es barato blindarlo).
+export async function claimNextUrlResearch(): Promise<UrlResearchRow | null> {
+  const { data: pending } = await getDb()
+    .from('ph_url_research')
+    .select('*')
+    .eq('status', 'pending')
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+  if (!pending) return null
+  const row = pending as UrlResearchRow
+  const { data: claimed } = await getDb()
+    .from('ph_url_research')
+    .update({ status: 'processing' })
+    .eq('id', row.id)
+    .eq('status', 'pending')
+    .select('*')
+    .maybeSingle()
+  return (claimed as UrlResearchRow) ?? null  // null = otro poller la tomó primero
+}
+
+export async function saveUrlResearchResult(id: string, result: UrlResearchResult): Promise<void> {
+  const { error } = await getDb()
+    .from('ph_url_research')
+    .update({ status: 'ready', result, processed_at: new Date().toISOString() })
+    .eq('id', id)
+  if (error) throw new Error(error.message)
+}
+
+// Marca una request como fallida ('error') o bloqueada por Meta ('blocked').
+export async function failUrlResearch(
+  id: string,
+  status: 'error' | 'blocked',
+  message: string,
+): Promise<void> {
+  const { error } = await getDb()
+    .from('ph_url_research')
+    .update({ status, error: message, processed_at: new Date().toISOString() })
+    .eq('id', id)
   if (error) throw new Error(error.message)
 }

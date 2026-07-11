@@ -123,6 +123,53 @@ export interface WatchlistRow {
   last_checked: string
 }
 
+// ─── Research por URL (feature "pega un anuncio") ─────────────────────────────
+// Cola independiente de la de nichos: un producto pegado NO pasa por las reglas
+// de oro (queremos devolver su veredicto aunque tenga <40 ads o esté saturado en
+// PE). Nunca toca ph_products. El worker (poller dedicado) la drena.
+
+export interface MarketCompetitor {
+  name: string
+  adCount: number
+  country: string
+}
+
+export interface UrlResearchResult {
+  verdict: {
+    productName: string
+    whatItIs: string
+    problemSolved: string
+    attributes: string[]
+    adCount: number
+    daysRunning: number | null
+    foundCountry: string
+    pageName: string
+    score: number
+    priority: 'alta' | 'media' | 'baja'
+    reasoning: string
+  }
+  // null = no se pudo verificar la competencia en PE (probe bloqueado — no
+  // fabricamos "sin competencia", regla de oro).
+  peScenario: z.infer<typeof PeScenario> | null
+  peCompetitors: PeCompetitor[]
+  marketCompetitors: MarketCompetitor[]
+  adUrl: string
+  pageUrl: string
+}
+
+export interface UrlResearchRow {
+  id: string
+  user_id: string | null
+  url: string
+  page_id: string | null
+  ad_id: string | null
+  status: 'pending' | 'processing' | 'ready' | 'error' | 'blocked'
+  result: UrlResearchResult | null
+  error: string | null
+  created_at: string
+  processed_at: string | null
+}
+
 // ─── Lo que la ruta /search devuelve al frontend ──────────────────────────────
 // Solo metadatos — sin slides HTML.
 

@@ -93,7 +93,7 @@ function rescore(oldScore: number, scenario: 'A' | 'B' | 'C' | 'D') {
 
 // Términos a buscar: los del análisis o, si faltan (descartados emiten []),
 // derivados del productName + la keyword que lo encontró.
-function termsFor(product: ProductRow): string[] {
+export function termsFor(product: ProductRow): string[] {
   const fromAnalysis = (product.analysis?.peSearchTerms ?? []).filter(Boolean)
   if (fromAnalysis.length) return fromAnalysis.slice(0, MAX_TERMS)
   const out = new Set<string>()
@@ -101,6 +101,55 @@ function termsFor(product: ProductRow): string[] {
   if (name) out.add(name.toLowerCase().split(/\s+/).slice(0, 3).join(' '))
   if (product.raw_data.found_keyword) out.add(product.raw_data.found_keyword.toLowerCase())
   return [...out].slice(0, MAX_TERMS)
+}
+
+export interface PeResearch {
+  scenario: 'A' | 'B' | 'C' | 'D'
+  competitors: PeCompetitor[]
+  perTerm: PeValidation['terms']
+  score: number
+  priority: 'alta' | 'media' | 'baja'
+}
+
+// Núcleo reusable de la validación PE en vivo: busca `terms` en Meta Ads Library
+// filtrando por Perú, agrega los competidores-vendedores y clasifica el escenario
+// A/B/C/D de forma determinista, reclasificando el score/prioridad. Lo comparten
+// validateProduct (cola de nichos → ph_products) y el research por URL (cola
+// aparte) — una sola fuente de verdad para el guard de la regla de oro.
+//
+// Devuelve null si es INCONCLUSO: 0 competidores pero algún probe quedó bloqueado.
+// "0 competidores" solo significa "sin competencia en PE" si TODOS los probes
+// respondieron; con uno bloqueado el 0 puede ser competencia oculta por el
+// throttle → NO declarar escenario A (regla de oro "no pautado en PE" sin
+// verificar). El caller decide qué hacer con el inconcluso (re-encolar / mostrar
+// "no verificado"). Con competidores>0 sí clasifica: un probe bloqueado solo
+// habría sumado más competencia, así que B/C/D sobre data parcial es conservador.
+export async function researchPe(
+  page: Page,
+  terms: string[],
+  oldScore: number,
+): Promise<PeResearch | null> {
+  if (!terms.length) return null  // sin términos no se puede concluir (no fabricar 'A')
+  const seen = new Map<string, PeCompetitor>()
+  const perTerm: PeValidation['terms'] = []
+  let allValid = true
+  for (const term of terms) {
+    const { competitors: found, valid } = await searchPeAdvertisers(page, term)
+    if (!valid) allValid = false
+    perTerm.push({ term, competitors: [...found.values()] })
+    for (const [pageId, comp] of found) {
+      const prev = seen.get(pageId)
+      if (!prev || comp.adCount > prev.adCount) seen.set(pageId, comp)
+    }
+  }
+
+  const competitors = [...seen.values()].sort((a, b) => b.adCount - a.adCount)
+  if (competitors.length === 0 && !allValid) return null
+
+  const maxAds = competitors[0]?.adCount ?? 0
+  const scenario = classify(competitors.length, maxAds)
+  const { score, priority } = rescore(oldScore, scenario)
+  return { scenario, competitors, perTerm, score, priority }
 }
 
 // Valida UN producto: busca sus términos en PE (secuencial dentro de su page)
@@ -112,55 +161,32 @@ async function validateProduct(page: Page, product: ProductRow): Promise<void> {
   if (!terms.length) return
 
   try {
-    const seen = new Map<string, PeCompetitor>()
-    const perTerm: PeValidation['terms'] = []
-    let allValid = true
-    for (const term of terms) {
-      const { competitors: found, valid } = await searchPeAdvertisers(page, term)
-      if (!valid) allValid = false
-      perTerm.push({ term, competitors: [...found.values()] })
-      for (const [pageId, comp] of found) {
-        const prev = seen.get(pageId)
-        if (!prev || comp.adCount > prev.adCount) seen.set(pageId, comp)
-      }
-    }
-
-    const competitors = [...seen.values()].sort((a, b) => b.adCount - a.adCount)
-
-    // Guard anti-bloqueo: "0 competidores" solo significa "sin competencia en PE"
-    // si TODOS los probes respondieron. Con algún probe bloqueado, el 0 puede ser
-    // competencia oculta por el throttle → NO declarar escenario A (regla de oro
-    // "no pautado en PE" sin verificar). No persistimos peValidation: el producto
-    // queda en la cola de getProductsToValidatePe y se re-valida en un run limpio.
-    // (Con competidores>0 sí clasificamos: un probe bloqueado solo habría sumado
-    // más competencia, así que B/C/D sobre data parcial es conservador.)
-    if (competitors.length === 0 && !allValid) {
+    const r = await researchPe(page, terms, product.score ?? 0)
+    // Inconcluso: no persistimos — el producto queda en la cola de
+    // getProductsToValidatePe y se re-valida en un run limpio.
+    if (!r) {
       console.log(
         `  ⊘ ${analysis.productName} — PE inconcluso (probe bloqueado, 0 competidores no confiable) — se re-validará`
       )
       return
     }
 
-    const maxAds = competitors[0]?.adCount ?? 0
-    const scenario = classify(competitors.length, maxAds)
-    const { score, priority } = rescore(product.score ?? 0, scenario)
-
     const updated = {
       ...analysis,
-      score,
-      priority,
-      peScenario: scenario,
-      peCompetitors: competitors.slice(0, 10),
+      score: r.score,
+      priority: r.priority,
+      peScenario: r.scenario,
+      peCompetitors: r.competitors.slice(0, 10),
       peValidation: {
         validated_at: new Date().toISOString(),
-        terms: perTerm,
-        scenario,
+        terms: r.perTerm,
+        scenario: r.scenario,
       },
     }
-    await saveProductAnalysis(product.id, score, updated)
+    await saveProductAnalysis(product.id, r.score, updated)
     console.log(
-      `  ✓ ${analysis.productName} — ${terms.length} búsquedas → ${competitors.length} competidores ` +
-      `→ escenario ${scenario} · score ${product.score} → ${score} · ${priority}`
+      `  ✓ ${analysis.productName} — ${terms.length} búsquedas → ${r.competitors.length} competidores ` +
+      `→ escenario ${r.scenario} · score ${product.score} → ${r.score} · ${r.priority}`
     )
   } catch (e) {
     console.error(`  ✗ ${analysis.productName}: ${e instanceof Error ? e.message : e}`)
