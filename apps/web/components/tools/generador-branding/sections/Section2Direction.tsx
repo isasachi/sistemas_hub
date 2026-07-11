@@ -99,7 +99,7 @@ export default function Section2Direction() {
             value={feedback}
             onChange={(e) => setFeedback(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && !regenerating && regenerate()}
-            className="flex-1 h-10 rounded-xl border border-white/[0.06] bg-[#0a0a0a] px-3 text-[13px] text-[#f5f5f5] placeholder:text-[#8a8a8a] focus:outline-none focus:border-[rgba(255,156,77,0.5)] transition-colors"
+            className="jr-field flex-1 h-10 rounded-xl px-3 text-[13px]"
           />
           <button onClick={regenerate} disabled={regenerating} className={btnPrimary + ' h-10 px-4 shrink-0'}>
             {regenerating ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'Regenerar'}

@@ -83,7 +83,7 @@ export default function Section3Sections() {
             onChange={(e) => setFeedback(e.target.value)}
             rows={2}
             placeholder="¿Ajustar el copy? Escribe qué cambiar y regenera (opcional)"
-            className="bg-[#141414] border border-white/[0.06] rounded-xl px-3 py-2 text-[13px] text-[#f5f5f5] placeholder:text-[#8a8a8a] focus:border-[rgba(255,156,77,0.5)] outline-none"
+            className="jr-field rounded-xl px-3 py-2 text-[13px]"
           />
 
           {error && <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-[12px] text-red-400">{error}</div>}

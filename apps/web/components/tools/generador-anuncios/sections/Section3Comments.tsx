@@ -48,7 +48,7 @@ export default function Section3Comments() {
         onChange={(e) => setComments(e.target.value)}
         rows={7}
         placeholder="Pega aquí los comentarios..."
-        className="rounded-xl border border-white/[0.06] bg-[#0a0a0a] px-4 py-3 text-[13px] text-[#f5f5f5] placeholder:text-[#8a8a8a] resize-none focus:outline-none focus:border-[rgba(255,156,77,0.5)] transition-colors"
+        className="jr-field rounded-xl px-4 py-3 text-[13px] resize-none"
       />
       {isLoading && (
         <div className="flex flex-col gap-1.5">
@@ -68,7 +68,7 @@ export default function Section3Comments() {
         onChange={(e) => setPrompt(e.target.value)}
         rows={2}
         placeholder="Opcional: ajuste para el copy — ej: más directo, tono juvenil"
-        className="rounded-xl border border-white/[0.06] bg-[#0a0a0a] px-4 py-3 text-[13px] text-[#f5f5f5] placeholder:text-[#8a8a8a] resize-none focus:outline-none focus:border-[rgba(255,156,77,0.5)] transition-colors"
+        className="jr-field rounded-xl px-4 py-3 text-[13px] resize-none"
       />
       <button onClick={handleSubmit} disabled={!comments.trim() || isLoading} className={btnPrimary}>
         {isLoading ? (

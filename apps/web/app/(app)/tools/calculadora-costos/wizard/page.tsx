@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import ToolShell from "@/components/tools/ui/ToolShell";
 import { useSearchParams } from "next/navigation";
 import { ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
 import {
@@ -334,15 +334,7 @@ function CalculadoraWizard() {
   }, [isLast, ready]);
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#0a0a0a]">
-      <div className="px-8 py-3.5 border-b border-white/[0.06] flex items-center gap-2 text-[13px]">
-        <Link href="/dashboard" className="text-[#8a8a8a] hover:text-[#bdbdbd] no-underline">Dashboard</Link>
-        <ChevronRight className="w-3.5 h-3.5 text-[#8a8a8a]" />
-        <Link href="/tools/calculadora-costos" className="text-[#8a8a8a] hover:text-[#bdbdbd] no-underline">Calculadora de Costos</Link>
-        <ChevronRight className="w-3.5 h-3.5 text-[#8a8a8a]" />
-        <span className="text-[#f5f5f5] font-semibold">Sesión</span>
-      </div>
-
+    <ToolShell name="Calculadora de Costos" slug="calculadora-costos" trail="Sesión">
       <div className="flex flex-1 min-h-0">
         {/* Panel de preguntas */}
         <div className="flex-1 px-12 py-10 border-r border-white/[0.06] overflow-y-auto">
@@ -396,7 +388,7 @@ function CalculadoraWizard() {
           </div>
         </div>
       </div>
-    </div>
+    </ToolShell>
   );
 }
 

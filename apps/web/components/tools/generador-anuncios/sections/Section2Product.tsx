@@ -6,7 +6,7 @@ import { FileUpload } from '@/components/tools/ui/FileUpload'
 import type { ProductScan } from '@/lib/types'
 
 const btnPrimary = 'h-11 w-full rounded-xl jr-cta text-[13px] font-bold disabled:opacity-40 transition-all duration-200 cursor-pointer border-0 font-sans flex items-center justify-center gap-2'
-const inputClass = 'w-full h-10 rounded-xl border border-white/[0.06] bg-[#0a0a0a] px-3 text-[13px] text-[#f5f5f5] placeholder:text-[#8a8a8a] focus:outline-none focus:border-[rgba(255,156,77,0.5)] transition-colors'
+const inputClass = 'jr-field w-full h-10 rounded-xl px-3 text-[13px]'
 
 export default function Section2Product() {
   const { sessionId, productUrl, logoUrl: storedLogoUrl, productName: storedName, whatItDoes: storedWhatItDoes, targetAudience: storedAudience, setProductData, setLoading, isLoading } = useWizardStore()
