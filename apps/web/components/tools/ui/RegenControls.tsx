@@ -24,7 +24,7 @@ export function RegenControls({
         onChange={(e) => onPromptChange(e.target.value)}
         rows={2}
         placeholder="Opcional: dile qué ajustar — ej: más minimalista, fondo azul"
-        className="bg-[#141414] border border-white/[0.06] rounded-xl px-3 py-2 text-[13px] text-[#f5f5f5] placeholder:text-[#8a8a8a] focus:border-[rgba(255,156,77,0.5)] outline-none resize-none"
+        className="jr-field rounded-xl px-3 py-2 text-[13px] resize-none"
       />
       <div className="flex items-center gap-3">
         <button

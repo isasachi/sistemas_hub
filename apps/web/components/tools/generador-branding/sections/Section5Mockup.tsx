@@ -118,7 +118,7 @@ export default function Section5Mockup() {
           value={desc}
           onChange={(e) => setDesc(e.target.value)}
           rows={3}
-          className="rounded-xl border border-white/[0.06] bg-[#141414] px-3 py-2.5 text-[13px] text-[#f5f5f5] placeholder:text-[#8a8a8a] focus:outline-none focus:border-[rgba(255,156,77,0.5)] transition-colors resize-none"
+          className="jr-field rounded-xl px-3 py-2.5 text-[13px] resize-none"
         />
       ) : (
         <FileUpload label="Sube una foto del envase" onFile={onFile} preview={preview} />

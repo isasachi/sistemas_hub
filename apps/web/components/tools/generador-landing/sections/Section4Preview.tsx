@@ -11,8 +11,7 @@ const btnPrimary =
   'rounded-xl jr-cta text-[13px] font-bold disabled:opacity-40 transition-all duration-200 cursor-pointer border-0 font-sans flex items-center justify-center gap-2 h-11 w-full'
 const btnGhost =
   'h-9 px-3 rounded-lg border border-white/[0.14] text-[#f5f5f5] text-[12px] font-medium hover:bg-white/[0.05] transition-colors cursor-pointer bg-transparent'
-const fieldClass =
-  'bg-[#141414] border border-white/[0.06] rounded-lg px-3 py-2 text-[13px] text-[#f5f5f5] placeholder:text-[#8a8a8a] focus:border-[rgba(255,156,77,0.5)] outline-none w-full'
+const fieldClass = 'jr-field w-full rounded-lg px-3 py-2 text-[13px]'
 
 // POST una sección (genera o regenera). Reusado por el loop inicial y por el editor.
 async function genSection(
