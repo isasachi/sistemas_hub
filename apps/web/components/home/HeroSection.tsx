@@ -1,8 +1,10 @@
 import Link from "next/link";
+import { HeroShowcaseWall } from "./HeroShowcaseWall";
+import { HERO_COUNTER } from "@/lib/home/stats";
 
 export function HeroSection() {
   return (
-    <section className="relative overflow-hidden px-8 pt-20 pb-18 text-center jr-grid">
+    <section className="relative overflow-hidden px-8 pt-20 pb-14 text-center jr-grid">
       {/* Rayo cálido desde la esquina superior izquierda */}
       <div
         aria-hidden
@@ -22,14 +24,15 @@ export function HeroSection() {
         }}
       />
 
-      {/* Badge */}
+      {/* Badge-contador (estilo "en vivo") */}
       <div className="relative z-10 inline-flex items-center gap-2 bg-white/[0.04] border border-white/[0.12] rounded-full px-4 py-1.5 mb-7 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
         <span
-          className="w-1.5 h-1.5 rounded-full bg-[#ff9c4d] shadow-[0_0_8px_#ff9c4d]"
+          className="w-1.5 h-1.5 rounded-full bg-[#2ccf6f] shadow-[0_0_8px_#2ccf6f]"
           aria-hidden
         />
         <span className="text-[#cfcfcf] text-xs font-semibold tracking-[0.2px]">
-          Herramientas de Marketing con IA
+          <span className="text-[#f5f5f5] font-bold tabular-nums">{HERO_COUNTER}</span>{" "}
+          activos generados con IA
         </span>
       </div>
 
@@ -43,12 +46,12 @@ export function HeroSection() {
 
       {/* Subtitle */}
       <p className="relative z-10 text-[17px] text-[#bdbdbd] leading-[1.65] max-w-[520px] mx-auto mb-9">
-        Genera anuncios, videos, branding y landing pages en minutos.
-        Diseñado para marcas peruanas que quieren crecer más rápido.
+        Anuncios, branding, landings y productos ganadores — hechos con IA en
+        minutos. Mira abajo lo que la plataforma genera.
       </p>
 
       {/* CTAs */}
-      <div className="relative z-10 flex items-center justify-center gap-3 flex-wrap">
+      <div className="relative z-10 flex items-center justify-center gap-3 flex-wrap mb-12">
         <Link
           href={process.env.AUTH_DISABLED === "true" ? "/dashboard" : "/signup"}
           className="jr-cta text-[15px] font-bold px-8 py-3.5 rounded-full no-underline"
@@ -61,6 +64,11 @@ export function HeroSection() {
         >
           Ver herramientas
         </a>
+      </div>
+
+      {/* Signature — pared de outputs auto-scroll */}
+      <div className="relative z-10 -mx-8">
+        <HeroShowcaseWall />
       </div>
     </section>
   );

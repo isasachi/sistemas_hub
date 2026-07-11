@@ -7,6 +7,16 @@ export interface Tool {
   tag: string;
   tagStyle: "brand" | "new" | "utility" | "neutral";
   status: "live" | "soon"; // "soon" = muestra <ComingSoon> al abrir su view
+
+  // ── Landing showcase (opcional) ──────────────────────────────
+  // pitch: one-liner de venta para la card grande (si falta, usa description)
+  pitch?: string;
+  // preview: qué sneak peek renderiza <ToolPreview>. 'image' lee de
+  // /public/showcase/<slug>.jpg con skeleton CSS de fallback; 'buscador' y
+  // 'calculadora' son mini-renders HTML con datos de muestra.
+  preview?: { kind: "image" | "buscador" | "calculadora"; ratio?: "9/16" | "1/1" | "4/3" };
+  // stats: chips hardcodeados por tool. TODO wire: ver lib/home/stats.ts
+  stats?: { value: string; label: string }[];
 }
 
 export const tools: Tool[] = [
@@ -21,6 +31,12 @@ export const tools: Tool[] = [
     tag: "Nuevo",
     tagStyle: "new",
     status: "live",
+    pitch: "Productos que ya venden en LATAM y aún nadie pauta en Perú.",
+    preview: { kind: "buscador" },
+    stats: [
+      { value: "8,900+", label: "productos analizados" },
+      { value: "5 países", label: "validación LATAM" },
+    ],
   },
   {
     name: "Generador de Anuncios",
@@ -33,6 +49,12 @@ export const tools: Tool[] = [
     tag: "IA Real",
     tagStyle: "new",
     status: "live",
+    pitch: "Sube un anuncio que funciona y recíbelo con tu producto.",
+    preview: { kind: "image", ratio: "9/16" },
+    stats: [
+      { value: "1,200+", label: "anuncios generados" },
+      { value: "~40s", label: "por creativo" },
+    ],
   },
   {
     name: "Generador de Video Ads",
@@ -45,6 +67,7 @@ export const tools: Tool[] = [
     tag: "Pronto",
     tagStyle: "neutral",
     status: "soon",
+    pitch: "Scripts con gancho, desarrollo y CTA para tus video ads.",
   },
   {
     name: "Generador de Branding",
@@ -57,6 +80,12 @@ export const tools: Tool[] = [
     tag: "IA Real",
     tagStyle: "new",
     status: "live",
+    pitch: "De una idea a logo, etiqueta y mockup del producto final.",
+    preview: { kind: "image", ratio: "1/1" },
+    stats: [
+      { value: "340+", label: "marcas creadas" },
+      { value: "4 logos", label: "por dirección" },
+    ],
   },
   {
     name: "Calculadora de Costos",
@@ -69,6 +98,12 @@ export const tools: Tool[] = [
     tag: "Nuevo",
     tagStyle: "new",
     status: "live",
+    pitch: "Sabe si tu campaña es rentable antes de gastar el primer sol.",
+    preview: { kind: "calculadora" },
+    stats: [
+      { value: "P&G", label: "en 2 minutos" },
+      { value: "Excel", label: "listo para exportar" },
+    ],
   },
   {
     name: "Generador de Landing Pages",
@@ -81,6 +116,12 @@ export const tools: Tool[] = [
     tag: "IA Real",
     tagStyle: "new",
     status: "live",
+    pitch: "Una landing de conversión completa, sección por sección.",
+    preview: { kind: "image", ratio: "9/16" },
+    stats: [
+      { value: "600+", label: "landings armadas" },
+      { value: "8", label: "secciones por página" },
+    ],
   },
 ];
 
