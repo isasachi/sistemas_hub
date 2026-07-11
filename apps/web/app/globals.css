@@ -188,3 +188,34 @@
   height: 1px;
   background: linear-gradient(to right, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0));
 }
+
+/* ── Pared de outputs del hero (marquee auto-scroll) ─────── */
+/* La lista se renderiza 2× y se desplaza -50% para loop sin costura. */
+.jr-marquee {
+  animation: jr-marquee-scroll 46s linear infinite;
+}
+@keyframes jr-marquee-scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+/* ── Shimmer del skeleton de imagen (fallback) ───────────── */
+.jr-shimmer {
+  background:
+    linear-gradient(100deg, rgba(255, 255, 255, 0.015) 30%, rgba(255, 255, 255, 0.06) 50%, rgba(255, 255, 255, 0.015) 70%),
+    #0d0d0d;
+  background-size: 220% 100%;
+  animation: jr-shimmer-move 2.2s ease-in-out infinite;
+}
+@keyframes jr-shimmer-move {
+  from { background-position: 180% 0; }
+  to { background-position: -80% 0; }
+}
+
+/* Respeta a quien pide menos movimiento: todo queda estático. */
+@media (prefers-reduced-motion: reduce) {
+  .jr-marquee,
+  .jr-shimmer {
+    animation: none;
+  }
+}

@@ -1,17 +1,13 @@
-const stats = [
-  { value: "6", label: "Herramientas de IA" },
-  { value: "10×", label: "Más rápido que manual" },
-  { value: "100%", label: "En español" },
-];
+import { PLATFORM_STATS } from "@/lib/home/stats";
 
 export function StatsBar() {
   return (
     <div className="px-8 pb-14">
       <div className="flex items-center justify-center gap-4 flex-wrap">
-        {stats.map((stat) => (
+        {PLATFORM_STATS.map((stat) => (
           <div
             key={stat.label}
-            className="jr-card rounded-2xl px-8 py-5 text-center min-w-[180px]"
+            className="jr-card rounded-2xl px-8 py-5 text-center min-w-[180px] max-w-[260px]"
           >
             <div className="text-[28px] font-bold gradient-text leading-none font-[Poppins]">
               {stat.value}
