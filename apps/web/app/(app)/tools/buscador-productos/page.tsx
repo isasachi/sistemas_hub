@@ -2,7 +2,8 @@
 
 import { useState, useCallback, useEffect } from "react";
 import Link from "next/link";
-import { ChevronRight, Search, ExternalLink, TrendingUp, Loader2, PackageSearch, Calendar } from "lucide-react";
+import { Search, ExternalLink, TrendingUp, Loader2, PackageSearch, Calendar } from "lucide-react";
+import ToolShell from "@/components/tools/ui/ToolShell";
 import type { ProductCard, SearchResponse } from "@ph/shared";
 
 const ACCENT = "#ff9c4d";
@@ -199,13 +200,7 @@ export default function BuscadorProductos() {
   }, [niche, fetchToday, loading]);
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#0a0a0a]">
-      {/* Breadcrumb */}
-      <div className="px-8 py-3.5 border-b border-white/[0.06] flex items-center gap-2 text-[13px]">
-        <Link href="/dashboard" className="text-[#8a8a8a] hover:text-[#bdbdbd] transition-colors no-underline">Dashboard</Link>
-        <ChevronRight className="w-3.5 h-3.5 text-[#8a8a8a]" />
-        <span className="text-[#f5f5f5] font-semibold">Buscador de Productos</span>
-      </div>
+    <ToolShell name="Buscador de Productos" slug="buscador-productos">
 
       <main className="flex-1 max-w-[760px] w-full mx-auto px-8 py-10">
         <div className="mb-6">
@@ -351,6 +346,6 @@ export default function BuscadorProductos() {
         )}
         </div>
       </main>
-    </div>
+    </ToolShell>
   );
 }

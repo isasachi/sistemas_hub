@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ChevronRight, RotateCw } from "lucide-react";
+import { RotateCw } from "lucide-react";
+import ToolShell from "@/components/tools/ui/ToolShell";
 import type { SessionResponse } from "@/lib/types";
 import { SESSION_KEY } from "@/store/wizard";
 
@@ -25,14 +25,7 @@ export default function AnuncioDetalle() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#0a0a0a]">
-      <div className="px-8 py-3.5 border-b border-white/[0.06] flex items-center gap-2 text-[13px]">
-        <Link href="/dashboard" className="text-[#8a8a8a] hover:text-[#bdbdbd] transition-colors no-underline">Dashboard</Link>
-        <ChevronRight className="w-3.5 h-3.5 text-[#8a8a8a]" />
-        <Link href="/tools/generador-anuncios" className="text-[#8a8a8a] hover:text-[#bdbdbd] transition-colors no-underline">Generador de Anuncios</Link>
-        <ChevronRight className="w-3.5 h-3.5 text-[#8a8a8a]" />
-        <span className="text-[#f5f5f5] font-semibold">Sesión</span>
-      </div>
+    <ToolShell name="Generador de Anuncios" slug="generador-anuncios" trail="Sesión">
 
       <div className="max-w-[900px] w-full mx-auto px-6 md:px-10 py-10">
         {s === undefined && <p className="text-[13px] text-[#8a8a8a]">Cargando…</p>}
@@ -97,6 +90,6 @@ export default function AnuncioDetalle() {
           </>
         )}
       </div>
-    </div>
+    </ToolShell>
   );
 }
