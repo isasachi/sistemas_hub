@@ -1,6 +1,7 @@
 'use client'
 
 import { useRef, useState } from 'react'
+import { Check } from 'lucide-react'
 import { useBrandingStore } from '@/store/branding'
 import { SSEStatus } from '@/components/tools/ui/SSEStatus'
 import { FileUpload } from '@/components/tools/ui/FileUpload'
@@ -160,7 +161,7 @@ export default function Section3Logo() {
                     </div>
                   )}
                   {isSelected && !isPicking && (
-                    <div className="absolute top-2 right-2 w-6 h-6 rounded-full bg-[#ff9c4d] flex items-center justify-center text-black text-[13px] font-bold">✓</div>
+                    <div className="absolute top-2 right-2 w-6 h-6 rounded-full bg-[#ff9c4d] flex items-center justify-center text-black"><Check className="w-3.5 h-3.5" strokeWidth={3} /></div>
                   )}
                 </button>
               )

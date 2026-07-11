@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import { Check, Lock, ChevronDown } from 'lucide-react'
 
 type SectionStatus = 'locked' | 'active' | 'completed'
 
@@ -38,12 +39,12 @@ const statusStyles: Record<SectionStatus, {
     iconColor: 'text-[#ff9c4d]',
   },
   completed: {
-    border: 'border border-[rgba(34,197,94,0.25)]',
-    headerBg: 'bg-[rgba(34,197,94,0.04)]',
+    border: 'border border-[rgba(44,207,111,0.25)]',
+    headerBg: 'bg-[rgba(44,207,111,0.04)]',
     opacity: '',
-    iconBg: 'bg-[rgba(34,197,94,0.15)]',
-    iconBorder: 'border-[rgba(34,197,94,0.35)]',
-    iconColor: 'text-[#22c55e]',
+    iconBg: 'bg-[rgba(44,207,111,0.15)]',
+    iconBorder: 'border-[rgba(44,207,111,0.35)]',
+    iconColor: 'text-[#2ccf6f]',
   },
 }
 
@@ -68,11 +69,11 @@ export default function AccordionSection({
       >
         <div className={`w-[22px] h-[22px] rounded-full flex items-center justify-center shrink-0 border ${s.iconBg} ${s.iconBorder}`}>
           {status === 'completed' ? (
-            <span className={`text-[11px] font-bold ${s.iconColor}`}>✓</span>
+            <Check className={`w-3 h-3 ${s.iconColor}`} strokeWidth={3} />
           ) : status === 'locked' ? (
-            <span className="text-[11px]">🔒</span>
+            <Lock className={`w-3 h-3 ${s.iconColor}`} strokeWidth={2.5} />
           ) : (
-            <span className={`text-[11px] font-bold ${s.iconColor}`}>{index}</span>
+            <span className={`readout text-[11px] font-bold ${s.iconColor}`}>{index}</span>
           )}
         </div>
         <div className="flex-1 min-w-0">
@@ -84,7 +85,9 @@ export default function AccordionSection({
           )}
         </div>
         {canReopen && (
-          <span className="text-[10px] text-[#8a8a8a] shrink-0">▼ editar</span>
+          <span className="flex items-center gap-1 text-[10px] text-[#8a8a8a] shrink-0">
+            <ChevronDown className="w-3 h-3" /> editar
+          </span>
         )}
       </div>
 

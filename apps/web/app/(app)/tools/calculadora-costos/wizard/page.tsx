@@ -349,8 +349,8 @@ function CalculadoraWizard() {
           {/* Progreso */}
           <div className="max-w-[620px] mb-8">
             <div className="flex items-center justify-between text-[12px] text-[#8a8a8a] mb-2">
-              <span>Paso {current + 1} de {total}</span>
-              <span>{Math.round(((current + 1) / total) * 100)}%</span>
+              <span className="readout">Paso {current + 1} de {total}</span>
+              <span className="readout">{Math.round(((current + 1) / total) * 100)}%</span>
             </div>
             <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
               <div className="h-full jr-cta transition-all duration-300" style={{ width: `${((current + 1) / total) * 100}%` }} />
@@ -379,12 +379,12 @@ function CalculadoraWizard() {
         </div>
 
         {/* Panel de proyección en vivo */}
-        <div className="w-[380px] flex-shrink-0 sticky top-0 h-screen overflow-y-auto bg-[#080810] px-7 py-9">
+        <div className="w-[380px] flex-shrink-0 sticky top-0 h-screen overflow-y-auto bg-[#0a0a0a] px-7 py-9">
           <div className="text-[11px] font-semibold uppercase tracking-wide text-[#8a8a8a]">Proyección en vivo</div>
           <p className="text-[11px] text-[#6a6a6a] mt-1 leading-snug">Se actualiza con tus datos y los estimados que falten.</p>
           <div className="mt-4 rounded-2xl border border-white/[0.08] p-5">
             <div className="text-[13px] text-[#8a8a8a]">Profit Neto / mes</div>
-            <div className="text-[30px] font-bold mt-1" style={{ color: result.pg.profitNeto >= 0 ? accent : "#f87171" }}>
+            <div className="readout text-[30px] font-bold mt-1" style={{ color: result.pg.profitNeto >= 0 ? accent : "#f87171" }}>
               {fmtMoney(result.pg.profitNeto)}
             </div>
             <div className="grid grid-cols-2 gap-3 mt-5">

@@ -7,6 +7,10 @@ export interface Tool {
   tag: string;
   tagStyle: "brand" | "new" | "utility" | "neutral";
   status: "live" | "soon"; // "soon" = muestra <ComingSoon> al abrir su view
+  // stage: etapa del flujo del operador. Agrupa el dashboard (no es una
+  // secuencia obligatoria — cada tool se usa suelta). "investigar" = descubrir/
+  // validar antes de invertir; "crear" = producir los activos de campaña.
+  stage: "investigar" | "crear";
 
   // ── Landing showcase (opcional) ──────────────────────────────
   // pitch: one-liner de venta para la card grande (si falta, usa description)
@@ -28,6 +32,7 @@ export const tools: Tool[] = [
     longDescription:
       "Escribe un nicho y la herramienta te muestra productos que ya están funcionando en México, Colombia, Chile, Argentina y Ecuador, con su situación de competencia real en Perú y señales de validación (anuncios activos, días corriendo).",
     icon: "PackageSearch",
+    stage: "investigar",
     tag: "Nuevo",
     tagStyle: "new",
     status: "live",
@@ -46,6 +51,7 @@ export const tools: Tool[] = [
     longDescription:
       "Carga un anuncio de referencia y la foto de tu producto. La IA analiza la composición, estilo y copy, luego genera un nuevo anuncio con tu marca — fiel al original pero 100% tuyo.",
     icon: "ImagePlus",
+    stage: "crear",
     tag: "IA Real",
     tagStyle: "new",
     status: "live",
@@ -64,6 +70,7 @@ export const tools: Tool[] = [
     longDescription:
       "Crea scripts profesionales para videos publicitarios con gancho, desarrollo y llamada a la acción optimizados para cada plataforma.",
     icon: "Video",
+    stage: "crear",
     tag: "Pronto",
     tagStyle: "neutral",
     status: "soon",
@@ -77,6 +84,7 @@ export const tools: Tool[] = [
     longDescription:
       "Cuéntanos tu negocio y la IA define una dirección de marca (paleta + tipografía + concepto), genera opciones de logo para elegir, diseña tu etiqueta y la monta en el envase para mostrarte el producto terminado.",
     icon: "Sparkles",
+    stage: "crear",
     tag: "IA Real",
     tagStyle: "new",
     status: "live",
@@ -95,6 +103,7 @@ export const tools: Tool[] = [
     longDescription:
       "Responde unas preguntas sobre tus costos, embudo (leads o mensajes) y ofertas. La calculadora arma tu estado de resultados completo — profit, márgenes, ROAS, ROI, CPA máximo y capital mínimo — y te deja exportar todo a un Excel idéntico al modelo.",
     icon: "DollarSign",
+    stage: "investigar",
     tag: "Nuevo",
     tagStyle: "new",
     status: "live",
@@ -113,6 +122,7 @@ export const tools: Tool[] = [
     longDescription:
       "Crea el contenido y la estructura de una landing page optimizada para convertir: hero, beneficios, testimonios, FAQ y CTA.",
     icon: "LayoutTemplate",
+    stage: "crear",
     tag: "IA Real",
     tagStyle: "new",
     status: "live",

@@ -106,14 +106,14 @@ export default function Section6Guide() {
           <button
             onClick={createLanding}
             disabled={landingLoading}
-            className="h-11 px-4 rounded-xl bg-[#ff9c4d] text-[#1a1205] text-[13px] font-semibold hover:bg-[#ffae6b] transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-default self-start"
+            className="h-11 px-4 rounded-xl jr-cta text-[13px] font-semibold cursor-pointer self-start"
           >
             {landingLoading ? 'Creando landing…' : 'Crear landing con esta marca'}
           </button>
         )}
         <button
           onClick={startNewSession}
-          className="h-11 px-4 rounded-xl border border-white/[0.14] text-[#f5f5f5] text-[13px] font-medium hover:bg-white/[0.05] transition-colors cursor-pointer bg-transparent self-start"
+          className="h-11 px-4 rounded-xl jr-btn-ghost text-[13px] font-medium cursor-pointer self-start"
         >
           Crear otra marca
         </button>

@@ -31,7 +31,7 @@ export function HeroSection() {
           aria-hidden
         />
         <span className="text-[#cfcfcf] text-xs font-semibold tracking-[0.2px]">
-          <span className="text-[#f5f5f5] font-bold tabular-nums">{HERO_COUNTER}</span>{" "}
+          <span className="readout text-[#f5f5f5] font-bold">{HERO_COUNTER}</span>{" "}
           activos generados con IA
         </span>
       </div>

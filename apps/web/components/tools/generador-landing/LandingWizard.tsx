@@ -59,7 +59,7 @@ export default function LandingWizard() {
       <div className="h-[2px] bg-white/[0.06]">
         <div
           className="h-full transition-all duration-700"
-          style={{ width: `${progressPct}%`, background: 'linear-gradient(90deg,#ff9c4d,#ff9c4d)' }}
+          style={{ width: `${progressPct}%`, background: 'linear-gradient(90deg,#ff9c4d,#ff7a2f)' }}
         />
       </div>
 

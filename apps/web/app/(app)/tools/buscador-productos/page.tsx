@@ -25,7 +25,7 @@ function TopPickCard({ p }: { p: ProductCard }) {
     <div className="min-w-[240px] max-w-[240px] bg-white/[0.04] border border-white/[0.06] rounded-2xl p-4 flex flex-col gap-3">
       <div className="flex items-start justify-between gap-2">
         <h3 className="text-[14px] font-extrabold text-[#f5f5f5] tracking-[-0.2px] leading-tight line-clamp-2">{p.productName}</h3>
-        <span className="text-[11px] font-extrabold whitespace-nowrap" style={{ color: ACCENT }}>{Math.round(p.score)}</span>
+        <span className="readout text-[11px] font-extrabold whitespace-nowrap" style={{ color: ACCENT }}>{Math.round(p.score)}</span>
       </div>
       <div className="text-[12px] text-[#bdbdbd] leading-[1.5]">
         <span className="font-bold text-[#f5f5f5]">{p.adCount}</span> anuncios · {SCENARIO_TEXT[p.peScenario]}
@@ -59,11 +59,11 @@ function ProductCardView({ p }: { p: ProductCard }) {
       {/* Métricas de validación */}
       <div className="flex gap-3">
         <div className="flex-1 bg-white/[0.03] rounded-xl px-3 py-2.5 text-center">
-          <div className="text-[20px] font-extrabold" style={{ color: ACCENT }}>{p.adCount}</div>
+          <div className="readout text-[20px] font-extrabold" style={{ color: ACCENT }}>{p.adCount}</div>
           <div className="text-[10px] text-[#8a8a8a] uppercase tracking-[1px] font-bold">anuncios</div>
         </div>
         <div className="flex-1 bg-white/[0.03] rounded-xl px-3 py-2.5 text-center">
-          <div className="text-[20px] font-extrabold" style={{ color: ACCENT }}>{p.daysRunning ?? "?"}</div>
+          <div className="readout text-[20px] font-extrabold" style={{ color: ACCENT }}>{p.daysRunning ?? "?"}</div>
           <div className="text-[10px] text-[#8a8a8a] uppercase tracking-[1px] font-bold">días activo</div>
         </div>
         <div className="flex-1 bg-white/[0.03] rounded-xl px-3 py-2.5 text-center">
@@ -225,8 +225,17 @@ export default function BuscadorProductos() {
               <TrendingUp className="w-4 h-4" style={{ color: ACCENT }} />
               <span className="text-[13px] font-bold text-[#f5f5f5]">Top picks de la semana</span>
             </div>
-            <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
-              {topPicks.map((p) => <TopPickCard key={p.id} p={p} />)}
+            {/* Cinta auto-scroll (se pausa al hover para poder leer/clickear una card) */}
+            <div className="group relative -mx-1 overflow-hidden px-1 py-1">
+              <div aria-hidden className="pointer-events-none absolute inset-y-0 left-0 z-10 w-12 bg-gradient-to-r from-[#0a0a0a] to-transparent" />
+              <div aria-hidden className="pointer-events-none absolute inset-y-0 right-0 z-10 w-12 bg-gradient-to-l from-[#0a0a0a] to-transparent" />
+              <div className="jr-marquee flex w-max gap-3 group-hover:[animation-play-state:paused]">
+                {[...topPicks, ...topPicks].map((p, i) => (
+                  <div key={`${p.id}-${i}`} className="shrink-0" aria-hidden={i >= topPicks.length}>
+                    <TopPickCard p={p} />
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
