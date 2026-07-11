@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import Link from "next/link";
-import { Search, ExternalLink, TrendingUp, Loader2, PackageSearch, Calendar } from "lucide-react";
+import { Search, ExternalLink, TrendingUp, Loader2, PackageSearch, Calendar, Link2, Check, X } from "lucide-react";
 import ToolShell from "@/components/tools/ui/ToolShell";
-import type { ProductCard, SearchResponse } from "@ph/shared";
+import type { ProductCard, SearchResponse, UrlResearchResult } from "@ph/shared";
 
 const ACCENT = "#ff9c4d";
 
@@ -112,11 +112,142 @@ function ProductCardView({ p }: { p: ProductCard }) {
   );
 }
 
+function RuleCheck({ ok, label }: { ok: boolean; label: string }) {
+  return (
+    <div className="flex items-center gap-1.5 text-[12px]" style={{ color: ok ? "#7fd88f" : "#e58d8d" }}>
+      {ok ? <Check className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5" />}
+      <span>{label}</span>
+    </div>
+  );
+}
+
+function UrlResearchView({ r }: { r: UrlResearchResult }) {
+  const v = r.verdict;
+  const meetsAds = v.adCount >= 40;
+  const meetsDays = (v.daysRunning ?? 0) >= 10;
+  // El escenario null = no verificado (probe bloqueado). Solo A/B cuentan como "sin saturar".
+  const notSaturated = r.peScenario === "A" || r.peScenario === "B";
+  const isWinner = meetsAds && meetsDays && notSaturated;
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Veredicto */}
+      <div className="bg-white/[0.04] border border-white/[0.06] rounded-2xl p-5 flex flex-col gap-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-[18px] font-extrabold text-[#f5f5f5] tracking-[-0.3px] leading-tight">{v.productName}</h3>
+            <p className="text-[12px] text-[#8a8a8a] mt-0.5">{v.pageName}</p>
+          </div>
+          <span className="text-[10px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap"
+            style={isWinner
+              ? { background: "rgba(127,216,143,0.1)", border: "1px solid rgba(127,216,143,0.25)", color: "#7fd88f" }
+              : { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.12)", color: "#cfcfcf" }}>
+            {isWinner ? "Producto ganador" : "No cumple todo"}
+          </span>
+        </div>
+
+        <p className="text-[13px] text-[#bdbdbd] leading-[1.6]">{v.whatItIs}</p>
+
+        {/* Métricas */}
+        <div className="flex gap-3">
+          <div className="flex-1 bg-white/[0.03] rounded-xl px-3 py-2.5 text-center">
+            <div className="readout text-[20px] font-extrabold" style={{ color: ACCENT }}>{v.adCount}</div>
+            <div className="text-[10px] text-[#8a8a8a] uppercase tracking-[1px] font-bold">anuncios</div>
+          </div>
+          <div className="flex-1 bg-white/[0.03] rounded-xl px-3 py-2.5 text-center">
+            <div className="readout text-[20px] font-extrabold" style={{ color: ACCENT }}>{v.daysRunning ?? "?"}</div>
+            <div className="text-[10px] text-[#8a8a8a] uppercase tracking-[1px] font-bold">días activo</div>
+          </div>
+          <div className="flex-1 bg-white/[0.03] rounded-xl px-3 py-2.5 text-center">
+            <div className="readout text-[20px] font-extrabold" style={{ color: ACCENT }}>{Math.round(v.score)}</div>
+            <div className="text-[10px] text-[#8a8a8a] uppercase tracking-[1px] font-bold">score</div>
+          </div>
+        </div>
+
+        {/* Reglas de oro */}
+        <div className="flex flex-wrap gap-x-5 gap-y-1.5 bg-white/[0.02] rounded-xl px-3 py-2.5">
+          <RuleCheck ok={meetsAds} label="≥40 anuncios activos" />
+          <RuleCheck ok={meetsDays} label="≥10 días corriendo" />
+          <RuleCheck ok={notSaturated} label={r.peScenario === null ? "Perú sin verificar" : "sin saturar en Perú"} />
+        </div>
+
+        {v.attributes.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {v.attributes.map((a) => (
+              <span key={a} className="text-[11px] text-[#bdbdbd] bg-white/[0.04] border border-white/[0.06] px-2 py-1 rounded-lg">{a}</span>
+            ))}
+          </div>
+        )}
+
+        {/* Competencia en Perú */}
+        <div className="bg-white/[0.03] rounded-xl p-3">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <TrendingUp className="w-3.5 h-3.5" style={{ color: ACCENT }} />
+            <span className="text-[12px] font-bold text-[#f5f5f5]">
+              {r.peScenario === null ? "Competencia en Perú no verificada" : SCENARIO_TEXT[r.peScenario]}
+            </span>
+          </div>
+          {r.peScenario === null ? (
+            <p className="text-[11px] text-[#bdbdbd] leading-[1.5]">No pudimos verificar la competencia en Perú ahora mismo (Meta limitó la consulta). Vuelve a intentarlo en unos minutos.</p>
+          ) : r.peCompetitors.length > 0 ? (
+            <p className="text-[11px] text-[#bdbdbd] leading-[1.5]">
+              {r.peCompetitors.map((c) => `${c.name} (${c.adCount} ads)`).join(" · ")}
+            </p>
+          ) : (
+            <p className="text-[11px] text-[#bdbdbd]">0 competidores directos corriendo este producto en Perú.</p>
+          )}
+        </div>
+
+        {/* CTAs */}
+        <div className="flex gap-2">
+          <a href={r.adUrl} target="_blank" rel="noopener noreferrer"
+            className="jr-cta flex-1 flex items-center justify-center gap-1.5 text-[13px] font-bold rounded-xl py-2.5 no-underline">
+            Ver anuncio <ExternalLink className="w-3.5 h-3.5" />
+          </a>
+          <a href={r.pageUrl} target="_blank" rel="noopener noreferrer"
+            className="flex-1 flex items-center justify-center gap-1.5 text-[13px] font-semibold rounded-xl py-2.5 no-underline border border-white/[0.12] text-[#f5f5f5] transition-colors hover:bg-white/[0.04]">
+            Ver todos los anuncios
+          </a>
+        </div>
+      </div>
+
+      {/* Mercado LATAM */}
+      {r.marketCompetitors.length > 0 && (
+        <div className="bg-white/[0.04] border border-white/[0.06] rounded-2xl p-5">
+          <div className="flex items-center gap-1.5 mb-3">
+            <TrendingUp className="w-4 h-4" style={{ color: ACCENT }} />
+            <span className="text-[13px] font-bold text-[#f5f5f5]">Quién más lo vende en LATAM</span>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            {r.marketCompetitors.map((c, i) => (
+              <div key={`${c.name}-${i}`} className="flex items-center justify-between gap-3 text-[12px]">
+                <span className="text-[#bdbdbd] truncate">{c.name}</span>
+                <span className="text-[#8a8a8a] whitespace-nowrap">{c.adCount} ads · {c.country}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function BuscadorProductos() {
+  const [mode, setMode] = useState<"niche" | "url">("niche");
   const [niche, setNiche] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<SearchResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Modo "pega un anuncio" (research por URL)
+  const [url, setUrl] = useState("");
+  const [urlLoading, setUrlLoading] = useState(false);
+  const [urlResult, setUrlResult] = useState<UrlResearchResult | null>(null);
+  const [urlError, setUrlError] = useState<string | null>(null);
+  const [urlRequestId, setUrlRequestId] = useState<string | null>(null);
+  const [urlTimedOut, setUrlTimedOut] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (pollRef.current) clearTimeout(pollRef.current); }, []);
 
   // Cuota diaria
   const [quotaExhausted, setQuotaExhausted] = useState(false);
@@ -199,6 +330,75 @@ export default function BuscadorProductos() {
     }
   }, [niche, fetchToday, loading]);
 
+  // Polling del resultado, resumible: si se agota el cap NO se descarta el id — el
+  // usuario puede reanudar (el row puede quedar `ready` justo después). Evita
+  // huérfanos: un research completado nunca se vuelve inalcanzable.
+  const pollResult = useCallback((id: string) => {
+    if (pollRef.current) clearTimeout(pollRef.current);
+    setUrlLoading(true);
+    setUrlTimedOut(false);
+    const started = Date.now();
+    const poll = async () => {
+      try {
+        const r = await fetch(`/api/buscador-productos/research/${id}`);
+        const d = await r.json();
+        if (d.status === "ready" && d.result) {
+          setUrlResult(d.result as UrlResearchResult);
+          setUrlLoading(false);
+          return;
+        }
+        if (d.status === "error" || d.status === "blocked") {
+          setUrlError(d.error ?? "No pudimos completar el research. Intenta de nuevo.");
+          setUrlLoading(false);
+          return;
+        }
+        if (Date.now() - started > 240_000) {
+          setUrlTimedOut(true);   // conserva urlRequestId → botón para reanudar
+          setUrlLoading(false);
+          return;
+        }
+        pollRef.current = setTimeout(poll, 3000);
+      } catch {
+        pollRef.current = setTimeout(poll, 3000);
+      }
+    };
+    pollRef.current = setTimeout(poll, 3000);
+  }, []);
+
+  // Research por URL: encola la request y arranca el polling.
+  const researchUrl = useCallback(async () => {
+    if (urlLoading) return; // evita doble-submit → quema cuota
+    const u = url.trim();
+    if (!u) return;
+    setUrlLoading(true);
+    setUrlError(null);
+    setUrlResult(null);
+    setUrlRequestId(null);
+    setUrlTimedOut(false);
+    try {
+      const res = await fetch("/api/buscador-productos/research", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: u }),
+      });
+      const data = await res.json();
+      if (res.status === 429) {
+        if (data.code === "quota") { setQuotaExhausted(true); fetchToday(); }
+        setUrlError(data.error ?? "Límite alcanzado");
+        setUrlLoading(false);
+        return;
+      }
+      if (!res.ok) throw new Error(data.error ?? "No pudimos procesar esa URL");
+
+      const id = data.requestId as string;
+      setUrlRequestId(id);
+      pollResult(id);
+    } catch (e) {
+      setUrlError(e instanceof Error ? e.message : "Error desconocido");
+      setUrlLoading(false);
+    }
+  }, [url, urlLoading, fetchToday, pollResult]);
+
   return (
     <ToolShell name="Buscador de Productos" slug="buscador-productos">
 
@@ -261,8 +461,26 @@ export default function BuscadorProductos() {
           </div>
         )}
 
-        {/* Search bar */}
+        {/* Selector de modo */}
         {!quotaExhausted && (
+          <div className="flex gap-1 mb-3 p-1 bg-white/[0.03] border border-white/[0.06] rounded-xl w-fit">
+            {([["niche", "Buscar por nicho"], ["url", "Pega un anuncio"]] as const).map(([m, label]) => (
+              <button
+                key={m}
+                onClick={() => setMode(m)}
+                className="px-3.5 py-1.5 rounded-lg text-[13px] font-bold cursor-pointer border-0 transition-colors flex items-center gap-1.5"
+                style={mode === m
+                  ? { background: "rgba(255,156,77,0.14)", color: ACCENT }
+                  : { background: "transparent", color: "#8a8a8a" }}>
+                {m === "url" && <Link2 className="w-3.5 h-3.5" />}
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Search bar — nicho */}
+        {!quotaExhausted && mode === "niche" && (
           <div className="flex gap-2 mb-8">
             <div className="flex-1 flex items-center gap-2 bg-white/[0.04] border border-white/[0.06] rounded-xl px-4">
               <Search className="w-4 h-4 text-[#8a8a8a]" />
@@ -285,13 +503,72 @@ export default function BuscadorProductos() {
           </div>
         )}
 
+        {/* Research por URL — pega un anuncio */}
+        {!quotaExhausted && mode === "url" && (
+          <div className="mb-8">
+            <div className="flex gap-2">
+              <div className="flex-1 flex items-center gap-2 bg-white/[0.04] border border-white/[0.06] rounded-xl px-4">
+                <Link2 className="w-4 h-4 text-[#8a8a8a]" />
+                <input
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && researchUrl()}
+                  placeholder="Pega la URL del anuncio o anunciante de Meta Ads Library..."
+                  aria-label="URL de Meta Ads Library"
+                  className="flex-1 bg-transparent py-3 text-[14px] text-[#f5f5f5] placeholder:text-[#8a8a8a] outline-none"
+                />
+              </div>
+              <button
+                onClick={researchUrl}
+                disabled={urlLoading || !url.trim()}
+                className="jr-cta px-5 rounded-xl text-[14px] font-bold disabled:opacity-40 cursor-pointer border-0 flex items-center gap-2">
+                {urlLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                Investigar
+              </button>
+            </div>
+            <p className="text-[12px] text-[#8a8a8a] mt-2">
+              Abre un anuncio en la Biblioteca de Anuncios de Meta y copia el enlace. Analizamos ese producto y su competencia en Perú.
+            </p>
+
+            {urlError && (
+              <div role="alert" className="mt-4 bg-[rgba(233,61,61,0.08)] border border-[rgba(233,61,61,0.2)] rounded-xl p-4 text-[13px] text-[#fca5a5]">{urlError}</div>
+            )}
+
+            <div aria-live="polite" className="mt-6">
+              {urlLoading && !urlResult && (
+                <div className="text-center py-16">
+                  <Loader2 className="w-8 h-8 mx-auto mb-3 animate-spin text-[#8a8a8a]" />
+                  <h3 className="text-[16px] font-bold text-[#f5f5f5] mb-1">Investigando el producto</h3>
+                  <p className="text-[13px] text-[#bdbdbd] max-w-[380px] mx-auto leading-[1.6]">
+                    Estamos analizando el anuncio y su competencia en Perú. Suele tardar cerca de un minuto.
+                  </p>
+                </div>
+              )}
+              {urlTimedOut && !urlResult && urlRequestId && (
+                <div className="text-center py-16">
+                  <PackageSearch className="w-8 h-8 mx-auto mb-3 text-[#8a8a8a]" />
+                  <h3 className="text-[16px] font-bold text-[#f5f5f5] mb-1">Está tardando más de lo normal</h3>
+                  <p className="text-[13px] text-[#bdbdbd] max-w-[380px] mx-auto leading-[1.6] mb-4">
+                    El research sigue en proceso. No perdiste tu búsqueda — revisa el resultado en un momento.
+                  </p>
+                  <button
+                    onClick={() => pollResult(urlRequestId)}
+                    className="jr-cta px-5 py-2.5 rounded-xl text-[13px] font-bold cursor-pointer border-0">
+                    Ver resultado
+                  </button>
+                </div>
+              )}
+              {urlResult && <UrlResearchView r={urlResult} />}
+            </div>
+          </div>
+        )}
+
         {/* Error */}
-        {error && !quotaExhausted && (
+        {mode === "niche" && error && !quotaExhausted && (
           <div role="alert" className="bg-[rgba(233,61,61,0.08)] border border-[rgba(233,61,61,0.2)] rounded-xl p-4 text-[13px] text-[#fca5a5] mb-4">{error}</div>
         )}
-        {error && quotaExhausted && null /* quota message ya está arriba */}
 
-        <div aria-live="polite">
+        <div aria-live="polite" hidden={mode !== "niche"}>
         {result?.status === "pending" && (
           <div className="text-center py-16">
             <PackageSearch className="w-10 h-10 mx-auto mb-3 text-[#8a8a8a]" />

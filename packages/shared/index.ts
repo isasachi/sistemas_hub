@@ -3,6 +3,7 @@
 // Next/React (rompería el worker) o Playwright/Anthropic (rompería la regla de
 // costo: Vercel no puede tener acceso a esos módulos).
 export * from './types'
+export * from './ads-url'
 export * from './json-clean'
 export * from './prescore'
 export * from './keywords'
