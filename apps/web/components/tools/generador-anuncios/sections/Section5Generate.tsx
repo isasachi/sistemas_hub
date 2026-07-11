@@ -4,6 +4,7 @@ import { useState, useRef } from 'react'
 import { useWizardStore } from '@/store/wizard'
 import { SSEStatus } from '@/components/tools/ui/SSEStatus'
 import { RegenControls } from '@/components/tools/ui/RegenControls'
+import { GenerationProgress } from '@/components/tools/ui/GenerationProgress'
 
 const STATUS_LABELS: Record<string, { text: string; pct: number }> = {
   building_prompt: { text: 'Preparando instrucciones...', pct: 15 },
@@ -86,40 +87,13 @@ export default function Section5Generate() {
           />
           <p className="text-[13px] text-[#bdbdbd]">Esto puede tomar entre 15 y 40 segundos.</p>
 
-          {/* Progress bar with stage indicators */}
-          <div>
-            <div className="flex justify-between text-[11px] text-[#bdbdbd] mb-1.5">
-              <span>{STATUS_LABELS[status]?.text ?? status}</span>
-              <span className="text-[#ff9c4d] font-bold">{progress}%</span>
-            </div>
-            <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden mb-2">
-              <div
-                className="h-full rounded-full transition-all duration-700"
-                style={{ width: `${progress}%`, background: 'linear-gradient(90deg,#ff9c4d 0%,#ff9c4d 100%)' }}
-              />
-            </div>
-            <div className="flex gap-1">
-              {STAGES.map((s) => {
-                const idx = STAGES.indexOf(s)
-                const currentIdx = STAGES.indexOf(status)
-                return (
-                  <div
-                    key={s}
-                    className="flex-1 h-[2px] rounded-full transition-colors duration-500"
-                    style={{
-                      background:
-                        idx < currentIdx ? '#22c55e' :
-                        idx === currentIdx ? 'linear-gradient(90deg,#ff9c4d,#ff9c4d)' :
-                        'rgba(255,255,255,0.08)',
-                    }}
-                  />
-                )
-              })}
-            </div>
-            <div className="flex justify-between text-[9px] text-[#8a8a8a] mt-1">
-              <span>prompt</span><span>imágenes</span><span>generando</span><span>guardando</span><span>listo</span>
-            </div>
-          </div>
+          {/* Momento de generación unificado (compartido con landing) */}
+          <GenerationProgress
+            percent={progress}
+            label={STATUS_LABELS[status]?.text ?? status}
+            steps={['prompt', 'imágenes', 'generando', 'guardando', 'listo']}
+            currentStep={STAGES.indexOf(status)}
+          />
 
           {/* Skeleton */}
           <div className="aspect-[9/16] max-h-[300px] rounded-2xl bg-[#141414] animate-pulse border border-white/[0.06] flex items-center justify-center">

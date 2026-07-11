@@ -5,6 +5,7 @@ import { useLandingStore } from '@/store/landing'
 import { SECTION_LABELS, type LandingSection, type SectionCopy, type SectionType } from '@/lib/landing/types'
 import { Smartphone, Monitor } from 'lucide-react'
 import { RegenControls } from '@/components/tools/ui/RegenControls'
+import { GenerationProgress } from '@/components/tools/ui/GenerationProgress'
 
 const btnPrimary =
   'rounded-xl jr-cta text-[13px] font-bold disabled:opacity-40 transition-all duration-200 cursor-pointer border-0 font-sans flex items-center justify-center gap-2 h-11 w-full'
@@ -195,7 +196,11 @@ export default function Section4Preview() {
       )}
 
       {generating && (
-        <p className="text-[12px] text-[#bdbdbd]">Generando secciones... {done}/{copy.length}</p>
+        <GenerationProgress
+          percent={copy.length ? (done / copy.length) * 100 : 0}
+          label={`Generando secciones · ${done}/${copy.length}`}
+          hint="Esto puede tomar unos segundos por sección."
+        />
       )}
 
       {error && <div role="alert" className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-[12px] text-red-400">{error}</div>}

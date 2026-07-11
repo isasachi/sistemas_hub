@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Lato:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Lato:wght@400;500;700&family=JetBrains+Mono:wght@500;600;700&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -11,6 +11,7 @@
   --color-foreground: var(--foreground);
   --font-sans: 'Lato', -apple-system, sans-serif;
   --font-heading: 'Poppins', -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', 'Menlo', monospace;
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -164,6 +165,51 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.75);
   transform: translateY(-1px);
   filter: brightness(1.04);
+}
+.jr-cta:disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+/* ── Botón secundario neutro (relleno sutil) ─────────────── */
+.jr-btn-secondary {
+  background: rgba(255, 255, 255, 0.05);
+  color: #f5f5f5;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all var(--duration-fast) var(--ease-smooth);
+}
+.jr-btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+.jr-btn-secondary:disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+/* ── Botón fantasma (contorno, acción terciaria) ─────────── */
+.jr-btn-ghost {
+  background: transparent;
+  color: #bdbdbd;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  transition: all var(--duration-fast) var(--ease-smooth);
+}
+.jr-btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.25);
+  color: #f5f5f5;
+}
+.jr-btn-ghost:disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+/* ── Readout mono: todo número/dato se ve como instrumento ─ */
+.readout {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+  letter-spacing: -0.01em;
 }
 
 /* ── Card de vidrio sutil (superficie del sitio JR) ──────── */

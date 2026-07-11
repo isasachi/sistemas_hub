@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { Check } from 'lucide-react'
 import { useWizardStore } from '@/store/wizard'
 import type { CopyElement } from '@/lib/types'
 
@@ -38,7 +39,7 @@ function CopyCard({
             ★ Recomendada
           </span>
         )}
-        {selected && <span className="ml-auto text-[#ff9c4d] text-[11px]">✓</span>}
+        {selected && <Check className="ml-auto w-3.5 h-3.5 text-[#ff9c4d]" strokeWidth={3} />}
       </div>
       <div className="px-4 divide-y divide-white/[0.04]">
         {elements.map((el) => (

@@ -29,7 +29,7 @@ export function Kpi({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <div className="text-[11px] text-[#8a8a8a]">{label}</div>
-      <div className="text-[15px] font-semibold text-[#f5f5f5]">{value}</div>
+      <div className="readout text-[15px] font-semibold text-[#f5f5f5]">{value}</div>
     </div>
   );
 }
@@ -41,7 +41,7 @@ function Card({ label, value, help }: { label: string; value: string; help: stri
         {label}
         <Help text={help} />
       </div>
-      <div className="text-[19px] font-bold text-[#f5f5f5] mt-1 tabular-nums">{value}</div>
+      <div className="text-[19px] font-bold text-[#f5f5f5] mt-1 readout">{value}</div>
     </div>
   );
 }
@@ -58,7 +58,7 @@ export default function ResultsDashboard({
       ? { c: "#f87171", bg: "rgba(248,113,113,0.1)", b: "rgba(248,113,113,0.4)", label: "No rentable", msg: "Con estos números pierdes dinero. Sube el precio, baja costos o mejora la conversión." }
       : pg.margenNeto < 0.1
       ? { c: "#fbbf24", bg: "rgba(251,191,36,0.1)", b: "rgba(251,191,36,0.4)", label: "Rentable pero ajustado", msg: "Ganas, pero con margen delgado. Poco espacio para imprevistos o devoluciones." }
-      : { c: "#34d399", bg: "rgba(52,211,153,0.1)", b: "rgba(52,211,153,0.4)", label: "Rentable", msg: "¡Buen margen! Con estos números el negocio se sostiene y deja ganancia." };
+      : { c: "#2ccf6f", bg: "rgba(44,207,111,0.1)", b: "rgba(44,207,111,0.4)", label: "Rentable", msg: "¡Buen margen! Con estos números el negocio se sostiene y deja ganancia." };
 
   const ing = pg.ingresosTotales || 1;
   const segs = [
@@ -67,8 +67,8 @@ export default function ResultsDashboard({
     { label: "Empaque", val: pg.costoFullfillment, color: "#a78bfa" },
     { label: "Comisión pasarela", val: pg.comisionPasarela, color: "#f472b6" },
     { label: "Inversión en ads", val: pg.inversionPublicidad, color: "#fb923c" },
-    { label: "Gastos fijos", val: pg.gastosFijos, color: "#94a3b8" },
-    { label: "Profit neto", val: Math.max(0, pn), color: "#34d399" },
+    { label: "Gastos fijos", val: pg.gastosFijos, color: "#8a8a8a" },
+    { label: "Profit neto", val: Math.max(0, pn), color: "#2ccf6f" },
   ].filter((s) => s.val > 0);
 
   return (
@@ -79,7 +79,7 @@ export default function ResultsDashboard({
           <span className="w-2.5 h-2.5 rounded-full" style={{ background: estado.c }} />
           <span className="text-[13px] font-semibold uppercase tracking-wide" style={{ color: estado.c }}>{estado.label}</span>
         </div>
-        <div className="text-[40px] font-bold mt-2 tabular-nums" style={{ color: estado.c }}>{fmtMoney(pn)}</div>
+        <div className="text-[40px] font-bold mt-2 readout" style={{ color: estado.c }}>{fmtMoney(pn)}</div>
         <div className="text-[13px] text-[#bdbdbd]">Profit neto proyectado al mes</div>
         <p className="text-[13px] text-[#bdbdbd] mt-3 leading-relaxed">{estado.msg}</p>
       </div>
@@ -125,7 +125,7 @@ export default function ResultsDashboard({
                 <span className="w-2.5 h-2.5 rounded-sm" style={{ background: s.color }} />
                 {s.label}
               </span>
-              <span className="text-[#8a8a8a] tabular-nums">{fmtPct(s.val / ing)}</span>
+              <span className="text-[#8a8a8a] readout">{fmtPct(s.val / ing)}</span>
             </div>
           ))}
         </div>

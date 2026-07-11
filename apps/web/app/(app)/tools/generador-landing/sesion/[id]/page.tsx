@@ -50,7 +50,7 @@ export default function LandingDetalle() {
                   {s.price ? ` · ${s.price}` : ""} · solo lectura
                 </p>
               </div>
-              <button onClick={resume} className="flex items-center gap-2 rounded-xl bg-[#ff9c4d] px-4 py-2 text-[13px] font-bold text-[#0a0a0a] hover:bg-[#ffb066] transition-colors flex-shrink-0">
+              <button onClick={resume} className="flex items-center gap-2 rounded-xl jr-cta px-4 py-2 text-[13px] font-bold flex-shrink-0">
                 <RotateCw className="w-4 h-4" /> Reanudar sesión
               </button>
             </div>

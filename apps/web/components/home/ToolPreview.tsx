@@ -97,7 +97,7 @@ function BuscadorPreview() {
         {metrics.map((m) => (
           <div key={m.label} className="text-center">
             <div
-              className="text-[20px] font-extrabold leading-none tabular-nums"
+              className="text-[20px] font-extrabold leading-none readout"
               style={{ color: m.plain ? "#f5f5f5" : ACCENT }}
             >
               {m.value}
@@ -129,7 +129,7 @@ function CalculadoraPreview() {
       <div className="flex items-start justify-between gap-2">
         <div>
           <div className="text-[11px] text-[#8a8a8a]">Utilidad neta proyectada</div>
-          <div className="mt-0.5 text-[26px] font-bold leading-none tabular-nums text-[#2ccf6f]">
+          <div className="mt-0.5 text-[26px] font-bold leading-none readout text-[#2ccf6f]">
             S/ 4,820
           </div>
         </div>

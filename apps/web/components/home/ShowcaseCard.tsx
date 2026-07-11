@@ -59,7 +59,7 @@ export function ShowcaseCard({ tool }: { tool: Tool }) {
             key={s.label}
             className="inline-flex items-baseline gap-1 rounded-lg border border-white/[0.06] bg-white/[0.02] px-2.5 py-1"
           >
-            <span className="text-[13px] font-bold text-[#f5f5f5]">{s.value}</span>
+            <span className="readout text-[13px] font-bold text-[#f5f5f5]">{s.value}</span>
             <span className="text-[11px] text-[#8a8a8a]">{s.label}</span>
           </span>
         ))}
