@@ -10,7 +10,7 @@ export default function AppError({ reset }: { error: Error; reset: () => void })
         <div className="w-14 h-14 rounded-2xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center mx-auto mb-5">
           <AlertTriangle className="w-7 h-7 text-[#ff9c4d]" />
         </div>
-        <h1 className="text-[22px] font-bold text-[#f5f5f5] mb-2.5 font-[Poppins]">Algo salió mal</h1>
+        <h1 className="text-[22px] font-bold text-[#f5f5f5] mb-2.5">Algo salió mal</h1>
         <p className="text-[14px] text-[#bdbdbd] leading-[1.6] mb-7">
           Ocurrió un error inesperado. Inténtalo de nuevo o vuelve al dashboard.
         </p>

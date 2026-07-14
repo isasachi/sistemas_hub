@@ -26,7 +26,7 @@ export function ComingSoon({ tool }: { tool: Tool }) {
           <Clock className="w-3 h-3" /> Llega pronto
         </span>
 
-        <h1 className="text-[22px] font-bold gradient-text mb-2.5 font-[Poppins]">{tool.name}</h1>
+        <h1 className="text-[22px] font-bold gradient-text mb-2.5">{tool.name}</h1>
         <p className="text-[14px] text-[#bdbdbd] leading-[1.6] mb-7">{tool.longDescription}</p>
 
         <Link

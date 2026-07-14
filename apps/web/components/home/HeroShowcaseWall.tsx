@@ -1,9 +1,8 @@
 import { tools } from "@/lib/tools";
 import { ToolPreview } from "./ToolPreview";
 
-// Los tiles del marquee = las tools con sneak peek (imágenes reales + mini-renders
-// HTML). Mezclar ambos tipos asegura que la pared NUNCA se ve vacía aunque falten
-// las imágenes de /public/showcase.
+// Los tiles del marquee = las tools con sneak peek (spec-cards HTML/SVG del
+// sistema — sin imágenes externas, la pared nunca se ve vacía ni asimétrica).
 const tiles = tools.filter((t) => t.preview);
 
 export function HeroShowcaseWall() {
@@ -15,16 +14,16 @@ export function HeroShowcaseWall() {
       {/* Fades laterales para que los tiles "entren y salgan" */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-y-0 left-0 z-10 w-24 bg-gradient-to-r from-[#0a0a0a] to-transparent"
+        className="pointer-events-none absolute inset-y-0 left-0 z-10 w-28 bg-gradient-to-r from-[#141210] to-transparent"
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-y-0 right-0 z-10 w-24 bg-gradient-to-l from-[#0a0a0a] to-transparent"
+        className="pointer-events-none absolute inset-y-0 right-0 z-10 w-28 bg-gradient-to-l from-[#141210] to-transparent"
       />
 
-      <div className="jr-marquee flex w-max items-center gap-4">
+      <div className="jr-marquee flex w-max items-center gap-5">
         {loop.map((tool, i) => (
-          <div key={`${tool.slug}-${i}`} className="w-[188px] shrink-0" aria-hidden={i >= tiles.length}>
+          <div key={`${tool.slug}-${i}`} className="w-[200px] shrink-0" aria-hidden={i >= tiles.length}>
             <ToolPreview tool={tool} />
           </div>
         ))}
