@@ -13,6 +13,10 @@ const RATIO_CLASS: Record<string, string> = {
   "16/10": "aspect-[16/10]",
 };
 
+// Marco uniforme de TODOS los previews (imagen y mini-renders HTML):
+// misma superficie, mismo hairline, mismo radio — simetría del showcase.
+const FRAME = "rounded-2xl border border-white/[0.06] bg-[#0d0d0e]";
+
 /**
  * Sneak peek del output de cada tool.
  *  - image      → /public/showcase/<slug>.jpg con skeleton CSS de fallback
@@ -38,9 +42,7 @@ function ImagePreview({ tool, ratio }: { tool: Tool; ratio?: string }) {
   const Icon = toolIcon(tool.icon);
 
   return (
-    <div
-      className={`relative w-full ${ratioClass} overflow-hidden rounded-xl border border-white/[0.08] bg-[#0d0d0d]`}
-    >
+    <div className={`relative w-full ${ratioClass} overflow-hidden ${FRAME}`}>
       {!failed && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -57,7 +59,7 @@ function ImagePreview({ tool, ratio }: { tool: Tool; ratio?: string }) {
           className="absolute inset-0 flex flex-col items-center justify-center gap-2 jr-shimmer"
         >
           <Icon className="h-8 w-8" style={{ color: ACCENT, opacity: 0.7 }} />
-          <span className="text-[11px] font-semibold uppercase tracking-[1.5px] text-[#8a8a8a]">
+          <span className="text-[11px] font-semibold uppercase tracking-[1.5px] text-[#6e6e73]">
             Vista previa
           </span>
         </div>
@@ -77,20 +79,19 @@ function BuscadorPreview() {
     // h-full + flex col: en la card wide del bento se estira a la altura de la
     // fila (header arriba, métricas centradas, footer abajo); en flujo normal
     // conserva su altura natural.
-    <div className="flex h-full w-full flex-col rounded-xl border border-white/[0.08] bg-[#0d0d0d] p-4">
+    <div className={`flex h-full w-full flex-col p-4 ${FRAME}`}>
       <div className="mb-3 flex items-start justify-between gap-2">
         <div>
-          <div className="text-[13px] font-bold text-[#f5f5f5]">
+          <div className="text-[13px] font-semibold text-[#f5f5f7]">
             Faja moldeadora premium
           </div>
-          <div className="text-[11px] text-[#8a8a8a]">@shapefit.pe</div>
+          <div className="text-[11px] text-[#6e6e73]">@shapefit.pe</div>
         </div>
         <span
-          className="shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.5px]"
+          className="shrink-0 rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.5px]"
           style={{
             color: ACCENT,
-            background: "rgba(255,156,77,0.10)",
-            border: "1px solid rgba(255,156,77,0.25)",
+            background: "rgba(255,156,77,0.12)",
           }}
         >
           Prioridad alta
@@ -99,16 +100,16 @@ function BuscadorPreview() {
       {/* flex-1 en el wrapper (no en el box con borde): al estirarse la card,
           el box de métricas queda compacto y centrado en el espacio sobrante. */}
       <div className="flex flex-1 items-center">
-        <div className="grid w-full grid-cols-3 gap-2 rounded-lg border border-white/[0.06] bg-white/[0.02] p-3">
+        <div className="grid w-full grid-cols-3 gap-2 rounded-xl bg-white/[0.04] p-3">
           {metrics.map((m) => (
             <div key={m.label} className="text-center">
               <div
-                className="text-[20px] font-extrabold leading-none readout"
-                style={{ color: m.plain ? "#f5f5f5" : ACCENT }}
+                className="text-[20px] font-bold leading-none readout"
+                style={{ color: m.plain ? "#f5f5f7" : ACCENT }}
               >
                 {m.value}
               </div>
-              <div className="mt-1 text-[10px] text-[#8a8a8a]">{m.label}</div>
+              <div className="mt-1 text-[10px] text-[#6e6e73]">{m.label}</div>
             </div>
           ))}
         </div>
@@ -126,8 +127,8 @@ function CalculadoraPreview() {
   // Segmentos del "¿a dónde va cada sol?" (suman 100).
   const segments = [
     { label: "Producto", pct: 32, color: "#5b6b7f" },
-    { label: "Ads", pct: 28, color: "#ff7a2f" },
-    { label: "Envío", pct: 12, color: "#8a8a8a" },
+    { label: "Ads", pct: 28, color: "#ff9c4d" },
+    { label: "Envío", pct: 12, color: "#6e6e73" },
     { label: "Comisión", pct: 8, color: "#c04b6b" },
     { label: "Utilidad", pct: 20, color: "#2ccf6f" },
   ];
@@ -135,20 +136,19 @@ function CalculadoraPreview() {
     // h-full + flex col: en la card wide del bento se estira a la altura de la
     // fila (header arriba, bloque de barra centrado); en flujo normal conserva
     // su altura natural.
-    <div className="flex h-full w-full flex-col rounded-xl border border-white/[0.08] bg-[#0d0d0d] p-4">
+    <div className={`flex h-full w-full flex-col p-4 ${FRAME}`}>
       <div className="flex shrink-0 items-start justify-between gap-2">
         <div>
-          <div className="text-[11px] text-[#8a8a8a]">Utilidad neta proyectada</div>
+          <div className="text-[11px] text-[#6e6e73]">Utilidad neta proyectada</div>
           <div className="mt-0.5 text-[26px] font-bold leading-none readout text-[#2ccf6f]">
             S/ 4,820
           </div>
         </div>
         <span
-          className="shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.5px]"
+          className="shrink-0 rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.5px]"
           style={{
             color: "#2ccf6f",
-            background: "rgba(44,207,111,0.10)",
-            border: "1px solid rgba(44,207,111,0.25)",
+            background: "rgba(44,207,111,0.12)",
           }}
         >
           Rentable
@@ -158,7 +158,7 @@ function CalculadoraPreview() {
       {/* flex-1 en el wrapper: al estirarse la card, el bloque de la barra
           queda centrado en el espacio sobrante. */}
       <div className="flex flex-1 flex-col justify-center">
-        <div className="mt-4 text-[10px] font-semibold uppercase tracking-[1px] text-[#8a8a8a]">
+        <div className="mt-4 text-[10px] font-semibold uppercase tracking-[1px] text-[#6e6e73]">
           ¿A dónde va cada sol?
         </div>
         <div className="mt-2 flex h-2.5 w-full overflow-hidden rounded-full">
@@ -168,9 +168,9 @@ function CalculadoraPreview() {
         </div>
         <div className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1">
           {segments.map((s) => (
-            <div key={s.label} className="flex items-center gap-1 text-[10px] text-[#bdbdbd]">
+            <div key={s.label} className="flex items-center gap-1 text-[10px] text-[#a1a1a6]">
               <span
-                className="h-2 w-2 rounded-[3px]"
+                className="h-2 w-2 rounded-full"
                 style={{ background: s.color }}
                 aria-hidden
               />

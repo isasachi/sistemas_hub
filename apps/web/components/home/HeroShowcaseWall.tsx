@@ -15,16 +15,16 @@ export function HeroShowcaseWall() {
       {/* Fades laterales para que los tiles "entren y salgan" */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-y-0 left-0 z-10 w-24 bg-gradient-to-r from-[#0a0a0a] to-transparent"
+        className="pointer-events-none absolute inset-y-0 left-0 z-10 w-28 bg-gradient-to-r from-black to-transparent"
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-y-0 right-0 z-10 w-24 bg-gradient-to-l from-[#0a0a0a] to-transparent"
+        className="pointer-events-none absolute inset-y-0 right-0 z-10 w-28 bg-gradient-to-l from-black to-transparent"
       />
 
-      <div className="jr-marquee flex w-max items-center gap-4">
+      <div className="jr-marquee flex w-max items-center gap-5">
         {loop.map((tool, i) => (
-          <div key={`${tool.slug}-${i}`} className="w-[188px] shrink-0" aria-hidden={i >= tiles.length}>
+          <div key={`${tool.slug}-${i}`} className="w-[210px] shrink-0" aria-hidden={i >= tiles.length}>
             <ToolPreview tool={tool} />
           </div>
         ))}

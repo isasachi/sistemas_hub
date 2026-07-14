@@ -35,7 +35,7 @@ export default function Home() {
       : "Comenzar gratis →";
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#0a0a0a]">
+    <div className="min-h-screen flex flex-col bg-black">
       <Navbar />
 
       <main className="flex-1">
@@ -43,18 +43,18 @@ export default function Home() {
         <StatsBar />
 
         {/* Bento de herramientas — sneak peek + stats por tool */}
-        <section id="herramientas" className="max-w-[1100px] mx-auto px-8 py-14">
-          <div className="mb-10 text-center">
-            <Eyebrow label="Herramientas" center className="mb-3" />
-            <h2 className="gradient-text text-[clamp(26px,3.2vw,34px)] font-bold">
+        <section id="herramientas" className="max-w-[1120px] mx-auto px-8 py-20">
+          <div className="mb-14 text-center">
+            <Eyebrow label="Herramientas" center className="mb-4" />
+            <h2 className="text-[clamp(30px,3.8vw,44px)] font-semibold tracking-[-0.02em] text-[#f5f5f7]">
               Todo lo que necesitas para vender
             </h2>
-            <p className="mx-auto mt-2.5 max-w-[480px] text-[15px] text-[#bdbdbd]">
+            <p className="mx-auto mt-3 max-w-[480px] text-[17px] leading-[1.5] text-[#a1a1a6]">
               Cada herramienta, con un ejemplo real de lo que genera. Sin humo.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {liveTools.map((tool) => (
               <ShowcaseCard
                 key={tool.slug}
@@ -66,25 +66,25 @@ export default function Home() {
         </section>
 
         {/* Cierre — CTA final */}
-        <section className="px-8 pb-20 pt-6">
-          <div className="jr-card relative mx-auto max-w-[860px] overflow-hidden rounded-3xl px-8 py-14 text-center">
+        <section className="px-8 pb-28 pt-10">
+          <div className="jr-card relative mx-auto max-w-[880px] overflow-hidden rounded-[28px] px-8 py-20 text-center">
             <div
               aria-hidden
               className="pointer-events-none absolute inset-0"
               style={{
                 background:
-                  "radial-gradient(70% 90% at 50% 0%, rgba(255,150,90,0.12) 0%, transparent 65%)",
+                  "radial-gradient(70% 90% at 50% 0%, rgba(255,150,90,0.10) 0%, transparent 65%)",
               }}
             />
-            <h2 className="gradient-text relative text-[clamp(24px,3vw,32px)] font-bold">
+            <h2 className="relative text-[clamp(28px,3.4vw,40px)] font-semibold tracking-[-0.02em] text-[#f5f5f7]">
               Tu próxima campaña empieza aquí
             </h2>
-            <p className="relative mx-auto mt-2.5 max-w-[420px] text-[15px] text-[#bdbdbd]">
+            <p className="relative mx-auto mt-3 max-w-[420px] text-[17px] leading-[1.5] text-[#a1a1a6]">
               Crea tu cuenta y genera tu primer activo con IA en minutos.
             </p>
             <Link
               href={ctaHref}
-              className="jr-cta relative mt-7 inline-block rounded-full px-8 py-3.5 text-[15px] font-bold no-underline"
+              className="jr-cta relative mt-8 inline-block rounded-full px-8 py-3 text-[15px] font-semibold no-underline"
             >
               {ctaLabel}
             </Link>
