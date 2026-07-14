@@ -6,7 +6,7 @@ import { PLATFORM_STATS } from "@/lib/home/stats";
 export function StatsBar() {
   return (
     <section className="px-8 pt-8 pb-16">
-      <p className="mx-auto max-w-[760px] text-center font-[Poppins] text-[clamp(20px,2.8vw,28px)] font-semibold leading-[1.45] text-[#8a8a8a]">
+      <p className="mx-auto max-w-[760px] text-center text-[clamp(20px,2.8vw,28px)] font-semibold leading-[1.45] text-[#8a8a8a]">
         De <span className="text-[#f5f5f5]">miles de productos analizados</span>{" "}
         salen los ganadores que{" "}
         <span className="text-[#f5f5f5]">aún nadie pauta en Perú</span> — y los

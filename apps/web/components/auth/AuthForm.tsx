@@ -72,7 +72,7 @@ export function AuthForm({ mode, action, next, initialError }: AuthFormProps) {
 
   return (
     <div className="jr-card rounded-2xl p-7 w-full max-w-[400px]">
-      <h1 className="text-[22px] font-bold gradient-text mb-1 font-[Poppins]">{c.title}</h1>
+      <h1 className="text-[22px] font-bold gradient-text mb-1">{c.title}</h1>
       <p className="text-[13px] text-[#bdbdbd] mb-6 leading-[1.5]">{c.subtitle}</p>
 
       {/* Google OAuth */}

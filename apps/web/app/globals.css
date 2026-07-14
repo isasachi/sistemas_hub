@@ -1,16 +1,16 @@
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Lato:wght@400;500;700&family=JetBrains+Mono:wght@500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
 @custom-variant dark (&:is(.dark *));
 
-/* ── JR AI Hub Design Tokens (fiel a jrconsulting.com.pe) ── */
+/* ── JR AI Hub Design Tokens (sistema Apple dark, acento ámbar) ── */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: 'Lato', -apple-system, sans-serif;
-  --font-heading: 'Poppins', -apple-system, sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+  --font-heading: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', 'Menlo', monospace;
   --color-ring: var(--ring);
   --color-input: var(--input);
@@ -41,27 +41,27 @@
   --color-border-brand: rgba(255, 156, 77, 0.28);
 }
 
-/* ── Dark theme neutro (negro puro, como el sitio JR) ────── */
+/* ── Dark theme Apple (negro puro, superficies sólidas) ──── */
 :root {
-  --background: #0a0a0a;
-  --foreground: #f5f5f5;
-  --card: #111111;
-  --card-foreground: #f5f5f5;
-  --popover: #0f0f0f;
-  --popover-foreground: #f5f5f5;
+  --background: #000000;
+  --foreground: #f5f5f7;
+  --card: #161617;
+  --card-foreground: #f5f5f7;
+  --popover: #1d1d1f;
+  --popover-foreground: #f5f5f7;
   --primary: #ff9c4d;
   --primary-foreground: #1c0f03;
-  --secondary: #141414;
-  --secondary-foreground: #f5f5f5;
-  --muted: #0f0f0f;
-  --muted-foreground: #bdbdbd;
-  --accent: #141414;
-  --accent-foreground: #f5f5f5;
+  --secondary: #1d1d1f;
+  --secondary-foreground: #f5f5f7;
+  --muted: #161617;
+  --muted-foreground: #a1a1a6;
+  --accent: #1d1d1f;
+  --accent-foreground: #f5f5f7;
   --destructive: #e93d3d;
-  --border: rgba(255, 255, 255, 0.06);
-  --input: rgba(255, 255, 255, 0.06);
+  --border: rgba(255, 255, 255, 0.08);
+  --input: rgba(255, 255, 255, 0.08);
   --ring: rgba(255, 156, 77, 0.5);
-  --radius: 0.875rem;
+  --radius: 1.125rem;
 
   /* JR brand */
   --brand-amber: #ff9c4d;
@@ -71,41 +71,41 @@
   --positive: #2ccf6f;
 
   /* Text utilities */
-  --fg-subtle: #8a8a8a;
-  --fg-muted: #bdbdbd;
+  --fg-subtle: #6e6e73;
+  --fg-muted: #a1a1a6;
 
   /* Backgrounds */
-  --bg-deep: #0a0a0a;
-  --bg-base: #0f0f0f;
-  --bg-elevated: #141414;
+  --bg-deep: #000000;
+  --bg-base: #0e0e0f;
+  --bg-elevated: #161617;
   --surface: rgba(255, 255, 255, 0.04);
   --surface-hover: rgba(255, 255, 255, 0.07);
   --border-brand: rgba(255, 156, 77, 0.28);
 
   /* Motion */
-  --ease-smooth: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-smooth: cubic-bezier(0.28, 0.11, 0.32, 1);
   --duration-fast: 200ms;
 }
 
 /* .dark kept for Shadcn components that need it */
 .dark {
-  --background: #0a0a0a;
-  --foreground: #f5f5f5;
-  --card: #111111;
-  --card-foreground: #f5f5f5;
-  --popover: #0f0f0f;
-  --popover-foreground: #f5f5f5;
+  --background: #000000;
+  --foreground: #f5f5f7;
+  --card: #161617;
+  --card-foreground: #f5f5f7;
+  --popover: #1d1d1f;
+  --popover-foreground: #f5f5f7;
   --primary: #ff9c4d;
   --primary-foreground: #1c0f03;
-  --secondary: #141414;
-  --secondary-foreground: #f5f5f5;
-  --muted: #0f0f0f;
-  --muted-foreground: #bdbdbd;
-  --accent: #141414;
-  --accent-foreground: #f5f5f5;
+  --secondary: #1d1d1f;
+  --secondary-foreground: #f5f5f7;
+  --muted: #161617;
+  --muted-foreground: #a1a1a6;
+  --accent: #1d1d1f;
+  --accent-foreground: #f5f5f7;
   --destructive: #e93d3d;
-  --border: rgba(255, 255, 255, 0.06);
-  --input: rgba(255, 255, 255, 0.06);
+  --border: rgba(255, 255, 255, 0.08);
+  --input: rgba(255, 255, 255, 0.08);
   --ring: rgba(255, 156, 77, 0.5);
 }
 
@@ -116,31 +116,32 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-family: 'Lato', -apple-system, sans-serif;
-    letter-spacing: 0.2px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+    letter-spacing: -0.011em;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
   h1, h2, h3, h4, h5, h6 {
-    font-family: 'Poppins', -apple-system, sans-serif;
-    letter-spacing: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+    letter-spacing: -0.02em;
+    font-weight: 600;
   }
 }
 
-/* ── Texto metálico de titulares (blanco→gris del sitio) ─── */
+/* ── Titulares: blanco sólido Apple (la clase se conserva
+   redefinida para no tocar cada uso app-wide) ────────────── */
 .gradient-text {
-  background: linear-gradient(180deg, #ffffff 0%, #e9e9e9 45%, #bdbdbd 95%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  background: none;
+  -webkit-text-fill-color: currentColor;
+  color: #f5f5f7;
+  letter-spacing: -0.02em;
 }
 
-/* ── Texto naranja de marca ──────────────────────────────── */
+/* ── Texto ámbar de marca (plano, sin degradado) ─────────── */
 .accent-text {
-  background: linear-gradient(90deg, #ff9c4d 0%, #ff7a2f 60%, #ff9c4d 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  background: none;
+  -webkit-text-fill-color: currentColor;
+  color: #ff9c4d;
 }
 
 /* ── Fondo gradiente de marca ────────────────────────────── */
@@ -148,39 +149,33 @@
   background: var(--brand-gradient);
 }
 
-/* ── CTA glossy naranja (botón firma del sitio JR) ───────── */
+/* ── CTA pill ámbar plano (botón primario) ───────────────── */
 .jr-cta {
-  background: linear-gradient(180deg, #ffb066 0%, #ff8e3c 45%, #ff7a2f 100%);
+  background: #ff9c4d;
   color: #1c0f03;
-  box-shadow:
-    0 10px 24px rgba(255, 142, 60, 0.25),
-    inset 0 1px 0 rgba(255, 255, 255, 0.65);
-  transition: box-shadow var(--duration-fast) var(--ease-smooth),
-    transform var(--duration-fast) var(--ease-smooth),
-    filter var(--duration-fast) var(--ease-smooth);
+  transition: background-color var(--duration-fast) var(--ease-smooth),
+    transform var(--duration-fast) var(--ease-smooth);
 }
 .jr-cta:hover {
-  box-shadow:
-    0 14px 36px rgba(255, 142, 60, 0.32),
-    inset 0 1px 0 rgba(255, 255, 255, 0.75);
-  transform: translateY(-1px);
-  filter: brightness(1.04);
+  background: #ffac66;
+}
+.jr-cta:active {
+  transform: scale(0.98);
 }
 .jr-cta:disabled {
   opacity: 0.45;
   pointer-events: none;
 }
 
-/* ── Botón secundario neutro (relleno sutil) ─────────────── */
+/* ── Botón secundario (relleno gris Apple) ───────────────── */
 .jr-btn-secondary {
-  background: rgba(255, 255, 255, 0.05);
-  color: #f5f5f5;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  transition: all var(--duration-fast) var(--ease-smooth);
+  background: rgba(255, 255, 255, 0.08);
+  color: #f5f5f7;
+  border: 1px solid transparent;
+  transition: background-color var(--duration-fast) var(--ease-smooth);
 }
 .jr-btn-secondary:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.14);
 }
 .jr-btn-secondary:disabled {
   opacity: 0.45;
@@ -190,14 +185,14 @@
 /* ── Botón fantasma (contorno, acción terciaria) ─────────── */
 .jr-btn-ghost {
   background: transparent;
-  color: #bdbdbd;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #a1a1a6;
+  border: 1px solid rgba(255, 255, 255, 0.14);
   transition: all var(--duration-fast) var(--ease-smooth);
 }
 .jr-btn-ghost:hover {
-  background: rgba(255, 255, 255, 0.04);
-  border-color: rgba(255, 255, 255, 0.25);
-  color: #f5f5f5;
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.28);
+  color: #f5f5f7;
 }
 .jr-btn-ghost:disabled {
   opacity: 0.45;
@@ -215,14 +210,14 @@
 /* ── Campo de formulario canónico (mismo look que FieldGroup) ─
    Solo color/borde/foco: el caller pone radius, padding, ancho, etc. */
 .jr-field {
-  background: #141414;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  color: #f5f5f5;
+  background: #1d1d1f;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #f5f5f7;
   transition: border-color var(--duration-fast) var(--ease-smooth),
     box-shadow var(--duration-fast) var(--ease-smooth);
 }
 .jr-field::placeholder {
-  color: #8a8a8a;
+  color: #6e6e73;
 }
 .jr-field:focus,
 .jr-field:focus-visible,
@@ -232,27 +227,23 @@
   box-shadow: 0 0 0 2px rgba(255, 156, 77, 0.12);
 }
 
-/* ── Card de vidrio sutil (superficie del sitio JR) ──────── */
+/* ── Card sólida Apple (elevación por color, no por sombra) ─ */
 .jr-card {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.01));
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow:
-    0 2px 14px rgba(0, 0, 0, 0.25),
-    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  background: #161617;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: border-color var(--duration-fast) var(--ease-smooth),
+    transform var(--duration-fast) var(--ease-smooth);
 }
 
-/* ── Grid técnico de fondo (células 92px + glow central) ─── */
+/* ── Fondo del hero: solo un resplandor central sutil ────── */
 .jr-grid {
-  background:
-    radial-gradient(60% 40% at 50% 46%, rgba(255, 255, 255, 0.045), transparent 60%),
-    repeating-linear-gradient(to right, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 92px),
-    repeating-linear-gradient(to bottom, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 92px);
+  background: radial-gradient(60% 40% at 50% 46%, rgba(255, 255, 255, 0.04), transparent 60%);
 }
 
-/* ── Hairline divisor con desvanecido lateral ────────────── */
+/* ── Hairline divisor plano ──────────────────────────────── */
 .jr-hairline {
   height: 1px;
-  background: linear-gradient(to right, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0));
+  background: rgba(255, 255, 255, 0.08);
 }
 
 /* ── Pared de outputs del hero (marquee auto-scroll) ─────── */
@@ -263,15 +254,6 @@
 @keyframes jr-marquee-scroll {
   from { transform: translateX(0); }
   to { transform: translateX(-50%); }
-}
-
-/* ── Flotado suave de los chips-cursor del hero ──────────── */
-.jr-float {
-  animation: jr-float-drift 7s ease-in-out infinite;
-}
-@keyframes jr-float-drift {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8px); }
 }
 
 /* ── Shimmer del skeleton de imagen (fallback) ───────────── */
@@ -290,8 +272,7 @@
 /* Respeta a quien pide menos movimiento: todo queda estático. */
 @media (prefers-reduced-motion: reduce) {
   .jr-marquee,
-  .jr-shimmer,
-  .jr-float {
+  .jr-shimmer {
     animation: none;
   }
 }

@@ -43,7 +43,7 @@ export function AppShell({ user, children }: AppShellProps) {
         <div className="w-[32px] h-[32px] rounded-lg flex items-center justify-center jr-cta">
           <Zap className="w-[17px] h-[17px] text-[#1c0f03] fill-[#1c0f03]" />
         </div>
-        <span className="text-[15px] font-bold text-[#f5f5f5] tracking-[0.2px] font-[Poppins]">
+        <span className="text-[15px] font-bold text-[#f5f5f5] tracking-[0.2px]">
           JR <span className="text-[#ff9c4d]">AI Hub</span>
         </span>
       </Link>
@@ -144,7 +144,7 @@ export function AppShell({ user, children }: AppShellProps) {
           >
             <Menu className="w-5 h-5" />
           </button>
-          <span className="text-[14px] font-bold text-[#f5f5f5] font-[Poppins]">
+          <span className="text-[14px] font-bold text-[#f5f5f5]">
             JR <span className="text-[#ff9c4d]">AI Hub</span>
           </span>
           <span className="w-5" />

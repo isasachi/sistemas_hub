@@ -10,7 +10,7 @@ export function Navbar() {
         <div className="w-[34px] h-[34px] rounded-lg flex items-center justify-center jr-cta">
           <Zap className="w-[18px] h-[18px] text-[#1c0f03] fill-[#1c0f03]" />
         </div>
-        <span className="text-[15px] font-bold text-[#f5f5f5] tracking-[0.2px] font-[Poppins]">
+        <span className="text-[15px] font-bold text-[#f5f5f5] tracking-[0.2px]">
           JR <span className="text-[#ff9c4d]">AI Hub</span>
         </span>
       </Link>

@@ -35,7 +35,7 @@ export default function DashboardPage() {
       {/* Cabecera del panel */}
       <header className="mb-10">
         <Eyebrow label="Tu panel" className="mb-2.5" />
-        <h1 className="gradient-text font-[Poppins] text-[28px] font-bold">
+        <h1 className="gradient-text text-[28px] font-bold">
           Tu suite de marketing con IA
         </h1>
         <p className="mt-1.5 text-[14px] text-[#bdbdbd]">
