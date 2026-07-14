@@ -265,6 +265,15 @@
   to { transform: translateX(-50%); }
 }
 
+/* ── Flotado suave de los chips-cursor del hero ──────────── */
+.jr-float {
+  animation: jr-float-drift 7s ease-in-out infinite;
+}
+@keyframes jr-float-drift {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
 /* ── Shimmer del skeleton de imagen (fallback) ───────────── */
 .jr-shimmer {
   background:
@@ -281,7 +290,8 @@
 /* Respeta a quien pide menos movimiento: todo queda estático. */
 @media (prefers-reduced-motion: reduce) {
   .jr-marquee,
-  .jr-shimmer {
+  .jr-shimmer,
+  .jr-float {
     animation: none;
   }
 }

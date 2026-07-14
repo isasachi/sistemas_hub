@@ -1,5 +1,6 @@
 import { ShowcaseCard } from "@/components/home/ShowcaseCard";
 import { ContinueStrip } from "@/components/dashboard/ContinueStrip";
+import { Eyebrow } from "@/components/ui/Eyebrow";
 import { tools, type Tool } from "@/lib/tools";
 
 // Etapas del flujo del operador. NO es una secuencia obligatoria — cada tool
@@ -19,13 +20,8 @@ const STAGES: { id: Tool["stage"]; label: string; tagline: string }[] = [
 
 function StageEyebrow({ label, tagline }: { label: string; tagline: string }) {
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1">
-      <div className="flex items-center gap-2">
-        <div className="h-px w-8 bg-white/[0.12]" />
-        <span className="text-[11px] font-bold uppercase tracking-[2px] text-[#8a8a8a]">
-          {label}
-        </span>
-      </div>
+    <div className="mb-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+      <Eyebrow label={label} />
       <span className="text-[13px] text-[#8a8a8a]">{tagline}</span>
     </div>
   );
@@ -38,12 +34,7 @@ export default function DashboardPage() {
     <div className="mx-auto max-w-[1100px] px-6 py-10 md:px-10">
       {/* Cabecera del panel */}
       <header className="mb-10">
-        <div className="mb-2.5 flex items-center gap-2">
-          <div className="h-px w-10 bg-white/[0.12]" />
-          <span className="text-[11px] font-bold uppercase tracking-[2px] text-[#8a8a8a]">
-            Tu panel
-          </span>
-        </div>
+        <Eyebrow label="Tu panel" className="mb-2.5" />
         <h1 className="gradient-text font-[Poppins] text-[28px] font-bold">
           Tu suite de marketing con IA
         </h1>

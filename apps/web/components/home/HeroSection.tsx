@@ -1,8 +1,54 @@
 import Link from "next/link";
+import { MousePointer2 } from "lucide-react";
 import { HeroShowcaseWall } from "./HeroShowcaseWall";
 import { HERO_COUNTER } from "@/lib/home/stats";
 
+// Chips-cursor flotantes (firma del rediseño): etiquetas estilo cursor
+// colaborativo que nombran outputs reales de las tools, como los tags
+// "Checkboxes upload" del modelo de referencia. Solo desktop.
+function CursorChip({
+  label,
+  color,
+  pos,
+  flip = false,
+  delay = "0s",
+}: {
+  label: string;
+  color: string;
+  pos: string;
+  flip?: boolean;
+  delay?: string;
+}) {
+  return (
+    <div
+      aria-hidden
+      className={`jr-float pointer-events-none absolute z-10 hidden items-start gap-1 lg:flex ${pos}`}
+      style={{ animationDelay: delay }}
+    >
+      {!flip && (
+        <MousePointer2 className="mt-3.5 h-4 w-4" style={{ color, fill: color }} />
+      )}
+      <span className="rounded-full border border-white/[0.12] bg-[#161616] px-3.5 py-1.5 text-[12px] font-semibold text-[#f5f5f5] shadow-[0_10px_30px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.06)]">
+        {label}
+      </span>
+      {flip && (
+        <MousePointer2
+          className="mt-3.5 h-4 w-4 -scale-x-100"
+          style={{ color, fill: color }}
+        />
+      )}
+    </div>
+  );
+}
+
 export function HeroSection() {
+  const ctaHref =
+    process.env.AUTH_DISABLED === "true" ? "/dashboard" : "/signup";
+  const ctaLabel =
+    process.env.AUTH_DISABLED === "true"
+      ? "Entrar al dashboard →"
+      : "Comenzar gratis →";
+
   return (
     <section className="relative overflow-hidden px-8 pt-20 pb-14 text-center jr-grid">
       {/* Rayo cálido desde la esquina superior izquierda */}
@@ -24,6 +70,20 @@ export function HeroSection() {
         }}
       />
 
+      {/* Chips-cursor con outputs reales, flanqueando el titular */}
+      <CursorChip
+        label="Producto validado · 142 ads"
+        color="#ff9c4d"
+        pos="left-[max(24px,7%)] top-[168px]"
+        flip
+      />
+      <CursorChip
+        label="Anuncio 9:16 generado"
+        color="#2ccf6f"
+        pos="right-[max(24px,7%)] top-[248px]"
+        delay="2.4s"
+      />
+
       {/* Badge-contador (estilo "en vivo") */}
       <div className="relative z-10 inline-flex items-center gap-2 bg-white/[0.04] border border-white/[0.12] rounded-full px-4 py-1.5 mb-7 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
         <span
@@ -36,12 +96,29 @@ export function HeroSection() {
         </span>
       </div>
 
-      {/* Title */}
-      <h1 className="relative z-10 text-[clamp(36px,5vw,52px)] font-bold leading-[1.12] mb-5 max-w-[680px] mx-auto">
-        <span className="gradient-text">El poder de la IA al servicio</span>
+      {/* Title — "ecommerce" lleva el subrayado-marcador del modelo */}
+      <h1 className="relative z-10 mx-auto mb-6 max-w-[720px] text-[clamp(36px,5vw,54px)] font-bold leading-[1.12]">
+        <span className="gradient-text">El poder de la IA</span>
         <br />
-        <span className="gradient-text">de tu</span>{" "}
-        <span className="accent-text">ecommerce</span>
+        <span className="gradient-text">al servicio de tu</span>{" "}
+        <span className="relative inline-block">
+          <span className="gradient-text">ecommerce</span>
+          <svg
+            aria-hidden
+            className="absolute -bottom-[0.16em] left-0 h-[0.18em] w-full"
+            viewBox="0 0 200 10"
+            preserveAspectRatio="none"
+          >
+            <path
+              d="M4 7.5 Q 100 1.5 196 6.5"
+              stroke="#ff9c4d"
+              strokeWidth="5"
+              strokeLinecap="round"
+              fill="none"
+              opacity="0.9"
+            />
+          </svg>
+        </span>
       </h1>
 
       {/* Subtitle */}
@@ -53,10 +130,10 @@ export function HeroSection() {
       {/* CTAs */}
       <div className="relative z-10 flex items-center justify-center gap-3 flex-wrap mb-12">
         <Link
-          href={process.env.AUTH_DISABLED === "true" ? "/dashboard" : "/signup"}
+          href={ctaHref}
           className="jr-cta text-[15px] font-bold px-8 py-3.5 rounded-full no-underline"
         >
-          {process.env.AUTH_DISABLED === "true" ? "Entrar al dashboard →" : "Comenzar gratis →"}
+          {ctaLabel}
         </Link>
         <a
           href="#herramientas"
@@ -66,8 +143,12 @@ export function HeroSection() {
         </a>
       </div>
 
-      {/* Signature — pared de outputs auto-scroll */}
+      {/* Pared de outputs auto-scroll (el "trusted by" de la plataforma) */}
       <div className="relative z-10 -mx-8">
+        <p className="mb-4 text-[13px] text-[#8a8a8a]">
+          Generado por la plataforma —{" "}
+          <span className="text-[#bdbdbd]">ejemplos reales, sin humo</span>
+        </p>
         <HeroShowcaseWall />
       </div>
     </section>

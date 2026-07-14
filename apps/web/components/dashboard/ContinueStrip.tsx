@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { CheckCircle2, Clock, ImageOff } from 'lucide-react'
+import { Eyebrow } from '@/components/ui/Eyebrow'
 
 // Tools con sesiones persistidas (GET /api/<slug>/sessions → shape uniforme).
 const SESSION_TOOLS = [
@@ -65,12 +66,7 @@ export function ContinueStrip() {
 
   return (
     <section className="mb-12">
-      <div className="mb-4 flex items-center gap-2">
-        <div className="h-px w-8 bg-white/[0.12]" />
-        <span className="text-[11px] font-bold uppercase tracking-[2px] text-[#8a8a8a]">
-          Retoma tu trabajo
-        </span>
-      </div>
+      <Eyebrow label="Retoma tu trabajo" className="mb-4" />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {items.map((s) => (
           <Link
