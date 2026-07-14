@@ -74,7 +74,10 @@ function BuscadorPreview() {
     { value: "MX", label: "país", plain: true },
   ];
   return (
-    <div className="w-full rounded-xl border border-white/[0.08] bg-[#0d0d0d] p-4">
+    // h-full + flex col: en la card wide del bento se estira a la altura de la
+    // fila (header arriba, métricas centradas, footer abajo); en flujo normal
+    // conserva su altura natural.
+    <div className="flex h-full w-full flex-col rounded-xl border border-white/[0.08] bg-[#0d0d0d] p-4">
       <div className="mb-3 flex items-start justify-between gap-2">
         <div>
           <div className="text-[13px] font-bold text-[#f5f5f5]">
@@ -93,20 +96,24 @@ function BuscadorPreview() {
           Prioridad alta
         </span>
       </div>
-      <div className="grid grid-cols-3 gap-2 rounded-lg border border-white/[0.06] bg-white/[0.02] p-3">
-        {metrics.map((m) => (
-          <div key={m.label} className="text-center">
-            <div
-              className="text-[20px] font-extrabold leading-none readout"
-              style={{ color: m.plain ? "#f5f5f5" : ACCENT }}
-            >
-              {m.value}
+      {/* flex-1 en el wrapper (no en el box con borde): al estirarse la card,
+          el box de métricas queda compacto y centrado en el espacio sobrante. */}
+      <div className="flex flex-1 items-center">
+        <div className="grid w-full grid-cols-3 gap-2 rounded-lg border border-white/[0.06] bg-white/[0.02] p-3">
+          {metrics.map((m) => (
+            <div key={m.label} className="text-center">
+              <div
+                className="text-[20px] font-extrabold leading-none readout"
+                style={{ color: m.plain ? "#f5f5f5" : ACCENT }}
+              >
+                {m.value}
+              </div>
+              <div className="mt-1 text-[10px] text-[#8a8a8a]">{m.label}</div>
             </div>
-            <div className="mt-1 text-[10px] text-[#8a8a8a]">{m.label}</div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
-      <div className="mt-3 flex items-center gap-1.5 text-[11px] text-[#2ccf6f]">
+      <div className="mt-3 flex shrink-0 items-center gap-1.5 text-[11px] text-[#2ccf6f]">
         <span className="h-1.5 w-1.5 rounded-full bg-[#2ccf6f]" aria-hidden />
         Sin competencia pautando en Perú
       </div>
@@ -125,8 +132,11 @@ function CalculadoraPreview() {
     { label: "Utilidad", pct: 20, color: "#2ccf6f" },
   ];
   return (
-    <div className="w-full rounded-xl border border-white/[0.08] bg-[#0d0d0d] p-4">
-      <div className="flex items-start justify-between gap-2">
+    // h-full + flex col: en la card wide del bento se estira a la altura de la
+    // fila (header arriba, bloque de barra centrado); en flujo normal conserva
+    // su altura natural.
+    <div className="flex h-full w-full flex-col rounded-xl border border-white/[0.08] bg-[#0d0d0d] p-4">
+      <div className="flex shrink-0 items-start justify-between gap-2">
         <div>
           <div className="text-[11px] text-[#8a8a8a]">Utilidad neta proyectada</div>
           <div className="mt-0.5 text-[26px] font-bold leading-none readout text-[#2ccf6f]">
@@ -145,25 +155,29 @@ function CalculadoraPreview() {
         </span>
       </div>
 
-      <div className="mt-4 text-[10px] font-semibold uppercase tracking-[1px] text-[#8a8a8a]">
-        ¿A dónde va cada sol?
-      </div>
-      <div className="mt-2 flex h-2.5 w-full overflow-hidden rounded-full">
-        {segments.map((s) => (
-          <div key={s.label} style={{ width: `${s.pct}%`, background: s.color }} />
-        ))}
-      </div>
-      <div className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1">
-        {segments.map((s) => (
-          <div key={s.label} className="flex items-center gap-1 text-[10px] text-[#bdbdbd]">
-            <span
-              className="h-2 w-2 rounded-[3px]"
-              style={{ background: s.color }}
-              aria-hidden
-            />
-            {s.label}
-          </div>
-        ))}
+      {/* flex-1 en el wrapper: al estirarse la card, el bloque de la barra
+          queda centrado en el espacio sobrante. */}
+      <div className="flex flex-1 flex-col justify-center">
+        <div className="mt-4 text-[10px] font-semibold uppercase tracking-[1px] text-[#8a8a8a]">
+          ¿A dónde va cada sol?
+        </div>
+        <div className="mt-2 flex h-2.5 w-full overflow-hidden rounded-full">
+          {segments.map((s) => (
+            <div key={s.label} style={{ width: `${s.pct}%`, background: s.color }} />
+          ))}
+        </div>
+        <div className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1">
+          {segments.map((s) => (
+            <div key={s.label} className="flex items-center gap-1 text-[10px] text-[#bdbdbd]">
+              <span
+                className="h-2 w-2 rounded-[3px]"
+                style={{ background: s.color }}
+                aria-hidden
+              />
+              {s.label}
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
