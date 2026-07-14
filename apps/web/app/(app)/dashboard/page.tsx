@@ -22,7 +22,7 @@ function StageEyebrow({ label, tagline }: { label: string; tagline: string }) {
   return (
     <div className="mb-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
       <Eyebrow label={label} />
-      <span className="text-[13px] text-[#8a8a8a]">{tagline}</span>
+      <span className="text-[13px] text-[#6e6e73]">{tagline}</span>
     </div>
   );
 }
@@ -31,15 +31,15 @@ export default function DashboardPage() {
   const live = tools.filter((t) => t.status === "live").length;
 
   return (
-    <div className="mx-auto max-w-[1100px] px-6 py-10 md:px-10">
+    <div className="mx-auto max-w-[1100px] px-6 py-12 md:px-10">
       {/* Cabecera del panel */}
-      <header className="mb-10">
-        <Eyebrow label="Tu panel" className="mb-2.5" />
-        <h1 className="gradient-text text-[28px] font-bold">
+      <header className="mb-12">
+        <Eyebrow label="Tu panel" className="mb-3" />
+        <h1 className="text-[32px] font-semibold tracking-[-0.02em] text-[#f5f5f7]">
           Tu suite de marketing con IA
         </h1>
-        <p className="mt-1.5 text-[14px] text-[#bdbdbd]">
-          <span className="readout font-semibold text-[#f5f5f5]">{live}</span>{" "}
+        <p className="mt-2 text-[14px] text-[#a1a1a6]">
+          <span className="readout font-semibold text-[#f5f5f7]">{live}</span>{" "}
           herramientas listas para usar · el resto llega pronto.
         </p>
       </header>
@@ -58,7 +58,7 @@ export default function DashboardPage() {
           return (
             <section key={stage.id}>
               <StageEyebrow label={stage.label} tagline={stage.tagline} />
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                 {stageTools.map((tool) => (
                   <ShowcaseCard key={tool.slug} tool={tool} />
                 ))}

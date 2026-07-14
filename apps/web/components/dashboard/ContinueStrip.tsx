@@ -72,22 +72,22 @@ export function ContinueStrip() {
           <Link
             key={`${s.slug}-${s.id}`}
             href={`/tools/${s.slug}/sesion/${s.id}`}
-            className="jr-card group flex items-center gap-3 overflow-hidden rounded-xl p-3 no-underline transition-all duration-200 hover:-translate-y-0.5 hover:border-[rgba(255,156,77,0.28)]"
+            className="jr-card group flex items-center gap-3 overflow-hidden rounded-2xl p-3 no-underline transition-all duration-200 hover:-translate-y-0.5 hover:border-white/[0.16]"
           >
-            <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/[0.06] bg-white/[0.03]">
+            <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-[10px] border border-white/[0.06] bg-[#0d0d0e]">
               {s.thumb ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={s.thumb} alt="" className="h-full w-full object-cover" />
               ) : (
-                <ImageOff className="h-5 w-5 text-[#4a4a4a]" />
+                <ImageOff className="h-5 w-5 text-[#48484a]" />
               )}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[10px] font-bold uppercase tracking-[0.5px] text-[#ff9c4d]">
+              <p className="truncate text-[10px] font-semibold uppercase tracking-[0.5px] text-[#ff9c4d]">
                 {s.toolName}
               </p>
-              <h3 className="truncate text-[13px] font-bold text-[#f5f5f5]">{s.title}</h3>
-              <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-[#8a8a8a]">
+              <h3 className="truncate text-[13px] font-semibold text-[#f5f5f7]">{s.title}</h3>
+              <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-[#6e6e73]">
                 {s.done ? (
                   <CheckCircle2 className="h-3 w-3 text-[#2ccf6f]" />
                 ) : (
