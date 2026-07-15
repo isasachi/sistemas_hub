@@ -6,7 +6,7 @@ import { ToolPreview } from "./ToolPreview";
 // el formato nativo de cada asset.
 const tiles = tools.filter((t) => t.preview);
 
-const TILE_H = 260;
+const TILE_H = 220;
 const RATIO_W: Record<string, number> = {
   "9/16": Math.round(TILE_H * (9 / 16)),
   "1/1": TILE_H,
