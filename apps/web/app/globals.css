@@ -12,7 +12,7 @@
   --color-foreground: var(--foreground);
   --font-sans: 'Inter', -apple-system, sans-serif;
   --font-display: 'Fraunces', Georgia, serif;
-  --font-heading: 'Inter', -apple-system, sans-serif;
+  --font-heading: 'Fraunces', Georgia, serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', 'Menlo', monospace;
   --color-ring: var(--ring);
   --color-input: var(--input);
@@ -124,12 +124,12 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
-  /* Los titulares de display llevan .font-display (Fraunces) explícito;
-     el resto de headings queda en Inter (UI). */
+  /* Todos los headings en la serif de display (Fraunces) — el look premium
+     del sistema. El texto de UI (botones, labels, body) sigue en Inter. */
   h1, h2, h3, h4, h5, h6 {
-    font-family: 'Inter', -apple-system, sans-serif;
-    letter-spacing: -0.015em;
-    font-weight: 600;
+    font-family: 'Fraunces', Georgia, serif;
+    letter-spacing: -0.01em;
+    font-weight: 500;
   }
 }
 

@@ -86,7 +86,7 @@ export function ContinueStrip() {
               <p className="truncate text-[10px] font-bold uppercase tracking-[0.5px] text-[#ff9c4d]">
                 {s.toolName}
               </p>
-              <h3 className="truncate text-[13px] font-semibold text-[#f3efe8]">{s.title}</h3>
+              <h3 className="truncate text-[14px] font-medium text-[#f3efe8]">{s.title}</h3>
               <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-[#726b60]">
                 {s.done ? (
                   <CheckCircle2 className="h-3 w-3 text-[#4cd07d]" />

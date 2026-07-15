@@ -45,7 +45,7 @@ export function ShowcaseCard({ tool, wide = false }: { tool: Tool; wide?: boolea
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[rgba(255,240,220,0.08)] bg-[rgba(255,240,220,0.04)]">
             <Icon className="h-[17px] w-[17px] text-[#a8a094] transition-colors duration-200 group-hover:text-[#ff9c4d]" />
           </div>
-          <h3 className="text-[16px] font-semibold text-[#f3efe8]">{tool.name}</h3>
+          <h3 className="text-[17px] font-medium text-[#f3efe8]">{tool.name}</h3>
         </div>
         <ArrowUpRight className="mt-1 h-[18px] w-[18px] shrink-0 text-[#726b60] transition-all duration-200 group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-[#ff9c4d]" />
       </div>
