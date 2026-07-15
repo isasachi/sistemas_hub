@@ -15,10 +15,13 @@ export interface Tool {
   // ── Landing showcase (opcional) ──────────────────────────────
   // pitch: one-liner de venta para la card grande (si falta, usa description)
   pitch?: string;
-  // preview: qué sneak peek renderiza <ToolPreview>. 'image' lee de
-  // /public/showcase/<slug>.jpg con skeleton CSS de fallback; 'buscador' y
-  // 'calculadora' son mini-renders HTML con datos de muestra.
-  preview?: { kind: "image" | "buscador" | "calculadora"; ratio?: "9/16" | "1/1" | "4/3" };
+  // preview: sneak peek que renderiza <ToolPreview> — imagen generada con
+  // Gemini en /public/showcase/<slug>.jpg (asset del sistema de diseño),
+  // enmarcada en el spec-card con metadata mono. `ratio` = formato nativo.
+  preview?: {
+    kind: "image";
+    ratio?: "9/16" | "1/1" | "4/3" | "16/10";
+  };
   // stats: chips hardcodeados por tool. TODO wire: ver lib/home/stats.ts
   stats?: { value: string; label: string }[];
 }
@@ -37,7 +40,7 @@ export const tools: Tool[] = [
     tagStyle: "new",
     status: "live",
     pitch: "Productos que ya venden en LATAM y aún nadie pauta en Perú.",
-    preview: { kind: "buscador" },
+    preview: { kind: "image", ratio: "4/3" },
     stats: [
       { value: "8,900+", label: "productos analizados" },
       { value: "5 países", label: "validación LATAM" },
@@ -108,7 +111,7 @@ export const tools: Tool[] = [
     tagStyle: "new",
     status: "live",
     pitch: "Sabe si tu campaña es rentable antes de gastar el primer sol.",
-    preview: { kind: "calculadora" },
+    preview: { kind: "image", ratio: "16/10" },
     stats: [
       { value: "P&G", label: "en 2 minutos" },
       { value: "Excel", label: "listo para exportar" },

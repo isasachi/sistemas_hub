@@ -35,7 +35,7 @@ export default function Home() {
       : "Comenzar gratis →";
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#0a0a0a]">
+    <div className="min-h-screen flex flex-col bg-[#141210]">
       <Navbar />
 
       <main className="flex-1">
@@ -43,18 +43,18 @@ export default function Home() {
         <StatsBar />
 
         {/* Bento de herramientas — sneak peek + stats por tool */}
-        <section id="herramientas" className="max-w-[1100px] mx-auto px-8 py-14">
-          <div className="mb-10 text-center">
-            <Eyebrow label="Herramientas" center className="mb-3" />
-            <h2 className="gradient-text text-[clamp(26px,3.2vw,34px)] font-bold">
+        <section id="herramientas" className="max-w-[1100px] mx-auto px-8 py-16">
+          <div className="mb-12 text-center">
+            <Eyebrow label="Herramientas" center className="mb-4" />
+            <h2 className="font-display text-[clamp(28px,3.6vw,40px)] font-medium text-[#f3efe8]">
               Todo lo que necesitas para vender
             </h2>
-            <p className="mx-auto mt-2.5 max-w-[480px] text-[15px] text-[#bdbdbd]">
+            <p className="mx-auto mt-3 max-w-[480px] text-[15px] leading-[1.6] text-[#a8a094]">
               Cada herramienta, con un ejemplo real de lo que genera. Sin humo.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {liveTools.map((tool) => (
               <ShowcaseCard
                 key={tool.slug}
@@ -65,29 +65,35 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Cierre — CTA final */}
-        <section className="px-8 pb-20 pt-6">
-          <div className="jr-card relative mx-auto max-w-[860px] overflow-hidden rounded-3xl px-8 py-14 text-center">
-            <div
-              aria-hidden
-              className="pointer-events-none absolute inset-0"
-              style={{
-                background:
-                  "radial-gradient(70% 90% at 50% 0%, rgba(255,150,90,0.12) 0%, transparent 65%)",
-              }}
-            />
-            <h2 className="gradient-text relative text-[clamp(24px,3vw,32px)] font-bold">
-              Tu próxima campaña empieza aquí
-            </h2>
-            <p className="relative mx-auto mt-2.5 max-w-[420px] text-[15px] text-[#bdbdbd]">
-              Crea tu cuenta y genera tu primer activo con IA en minutos.
-            </p>
-            <Link
-              href={ctaHref}
-              className="jr-cta relative mt-7 inline-block rounded-full px-8 py-3.5 text-[15px] font-bold no-underline"
-            >
-              {ctaLabel}
-            </Link>
+        {/* Cierre — CTA final (card anidada con panel inset) */}
+        <section className="px-8 pb-24 pt-8">
+          <div className="jr-card relative mx-auto max-w-[880px] rounded-[26px] p-2.5">
+            <div className="jr-inset relative overflow-hidden rounded-[18px] px-8 py-14 text-center">
+              <div className="flex items-center justify-between px-1 pb-8 -mt-8 pt-3">
+                <span className="spec-label">JR AI Hub</span>
+                <span className="spec-label">© 2025</span>
+              </div>
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-0"
+                style={{
+                  background:
+                    "radial-gradient(70% 90% at 50% 0%, rgba(255,150,90,0.10) 0%, transparent 65%)",
+                }}
+              />
+              <h2 className="font-display relative text-[clamp(26px,3.2vw,38px)] font-medium text-[#f3efe8]">
+                Tu próxima campaña empieza aquí
+              </h2>
+              <p className="relative mx-auto mt-3 max-w-[420px] text-[15px] leading-[1.6] text-[#a8a094]">
+                Crea tu cuenta y genera tu primer activo con IA en minutos.
+              </p>
+              <Link
+                href={ctaHref}
+                className="jr-cta relative mt-8 inline-block rounded-full px-8 py-3.5 text-[15px] font-bold no-underline"
+              >
+                {ctaLabel}
+              </Link>
+            </div>
           </div>
         </section>
       </main>
