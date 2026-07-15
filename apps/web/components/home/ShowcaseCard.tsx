@@ -80,8 +80,10 @@ export function ShowcaseCard({ tool, wide = false }: { tool: Tool; wide?: boolea
 
   const body = (
     <>
-      {/* wide: el preview crece para llenar el alto de la fila */}
-      <div className={wide ? "flex min-h-0 flex-1" : undefined}>{previewEl}</div>
+      {/* El preview siempre crece para llenar el alto de la fila: las cards
+          de una misma fila quedan con previews de igual altura (el aspect
+          16/10 actúa como mínimo). */}
+      <div className="flex min-h-0 flex-1">{previewEl}</div>
       {headerAndDesc}
       {statsEl}
     </>

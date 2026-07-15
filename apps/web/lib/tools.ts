@@ -15,12 +15,12 @@ export interface Tool {
   // ── Landing showcase (opcional) ──────────────────────────────
   // pitch: one-liner de venta para la card grande (si falta, usa description)
   pitch?: string;
-  // preview: qué sneak peek renderiza <ToolPreview>. Todos son mini-renders
-  // HTML/SVG con datos de muestra (assets del sistema de diseño — no JPGs),
-  // uno por tool: anuncio · branding · landing · buscador · calculadora.
+  // preview: sneak peek que renderiza <ToolPreview> — imagen generada con
+  // Gemini en /public/showcase/<slug>.jpg (asset del sistema de diseño),
+  // enmarcada en el spec-card con metadata mono. `ratio` = formato nativo.
   preview?: {
-    kind: "anuncio" | "branding" | "landing" | "buscador" | "calculadora";
-    ratio?: "9/16" | "1/1" | "4/3";
+    kind: "image";
+    ratio?: "9/16" | "1/1" | "4/3" | "16/10";
   };
   // stats: chips hardcodeados por tool. TODO wire: ver lib/home/stats.ts
   stats?: { value: string; label: string }[];
@@ -40,7 +40,7 @@ export const tools: Tool[] = [
     tagStyle: "new",
     status: "live",
     pitch: "Productos que ya venden en LATAM y aún nadie pauta en Perú.",
-    preview: { kind: "buscador" },
+    preview: { kind: "image", ratio: "4/3" },
     stats: [
       { value: "8,900+", label: "productos analizados" },
       { value: "5 países", label: "validación LATAM" },
@@ -59,7 +59,7 @@ export const tools: Tool[] = [
     tagStyle: "new",
     status: "live",
     pitch: "Sube un anuncio que funciona y recíbelo con tu producto.",
-    preview: { kind: "anuncio", ratio: "9/16" },
+    preview: { kind: "image", ratio: "9/16" },
     stats: [
       { value: "1,200+", label: "anuncios generados" },
       { value: "~40s", label: "por creativo" },
@@ -92,7 +92,7 @@ export const tools: Tool[] = [
     tagStyle: "new",
     status: "live",
     pitch: "De una idea a logo, etiqueta y mockup del producto final.",
-    preview: { kind: "branding", ratio: "1/1" },
+    preview: { kind: "image", ratio: "1/1" },
     stats: [
       { value: "340+", label: "marcas creadas" },
       { value: "4 logos", label: "por dirección" },
@@ -111,7 +111,7 @@ export const tools: Tool[] = [
     tagStyle: "new",
     status: "live",
     pitch: "Sabe si tu campaña es rentable antes de gastar el primer sol.",
-    preview: { kind: "calculadora" },
+    preview: { kind: "image", ratio: "16/10" },
     stats: [
       { value: "P&G", label: "en 2 minutos" },
       { value: "Excel", label: "listo para exportar" },
@@ -130,7 +130,7 @@ export const tools: Tool[] = [
     tagStyle: "new",
     status: "live",
     pitch: "Una landing de conversión completa, sección por sección.",
-    preview: { kind: "landing", ratio: "9/16" },
+    preview: { kind: "image", ratio: "9/16" },
     stats: [
       { value: "600+", label: "landings armadas" },
       { value: "8", label: "secciones por página" },

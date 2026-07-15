@@ -272,9 +272,10 @@
 }
 
 /* ── Pared de outputs del hero (marquee auto-scroll) ─────── */
-/* La lista se renderiza 2× y se desplaza -50% para loop sin costura. */
+/* La lista se renderiza 4× y se desplaza -50% (2 copias exactas) para el
+   loop sin costura; la duración compensa el recorrido más largo. */
 .jr-marquee {
-  animation: jr-marquee-scroll 46s linear infinite;
+  animation: jr-marquee-scroll 110s linear infinite;
 }
 @keyframes jr-marquee-scroll {
   from { transform: translateX(0); }

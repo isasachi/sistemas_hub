@@ -1,13 +1,25 @@
 import { tools } from "@/lib/tools";
 import { ToolPreview } from "./ToolPreview";
 
-// Los tiles del marquee = las tools con sneak peek (spec-cards HTML/SVG del
-// sistema — sin imágenes externas, la pared nunca se ve vacía ni asimétrica).
+// Los tiles del marquee = las tools con sneak peek (assets generados con
+// Gemini en el marco spec-card). Todos con la MISMA altura; el ancho lo da
+// el formato nativo de cada asset.
 const tiles = tools.filter((t) => t.preview);
 
+const TILE_H = 260;
+const RATIO_W: Record<string, number> = {
+  "9/16": Math.round(TILE_H * (9 / 16)),
+  "1/1": TILE_H,
+  "4/3": Math.round(TILE_H * (4 / 3)),
+  "16/10": Math.round(TILE_H * 1.6),
+};
+
 export function HeroShowcaseWall() {
-  // Se renderiza la lista dos veces para el loop continuo del marquee.
-  const loop = [...tiles, ...tiles];
+  // 4 copias de la lista: el loop desplaza -50% (= 2 copias exactas), y esas
+  // 2 copias (~2800px) superan cualquier viewport — sin hueco progresivo a la
+  // derecha antes del reinicio. El espaciado va como margen DENTRO de cada
+  // item (no gap) para que el -50% caiga exactamente en la costura.
+  const loop = [...tiles, ...tiles, ...tiles, ...tiles];
 
   return (
     <div className="relative w-full overflow-hidden py-2">
@@ -21,9 +33,17 @@ export function HeroShowcaseWall() {
         className="pointer-events-none absolute inset-y-0 right-0 z-10 w-28 bg-gradient-to-l from-[#141210] to-transparent"
       />
 
-      <div className="jr-marquee flex w-max items-center gap-5">
+      <div className="jr-marquee flex w-max items-center">
         {loop.map((tool, i) => (
-          <div key={`${tool.slug}-${i}`} className="w-[200px] shrink-0" aria-hidden={i >= tiles.length}>
+          <div
+            key={`${tool.slug}-${i}`}
+            className="mr-5 shrink-0"
+            style={{
+              height: TILE_H,
+              width: RATIO_W[tool.preview?.ratio ?? "1/1"] ?? TILE_H,
+            }}
+            aria-hidden={i >= tiles.length}
+          >
             <ToolPreview tool={tool} />
           </div>
         ))}
