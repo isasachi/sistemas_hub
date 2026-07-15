@@ -23,6 +23,13 @@ const SPEC_META: Record<string, [string, string]> = {
   "calculadora-costos": ["P&G", "Excel"],
 };
 
+// Punto focal del crop cuando el frame es más bajo que el asset (los frames
+// 16/10 muestran ~un tercio de un asset 9:16): centra la ventana en lo
+// importante de cada imagen.
+const OBJECT_POS: Record<string, string> = {
+  "generador-anuncios": "center 42%",
+};
+
 /**
  * Sneak peek del output de cada tool: imagen real generada con Gemini
  * (/public/showcase/<slug>.jpg, asset del sistema de diseño) dentro del
@@ -47,7 +54,8 @@ export function ToolPreview({ tool, ratio }: { tool: Tool; ratio?: string }) {
         <img
           src={`/showcase/${tool.slug}.jpg`}
           alt={`Ejemplo generado con ${tool.name}`}
-          className="absolute inset-0 h-full w-full object-cover object-top"
+          className="absolute inset-0 h-full w-full object-cover"
+          style={{ objectPosition: OBJECT_POS[tool.slug] ?? "top" }}
           onError={() => setFailed(true)}
         />
       )}
@@ -64,10 +72,10 @@ export function ToolPreview({ tool, ratio }: { tool: Tool; ratio?: string }) {
       {/* Metadata mono de esquina sobre un scrim sutil (firma del sistema) */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-10"
+        className="pointer-events-none absolute inset-x-0 top-0 h-12"
         style={{
           background:
-            "linear-gradient(to bottom, rgba(18,16,13,0.65) 0%, transparent 100%)",
+            "linear-gradient(to bottom, rgba(18,16,13,0.8) 0%, rgba(18,16,13,0.35) 60%, transparent 100%)",
         }}
       />
       <div className="absolute inset-x-0 top-0 flex items-center justify-between px-3.5 pt-2.5">
