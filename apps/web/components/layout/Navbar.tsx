@@ -1,25 +1,25 @@
 import Link from "next/link";
 
 // Navbar de la landing pública (no autenticada). El área privada usa AppShell.
-// Píldora flotante del sistema de referencia: barra redondeada despegada del
-// borde, con superficie elevada y sombra difusa.
+// ADN "JR Studio": barra transparente, logo serif con tracking amplio,
+// links Poppins y CTA en pastilla blanca (como jrconsulting.com.pe).
 export function Navbar() {
   return (
-    <div className="sticky top-0 z-40 px-4 pt-4">
-      <nav className="jr-card relative mx-auto flex h-[52px] max-w-[960px] items-center justify-between rounded-full bg-[#1c1917]/90 px-5 backdrop-blur-xl">
-        {/* Logo tipográfico */}
+    <div className="sticky top-0 z-40 border-b border-[rgba(255,255,255,0.06)] bg-[#0b0b0c]/80 backdrop-blur-xl">
+      <nav className="relative mx-auto flex h-[68px] max-w-[1160px] items-center justify-between px-6">
+        {/* Logo tipográfico serif con tracking */}
         <Link href="/" className="no-underline">
-          <span className="font-display text-[16px] font-medium text-[#f3efe8]">
-            JR <span className="text-[#ff9c4d]">AI Hub</span>
+          <span className="lp-serif text-[19px] tracking-[0.14em] text-[#ededed]">
+            JR <span className="text-[#d6a860]">AI HUB</span>
           </span>
         </Link>
 
-        {/* Center nav — centrado absoluto, independiente del ancho de logo/CTAs */}
-        <ul className="hidden md:flex items-center gap-7 list-none m-0 p-0 absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+        {/* Center nav — centrado absoluto */}
+        <ul className="absolute left-1/2 top-1/2 m-0 hidden -translate-x-1/2 -translate-y-1/2 list-none items-center gap-9 p-0 md:flex">
           <li>
             <a
               href="#herramientas"
-              className="text-[13px] font-medium text-[#a8a094] hover:text-[#f3efe8] transition-colors duration-200 no-underline"
+              className="font-[Poppins] text-[14px] font-medium text-[#cfcfcf] no-underline transition-colors duration-200 hover:text-[#ffffff]"
             >
               Herramientas
             </a>
@@ -29,33 +29,33 @@ export function Navbar() {
               href="https://jrconsulting.com.pe"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-[13px] font-medium text-[#a8a094] hover:text-[#f3efe8] transition-colors duration-200 no-underline"
+              className="font-[Poppins] text-[14px] font-medium text-[#cfcfcf] no-underline transition-colors duration-200 hover:text-[#ffffff]"
             >
               Sobre JR
             </a>
           </li>
         </ul>
 
-        {/* Right side: auth CTAs (o link temporal al dashboard si AUTH_DISABLED) */}
-        <div className="flex items-center gap-2">
+        {/* Right — auth CTAs (o link al dashboard si AUTH_DISABLED) */}
+        <div className="flex items-center gap-3">
           {process.env.AUTH_DISABLED === "true" ? (
             <Link
               href="/dashboard"
-              className="jr-cta text-[13px] font-bold px-4 py-1.5 rounded-full no-underline"
+              className="lp-pill-white px-5 py-2 text-[14px] no-underline"
             >
-              Entrar al dashboard →
+              Entrar al dashboard
             </Link>
           ) : (
             <>
               <Link
                 href="/login"
-                className="text-[13px] font-medium text-[#a8a094] hover:text-[#f3efe8] px-3 py-1.5 transition-colors duration-200 no-underline"
+                className="hidden font-[Poppins] text-[14px] font-medium text-[#cfcfcf] no-underline transition-colors duration-200 hover:text-[#ffffff] sm:inline"
               >
                 Iniciar sesión
               </Link>
               <Link
                 href="/signup"
-                className="jr-cta text-[13px] font-bold px-4 py-1.5 rounded-full no-underline"
+                className="lp-pill-white px-5 py-2 text-[14px] no-underline"
               >
                 Comenzar gratis
               </Link>

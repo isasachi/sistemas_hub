@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&family=JetBrains+Mono:wght@400;500;600;700&family=Poppins:wght@400;500;600;700&family=Lato:wght@400;700&family=Playfair+Display:ital,wght@0,500;0,600;1,500&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -309,6 +309,271 @@
   .jr-marquee,
   .jr-shimmer,
   .jr-float {
+    animation: none;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   LANDING DNA — "JR Studio" (scoped a .lp-root, home page)
+   Refactor del ADN visual de jrconsulting.com.pe: lienzo casi-negro
+   neutro · titulares serif metálicos · naranja = energía (CTA/iconos/
+   glows) · fuga de luz dorada = firma de las cards · verde = SOLO
+   pills de delta · Poppins/Lato. Todo scopeado bajo .lp-root para NO
+   tocar el sistema cálido del dashboard.
+   ══════════════════════════════════════════════════════════════════ */
+.lp-root {
+  /* Canvas neutro */
+  --lp-bg: #0b0b0c;
+  --lp-bg-2: #0c0c0d;
+  --lp-elev: #121214;
+  /* Texto */
+  --lp-white: #ffffff;
+  --lp-head: #ededed;
+  --lp-text: #cfcfcf;
+  --lp-muted: #bebebe;
+  --lp-faint: #bdbdbd;
+  /* Hairlines */
+  --lp-line: rgba(255, 255, 255, 0.08);
+  --lp-line-soft: rgba(255, 255, 255, 0.06);
+  --lp-line-strong: rgba(255, 255, 255, 0.12);
+  --lp-line-focus: rgba(255, 255, 255, 0.25);
+  /* Acentos: naranja (energía) · dorado (fuga de luz) · verde (delta) */
+  --lp-orange-a: rgb(255, 155, 74);
+  --lp-orange-b: rgb(255, 106, 0);
+  --lp-gold: #d6a860;
+  --lp-green: #2ccf6f;
+  --lp-mint: #b9ffd0;
+  --lp-green-deep: #163e26;
+  --lp-ease: cubic-bezier(0.29, 0.63, 0.44, 1);
+
+  background: var(--lp-bg);
+  color: var(--lp-text);
+  font-family: 'Lato', -apple-system, sans-serif;
+  letter-spacing: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Headings en Poppins — regla directa por elemento (gana a la de
+   herencia y al @layer base h1..h6 de Fraunces que vive globalmente). */
+.lp-root h1,
+.lp-root h2,
+.lp-root h3,
+.lp-root h4,
+.lp-root h5,
+.lp-root h6 {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--lp-head);
+}
+
+/* El momento serif: display de alto contraste (Replay Pro Headline →
+   Playfair Display in-set → Times). Dos clases ⇒ gana al h1..h6. */
+.lp-root .lp-serif {
+  font-family: 'Replay Pro Headline', 'Playfair Display', 'Times New Roman', serif;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+}
+
+/* Titular metálico plata (sheen lento in-token de 14s) */
+.lp-root .lp-metal {
+  background: linear-gradient(90deg, #ffffff 0%, #cfcfcf 50%, #ffffff 100%);
+  background-size: 220% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: lp-sheen 14s linear infinite;
+}
+@keyframes lp-sheen {
+  from { background-position: 200% center; }
+  to { background-position: -20% center; }
+}
+
+/* Palabra de acento dorada dentro del display serif */
+.lp-root .lp-gold-word {
+  -webkit-text-fill-color: var(--lp-gold);
+  color: var(--lp-gold);
+  font-style: italic;
+}
+
+/* ── CTA naranja: pastilla suave con glow (el botón-objeto) ───────── */
+.lp-root .lp-cta {
+  display: inline-block;
+  background: linear-gradient(90deg, var(--lp-orange-a), var(--lp-orange-b));
+  color: #0a0a0a;
+  font-family: 'Poppins', sans-serif;
+  font-weight: 600;
+  border-radius: 14px;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06) inset,
+    0 8px 30px rgba(255, 106, 0, 0.28);
+  transition: transform 0.2s var(--lp-ease), box-shadow 0.2s var(--lp-ease),
+    filter 0.2s var(--lp-ease);
+}
+.lp-root .lp-cta:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08) inset,
+    0 12px 40px rgba(255, 106, 0, 0.42);
+}
+
+/* ── Pill blanca (CTA del navbar) ─────────────────────────────────── */
+.lp-root .lp-pill-white {
+  display: inline-block;
+  background: #ffffff;
+  color: #0a0a0a;
+  font-family: 'Poppins', sans-serif;
+  font-weight: 600;
+  border-radius: 100px;
+  box-shadow: 0 2px 14px rgba(0, 0, 0, 0.35);
+  transition: transform 0.2s var(--lp-ease), box-shadow 0.2s var(--lp-ease);
+}
+.lp-root .lp-pill-white:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+}
+
+/* ── Botón fantasma (contorno hairline) ───────────────────────────── */
+.lp-root .lp-btn {
+  display: inline-block;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--lp-line-strong);
+  color: var(--lp-head);
+  font-family: 'Poppins', sans-serif;
+  font-weight: 500;
+  border-radius: 14px;
+  transition: background 0.2s var(--lp-ease), border-color 0.2s var(--lp-ease);
+}
+.lp-root .lp-btn:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: var(--lp-line-focus);
+}
+
+/* ── Card: superficie casi-negra con fuga de luz dorada al tope
+   (la firma del sistema de referencia) ────────────────────────────── */
+.lp-root .lp-card {
+  position: relative;
+  background: linear-gradient(0deg, #0c0c0f, #121215);
+  border: 1px solid var(--lp-line);
+  border-radius: 18px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+/* Fuga de luz dorada: barra al borde superior, sesgada a la izquierda */
+.lp-root .lp-leak::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  border-radius: 18px 18px 0 0;
+  background: linear-gradient(90deg, rgba(214, 168, 96, 0.7),
+    rgba(214, 168, 96, 0) 55%);
+}
+/* Halo dorado difuso desde la esquina superior (glow ambiental) */
+.lp-root .lp-leak::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(120% 90% at 8% 0%,
+    rgba(214, 168, 96, 0.14), rgba(0, 0, 0, 0) 45%);
+}
+
+/* ── Card grande de cierre: vignette + glow naranja envolvente ────── */
+.lp-root .lp-hero-card {
+  position: relative;
+  overflow: hidden;
+  background: radial-gradient(120% 120% at 50% 120%,
+      rgba(255, 106, 0, 0.10), rgba(0, 0, 0, 0) 55%),
+    linear-gradient(0deg, #0c0c0f, #121215);
+  border: 1px solid var(--lp-line);
+  border-radius: 28px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 20px 60px rgba(0, 0, 0, 0.45);
+}
+
+/* ── Chip de icono naranja (rounded-square) ───────────────────────── */
+.lp-root .lp-icon-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--lp-line);
+  color: var(--lp-orange-a);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+/* ── Pill de delta verde (mint sobre verde profundo) ──────────────── */
+.lp-root .lp-delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--lp-green-deep);
+  color: var(--lp-mint);
+  font-family: 'Poppins', sans-serif;
+  font-weight: 600;
+  border-radius: 50px;
+}
+
+/* ── Eyebrow / label mono-menos (Poppins uppercase tracked) ───────── */
+.lp-root .lp-eyebrow {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--lp-gold);
+}
+.lp-root .lp-label {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--lp-faint);
+}
+
+/* ── Punto "en vivo" verde ────────────────────────────────────────── */
+.lp-root .lp-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50px;
+  background: var(--lp-green);
+  box-shadow: 0 0 0 3px rgba(44, 207, 111, 0.15);
+}
+
+/* ── Hairline con desvanecido lateral (in-token) ──────────────────── */
+.lp-root .lp-hairline {
+  height: 1px;
+  background: linear-gradient(to right, rgba(255, 255, 255, 0),
+    rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0));
+}
+
+/* ── Rejilla vertical tenue del hero ──────────────────────────────── */
+.lp-root .lp-grid {
+  background-image: linear-gradient(90deg,
+    rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 92px 100%;
+  -webkit-mask-image: radial-gradient(120% 80% at 50% 0%, #000 30%, transparent 75%);
+  mask-image: radial-gradient(120% 80% at 50% 0%, #000 30%, transparent 75%);
+}
+
+/* Reutiliza el marco de preview (jr-inset) en clave neutra dentro del
+   landing — alcanza a ToolPreview sin tocar el dashboard. */
+.lp-root .jr-inset {
+  background: #0c0c0d;
+  border: 1px solid var(--lp-line-soft);
+}
+.lp-root .spec-label {
+  font-family: 'Poppins', sans-serif;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-root .lp-metal {
     animation: none;
   }
 }
