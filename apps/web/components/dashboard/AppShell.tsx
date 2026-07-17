@@ -27,10 +27,10 @@ export function AppShell({ user, children }: AppShellProps) {
 
   const navItem = (href: string, active: boolean) =>
     [
-      "flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium no-underline transition-all duration-200",
+      "flex items-center gap-3 px-3 py-2.5 rounded-xl font-[Poppins] text-[13px] font-medium no-underline transition-all duration-200",
       active
-        ? "bg-[rgba(255,156,77,0.10)] text-[#ff9c4d]"
-        : "text-[#a8a094] hover:text-[#f3efe8] hover:bg-[rgba(255,240,220,0.04)]",
+        ? "bg-[rgba(255,106,0,0.12)] text-[rgb(255,155,74)]"
+        : "text-[#bebebe] hover:text-[#ffffff] hover:bg-[rgba(255,255,255,0.05)]",
     ].join(" ");
 
   const sidebar = (
@@ -38,10 +38,10 @@ export function AppShell({ user, children }: AppShellProps) {
       <Link
         href="/dashboard"
         onClick={() => setOpen(false)}
-        className="flex items-center no-underline px-5 h-[60px] flex-shrink-0 border-b border-[rgba(255,240,220,0.07)]"
+        className="flex items-center no-underline px-5 h-[60px] flex-shrink-0 border-b border-[rgba(255,255,255,0.06)]"
       >
-        <span className="font-display text-[16px] font-medium text-[#f3efe8]">
-          JR <span className="text-[#ff9c4d]">AI Hub</span>
+        <span className="font-[Playfair_Display] text-[17px] tracking-[0.12em] text-[#ededed]">
+          JR <span className="text-[#d6a860]">AI HUB</span>
         </span>
       </Link>
 
@@ -55,8 +55,8 @@ export function AppShell({ user, children }: AppShellProps) {
           Dashboard
         </Link>
 
-        <div className="h-px bg-[rgba(255,240,220,0.07)] my-2" />
-        <span className="spec-label px-3 mb-1">
+        <div className="h-px bg-[rgba(255,255,255,0.06)] my-2" />
+        <span className="px-3 mb-1 font-[Poppins] text-[10px] font-semibold uppercase tracking-[0.12em] text-[#bdbdbd]">
           Herramientas
         </span>
 
@@ -74,7 +74,7 @@ export function AppShell({ user, children }: AppShellProps) {
               <Icon className="w-[18px] h-[18px] flex-shrink-0" />
               <span className="flex-1 truncate">{tool.name}</span>
               {tool.status === "soon" && (
-                <span className="text-[9px] font-bold text-[#726b60] bg-[rgba(255,240,220,0.05)] rounded-full px-1.5 py-0.5 tracking-[0.5px] uppercase">
+                <span className="font-[Poppins] text-[9px] font-semibold text-[#bdbdbd] bg-[rgba(255,255,255,0.05)] rounded-full px-1.5 py-0.5 tracking-[0.08em] uppercase">
                   Pronto
                 </span>
               )}
@@ -84,17 +84,17 @@ export function AppShell({ user, children }: AppShellProps) {
       </nav>
 
       {/* Cuenta + logout */}
-      <div className="border-t border-[rgba(255,240,220,0.07)] p-3 flex-shrink-0">
+      <div className="border-t border-[rgba(255,255,255,0.06)] p-3 flex-shrink-0">
         <div className="flex items-center gap-2.5 px-2 mb-2">
-          <div className="w-8 h-8 rounded-full bg-[rgba(255,156,77,0.10)] flex items-center justify-center text-[12px] font-bold text-[#ff9c4d] flex-shrink-0">
+          <div className="w-8 h-8 rounded-full bg-[rgba(255,106,0,0.12)] flex items-center justify-center font-[Poppins] text-[12px] font-bold text-[rgb(255,155,74)] flex-shrink-0">
             {user.label.charAt(0).toUpperCase()}
           </div>
-          <span className="text-[12px] text-[#a8a094] truncate">{user.label}</span>
+          <span className="text-[12px] text-[#bebebe] truncate">{user.label}</span>
         </div>
         <form action={signOut}>
           <button
             type="submit"
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] font-medium text-[#a8a094] hover:text-[#f3efe8] hover:bg-[rgba(255,240,220,0.04)] transition-all duration-200 cursor-pointer border-0 bg-transparent"
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] font-medium text-[#bebebe] hover:text-[#ffffff] hover:bg-[rgba(255,255,255,0.05)] transition-all duration-200 cursor-pointer border-0 bg-transparent"
           >
             <LogOut className="w-[18px] h-[18px]" />
             Cerrar sesión
@@ -105,9 +105,9 @@ export function AppShell({ user, children }: AppShellProps) {
   );
 
   return (
-    <div className="min-h-screen flex bg-[#141210]">
+    <div className="min-h-screen flex bg-[#0b0b0c]">
       {/* Sidebar desktop */}
-      <aside className="hidden md:flex w-[248px] flex-shrink-0 flex-col border-r border-[rgba(255,240,220,0.07)] bg-[#181512] sticky top-0 h-screen">
+      <aside className="hidden md:flex w-[248px] flex-shrink-0 flex-col border-r border-[rgba(255,255,255,0.06)] bg-[#0c0c0d] sticky top-0 h-screen">
         {sidebar}
       </aside>
 
@@ -123,7 +123,7 @@ export function AppShell({ user, children }: AppShellProps) {
             role="dialog"
             aria-modal="true"
             aria-label="Menú de navegación"
-            className="md:hidden fixed inset-y-0 left-0 w-[248px] z-50 flex flex-col border-r border-[rgba(255,240,220,0.07)] bg-[#181512]"
+            className="md:hidden fixed inset-y-0 left-0 w-[248px] z-50 flex flex-col border-r border-[rgba(255,255,255,0.06)] bg-[#0c0c0d]"
           >
             {sidebar}
           </aside>
@@ -132,17 +132,17 @@ export function AppShell({ user, children }: AppShellProps) {
 
       {/* Columna principal */}
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="md:hidden flex items-center justify-between h-[56px] px-4 border-b border-[rgba(255,240,220,0.07)] bg-[#181512]/90 backdrop-blur-[16px] sticky top-0 z-30">
+        <header className="md:hidden flex items-center justify-between h-[56px] px-4 border-b border-[rgba(255,255,255,0.06)] bg-[#0c0c0d]/90 backdrop-blur-[16px] sticky top-0 z-30">
           <button
             type="button"
             onClick={() => setOpen(true)}
             aria-label="Abrir menú"
-            className="text-[#a8a094] hover:text-[#f3efe8] cursor-pointer"
+            className="text-[#bebebe] hover:text-[#ffffff] cursor-pointer"
           >
             <Menu className="w-5 h-5" />
           </button>
-          <span className="font-display text-[15px] font-medium text-[#f3efe8]">
-            JR <span className="text-[#ff9c4d]">AI Hub</span>
+          <span className="font-[Playfair_Display] text-[16px] tracking-[0.12em] text-[#ededed]">
+            JR <span className="text-[#d6a860]">AI HUB</span>
           </span>
           <span className="w-5" />
         </header>
@@ -156,7 +156,7 @@ export function AppShell({ user, children }: AppShellProps) {
           type="button"
           onClick={() => setOpen(false)}
           aria-label="Cerrar menú"
-          className="md:hidden fixed top-3 right-4 z-50 text-[#a8a094] hover:text-[#f3efe8] cursor-pointer"
+          className="md:hidden fixed top-3 right-4 z-50 text-[#bebebe] hover:text-[#ffffff] cursor-pointer"
         >
           <X className="w-6 h-6" />
         </button>

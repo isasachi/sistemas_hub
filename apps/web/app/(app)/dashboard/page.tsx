@@ -1,4 +1,4 @@
-import { ShowcaseCard } from "@/components/home/ShowcaseCard";
+import { LandingToolCard } from "@/components/home/LandingToolCard";
 import { ContinueStrip } from "@/components/dashboard/ContinueStrip";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { tools, type Tool } from "@/lib/tools";
@@ -22,7 +22,7 @@ function StageEyebrow({ label, tagline }: { label: string; tagline: string }) {
   return (
     <div className="mb-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
       <Eyebrow label={label} />
-      <span className="text-[13px] text-[#726b60]">{tagline}</span>
+      <span className="font-[Lato] text-[13px] text-[#bebebe]">{tagline}</span>
     </div>
   );
 }
@@ -31,15 +31,15 @@ export default function DashboardPage() {
   const live = tools.filter((t) => t.status === "live").length;
 
   return (
-    <div className="mx-auto max-w-[1100px] px-6 py-11 md:px-10">
+    <div className="lp-root mx-auto min-h-full max-w-[1160px] px-6 py-11 md:px-10">
       {/* Cabecera del panel */}
       <header className="mb-11">
         <Eyebrow label="Tu panel" className="mb-3" />
-        <h1 className="font-display text-[30px] font-medium text-[#f3efe8]">
+        <h1 className="lp-serif lp-metal text-[clamp(28px,3.4vw,38px)] leading-[1.1]">
           Tu suite de marketing con IA
         </h1>
-        <p className="mt-2 text-[14px] text-[#a8a094]">
-          <span className="readout font-semibold text-[#f3efe8]">{live}</span>{" "}
+        <p className="mt-3 font-[Lato] text-[14px] text-[#bebebe]">
+          <span className="font-[Poppins] font-semibold text-[#ffffff]">{live}</span>{" "}
           herramientas listas para usar · el resto llega pronto.
         </p>
       </header>
@@ -60,7 +60,7 @@ export default function DashboardPage() {
               <StageEyebrow label={stage.label} tagline={stage.tagline} />
               <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                 {stageTools.map((tool) => (
-                  <ShowcaseCard key={tool.slug} tool={tool} />
+                  <LandingToolCard key={tool.slug} tool={tool} />
                 ))}
               </div>
             </section>

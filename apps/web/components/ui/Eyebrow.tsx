@@ -1,5 +1,5 @@
 // Eyebrow de sección "✦ LABEL ✦": marcas decorativas flanqueando el label
-// en mono uppercase (lenguaje spec del sistema de referencia).
+// en Poppins uppercase dorado (ADN "JR Studio").
 export function Eyebrow({
   label,
   center = false,
@@ -13,13 +13,13 @@ export function Eyebrow({
     <div
       className={`flex items-center gap-2 ${center ? "justify-center" : ""} ${className}`}
     >
-      <span aria-hidden className="text-[11px] leading-none text-[#ff9c4d] opacity-70">
+      <span aria-hidden className="text-[11px] leading-none text-[#d6a860] opacity-70">
         ✦
       </span>
-      <span className="readout text-[11px] font-semibold uppercase tracking-[0.22em] text-[#ff9c4d]">
+      <span className="font-[Poppins] text-[11px] font-semibold uppercase tracking-[0.22em] text-[#d6a860]">
         {label}
       </span>
-      <span aria-hidden className="text-[11px] leading-none text-[#ff9c4d] opacity-70">
+      <span aria-hidden className="text-[11px] leading-none text-[#d6a860] opacity-70">
         ✦
       </span>
     </div>

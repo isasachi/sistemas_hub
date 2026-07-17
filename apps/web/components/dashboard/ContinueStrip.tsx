@@ -72,28 +72,28 @@ export function ContinueStrip() {
           <Link
             key={`${s.slug}-${s.id}`}
             href={`/tools/${s.slug}/sesion/${s.id}`}
-            className="jr-card group flex items-center gap-3 overflow-hidden rounded-2xl p-3 no-underline transition-all duration-200 hover:-translate-y-0.5 hover:border-[rgba(255,240,220,0.14)]"
+            className="lp-card lp-leak group flex items-center gap-3 overflow-hidden p-3 no-underline transition-transform duration-200 hover:-translate-y-0.5 hover:border-[rgba(255,255,255,0.2)]"
           >
-            <div className="jr-inset flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl">
+            <div className="jr-inset relative z-[1] flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl">
               {s.thumb ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={s.thumb} alt="" className="h-full w-full object-cover" />
               ) : (
-                <ImageOff className="h-5 w-5 text-[#544e45]" />
+                <ImageOff className="h-5 w-5 text-[#8a8a8a]" />
               )}
             </div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-[10px] font-bold uppercase tracking-[0.5px] text-[#ff9c4d]">
+            <div className="relative z-[1] min-w-0 flex-1">
+              <p className="truncate font-[Poppins] text-[10px] font-semibold uppercase tracking-[0.12em] text-[#d6a860]">
                 {s.toolName}
               </p>
-              <h3 className="truncate text-[14px] font-medium text-[#f3efe8]">{s.title}</h3>
-              <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-[#726b60]">
+              <h3 className="truncate text-[14px] font-semibold text-[#ededed]">{s.title}</h3>
+              <div className="mt-0.5 flex items-center gap-1.5 font-[Lato] text-[11px] text-[#bdbdbd]">
                 {s.done ? (
-                  <CheckCircle2 className="h-3 w-3 text-[#4cd07d]" />
+                  <CheckCircle2 className="h-3 w-3 text-[#2ccf6f]" />
                 ) : (
-                  <Clock className="h-3 w-3 text-[#ff9c4d]" />
+                  <Clock className="h-3 w-3 text-[rgb(255,155,74)]" />
                 )}
-                <span className="readout">{fmtDate(s.created_at)}</span>
+                <span>{fmtDate(s.created_at)}</span>
               </div>
             </div>
           </Link>
