@@ -12,9 +12,12 @@ import type { CSSProperties } from 'react'
 // ─── Oro (invariante #4: valor / urgencia / confianza) ───────────────────────
 type Gold = { gold: string; goldDark: string }
 
-const goldFill = (g: Gold): CSSProperties => ({
-  backgroundImage: `linear-gradient(145deg, ${g.gold} 0%, ${g.goldDark} 60%, ${g.gold} 100%)`,
-})
+// Gradiente metálico agresivo: bandas casi-blancas de brillo + oro + sombra profunda → lee
+// como lámina de oro pulido, no un fill plano. Reusado por devices Y por el layout de oferta.
+export const goldGradient = (gold: string, goldDark: string): string =>
+  `linear-gradient(155deg, #FCEFB4 0%, ${gold} 24%, ${goldDark} 56%, ${gold} 80%, #FFF6CE 100%)`
+
+const goldFill = (g: Gold): CSSProperties => ({ backgroundImage: goldGradient(g.gold, g.goldDark) })
 
 // Placa "Recomendado" / "Mejor valor" — corona el tier destacado.
 export function GoldRibbon({ label, gold, goldDark }: { label: string } & Gold) {

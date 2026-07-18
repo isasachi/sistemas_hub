@@ -39,13 +39,13 @@ export async function GET() {
   )
   const copy: OfferCopy = {
     type: 'oferta',
-    headline: 'Aprovecha la oferta',
-    subheadline: 'Mientras dure el stock. Pago contra entrega en todo el Perú.',
+    headline: 'Elige tu mejor opción',
+    subheadline: 'Ahorros y resultados reales',
     urgency: 'Solo hoy',
     tiers: [
-      { label: '1 unidad', price: 'S/ 99', priceBefore: 'S/ 129', perUnit: 'S/ 99 c/u', cta: 'Lo quiero', featured: false },
-      { label: '2 unidades', price: 'S/ 169', priceBefore: 'S/ 258', savingsPct: 35, perUnit: 'S/ 84 c/u', badge: 'Recomendado', cta: 'Lo quiero', featured: true },
-      { label: '3 unidades', price: 'S/ 229', priceBefore: 'S/ 387', savingsPct: 41, perUnit: 'S/ 76 c/u', cta: 'Lo quiero', featured: false },
+      { label: '1 Frasco', price: 'S/ 99', priceBefore: 'S/ 169', savingsPct: 41, perUnit: 'S/ 1.1 por cápsula', cta: 'Compra ya', featured: false },
+      { label: '3 Frascos', price: 'S/ 199', priceBefore: 'S/ 507', savingsPct: 60, perUnit: 'S/ 0.7 por cápsula', badge: 'Recomendado', cta: 'Compra ya', featured: true },
+      { label: '2 Frascos', price: 'S/ 149', priceBefore: 'S/ 338', savingsPct: 55, perUnit: 'S/ 0.8 por cápsula', cta: 'Compra ya', featured: false },
     ],
   }
   const fonts = loadPairFonts('clinico-geometrico')

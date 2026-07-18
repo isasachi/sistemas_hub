@@ -64,10 +64,10 @@ export async function generateOfferCopy(
         `Reglas de la oferta:`,
         `- 2 a 4 tiers de cantidad (ej. 1 / 2 / 3 unidades). Precios en soles ("S/ 199").`,
         `- Exactamente UN tier con featured:true — el mediano-alto (el decoy que querés vender).`,
-        `- Si hay descuento, incluí priceBefore (precio ancla tachado) y savingsPct.`,
-        `- En tiers multi-unidad incluí perUnit (costo por unidad, ej. "S/ 66 c/u").`,
+        `- TODOS los tiers llevan priceBefore (precio ancla tachado), savingsPct y perUnit —`,
+        `  las cards deben verse pobladas. perUnit = costo por unidad ("S/ 66 c/u").`,
         `- badge corto solo en el featured ("Mejor valor" / "Recomendado").`,
-        `- urgency solo si aplica ("Solo hoy", "Stock limitado"). cta corto por tier ("Lo quiero").`,
+        `- urgency solo si aplica ("Solo hoy", "Stock limitado"). cta corto por tier ("Compra ya").`,
       ].join('\n'),
     },
   ]
