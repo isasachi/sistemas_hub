@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { TYPE_PAIRS, TypePairId, loadPairFonts } from './typography-catalog'
+import { TYPE_PAIRS, TypePairId } from './typography-catalog'
+import { loadPairFonts } from './fonts'
 
 // Guarda contra el modo de falla #1 de Satori: fuente registrada con nombre/peso que no
 // matchea el layout → tofu silencioso, no error. Si un .ttf falta, readFileSync tira acá.
