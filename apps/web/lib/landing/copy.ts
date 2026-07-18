@@ -1,7 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import { callStructured } from '@/lib/gemini'
-import { LandingCopySchema, SECTION_LABELS, type SectionCopy, type SectionType, type LandingSessionResponse } from './types'
+import { LandingCopySchema, OfferCopySchema, SECTION_LABELS, type SectionCopy, type SectionType, type OfferCopy, type LandingSessionResponse } from './types'
 import type { Part } from '@google/genai'
 
 // Generación de copy compartida entre la ruta /copy (regenera con feedback) y el
@@ -39,4 +39,37 @@ export async function generateLandingCopy(
 
   const result = await callStructured('landing_copy', LandingCopySchema, parts, 3, LANDING_SYSTEM_PROMPT)
   return result.sections
+}
+
+// Copy de la Oferta HÍBRIDA (Fase 1). Call estructurada dedicada: OfferCopySchema fuerza el
+// decoy (≥2 tiers, exactamente uno featured). Reglas de oferta en landing-system.md. El
+// `.refine` se valida post-hoc en callStructured → reintenta si el modelo no cumple.
+export async function generateOfferCopy(
+  session: LandingSessionResponse,
+  feedback?: string,
+): Promise<OfferCopy> {
+  const parts: Part[] = [
+    {
+      text: [
+        `Escribe SOLO el copy de la sección OFERTA de una landing (esquema OfferCopy).`,
+        `El campo "type" debe ser exactamente "oferta".`,
+        ``,
+        `Producto: ${session.product_name ?? 'no especificado'}`,
+        `Precio / oferta: ${session.price || 'no especificado'}`,
+        `Beneficios clave: ${session.benefits || 'no especificados'}`,
+        `Público objetivo: ${session.audience || 'no especificado'}`,
+        `Tono deseado: ${(session.tone ?? []).join(', ') || 'no especificado'}`,
+        feedback?.trim() ? `\nAjustes pedidos por el usuario: ${feedback.trim()}` : '',
+        ``,
+        `Reglas de la oferta:`,
+        `- Preferentemente 3 tiers de cantidad (1 / 2 / 3 unidades). Precios en soles ("S/ 199").`,
+        `- Exactamente UN tier con featured:true — el mediano-alto (el decoy que querés vender).`,
+        `- TODOS los tiers llevan priceBefore (precio ancla tachado), savingsPct y perUnit —`,
+        `  las cards deben verse pobladas. perUnit = costo por unidad ("S/ 66 c/u").`,
+        `- badge corto solo en el featured ("Mejor valor" / "Recomendado").`,
+        `- urgency solo si aplica ("Solo hoy", "Stock limitado"). cta corto por tier ("Compra ya").`,
+      ].join('\n'),
+    },
+  ]
+  return callStructured('landing_offer_copy', OfferCopySchema, parts, 3, LANDING_SYSTEM_PROMPT)
 }

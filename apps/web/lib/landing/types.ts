@@ -45,6 +45,36 @@ export const LandingCopySchema = z.object({
   sections: z.array(SectionCopySchema),
 })
 
+// ─── Copy de Oferta (motor híbrido, Fase 1) ──────────────────────────────────
+// En el híbrido el texto lo compone Satori, así que la oferta deja de ser una string y
+// pasa a ser datos ricos: tiers con precio ancla, ahorro, costo por unidad y decoy.
+export const OfferTierSchema = z.object({
+  label: z.string().max(20),                    // "3 Frascos"
+  price: z.string().max(12),                    // "S/ 199"
+  priceBefore: z.string().max(12).optional(),   // precio ancla → "S/ 507"
+  savingsPct: z.number().int().min(1).max(90).optional(),
+  perUnit: z.string().max(28).optional(),       // "S/ 0.7 por cápsula"
+  badge: z.string().max(16).optional(),         // "Mejor valor"
+  cta: z.string().max(18),
+  featured: z.boolean(),                         // el decoy destacado
+})
+export type OfferTier = z.infer<typeof OfferTierSchema>
+
+// `.min(2)` + `.refine(1 featured)` fuerzan ESTRUCTURALMENTE el decoy del ADN — deja de
+// depender de que el LLM se acuerde. Si no cumple, callStructured reintenta (maxRetries=3).
+export const OfferCopySchema = z.object({
+  // enum (no literal): z.toJSONSchema emite `const` para literal y Gemini lo IGNORA (solo
+  // respeta `enum`) → el modelo omitía `type` y fallaba la validación. enum de un valor lo fuerza.
+  type: z.enum(['oferta']),
+  headline: z.string().max(60),
+  subheadline: z.string().max(90).optional(),
+  urgency: z.string().max(30).optional(),        // "Solo hoy"
+  tiers: z.array(OfferTierSchema).min(2).max(4),
+}).refine((d) => d.tiers.filter((t) => t.featured).length === 1, {
+  message: 'exactamente un tier debe ser featured',
+})
+export type OfferCopy = z.infer<typeof OfferCopySchema>
+
 // ─── Estilo de marca (paleta + tipografía) ───────────────────────────────────
 // Predomina sobre la plantilla en la generación de imagen. Mismo shape que
 // `direction.palette`/`direction.typography` del branding → el handoff mapea directo.
@@ -67,6 +97,9 @@ export interface LandingSection {
   copy: SectionCopy
   imageUrl: string | null
   status: 'pending' | 'done'
+  // Secciones híbridas: URL de la ESCENA cruda (plato de fondo de Gemini, pre-Satori). Se
+  // cachea para re-componer el texto/precio a $0 (renderComposite) sin re-generar imagen.
+  sceneUrl?: string | null
 }
 
 // ─── Sesión (forma de respuesta de la API) ───────────────────────────────────
@@ -97,4 +130,7 @@ export interface LandingSessionResponse {
   // por el usuario. Ground-truth para el prompt de imagen → el modelo renderiza las palabras
   // correctas en vez de confabular texto ilegible de la foto. Null = copiar de la foto.
   product_labels: string | null
+  // Copy estructurado de la Oferta híbrida (tiers/precio ancla/decoy). Lo compone Satori.
+  // Null = la sesión aún no generó la oferta híbrida (motor viejo intacto). Ver OfferCopy.
+  offer_copy: OfferCopy | null
 }

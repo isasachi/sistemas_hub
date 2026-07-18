@@ -16,9 +16,9 @@ export type ThemeTokens = {
   fonts: { display: string; body: string }
 }
 
-// Oro metálico cálido — fijo (invariante #4). Gradiente gold→goldDark en los devices.
-const GOLD = '#F1C15A'
-const GOLD_DARK = '#A97B2E'
+// Oro metálico cálido — fijo (invariante #4). Contraste alto gold↔goldDark = lámina agresiva.
+const GOLD = '#F4C63E'
+const GOLD_DARK = '#8F5E0E'
 
 // Elige el accent: la primera entrada de la paleta cuyo usage mencione "accent"/"cta"/
 // "primary", o la primera a secas. La paleta viene validada (>=1) por LandingStyleSchema.
