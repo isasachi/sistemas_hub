@@ -51,14 +51,15 @@ function Ribbon({ label, t, fs }: { label: string; t: ThemeTokens; fs: number })
   )
 }
 
-// UNA card, escalada por `k`. Base (k=1) = 300×372; la featured usa k=1.4. Estructura idéntica
-// de 6 filas en todas: cinta / cantidad / precio-antes / línea / precio / botón / detalle.
+// UNA card, derivada de un ancho base `u` (todo escala proporcional a u → sistema de factor
+// único). Cards laterales u=BASE; la destacada u=BASE·1.4. Estructura IDÉNTICA de 6 filas en
+// todas: cinta / cantidad / precio-antes / línea / precio / botón / detalle.
 function Card(
-  { tier, x, y, k, blurBg, t }:
-  { tier: OfferTier; x: number; y: number; k: number; blurBg: string; t: ThemeTokens },
+  { tier, x, y, u, blurBg, t }:
+  { tier: OfferTier; x: number; y: number; u: number; blurBg: string; t: ThemeTokens },
 ): ReactElement {
   const rec = tier.featured
-  const p = (v: number) => v * k
+  const p = (frac: number) => u * frac
   const ribbon = rec ? (tier.badge ?? 'Recomendado') : typeof tier.savingsPct === 'number' ? `Ahorra ${tier.savingsPct}%` : null
   const [cur, ...rest] = tier.price.trim().split(/\s+/)
   const num = rest.join(' ') || cur
@@ -68,40 +69,50 @@ function Card(
     : { background: t.accent, color: isLight(t.accent) ? t.textPrimary : '#fff', border: '1px solid rgba(255,255,255,0.25)' }
 
   return (
-    <GlassSurface x={x} y={y} w={p(300)} h={p(372)} blurBg={blurBg} radius={p(22)} bw={p(rec ? 2.5 : 1.5)}
+    <GlassSurface x={x} y={y} w={u} h={p(1.24)} blurBg={blurBg} radius={p(0.073)} bw={Math.max(1.5, p(rec ? 0.008 : 0.005))}
       borderColor={rec ? t.gold : 'rgba(255,255,255,0.55)'} shadow={rec ? SHADOW_F : SHADOW}>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between', width: p(300), height: p(372), padding: `${p(20)}px ${p(14)}px ${p(18)}px` }}>
-        <div style={{ display: 'flex', height: p(40), alignItems: 'center' }}>{ribbon ? <Ribbon label={ribbon} t={t} fs={p(20)} /> : null}</div>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between', width: u, height: p(1.24), padding: `${p(0.06)}px ${p(0.045)}px ${p(0.055)}px` }}>
+        <div style={{ display: 'flex', height: p(0.13), alignItems: 'center' }}>{ribbon ? <Ribbon label={ribbon} t={t} fs={p(0.066)} /> : null}</div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: p(4) }}>
-          <span style={{ fontFamily: t.fonts.display, fontWeight: 700, fontSize: p(34), color: t.textPrimary, textAlign: 'center' }}>{tier.label}</span>
-          {tier.priceBefore ? <span style={{ fontFamily: t.fonts.body, fontSize: p(20), color: t.textMuted, textDecoration: 'line-through' }}>Antes: {tier.priceBefore}</span> : null}
-          <div style={{ display: 'flex', width: p(150), height: p(2), background: 'rgba(0,0,0,0.14)', borderRadius: 2, margin: `${p(3)}px 0` }} />
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: p(0.013) }}>
+          <span style={{ fontFamily: t.fonts.display, fontWeight: 700, fontSize: p(0.112), color: t.textPrimary, textAlign: 'center' }}>{tier.label}</span>
+          {tier.priceBefore ? <span style={{ fontFamily: t.fonts.body, fontSize: p(0.066), color: t.textMuted, textDecoration: 'line-through' }}>Antes: {tier.priceBefore}</span> : null}
+          <div style={{ display: 'flex', width: p(0.5), height: Math.max(2, p(0.006)), background: 'rgba(0,0,0,0.14)', borderRadius: 2, margin: `${p(0.01)}px 0` }} />
           <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-            {hasCur ? <span style={{ fontFamily: t.fonts.display, fontWeight: 700, fontSize: p(44), color: rec ? t.goldDark : t.textPrimary, marginRight: p(4), marginBottom: p(8) }}>{cur}</span> : null}
-            <span style={{ fontFamily: t.fonts.display, fontWeight: 700, fontSize: p(76), color: rec ? t.goldDark : t.textPrimary, lineHeight: 1 }}>{num}</span>
+            {hasCur ? <span style={{ fontFamily: t.fonts.display, fontWeight: 700, fontSize: p(0.145), color: rec ? t.goldDark : t.textPrimary, marginRight: p(0.013), marginBottom: p(0.026) }}>{cur}</span> : null}
+            <span style={{ fontFamily: t.fonts.display, fontWeight: 700, fontSize: p(0.25), color: rec ? t.goldDark : t.textPrimary, lineHeight: 1 }}>{num}</span>
           </div>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: p(8) }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: p(206), height: p(52), borderRadius: 999, fontFamily: t.fonts.body, fontWeight: 700, fontSize: p(26), boxShadow: '0 8px 18px rgba(0,0,0,0.3)', ...ctaStyle }}>{tier.cta}</div>
-          <div style={{ display: 'flex', height: p(22), alignItems: 'center' }}>{tier.perUnit ? <span style={{ fontFamily: t.fonts.body, fontSize: p(17), color: t.textMuted }}>{tier.perUnit}</span> : null}</div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: p(0.026) }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: p(0.68), height: p(0.172), borderRadius: 999, fontFamily: t.fonts.body, fontWeight: 700, fontSize: p(0.086), boxShadow: '0 8px 18px rgba(0,0,0,0.3)', ...ctaStyle }}>{tier.cta}</div>
+          <div style={{ display: 'flex', height: p(0.075), alignItems: 'center' }}>{tier.perUnit ? <span style={{ fontFamily: t.fonts.body, fontSize: p(0.056), color: t.textMuted }}>{tier.perUnit}</span> : null}</div>
         </div>
       </div>
     </GlassSurface>
   )
 }
 
-// Banner superior grande: placa dorada + sello circular EN EL COLOR DEL NICHO (variación de esquema).
+// Corona sobre el producto: topper "Recomendado" + placa dorada grande con la mejor promo.
+function Crown({ label, t }: { label: string; t: ThemeTokens }): ReactElement {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '6px 22px', borderRadius: 999, backgroundImage: goldGradient(t.gold, t.goldDark), color: '#3a2a05', fontFamily: t.fonts.display, fontWeight: 700, fontSize: 20, textTransform: 'uppercase', letterSpacing: 1.5, boxShadow: '0 5px 12px rgba(0,0,0,0.28)', border: '1px solid #fff3c4', marginBottom: -6 }}>Recomendado</div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '12px 44px', borderRadius: 16, backgroundImage: goldGradient(t.gold, t.goldDark), color: '#3a2a05', fontFamily: t.fonts.display, fontWeight: 700, fontSize: 44, letterSpacing: 0.5, boxShadow: '0 10px 24px rgba(0,0,0,0.32)', border: '2px solid #fff3c4' }}>{label}</div>
+    </div>
+  )
+}
+
+// Banner superior GRANDE: placa dorada ancha + sello circular EN EL COLOR DEL NICHO.
 function TopBanner({ text, t }: { text: string; t: ThemeTokens }): ReactElement {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', padding: '10px 42px 10px 10px', borderRadius: 22, backgroundImage: goldGradient(t.gold, t.goldDark), border: '2px solid #fff3c4', boxShadow: '0 12px 30px rgba(0,0,0,0.34)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 76, height: 76, borderRadius: 999, marginRight: 20, background: t.accent, border: '3px solid #fffbe6', boxShadow: 'inset 0 0 0 3px rgba(255,255,255,0.4)' }}>
-        <span style={{ fontFamily: t.fonts.display, fontWeight: 700, fontSize: 22, color: isLight(t.accent) ? t.textPrimary : '#fff' }}>SOLO</span>
+    <div style={{ display: 'flex', alignItems: 'center', padding: '12px 56px 12px 12px', borderRadius: 26, backgroundImage: goldGradient(t.gold, t.goldDark), border: '2px solid #fff3c4', boxShadow: '0 14px 34px rgba(0,0,0,0.36)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 88, height: 88, borderRadius: 999, marginRight: 24, background: t.accent, border: '3px solid #fffbe6', boxShadow: 'inset 0 0 0 3px rgba(255,255,255,0.4)' }}>
+        <span style={{ fontFamily: t.fonts.display, fontWeight: 700, fontSize: 25, color: isLight(t.accent) ? t.textPrimary : '#fff' }}>SOLO</span>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-        <span style={{ fontFamily: t.fonts.display, fontWeight: 700, fontSize: 24, color: '#6b4e12', letterSpacing: 1 }}>OFERTA EXCLUSIVA</span>
-        <span style={{ fontFamily: t.fonts.display, fontWeight: 700, fontSize: 36, color: '#3a2a05', textTransform: 'uppercase', letterSpacing: 1, lineHeight: 1.05 }}>{text}</span>
+        <span style={{ fontFamily: t.fonts.display, fontWeight: 700, fontSize: 28, color: '#6b4e12', letterSpacing: 1 }}>OFERTA EXCLUSIVA</span>
+        <span style={{ fontFamily: t.fonts.display, fontWeight: 700, fontSize: 44, color: '#3a2a05', textTransform: 'uppercase', letterSpacing: 1, lineHeight: 1.05 }}>{text}</span>
       </div>
     </div>
   )
@@ -110,52 +121,53 @@ function TopBanner({ text, t }: { text: string; t: ThemeTokens }): ReactElement 
 export function OfertaLayout(
   { copy, theme: t, blurBg }: { copy: OfferCopy; theme: ThemeTokens; blurBg: string },
 ): ReactElement {
-  const MX = 30
   const featured = copy.tiers.find((tt) => tt.featured) ?? copy.tiers[copy.tiers.length - 1]
   const sides = copy.tiers.filter((tt) => tt !== featured).slice(0, 2)
   const maxSave = Math.max(0, ...copy.tiers.map((tt) => tt.savingsPct ?? 0))
 
-  const K = 1.4                     // factor único: la card central es la base × K
-  const sideW = 300, sideY = 548
-  const cW = 300 * K, cX = Math.round((W - cW) / 2), cY = 1132
+  // Sistema de factor único. Base medido del reference: laterales ~33% ancho, central ~46%
+  // (relación 1.4). Posiciones en % del lienzo medidas sobre el reference CLEARSTEM.
+  const BASE = 352, K = 1.4
+  const sideY = 596, sideL = 48, sideR = W - 48 - BASE
+  const cU = Math.round(BASE * K), cX = Math.round((W - cU) / 2), cY = 1086
   const logos: ReactNode[] = [<YapeLogo key="y" />, <MercadoPagoLogo key="m" />, <VisaLogo key="v" />, <MastercardLogo key="c" />, <FlagPE key="pe" />, <FlagUS key="us" />]
 
   return (
     <div style={{ display: 'flex', position: 'absolute', left: 0, top: 0, width: W, height: H }}>
       <div style={{ display: 'flex', position: 'absolute', left: 0, top: 0, width: W, height: 470, backgroundImage: 'linear-gradient(180deg, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0) 100%)' }} />
-      <div style={{ display: 'flex', position: 'absolute', left: 0, top: 1060, width: W, height: 860, backgroundImage: 'linear-gradient(180deg, rgba(10,14,24,0) 0%, rgba(10,14,24,0.22) 55%, rgba(10,14,24,0.36) 100%)' }} />
+      <div style={{ display: 'flex', position: 'absolute', left: 0, top: 1020, width: W, height: 900, backgroundImage: 'linear-gradient(180deg, rgba(10,14,24,0) 0%, rgba(10,14,24,0.22) 55%, rgba(10,14,24,0.36) 100%)' }} />
 
-      {/* Header: banner + título + eyebrow dorado */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'absolute', left: 40, top: 42, width: W - 80 }}>
+      {/* Header: banner grande + título + eyebrow dorado */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'absolute', left: 30, top: 40, width: W - 60 }}>
         {copy.urgency ? <TopBanner text={copy.urgency} t={t} /> : null}
-        <div style={{ display: 'flex', justifyContent: 'center', width: '100%', marginTop: copy.urgency ? 20 : 0 }}>
-          <span style={{ fontFamily: t.fonts.display, fontWeight: 700, fontSize: 78, color: t.textPrimary, textAlign: 'center', lineHeight: 1.02, letterSpacing: -1 }}>{copy.headline}</span>
+        <div style={{ display: 'flex', justifyContent: 'center', width: '100%', marginTop: copy.urgency ? 18 : 0 }}>
+          <span style={{ fontFamily: t.fonts.display, fontWeight: 700, fontSize: 80, color: t.textPrimary, textAlign: 'center', lineHeight: 1.02, letterSpacing: -1 }}>{copy.headline}</span>
         </div>
         {copy.subheadline ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', marginTop: 12, gap: 14 }}>
-            <div style={{ display: 'flex', width: 44, height: 3, background: t.goldDark, borderRadius: 2 }} />
-            <span style={{ fontFamily: t.fonts.display, fontWeight: 700, fontSize: 27, color: t.goldDark, textAlign: 'center', textTransform: 'uppercase', letterSpacing: 1, maxWidth: 680 }}>{copy.subheadline}</span>
-            <div style={{ display: 'flex', width: 44, height: 3, background: t.goldDark, borderRadius: 2 }} />
+            <div style={{ display: 'flex', width: 46, height: 3, background: t.goldDark, borderRadius: 2 }} />
+            <span style={{ fontFamily: t.fonts.display, fontWeight: 700, fontSize: 28, color: t.goldDark, textAlign: 'center', textTransform: 'uppercase', letterSpacing: 1, maxWidth: 700 }}>{copy.subheadline}</span>
+            <div style={{ display: 'flex', width: 46, height: 3, background: t.goldDark, borderRadius: 2 }} />
           </div>
         ) : null}
       </div>
 
-      {/* Badge dorado sobre el producto (mayor ahorro) */}
+      {/* Corona dorada grande sobre el producto (mejor promo) */}
       {maxSave > 0 ? (
-        <div style={{ display: 'flex', justifyContent: 'center', position: 'absolute', left: 0, top: 392, width: W }}>
-          <Ribbon label={`Hasta ${maxSave}% OFF`} t={t} fs={30} />
+        <div style={{ display: 'flex', justifyContent: 'center', position: 'absolute', left: 0, top: 470, width: W }}>
+          <Crown label={`Hasta ${maxSave}% OFF`} t={t} />
         </div>
       ) : null}
 
-      {/* Dos cards base (k=1) a los lados del producto */}
-      {sides[0] ? <Card tier={sides[0]} x={MX} y={sideY} k={1} blurBg={blurBg} t={t} /> : null}
-      {sides[1] ? <Card tier={sides[1]} x={W - MX - sideW} y={sideY} k={1} blurBg={blurBg} t={t} /> : null}
+      {/* Dos cards base (u=BASE) a los lados del producto */}
+      {sides[0] ? <Card tier={sides[0]} x={sideL} y={sideY} u={BASE} blurBg={blurBg} t={t} /> : null}
+      {sides[1] ? <Card tier={sides[1]} x={sideR} y={sideY} u={BASE} blurBg={blurBg} t={t} /> : null}
 
-      {/* Card central = base × K, angosta y centrada (no pisa al modelo) */}
-      <Card tier={featured} x={cX} y={cY} k={K} blurBg={blurBg} t={t} />
+      {/* Card central = base × K, ancha y centrada (el modelo va abajo-izquierda) */}
+      <Card tier={featured} x={cX} y={cY} u={cU} blurBg={blurBg} t={t} />
 
       {/* Fila de pagos SIN glass — logos directos sobre la escena */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'absolute', left: 0, top: 1712, width: W, gap: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'absolute', left: 0, top: 1772, width: W, gap: 16 }}>
         {logos}
         <div style={{ display: 'flex', marginLeft: 8 }}><GoldSeal label="Garantía" gold={t.gold} goldDark={t.goldDark} size={78} /></div>
       </div>
