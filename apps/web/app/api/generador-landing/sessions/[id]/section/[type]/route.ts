@@ -3,6 +3,7 @@ import { getLandingSession, updateLandingSession } from '@/lib/landing/db'
 import { fetchAsBase64, uploadToStorage } from '@/lib/storage'
 import { generateImage, editWithPrompt } from '@/lib/gemini'
 import { buildSectionInstruction } from '@/lib/landing/instructions'
+import { HYBRID_SECTIONS } from '@/lib/landing/engine-registry'
 import { extractLandingStyle } from '@/lib/landing/style-extract'
 import { extractProductBox, cropProduct } from '@/lib/landing/product-box'
 import { SectionCopySchema, SectionType, type LandingSection } from '@/lib/landing/types'
@@ -43,6 +44,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
   if (!copy || copy.type !== parsedType.data)
     return NextResponse.json({ error: 'Falta el copy de la sección' }, { status: 400 })
+
+  // Bifurcación de motor: las secciones en HYBRID_SECTIONS se producen como escena Gemini +
+  // composición Satori (Fase 1 C1.5). Set vacío ⇒ este bloque es inalcanzable y el
+  // comportamiento de las 8 secciones es idéntico al motor viejo de abajo.
+  if (HYBRID_SECTIONS.has(parsedType.data)) {
+    return NextResponse.json({ error: 'Motor híbrido no implementado' }, { status: 501 })
+  }
 
   // Regen con prompt sobre una sección ya generada = edición exclusiva: solo ese cambio,
   // el resto pixel-idéntico (y nos ahorra fetch de fotos + extracción de estilo). Sin
