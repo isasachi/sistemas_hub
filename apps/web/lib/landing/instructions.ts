@@ -216,6 +216,12 @@ const SCENE_CRAFT = [
 const SCENE_NEGATIVE =
   'NO TEXT (absolute): render ZERO text, letters, numbers, words, captions, labels, badges-with-words, price tags, logos, watermarks or typography of any kind anywhere in this image — with the SINGLE exception of the text physically printed on the product itself. This is a background plate; all copy is composited afterwards. Leave the composition breathing room where copy will be placed: keep the top third and the lower third visually calm and uncluttered.'
 
+// Override PRODUCT-ONLY (casting.present=false). End-weighted y absoluto, para GANARLE a la
+// mención de beneficiario que trae SCENE_SPECS (p.ej. la oferta pone una persona en la esquina
+// inferior). Sin esto, "NO PERSON" del brand block y el beneficiario del spec se pelean.
+const SCENE_PRODUCT_ONLY =
+  'PRODUCT-ONLY (absolute, OVERRIDES everything above): this product has NO human beneficiary. Do NOT render any person, model, face, hand, arm or silhouette anywhere in the scene; IGNORE every earlier mention of a beneficiary, person or someone in a corner. The product ALONE is the subject, floating over the atmosphere.'
+
 // Prompt de ESCENA para una sección híbrida. Sin `typography` ni `copy`: la escena no lleva
 // texto. Reusa brandBlock (paleta/estilo → atmósfera y materiales) + productLine/labelBlock.
 // `brand` (Fase 3): si viene, aporta paleta fusionada + mood + casting. Fallback al camino
@@ -228,6 +234,7 @@ export function buildSceneInstruction(
   productLabels?: string | null,
   brand?: DerivedBrand | null,
 ): string {
+  const noPerson = !!brand && !brand.casting.present
   return [
     `Design a single vertical landing-page SECTION BACKGROUND PLATE as one high-resolution image,`,
     `mobile-first, portrait orientation, premium e-commerce styling.`,
@@ -237,5 +244,6 @@ export function buildSceneInstruction(
     productLine(productMode) + labelBlock(productMode, productLabels),
     ``,
     SCENE_NEGATIVE,
-  ].join('\n')
+    noPerson ? SCENE_PRODUCT_ONLY : '',
+  ].filter(Boolean).join('\n')
 }

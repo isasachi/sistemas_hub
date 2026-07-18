@@ -126,5 +126,18 @@ describe('buildSceneInstruction — plato de fondo híbrido', () => {
     }
     const out = buildSceneInstruction('oferta', 'canonical', null, null, null, brand)
     expect(out).toContain('NO PERSON')
+    // el override PRODUCT-ONLY va al FINAL para ganarle al beneficiario del SCENE_SPECS
+    expect(out).toContain('PRODUCT-ONLY (absolute, OVERRIDES everything above)')
+    expect(out.trimEnd().endsWith('floating over the atmosphere.')).toBe(true)
+  })
+
+  it('casting.present=true NO agrega el override product-only', () => {
+    const brand: DerivedBrand = {
+      niche: 'salud-clinico', palette: [{ name: 'Azul', hex: '#2E6FB7' }],
+      typePair: 'clinico-geometrico', casting: { present: true, ageRange: '35-50', gender: 'femenino' },
+      sceneMood: 'luz clínica',
+    }
+    const out = buildSceneInstruction('oferta', 'canonical', null, null, null, brand)
+    expect(out).not.toContain('PRODUCT-ONLY')
   })
 })
