@@ -22,6 +22,7 @@ interface LandingState {
   productLabels: string | null
   productPhotoUrls: string[]
   derivedBrand: DerivedBrand | null
+  talentUrl: string | null
   selectedSections: SectionType[]
   copy: SectionCopy[]
   sections: LandingSection[]
@@ -33,6 +34,7 @@ interface LandingActions {
   setDetails: (data: { productName: string; price: string; benefits: string; audience: string; tone: string[]; productLabels: string }) => void
   setPhotos: (urls: string[]) => void
   setDerivedBrand: (brand: DerivedBrand | null) => void
+  setTalentUrl: (url: string | null) => void
   confirmIdentity: () => void
   setSelectedSections: (sections: SectionType[]) => void
   setCopy: (copy: SectionCopy[]) => void
@@ -57,6 +59,7 @@ const initialState: LandingState = {
   productLabels: null,
   productPhotoUrls: [],
   derivedBrand: null,
+  talentUrl: null,
   selectedSections: [],
   copy: [],
   sections: [],
@@ -74,6 +77,8 @@ export const useLandingStore = create<LandingState & LandingActions>((set) => ({
   setPhotos: (urls) => set({ productPhotoUrls: urls, step: 2 }),
 
   setDerivedBrand: (derivedBrand) => set({ derivedBrand }),
+
+  setTalentUrl: (talentUrl) => set({ talentUrl }),
 
   // Confirmación del checkpoint bloqueante de identidad → avanza a secciones.
   confirmIdentity: () => set({ step: 3 }),
@@ -106,6 +111,7 @@ export const useLandingStore = create<LandingState & LandingActions>((set) => ({
       productLabels: s.product_labels,
       productPhotoUrls: s.product_photo_urls ?? [],
       derivedBrand: s.derived_brand ?? null,
+      talentUrl: s.talent_canonical_url ?? null,
       selectedSections: s.selected_sections ?? [],
       copy: s.copy ?? [],
       sections: (s.sections ?? []).slice().sort((a, b) => a.order - b.order),
