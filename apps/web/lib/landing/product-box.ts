@@ -18,10 +18,11 @@ const BoxSchema = z.object({
 })
 
 const SYSTEM = [
-  'You are an object-detection annotator. You will be shown ONE marketing image that contains a',
-  'physical product (a bottle, jar, tube, box or package) in the composition, surrounded by text,',
-  'people and scenery. Return the TIGHT 2D bounding box of the MAIN physical product ONLY — just the',
-  'product object(s), excluding its shadow, the surrounding text, any person and the background.',
+  'You are an object-detection annotator. You will be shown ONE image of a physical product',
+  '(a bottle, jar, tube, box or package). It may be a clean packshot on a plain/white background,',
+  'a product photo in context, or a marketing piece with text, people and scenery around it.',
+  'Return the TIGHT 2D bounding box of the MAIN physical product ONLY — just the product object(s),',
+  'excluding its shadow, any surrounding text, any person and the background.',
   'Output box_2d as [ymin, xmin, ymax, xmax], each value an integer 0-1000 normalized to the image',
   '(y = top→bottom, x = left→right). If a pack of several identical units is shown, box the whole group tightly.',
 ].join(' ')

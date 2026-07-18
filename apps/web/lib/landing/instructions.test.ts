@@ -49,6 +49,15 @@ describe('buildSectionInstruction — ADN de referencia', () => {
     expect(buildSectionInstruction(c, 'none')).toContain('placeholder')
   })
 
+  it("modo 'canonical' (Fase 2): recorte aislado + fidelidad física + labels exactos", () => {
+    const out = buildSectionInstruction(copyFor('hero'), 'canonical')
+    expect(out).toContain('ISOLATED CROP')              // de anchored: no copiar encuadre/fondo
+    expect(out).toContain('do NOT recolour')            // de source: fidelidad de color
+    expect(out).toContain('ground-truth')               // Images 2+ = fotos reales
+    // también en la escena híbrida
+    expect(buildSceneInstruction('oferta', 'canonical')).toContain('ISOLATED CROP')
+  })
+
   it('inyecta el ground-truth de labels solo con foto y labels', () => {
     const c = copyFor('hero')
     expect(
