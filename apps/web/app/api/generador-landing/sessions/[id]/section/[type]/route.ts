@@ -110,7 +110,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       parts.push(...photoParts)
       mode = 'canonical'
     }
-    parts.push({ text: buildSectionInstruction(copy, mode, palette, typography, session.brand_style, session.product_labels) })
+    // Talento canónico (Fase 4): la persona va como ÚLTIMA imagen del parts[] — el contrato de
+    // orden (producto canónico → fotos → talento) lo asume talentLine ("FINAL reference image").
+    const hasTalent = !!(brand?.casting.present && session.talent_canonical_url)
+    if (hasTalent) {
+      const talent = await fetchAsBase64(session.talent_canonical_url!)
+      parts.push({ inlineData: { mimeType: talent.mimeType, data: talent.data } })
+    }
+    parts.push({ text: buildSectionInstruction(copy, mode, palette, typography, session.brand_style, session.product_labels, brand, hasTalent) })
     b64 = await generateImage(parts, 3, { aspectRatio: '9:16' })
   }
   if (!b64) return NextResponse.json({ error: 'No se pudo generar la sección', retryable: true }, { status: 502 })
@@ -175,7 +182,13 @@ async function generateScenePlate(
     parts.push(...photoParts)
     mode = 'canonical'
   }
-  parts.push({ text: buildSceneInstruction('oferta', mode, palette, session.brand_style, session.product_labels, brand) })
+  // Talento canónico (Fase 4): última imagen del parts[] (contrato producto → fotos → talento).
+  const hasTalent = !!(brand?.casting.present && session.talent_canonical_url)
+  if (hasTalent) {
+    const talent = await fetchAsBase64(session.talent_canonical_url!)
+    parts.push({ inlineData: { mimeType: talent.mimeType, data: talent.data } })
+  }
+  parts.push({ text: buildSceneInstruction('oferta', mode, palette, session.brand_style, session.product_labels, brand, hasTalent) })
   const sceneB64 = await generateImage(parts, 3, { aspectRatio: '9:16', imageSize: '2K' })
   return { sceneB64, palette }
 }

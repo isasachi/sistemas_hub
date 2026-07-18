@@ -161,6 +161,9 @@ function labelBlock(productMode: ProductMode, productLabels?: string | null): st
 
 // `productLabels` (opcional) = texto exacto de las etiquetas tipeado por el usuario; ground-
 // truth autoritativo. El copy/fidelidad van end-weighted (lo más crítico). Reusado intacto.
+// `brand`/`hasTalent` (Fase 4): el motor viejo también recibe el talento canónico y el override
+// no-persona, para que la MISMA persona (o ninguna) salga en las 8 secciones, no solo en la
+// híbrida. brand opcional → firma vieja intacta para llamadas sin marca derivada.
 export function buildSectionInstruction(
   copy: SectionCopy,
   productMode: ProductMode,
@@ -168,7 +171,10 @@ export function buildSectionInstruction(
   typography?: LandingTypography | null,
   brandStyle?: string | null,
   productLabels?: string | null,
+  brand?: DerivedBrand | null,
+  hasTalent = false,
 ): string {
+  const noPerson = !!brand && !brand.casting.present
   return [
     `Design a single vertical landing-page SECTION as one high-resolution image,`,
     `mobile-first, portrait orientation, premium e-commerce styling.`,
@@ -177,12 +183,14 @@ export function buildSectionInstruction(
     DESIGN_SYSTEM,
     brandBlock(palette, typography, brandStyle),
     productLine(productMode) + labelBlock(productMode, productLabels),
+    talentLine(hasTalent),
     ``,
     `Copy to render (and ONLY this copy):`,
     copyBlock(copy),
     ``,
     TEXT_RULES,
-  ].join('\n')
+    noPerson ? PRODUCT_ONLY_OVERRIDE : '',
+  ].filter(Boolean).join('\n')
 }
 
 // ─── Motor HÍBRIDO (Fase 1) ──────────────────────────────────────────────────
@@ -216,11 +224,21 @@ const SCENE_CRAFT = [
 const SCENE_NEGATIVE =
   'NO TEXT (absolute): render ZERO text, letters, numbers, words, captions, labels, badges-with-words, price tags, logos, watermarks or typography of any kind anywhere in this image — with the SINGLE exception of the text physically printed on the product itself. This is a background plate; all copy is composited afterwards. Leave the composition breathing room where copy will be placed: keep the top third and the lower third visually calm and uncluttered.'
 
-// Override PRODUCT-ONLY (casting.present=false). End-weighted y absoluto, para GANARLE a la
-// mención de beneficiario que trae SCENE_SPECS (p.ej. la oferta pone una persona en la esquina
-// inferior). Sin esto, "NO PERSON" del brand block y el beneficiario del spec se pelean.
-const SCENE_PRODUCT_ONLY =
-  'PRODUCT-ONLY (absolute, OVERRIDES everything above): this product has NO human beneficiary. Do NOT render any person, model, face, hand, arm or silhouette anywhere in the scene; IGNORE every earlier mention of a beneficiary, person or someone in a corner. The product ALONE is the subject, floating over the atmosphere.'
+// Override PRODUCT-ONLY (casting.present=false). End-weighted y absoluto, para GANARLE a las
+// menciones de beneficiario de SCENE_SPECS/MASTER_LAYOUT (la oferta pone una persona en la
+// esquina; el master layout describe beneficiarios). Compartido por AMBOS motores (escena
+// híbrida y sección vieja) — sin él, "NO PERSON" y esas menciones se pelean.
+const PRODUCT_ONLY_OVERRIDE =
+  'PRODUCT-ONLY (absolute, OVERRIDES everything above): this product has NO human beneficiary. Do NOT render any person, model, face, hand, arm or silhouette anywhere in the image; IGNORE every earlier mention of a beneficiary, person or someone in a corner. The product ALONE is the subject.'
+
+// Bloque de TALENTO canónico (Fase 4), paralelo a productLine y con el mismo rigor: la persona
+// es una imagen de referencia (la ÚLTIMA del parts[]) que debe salir IDÉNTICA en todas las
+// secciones. `hasTalent` lo decide el caller (hay talent_canonical_url y casting.present).
+function talentLine(hasTalent: boolean): string {
+  return hasTalent
+    ? `The FINAL reference image is the CAMPAIGN TALENT — the exact person who appears across this ENTIRE landing (it is a PERSON reference, NOT a product photo). Reproduce this SAME person IDENTICALLY in every section: same face, age, skin tone, hair, build and features. Re-pose, re-light and re-frame them to fit THIS section's composition, but NEVER substitute, swap, restyle, beautify, slim or age them. This image is ONLY a person reference: do NOT copy its neutral background, framing or pose.`
+    : ``
+}
 
 // Prompt de ESCENA para una sección híbrida. Sin `typography` ni `copy`: la escena no lleva
 // texto. Reusa brandBlock (paleta/estilo → atmósfera y materiales) + productLine/labelBlock.
@@ -233,6 +251,7 @@ export function buildSceneInstruction(
   brandStyle?: string | null,
   productLabels?: string | null,
   brand?: DerivedBrand | null,
+  hasTalent = false,
 ): string {
   const noPerson = !!brand && !brand.casting.present
   return [
@@ -242,8 +261,9 @@ export function buildSceneInstruction(
     SCENE_CRAFT,
     brand ? brandBlockFromDerived(brand) : brandBlock(palette, null, brandStyle),
     productLine(productMode) + labelBlock(productMode, productLabels),
+    talentLine(hasTalent),
     ``,
     SCENE_NEGATIVE,
-    noPerson ? SCENE_PRODUCT_ONLY : '',
+    noPerson ? PRODUCT_ONLY_OVERRIDE : '',
   ].filter(Boolean).join('\n')
 }
