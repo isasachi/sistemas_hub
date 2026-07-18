@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useLandingStore } from '@/store/landing'
 import { ChipGroup } from '@/components/tools/ui/ChipGroup'
 import { SECTION_LABELS, SectionType, type SectionCopy } from '@/lib/landing/types'
+import { validateSet } from '@/lib/landing/validate-set'
 
 const btnPrimary =
   'rounded-xl jr-cta text-[13px] font-bold disabled:opacity-40 transition-all duration-200 cursor-pointer border-0 font-sans flex items-center justify-center gap-2 h-11 w-full'
@@ -34,7 +35,11 @@ function CopyCard({ c }: { c: SectionCopy }) {
 }
 
 export default function Section3Sections() {
-  const { sessionId, selectedSections, copy, setSelectedSections, setCopy, approveCopy } = useLandingStore()
+  const { sessionId, selectedSections, copy, offer, trustBlock, setSelectedSections, setCopy, approveCopy } = useLandingStore()
+  // Gate de aprobación (Fase 5 C5.4): contrasta el copy generado contra la oferta y el bloque de
+  // confianza. Los issues no bloquean — el usuario decide. Los de precio requieren la oferta ya
+  // generada (pasa en el preview); los de confianza corren apenas hay trust_block.
+  const issues = copy.length ? validateSet({ offer, offer_copy: null, trust_block: trustBlock, copy }) : []
   const [picked, setPicked] = useState<string[]>(selectedSections.map((t) => SECTION_LABELS[t]))
   const [feedback, setFeedback] = useState('')
   const [loading, setLoading] = useState(false)
@@ -77,6 +82,17 @@ export default function Section3Sections() {
       ) : (
         <>
           <div className="flex flex-col gap-2">{copy.map((c) => <CopyCard key={c.type} c={c} />)}</div>
+
+          {issues.length > 0 && (
+            <div className="flex flex-col gap-1.5 rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-4 py-3">
+              <p className="text-[11px] uppercase tracking-wide text-amber-400/90">Revisa la coherencia ({issues.length})</p>
+              {issues.map((iss, i) => (
+                <p key={i} className={`text-[12px] ${iss.severity === 'error' ? 'text-red-400' : 'text-amber-300/90'}`}>
+                  {iss.severity === 'error' ? '● ' : '○ '}{iss.message}
+                </p>
+              ))}
+            </div>
+          )}
 
           <textarea
             value={feedback}

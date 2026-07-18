@@ -11,6 +11,7 @@ import { TYPE_PAIRS } from '@/lib/landing/typography-catalog'
 import Section1Product from './sections/Section1Product'
 import Section2Photos from './sections/Section2Photos'
 import SectionIdentity from './sections/SectionIdentity'
+import SectionTrust from './sections/SectionTrust'
 import Section3Sections from './sections/Section3Sections'
 import Section4Preview from './sections/Section4Preview'
 
@@ -23,7 +24,7 @@ function getStatus(sectionStep: number, currentStep: number, maxStep: number): '
 }
 
 export default function LandingWizard() {
-  const { step, sessionId, sessionError, startNewSession, hydrateFromSession, setStep, setRegens, productName, productPhotoUrls, derivedBrand, selectedSections, sections } =
+  const { step, sessionId, sessionError, startNewSession, hydrateFromSession, setStep, setRegens, productName, productPhotoUrls, derivedBrand, trustBlock, selectedSections, sections } =
     useLandingStore()
 
   useEffect(() => {
@@ -46,7 +47,7 @@ export default function LandingWizard() {
   if (prevSession.current !== sessionId) { prevSession.current = sessionId; maxStep.current = 0 }
   maxStep.current = Math.max(maxStep.current, step)
 
-  const progressPct = Math.round((Math.min(step, 4) / 4) * 100)
+  const progressPct = Math.round((Math.min(step, 5) / 5) * 100)
 
   if (sessionError && !sessionId) {
     return (
@@ -100,20 +101,30 @@ export default function LandingWizard() {
 
         <AccordionSection
           index={4}
-          title="Secciones de tu landing"
+          title="Confianza y pagos"
           status={getStatus(3, step, maxStep.current)}
-          summary={selectedSections.length ? selectedSections.map((s) => SECTION_LABELS[s]).join(' · ') : undefined}
+          summary={trustBlock ? `${trustBlock.paymentMethods.length} medios${trustBlock.codDelivery ? ' · contraentrega' : ''}${trustBlock.guaranteeDays ? ` · ${trustBlock.guaranteeDays}d garantía` : ''}` : undefined}
           onReopen={() => setStep(3)}
+        >
+          <SectionTrust />
+        </AccordionSection>
+
+        <AccordionSection
+          index={5}
+          title="Secciones de tu landing"
+          status={getStatus(4, step, maxStep.current)}
+          summary={selectedSections.length ? selectedSections.map((s) => SECTION_LABELS[s]).join(' · ') : undefined}
+          onReopen={() => setStep(4)}
         >
           <Section3Sections />
         </AccordionSection>
 
         <AccordionSection
-          index={5}
+          index={6}
           title={sections.length ? '¡Tu landing está lista!' : 'Tu landing'}
-          status={step === 4 ? 'active' : maxStep.current >= 4 ? 'completed' : 'locked'}
+          status={step === 5 ? 'active' : maxStep.current >= 5 ? 'completed' : 'locked'}
           summary={sections.length ? 'Landing lista' : undefined}
-          onReopen={() => setStep(4)}
+          onReopen={() => setStep(5)}
         >
           <Section4Preview />
         </AccordionSection>

@@ -58,7 +58,7 @@ function sectionText(c: SectionCopy): string {
   ].filter(Boolean).join('  ')
 }
 
-export function validateSet(session: LandingSessionResponse): SetIssue[] {
+export function validateSet(session: Pick<LandingSessionResponse, 'offer' | 'offer_copy' | 'trust_block' | 'copy'>): SetIssue[] {
   const issues: SetIssue[] = []
   const offer = resolveOffer(session)
   const trust = session.trust_block
