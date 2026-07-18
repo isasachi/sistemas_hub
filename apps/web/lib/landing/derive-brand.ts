@@ -45,7 +45,7 @@ const SYSTEM = [
   'You are shown ONE product photo plus a text brief. Derive a coherent visual identity:',
   '(1) niche — the chromatic/emotional family the product belongs to (drives the scene atmosphere, NOT the packaging colors);',
   '(2) typePair — pick the ONE type pair id whose niche axis best fits this product, from the closed catalog given in the prompt. Never invent a font name;',
-  '(3) casting — the human talent that should appear in every section. Set present=false for products that carry NO person (car accessory, tool, gadget with no user in frame). When present, derive ageRange/gender/appearance/context/wardrobe/expression from the audience and benefits, favoring realistic Latin-American people;',
+  '(3) casting — the human talent that should appear in every section. STRONGLY PREFER present=false for products whose value is shown by the OBJECT itself, not by a person using it: accessories, tools, gadgets, auto parts, phone/screen protectors, organizers, hardware, kitchenware, décor. A plausible user existing is NOT enough — only set present=true when a human is genuinely essential to sell the benefit (apparel/footwear, skincare/cosmetics, supplements, fitness/weight-loss, baby care with a caregiver, anything worn or applied to the body). When in doubt, prefer present=false. When present=true, derive ageRange/gender/appearance/context/wardrobe/expression from the audience and benefits, favoring realistic Latin-American people;',
   '(4) sceneMood — one short Spanish phrase describing the atmosphere/ambience for the image scene (e.g. "luz serena y etérea, aire de pureza clínica").',
   'Be decisive and specific to THIS product. Return JSON for the given schema (no palette field — the palette is computed separately).',
 ].join(' ')
