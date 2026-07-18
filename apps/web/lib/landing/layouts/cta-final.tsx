@@ -43,7 +43,7 @@ export function CtaFinalLayout(
       <GlassSurface x={px} y={py} w={pw} h={ph} blurBg={blurBg} radius={40} bw={2} borderColor={t.gold} shadow={SHADOW}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: pw, height: ph, padding: '40px' }}>
           {featured ? (
-            <>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
               <span style={{ fontFamily: t.fonts.display, fontWeight: 800, fontSize: 44, color: t.textPrimary }}>{featured.label}</span>
               {featured.priceBefore ? <span style={{ fontFamily: t.fonts.body, fontSize: 30, color: t.textMuted, textDecoration: 'line-through', marginTop: 6 }}>Antes: {featured.priceBefore}</span> : null}
               <div style={{ display: 'flex', alignItems: 'flex-end', marginTop: 6 }}>
@@ -51,7 +51,7 @@ export function CtaFinalLayout(
                 <span style={{ fontFamily: t.fonts.display, fontWeight: 900, fontSize: 150, color: t.goldDark, lineHeight: 1 }}>{num}</span>
               </div>
               {featured.perUnit ? <span style={{ fontFamily: t.fonts.body, fontSize: 26, color: t.textMuted, marginTop: 4 }}>{featured.perUnit}</span> : null}
-            </>
+            </div>
           ) : null}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: featured ? 28 : 0, padding: '22px 64px', borderRadius: 999, backgroundImage: goldGradient(t.gold, t.goldDark), color: '#3a2a05', fontFamily: t.fonts.display, fontWeight: 900, fontSize: 44, letterSpacing: 0.5, border: '2px solid #fff3c4', boxShadow: '0 12px 26px rgba(0,0,0,0.34)' }}>{ctaLabel}</div>
         </div>
