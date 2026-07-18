@@ -181,4 +181,8 @@ export interface LandingSessionResponse {
   // casting del talento y mood de escena. Resuelto una vez (etapa 2→3), editable, alimenta
   // composición (tokens) y prompt de escena (texto). Supera a palette/typography. Ver DerivedBrand.
   derived_brand: DerivedBrand | null
+  // Placa canónica del talento (Fase 4): retrato del beneficiario generado UNA vez desde el
+  // CastingSpec, sobre fondo neutro. Se pasa como referencia a todas las secciones para que la
+  // persona no cambie entre ellas. Null si el producto no lleva persona (casting.present=false).
+  talent_canonical_url: string | null
 }
