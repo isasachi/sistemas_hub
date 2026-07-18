@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildSectionInstruction } from './instructions'
+import { buildSectionInstruction, buildSceneInstruction } from './instructions'
 import type { SectionCopy, SectionType } from './types'
 
 const ALL: SectionType[] = [
@@ -68,5 +68,27 @@ describe('buildSectionInstruction — ADN de referencia', () => {
     )
     expect(out).toContain('#1e3a8a')
     expect(out).toContain('Poppins')
+  })
+})
+
+describe('buildSceneInstruction — plato de fondo híbrido', () => {
+  it('mantiene la mitad-de-escena y saca la mitad-de-UI', () => {
+    const out = buildSceneInstruction('oferta', 'source', [{ name: 'azul', hex: '#1e3a8a' }], null, null)
+    // escena: atmósfera + fidelidad de producto
+    expect(out).toContain('luminous, dimensional background')
+    expect(out).toContain('REAL product')
+    expect(out).toContain('#1e3a8a')
+    // negativa dura de texto (end-weighted)
+    expect(out).toContain('NO TEXT (absolute)')
+    expect(out.trimEnd().endsWith('calm and uncluttered.')).toBe(true)
+    // UI que NO debe filtrarse al prompt de escena (la compone Satori)
+    expect(out).not.toContain('glassmorphism')
+    expect(out).not.toContain('METALLIC GOLD')
+    expect(out).not.toContain('TEXT DISCIPLINE')
+  })
+
+  it('el producto lleva su texto impreso como única excepción de texto', () => {
+    const out = buildSceneInstruction('oferta', 'source', null, null, 'MINDBODYSKIN\n90 Capsules')
+    expect(out).toContain('PRODUCT LABEL TEXT')
   })
 })

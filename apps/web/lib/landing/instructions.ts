@@ -105,6 +105,22 @@ function brandBlock(
 //   'anchored' — resto: Image 1 es el RECORTE del producto del ancla; Image 2+ son las fotos
 //                reales = ground-truth de labels. Consistencia sin arrastrar la estructura.
 //   'none'     — sin foto (no debería pasar; el wizard exige ≥1): placeholder genérico.
+// Extraídos a nivel módulo para que los reusen buildSectionInstruction (motor viejo) Y
+// buildSceneInstruction (motor híbrido) — el producto y sus labels son idénticos en ambos.
+function productLine(productMode: 'source' | 'anchored' | 'none'): string {
+  return productMode === 'source'
+    ? `Image 1 is the REAL product — the exact object this landing sells. Reproduce it with total PHYSICAL fidelity: the SAME shape, proportions, colour, material and finish as in Image 1 — keep its exact colour and tint, do NOT recolour, lighten, whiten, desaturate or restyle the product to match the background or palette. ALSO reproduce ALL the text and graphics actually PRINTED ON IT faithfully and exactly: its main wordmark AND every secondary label, ingredient line, tagline and size/volume, spelled, styled and placed as in Image 1 — do not simplify, drop, translate or restyle any of them, and keep them legible. Invent NOTHING that is not printed on the product (no fake descriptors, sizes or ingredient names). If Image 1 is an ad or infographic, the product is the physical object only — the section copy, captions, callouts and any text or lines pointing AT the product from outside are NOT part of its label; never render those onto it. Place it in the scene per the design system above.`
+    : productMode === 'anchored'
+      ? `Image 1 is an ISOLATED CROP of THIS landing's product (the product alone, cut out of another section — it carries NO layout, headline, cards or scene of its own). Reproduce that exact product IDENTICALLY: same shape, proportions, colors, finish and every label — all printed text big and small, spelled, styled and placed exactly as in Image 1. Images 2 and later are the real product photo(s) — use them as the ground-truth for label wording and detail. Image 1 is ONLY a product reference: do NOT copy any framing, background or composition from it — this section's entire layout comes from its own section spec and the master layout above. Do NOT invent, drop, restyle or redraw the product. Place it in the scene per the design system above.`
+      : `Compose around a generic attractive product placeholder.`
+}
+
+function labelBlock(productMode: 'source' | 'anchored' | 'none', productLabels?: string | null): string {
+  return productMode !== 'none' && productLabels && productLabels.trim()
+    ? `\nPRODUCT LABEL TEXT (authoritative ground-truth): the exact text printed on the product is, line by line:\n${productLabels.trim()}\nRender these exact words correctly and legibly on the product, in the positions they occupy in the reference; use this as the source of truth wherever the label is small or unclear in the photo. Do not put any other words on the product.`
+    : ``
+}
+
 // `productLabels` (opcional) = texto exacto de las etiquetas tipeado por el usuario; ground-
 // truth autoritativo. El copy/fidelidad van end-weighted (lo más crítico). Reusado intacto.
 export function buildSectionInstruction(
@@ -115,16 +131,6 @@ export function buildSectionInstruction(
   brandStyle?: string | null,
   productLabels?: string | null,
 ): string {
-  const productLine =
-    productMode === 'source'
-      ? `Image 1 is the REAL product — the exact object this landing sells. Reproduce it with total PHYSICAL fidelity: the SAME shape, proportions, colour, material and finish as in Image 1 — keep its exact colour and tint, do NOT recolour, lighten, whiten, desaturate or restyle the product to match the background or palette. ALSO reproduce ALL the text and graphics actually PRINTED ON IT faithfully and exactly: its main wordmark AND every secondary label, ingredient line, tagline and size/volume, spelled, styled and placed as in Image 1 — do not simplify, drop, translate or restyle any of them, and keep them legible. Invent NOTHING that is not printed on the product (no fake descriptors, sizes or ingredient names). If Image 1 is an ad or infographic, the product is the physical object only — the section copy, captions, callouts and any text or lines pointing AT the product from outside are NOT part of its label; never render those onto it. Place it in the scene per the design system above.`
-      : productMode === 'anchored'
-        ? `Image 1 is an ISOLATED CROP of THIS landing's product (the product alone, cut out of another section — it carries NO layout, headline, cards or scene of its own). Reproduce that exact product IDENTICALLY: same shape, proportions, colors, finish and every label — all printed text big and small, spelled, styled and placed exactly as in Image 1. Images 2 and later are the real product photo(s) — use them as the ground-truth for label wording and detail. Image 1 is ONLY a product reference: do NOT copy any framing, background or composition from it — this section's entire layout comes from its own section spec and the master layout above. Do NOT invent, drop, restyle or redraw the product. Place it in the scene per the design system above.`
-        : `Compose around a generic attractive product placeholder.`
-  const labelBlock =
-    productMode !== 'none' && productLabels && productLabels.trim()
-      ? `\nPRODUCT LABEL TEXT (authoritative ground-truth): the exact text printed on the product is, line by line:\n${productLabels.trim()}\nRender these exact words correctly and legibly on the product, in the positions they occupy in the reference; use this as the source of truth wherever the label is small or unclear in the photo. Do not put any other words on the product.`
-      : ``
   return [
     `Design a single vertical landing-page SECTION as one high-resolution image,`,
     `mobile-first, portrait orientation, premium e-commerce styling.`,
@@ -132,11 +138,63 @@ export function buildSectionInstruction(
     MASTER_LAYOUT,
     DESIGN_SYSTEM,
     brandBlock(palette, typography, brandStyle),
-    productLine + labelBlock,
+    productLine(productMode) + labelBlock(productMode, productLabels),
     ``,
     `Copy to render (and ONLY this copy):`,
     copyBlock(copy),
     ``,
     TEXT_RULES,
+  ].join('\n')
+}
+
+// ─── Motor HÍBRIDO (Fase 1) ──────────────────────────────────────────────────
+// La escena que genera Gemini es un PLATO DE FONDO: fondo + producto + beneficiario, CERO
+// texto (salvo el impreso en el propio producto). El texto/UI (tiers, ribbons, CTAs, strip de
+// pagos) los compone Satori después. `buildSceneInstruction` reusa las mitades-de-escena de
+// SECTION_SPECS/DESIGN_SYSTEM; las mitades-de-UI (Surfaces, Graphic devices, Type treatment,
+// MASTER_LAYOUT, copyBlock, TEXT_RULES) NO van al prompt — son la capa de composición.
+
+// Mitad-de-escena de SECTION_SPECS. Parcial: solo las secciones migradas (F1 = oferta); las no
+// migradas nunca llaman acá (no están en HYBRID_SECTIONS). Fallback genérico por si acaso.
+const SCENE_SPECS: Partial<Record<SectionType, string>> = {
+  oferta:
+    'OFFER background plate: the product as the hero of a purchase-driving scene over the luminous atmosphere — show it multiplied into a clustered multi-unit pack or an open shipping box (this is a multi-unit offer). Optionally a confident beneficiary fitting the audience to one side, conveying the aspirational result. Energetic, high-contrast, conversion mood. Depict NO price cards, tiers, ribbons, badges, plaques, CTAs, banners, urgency stickers or payment/trust strips — every one of those is composited afterwards; leave clean, calm negative space (especially the top third and lower third) where they will be placed.',
+}
+const GENERIC_SCENE =
+  'SECTION background plate: the product as the hero over the luminous atmosphere, with an optional beneficiary conveying the result. Depict no UI, cards, badges, seals or text; leave clean negative space for composited copy.'
+
+// Mitad-de-escena de DESIGN_SYSTEM (Atmosphere + Depth + Product finish + breathing room). Las
+// Surfaces/Graphic devices/Type treatment quedan afuera: eso lo dibuja Satori con los devices.
+const SCENE_CRAFT = [
+  `SCENE CRAFT — render this as polished, high-converting direct-response e-commerce imagery, NOT a flat template. The recipe is FIXED; EXECUTE it with the brand palette and a MOOD that fits THIS product's niche (serene-luminous for wellness/beauty, warm for food, clean bright-tech for gadgets — recipe stays, mood adapts):`,
+  `• Atmosphere: a luminous, dimensional background built from the brand palette — a soft vertical gradient (lightest toward the top), a broad radial glow behind the focal subject, faint light rays, soft mist/haze, gentle bokeh orbs and a few sparkle particles. Ethereal and aspirational. NEVER a plain flat fill.`,
+  `• Depth: stage the background → beneficiary → product as distinct planes, each lifted with soft contact shadows and a glow halo so nothing looks pasted-on. Clean, confident, directional lighting.`,
+  `• Product finish: crisp and well-lit, with realistic reflections and a soft grounding shadow or glow halo — magazine-grade render.`,
+  `• Breathing room: keep the composition airy; the product sits clear of the top and lower thirds, which stay calm and uncluttered for the copy composited on top.`,
+].join('\n')
+
+// Negativa dura de texto, end-weighted (lo más prominente). La ÚNICA excepción es el texto
+// impreso en el propio producto (lo maneja productLine/labelBlock).
+const SCENE_NEGATIVE =
+  'NO TEXT (absolute): render ZERO text, letters, numbers, words, captions, labels, badges-with-words, price tags, logos, watermarks or typography of any kind anywhere in this image — with the SINGLE exception of the text physically printed on the product itself. This is a background plate; all copy is composited afterwards. Leave the composition breathing room where copy will be placed: keep the top third and the lower third visually calm and uncluttered.'
+
+// Prompt de ESCENA para una sección híbrida. Sin `typography` ni `copy`: la escena no lleva
+// texto. Reusa brandBlock (paleta/estilo → atmósfera y materiales) + productLine/labelBlock.
+export function buildSceneInstruction(
+  type: SectionType,
+  productMode: 'source' | 'anchored' | 'none',
+  palette?: LandingPalette | null,
+  brandStyle?: string | null,
+  productLabels?: string | null,
+): string {
+  return [
+    `Design a single vertical landing-page SECTION BACKGROUND PLATE as one high-resolution image,`,
+    `mobile-first, portrait orientation, premium e-commerce styling.`,
+    SCENE_SPECS[type] ?? GENERIC_SCENE,
+    SCENE_CRAFT,
+    brandBlock(palette, null, brandStyle),
+    productLine(productMode) + labelBlock(productMode, productLabels),
+    ``,
+    SCENE_NEGATIVE,
   ].join('\n')
 }
