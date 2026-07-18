@@ -133,4 +133,7 @@ export interface LandingSessionResponse {
   // Copy estructurado de la Oferta híbrida (tiers/precio ancla/decoy). Lo compone Satori.
   // Null = la sesión aún no generó la oferta híbrida (motor viejo intacto). Ver OfferCopy.
   offer_copy: OfferCopy | null
+  // Origen de la placa canónica (Fase 2): 'photo' = derivada de la foto real en etapa 2;
+  // 'render' (legado) o null = recortada del render de la 1ª sección. Ver product-box.ts.
+  product_canonical_source: string | null
 }
