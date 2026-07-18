@@ -128,7 +128,7 @@ describe('buildSceneInstruction — plato de fondo híbrido', () => {
     expect(out).toContain('NO PERSON')
     // el override PRODUCT-ONLY va al FINAL para ganarle al beneficiario del SCENE_SPECS
     expect(out).toContain('PRODUCT-ONLY (absolute, OVERRIDES everything above)')
-    expect(out.trimEnd().endsWith('floating over the atmosphere.')).toBe(true)
+    expect(out.trimEnd().endsWith('The product ALONE is the subject.')).toBe(true)
   })
 
   it('casting.present=true NO agrega el override product-only', () => {
@@ -139,5 +139,34 @@ describe('buildSceneInstruction — plato de fondo híbrido', () => {
     }
     const out = buildSceneInstruction('oferta', 'canonical', null, null, null, brand)
     expect(out).not.toContain('PRODUCT-ONLY')
+  })
+})
+
+describe('talento canónico (Fase 4)', () => {
+  const brandPerson: DerivedBrand = {
+    niche: 'salud-clinico', palette: [{ name: 'Azul', hex: '#2E6FB7' }],
+    typePair: 'clinico-geometrico', casting: { present: true, ageRange: '35-50', gender: 'femenino' },
+    sceneMood: 'luz clínica',
+  }
+
+  it('hasTalent inyecta el bloque de talento en la escena híbrida', () => {
+    const withT = buildSceneInstruction('oferta', 'canonical', null, null, null, brandPerson, true)
+    const without = buildSceneInstruction('oferta', 'canonical', null, null, null, brandPerson, false)
+    expect(withT).toContain('CAMPAIGN TALENT')
+    expect(withT).toContain('FINAL reference image')
+    expect(withT).toContain('ONE AND ONLY human') // exclusividad: no agregar otra persona
+    expect(without).not.toContain('CAMPAIGN TALENT')
+  })
+
+  it('hasTalent inyecta el bloque de talento en el motor viejo', () => {
+    const out = buildSectionInstruction(copyFor('hero'), 'canonical', null, null, null, null, brandPerson, true)
+    expect(out).toContain('CAMPAIGN TALENT')
+  })
+
+  it('el motor viejo también suprime la persona con present=false', () => {
+    const brandNo: DerivedBrand = { ...brandPerson, casting: { present: false } }
+    const out = buildSectionInstruction(copyFor('beneficios'), 'canonical', null, null, null, null, brandNo, false)
+    expect(out).toContain('PRODUCT-ONLY (absolute, OVERRIDES everything above)')
+    expect(out.trimEnd().endsWith('The product ALONE is the subject.')).toBe(true)
   })
 })

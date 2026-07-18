@@ -3,7 +3,7 @@ import { getLandingSession, updateLandingSession } from '@/lib/landing/db'
 import { fetchAsBase64, uploadToStorage } from '@/lib/storage'
 import { generateImage, editWithPrompt } from '@/lib/gemini'
 import { buildSectionInstruction, buildSceneInstruction, type ProductMode } from '@/lib/landing/instructions'
-import { HYBRID_SECTIONS } from '@/lib/landing/engine-registry'
+import { HYBRID_SECTIONS, NO_TALENT_SECTIONS } from '@/lib/landing/engine-registry'
 import { extractLandingStyle } from '@/lib/landing/style-extract'
 import { generateOfferCopy } from '@/lib/landing/copy'
 import { renderComposite, blurToDataUri } from '@/lib/landing/composite'
@@ -110,7 +110,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       parts.push(...photoParts)
       mode = 'canonical'
     }
-    parts.push({ text: buildSectionInstruction(copy, mode, palette, typography, session.brand_style, session.product_labels) })
+    // Talento canónico (Fase 4): la persona va como ÚLTIMA imagen del parts[] — el contrato de
+    // orden (producto canónico → fotos → talento) lo asume talentLine ("FINAL reference image").
+    // testimonios se excluye: muestra clientes distintos, no al protagonista canónico.
+    const hasTalent = !!(brand?.casting.present && session.talent_canonical_url && !NO_TALENT_SECTIONS.has(parsedType.data))
+    if (hasTalent) {
+      const talent = await fetchAsBase64(session.talent_canonical_url!)
+      parts.push({ inlineData: { mimeType: talent.mimeType, data: talent.data } })
+    }
+    parts.push({ text: buildSectionInstruction(copy, mode, palette, typography, session.brand_style, session.product_labels, brand, hasTalent) })
     b64 = await generateImage(parts, 3, { aspectRatio: '9:16' })
   }
   if (!b64) return NextResponse.json({ error: 'No se pudo generar la sección', retryable: true }, { status: 502 })
@@ -175,7 +183,13 @@ async function generateScenePlate(
     parts.push(...photoParts)
     mode = 'canonical'
   }
-  parts.push({ text: buildSceneInstruction('oferta', mode, palette, session.brand_style, session.product_labels, brand) })
+  // Talento canónico (Fase 4): última imagen del parts[] (contrato producto → fotos → talento).
+  const hasTalent = !!(brand?.casting.present && session.talent_canonical_url)
+  if (hasTalent) {
+    const talent = await fetchAsBase64(session.talent_canonical_url!)
+    parts.push({ inlineData: { mimeType: talent.mimeType, data: talent.data } })
+  }
+  parts.push({ text: buildSceneInstruction('oferta', mode, palette, session.brand_style, session.product_labels, brand, hasTalent) })
   const sceneB64 = await generateImage(parts, 3, { aspectRatio: '9:16', imageSize: '2K' })
   return { sceneB64, palette }
 }

@@ -18,7 +18,7 @@ const SECTION_SPECS: Record<SectionType, string> = {
   oferta: 'OFFER section: drive the purchase. A gold urgency banner/plaque at the very top ONLY if the copy supplies urgency. Show the product multiplied into the pack when the offer names a multi-unit tier (clustered units or an open shipping box) and EXACTLY the price tiers the copy lists — one frosted-glass card per tier in a row, each with a quantity label, an optional struck-through "Antes: S/.X" price, a big heavy price numeral, its own rounded CTA pill and an optional per-unit cost line — never adding, padding or duplicating a tier. VISUALLY ELEVATE the recommended/best-value tier: lift it forward, crown it with a GOLD ribbon header ("Recomendado" / "Mejor valor") and give it the gold CTA pill; the other tiers use the brand-accent CTA. Gold "Ahorra X%" ribbons only when the copy supplies the saving. A payment/flag/trust strip may sit at the bottom if the copy provides it. Energetic, conversion-focused.',
   'antes-despues': 'BEFORE/AFTER section: two clearly labelled paired states (problem vs result) split side by side by a clean diagonal or line, each with a person in that state and a short list of its symptoms/results as the copy provides. Keep the real product visible at the centre as the cause of the result. Honest and evidence-like, still premium.',
   beneficios: 'BENEFITS section: present the 3-5 benefits the copy lists as a clean stack of rows inside or beside a large frosted-glass panel — each row = a glossy circular gradient icon in the brand accent carrying a simple SYMBOL (with a small green check badge on its corner) + a bold benefit phrase + a lighter detail line. A small brand/product title and one accent sub-pill may head the panel if the copy supplies them. The real product prominent (bottom or side) with supporting proof props (ingredients/specs) and the beneficiary welcome. Trustworthy, airy, generous spacing.',
-  testimonios: 'TESTIMONIALS section: short frosted review cards, each with 5 gold stars, an italic quote, a customer name with location, a small avatar photo and a green verified-check badge. Warm social-proof feel over the luminous atmosphere. Product may appear small as an accent.',
+  testimonios: 'TESTIMONIALS section: short frosted review cards, each with 5 gold stars, an italic quote, a customer name with location, a small circular avatar and a green verified-check badge. Each avatar MUST be a REALISTIC PHOTOGRAPHIC headshot of a real, ordinary Latin-American person — a genuine photo, NOT an illustration, cartoon, 3D character, drawing or flat vector avatar. Every card shows a DIFFERENT, distinct person (different face, age, skin tone and hair per card), each looking believable and candid. Warm social-proof feel over the luminous atmosphere. Product may appear small as an accent.',
   faq: 'FAQ section: a heading plus a vertical list of question/answer pairs inside a calm frosted panel — each question bold in the brand accent, each answer one short lighter line. Reassuring, generous spacing, low visual noise.',
   garantia: 'GUARANTEE / TRUST section: a column of trust rows, each a frosted pill with a glossy icon (check / shield / truck / clock) + a bold title + a lighter line (shipping, delivery time, pay-on-delivery, secure purchase). Reserve a GOLD metallic finish for the value/trust marks (a "48h" clock, a "100%" shield seal). Add payment-method, retailer and shipping-carrier logos, country flags and a gold guarantee seal/medal when the copy provides them; supporting props (an open pack box, cash) welcome. Reassuring, builds confidence.',
   'cta-final': 'FINAL CTA section: the closing push — the product, a punchy headline with one accent word and ONE prominent rounded call-to-action pill in the brand accent, reinforced with a gold trust seal or an urgency cue when the copy supplies one. Decisive, high contrast, easy to act on.',
@@ -161,6 +161,9 @@ function labelBlock(productMode: ProductMode, productLabels?: string | null): st
 
 // `productLabels` (opcional) = texto exacto de las etiquetas tipeado por el usuario; ground-
 // truth autoritativo. El copy/fidelidad van end-weighted (lo más crítico). Reusado intacto.
+// `brand`/`hasTalent` (Fase 4): el motor viejo también recibe el talento canónico y el override
+// no-persona, para que la MISMA persona (o ninguna) salga en las 8 secciones, no solo en la
+// híbrida. brand opcional → firma vieja intacta para llamadas sin marca derivada.
 export function buildSectionInstruction(
   copy: SectionCopy,
   productMode: ProductMode,
@@ -168,7 +171,10 @@ export function buildSectionInstruction(
   typography?: LandingTypography | null,
   brandStyle?: string | null,
   productLabels?: string | null,
+  brand?: DerivedBrand | null,
+  hasTalent = false,
 ): string {
+  const noPerson = !!brand && !brand.casting.present
   return [
     `Design a single vertical landing-page SECTION as one high-resolution image,`,
     `mobile-first, portrait orientation, premium e-commerce styling.`,
@@ -177,12 +183,14 @@ export function buildSectionInstruction(
     DESIGN_SYSTEM,
     brandBlock(palette, typography, brandStyle),
     productLine(productMode) + labelBlock(productMode, productLabels),
+    talentLine(hasTalent),
     ``,
     `Copy to render (and ONLY this copy):`,
     copyBlock(copy),
     ``,
     TEXT_RULES,
-  ].join('\n')
+    noPerson ? PRODUCT_ONLY_OVERRIDE : '',
+  ].filter(Boolean).join('\n')
 }
 
 // ─── Motor HÍBRIDO (Fase 1) ──────────────────────────────────────────────────
@@ -216,11 +224,21 @@ const SCENE_CRAFT = [
 const SCENE_NEGATIVE =
   'NO TEXT (absolute): render ZERO text, letters, numbers, words, captions, labels, badges-with-words, price tags, logos, watermarks or typography of any kind anywhere in this image — with the SINGLE exception of the text physically printed on the product itself. This is a background plate; all copy is composited afterwards. Leave the composition breathing room where copy will be placed: keep the top third and the lower third visually calm and uncluttered.'
 
-// Override PRODUCT-ONLY (casting.present=false). End-weighted y absoluto, para GANARLE a la
-// mención de beneficiario que trae SCENE_SPECS (p.ej. la oferta pone una persona en la esquina
-// inferior). Sin esto, "NO PERSON" del brand block y el beneficiario del spec se pelean.
-const SCENE_PRODUCT_ONLY =
-  'PRODUCT-ONLY (absolute, OVERRIDES everything above): this product has NO human beneficiary. Do NOT render any person, model, face, hand, arm or silhouette anywhere in the scene; IGNORE every earlier mention of a beneficiary, person or someone in a corner. The product ALONE is the subject, floating over the atmosphere.'
+// Override PRODUCT-ONLY (casting.present=false). End-weighted y absoluto, para GANARLE a las
+// menciones de beneficiario de SCENE_SPECS/MASTER_LAYOUT (la oferta pone una persona en la
+// esquina; el master layout describe beneficiarios). Compartido por AMBOS motores (escena
+// híbrida y sección vieja) — sin él, "NO PERSON" y esas menciones se pelean.
+const PRODUCT_ONLY_OVERRIDE =
+  'PRODUCT-ONLY (absolute, OVERRIDES everything above): this product has NO human beneficiary. Do NOT render any person, model, face, hand, arm or silhouette anywhere in the image; IGNORE every earlier mention of a beneficiary, person or someone in a corner. The product ALONE is the subject.'
+
+// Bloque de TALENTO canónico (Fase 4), paralelo a productLine y con el mismo rigor: la persona
+// es una imagen de referencia (la ÚLTIMA del parts[]) que debe salir IDÉNTICA en todas las
+// secciones. `hasTalent` lo decide el caller (hay talent_canonical_url y casting.present).
+function talentLine(hasTalent: boolean): string {
+  return hasTalent
+    ? `The FINAL reference image is the CAMPAIGN TALENT — the exact person who appears across this ENTIRE landing (it is a PERSON reference, NOT a product photo). Reproduce this SAME person IDENTICALLY in every section: same face, age, skin tone, hair, build and features. Re-pose, re-light and re-frame them to fit THIS section's composition, but NEVER substitute, swap, restyle, beautify, slim or age them. This talent is the ONE AND ONLY human in this section, shown EXACTLY ONCE as a single solid figure: do NOT add, invent, include or duplicate ANY other person, model, face, extra beneficiary or background figure, and do NOT render a reflection, echo, double-exposure, ghosted or translucent second copy of them — every person visible in the image must BE this exact talent, appearing once. This image is ONLY a person reference: do NOT copy its neutral background, framing or pose.`
+    : ``
+}
 
 // Prompt de ESCENA para una sección híbrida. Sin `typography` ni `copy`: la escena no lleva
 // texto. Reusa brandBlock (paleta/estilo → atmósfera y materiales) + productLine/labelBlock.
@@ -233,6 +251,7 @@ export function buildSceneInstruction(
   brandStyle?: string | null,
   productLabels?: string | null,
   brand?: DerivedBrand | null,
+  hasTalent = false,
 ): string {
   const noPerson = !!brand && !brand.casting.present
   return [
@@ -242,8 +261,9 @@ export function buildSceneInstruction(
     SCENE_CRAFT,
     brand ? brandBlockFromDerived(brand) : brandBlock(palette, null, brandStyle),
     productLine(productMode) + labelBlock(productMode, productLabels),
+    talentLine(hasTalent),
     ``,
     SCENE_NEGATIVE,
-    noPerson ? SCENE_PRODUCT_ONLY : '',
+    noPerson ? PRODUCT_ONLY_OVERRIDE : '',
   ].filter(Boolean).join('\n')
 }

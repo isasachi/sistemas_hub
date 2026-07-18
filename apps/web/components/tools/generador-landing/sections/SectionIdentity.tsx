@@ -31,10 +31,12 @@ const GF_URL = `https://fonts.googleapis.com/css2?${[...new Set(Object.values(TY
   .join('&')}&display=swap`
 
 export default function SectionIdentity() {
-  const { sessionId, step, derivedBrand, setDerivedBrand, confirmIdentity, productName } = useLandingStore()
+  const { sessionId, step, derivedBrand, setDerivedBrand, talentUrl, setTalentUrl, confirmIdentity, productName } = useLandingStore()
   const [local, setLocal] = useState<DerivedBrand | null>(derivedBrand)
   const [deriving, setDeriving] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [genTalent, setGenTalent] = useState(false)
+  const [talentError, setTalentError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   // Deriva al entrar al paso (idempotente en el server). Solo cuando está activo y sin marca.
@@ -54,6 +56,33 @@ export default function SectionIdentity() {
 
   // Sembrar el editable cuando la marca llega desde el store (hidratación / handoff).
   useEffect(() => { if (derivedBrand && !local) setLocal(derivedBrand) }, [derivedBrand, local])
+
+  // Genera/regenera la placa de talento desde el casting ACTUAL (local). La llama el efecto
+  // (auto, cuando hay persona y aún no hay placa) y el botón "Generar otra persona".
+  async function generateTalentNow() {
+    if (!sessionId || !local || genTalent) return
+    setGenTalent(true)
+    setTalentError(null)
+    try {
+      const res = await fetch(`/api/generador-landing/sessions/${sessionId}/talent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ brand: local }),
+      })
+      const data = (await res.json()) as { talentUrl?: string | null; error?: string }
+      if (!res.ok) throw new Error(data.error ?? 'No se pudo generar el talento')
+      setTalentUrl(data.talentUrl ?? null)
+    } catch (e) {
+      setTalentError((e as Error).message)
+    } finally {
+      setGenTalent(false)
+    }
+  }
+
+  // Auto-genera el talento la primera vez: paso activo, hay persona y aún no hay placa.
+  useEffect(() => {
+    if (step === 2 && local?.casting.present && !talentUrl && !genTalent) generateTalentNow()
+  }, [step, local?.casting.present, talentUrl]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function patch(p: Partial<DerivedBrand>) { setLocal((b) => (b ? { ...b, ...p } : b)) }
   function patchCasting(p: Partial<CastingSpec>) { setLocal((b) => (b ? { ...b, casting: { ...b.casting, ...p } } : b)) }
@@ -184,6 +213,27 @@ export default function SectionIdentity() {
               <input value={local.casting.wardrobe ?? ''} onChange={(e) => patchCasting({ wardrobe: e.target.value || undefined })} className={field} placeholder="Vestuario" />
             </div>
             <input value={local.casting.expression ?? ''} onChange={(e) => patchCasting({ expression: e.target.value || undefined })} className={field} placeholder="Expresión (serena y segura, enérgica…)" />
+
+            {/* Placa de talento: la MISMA persona en las 8 secciones. Lo más importante de acertar. */}
+            <div className="flex items-start gap-3 rounded-xl border border-white/[0.08] bg-[#141414] p-3">
+              <div className="w-24 h-32 rounded-lg overflow-hidden bg-[#0f0f0f] border border-white/[0.06] shrink-0 flex items-center justify-center">
+                {genTalent ? (
+                  <span className="w-5 h-5 border-2 border-white/20 border-t-[#ff9c4d] rounded-full animate-spin" />
+                ) : talentUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={talentUrl} alt="Talento de la campaña" className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-[10px] text-[#8a8a8a] text-center px-1">Sin retrato</span>
+                )}
+              </div>
+              <div className="flex flex-col gap-1.5 flex-1">
+                <p className="text-[12px] text-[#bdbdbd]">Esta persona aparecerá en <strong className="text-[#f5f5f5]">todas</strong> las secciones. Es la decisión que más se nota — genera otra si no te convence.</p>
+                {talentError && <p className="text-[11px] text-red-400">{talentError}</p>}
+                <button onClick={generateTalentNow} disabled={genTalent} className={btnGhost + ' self-start'}>
+                  {genTalent ? 'Generando…' : talentUrl ? '↻ Generar otra persona' : 'Generar talento'}
+                </button>
+              </div>
+            </div>
           </div>
         ) : (
           <p className="text-[12px] text-[#8a8a8a]">El producto sale solo, sin ninguna persona en escena.</p>
