@@ -52,6 +52,7 @@ export async function generateOfferCopy(
     {
       text: [
         `Escribe SOLO el copy de la sección OFERTA de una landing (esquema OfferCopy).`,
+        `El campo "type" debe ser exactamente "oferta".`,
         ``,
         `Producto: ${session.product_name ?? 'no especificado'}`,
         `Precio / oferta: ${session.price || 'no especificado'}`,

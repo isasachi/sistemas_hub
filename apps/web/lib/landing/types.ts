@@ -63,7 +63,9 @@ export type OfferTier = z.infer<typeof OfferTierSchema>
 // `.min(2)` + `.refine(1 featured)` fuerzan ESTRUCTURALMENTE el decoy del ADN — deja de
 // depender de que el LLM se acuerde. Si no cumple, callStructured reintenta (maxRetries=3).
 export const OfferCopySchema = z.object({
-  type: z.literal('oferta'),
+  // enum (no literal): z.toJSONSchema emite `const` para literal y Gemini lo IGNORA (solo
+  // respeta `enum`) → el modelo omitía `type` y fallaba la validación. enum de un valor lo fuerza.
+  type: z.enum(['oferta']),
   headline: z.string().max(60),
   subheadline: z.string().max(90).optional(),
   urgency: z.string().max(30).optional(),        // "Solo hoy"
