@@ -1,4 +1,4 @@
-import type { SectionCopy, SectionType, LandingPalette, LandingTypography } from './types'
+import type { SectionCopy, SectionType, LandingPalette, LandingTypography, DerivedBrand, CastingSpec } from './types'
 
 // Builders puros ($0) para el prompt de imagen de cada sección de la landing.
 // La FUENTE DE VERDAD del diseño es el ADN destilado de 4 referencias (funnel DR real
@@ -78,25 +78,51 @@ function copyBlock(copy: SectionCopy): string {
 // se reparte sobre los roles del ADN (un acento de marca dominante + dorado solo para valor);
 // la tipografía es la de marca; el estilo gráfico guía los devices. Todo se aplica A TRAVÉS
 // del design system. Reusado sin cambios funcionales del motor previo.
+const BRAND_HEADER = `BRAND — the look comes from the product/brand; apply it THROUGH the design system and generate any badges, seals, icons and props in this palette (never generic stock):`
+
+function paletteLine(palette?: LandingPalette | null): string {
+  return palette?.length
+    ? `Palette — build everything from these brand colors: ${palette
+        .map((c) => `${c.hex}${c.name ? ` (${c.name}${c.usage ? `, ${c.usage}` : ''})` : ''}`)
+        .join('; ')}. Pick ONE as the dominant brand accent (CTA fill, one key headline word, icons); use the rest for backgrounds and surfaces. Do not rainbow. A warm/gold tone is allowed ONLY for value/urgency/trust marks.`
+    : `Palette — choose a cohesive palette with a single dominant brand accent that fits the product; reserve a warm/gold tone only for value/urgency/trust marks.`
+}
+
 function brandBlock(
   palette?: LandingPalette | null,
   typography?: LandingTypography | null,
   brandStyle?: string | null,
 ): string {
-  const lines: string[] = [
-    palette?.length
-      ? `Palette — build everything from these brand colors: ${palette
-          .map((c) => `${c.hex}${c.name ? ` (${c.name}${c.usage ? `, ${c.usage}` : ''})` : ''}`)
-          .join('; ')}. Pick ONE as the dominant brand accent (CTA fill, one key headline word, icons); use the rest for backgrounds and surfaces. Do not rainbow. A warm/gold tone is allowed ONLY for value/urgency/trust marks.`
-      : `Palette — choose a cohesive palette with a single dominant brand accent that fits the product; reserve a warm/gold tone only for value/urgency/trust marks.`,
-  ]
+  const lines: string[] = [paletteLine(palette)]
   if (typography?.headline || typography?.body)
     lines.push(
       `Typography — use the brand type style (headline: ${typography.headline}; body: ${typography.body}); keep the headline bold/high-impact and the body clean and legible.`,
     )
   if (brandStyle && brandStyle.trim())
     lines.push(`Brand identity — match the scene, motifs and generated graphic devices to this brand: ${brandStyle.trim()}.`)
-  return `BRAND — the look comes from the product/brand; apply it THROUGH the design system and generate any badges, seals, icons and props in this palette (never generic stock):\n${lines.join('\n')}`
+  return `${BRAND_HEADER}\n${lines.join('\n')}`
+}
+
+// Variante que consume DerivedBrand (Fase 3 C3.5): la paleta ya viene fusionada, el mood de
+// escena reemplaza al brand_style suelto y el casting fija QUIÉN aparece (la misma persona en
+// todas las secciones). Sin `typography` textual: en el híbrido las fuentes las pone Satori.
+function castingLine(casting: CastingSpec): string {
+  if (!casting.present)
+    return `Talent — NO PERSON: the product stands ALONE as the hero. Do NOT add any human, model, hand, silhouette or beneficiary anywhere in the scene.`
+  const bits = [
+    casting.ageRange && `age ${casting.ageRange}`,
+    casting.gender,
+    casting.appearance,
+    casting.context && `in a ${casting.context} setting`,
+    casting.wardrobe,
+    casting.expression && `${casting.expression} expression`,
+  ].filter(Boolean).join(', ')
+  return `Talent (the SAME person in every section — keep casting consistent): a realistic Latin-American person${bits ? ` — ${bits}` : ''}, natural skin, believable, never a generic stock model.`
+}
+
+export function brandBlockFromDerived(brand: DerivedBrand): string {
+  const lines = [paletteLine(brand.palette), `Scene mood — ${brand.sceneMood}.`, castingLine(brand.casting)]
+  return `${BRAND_HEADER}\n${lines.join('\n')}`
 }
 
 // `productMode` decide la frase del producto y qué imágenes se pasan (ver la ruta):
@@ -190,23 +216,34 @@ const SCENE_CRAFT = [
 const SCENE_NEGATIVE =
   'NO TEXT (absolute): render ZERO text, letters, numbers, words, captions, labels, badges-with-words, price tags, logos, watermarks or typography of any kind anywhere in this image — with the SINGLE exception of the text physically printed on the product itself. This is a background plate; all copy is composited afterwards. Leave the composition breathing room where copy will be placed: keep the top third and the lower third visually calm and uncluttered.'
 
+// Override PRODUCT-ONLY (casting.present=false). End-weighted y absoluto, para GANARLE a la
+// mención de beneficiario que trae SCENE_SPECS (p.ej. la oferta pone una persona en la esquina
+// inferior). Sin esto, "NO PERSON" del brand block y el beneficiario del spec se pelean.
+const SCENE_PRODUCT_ONLY =
+  'PRODUCT-ONLY (absolute, OVERRIDES everything above): this product has NO human beneficiary. Do NOT render any person, model, face, hand, arm or silhouette anywhere in the scene; IGNORE every earlier mention of a beneficiary, person or someone in a corner. The product ALONE is the subject, floating over the atmosphere.'
+
 // Prompt de ESCENA para una sección híbrida. Sin `typography` ni `copy`: la escena no lleva
 // texto. Reusa brandBlock (paleta/estilo → atmósfera y materiales) + productLine/labelBlock.
+// `brand` (Fase 3): si viene, aporta paleta fusionada + mood + casting. Fallback al camino
+// viejo (palette/brandStyle sueltos) cuando es null → seguro antes de que el wizard lo siembre.
 export function buildSceneInstruction(
   type: SectionType,
   productMode: ProductMode,
   palette?: LandingPalette | null,
   brandStyle?: string | null,
   productLabels?: string | null,
+  brand?: DerivedBrand | null,
 ): string {
+  const noPerson = !!brand && !brand.casting.present
   return [
     `Design a single vertical landing-page SECTION BACKGROUND PLATE as one high-resolution image,`,
     `mobile-first, portrait orientation, premium e-commerce styling.`,
     SCENE_SPECS[type] ?? GENERIC_SCENE,
     SCENE_CRAFT,
-    brandBlock(palette, null, brandStyle),
+    brand ? brandBlockFromDerived(brand) : brandBlock(palette, null, brandStyle),
     productLine(productMode) + labelBlock(productMode, productLabels),
     ``,
     SCENE_NEGATIVE,
-  ].join('\n')
+    noPerson ? SCENE_PRODUCT_ONLY : '',
+  ].filter(Boolean).join('\n')
 }

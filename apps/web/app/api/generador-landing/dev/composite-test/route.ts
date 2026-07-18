@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { renderComposite, blurToDataUri } from '@/lib/landing/composite'
 import { buildTheme } from '@/lib/landing/theme'
-import { loadPairFonts } from '@/lib/landing/typography-catalog'
+import { loadPairFonts } from '@/lib/landing/fonts'
 import { OfertaLayout } from '@/lib/landing/layouts/oferta'
 import type { OfferCopy } from '@/lib/landing/types'
 

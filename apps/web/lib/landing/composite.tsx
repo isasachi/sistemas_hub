@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 import { ImageResponse } from 'next/og'
 import type { ReactElement } from 'react'
-import type { SatoriFont } from './typography-catalog'
+import type { SatoriFont } from './fonts'
 
 // Compone la capa de texto/UI (Satori) sobre la escena de Gemini. La escena es solo píxeles
 // (sin texto); TODO el texto sale del layout. Salida JPEG (peso) vía sharp.

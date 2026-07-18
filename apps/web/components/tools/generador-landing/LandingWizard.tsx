@@ -7,8 +7,10 @@ import { fetchRegens } from '@/lib/gen-quota-client'
 import { SECTION_LABELS } from '@/lib/landing/types'
 import { SessionErrorRetry } from '@/components/tools/ui/SessionErrorRetry'
 import AccordionSection from '@/components/tools/generador-anuncios/AccordionSection'
+import { TYPE_PAIRS } from '@/lib/landing/typography-catalog'
 import Section1Product from './sections/Section1Product'
 import Section2Photos from './sections/Section2Photos'
+import SectionIdentity from './sections/SectionIdentity'
 import Section3Sections from './sections/Section3Sections'
 import Section4Preview from './sections/Section4Preview'
 
@@ -21,7 +23,7 @@ function getStatus(sectionStep: number, currentStep: number, maxStep: number): '
 }
 
 export default function LandingWizard() {
-  const { step, sessionId, sessionError, startNewSession, hydrateFromSession, setStep, setRegens, productName, productPhotoUrls, selectedSections, sections } =
+  const { step, sessionId, sessionError, startNewSession, hydrateFromSession, setStep, setRegens, productName, productPhotoUrls, derivedBrand, selectedSections, sections } =
     useLandingStore()
 
   useEffect(() => {
@@ -44,7 +46,7 @@ export default function LandingWizard() {
   if (prevSession.current !== sessionId) { prevSession.current = sessionId; maxStep.current = 0 }
   maxStep.current = Math.max(maxStep.current, step)
 
-  const progressPct = Math.round((Math.min(step, 3) / 3) * 100)
+  const progressPct = Math.round((Math.min(step, 4) / 4) * 100)
 
   if (sessionError && !sessionId) {
     return (
@@ -88,20 +90,30 @@ export default function LandingWizard() {
 
         <AccordionSection
           index={3}
-          title="Secciones de tu landing"
+          title="Identidad visual"
           status={getStatus(2, step, maxStep.current)}
-          summary={selectedSections.length ? selectedSections.map((s) => SECTION_LABELS[s]).join(' · ') : undefined}
+          summary={derivedBrand ? `${derivedBrand.niche} · ${TYPE_PAIRS[derivedBrand.typePair].display}` : undefined}
           onReopen={() => setStep(2)}
+        >
+          <SectionIdentity />
+        </AccordionSection>
+
+        <AccordionSection
+          index={4}
+          title="Secciones de tu landing"
+          status={getStatus(3, step, maxStep.current)}
+          summary={selectedSections.length ? selectedSections.map((s) => SECTION_LABELS[s]).join(' · ') : undefined}
+          onReopen={() => setStep(3)}
         >
           <Section3Sections />
         </AccordionSection>
 
         <AccordionSection
-          index={4}
+          index={5}
           title={sections.length ? '¡Tu landing está lista!' : 'Tu landing'}
-          status={step === 3 ? 'active' : maxStep.current >= 3 ? 'completed' : 'locked'}
+          status={step === 4 ? 'active' : maxStep.current >= 4 ? 'completed' : 'locked'}
           summary={sections.length ? 'Landing lista' : undefined}
-          onReopen={() => setStep(3)}
+          onReopen={() => setStep(4)}
         >
           <Section4Preview />
         </AccordionSection>

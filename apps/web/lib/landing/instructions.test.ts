@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { buildSectionInstruction, buildSceneInstruction } from './instructions'
-import type { SectionCopy, SectionType } from './types'
+import type { SectionCopy, SectionType, DerivedBrand } from './types'
 
 const ALL: SectionType[] = [
   'hero', 'oferta', 'antes-despues', 'beneficios',
@@ -99,5 +99,45 @@ describe('buildSceneInstruction — plato de fondo híbrido', () => {
   it('el producto lleva su texto impreso como única excepción de texto', () => {
     const out = buildSceneInstruction('oferta', 'source', null, null, 'MINDBODYSKIN\n90 Capsules')
     expect(out).toContain('PRODUCT LABEL TEXT')
+  })
+
+  it('con DerivedBrand (Fase 3): usa mood + casting y su paleta fusionada', () => {
+    const brand: DerivedBrand = {
+      niche: 'fitness-energia',
+      palette: [{ name: 'Naranja', hex: '#FF6A2C', usage: 'accent' }],
+      typePair: 'urgencia-condensada',
+      casting: { present: true, ageRange: '25-35', gender: 'femenino', expression: 'enérgica' },
+      sceneMood: 'energía y sudor, luz de gimnasio',
+    }
+    const out = buildSceneInstruction('oferta', 'canonical', null, 'IGNORAR-BRANDSTYLE', null, brand)
+    expect(out).toContain('#FF6A2C')                       // paleta fusionada del brand
+    expect(out).toContain('energía y sudor, luz de gimnasio') // sceneMood
+    expect(out).toContain('age 25-35')                     // casting como dato
+    expect(out).not.toContain('IGNORAR-BRANDSTYLE')        // brand gana sobre brand_style suelto
+  })
+
+  it('casting.present=false suprime al beneficiario (acceptance #2)', () => {
+    const brand: DerivedBrand = {
+      niche: 'tech-limpio',
+      palette: [{ name: 'Azul', hex: '#3B82F6' }],
+      typePair: 'tech-neutral',
+      casting: { present: false },
+      sceneMood: 'estudio limpio',
+    }
+    const out = buildSceneInstruction('oferta', 'canonical', null, null, null, brand)
+    expect(out).toContain('NO PERSON')
+    // el override PRODUCT-ONLY va al FINAL para ganarle al beneficiario del SCENE_SPECS
+    expect(out).toContain('PRODUCT-ONLY (absolute, OVERRIDES everything above)')
+    expect(out.trimEnd().endsWith('floating over the atmosphere.')).toBe(true)
+  })
+
+  it('casting.present=true NO agrega el override product-only', () => {
+    const brand: DerivedBrand = {
+      niche: 'salud-clinico', palette: [{ name: 'Azul', hex: '#2E6FB7' }],
+      typePair: 'clinico-geometrico', casting: { present: true, ageRange: '35-50', gender: 'femenino' },
+      sceneMood: 'luz clínica',
+    }
+    const out = buildSceneInstruction('oferta', 'canonical', null, null, null, brand)
+    expect(out).not.toContain('PRODUCT-ONLY')
   })
 })

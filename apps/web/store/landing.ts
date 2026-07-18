@@ -1,13 +1,14 @@
 'use client'
 
 import { create } from 'zustand'
-import type { SectionType, SectionCopy, LandingSection, LandingSessionResponse } from '@/lib/landing/types'
+import type { SectionType, SectionCopy, LandingSection, LandingSessionResponse, DerivedBrand } from '@/lib/landing/types'
 
 export const SESSION_KEY = 'landing_session_id'
 
-// Máquina de pasos del wizard de landing. `step` = nº de secciones completadas.
-//   0 Producto · 1 Fotos · 2 Secciones+copy · 3 Preview (final)
+// Máquina de pasos del wizard de landing. `step` = etapa alcanzada.
+//   0 Producto · 1 Fotos · 2 Identidad visual · 3 Secciones+copy · 4 Preview (final)
 //   La plantilla ya no es un paso: el análisis es interno (plantilla maestra).
+//   Identidad (F3): revisión bloqueante de la marca derivada antes de generar imagen.
 
 interface LandingState {
   sessionId: string | null
@@ -20,6 +21,7 @@ interface LandingState {
   tone: string[]
   productLabels: string | null
   productPhotoUrls: string[]
+  derivedBrand: DerivedBrand | null
   selectedSections: SectionType[]
   copy: SectionCopy[]
   sections: LandingSection[]
@@ -30,6 +32,8 @@ interface LandingActions {
   setStep: (step: number) => void
   setDetails: (data: { productName: string; price: string; benefits: string; audience: string; tone: string[]; productLabels: string }) => void
   setPhotos: (urls: string[]) => void
+  setDerivedBrand: (brand: DerivedBrand | null) => void
+  confirmIdentity: () => void
   setSelectedSections: (sections: SectionType[]) => void
   setCopy: (copy: SectionCopy[]) => void
   approveCopy: () => void
@@ -52,6 +56,7 @@ const initialState: LandingState = {
   tone: [],
   productLabels: null,
   productPhotoUrls: [],
+  derivedBrand: null,
   selectedSections: [],
   copy: [],
   sections: [],
@@ -68,11 +73,16 @@ export const useLandingStore = create<LandingState & LandingActions>((set) => ({
 
   setPhotos: (urls) => set({ productPhotoUrls: urls, step: 2 }),
 
+  setDerivedBrand: (derivedBrand) => set({ derivedBrand }),
+
+  // Confirmación del checkpoint bloqueante de identidad → avanza a secciones.
+  confirmIdentity: () => set({ step: 3 }),
+
   setSelectedSections: (selectedSections) => set({ selectedSections }),
 
   setCopy: (copy) => set({ copy }),
 
-  approveCopy: () => set({ step: 3 }),
+  approveCopy: () => set({ step: 4 }),
 
   // Upsert por tipo: el evento progress del SSE va llenando el array.
   setSectionImage: (section) =>
@@ -95,6 +105,7 @@ export const useLandingStore = create<LandingState & LandingActions>((set) => ({
       tone: s.tone ?? [],
       productLabels: s.product_labels,
       productPhotoUrls: s.product_photo_urls ?? [],
+      derivedBrand: s.derived_brand ?? null,
       selectedSections: s.selected_sections ?? [],
       copy: s.copy ?? [],
       sections: (s.sections ?? []).slice().sort((a, b) => a.order - b.order),
