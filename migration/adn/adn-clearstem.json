@@ -1,0 +1,252 @@
+{
+  "meta": {
+    "name": "ADN CLEARSTEM — funnel DR peruano (MINDBODYSKIN)",
+    "description": "ADN destilado de 4 creativos 9:16 de una landing direct-response CLEARSTEM (suplemento anti-acné hormonal) adaptada al mercado peruano. Fuente de verdad única del sistema de diseño de generador-landing. Cubre las 4 dimensiones del proyecto: visual, copy, oferta, confianza.",
+    "source_references": [
+      "hero — Acabá con el acné hormonal que siempre vuelve",
+      "beneficios — Libérate del acné y recupera el equilibrio hormonal",
+      "oferta — Elige tu mejor opción / OFERTA EXCLUSIVA SOLO HOY",
+      "garantia — Envío rápido y pago seguro"
+    ],
+    "created_at": "2026-07-18",
+    "aspect_ratio": "9:16",
+    "market": "Perú (soles S/, contraentrega, yape/plin/mercadopago)"
+  },
+
+  "design_system": {
+    "color": {
+      "palette_type": "analogous-blue with metallic-gold accent",
+      "primary": { "hex": "#123C7A", "role": "navy profundo — headlines, texto sobre glass, card del tier destacado, CTA por defecto" },
+      "secondary": { "hex": "#2E6FB7", "role": "azul royal — palabra-acento del headline, relleno de CTA no destacado, discos de icono" },
+      "accent": { "hex": "#F4C63E", "role": "oro metálico — EXCLUSIVO para valor/urgencia/confianza (ribbons ahorra%, sellos, corona recomendado, CTA del tier destacado, 48h, 100%, banner de urgencia)" },
+      "accent_dark": { "hex": "#8F5E0E", "role": "bronce — sombra del degradado dorado; contraste alto oro↔bronce = lámina metálica agresiva" },
+      "neutral": {
+        "scale": ["#FFFFFF", "#EAF4FC", "#CFE3F5", "#9EC2E4", "#5A6B85", "#101828"],
+        "usage": "blanco = producto y superficies; #EAF4FC..#9EC2E4 = atmósfera de cielo luminoso; #5A6B85 = subtítulos sobre glass; #101828 = texto máximo contraste"
+      },
+      "semantic": {
+        "success": "#2FA35A",
+        "warning": "#F4C63E",
+        "error": "#D64545",
+        "info": "#2E6FB7"
+      },
+      "surface": {
+        "background": "atmósfera de cielo luminoso — degradado vertical (más claro arriba/centro) #EAF4FC→#9EC2E4 con glow radial, rayos suaves, bruma, bokeh y chispas",
+        "card": "frosted glass — blanco translúcido rgba(244,250,255,0.62) con tinte azul, borde superior 1px de luz, glow interno sutil, sombra difusa",
+        "elevated": "card del tier destacado — relleno navy #123C7A sólido, coronado con ribbon dorado"
+      },
+      "contrast_strategy": "navy-sobre-luz dominante; el oro salta como único color cálido sobre un mundo frío-azul; texto oscuro sobre glass claro siempre legible"
+    },
+
+    "typography": {
+      "type_scale": {
+        "display": { "size": "~64px", "weight": "800", "line_height": "1.02", "tracking": "-0.01em" },
+        "heading_1": { "size": "~44px", "weight": "800", "line_height": "1.05", "tracking": "-0.01em" },
+        "heading_2": { "size": "~30px", "weight": "700", "line_height": "1.1", "tracking": "0" },
+        "heading_3": { "size": "~22px", "weight": "700", "line_height": "1.2", "tracking": "0" },
+        "body": { "size": "~17px", "weight": "400", "line_height": "1.4", "tracking": "0" },
+        "body_small": { "size": "~14px", "weight": "400", "line_height": "1.4", "tracking": "0" },
+        "caption": { "size": "~12px", "weight": "400", "line_height": "1.3", "tracking": "0" },
+        "overline": { "size": "~13px", "weight": "700", "line_height": "1.2", "tracking": "0.14em" },
+        "price_numeral": { "size": "~72px", "weight": "900", "line_height": "0.95", "tracking": "-0.02em", "note": "el precio es el mayor peso tipográfico de toda la pieza; oro sobre el tier destacado, navy en los demás" }
+      },
+      "font_families": {
+        "heading": "geométrica-humanista bold (Poppins / Montserrat SemiBold-Black)",
+        "body": "grotesca neutra limpia (Inter / Source Sans)",
+        "mono": "n/a"
+      },
+      "font_style_notes": "display geométrica bold, ligeramente amistosa (no severa); la palabra-acento del headline en peso igual pero color azul royal; overlines en mayúsculas con tracking amplio; los numerales de precio son el clímax tipográfico (Black/900)"
+    },
+
+    "spacing": {
+      "base_unit": "8px",
+      "scale": [8, 16, 24, 32, 48, 64],
+      "content_density": "comfortable — respira, whitespace generoso; una sección con poco copy queda limpia y espaciada",
+      "section_rhythm": "headline arriba (tercio superior) → subject/producto medio → cards/pills/oferta abajo; footer de refuerzo en 1 línea"
+    },
+
+    "layout": {
+      "grid_system": "vertical stack 9:16 sobre escena de fondo full-bleed; tiers en fila horizontal (2-3 columnas)",
+      "max_content_width": "borde a borde con margen lateral ~48px",
+      "columns": "1 (contenido) / 2-3 (fila de tiers)",
+      "gutter": "~16px entre tiers",
+      "breakpoints": "n/a (formato fijo de creativo)",
+      "alignment_tendency": "mixed — headline alineado a la izquierda, oferta/precios centrados, beneficiario cropeado al borde"
+    },
+
+    "shape": {
+      "border_radius": { "small": "10px", "medium": "18px", "large": "28px", "pill": "999px" },
+      "border_usage": "borde superior 1px de luz en cada glass (highlight), sin bordes duros; los CTA son pills redondeadas",
+      "divider_style": "pill navy sólido como separador de sección dentro del panel (ej. 'Combate el acné desde adentro')"
+    },
+
+    "elevation": {
+      "shadow_style": "soft diffused + glow interno; el glass flota sobre la atmósfera",
+      "levels": {
+        "low": "sombra difusa suave bajo pills de beneficio",
+        "medium": "sombra + glow del panel frosted grande",
+        "high": "tier destacado levantado al frente, coronado, con sombra proyectada más marcada"
+      },
+      "depth_cues": "blur/glass, superposición de capas, glow radial detrás del subject, intensidad de color"
+    },
+
+    "iconography": {
+      "style": "discos circulares glossy con degradado en el color de marca + un SÍMBOLO (balanza, gota, chispa, cerebro-corazón, check, camión, reloj, escudo); nunca clip-art plano",
+      "stroke_weight": "n/a (sólidos/glossy, no line-icons)",
+      "size_scale": "~56px el disco de beneficio; badge verde de check ~20px en la esquina",
+      "preferred_set": "símbolos custom glossy; badge verde de verificación recurrente"
+    },
+
+    "motion": {
+      "easing": "n/a (creativos estáticos)",
+      "duration_scale": { "micro": "n/a", "normal": "n/a", "macro": "n/a" },
+      "entrance_pattern": "n/a",
+      "exit_pattern": "n/a",
+      "philosophy": "estático — el ADN de movimiento no aplica a secciones-imagen"
+    },
+
+    "components": {
+      "button_style": "pill redondeada; relleno navy #123C7A o azul royal por defecto ('Compra Ya'), relleno DORADO en el tier destacado ('Comprar Ya')",
+      "input_style": "n/a",
+      "card_style": "frosted glass translúcido con borde superior de luz; el tier destacado invierte a navy sólido + corona dorada",
+      "navigation_pattern": "n/a",
+      "modal_style": "n/a",
+      "list_style": "filas de beneficio/confianza como pills frosted horizontales: disco de icono + título bold + línea más clara",
+      "component_notes": "ribbon dorado ('Recomendado', 'MEJOR VALOR', 'AHORRA 41%') como corona/banda sobre la card; sello/medalla dorado circular para garantía ('100%', 'MEJOR VALOR'); strip de logos de pago + banderas + camión al pie"
+    }
+  },
+
+  "design_style": {
+    "aesthetic": {
+      "mood": ["luminoso", "aspiracional", "clínico-confiable", "premium-accesible", "esperanzador"],
+      "visual_metaphor": "amanecer/cielo limpio = piel limpia y equilibrio recuperado; luz que disuelve el problema",
+      "era_influence": "e-commerce DR contemporáneo, estética de suplemento wellness premium",
+      "genre": "direct-response e-commerce (funnel de conversión), no editorial ni SaaS",
+      "personality_traits": ["confiado", "cálido pero profesional", "persuasivo", "meticuloso con la prueba"],
+      "adjectives": ["etéreo", "glossy", "high-contrast", "conversion-first", "magazine-grade"]
+    },
+    "visual_language": {
+      "complexity": "rich — muchas capas (atmósfera + producto + persona + glass + oro) pero ordenadas por jerarquía",
+      "ornamentation": "decorativa controlada — ribbons, sellos y discos solo donde el copy aporta el dato; nunca relleno",
+      "whitespace_usage": "generoso alrededor del producto y el headline; densidad sube en la fila de tiers",
+      "visual_weight_distribution": "producto = héroe central; oro = imán de atención puntual sobre valor",
+      "focal_strategy": "single hero element (producto) + un punto de oro que dirige al valor/CTA",
+      "contrast_level": "alto — navy sobre luz, oro cálido sobre azul frío",
+      "texture_usage": "bruma, bokeh, chispas, rayos de luz, vidrio esmerilado; oro con textura metálica"
+    },
+    "composition": {
+      "hierarchy_method": "scale contrast (producto y precio grandes) + color weight (oro para valor) + aislamiento espacial",
+      "balance_type": "asymmetric — headline a un lado, beneficiario al opuesto, producto al centro",
+      "flow_direction": "top-down: problema/promesa → producto/beneficio → oferta/precio → CTA",
+      "grouping_strategy": "cada beneficio/garantía en su propia pill; cada tier en su propia card",
+      "negative_space_role": "el aire alrededor del producto comunica premium y foco"
+    },
+    "imagery": {
+      "photo_treatment": "beneficiario real latino, piel real no idealizada (poros, pecas, textura), luz suave direccional; cropeado al borde del frame",
+      "illustration_style": "discos de icono glossy 3D, no ilustración plana",
+      "graphic_elements": "ribbons dorados, sellos/medallas circulares, banderas PE+US, logos de pago reales, camión de envío, estructura molecular tenue",
+      "pattern_usage": "sin patrón repetitivo; textura de cielo/agua",
+      "image_shape": "producto flotante recortado; insets con esquinas redondeadas para el estado 'antes/problema'"
+    },
+    "interaction_feel": {
+      "feedback_style": "n/a (imagen estática)",
+      "hover_behavior": "n/a",
+      "transition_personality": "n/a",
+      "loading_style": "n/a",
+      "microinteraction_density": "n/a"
+    },
+    "brand_voice_in_ui": {
+      "tone": "cercano, motivador, tranquilizador; tuteo/voseo rioplatense-neutro peruano",
+      "formality": "informal-persuasivo",
+      "cta_style": "imperativo directo con urgencia ('Compra Ya', 'Comprar Ya', 'SOLO HOY')",
+      "empty_state_approach": "n/a",
+      "error_tone": "n/a"
+    }
+  },
+
+  "visual_effects": {
+    "overview": {
+      "effect_intensity": "moderate — atmósfera + glass + oro metálico, todo simulado en la imagen generada (Gemini) o compuesto (Satori)",
+      "performance_tier": "lightweight (la escena es una imagen; la UI se compone con Satori sin backdrop-filter)",
+      "fallback_strategy": "el glass se simula pintando el frosted en la escena o con relleno translúcido + borde de luz en la capa compuesta",
+      "primary_technology": "Gemini (escena) + Satori/next-og (composición de texto/UI)"
+    },
+    "background_effects": {
+      "type": "generative-art — atmósfera de cielo luminoso",
+      "description": "degradado vertical (más claro arriba/centro), glow radial detrás del subject, rayos de luz suaves, bruma/haze, bokeh orbs, chispas",
+      "technology": "Gemini image",
+      "params": { "color_palette": ["#EAF4FC", "#9EC2E4", "#7FB4E0"], "speed": "n/a", "density": "media", "opacity": "alta luminosidad", "blend_mode": "screen/soft-light" }
+    },
+    "particle_systems": { "enabled": true, "type": "sparkle + bokeh", "description": "chispas y orbes de luz difusos flotando en la atmósfera", "technology": "Gemini image", "params": { "count": "pocas", "shape": "orbe/estrella", "size_range": "pequeño-medio", "movement_pattern": "n/a (estático)", "color_behavior": "blanco/azul luminoso, oro cerca de sellos", "interaction": "none", "spawn_area": "todo el fondo" } },
+    "3d_elements": { "enabled": false, "type": "n/a", "description": "los discos de icono y sellos leen como 3D glossy pero son pintados, no render 3D", "technology": "n/a", "params": {} },
+    "shader_effects": { "enabled": false, "type": "n/a", "description": "n/a", "technology": "n/a", "params": {} },
+    "scroll_effects": {
+      "parallax": { "enabled": false, "layers": "n/a", "depth_range": "n/a", "speed_curve": "n/a" },
+      "scroll_triggered_animations": { "enabled": false, "trigger_points": "n/a", "animation_type": "n/a", "scrub_behavior": "n/a" },
+      "scroll_morphing": { "enabled": false, "description": "n/a" }
+    },
+    "text_effects": { "type": "gradient-fill", "description": "numerales de precio y ribbons con relleno degradado dorado; palabra-acento del headline en color contrastante", "technology": "Satori (capa compuesta)", "params": { "split_strategy": "by-word (acento)", "animation_per_unit": "n/a", "stagger": "n/a", "effect_style": "metallic-gold gradient" } },
+    "cursor_effects": { "enabled": false, "type": "none", "description": "n/a", "params": {} },
+    "image_effects": { "type": "none", "description": "producto y persona son fotográficos limpios sobre la atmósfera", "technology": "n/a", "params": {} },
+    "glassmorphism_neumorphism": {
+      "enabled": true,
+      "style": "glass (frosted)",
+      "params": { "blur_radius": "simulado (Satori no soporta backdrop-filter)", "transparency": "~0.62", "border_treatment": "1px highlight superior + tinte de accent", "shadow_type": "difusa suave + glow interno", "light_source_angle": "superior" }
+    },
+    "canvas_drawings": { "enabled": false, "type": "none", "description": "n/a", "technology": "n/a", "params": {} },
+    "svg_animations": { "enabled": false, "type": "none", "description": "logos de pago (yape/visa/mastercard/mercadopago) son SVG reales de la librería de devices, sin animar", "params": {} },
+    "composite_notes": "FIRMA del ADN = tres capas: (1) atmósfera luminosa dimensional, (2) superficies frosted-glass para toda fila/card/panel, (3) oro metálico EXCLUSIVO para valor/urgencia/confianza. El oro nunca es mobiliario por defecto: aparece solo sobre el tier recomendado, ribbons de ahorro, corona 'MEJOR VALOR', sello de garantía, reloj '48h', banner de urgencia. Verde = solo checks de verificación."
+  },
+
+  "copy_dna": {
+    "headline_formulas": [
+      "Imperativo anti-problema recurrente: 'Acabá con el {problema} que siempre vuelve'",
+      "Liberación + beneficio profundo: 'Libérate del {problema} y recupera el {estado-deseado}'",
+      "Elección/valor: 'Elige tu mejor opción' + overline 'AHORROS Y RESULTADOS REALES'",
+      "Confianza operativa: 'Envío rápido y pago seguro' + subtítulo 'Tu tranquilidad, nuestra prioridad'"
+    ],
+    "accent_word_rule": "una sola palabra-acento por headline, coloreada distinto (azul royal sobre navy)",
+    "footer_reinforcement": "una línea de cierre con acento: '¡Beneficios rápidos y visibles!', '¡Confiable, fácil y rápido!'",
+    "benefit_line_shape": "título bold corto ('Regula las hormonas') + continuación más clara ('que disparan el acné')",
+    "tone": "motivador, cercano, con urgencia honesta"
+  },
+
+  "offer_dna": {
+    "tier_count": 3,
+    "structure": "1 / 2 / 3 unidades (frascos), con un tier destacado (decoy asimétrico)",
+    "featured_tier": {
+      "position": "3 Frascos (mayor unidad)",
+      "label": "MEJOR VALOR + corona 'Recomendado 3x2'",
+      "treatment": "card navy sólido + CTA dorado + ribbon/corona dorada",
+      "price": "S/199"
+    },
+    "price_anchor": "precio 'Antes: S/.X' tachado sobre cada tier (S/169, S/338, S/507) — ancla de descuento",
+    "savings_ribbon": "ribbon dorado 'AHORRA 41%' / 'AHORRA 55%' solo cuando hay ahorro declarado",
+    "per_unit_cost": "línea de costo por cápsula ('90 cápsulas x3 | S/ 0.7 por cápsula') para justificar el tier grande",
+    "urgency": "banner dorado 'OFERTA EXCLUSIVA — SOLO HOY' + '¡S/.199 HOY!'",
+    "cta": "'Compra Ya' / 'Comprar Ya' — pill; dorada en el destacado, navy/azul en el resto",
+    "consistency_rule": "el precio del tier destacado (S/199) y sus anclas deben ser idénticos en hero, oferta, cta-final y garantía — nunca contradecirse (este es el bug real de las referencias: S/99 sin ancla en una pieza, con 'antes S/169' en otra)"
+  },
+
+  "trust_dna": {
+    "cod_delivery": true,
+    "delivery_time": "24/48 horas",
+    "coverage": ["Perú", "EE.UU."],
+    "payment_methods": ["yape", "visa", "mastercard", "mercadopago", "efectivo"],
+    "guarantee": { "text": "devolución/reembolso garantizado, pago cifrado, compra 100% segura", "seal": "sello dorado '100%'" },
+    "free_shipping": true,
+    "trust_rows": [
+      { "icon": "camión + banderas PE/US", "title": "Domicilio en todo Perú y EE.UU.", "line": "Recíbelo en casa y paga de forma segura" },
+      { "icon": "check + reloj dorado 48h", "title": "Entrega en 24/48 horas", "line": "Dictas tu dirección, ¡y listo!" },
+      { "icon": "check verde", "title": "Pago Contraentrega", "line": "Pagas en efectivo cuando llega" },
+      { "icon": "escudo dorado", "title": "Compra 100% Segura", "line": "Garantía de reembolso y pago cifrado" }
+    ],
+    "payment_strip": "logos reales yape / VISA / mastercard / mercado pago + sello dorado 100% (SVG reales, no difusión)",
+    "note": "estos son HECHOS OPERATIVOS del negocio — los llena el usuario en el wizard (F5), el LLM no los inventa"
+  },
+
+  "niche_extrapolation": {
+    "note": "CLEARSTEM = nicho salud-clinico. El ADN visual (atmósfera luminosa + glass + oro-para-valor) es FIJO app-wide; solo la paleta/mood se adapta por nicho. La paleta salud-clinico debe reflejar este funnel: navy profundo + cielo luminoso + celeste.",
+    "salud-clinico": ["#123C7A navy atmósfera/marca", "#7FB4E0 celeste brillo", "#EAF4FC blanco-cielo fondo"]
+  }
+}

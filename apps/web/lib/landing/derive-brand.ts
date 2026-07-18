@@ -14,7 +14,7 @@ import type { Part } from '@google/genai'
 // píxeles del packaging: el frasco blanco de un suplemento no "sabe" que su código de nicho es
 // azul-pureza. El accent de MARCA sí sale del packaging (style-extract); esto lo complementa.
 const NICHE_PALETTE: Record<NicheCode, LandingPalette> = {
-  'salud-clinico':   [{ name: 'Azul clínico', hex: '#2E6FB7', usage: 'atmósfera' }, { name: 'Celeste', hex: '#8FC2E8', usage: 'brillo' }, { name: 'Blanco puro', hex: '#F5FAFF', usage: 'fondo' }],
+  'salud-clinico':   [{ name: 'Azul marino', hex: '#123C7A', usage: 'marca' }, { name: 'Celeste luminoso', hex: '#7FB4E0', usage: 'brillo' }, { name: 'Blanco cielo', hex: '#EAF4FC', usage: 'atmósfera' }],
   'fitness-energia': [{ name: 'Negro grafito', hex: '#14161A', usage: 'atmósfera' }, { name: 'Naranja energía', hex: '#FF6A2C', usage: 'acento cálido' }, { name: 'Lima', hex: '#C6F53B', usage: 'brillo' }],
   'belleza-premium': [{ name: 'Nude', hex: '#E7D3C2', usage: 'atmósfera' }, { name: 'Dorado suave', hex: '#C9A76B', usage: 'acento cálido' }, { name: 'Crema', hex: '#FAF3EA', usage: 'fondo' }],
   'hogar-calido':    [{ name: 'Terracota', hex: '#C56A45', usage: 'atmósfera' }, { name: 'Beige', hex: '#E4D2B8', usage: 'superficie' }, { name: 'Crema tibia', hex: '#FBF4E9', usage: 'fondo' }],
