@@ -4,8 +4,8 @@ import { buildTheme } from '@/lib/landing/theme'
 import { loadPairFonts } from '@/lib/landing/typography-catalog'
 import { OfertaDemo } from './oferta-demo'
 
-// Ruta de PRUEBA de la infra de composición (Fase 0). Solo desarrollo — 404 en prod.
-// Renderiza el layout de Oferta demo sobre un fondo luminoso estático y devuelve el JPEG.
+// Ruta de PRUEBA de la infra de composición (Fase 0). Vive en local Y en previews de Vercel;
+// 404 solo en production real. Renderiza la Oferta demo sobre un fondo luminoso → JPEG.
 // GET /api/generador-landing/dev/composite-test  → image/jpeg 1080×1920
 // (carpeta `dev`, NO `_dev`: el prefijo `_` es private folder de App Router y no enruta.)
 
@@ -25,7 +25,10 @@ async function luminousScene(): Promise<Buffer> {
 }
 
 export async function GET() {
-  if (process.env.NODE_ENV === 'production') {
+  // En Vercel, preview Y production corren con NODE_ENV=production; el discriminador es
+  // VERCEL_ENV. Bloquear SOLO production real → la ruta de prueba se puede abrir en el
+  // preview del PR (donde hay que verificar que las fuentes llegan al bundle) y en local.
+  if (process.env.VERCEL_ENV === 'production') {
     return new NextResponse('Not found', { status: 404 })
   }
 
