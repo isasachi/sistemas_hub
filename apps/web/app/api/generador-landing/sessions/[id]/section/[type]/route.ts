@@ -2,10 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getLandingSession, updateLandingSession } from '@/lib/landing/db'
 import { fetchAsBase64, uploadToStorage } from '@/lib/storage'
 import { generateImage, editWithPrompt } from '@/lib/gemini'
-import { buildSectionInstruction, buildSceneInstruction } from '@/lib/landing/instructions'
+import { buildSectionInstruction, buildSceneInstruction, type ProductMode } from '@/lib/landing/instructions'
 import { HYBRID_SECTIONS } from '@/lib/landing/engine-registry'
 import { extractLandingStyle } from '@/lib/landing/style-extract'
-import { extractProductBox, cropProduct } from '@/lib/landing/product-box'
 import { generateOfferCopy } from '@/lib/landing/copy'
 import { renderComposite, blurToDataUri } from '@/lib/landing/composite'
 import { buildTheme } from '@/lib/landing/theme'
@@ -91,35 +90,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
     }
 
-    // Ancla de producto para consistencia + fidelidad entre secciones. La PRIMERA sección
-    // generada sale de las fotos crudas ('source': reproduce el producto con TODOS sus labels
-    // reales) y su render limpio se cachea como ancla. Las demás calcan ese producto
-    // ('anchored': Imagen 1 = RECORTE del producto del ancla, Imagen 2+ = fotos reales como
-    // ground-truth de labels). El cliente genera secuencialmente Y en orden de prioridad de
-    // ancla (Section4Preview: hero/producto-único-grande primero) → la 1ª 'source' es siempre
-    // anchor-worthy, sin carrera. ponytail: el ancla se fija una vez; regenerar en fresco la
-    // sección-fuente la re-ancla contra su propio recorte viejo (no re-deriva). Si el ancla
-    // saliera mala, hoy no hay reset — v1; upgrade: botón "re-anclar" que limpie la columna.
-    const parts: Part[] = [...photoParts]
-    let mode: 'source' | 'anchored' | 'none' = photoParts.length ? 'source' : 'none'
+    // Ancla CANÓNICA del producto (Fase 2): la placa se deriva de la FOTO REAL en la etapa 2
+    // (photos/route.ts), no del render de la 1ª sección. Image 1 = recorte canónico si existe (o
+    // la foto cruda si no se pudo derivar — el prompt 'canonical' ignora su fondo); Image 2+ =
+    // fotos reales como ground-truth de labels. La ruta ya NO siembra ni deriva el ancla: queda
+    // SIN estado compartido entre secciones → secciones independientes (habilita la Fase 6).
+    const parts: Part[] = []
+    let mode: ProductMode = 'none'
     if (session.product_canonical_url) {
       const anchor = await fetchAsBase64(session.product_canonical_url)
-      parts.unshift({ inlineData: { mimeType: anchor.mimeType, data: anchor.data } })
-      mode = 'anchored'
+      parts.push({ inlineData: { mimeType: anchor.mimeType, data: anchor.data } }, ...photoParts)
+      mode = 'canonical'
+    } else if (photoParts.length) {
+      parts.push(...photoParts)
+      mode = 'canonical'
     }
     parts.push({ text: buildSectionInstruction(copy, mode, palette, typography, session.brand_style, session.product_labels) })
     b64 = await generateImage(parts, 3, { aspectRatio: '9:16' })
-
-    // Cachea el ancla desde la primera sección-fuente exitosa, RECORTADA al producto (sin el
-    // layout de la sección) para que las demás calquen el producto sin clonar su estructura.
-    // Fallback al render completo si el bbox/recorte falla (nunca peor que hoy).
-    if (b64 && mode === 'source') {
-      const buf = Buffer.from(b64, 'base64')
-      const box = await extractProductBox(b64, 'image/png')
-      const anchorBuf = box ? await cropProduct(buf, box).catch(() => buf) : buf
-      const anchorUrl = await uploadToStorage(id, anchorBuf, 'image/png', 'product-canonical')
-      await updateLandingSession(id, { product_canonical_url: anchorUrl })
-    }
   }
   if (!b64) return NextResponse.json({ error: 'No se pudo generar la sección', retryable: true }, { status: 502 })
 
@@ -170,12 +157,16 @@ async function generateScenePlate(
       console.error('[landing-style]', err)
     }
   }
-  const parts: Part[] = [...photoParts]
-  let mode: 'source' | 'anchored' | 'none' = photoParts.length ? 'source' : 'none'
+  // Ancla CANÓNICA (Fase 2): recorte de la foto real desde la etapa 2. Sin siembra ni estado.
+  const parts: Part[] = []
+  let mode: ProductMode = 'none'
   if (session.product_canonical_url) {
     const anchor = await fetchAsBase64(session.product_canonical_url)
-    parts.unshift({ inlineData: { mimeType: anchor.mimeType, data: anchor.data } })
-    mode = 'anchored'
+    parts.push({ inlineData: { mimeType: anchor.mimeType, data: anchor.data } }, ...photoParts)
+    mode = 'canonical'
+  } else if (photoParts.length) {
+    parts.push(...photoParts)
+    mode = 'canonical'
   }
   parts.push({ text: buildSceneInstruction('oferta', mode, palette, session.brand_style, session.product_labels) })
   const sceneB64 = await generateImage(parts, 3, { aspectRatio: '9:16', imageSize: '2K' })

@@ -105,17 +105,29 @@ function brandBlock(
 //   'anchored' — resto: Image 1 es el RECORTE del producto del ancla; Image 2+ son las fotos
 //                reales = ground-truth de labels. Consistencia sin arrastrar la estructura.
 //   'none'     — sin foto (no debería pasar; el wizard exige ≥1): placeholder genérico.
+// Modo de producto. Fase 2: 'canonical' (placa canónica derivada de la foto real en etapa 2)
+// unifica lo mejor de los dos modos viejos. 'source'/'anchored' quedan SOLO por compatibilidad
+// con sesiones en curso — @deprecated, no usar en código nuevo.
+export type ProductMode = 'canonical' | 'none' | 'source' | 'anchored'
+
 // Extraídos a nivel módulo para que los reusen buildSectionInstruction (motor viejo) Y
 // buildSceneInstruction (motor híbrido) — el producto y sus labels son idénticos en ambos.
-function productLine(productMode: 'source' | 'anchored' | 'none'): string {
-  return productMode === 'source'
-    ? `Image 1 is the REAL product — the exact object this landing sells. Reproduce it with total PHYSICAL fidelity: the SAME shape, proportions, colour, material and finish as in Image 1 — keep its exact colour and tint, do NOT recolour, lighten, whiten, desaturate or restyle the product to match the background or palette. ALSO reproduce ALL the text and graphics actually PRINTED ON IT faithfully and exactly: its main wordmark AND every secondary label, ingredient line, tagline and size/volume, spelled, styled and placed as in Image 1 — do not simplify, drop, translate or restyle any of them, and keep them legible. Invent NOTHING that is not printed on the product (no fake descriptors, sizes or ingredient names). If Image 1 is an ad or infographic, the product is the physical object only — the section copy, captions, callouts and any text or lines pointing AT the product from outside are NOT part of its label; never render those onto it. Place it in the scene per the design system above.`
-    : productMode === 'anchored'
-      ? `Image 1 is an ISOLATED CROP of THIS landing's product (the product alone, cut out of another section — it carries NO layout, headline, cards or scene of its own). Reproduce that exact product IDENTICALLY: same shape, proportions, colors, finish and every label — all printed text big and small, spelled, styled and placed exactly as in Image 1. Images 2 and later are the real product photo(s) — use them as the ground-truth for label wording and detail. Image 1 is ONLY a product reference: do NOT copy any framing, background or composition from it — this section's entire layout comes from its own section spec and the master layout above. Do NOT invent, drop, restyle or redraw the product. Place it in the scene per the design system above.`
-      : `Compose around a generic attractive product placeholder.`
+function productLine(productMode: ProductMode): string {
+  switch (productMode) {
+    case 'canonical':
+      // Fusión de source (fidelidad física + labels exactos) + anchored (recorte aislado, no
+      // copiar encuadre/fondo). Image 1 = placa canónica; Images 2+ = fotos reales (ground-truth).
+      return `Image 1 is an ISOLATED CROP of THIS landing's product — the product alone, cut out of its own photo; it carries NO layout, headline, cards, scene, framing or background of its own. Reproduce that exact product with total PHYSICAL fidelity: the SAME shape, proportions, colour, material and finish as in Image 1 — keep its exact colour and tint, do NOT recolour, lighten, whiten, desaturate or restyle it to match the background or palette. ALSO reproduce ALL the text and graphics actually PRINTED ON IT exactly: its main wordmark AND every secondary label, ingredient line, tagline and size/volume, spelled, styled and placed as in Image 1 — do not simplify, drop, translate or restyle any of them, keep them legible. Invent NOTHING that is not printed on it. Images 2 and later, when present, are the real product photo(s) — use them as the ground-truth for label wording and detail. Image 1 is ONLY a product reference: do NOT copy any framing, background or composition from it — this section's entire layout comes from its own section spec above. Place it in the scene per the design system above.`
+    case 'source': // @deprecated (sesiones en curso)
+      return `Image 1 is the REAL product — the exact object this landing sells. Reproduce it with total PHYSICAL fidelity: the SAME shape, proportions, colour, material and finish as in Image 1 — keep its exact colour and tint, do NOT recolour, lighten, whiten, desaturate or restyle the product to match the background or palette. ALSO reproduce ALL the text and graphics actually PRINTED ON IT faithfully and exactly: its main wordmark AND every secondary label, ingredient line, tagline and size/volume, spelled, styled and placed as in Image 1 — do not simplify, drop, translate or restyle any of them, and keep them legible. Invent NOTHING that is not printed on the product (no fake descriptors, sizes or ingredient names). If Image 1 is an ad or infographic, the product is the physical object only — the section copy, captions, callouts and any text or lines pointing AT the product from outside are NOT part of its label; never render those onto it. Place it in the scene per the design system above.`
+    case 'anchored': // @deprecated (sesiones en curso)
+      return `Image 1 is an ISOLATED CROP of THIS landing's product (the product alone, cut out of another section — it carries NO layout, headline, cards or scene of its own). Reproduce that exact product IDENTICALLY: same shape, proportions, colors, finish and every label — all printed text big and small, spelled, styled and placed exactly as in Image 1. Images 2 and later are the real product photo(s) — use them as the ground-truth for label wording and detail. Image 1 is ONLY a product reference: do NOT copy any framing, background or composition from it — this section's entire layout comes from its own section spec and the master layout above. Do NOT invent, drop, restyle or redraw the product. Place it in the scene per the design system above.`
+    default:
+      return `Compose around a generic attractive product placeholder.`
+  }
 }
 
-function labelBlock(productMode: 'source' | 'anchored' | 'none', productLabels?: string | null): string {
+function labelBlock(productMode: ProductMode, productLabels?: string | null): string {
   return productMode !== 'none' && productLabels && productLabels.trim()
     ? `\nPRODUCT LABEL TEXT (authoritative ground-truth): the exact text printed on the product is, line by line:\n${productLabels.trim()}\nRender these exact words correctly and legibly on the product, in the positions they occupy in the reference; use this as the source of truth wherever the label is small or unclear in the photo. Do not put any other words on the product.`
     : ``
@@ -125,7 +137,7 @@ function labelBlock(productMode: 'source' | 'anchored' | 'none', productLabels?:
 // truth autoritativo. El copy/fidelidad van end-weighted (lo más crítico). Reusado intacto.
 export function buildSectionInstruction(
   copy: SectionCopy,
-  productMode: 'source' | 'anchored' | 'none',
+  productMode: ProductMode,
   palette?: LandingPalette | null,
   typography?: LandingTypography | null,
   brandStyle?: string | null,
@@ -182,7 +194,7 @@ const SCENE_NEGATIVE =
 // texto. Reusa brandBlock (paleta/estilo → atmósfera y materiales) + productLine/labelBlock.
 export function buildSceneInstruction(
   type: SectionType,
-  productMode: 'source' | 'anchored' | 'none',
+  productMode: ProductMode,
   palette?: LandingPalette | null,
   brandStyle?: string | null,
   productLabels?: string | null,
