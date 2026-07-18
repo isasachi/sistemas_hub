@@ -236,7 +236,7 @@ const PRODUCT_ONLY_OVERRIDE =
 // secciones. `hasTalent` lo decide el caller (hay talent_canonical_url y casting.present).
 function talentLine(hasTalent: boolean): string {
   return hasTalent
-    ? `The FINAL reference image is the CAMPAIGN TALENT — the exact person who appears across this ENTIRE landing (it is a PERSON reference, NOT a product photo). Reproduce this SAME person IDENTICALLY in every section: same face, age, skin tone, hair, build and features. Re-pose, re-light and re-frame them to fit THIS section's composition, but NEVER substitute, swap, restyle, beautify, slim or age them. This image is ONLY a person reference: do NOT copy its neutral background, framing or pose.`
+    ? `The FINAL reference image is the CAMPAIGN TALENT — the exact person who appears across this ENTIRE landing (it is a PERSON reference, NOT a product photo). Reproduce this SAME person IDENTICALLY in every section: same face, age, skin tone, hair, build and features. Re-pose, re-light and re-frame them to fit THIS section's composition, but NEVER substitute, swap, restyle, beautify, slim or age them. This talent is the ONE AND ONLY human in this section: do NOT add, invent, include or duplicate ANY other person, model, face, extra beneficiary or background figure anywhere — every person visible in the image must BE this exact talent, nobody else. This image is ONLY a person reference: do NOT copy its neutral background, framing or pose.`
     : ``
 }
 

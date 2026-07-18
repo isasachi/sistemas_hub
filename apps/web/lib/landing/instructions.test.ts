@@ -154,6 +154,7 @@ describe('talento canónico (Fase 4)', () => {
     const without = buildSceneInstruction('oferta', 'canonical', null, null, null, brandPerson, false)
     expect(withT).toContain('CAMPAIGN TALENT')
     expect(withT).toContain('FINAL reference image')
+    expect(withT).toContain('ONE AND ONLY human') // exclusividad: no agregar otra persona
     expect(without).not.toContain('CAMPAIGN TALENT')
   })
 
