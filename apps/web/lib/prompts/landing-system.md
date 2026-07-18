@@ -11,4 +11,11 @@ Reglas de copy:
 - Para `beneficios`: usa `bullets` (3-5 beneficios concretos, muy cortos).
 - `cta` es el texto del botón (ej: "Pídelo ahora", "Quiero el mío").
 
+Reglas de la sección OFERTA (esquema OfferCopy, cuando se pida por separado):
+- 2 a 4 tiers de cantidad. Exactamente UNO con `featured:true`: el mediano-alto, el que querés vender (decoy). El más caro por unidad NO es el featured; el featured es el de mejor relación precio/cantidad.
+- Precio ancla: SIEMPRE incluí `priceBefore` y `savingsPct` cuando haya descuento (el ancla tachada es lo que hace ver la oferta como oferta).
+- Costo por unidad: SIEMPRE `perUnit` en los tiers multi-unidad ("S/ 66 c/u") — es el argumento que empuja al pack.
+- `badge` corto solo en el featured. `urgency` solo si aplica. `cta` de 1-3 palabras por tier.
+- No inventes precios: derivá los tiers del precio base que dio el usuario. Sin precio, no generes oferta con cifras falsas.
+
 Devuelve JSON que cumpla el esquema. Una entrada por cada sección pedida, en el mismo orden.
