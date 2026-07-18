@@ -13,6 +13,7 @@ export type SetIssueRule =
   | 'payment-not-configured'
   | 'guarantee-without-days'
   | 'delivery-inconsistent'
+  | 'cod-not-offered'
 
 export interface SetIssue {
   rule: SetIssueRule
@@ -34,6 +35,7 @@ const DELIVERY_RE = /\b\d+(?:\/\d+)?\s?(?:h|hrs?|horas)\b/gi
 const timeNums = (s: string): number[] => (s.match(/\d+/g) ?? []).map(Number)
 
 const GUARANTEE_RE = /garant[ií]a|reembolso|devoluci[oó]n|money.?back/i
+const COD_RE = /contra\s?entrega|pag[ao]s? al recibir|pago contra/i
 // Marca que enmarca un precio como ancla ("Antes: S/ 169", "precio regular"). Si el valor ancla
 // aparece SIN esta marca, se lee como precio real → el bug del ADN (mostrar el inflado como si valiera).
 const ANCHOR_FRAME_RE = /\bantes\b|\bregular\b|\bnormal\b|\bbefore\b/i
@@ -111,6 +113,9 @@ export function validateSet(session: Pick<LandingSessionResponse, 'offer' | 'off
       // R4: no mencionar garantía si no hay días de garantía.
       if (!trust.guaranteeDays && GUARANTEE_RE.test(low))
         issues.push({ rule: 'guarantee-without-days', severity: 'warning', section: c.type, message: `La sección "${c.type}" menciona garantía/reembolso, pero no configuraste una garantía (días = 0).` })
+      // R6: no prometer contraentrega si no la ofreces (acceptance #3).
+      if (!trust.codDelivery && COD_RE.test(low))
+        issues.push({ rule: 'cod-not-offered', severity: 'warning', section: c.type, message: `La sección "${c.type}" menciona pago contraentrega, pero no lo ofreces (contraentrega desactivada).` })
       // R2: el plazo de entrega es el mismo en toda sección que lo mencione.
       if (trust.deliveryTime) {
         const allowedNums = new Set(timeNums(trust.deliveryTime))

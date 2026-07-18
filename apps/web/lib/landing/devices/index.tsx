@@ -8,6 +8,7 @@
 // checks, estrellas, iconos de confianza). Los logos de pago son assets de terceros con
 // COLORES DE MARCA FIJOS (verificados de brand kits reales), nunca del accent de la campaña.
 import type { CSSProperties } from 'react'
+import type { PaymentMethod } from '../types'
 
 // ─── Oro (invariante #4: valor / urgencia / confianza) ───────────────────────
 type Gold = { gold: string; goldDark: string }
@@ -157,6 +158,31 @@ export function MastercardLogo({ w = 108, h = 62 }: { w?: number; h?: number }) 
       <span style={{ color: '#232323', fontSize: h * 0.15, fontWeight: 700 }}>mastercard</span>
     </div>
   )
+}
+
+// Píldora de texto para medios sin logo propio (Plin, efectivo, transferencia).
+function PayTextPill({ label, bg, fg, w, h }: { label: string; bg: string; fg: string; w: number; h: number }) {
+  return (
+    <div style={{ ...logoBox, width: w, height: h, background: bg }}>
+      <span style={{ color: fg, fontSize: h * 0.3, fontWeight: 700, letterSpacing: 0.3 }}>{label}</span>
+    </div>
+  )
+}
+
+// Dispatcher: PaymentMethod (enum del TrustBlock) → su logo real de marca. Los que no tienen
+// asset propio caen a una píldora de texto. Es lo que hace posible el ADN de confianza (los
+// logos por difusión salen deformados) — Fase 5 C5.5.
+export function PaymentLogo({ method, h = 58 }: { method: PaymentMethod; h?: number }) {
+  const w = Math.round(h * 1.7)
+  switch (method) {
+    case 'yape': return <YapeLogo w={w} h={h} />
+    case 'mercadopago': return <MercadoPagoLogo w={w} h={h} />
+    case 'visa': return <VisaLogo w={w} h={h} />
+    case 'mastercard': return <MastercardLogo w={w} h={h} />
+    case 'plin': return <PayTextPill label="Plin" bg="#0BB5C4" fg="#fff" w={w} h={h} />
+    case 'efectivo': return <PayTextPill label="Efectivo" bg="#0f7a3d" fg="#fff" w={w} h={h} />
+    case 'transferencia': return <PayTextPill label="Transfer." bg="#fff" fg="#1f2937" w={w} h={h} />
+  }
 }
 
 // Banderas (proporción 3:2). PE = rojo/blanco/rojo vertical; US = rayas simplificadas + cantón.

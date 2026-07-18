@@ -71,6 +71,16 @@ describe('validateSet — coherencia cruzada del set', () => {
     expect(validateSet(s).some((i) => i.rule === 'guarantee-without-days')).toBe(false)
   })
 
+  it('R6: menciona contraentrega con codDelivery=false → warning (acceptance #3)', () => {
+    const s = session([sec('hero', 'Pago contraentrega en todo el país')], { trust_block: { ...TRUST, codDelivery: false } })
+    expect(validateSet(s).some((i) => i.rule === 'cod-not-offered')).toBe(true)
+  })
+
+  it('R6: con contraentrega activa, mencionarla no dispara', () => {
+    const s = session([sec('garantia', 'Pagas al recibir, contraentrega')])
+    expect(validateSet(s).some((i) => i.rule === 'cod-not-offered')).toBe(false)
+  })
+
   it('R2: un plazo distinto al configurado → warning; uno consistente no', () => {
     expect(validateSet(session([sec('cta-final', 'Te llega en 72 horas')])).some((i) => i.rule === 'delivery-inconsistent')).toBe(true)
     expect(validateSet(session([sec('cta-final', 'Te llega en 48 horas')])).some((i) => i.rule === 'delivery-inconsistent')).toBe(false)

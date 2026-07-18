@@ -2,6 +2,7 @@ import type { ReactElement, ReactNode } from 'react'
 import type { ThemeTokens } from '../theme'
 import type { Offer, OfferCopy, OfferTier } from '../types'
 import { GoldSeal, YapeLogo, MercadoPagoLogo, VisaLogo, MastercardLogo, FlagPE, FlagUS, goldGradient } from '../devices'
+import { GlassSurface, isLight } from './glass'
 
 // Layout de composición de la sección OFERTA (motor híbrido). Formato ADN CLEARSTEM, con el
 // método proporcional: hay UNA card base y la card destacada es esa misma card × k — TODO
@@ -15,31 +16,6 @@ import { GoldSeal, YapeLogo, MercadoPagoLogo, VisaLogo, MastercardLogo, FlagPE, 
 const W = 1080, H = 1920
 const SHADOW = '0 20px 44px rgba(14,40,88,0.22)'   // sombra navy del ADN
 const SHADOW_F = '0 26px 56px rgba(14,40,88,0.34)'  // featured, más fuerte
-
-function isLight(hex: string): boolean {
-  const h = hex.replace('#', '')
-  if (h.length < 6) return false
-  const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16)
-  return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 > 0.62
-}
-
-// Vidrio real (Camino B): recorte desenfocado de la escena + velo blanco + borde superior claro.
-function GlassSurface(
-  { x, y, w, h, blurBg, radius, bw, borderColor, shadow, children }:
-  { x: number; y: number; w: number; h: number; blurBg: string; radius: number; bw: number; borderColor: string; shadow: string; children: ReactNode },
-): ReactElement {
-  return (
-    <div style={{
-      display: 'flex', position: 'absolute', left: x, top: y, width: w, height: h, borderRadius: radius, overflow: 'hidden',
-      border: `${bw}px solid ${borderColor}`, boxShadow: shadow,
-    }}>
-      <img src={blurBg} width={W} height={H} style={{ position: 'absolute', left: -x, top: -y, width: W, height: H, objectFit: 'cover' }} />
-      <div style={{ display: 'flex', position: 'absolute', left: 0, top: 0, width: w, height: h, backgroundImage: 'linear-gradient(180deg, rgba(255,255,255,0.66), rgba(255,255,255,0.50))' }} />
-      <div style={{ display: 'flex', position: 'absolute', left: 0, top: 0, width: w, height: 2, background: 'rgba(255,255,255,0.85)' }} />
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative', width: w, height: h }}>{children}</div>
-    </div>
-  )
-}
 
 function Ribbon({ label, t, fs }: { label: string; t: ThemeTokens; fs: number }): ReactElement {
   return (

@@ -140,6 +140,15 @@ describe('buildSceneInstruction — plato de fondo híbrido', () => {
     const out = buildSceneInstruction('oferta', 'canonical', null, null, null, brand)
     expect(out).not.toContain('PRODUCT-ONLY')
   })
+
+  it('C5.5: garantía y cta-final tienen su propio plato de escena, sin texto', () => {
+    const g = buildSceneInstruction('garantia', 'canonical')
+    expect(g).toContain('GUARANTEE / TRUST background plate')
+    expect(g).toContain('NO TEXT (absolute)')
+    const c = buildSceneInstruction('cta-final', 'canonical')
+    expect(c).toContain('FINAL CTA background plate')
+    expect(c).toContain('NO TEXT (absolute)')
+  })
 })
 
 describe('talento canónico (Fase 4)', () => {

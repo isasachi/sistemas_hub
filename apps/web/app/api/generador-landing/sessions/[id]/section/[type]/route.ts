@@ -11,7 +11,10 @@ import { buildTheme } from '@/lib/landing/theme'
 import { loadPairFonts } from '@/lib/landing/fonts'
 import { TYPE_PAIRS, type TypePairId } from '@/lib/landing/typography-catalog'
 import { OfertaLayout } from '@/lib/landing/layouts/oferta'
-import { SectionCopySchema, OfferCopySchema, SectionType, resolveOffer, type LandingSection, type LandingPalette, type LandingTypography, type LandingSessionResponse } from '@/lib/landing/types'
+import { GarantiaLayout } from '@/lib/landing/layouts/garantia'
+import { CtaFinalLayout } from '@/lib/landing/layouts/cta-final'
+import { SectionCopySchema, OfferCopySchema, SectionType, resolveOffer, type LandingSection, type SectionCopy, type LandingPalette, type LandingTypography, type LandingSessionResponse } from '@/lib/landing/types'
+import type { ReactElement } from 'react'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 import type { Part } from '@google/genai'
@@ -118,7 +121,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const talent = await fetchAsBase64(session.talent_canonical_url!)
       parts.push({ inlineData: { mimeType: talent.mimeType, data: talent.data } })
     }
-    parts.push({ text: buildSectionInstruction(copy, mode, palette, typography, session.brand_style, session.product_labels, brand, hasTalent) })
+    // El copy libre de una sección vieja (hero, etc.) puede mencionar precio/oferta: anclarlo al
+    // tier DESTACADO de la sesión (Fase 5 C5.1) para que ninguna sección contradiga a la Oferta.
+    const featured = resolveOffer(session)?.tiers.find((t) => t.featured)
+    const offerHint = featured
+      ? `\n\nOFFER CONSISTENCY: if this section shows any price, use ONLY the featured offer — "${featured.label}" at ${featured.price}${featured.priceBefore ? ` (previous price ${featured.priceBefore})` : ''}. Never invent a different amount, and never show a "before"/anchor price without labelling it as the previous price.`
+      : ''
+    parts.push({ text: buildSectionInstruction(copy, mode, palette, typography, session.brand_style, session.product_labels, brand, hasTalent) + offerHint })
     b64 = await generateImage(parts, 3, { aspectRatio: '9:16' })
   }
   if (!b64) return NextResponse.json({ error: 'No se pudo generar la sección', retryable: true }, { status: 502 })
@@ -134,7 +143,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (idx >= 0) sections[idx] = section
   else sections.push(section)
 
-  await updateLandingSession(id, { step: Math.max(session.step, 4), sections })
+  await updateLandingSession(id, { step: Math.max(session.step, 5), sections })
   await recordGenQuota(id, kind, userId)
   return NextResponse.json({ section, regensLeft })
 }
@@ -151,6 +160,7 @@ const FALLBACK_PALETTE: LandingPalette = [{ name: 'accent', hex: '#0EA5A4' }]
 async function generateScenePlate(
   session: LandingSessionResponse,
   id: string,
+  type: SectionType,
 ): Promise<{ sceneB64: string; palette: LandingPalette | null }> {
   const photoParts: Part[] = []
   let firstPhoto: { data: string; mimeType: string } | null = null
@@ -189,7 +199,7 @@ async function generateScenePlate(
     const talent = await fetchAsBase64(session.talent_canonical_url!)
     parts.push({ inlineData: { mimeType: talent.mimeType, data: talent.data } })
   }
-  parts.push({ text: buildSceneInstruction('oferta', mode, palette, session.brand_style, session.product_labels, brand, hasTalent) })
+  parts.push({ text: buildSceneInstruction(type, mode, palette, session.brand_style, session.product_labels, brand, hasTalent) })
   const sceneB64 = await generateImage(parts, 3, { aspectRatio: '9:16', imageSize: '2K' })
   return { sceneB64, palette }
 }
@@ -204,17 +214,21 @@ async function generateHybridSection(
   kind: string,
   regensLeft: number | null,
 ): Promise<NextResponse> {
-  // 1. Oferta (tiers, nivel de sesión — Fase 5 C5.1) + copy propio de la sección. Resuelve de la
-  //    sesión, con compat a sesiones pre-F5 que guardaban los tiers en offer_copy (resolveOffer).
-  //    Si falta cualquiera, genera ambos en una call y los persiste por separado.
+  // 1. Datos de composición según el tipo (C5.5 generalizó el dispatch, antes solo oferta):
+  //    - oferta:    tiers (nivel de sesión, C5.1) + su copy propio; los genera si faltan.
+  //    - cta-final: referencia el tier destacado (offer, no lo re-inventa); su texto sale del SectionCopy aprobado.
+  //    - garantia:  el TrustBlock que cargó el usuario + su SectionCopy. Compat pre-F5 vía resolveOffer.
   let offer = resolveOffer(session)
   let offerCopy = OfferCopySchema.safeParse(session.offer_copy).success ? OfferCopySchema.parse(session.offer_copy) : null
-  if (!offer || !offerCopy) {
+  const needsOffer = type === 'oferta' || type === 'cta-final'
+  if (needsOffer && (!offer || (type === 'oferta' && !offerCopy))) {
     const gen = await generateOfferCopy(session)
     offer = gen.offer
-    offerCopy = gen.copy
+    offerCopy = offerCopy ?? gen.copy
     await updateLandingSession(id, { offer, offer_copy: offerCopy })
   }
+  const trust = session.trust_block
+  const bodyCopy = (session.copy ?? []).find((c) => c.type === type) ?? null
 
   // 2. Escena. Reuso $0 (recompose): CUALQUIER regen sin prompt de precisión, con escena
   // cacheada, reutiliza la escena y re-compone con el theme (paleta/tipografía de derived_brand)
@@ -233,13 +247,13 @@ async function generateHybridSection(
     sceneB64 = await editWithPrompt(prev.data, prev.mimeType, precision, { aspectRatio: '9:16' })
     sceneUrl = null
   } else {
-    const plate = await generateScenePlate(session, id)
+    const plate = await generateScenePlate(session, id, type)
     sceneB64 = plate.sceneB64
     palette = plate.palette
     sceneUrl = null
   }
   if (!sceneB64) return NextResponse.json({ error: 'No se pudo generar la escena', retryable: true }, { status: 502 })
-  if (!sceneUrl) sceneUrl = await uploadToStorage(id, Buffer.from(sceneB64, 'base64'), 'image/png', 'scene-oferta')
+  if (!sceneUrl) sceneUrl = await uploadToStorage(id, Buffer.from(sceneB64, 'base64'), 'image/png', `scene-${type}`)
 
   // 3. Composición Satori sobre la escena → JPEG final. Glass real (Camino B): la escena
   // pre-desenfocada se embebe en las cards para el frosted glass alineado.
@@ -249,20 +263,27 @@ async function generateHybridSection(
   const fonts = loadPairFonts(typePair)
   const sceneBuf = Buffer.from(sceneB64, 'base64')
   const blurBg = await blurToDataUri(sceneBuf)
-  const jpeg = await renderComposite(sceneBuf, OfertaLayout({ offer, copy: offerCopy, theme, blurBg }), { fonts, width: 1080, height: 1920 })
-  const imageUrl = await uploadToStorage(id, jpeg, 'image/jpeg', 'section-oferta')
+  const layout: ReactElement =
+    type === 'garantia' ? GarantiaLayout({ trust, copy: bodyCopy, theme, blurBg })
+    : type === 'cta-final' ? CtaFinalLayout({ offer, trust, copy: bodyCopy, theme, blurBg })
+    : OfertaLayout({ offer: offer!, copy: offerCopy!, theme, blurBg })
+  const jpeg = await renderComposite(sceneBuf, layout, { fonts, width: 1080, height: 1920 })
+  const imageUrl = await uploadToStorage(id, jpeg, 'image/jpeg', `section-${type}`)
 
-  // 4. Upsert. LandingSection.copy es SectionCopy → sintetizamos una mínima desde el copy de la
-  // oferta + el CTA del tier destacado (los tiers viven en session.offer).
-  const sectionCopy = { type: 'oferta' as const, headline: offerCopy.headline, subheadline: offerCopy.subheadline, cta: offer.tiers.find((t) => t.featured)?.cta }
+  // 4. Upsert. LandingSection.copy es SectionCopy → para oferta la sintetizamos de su copy + el CTA
+  // del tier destacado; garantia/cta-final ya tienen su SectionCopy aprobado.
+  const outCopy: SectionCopy =
+    type === 'oferta'
+      ? { type: 'oferta', headline: offerCopy!.headline, subheadline: offerCopy!.subheadline, cta: offer!.tiers.find((t) => t.featured)?.cta }
+      : (bodyCopy ?? { type, headline: '' })
   const sections: LandingSection[] = [...(session.sections ?? [])]
   const idx = sections.findIndex((s) => s.type === type)
   const order = idx >= 0 ? sections[idx].order : (typeof body.order === 'number' ? body.order : sections.length)
-  const section: LandingSection = { type, order, copy: sectionCopy, imageUrl, status: 'done', sceneUrl }
+  const section: LandingSection = { type, order, copy: outCopy, imageUrl, status: 'done', sceneUrl }
   if (idx >= 0) sections[idx] = section
   else sections.push(section)
 
-  await updateLandingSession(id, { step: Math.max(session.step, 4), sections })
+  await updateLandingSession(id, { step: Math.max(session.step, 5), sections })
   await recordGenQuota(id, kind, userId)
   return NextResponse.json({ section, regensLeft })
 }
