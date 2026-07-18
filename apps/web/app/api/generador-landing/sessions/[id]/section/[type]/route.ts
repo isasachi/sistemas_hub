@@ -7,7 +7,7 @@ import { HYBRID_SECTIONS } from '@/lib/landing/engine-registry'
 import { extractLandingStyle } from '@/lib/landing/style-extract'
 import { extractProductBox, cropProduct } from '@/lib/landing/product-box'
 import { generateOfferCopy } from '@/lib/landing/copy'
-import { renderComposite } from '@/lib/landing/composite'
+import { renderComposite, blurToDataUri } from '@/lib/landing/composite'
 import { buildTheme } from '@/lib/landing/theme'
 import { loadPairFonts, type TypePairId } from '@/lib/landing/typography-catalog'
 import { OfertaLayout } from '@/lib/landing/layouts/oferta'
@@ -228,10 +228,13 @@ async function generateHybridSection(
   if (!sceneB64) return NextResponse.json({ error: 'No se pudo generar la escena', retryable: true }, { status: 502 })
   if (!sceneUrl) sceneUrl = await uploadToStorage(id, Buffer.from(sceneB64, 'base64'), 'image/png', 'scene-oferta')
 
-  // 3. Composición Satori sobre la escena → JPEG final.
+  // 3. Composición Satori sobre la escena → JPEG final. Glass real (Camino B): la escena
+  // pre-desenfocada se embebe en las cards para el frosted glass alineado.
   const theme = buildTheme(palette ?? FALLBACK_PALETTE, DEFAULT_TYPE_PAIR)
   const fonts = loadPairFonts(DEFAULT_TYPE_PAIR)
-  const jpeg = await renderComposite(Buffer.from(sceneB64, 'base64'), OfertaLayout({ copy: offer, theme }), { fonts, width: 1080, height: 1920 })
+  const sceneBuf = Buffer.from(sceneB64, 'base64')
+  const blurBg = await blurToDataUri(sceneBuf)
+  const jpeg = await renderComposite(sceneBuf, OfertaLayout({ copy: offer, theme, blurBg }), { fonts, width: 1080, height: 1920 })
   const imageUrl = await uploadToStorage(id, jpeg, 'image/jpeg', 'section-oferta')
 
   // 4. Upsert. LandingSection.copy es SectionCopy → sintetizamos una mínima desde la oferta

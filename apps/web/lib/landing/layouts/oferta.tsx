@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react'
+import type { ReactElement, ReactNode } from 'react'
 import type { ThemeTokens } from '../theme'
 import type { OfferCopy, OfferTier } from '../types'
 import {
@@ -6,14 +6,15 @@ import {
   YapeLogo, MercadoPagoLogo, VisaLogo, MastercardLogo, FlagPE, FlagUS,
 } from '../devices'
 
-// Layout de composición de la sección OFERTA (motor híbrido, Fase 1). Traducción directa de
-// SECTION_SPECS.oferta a JSX real sobre la escena de Gemini. La escena pone el producto en el
-// CENTRO, así que el texto se ancla ARRIBA (headline) y ABAJO (tiers+pagos), dejando respirar
-// al producto en el medio. Cards de glass simulado (Camino A) opacas lo suficiente para leerse
-// sobre una escena con producto. Todo el texto sale de acá, nunca de la IA.
+// Layout de composición de la sección OFERTA (motor híbrido). GLASS REAL (Camino B): las cards
+// se posicionan en ABSOLUTO y embeben la escena PRE-DESENFOCADA (`blurBg`) con offset negativo
+// igual a su posición → el recorte borroso coincide con lo que hay detrás = frosted glass real
+// (Satori no soporta backdrop-filter). Cards SIMÉTRICAS (mismo tamaño/estructura/posición); el
+// featured se distingue por corona dorada + borde + CTA, no por tamaño. Headline grande, sin
+// espacio muerto. Todo el texto sale de acá, nunca de la IA.
 
-// Luminancia relativa aproximada → decide texto blanco/oscuro sobre un fill de color de marca
-// (un accent claro con texto blanco = CTA invisible; el bug que esto evita).
+const W = 1080, H = 1920
+
 function isLight(hex: string): boolean {
   const h = hex.replace('#', '')
   if (h.length < 6) return false
@@ -21,104 +22,106 @@ function isLight(hex: string): boolean {
   return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 > 0.62
 }
 
-// Glass simulado (Camino A) legible: gradiente blanco casi-opaco + borde superior claro +
-// sombra. Sobre una escena con producto el 0.14 original era ilegible; esto se lee como frosted.
-const glass = (t: ThemeTokens, featured: boolean) => ({
-  backgroundImage: 'linear-gradient(180deg, rgba(255,255,255,0.90), rgba(255,255,255,0.74))',
-  borderTop: `1px solid ${t.surfaceBorder}`,
-  border: featured ? `2px solid ${t.gold}` : '1px solid rgba(255,255,255,0.7)',
-  boxShadow: featured ? '0 18px 44px rgba(0,0,0,0.34)' : '0 12px 30px rgba(0,0,0,0.26)',
-})
-
-function Headline({ text, t }: { text: string; t: ThemeTokens }): ReactElement {
-  // Una sola pieza de texto (envuelve de forma fiable en Satori); sin split por palabra para
-  // no cortar headlines largos. El accent vive en urgency/featured/CTAs.
+// Superficie de glass real: recorte desenfocado de la escena + velo blanco (contraste) + borde
+// superior claro. `blurBg` = data URI 1080×1920 de la escena borrosa (mismo cover que el fondo).
+function GlassSurface(
+  { x, y, w, h, blurBg, t, featured = false, radius = 26, children }:
+  { x: number; y: number; w: number; h: number; blurBg: string; t: ThemeTokens; featured?: boolean; radius?: number; children: ReactNode },
+): ReactElement {
   return (
-    <div style={{ display: 'flex', width: '100%', justifyContent: 'center' }}>
-      <span style={{ fontFamily: t.fonts.display, fontWeight: 700, fontSize: 58, color: t.textPrimary, textAlign: 'center', lineHeight: 1.06 }}>{text}</span>
+    <div style={{
+      display: 'flex', position: 'absolute', left: x, top: y, width: w, height: h, borderRadius: radius, overflow: 'hidden',
+      border: featured ? `2px solid ${t.gold}` : '1px solid rgba(255,255,255,0.55)',
+      boxShadow: featured ? '0 22px 52px rgba(0,0,0,0.42)' : '0 16px 38px rgba(0,0,0,0.32)',
+    }}>
+      <img src={blurBg} width={W} height={H} style={{ position: 'absolute', left: -x, top: -y, width: W, height: H, objectFit: 'cover' }} />
+      <div style={{ display: 'flex', position: 'absolute', left: 0, top: 0, width: w, height: h, backgroundImage: 'linear-gradient(180deg, rgba(255,255,255,0.60), rgba(255,255,255,0.44))' }} />
+      <div style={{ display: 'flex', position: 'absolute', left: 0, top: 0, width: w, height: 2, background: 'rgba(255,255,255,0.85)' }} />
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative', width: w, height: h }}>{children}</div>
     </div>
   )
 }
 
-function Cta({ label, featured, t }: { label: string; featured: boolean; t: ThemeTokens }): ReactElement {
-  const base = {
-    display: 'flex' as const, alignItems: 'center', justifyContent: 'center', marginTop: 8,
-    padding: '13px 24px', borderRadius: 999, fontFamily: t.fonts.body, fontWeight: 700, fontSize: 26,
-    boxShadow: '0 8px 18px rgba(0,0,0,0.28)',
-  }
-  // Sin valores undefined en el style (rompen Satori). Featured = gradiente dorado; el resto,
-  // fill accent con texto de contraste (blanco si el accent es oscuro, textPrimary si es claro).
-  const style = featured
-    ? { ...base, backgroundImage: `linear-gradient(145deg, ${t.gold}, ${t.goldDark})`, color: '#3a2a05' }
-    : { ...base, background: t.accent, color: isLight(t.accent) ? t.textPrimary : '#fff' }
-  return <div style={style}>{label}</div>
+// Slot de altura fija → los precios/CTAs quedan alineados entre cards (simetría de composición).
+function Slot({ h, children }: { h: number; children?: ReactNode }): ReactElement {
+  return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: h }}>{children}</div>
 }
 
-function TierCard({ tier, t }: { tier: OfferTier; t: ThemeTokens }): ReactElement {
+function TierCard(
+  { tier, x, y, w, h, blurBg, t }:
+  { tier: OfferTier; x: number; y: number; w: number; h: number; blurBg: string; t: ThemeTokens },
+): ReactElement {
   const rec = tier.featured
+  const ctaStyle = rec
+    ? { backgroundImage: `linear-gradient(145deg, ${t.gold}, ${t.goldDark})`, color: '#3a2a05' }
+    : { background: t.accent, color: isLight(t.accent) ? t.textPrimary : '#fff' }
   return (
-    <div style={{
-      display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1,
-      marginTop: rec ? 0 : 30, padding: '24px 14px 20px', gap: 9, borderRadius: 24,
-      position: 'relative', ...glass(t, rec),
-    }}>
-      {rec && (
-        <div style={{ display: 'flex', position: 'absolute', top: -20 }}>
-          <GoldRibbon label={tier.badge ?? 'Recomendado'} gold={t.gold} goldDark={t.goldDark} />
-        </div>
-      )}
-      <span style={{ fontFamily: t.fonts.display, fontWeight: 700, fontSize: 30, color: t.textPrimary, textAlign: 'center', marginTop: rec ? 16 : 0 }}>{tier.label}</span>
-      {tier.priceBefore && (
-        <span style={{ fontFamily: t.fonts.body, fontSize: 23, color: t.textMuted, textDecoration: 'line-through' }}>Antes: {tier.priceBefore}</span>
-      )}
-      <span style={{ fontFamily: t.fonts.display, fontWeight: 700, fontSize: 62, color: t.textPrimary, lineHeight: 1 }}>{tier.price}</span>
-      {typeof tier.savingsPct === 'number' && (
-        <div style={{ display: 'flex' }}><SavingsRibbon label={`Ahorra ${tier.savingsPct}%`} gold={t.gold} goldDark={t.goldDark} /></div>
-      )}
-      {tier.perUnit && <span style={{ fontFamily: t.fonts.body, fontSize: 22, color: t.textMuted }}>{tier.perUnit}</span>}
-      <Cta label={tier.cta} featured={rec} t={t} />
-    </div>
+    <GlassSurface x={x} y={y} w={w} h={h} blurBg={blurBg} t={t} featured={rec}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: w, height: h, padding: '20px 12px 18px' }}>
+        {/* Badge del featured DENTRO de la card (slot reservado en todas → simetría, sin
+            colisión con el producto que tenía la corona externa). */}
+        <Slot h={40}>{rec ? (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '6px 16px', borderRadius: 999, backgroundImage: `linear-gradient(145deg, ${t.gold}, ${t.goldDark})`, color: '#3a2a05', fontFamily: t.fonts.display, fontWeight: 700, fontSize: 20, textTransform: 'uppercase', letterSpacing: 0.5, boxShadow: '0 4px 10px rgba(0,0,0,0.22)' }}>{tier.badge ?? 'Recomendado'}</div>
+        ) : null}</Slot>
+        <Slot h={44}><span style={{ fontFamily: t.fonts.display, fontWeight: 700, fontSize: 32, color: t.textPrimary, textAlign: 'center' }}>{tier.label}</span></Slot>
+        <Slot h={26}>{tier.priceBefore ? <span style={{ fontFamily: t.fonts.body, fontSize: 24, color: t.textMuted, textDecoration: 'line-through' }}>Antes: {tier.priceBefore}</span> : null}</Slot>
+        <Slot h={76}><span style={{ fontFamily: t.fonts.display, fontWeight: 700, fontSize: 66, color: t.textPrimary, lineHeight: 1 }}>{tier.price}</span></Slot>
+        <Slot h={42}>{typeof tier.savingsPct === 'number' ? <SavingsRibbon label={`Ahorra ${tier.savingsPct}%`} gold={t.gold} goldDark={t.goldDark} /> : null}</Slot>
+        <Slot h={28}>{tier.perUnit ? <span style={{ fontFamily: t.fonts.body, fontSize: 24, color: t.textMuted }}>{tier.perUnit}</span> : null}</Slot>
+        <div style={{ display: 'flex', flex: 1 }} />
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: 58, borderRadius: 999,
+          fontFamily: t.fonts.body, fontWeight: 700, fontSize: 27, boxShadow: '0 8px 18px rgba(0,0,0,0.28)', ...ctaStyle,
+        }}>{tier.cta}</div>
+      </div>
+    </GlassSurface>
   )
 }
 
-export function OfertaLayout({ copy, theme: t }: { copy: OfferCopy; theme: ThemeTokens }): ReactElement {
+export function OfertaLayout(
+  { copy, theme: t, blurBg }: { copy: OfferCopy; theme: ThemeTokens; blurBg: string },
+): ReactElement {
+  const n = copy.tiers.length
+  const MX = 38, GAP = 15
+  const cardW = Math.round((W - 2 * MX - (n - 1) * GAP) / n)
+  const cardH = 408
+  const payH = 92, payY = H - 36 - payH
+  const cardsY = payY - 20 - cardH
+  const cardX = (i: number) => MX + i * (cardW + GAP)
+
   return (
-    <div style={{
-      display: 'flex', flexDirection: 'column', alignItems: 'center',
-      position: 'absolute', top: 0, left: 0, width: 1080, height: 1920,
-      padding: '80px 46px 72px',
-    }}>
-      {/* Banner de urgencia dorado — solo si el copy lo trae */}
-      {copy.urgency && <GoldRibbon label={copy.urgency} gold={t.gold} goldDark={t.goldDark} />}
+    <div style={{ display: 'flex', position: 'absolute', left: 0, top: 0, width: W, height: H }}>
+      {/* Scrim superior: ground claro para que el header oscuro lea sobre cualquier escena */}
+      <div style={{ display: 'flex', position: 'absolute', left: 0, top: 0, width: W, height: 470, backgroundImage: 'linear-gradient(180deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 100%)' }} />
+      {/* Scrim inferior: asienta las cards en la escena (integración, no "pegado encima") */}
+      <div style={{ display: 'flex', position: 'absolute', left: 0, top: 1120, width: W, height: 800, backgroundImage: 'linear-gradient(180deg, rgba(10,14,24,0) 0%, rgba(10,14,24,0.26) 55%, rgba(10,14,24,0.40) 100%)' }} />
 
-      {/* Headline + subheadline, anclados ARRIBA */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, marginTop: copy.urgency ? 22 : 0 }}>
-        <Headline text={copy.headline} t={t} />
-        {copy.subheadline && (
-          <div style={{ display: 'flex', width: '100%', justifyContent: 'center' }}>
-            <span style={{ fontFamily: t.fonts.body, fontSize: 29, color: t.textPrimary, textAlign: 'center', maxWidth: 860 }}>{copy.subheadline}</span>
+      {/* Header anclado arriba: urgencia + headline GRANDE + subheadline legible */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'absolute', left: 60, top: 54, width: W - 120 }}>
+        {copy.urgency ? <GoldRibbon label={copy.urgency} gold={t.gold} goldDark={t.goldDark} /> : null}
+        <div style={{ display: 'flex', justifyContent: 'center', width: '100%', marginTop: copy.urgency ? 22 : 0 }}>
+          <span style={{ fontFamily: t.fonts.display, fontWeight: 700, fontSize: 82, color: t.textPrimary, textAlign: 'center', lineHeight: 1.02, letterSpacing: -1 }}>{copy.headline}</span>
+        </div>
+        {copy.subheadline ? (
+          <div style={{ display: 'flex', justifyContent: 'center', width: '100%', marginTop: 16 }}>
+            <span style={{ fontFamily: t.fonts.body, fontWeight: 700, fontSize: 36, color: t.textPrimary, textAlign: 'center', maxWidth: 840 }}>{copy.subheadline}</span>
           </div>
-        )}
+        ) : null}
       </div>
 
-      {/* El producto de la escena respira en el medio */}
-      <div style={{ display: 'flex', flex: 1 }} />
+      {/* Fila de tiers SIMÉTRICOS en glass real (el featured se distingue por badge interno,
+          borde y CTA dorados — no por tamaño ni posición) */}
+      {copy.tiers.map((tier, i) => (
+        <TierCard key={i} tier={tier} x={cardX(i)} y={cardsY} w={cardW} h={cardH} blurBg={blurBg} t={t} />
+      ))}
 
-      {/* Fila de tiers en glass, anclada ABAJO */}
-      <div style={{ display: 'flex', width: '100%', gap: 14, alignItems: 'flex-start' }}>
-        {copy.tiers.map((tier, i) => <TierCard key={i} tier={tier} t={t} />)}
-      </div>
-
-      {/* Strip de pagos (hardcodeado en F1; Fase 5 lo vuelve condicional) */}
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, marginTop: 22,
-        padding: '18px 28px', borderRadius: 20,
-        backgroundImage: 'linear-gradient(180deg, rgba(255,255,255,0.72), rgba(255,255,255,0.5))',
-        borderTop: `1px solid ${t.surfaceBorder}`,
-      }}>
-        <YapeLogo /><MercadoPagoLogo /><VisaLogo /><MastercardLogo />
-        <div style={{ display: 'flex', gap: 8, marginLeft: 6 }}><FlagPE /><FlagUS /></div>
-      </div>
+      {/* Strip de pagos, también glass real */}
+      <GlassSurface x={MX} y={payY} w={W - 2 * MX} h={payH} blurBg={blurBg} t={t} radius={22}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', gap: 16 }}>
+          <YapeLogo /><MercadoPagoLogo /><VisaLogo /><MastercardLogo />
+          <div style={{ display: 'flex', gap: 8, marginLeft: 6 }}><FlagPE /><FlagUS /></div>
+        </div>
+      </GlassSurface>
     </div>
   )
 }

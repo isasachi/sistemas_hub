@@ -31,3 +31,13 @@ export async function renderComposite(
   const sharp = (await import('sharp')).default
   return sharp(png).jpeg({ quality: 92 }).toBuffer()
 }
+
+// Glass sandwich (Camino B): versión pre-desenfocada de la escena como data URI. Cada card la
+// embebe con offset negativo igual a su posición absoluta → el recorte borroso coincide EXACTO
+// con lo que hay detrás = glass real (Satori no soporta backdrop-filter). Se blurea UNA vez.
+export async function blurToDataUri(scene: Buffer | string, sigma = 22): Promise<string> {
+  const sharp = (await import('sharp')).default
+  const buf = typeof scene === 'string' ? Buffer.from(scene, 'base64') : scene
+  const out = await sharp(buf).resize(1080, 1920, { fit: 'cover' }).blur(sigma).modulate({ brightness: 1.06 }).jpeg({ quality: 72 }).toBuffer()
+  return `data:image/jpeg;base64,${out.toString('base64')}`
+}

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { renderComposite } from '@/lib/landing/composite'
+import { renderComposite, blurToDataUri } from '@/lib/landing/composite'
 import { buildTheme } from '@/lib/landing/theme'
 import { loadPairFonts } from '@/lib/landing/typography-catalog'
 import { OfertaLayout } from '@/lib/landing/layouts/oferta'
@@ -50,7 +50,8 @@ export async function GET() {
   }
   const fonts = loadPairFonts('clinico-geometrico')
   const scene = await luminousScene()
-  const jpeg = await renderComposite(scene, OfertaLayout({ copy, theme }), { fonts })
+  const blurBg = await blurToDataUri(scene)
+  const jpeg = await renderComposite(scene, OfertaLayout({ copy, theme, blurBg }), { fonts })
 
   return new NextResponse(new Uint8Array(jpeg), {
     headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'no-store' },
