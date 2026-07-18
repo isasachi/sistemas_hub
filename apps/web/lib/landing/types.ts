@@ -61,20 +61,72 @@ export const OfferTierSchema = z.object({
 })
 export type OfferTier = z.infer<typeof OfferTierSchema>
 
-// `.min(2)` + `.refine(1 featured)` fuerzan ESTRUCTURALMENTE el decoy del ADN — deja de
-// depender de que el LLM se acuerde. Si no cumple, callStructured reintenta (maxRetries=3).
+// ── Oferta a nivel de SESIÓN (Fase 5 C5.1) ──────────────────────────────────
+// Los tiers (con decoy) subieron del copy de UNA sección a la SESIÓN: así el hero y el
+// cta-final referencian el tier destacado sin poder contradecirlo, y validateSet tiene una
+// sola fuente de precios. `.min(2)` + `.refine(1 featured)` fuerzan estructuralmente el decoy.
+export const OfferSchema = z.object({
+  tiers: z.array(OfferTierSchema).min(2).max(4),
+  urgency: z.string().max(30).optional(),        // "Solo hoy"
+}).refine((d) => d.tiers.filter((t) => t.featured).length === 1, {
+  message: 'exactamente un tier debe ser featured',
+})
+export type Offer = z.infer<typeof OfferSchema>
+
+// Copy PROPIO de la sección Oferta: solo su texto. Los tiers/urgency viven en OfferSchema
+// (sesión); la sección los CONSUME vía resolveOffer, no los posee.
 export const OfferCopySchema = z.object({
   // enum (no literal): z.toJSONSchema emite `const` para literal y Gemini lo IGNORA (solo
   // respeta `enum`) → el modelo omitía `type` y fallaba la validación. enum de un valor lo fuerza.
   type: z.enum(['oferta']),
   headline: z.string().max(60),
   subheadline: z.string().max(90).optional(),
-  urgency: z.string().max(30).optional(),        // "Solo hoy"
+})
+export type OfferCopy = z.infer<typeof OfferCopySchema>
+
+// Schema de GENERACIÓN: una sola llamada LLM produce copy + tiers; el caller lo parte en
+// session.offer (tiers/urgency) y session.offer_copy (headline/subheadline). También valida el
+// offer_copy LEGADO (pre-F5 guardaba los tiers acá) → resolveOffer los recupera de ahí.
+export const OfferGenSchema = z.object({
+  type: z.enum(['oferta']),
+  headline: z.string().max(60),
+  subheadline: z.string().max(90).optional(),
+  urgency: z.string().max(30).optional(),
   tiers: z.array(OfferTierSchema).min(2).max(4),
 }).refine((d) => d.tiers.filter((t) => t.featured).length === 1, {
   message: 'exactamente un tier debe ser featured',
 })
-export type OfferCopy = z.infer<typeof OfferCopySchema>
+export type OfferGen = z.infer<typeof OfferGenSchema>
+
+// Compat (invariante #6): sesiones pre-F5 guardaron los tiers dentro de offer_copy. Devuelve el
+// Offer de la sesión, cayendo a esos tiers legados mientras `offer` siga null.
+export function resolveOffer(session: Pick<LandingSessionResponse, 'offer' | 'offer_copy'>): Offer | null {
+  const cur = OfferSchema.safeParse(session.offer)
+  if (cur.success) return cur.data
+  const legacy = OfferGenSchema.safeParse(session.offer_copy)
+  return legacy.success ? { tiers: legacy.data.tiers, urgency: legacy.data.urgency } : null
+}
+
+// ── Bloque de CONFIANZA (Fase 5 C5.2) ───────────────────────────────────────
+// Hechos OPERATIVOS del negocio: un modelo no puede inferirlos y no debe inventarlos, así que
+// los llena el USUARIO en el wizard. `paymentMethods` es un enum porque cada valor mapea a un
+// SVG real de la librería de devices (Fase 0) — es lo que hace posible el ADN de confianza (los
+// logos por difusión salen deformados). garantia/cta-final consumen este bloque directamente.
+export const PaymentMethod = z.enum([
+  'yape', 'plin', 'mercadopago', 'visa', 'mastercard', 'efectivo', 'transferencia',
+])
+export type PaymentMethod = z.infer<typeof PaymentMethod>
+
+export const TrustBlockSchema = z.object({
+  codDelivery:    z.boolean(),                                   // pago contraentrega
+  deliveryTime:   z.string().max(24).optional(),                 // "24/48 horas"
+  coverage:       z.array(z.string().max(20)).max(4).optional(), // ["Perú", "EE.UU."]
+  paymentMethods: z.array(PaymentMethod).max(7),
+  guaranteeDays:  z.number().int().min(0).max(365).optional(),
+  guaranteeText:  z.string().max(60).optional(),
+  freeShipping:   z.boolean().default(false),
+})
+export type TrustBlock = z.infer<typeof TrustBlockSchema>
 
 // ─── Estilo de marca (paleta + tipografía) ───────────────────────────────────
 // Predomina sobre la plantilla en la generación de imagen. Mismo shape que
@@ -171,9 +223,16 @@ export interface LandingSessionResponse {
   // por el usuario. Ground-truth para el prompt de imagen → el modelo renderiza las palabras
   // correctas en vez de confabular texto ilegible de la foto. Null = copiar de la foto.
   product_labels: string | null
-  // Copy estructurado de la Oferta híbrida (tiers/precio ancla/decoy). Lo compone Satori.
-  // Null = la sesión aún no generó la oferta híbrida (motor viejo intacto). Ver OfferCopy.
+  // Copy propio de la sección Oferta (headline/subheadline). Lo compone Satori. Null = la
+  // sesión aún no generó la oferta híbrida. En sesiones pre-F5 también trae tiers/urgency. Ver OfferCopy.
   offer_copy: OfferCopy | null
+  // Oferta a nivel de sesión (Fase 5): tiers de precio con decoy + urgency. Fuente única de
+  // precios — la sección Oferta la consume (resolveOffer), hero/cta-final referencian el tier
+  // destacado. Null en sesiones pre-F5 (los tiers siguen en offer_copy → resolveOffer los recupera).
+  offer: Offer | null
+  // Bloque de confianza (Fase 5): hechos operativos del negocio (contraentrega, medios de pago,
+  // plazo, cobertura, garantía). Lo llena el USUARIO en el wizard, no el LLM. Ver TrustBlock.
+  trust_block: TrustBlock | null
   // Origen de la placa canónica (Fase 2): 'photo' = derivada de la foto real en etapa 2;
   // 'render' (legado) o null = recortada del render de la 1ª sección. Ver product-box.ts.
   product_canonical_source: string | null

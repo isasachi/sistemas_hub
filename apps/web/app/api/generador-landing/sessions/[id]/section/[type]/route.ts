@@ -11,7 +11,7 @@ import { buildTheme } from '@/lib/landing/theme'
 import { loadPairFonts } from '@/lib/landing/fonts'
 import { TYPE_PAIRS, type TypePairId } from '@/lib/landing/typography-catalog'
 import { OfertaLayout } from '@/lib/landing/layouts/oferta'
-import { SectionCopySchema, OfferCopySchema, SectionType, type LandingSection, type OfferCopy, type LandingPalette, type LandingTypography, type LandingSessionResponse } from '@/lib/landing/types'
+import { SectionCopySchema, OfferCopySchema, SectionType, resolveOffer, type LandingSection, type LandingPalette, type LandingTypography, type LandingSessionResponse } from '@/lib/landing/types'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 import type { Part } from '@google/genai'
@@ -198,24 +198,22 @@ async function generateHybridSection(
   session: LandingSessionResponse,
   id: string,
   type: SectionType,
-  body: { offerCopy?: unknown; order?: number; prompt?: string },
+  body: { order?: number; prompt?: string },
   precision: string,
   userId: string | null,
   kind: string,
   regensLeft: number | null,
 ): Promise<NextResponse> {
-  // 1. Copy de oferta: edición del body > persistido en la sesión > generar (y persistir).
-  const offerEdited = OfferCopySchema.safeParse(body.offerCopy).success
-  let offer: OfferCopy | null = offerEdited
-    ? OfferCopySchema.parse(body.offerCopy)
-    : OfferCopySchema.safeParse(session.offer_copy).success
-      ? OfferCopySchema.parse(session.offer_copy)
-      : null
-  if (!offer) {
-    offer = await generateOfferCopy(session)
-    await updateLandingSession(id, { offer_copy: offer })
-  } else if (offerEdited) {
-    await updateLandingSession(id, { offer_copy: offer })
+  // 1. Oferta (tiers, nivel de sesión — Fase 5 C5.1) + copy propio de la sección. Resuelve de la
+  //    sesión, con compat a sesiones pre-F5 que guardaban los tiers en offer_copy (resolveOffer).
+  //    Si falta cualquiera, genera ambos en una call y los persiste por separado.
+  let offer = resolveOffer(session)
+  let offerCopy = OfferCopySchema.safeParse(session.offer_copy).success ? OfferCopySchema.parse(session.offer_copy) : null
+  if (!offer || !offerCopy) {
+    const gen = await generateOfferCopy(session)
+    offer = gen.offer
+    offerCopy = gen.copy
+    await updateLandingSession(id, { offer, offer_copy: offerCopy })
   }
 
   // 2. Escena. Reuso $0 (recompose): CUALQUIER regen sin prompt de precisión, con escena
@@ -251,12 +249,12 @@ async function generateHybridSection(
   const fonts = loadPairFonts(typePair)
   const sceneBuf = Buffer.from(sceneB64, 'base64')
   const blurBg = await blurToDataUri(sceneBuf)
-  const jpeg = await renderComposite(sceneBuf, OfertaLayout({ copy: offer, theme, blurBg }), { fonts, width: 1080, height: 1920 })
+  const jpeg = await renderComposite(sceneBuf, OfertaLayout({ offer, copy: offerCopy, theme, blurBg }), { fonts, width: 1080, height: 1920 })
   const imageUrl = await uploadToStorage(id, jpeg, 'image/jpeg', 'section-oferta')
 
-  // 4. Upsert. LandingSection.copy es SectionCopy → sintetizamos una mínima desde la oferta
-  // para el preview/historial; los tiers viven en session.offer_copy.
-  const sectionCopy = { type: 'oferta' as const, headline: offer.headline, subheadline: offer.subheadline, cta: offer.tiers.find((t) => t.featured)?.cta }
+  // 4. Upsert. LandingSection.copy es SectionCopy → sintetizamos una mínima desde el copy de la
+  // oferta + el CTA del tier destacado (los tiers viven en session.offer).
+  const sectionCopy = { type: 'oferta' as const, headline: offerCopy.headline, subheadline: offerCopy.subheadline, cta: offer.tiers.find((t) => t.featured)?.cta }
   const sections: LandingSection[] = [...(session.sections ?? [])]
   const idx = sections.findIndex((s) => s.type === type)
   const order = idx >= 0 ? sections[idx].order : (typeof body.order === 'number' ? body.order : sections.length)

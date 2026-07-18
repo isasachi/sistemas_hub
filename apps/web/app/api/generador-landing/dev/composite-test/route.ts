@@ -3,7 +3,7 @@ import { renderComposite, blurToDataUri } from '@/lib/landing/composite'
 import { buildTheme } from '@/lib/landing/theme'
 import { loadPairFonts } from '@/lib/landing/fonts'
 import { OfertaLayout } from '@/lib/landing/layouts/oferta'
-import type { OfferCopy } from '@/lib/landing/types'
+import type { Offer, OfferCopy } from '@/lib/landing/types'
 
 // Ruta de PRUEBA de la infra de composición (Fase 0). Vive en local Y en previews de Vercel;
 // 404 solo en production real. Renderiza la Oferta demo sobre un fondo luminoso → JPEG.
@@ -41,6 +41,8 @@ export async function GET() {
     type: 'oferta',
     headline: 'Elige tu mejor opción',
     subheadline: 'Ahorros y resultados reales',
+  }
+  const offer: Offer = {
     urgency: 'Solo hoy',
     tiers: [
       { label: '1 Frasco', price: 'S/ 99', priceBefore: 'S/ 169', savingsPct: 41, perUnit: 'S/ 1.1 por cápsula', cta: 'Compra ya', featured: false },
@@ -51,7 +53,7 @@ export async function GET() {
   const fonts = loadPairFonts('clinico-geometrico')
   const scene = await luminousScene()
   const blurBg = await blurToDataUri(scene)
-  const jpeg = await renderComposite(scene, OfertaLayout({ copy, theme, blurBg }), { fonts })
+  const jpeg = await renderComposite(scene, OfertaLayout({ offer, copy, theme, blurBg }), { fonts })
 
   return new NextResponse(new Uint8Array(jpeg), {
     headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'no-store' },

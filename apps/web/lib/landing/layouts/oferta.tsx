@@ -1,6 +1,6 @@
 import type { ReactElement, ReactNode } from 'react'
 import type { ThemeTokens } from '../theme'
-import type { OfferCopy, OfferTier } from '../types'
+import type { Offer, OfferCopy, OfferTier } from '../types'
 import { GoldSeal, YapeLogo, MercadoPagoLogo, VisaLogo, MastercardLogo, FlagPE, FlagUS, goldGradient } from '../devices'
 
 // Layout de composición de la sección OFERTA (motor híbrido). Formato ADN CLEARSTEM, con el
@@ -119,11 +119,11 @@ function TopBanner({ text, t }: { text: string; t: ThemeTokens }): ReactElement 
 }
 
 export function OfertaLayout(
-  { copy, theme: t, blurBg }: { copy: OfferCopy; theme: ThemeTokens; blurBg: string },
+  { offer, copy, theme: t, blurBg }: { offer: Offer; copy: OfferCopy; theme: ThemeTokens; blurBg: string },
 ): ReactElement {
-  const featured = copy.tiers.find((tt) => tt.featured) ?? copy.tiers[copy.tiers.length - 1]
-  const sides = copy.tiers.filter((tt) => tt !== featured).slice(0, 2)
-  const maxSave = Math.max(0, ...copy.tiers.map((tt) => tt.savingsPct ?? 0))
+  const featured = offer.tiers.find((tt) => tt.featured) ?? offer.tiers[offer.tiers.length - 1]
+  const sides = offer.tiers.filter((tt) => tt !== featured).slice(0, 2)
+  const maxSave = Math.max(0, ...offer.tiers.map((tt) => tt.savingsPct ?? 0))
 
   // Sistema de factor único. Base medido del reference: laterales ~33% ancho, central ~46%
   // (relación 1.4). Posiciones en % del lienzo medidas sobre el reference CLEARSTEM.
@@ -139,8 +139,8 @@ export function OfertaLayout(
 
       {/* Header: banner grande + título + eyebrow dorado */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'absolute', left: 30, top: 40, width: W - 60 }}>
-        {copy.urgency ? <TopBanner text={copy.urgency} t={t} /> : null}
-        <div style={{ display: 'flex', justifyContent: 'center', width: '100%', marginTop: copy.urgency ? 18 : 0 }}>
+        {offer.urgency ? <TopBanner text={offer.urgency} t={t} /> : null}
+        <div style={{ display: 'flex', justifyContent: 'center', width: '100%', marginTop: offer.urgency ? 18 : 0 }}>
           <span style={{ fontFamily: t.fonts.display, fontWeight: 800, fontSize: 80, color: t.textPrimary, textAlign: 'center', lineHeight: 1.02, letterSpacing: -1 }}>{copy.headline}</span>
         </div>
         {copy.subheadline ? (

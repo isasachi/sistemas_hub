@@ -1,7 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import { callStructured } from '@/lib/gemini'
-import { LandingCopySchema, OfferCopySchema, SECTION_LABELS, type SectionCopy, type SectionType, type OfferCopy, type LandingSessionResponse } from './types'
+import { LandingCopySchema, OfferGenSchema, SECTION_LABELS, type SectionCopy, type SectionType, type Offer, type OfferCopy, type LandingSessionResponse } from './types'
 import type { Part } from '@google/genai'
 
 // Generación de copy compartida entre la ruta /copy (regenera con feedback) y el
@@ -41,13 +41,14 @@ export async function generateLandingCopy(
   return result.sections
 }
 
-// Copy de la Oferta HÍBRIDA (Fase 1). Call estructurada dedicada: OfferCopySchema fuerza el
-// decoy (≥2 tiers, exactamente uno featured). Reglas de oferta en landing-system.md. El
+// Copy de la Oferta HÍBRIDA. Una call estructurada produce copy + tiers (OfferGenSchema fuerza
+// el decoy: ≥2 tiers, exactamente uno featured); el resultado se PARTE en `offer` (tiers/urgency,
+// nivel de sesión — Fase 5 C5.1) y `copy` (headline/subheadline, propio de la sección). El
 // `.refine` se valida post-hoc en callStructured → reintenta si el modelo no cumple.
 export async function generateOfferCopy(
   session: LandingSessionResponse,
   feedback?: string,
-): Promise<OfferCopy> {
+): Promise<{ offer: Offer; copy: OfferCopy }> {
   const parts: Part[] = [
     {
       text: [
@@ -71,5 +72,9 @@ export async function generateOfferCopy(
       ].join('\n'),
     },
   ]
-  return callStructured('landing_offer_copy', OfferCopySchema, parts, 3, LANDING_SYSTEM_PROMPT)
+  const gen = await callStructured('landing_offer_copy', OfferGenSchema, parts, 3, LANDING_SYSTEM_PROMPT)
+  return {
+    offer: { tiers: gen.tiers, urgency: gen.urgency },
+    copy: { type: 'oferta', headline: gen.headline, subheadline: gen.subheadline },
+  }
 }
