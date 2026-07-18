@@ -9,9 +9,9 @@ import { generateOfferCopy } from '@/lib/landing/copy'
 import { renderComposite, blurToDataUri } from '@/lib/landing/composite'
 import { buildTheme } from '@/lib/landing/theme'
 import { loadPairFonts } from '@/lib/landing/fonts'
-import { type TypePairId } from '@/lib/landing/typography-catalog'
+import { TYPE_PAIRS, type TypePairId } from '@/lib/landing/typography-catalog'
 import { OfertaLayout } from '@/lib/landing/layouts/oferta'
-import { SectionCopySchema, OfferCopySchema, SectionType, type LandingSection, type OfferCopy, type LandingPalette, type LandingSessionResponse } from '@/lib/landing/types'
+import { SectionCopySchema, OfferCopySchema, SectionType, type LandingSection, type OfferCopy, type LandingPalette, type LandingTypography, type LandingSessionResponse } from '@/lib/landing/types'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 import type { Part } from '@google/genai'
@@ -75,12 +75,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       photoParts.push({ inlineData: { mimeType, data } })
     }
 
-    // Estilo de marca: del handoff de branding (ya seteado) o derivado de la foto.
-    // ponytail: deriva una vez y cachea en la sesión; el loop de secciones es
-    // secuencial (cliente), así que no hay carrera read-modify-write.
-    let palette = session.palette
-    let typography = session.typography
-    if ((!palette || !typography) && firstPhoto) {
+    // Marca: derived_brand (Fase 3) GANA; si no, palette/typography de la sesión; último
+    // recurso, derivar de la foto (camino viejo). Del par tipográfico sintetizamos el hint de
+    // fuentes (headline/body) para el modelo. ponytail: deriva una vez y cachea; el loop de
+    // secciones es secuencial (cliente), sin carrera read-modify-write.
+    const brand = session.derived_brand
+    let palette: LandingPalette | null = brand?.palette ?? session.palette
+    let typography: LandingTypography | null = brand
+      ? { headline: TYPE_PAIRS[brand.typePair].display, body: TYPE_PAIRS[brand.typePair].body }
+      : session.typography
+    if (!brand && (!palette || !typography) && firstPhoto) {
       try {
         const style = await extractLandingStyle(firstPhoto.data, firstPhoto.mimeType)
         palette = style.palette
@@ -128,8 +132,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 // ─── Motor HÍBRIDO (Fase 1): escena Gemini (sin texto) + composición Satori ───
-// F1: par tipográfico fijo. La Fase 3 (derived brand) lo deriva del producto.
-const DEFAULT_TYPE_PAIR: TypePairId = 'dr-conversion' // Montserrat DR; ponytail: F3 lo reemplaza
+// F1: par tipográfico fijo. F3: derived_brand.typePair lo reemplaza; este queda de FALLBACK
+// para sesiones sin marca derivada (pre-wizard-F3 o handoff sin derivar).
+const DEFAULT_TYPE_PAIR: TypePairId = 'dr-conversion' // Montserrat DR
 const FALLBACK_PALETTE: LandingPalette = [{ name: 'accent', hex: '#0EA5A4' }]
 
 // Genera la ESCENA cruda (plato de fondo, sin texto) con la misma lógica de fotos/ancla/paleta
@@ -146,14 +151,15 @@ async function generateScenePlate(
     if (!firstPhoto) firstPhoto = { data, mimeType }
     photoParts.push({ inlineData: { mimeType, data } })
   }
-  let palette = session.palette
-  let typography = session.typography
-  if ((!palette || !typography) && firstPhoto) {
+  // Marca: derived_brand (Fase 3) gana; si no, palette de la sesión; último recurso, derivar
+  // de la foto. Cuando hay brand, la escena consume su paleta + mood + casting (buildScene).
+  const brand = session.derived_brand
+  let palette: LandingPalette | null = brand?.palette ?? session.palette
+  if (!brand && (!palette || !session.typography) && firstPhoto) {
     try {
       const style = await extractLandingStyle(firstPhoto.data, firstPhoto.mimeType)
       palette = style.palette
-      typography = style.typography
-      await updateLandingSession(id, { palette, typography })
+      await updateLandingSession(id, { palette, typography: style.typography })
     } catch (err) {
       console.error('[landing-style]', err)
     }
@@ -169,7 +175,7 @@ async function generateScenePlate(
     parts.push(...photoParts)
     mode = 'canonical'
   }
-  parts.push({ text: buildSceneInstruction('oferta', mode, palette, session.brand_style, session.product_labels) })
+  parts.push({ text: buildSceneInstruction('oferta', mode, palette, session.brand_style, session.product_labels, brand) })
   const sceneB64 = await generateImage(parts, 3, { aspectRatio: '9:16', imageSize: '2K' })
   return { sceneB64, palette }
 }
@@ -222,8 +228,10 @@ async function generateHybridSection(
 
   // 3. Composición Satori sobre la escena → JPEG final. Glass real (Camino B): la escena
   // pre-desenfocada se embebe en las cards para el frosted glass alineado.
-  const theme = buildTheme(palette ?? FALLBACK_PALETTE, DEFAULT_TYPE_PAIR)
-  const fonts = loadPairFonts(DEFAULT_TYPE_PAIR)
+  // Par tipográfico: derived_brand (Fase 3) gana; si no, el default de F1. Reemplaza al fijo.
+  const typePair = session.derived_brand?.typePair ?? DEFAULT_TYPE_PAIR
+  const theme = buildTheme(palette ?? FALLBACK_PALETTE, typePair)
+  const fonts = loadPairFonts(typePair)
   const sceneBuf = Buffer.from(sceneB64, 'base64')
   const blurBg = await blurToDataUri(sceneBuf)
   const jpeg = await renderComposite(sceneBuf, OfertaLayout({ copy: offer, theme, blurBg }), { fonts, width: 1080, height: 1920 })
