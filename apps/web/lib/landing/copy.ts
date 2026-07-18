@@ -62,7 +62,7 @@ export async function generateOfferCopy(
         feedback?.trim() ? `\nAjustes pedidos por el usuario: ${feedback.trim()}` : '',
         ``,
         `Reglas de la oferta:`,
-        `- 2 a 4 tiers de cantidad (ej. 1 / 2 / 3 unidades). Precios en soles ("S/ 199").`,
+        `- Preferentemente 3 tiers de cantidad (1 / 2 / 3 unidades). Precios en soles ("S/ 199").`,
         `- Exactamente UN tier con featured:true — el mediano-alto (el decoy que querés vender).`,
         `- TODOS los tiers llevan priceBefore (precio ancla tachado), savingsPct y perUnit —`,
         `  las cards deben verse pobladas. perUnit = costo por unidad ("S/ 66 c/u").`,
