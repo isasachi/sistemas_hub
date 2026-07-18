@@ -141,7 +141,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
 // ─── Motor HÍBRIDO (Fase 1): escena Gemini (sin texto) + composición Satori ───
 // F1: par tipográfico fijo. La Fase 3 (derived brand) lo deriva del producto.
-const DEFAULT_TYPE_PAIR: TypePairId = 'clinico-geometrico' // ponytail: F3 lo reemplaza
+const DEFAULT_TYPE_PAIR: TypePairId = 'dr-conversion' // Montserrat DR; ponytail: F3 lo reemplaza
 const FALLBACK_PALETTE: LandingPalette = [{ name: 'accent', hex: '#0EA5A4' }]
 
 // Genera la ESCENA cruda (plato de fondo, sin texto) con la misma lógica de fotos/ancla/paleta

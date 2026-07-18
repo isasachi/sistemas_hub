@@ -11,6 +11,7 @@ import path from 'path'
 
 export const TYPE_PAIRS = {
   'clinico-geometrico':  { display: 'Poppins',          body: 'Inter',         niche: 'salud, skincare, suplementos' },
+  'dr-conversion':       { display: 'Montserrat',       body: 'Inter',         niche: 'oferta directa, DR agresivo, precios/conversión' },
   'wellness-humanista':  { display: 'Nunito',           body: 'Source Sans 3', niche: 'bienestar, natural, bebé' },
   'premium-serif':       { display: 'Playfair Display', body: 'Lato',          niche: 'belleza, joyería, lujo' },
   'urgencia-condensada': { display: 'Archivo Black',    body: 'Roboto',        niche: 'fitness, gadgets, oferta agresiva' },
@@ -20,6 +21,7 @@ export const TYPE_PAIRS = {
 
 export const TypePairId = z.enum([
   'clinico-geometrico',
+  'dr-conversion',
   'wellness-humanista',
   'premium-serif',
   'urgencia-condensada',
@@ -36,6 +38,8 @@ export type TypePairId = z.infer<typeof TypePairId>
 type FontSpec = { file: string; weights: number[] }
 const FONT_FILES: Record<string, FontSpec[]> = {
   Poppins:            [{ file: 'Poppins-700.ttf',        weights: [400, 700] }],
+  // Montserrat DR: pesos reales 700/800/900 — el layout usa 800 (headings) y 900 (precios).
+  Montserrat:         [{ file: 'Montserrat-700.ttf',     weights: [400, 700] }, { file: 'Montserrat-800.ttf', weights: [800] }, { file: 'Montserrat-900.ttf', weights: [900] }],
   Inter:              [{ file: 'Inter-400.ttf',          weights: [400] }, { file: 'Inter-700.ttf', weights: [700] }],
   Nunito:             [{ file: 'Nunito-700.ttf',         weights: [400, 700] }],
   'Source Sans 3':    [{ file: 'SourceSans3-400.ttf',    weights: [400] }, { file: 'SourceSans3-700.ttf', weights: [700] }],

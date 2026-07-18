@@ -15,7 +15,7 @@ type Gold = { gold: string; goldDark: string }
 // Gradiente metálico agresivo: bandas casi-blancas de brillo + oro + sombra profunda → lee
 // como lámina de oro pulido, no un fill plano. Reusado por devices Y por el layout de oferta.
 export const goldGradient = (gold: string, goldDark: string): string =>
-  `linear-gradient(155deg, #FCEFB4 0%, ${gold} 24%, ${goldDark} 56%, ${gold} 80%, #FFF6CE 100%)`
+  `linear-gradient(160deg, #FFF7D6 0%, ${gold} 22%, ${goldDark} 50%, ${gold} 74%, #FFF3C8 100%)`
 
 const goldFill = (g: Gold): CSSProperties => ({ backgroundImage: goldGradient(g.gold, g.goldDark) })
 

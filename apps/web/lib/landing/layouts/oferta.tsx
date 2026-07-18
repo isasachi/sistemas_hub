@@ -45,7 +45,7 @@ function Ribbon({ label, t, fs }: { label: string; t: ThemeTokens; fs: number })
   return (
     <div style={{
       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: `${fs * 0.36}px ${fs}px`, borderRadius: fs * 0.5,
-      backgroundImage: goldGradient(t.gold, t.goldDark), color: '#3a2a05', fontFamily: t.fonts.display, fontWeight: 700,
+      backgroundImage: goldGradient(t.gold, t.goldDark), color: '#3a2a05', fontFamily: t.fonts.display, fontWeight: 800,
       fontSize: fs, textTransform: 'uppercase', letterSpacing: 0.5, boxShadow: '0 5px 13px rgba(0,0,0,0.28)', border: '1px solid #fff3c4',
     }}>{label}</div>
   )
@@ -75,12 +75,12 @@ function Card(
         <div style={{ display: 'flex', height: p(0.13), alignItems: 'center' }}>{ribbon ? <Ribbon label={ribbon} t={t} fs={p(0.066)} /> : null}</div>
 
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: p(0.013) }}>
-          <span style={{ fontFamily: t.fonts.display, fontWeight: 700, fontSize: p(0.112), color: t.textPrimary, textAlign: 'center' }}>{tier.label}</span>
+          <span style={{ fontFamily: t.fonts.display, fontWeight: 800, fontSize: p(0.112), color: t.textPrimary, textAlign: 'center' }}>{tier.label}</span>
           {tier.priceBefore ? <span style={{ fontFamily: t.fonts.body, fontSize: p(0.066), color: t.textMuted, textDecoration: 'line-through' }}>Antes: {tier.priceBefore}</span> : null}
           <div style={{ display: 'flex', width: p(0.5), height: Math.max(2, p(0.006)), background: 'rgba(0,0,0,0.14)', borderRadius: 2, margin: `${p(0.01)}px 0` }} />
           <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-            {hasCur ? <span style={{ fontFamily: t.fonts.display, fontWeight: 700, fontSize: p(0.145), color: rec ? t.goldDark : t.textPrimary, marginRight: p(0.013), marginBottom: p(0.026) }}>{cur}</span> : null}
-            <span style={{ fontFamily: t.fonts.display, fontWeight: 700, fontSize: p(0.25), color: rec ? t.goldDark : t.textPrimary, lineHeight: 1 }}>{num}</span>
+            {hasCur ? <span style={{ fontFamily: t.fonts.display, fontWeight: 900, fontSize: p(0.145), color: rec ? t.goldDark : t.textPrimary, marginRight: p(0.013), marginBottom: p(0.026) }}>{cur}</span> : null}
+            <span style={{ fontFamily: t.fonts.display, fontWeight: 900, fontSize: p(0.25), color: rec ? t.goldDark : t.textPrimary, lineHeight: 1 }}>{num}</span>
           </div>
         </div>
 
@@ -97,8 +97,8 @@ function Card(
 function Crown({ label, t }: { label: string; t: ThemeTokens }): ReactElement {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '6px 22px', borderRadius: 999, backgroundImage: goldGradient(t.gold, t.goldDark), color: '#3a2a05', fontFamily: t.fonts.display, fontWeight: 700, fontSize: 20, textTransform: 'uppercase', letterSpacing: 1.5, boxShadow: '0 5px 12px rgba(0,0,0,0.28)', border: '1px solid #fff3c4', marginBottom: -6 }}>Recomendado</div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '12px 44px', borderRadius: 16, backgroundImage: goldGradient(t.gold, t.goldDark), color: '#3a2a05', fontFamily: t.fonts.display, fontWeight: 700, fontSize: 44, letterSpacing: 0.5, boxShadow: '0 10px 24px rgba(0,0,0,0.32)', border: '2px solid #fff3c4' }}>{label}</div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '6px 22px', borderRadius: 999, backgroundImage: goldGradient(t.gold, t.goldDark), color: '#3a2a05', fontFamily: t.fonts.display, fontWeight: 800, fontSize: 20, textTransform: 'uppercase', letterSpacing: 1.5, boxShadow: '0 5px 12px rgba(0,0,0,0.28)', border: '1px solid #fff3c4', marginBottom: -6 }}>Recomendado</div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '12px 44px', borderRadius: 16, backgroundImage: goldGradient(t.gold, t.goldDark), color: '#3a2a05', fontFamily: t.fonts.display, fontWeight: 800, fontSize: 44, letterSpacing: 0.5, boxShadow: '0 10px 24px rgba(0,0,0,0.32)', border: '2px solid #fff3c4' }}>{label}</div>
     </div>
   )
 }
@@ -108,11 +108,11 @@ function TopBanner({ text, t }: { text: string; t: ThemeTokens }): ReactElement 
   return (
     <div style={{ display: 'flex', alignItems: 'center', padding: '12px 56px 12px 12px', borderRadius: 26, backgroundImage: goldGradient(t.gold, t.goldDark), border: '2px solid #fff3c4', boxShadow: '0 14px 34px rgba(0,0,0,0.36)' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 88, height: 88, borderRadius: 999, marginRight: 24, background: t.accent, border: '3px solid #fffbe6', boxShadow: 'inset 0 0 0 3px rgba(255,255,255,0.4)' }}>
-        <span style={{ fontFamily: t.fonts.display, fontWeight: 700, fontSize: 25, color: isLight(t.accent) ? t.textPrimary : '#fff' }}>SOLO</span>
+        <span style={{ fontFamily: t.fonts.display, fontWeight: 800, fontSize: 25, color: isLight(t.accent) ? t.textPrimary : '#fff' }}>SOLO</span>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-        <span style={{ fontFamily: t.fonts.display, fontWeight: 700, fontSize: 28, color: '#6b4e12', letterSpacing: 1 }}>OFERTA EXCLUSIVA</span>
-        <span style={{ fontFamily: t.fonts.display, fontWeight: 700, fontSize: 44, color: '#3a2a05', textTransform: 'uppercase', letterSpacing: 1, lineHeight: 1.05 }}>{text}</span>
+        <span style={{ fontFamily: t.fonts.display, fontWeight: 800, fontSize: 28, color: '#6b4e12', letterSpacing: 1 }}>OFERTA EXCLUSIVA</span>
+        <span style={{ fontFamily: t.fonts.display, fontWeight: 900, fontSize: 44, color: '#3a2a05', textTransform: 'uppercase', letterSpacing: 1, lineHeight: 1.05 }}>{text}</span>
       </div>
     </div>
   )
@@ -141,12 +141,12 @@ export function OfertaLayout(
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'absolute', left: 30, top: 40, width: W - 60 }}>
         {copy.urgency ? <TopBanner text={copy.urgency} t={t} /> : null}
         <div style={{ display: 'flex', justifyContent: 'center', width: '100%', marginTop: copy.urgency ? 18 : 0 }}>
-          <span style={{ fontFamily: t.fonts.display, fontWeight: 700, fontSize: 80, color: t.textPrimary, textAlign: 'center', lineHeight: 1.02, letterSpacing: -1 }}>{copy.headline}</span>
+          <span style={{ fontFamily: t.fonts.display, fontWeight: 800, fontSize: 80, color: t.textPrimary, textAlign: 'center', lineHeight: 1.02, letterSpacing: -1 }}>{copy.headline}</span>
         </div>
         {copy.subheadline ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', marginTop: 12, gap: 14 }}>
             <div style={{ display: 'flex', width: 46, height: 3, background: t.goldDark, borderRadius: 2 }} />
-            <span style={{ fontFamily: t.fonts.display, fontWeight: 700, fontSize: 28, color: t.goldDark, textAlign: 'center', textTransform: 'uppercase', letterSpacing: 1, maxWidth: 700 }}>{copy.subheadline}</span>
+            <span style={{ fontFamily: t.fonts.display, fontWeight: 800, fontSize: 28, color: t.goldDark, textAlign: 'center', textTransform: 'uppercase', letterSpacing: 1, maxWidth: 700 }}>{copy.subheadline}</span>
             <div style={{ display: 'flex', width: 46, height: 3, background: t.goldDark, borderRadius: 2 }} />
           </div>
         ) : null}
