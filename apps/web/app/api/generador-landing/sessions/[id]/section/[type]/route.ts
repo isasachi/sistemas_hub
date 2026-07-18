@@ -204,14 +204,17 @@ async function generateHybridSection(
     await updateLandingSession(id, { offer_copy: offer })
   }
 
-  // 2. Escena: si solo cambió el copy (sin prompt) y hay escena cacheada → re-componer a $0
-  // (criterio de aceptación #6). Regen con prompt = editar SOLO la escena. Si no, generar.
+  // 2. Escena. Reuso $0 (recompose): CUALQUIER regen sin prompt de precisión, con escena
+  // cacheada, reutiliza la escena y re-compone con el theme (paleta/tipografía de derived_brand)
+  // y el offer copy ACTUALES → editar la paleta o un precio recompone sin regenerar la escena
+  // Gemini (criterios #3 y #6). Un prompt de precisión edita la escena; sin escena previa (1ª
+  // vez), se genera. ponytail: cambiar el CASTING tras la 1ª generación exige un prompt de
+  // precisión — la persona está horneada en la escena, no en la capa de composición.
   const existing = (session.sections ?? []).find((s) => s.type === type)
-  const copyOnly = offerEdited && !precision
   let sceneB64: string
   let sceneUrl = existing?.sceneUrl ?? null
-  let palette = session.palette
-  if (copyOnly && sceneUrl) {
+  let palette = session.derived_brand?.palette ?? session.palette
+  if (!precision && sceneUrl) {
     sceneB64 = (await fetchAsBase64(sceneUrl)).data
   } else if (precision && sceneUrl) {
     const prev = await fetchAsBase64(sceneUrl)
