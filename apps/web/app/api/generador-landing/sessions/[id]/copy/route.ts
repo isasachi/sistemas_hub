@@ -36,7 +36,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const copy = await generateLandingCopy(session, sections, feedbackText)
 
     await updateLandingSession(id, {
-      step: Math.max(session.step, 2),
+      step: Math.max(session.step, 3), // F3: secciones = step 3 (identidad se insertó en step 2)
       selected_sections: sections,
       copy,
     })

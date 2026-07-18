@@ -126,7 +126,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (idx >= 0) sections[idx] = section
   else sections.push(section)
 
-  await updateLandingSession(id, { step: Math.max(session.step, 3), sections })
+  await updateLandingSession(id, { step: Math.max(session.step, 4), sections })
   await recordGenQuota(id, kind, userId)
   return NextResponse.json({ section, regensLeft })
 }
@@ -247,7 +247,7 @@ async function generateHybridSection(
   if (idx >= 0) sections[idx] = section
   else sections.push(section)
 
-  await updateLandingSession(id, { step: Math.max(session.step, 3), sections })
+  await updateLandingSession(id, { step: Math.max(session.step, 4), sections })
   await recordGenQuota(id, kind, userId)
   return NextResponse.json({ section, regensLeft })
 }

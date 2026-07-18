@@ -62,7 +62,8 @@ export async function POST(req: NextRequest) {
     typography: direction ? { headline: direction.typography.headline, body: direction.typography.body } : null,
     brand_style: brandStyle,
     selected_sections: DEFAULT_SECTIONS,
-    // Para en el paso de SECCIONES: el usuario sigue el wizard (secciones → copy → preview).
+    // Para en el paso de IDENTIDAD visual (step 2, F3): el usuario revisa la marca derivada
+    // (su paleta de branding gana) y sigue el wizard (identidad → secciones → copy → preview).
     step: 2,
   })
 
