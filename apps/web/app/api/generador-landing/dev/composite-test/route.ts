@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server'
 import { renderComposite } from '@/lib/landing/composite'
 import { buildTheme } from '@/lib/landing/theme'
 import { loadPairFonts } from '@/lib/landing/typography-catalog'
-import { OfertaDemo } from './oferta-demo'
+import { OfertaLayout } from '@/lib/landing/layouts/oferta'
+import type { OfferCopy } from '@/lib/landing/types'
 
 // Ruta de PRUEBA de la infra de composición (Fase 0). Vive en local Y en previews de Vercel;
 // 404 solo en production real. Renderiza la Oferta demo sobre un fondo luminoso → JPEG.
@@ -36,9 +37,20 @@ export async function GET() {
     [{ name: 'Teal', hex: '#0EA5A4', usage: 'accent' }, { name: 'Ink', hex: '#0f172a' }],
     'clinico-geometrico',
   )
+  const copy: OfferCopy = {
+    type: 'oferta',
+    headline: 'Aprovecha la oferta',
+    subheadline: 'Mientras dure el stock. Pago contra entrega en todo el Perú.',
+    urgency: 'Solo hoy',
+    tiers: [
+      { label: '1 unidad', price: 'S/ 99', priceBefore: 'S/ 129', perUnit: 'S/ 99 c/u', cta: 'Lo quiero', featured: false },
+      { label: '2 unidades', price: 'S/ 169', priceBefore: 'S/ 258', savingsPct: 35, perUnit: 'S/ 84 c/u', badge: 'Recomendado', cta: 'Lo quiero', featured: true },
+      { label: '3 unidades', price: 'S/ 229', priceBefore: 'S/ 387', savingsPct: 41, perUnit: 'S/ 76 c/u', cta: 'Lo quiero', featured: false },
+    ],
+  }
   const fonts = loadPairFonts('clinico-geometrico')
   const scene = await luminousScene()
-  const jpeg = await renderComposite(scene, OfertaDemo(theme), { fonts })
+  const jpeg = await renderComposite(scene, OfertaLayout({ copy, theme }), { fonts })
 
   return new NextResponse(new Uint8Array(jpeg), {
     headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'no-store' },
