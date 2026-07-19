@@ -1,4 +1,4 @@
-import type { SectionCopy, SectionType, LandingPalette, LandingTypography, DerivedBrand, CastingSpec } from './types'
+import type { SectionCopy, SectionType, LandingPalette, LandingTypography, DerivedBrand, CastingSpec, Offer, TrustBlock } from './types'
 
 // Builders puros ($0) para el prompt de imagen de cada sección de la landing.
 // La FUENTE DE VERDAD del diseño es el ADN destilado de 4 referencias (funnel DR real
@@ -62,12 +62,18 @@ const TEXT_RULES = [
   'Badges, seals, ribbons, icons and price tags carry NO words of their own — decorate them with symbols (✓, ★, %), never with labels, unless that exact word appears in the copy.',
   'NEVER render instruction or design words (e.g. "badge", "seal", "gold", "value", "guarantee", "premium", "e-commerce", "market", "ingredients", "specification", "dimensional", "section", "palette", "typography", "glassmorphism", "mood"), field or role names ("headline", "subheadline", "bullets", "cta"), any bracketed field label or annotation wrapping a copy line, hex codes, font names, lorem ipsum, or any wording from this prompt.',
   'Render each copy string EXACTLY ONCE and render exactly as many cards / price tiers as the copy lists — never duplicate, pad or invent an extra one. The image\'s only text is the Copy-block strings plus the product\'s own printed labels. Keep every word short and highly legible.',
+  'Emphasize a word ONLY with color or weight — NEVER wrap any word in brackets [ ], parentheses, quotes, asterisks or an underline for emphasis; render the accent word as plain text in the accent color.',
 ].join(' ')
 
 function copyBlock(copy: SectionCopy): string {
   const lines: string[] = [`Headline: "${copy.headline}".`]
+  // La palabra-acento se resalta con COLOR (no con corchetes ni comillas). Dirigirla evita que el
+  // modelo elija otra o la envuelva en [ ] para "enfatizar".
+  if (copy.accentWord) lines.push(`Emphasis: within the headline, render the words "${copy.accentWord}" in the brand ACCENT COLOR only — same font and size, NO brackets, quotes, underline or box around them.`)
   if (copy.subheadline) lines.push(`Subheadline: "${copy.subheadline}".`)
-  if (copy.bullets?.length) lines.push(`Bullets:\n${copy.bullets.map((b) => `  • ${b}`).join('\n')}`)
+  if (copy.type === 'antes-despues') lines.push(`Label the left/before state "ANTES" and the right/after state "DESPUÉS" (those exact Spanish words, not "before/after").`)
+  if (copy.bullets?.length) lines.push(`${copy.type === 'antes-despues' ? 'ANTES column — problems, each with a red ✗' : 'Bullets'}:\n${copy.bullets.map((b) => `  • ${b}`).join('\n')}`)
+  if (copy.bulletsAfter?.length) lines.push(`AFTER column — results, each with a green ✓ (paired beside the BEFORE column):\n${copy.bulletsAfter.map((b) => `  • ${b}`).join('\n')}`)
   if (copy.cards?.length)
     lines.push(`Cards:\n${copy.cards.map((c) => `  - "${c.title}": "${c.body}"`).join('\n')}`)
   if (copy.cta) lines.push(`Call-to-action button label: "${copy.cta}".`)
@@ -173,8 +179,10 @@ export function buildSectionInstruction(
   productLabels?: string | null,
   brand?: DerivedBrand | null,
   hasTalent = false,
+  noPersonSection = false,
 ): string {
-  const noPerson = !!brand && !brand.casting.present
+  const productOnly = !!brand && !brand.casting.present
+  const noPersonHere = noPersonSection && !!brand && brand.casting.present
   return [
     `Design a single vertical landing-page SECTION as one high-resolution image,`,
     `mobile-first, portrait orientation, premium e-commerce styling.`,
@@ -189,8 +197,70 @@ export function buildSectionInstruction(
     copyBlock(copy),
     ``,
     TEXT_RULES,
-    noPerson ? PRODUCT_ONLY_OVERRIDE : '',
+    productOnly ? PRODUCT_ONLY_OVERRIDE : noPersonHere ? NO_PERSON_SCENE : '',
   ].filter(Boolean).join('\n')
+}
+
+// ─── Motor de DIFUSIÓN (goal 2026-07-18) ─────────────────────────────────────
+// La IA renderiza la sección COMPLETA con su texto (headlines, precios, filas), como el motor
+// original — se abandona la composición Satori del texto. Lo ÚNICO que NO dibuja la difusión son
+// los logos de marca reales (medios de pago, banderas): se reservan en una banda y se compositan
+// aparte (los logos por difusión salen deformados). Esta función reusa buildSectionInstruction e
+// inyecta lo que F5 sacó del copy (tiers de oferta, filas de confianza del TrustBlock).
+
+// Secciones que llevan la banda de logos de pago compuesta (el resto NO reserva banda).
+export const PAYMENT_SECTIONS: Set<SectionType> = new Set(['oferta', 'garantia'])
+
+function offerText(offer: Offer): string {
+  const lines = offer.tiers.map((t) => {
+    const bits = [
+      `"${t.label}"`,
+      t.priceBefore ? `antes ${t.priceBefore} (tachado)` : null,
+      `precio ${t.price}`,
+      t.perUnit ? `(${t.perUnit})` : null,
+      typeof t.savingsPct === 'number' ? `ahorra ${t.savingsPct}%` : null,
+      `botón "${t.cta}"`,
+      t.featured ? 'DESTACADO' : null,
+    ].filter(Boolean).join(', ')
+    return `  - ${bits}`
+  }).join('\n')
+  return `PRICE TIERS — render EXACTLY these ${offer.tiers.length} price cards, one per tier, and NO others; VISUALLY ELEVATE the DESTACADO one (crown it with a gold "Recomendado"/"Mejor valor" ribbon and a gold CTA pill; the rest use the brand-accent CTA); show each struck-through "antes" price and per-unit cost where given:\n${lines}${offer.urgency ? `\n  Gold urgency banner at the top: "${offer.urgency}".` : ''}`
+}
+
+function trustText(trust: TrustBlock): string {
+  const rows: string[] = []
+  if (trust.coverage?.length) rows.push(`Envío a domicilio en ${trust.coverage.join(' y ')}${trust.freeShipping ? ' (envío gratis)' : ''}`)
+  if (trust.deliveryTime) rows.push(`Entrega en ${trust.deliveryTime}`)
+  if (trust.codDelivery) rows.push('Pago contraentrega — pagas en efectivo cuando llega')
+  if (trust.guaranteeDays) rows.push(`Compra 100% segura${trust.guaranteeText ? ` — ${trust.guaranteeText}` : ` — garantía de ${trust.guaranteeDays} días`}`)
+  if (!rows.length) return ''
+  return `TRUST ROWS — render each of these as a frosted pill with a glossy icon (truck / clock / check / shield) + a bold title + a lighter line, using EXACTLY these facts (invent none):\n${rows.map((r) => `  - ${r}`).join('\n')}`
+}
+
+// Reserva la banda inferior para el overlay de logos reales. End-weighted para ganarle a
+// cualquier mención de logos en SECTION_SPECS. La composición dibuja los logos ahí después.
+const PAYMENT_BAND =
+  'PAYMENT LOGOS (do NOT draw): leave the BOTTOM ~12% of the image as a CLEAN, calm horizontal band (a subtle light strip is fine) with NO payment logos, card icons, brand marks, wallet logos, country flags or the words "yape/visa/mastercard/mercado pago" anywhere — the REAL payment-brand logos are composited into that band afterwards. You MAY render a short heading like "Paga como prefieras" just ABOVE the band, but no logos.'
+
+export function buildDiffusionInstruction(
+  copy: SectionCopy,
+  productMode: ProductMode,
+  palette?: LandingPalette | null,
+  typography?: LandingTypography | null,
+  brandStyle?: string | null,
+  productLabels?: string | null,
+  brand?: DerivedBrand | null,
+  hasTalent = false,
+  noPersonSection = false,
+  offer?: Offer | null,
+  trust?: TrustBlock | null,
+): string {
+  const base = buildSectionInstruction(copy, productMode, palette, typography, brandStyle, productLabels, brand, hasTalent, noPersonSection)
+  const extra: string[] = []
+  if (copy.type === 'oferta' && offer) extra.push(offerText(offer))
+  if (trust && (copy.type === 'garantia' || copy.type === 'cta-final' || copy.type === 'hero')) extra.push(trustText(trust))
+  if (PAYMENT_SECTIONS.has(copy.type)) extra.push(PAYMENT_BAND)
+  return [base, ...extra].filter(Boolean).join('\n\n')
 }
 
 // ─── Motor HÍBRIDO (Fase 1) ──────────────────────────────────────────────────

@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getLandingSession, updateLandingSession } from '@/lib/landing/db'
 import { fetchAsBase64, uploadToStorage } from '@/lib/storage'
 import { generateImage, editWithPrompt } from '@/lib/gemini'
-import { buildSectionInstruction, buildSceneInstruction, type ProductMode } from '@/lib/landing/instructions'
-import { HYBRID_SECTIONS, NO_TALENT_SECTIONS } from '@/lib/landing/engine-registry'
+import { buildSectionInstruction, buildSceneInstruction, buildDiffusionInstruction, PAYMENT_SECTIONS, type ProductMode } from '@/lib/landing/instructions'
+import { PaymentBar } from '@/lib/landing/layouts/payment-bar'
+import { HYBRID_SECTIONS, NO_TALENT_SECTIONS, NO_PERSON_SECTIONS } from '@/lib/landing/engine-registry'
 import { extractLandingStyle } from '@/lib/landing/style-extract'
 import { generateOfferCopy } from '@/lib/landing/copy'
 import { generateAvatars } from '@/lib/landing/avatars'
@@ -58,10 +59,25 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return generateHybridSection(session, id, parsedType.data, body, precision, userId, kind, regensLeft)
   }
 
+  // Motor de DIFUSIÓN: la oferta y la confianza (que F5 sacó del copy) se INYECTAN al prompt.
+  let offer = resolveOffer(session)
+  const trust = session.trust_block
+
   let copy = SectionCopySchema.safeParse(body.copy).success ? SectionCopySchema.parse(body.copy) : null
   if (!copy) {
     const approved = (session.copy ?? []).find((c) => c.type === parsedType.data)
     if (approved) copy = SectionCopySchema.parse(approved)
+  }
+  // Oferta: su texto vive en offer_copy + los tiers en session.offer (F5). Se arma el SectionCopy
+  // desde offer_copy (generando ambos si faltan) para que la difusión tenga headline/subheadline.
+  if (!copy && parsedType.data === 'oferta') {
+    let offerCopy = OfferCopySchema.safeParse(session.offer_copy).success ? OfferCopySchema.parse(session.offer_copy) : null
+    if (!offer || !offerCopy) {
+      const gen = await generateOfferCopy(session)
+      offer = gen.offer; offerCopy = gen.copy
+      await updateLandingSession(id, { offer, offer_copy: offerCopy })
+    }
+    copy = { type: 'oferta', headline: offerCopy.headline, subheadline: offerCopy.subheadline, cta: offer.tiers.find((t) => t.featured)?.cta }
   }
   if (!copy || copy.type !== parsedType.data)
     return NextResponse.json({ error: 'Falta el copy de la sección' }, { status: 400 })
@@ -122,23 +138,33 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // Talento canónico (Fase 4): la persona va como ÚLTIMA imagen del parts[] — el contrato de
     // orden (producto canónico → fotos → talento) lo asume talentLine ("FINAL reference image").
     // testimonios se excluye: muestra clientes distintos, no al protagonista canónico.
+    // Talento canónico: no va en testimonios/faq/beneficios. Persona del todo suprimida solo en
+    // beneficios/faq (testimonios SÍ muestra clientes, caras distintas que la difusión renderiza).
+    const noPersonSection = NO_PERSON_SECTIONS.has(parsedType.data)
     const hasTalent = !!(brand?.casting.present && session.talent_canonical_url && !NO_TALENT_SECTIONS.has(parsedType.data))
     if (hasTalent) {
       const talent = await fetchAsBase64(session.talent_canonical_url!)
       parts.push({ inlineData: { mimeType: talent.mimeType, data: talent.data } })
     }
-    // El copy libre de una sección vieja (hero, etc.) puede mencionar precio/oferta: anclarlo al
-    // tier DESTACADO de la sesión (Fase 5 C5.1) para que ninguna sección contradiga a la Oferta.
-    const featured = resolveOffer(session)?.tiers.find((t) => t.featured)
-    const offerHint = featured
-      ? `\n\nOFFER CONSISTENCY: if this section shows any price, use ONLY the featured offer — "${featured.label}" at ${featured.price}${featured.priceBefore ? ` (previous price ${featured.priceBefore})` : ''}. Never invent a different amount, and never show a "before"/anchor price without labelling it as the previous price.`
-      : ''
-    parts.push({ text: buildSectionInstruction(copy, mode, palette, typography, session.brand_style, session.product_labels, brand, hasTalent) + offerHint })
+    // Motor de DIFUSIÓN: la IA renderiza toda la sección con su texto; se le inyectan los tiers
+    // de la oferta y las filas de confianza (F5 los sacó del copy), y se reserva la banda de logos.
+    parts.push({ text: buildDiffusionInstruction(copy, mode, palette, typography, session.brand_style, session.product_labels, brand, hasTalent, noPersonSection, offer, trust) })
     b64 = await generateImage(parts, 3, { aspectRatio: '9:16' })
   }
   if (!b64) return NextResponse.json({ error: 'No se pudo generar la sección', retryable: true }, { status: 502 })
 
-  const imageUrl = await uploadToStorage(id, Buffer.from(b64, 'base64'), 'image/png', `section-${copy.type}`)
+  // Overlay de logos de marca REALES (medios de pago + banderas + sello) sobre la banda que la
+  // difusión dejó limpia. Solo las secciones con strip de pagos (oferta/garantía). El resto sube
+  // la imagen de difusión tal cual.
+  const needsBar = PAYMENT_SECTIONS.has(parsedType.data) && !!trust?.paymentMethods.length
+  let outBuf = Buffer.from(b64, 'base64')
+  if (needsBar) {
+    const dbrand = session.derived_brand
+    const pair = dbrand?.typePair ?? DEFAULT_TYPE_PAIR
+    const theme = buildTheme(dbrand?.palette ?? session.palette ?? FALLBACK_PALETTE, pair)
+    outBuf = Buffer.from(await renderComposite(outBuf, PaymentBar({ trust: trust!, theme }), { fonts: loadPairFonts(pair), width: 1080, height: 1920 }))
+  }
+  const imageUrl = await uploadToStorage(id, outBuf, needsBar ? 'image/jpeg' : 'image/png', `section-${copy.type}`)
 
   // Upsert en el array sections (read-modify-write). El `order` viene del cliente
   // (índice en selected_sections); al regenerar se preserva el existente.
