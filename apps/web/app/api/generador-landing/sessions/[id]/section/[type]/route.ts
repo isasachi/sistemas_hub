@@ -6,6 +6,7 @@ import { buildSectionInstruction, buildSceneInstruction, type ProductMode } from
 import { HYBRID_SECTIONS, NO_TALENT_SECTIONS } from '@/lib/landing/engine-registry'
 import { extractLandingStyle } from '@/lib/landing/style-extract'
 import { generateOfferCopy } from '@/lib/landing/copy'
+import { generateAvatars } from '@/lib/landing/avatars'
 import { renderComposite, blurToDataUri } from '@/lib/landing/composite'
 import { buildTheme } from '@/lib/landing/theme'
 import { loadPairFonts } from '@/lib/landing/fonts'
@@ -199,12 +200,15 @@ async function generateScenePlate(
     mode = 'canonical'
   }
   // Talento canónico (Fase 4): última imagen del parts[] (contrato producto → fotos → talento).
-  const hasTalent = !!(brand?.casting.present && session.talent_canonical_url)
+  // Igual que el motor viejo, respeta NO_TALENT_SECTIONS (testimonios/faq/beneficios no llevan
+  // persona). noPersonSection suprime a la persona en la escena AUNQUE la campaña tenga casting.
+  const noPersonSection = NO_TALENT_SECTIONS.has(type)
+  const hasTalent = !!(brand?.casting.present && session.talent_canonical_url && !noPersonSection)
   if (hasTalent) {
     const talent = await fetchAsBase64(session.talent_canonical_url!)
     parts.push({ inlineData: { mimeType: talent.mimeType, data: talent.data } })
   }
-  parts.push({ text: buildSceneInstruction(type, mode, palette, session.brand_style, session.product_labels, brand, hasTalent) })
+  parts.push({ text: buildSceneInstruction(type, mode, palette, session.brand_style, session.product_labels, brand, hasTalent, noPersonSection) })
   const sceneB64 = await generateImage(parts, 3, { aspectRatio: '9:16', imageSize: '2K' })
   return { sceneB64, palette }
 }
@@ -268,13 +272,34 @@ async function generateHybridSection(
   const fonts = loadPairFonts(typePair)
   const sceneBuf = Buffer.from(sceneB64, 'base64')
   const blurBg = await blurToDataUri(sceneBuf)
+
+  // Avatares de testimonios (se componen como <img>): cacheados en la sesión, o generados +
+  // subidos + persistidos UNA vez. Se re-encodan a JPEG para fijar el mime (Satori es estricto:
+  // un JPEG etiquetado png no decodifica). El resto de secciones no los necesita.
+  let avatars: string[] = []
+  if (type === 'testimonios') {
+    const cached = session.testimonial_avatars
+    if (cached?.length) {
+      avatars = await Promise.all(cached.map(async (u) => { const a = await fetchAsBase64(u); return `data:${a.mimeType};base64,${a.data}` }))
+    } else {
+      const sharp = (await import('sharp')).default
+      const urls: string[] = []
+      for (const b of await generateAvatars(session.derived_brand?.casting)) {
+        if (!b) continue
+        const jpg = await sharp(Buffer.from(b, 'base64')).jpeg({ quality: 88 }).toBuffer()
+        urls.push(await uploadToStorage(id, jpg, 'image/jpeg', `avatar-${urls.length}`))
+        avatars.push(`data:image/jpeg;base64,${jpg.toString('base64')}`)
+      }
+      if (urls.length) await updateLandingSession(id, { testimonial_avatars: urls })
+    }
+  }
+
   let layout: ReactElement
   switch (type) {
     case 'hero': layout = HeroLayout({ offer, trust, copy: bodyCopy, theme }); break
     case 'antes-despues': layout = AntesDespuesLayout({ copy: bodyCopy, theme, blurBg }); break
     case 'beneficios': layout = BeneficiosLayout({ copy: bodyCopy, theme, blurBg }); break
-    // ponytail: avatares de testimonios aún no se generan aparte → placeholder; TODO gen+cache.
-    case 'testimonios': layout = TestimoniosLayout({ copy: bodyCopy, avatars: [], theme, blurBg }); break
+    case 'testimonios': layout = TestimoniosLayout({ copy: bodyCopy, avatars, theme, blurBg }); break
     case 'faq': layout = FaqLayout({ copy: bodyCopy, theme, blurBg }); break
     case 'garantia': layout = GarantiaLayout({ trust, copy: bodyCopy, theme, blurBg }); break
     case 'cta-final': layout = CtaFinalLayout({ offer, trust, copy: bodyCopy, theme, blurBg }); break

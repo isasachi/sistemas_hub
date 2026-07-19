@@ -8,7 +8,8 @@ export const HYBRID_SECTIONS: Set<SectionType> = new Set([
   'hero', 'oferta', 'antes-despues', 'beneficios', 'testimonios', 'garantia', 'faq', 'cta-final',
 ])
 
-// Secciones que NO usan el talento canónico (Fase 4). `testimonios` muestra clientes DISTINTOS
-// por definición — forzar la misma cara en cada reseña se ve falso. El talento es para el/la
-// protagonista de la campaña (hero, oferta, beneficios, antes/después, cta), no para avatares.
-export const NO_TALENT_SECTIONS: Set<SectionType> = new Set(['testimonios'])
+// Secciones que NO reciben el talento canónico. `testimonios` muestra clientes DISTINTOS (sus
+// avatares se generan aparte). `faq` y `beneficios` no llevan persona en el ADN (solo producto +
+// motivos): pasarles el talento mete una figura que la composición tapa. El talento es para el/la
+// protagonista de la campaña (hero, oferta, antes/después, garantía, cta).
+export const NO_TALENT_SECTIONS: Set<SectionType> = new Set(['testimonios', 'faq', 'beneficios'])

@@ -211,8 +211,8 @@ const SCENE_SPECS: Partial<Record<SectionType, string>> = {
     'FINAL CTA background plate: the product as the confident hero, centered or slightly high in the frame, floating over the luminous atmosphere, with the beneficiary optionally to one side conveying the happy result. Keep the LOWER THIRD and the CENTRE calm and uncluttered — a headline, a price, one call-to-action button and a trust seal are composited there afterwards. Decisive, high-contrast, aspirational. Depict NO text, price numbers, buttons, CTAs, badges, ribbons or seals — every one of those is composited afterwards.',
   hero:
     'HERO background plate: the beneficiary (a confident, happy person fitting the audience) on the RIGHT half, and the real product LARGE and clear in the LOWER-CENTRE, floating over the luminous atmosphere with supporting botanical/ingredient props around its base. Include a small rounded-corner INSET on the MIDDLE-LEFT showing the "before"/problem state of the same kind of person. Keep the UPPER-LEFT (for the headline), the area beside the product (for a seal) and the BOTTOM band calm and uncluttered — headline, a "before" label, a value seal, a price plaque and a trust strip are composited there afterwards. Aspirational, high-contrast, the product as the star. Depict NO text, labels, prices, plaques, seals, badges or trust icons — every one of those is composited afterwards.',
-  'antes-despues':
-    'BEFORE/AFTER background plate: TWO photographic portraits of the same kind of person SIDE BY SIDE in the UPPER-MIDDLE band (roughly y 20%-40%) — the LEFT one showing the "before"/problem state, the RIGHT one showing the improved "after" state — with clean space between them. Keep the top (headline), the gap between the two faces (an arrow is composited there) and the LOWER HALF calm and uncluttered — the headline, ANTES/DESPUÉS labels, an arrow, two comparison lists and a tagline are composited there afterwards. Honest, evidence-like, luminous. Depict NO text, labels, arrows, checkmarks, lists or badges — every one of those is composited afterwards.',
+    'antes-despues':
+    'BEFORE/AFTER background plate: TWO tightly-cropped face/head portraits of the same kind of person SIDE BY SIDE HIGH in the frame (strictly between y 14% and y 40%, each fitting within its own half-width) — the LEFT one showing the "before"/problem state, the RIGHT one the improved "after" state — with a clean gap between them. The ENTIRE LOWER HALF (below y 42%) must stay EMPTY and uncluttered — do NOT place any product bottle, box, hands or props in the centre or lower half; at most a faint molecule/bokeh motif. Two comparison lists, an arrow and a tagline are composited over that lower area afterwards. Honest, evidence-like, luminous. Depict NO text, labels, arrows, checkmarks, lists or badges — every one of those is composited afterwards.',
   beneficios:
     'BENEFITS background plate: the real product in the LOWER area (optionally with botanical/ingredient props), floating over the luminous atmosphere. Keep the TOP (for the headline) and the LEFT-CENTRE column calm and uncluttered — the headline and a stack of benefit rows are composited there afterwards. Airy, trustworthy, generous negative space. Depict NO text, cards, rows, icons, discs, badges or checkmarks — every one of those is composited afterwards.',
   testimonios:
@@ -245,6 +245,12 @@ const SCENE_NEGATIVE =
 const PRODUCT_ONLY_OVERRIDE =
   'PRODUCT-ONLY (absolute, OVERRIDES everything above): this product has NO human beneficiary. Do NOT render any person, model, face, hand, arm or silhouette anywhere in the image; IGNORE every earlier mention of a beneficiary, person or someone in a corner. The product ALONE is the subject.'
 
+// La campaña SÍ tiene un talento, pero ESTA sección no lo lleva (beneficios/faq/testimonios en el
+// ADN no muestran persona). Suprime la persona en la escena sin forzar "producto solo" (a
+// diferencia de PRODUCT_ONLY_OVERRIDE) — respeta el plato de la sección (atmósfera y/o producto).
+const NO_PERSON_SCENE =
+  'NO PERSON in this section (absolute, OVERRIDES everything above): do NOT render any human, face, model, hand, arm, shoulder or silhouette anywhere in this image; IGNORE every earlier mention of a beneficiary or campaign person. Show ONLY what the section plate above describes (product and/or atmosphere) — no people at all.'
+
 // Bloque de TALENTO canónico (Fase 4), paralelo a productLine y con el mismo rigor: la persona
 // es una imagen de referencia (la ÚLTIMA del parts[]) que debe salir IDÉNTICA en todas las
 // secciones. `hasTalent` lo decide el caller (hay talent_canonical_url y casting.present).
@@ -266,8 +272,14 @@ export function buildSceneInstruction(
   productLabels?: string | null,
   brand?: DerivedBrand | null,
   hasTalent = false,
+  noPersonSection = false,
 ): string {
-  const noPerson = !!brand && !brand.casting.present
+  // productOnly: el producto no lleva persona en NINGUNA sección (casting.present=false).
+  // noPersonHere: la campaña SÍ tiene persona, pero ESTA sección no la muestra (beneficios/faq/
+  // testimonios). Lo decide el caller (NO_TALENT_SECTIONS), NO `!hasTalent` — sin la placa de
+  // talento todavía, oferta/hero igual deben describir a la persona para que Gemini la genere.
+  const productOnly = !!brand && !brand.casting.present
+  const noPersonHere = noPersonSection && !!brand && brand.casting.present
   return [
     `Design a single vertical landing-page SECTION BACKGROUND PLATE as one high-resolution image,`,
     `mobile-first, portrait orientation, premium e-commerce styling.`,
@@ -278,6 +290,6 @@ export function buildSceneInstruction(
     talentLine(hasTalent),
     ``,
     SCENE_NEGATIVE,
-    noPerson ? PRODUCT_ONLY_OVERRIDE : '',
+    productOnly ? PRODUCT_ONLY_OVERRIDE : noPersonHere ? NO_PERSON_SCENE : '',
   ].filter(Boolean).join('\n')
 }

@@ -250,4 +250,7 @@ export interface LandingSessionResponse {
   // CastingSpec, sobre fondo neutro. Se pasa como referencia a todas las secciones para que la
   // persona no cambie entre ellas. Null si el producto no lleva persona (casting.present=false).
   talent_canonical_url: string | null
+  // Avatares de testimonios: 3 retratos de clientes DISTINTOS, generados una vez y cacheados,
+  // que la sección testimonios compone como <img> (Satori no genera caras). Null hasta generarlos.
+  testimonial_avatars: string[] | null
 }
