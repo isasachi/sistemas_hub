@@ -1,6 +1,15 @@
 import { describe, it, expect } from 'vitest'
-import { buildSectionInstruction, buildSceneInstruction } from './instructions'
-import type { SectionCopy, SectionType, DerivedBrand } from './types'
+import { buildSectionInstruction, buildSceneInstruction, buildDiffusionInstruction, MULTI_UNIT_SECTIONS } from './instructions'
+import { brandLockupText } from './layouts/brand-lockup'
+import type { SectionCopy, SectionType, DerivedBrand, Offer } from './types'
+
+const OFFER: Offer = {
+  urgency: 'Oferta por tiempo limitado',
+  tiers: [
+    { label: '1 Frasco', price: 'S/ 99', cta: 'Comprar', featured: false },
+    { label: '3 Frascos', price: 'S/ 199', priceBefore: 'S/ 297', savingsPct: 33, cta: 'Comprar Ya', featured: true },
+  ],
+}
 
 const ALL: SectionType[] = [
   'hero', 'oferta', 'antes-despues', 'beneficios',
@@ -78,6 +87,59 @@ describe('buildSectionInstruction — ADN de referencia', () => {
     )
     expect(out).toContain('#1e3a8a')
     expect(out).toContain('Poppins')
+  })
+})
+
+describe('buildDiffusionInstruction — pack, urgencia, lockup (goal 2026-07-18)', () => {
+  it('inyecta la nota de PACK multi-unidad cuando packUnits > 1', () => {
+    const out = buildDiffusionInstruction(copyFor('oferta'), 'canonical', null, null, null, null, null, false, false, OFFER, null, 3)
+    expect(out).toContain('MULTI-UNIT PACK')
+    expect(out).toContain('3 copies of the SAME single product')
+    // sin packUnits, no aparece
+    expect(buildDiffusionInstruction(copyFor('oferta'), 'canonical', null, null, null, null, null, false, false, OFFER, null))
+      .not.toContain('MULTI-UNIT PACK')
+  })
+
+  it('oferta/cta-final son las secciones multi-unidad', () => {
+    expect(MULTI_UNIT_SECTIONS.has('oferta')).toBe(true)
+    expect(MULTI_UNIT_SECTIONS.has('cta-final')).toBe(true)
+    expect(MULTI_UNIT_SECTIONS.has('hero')).toBe(false)
+  })
+
+  it('urgencia data-driven: badge único con la línea del copy en hero/cta-final', () => {
+    const hero = buildDiffusionInstruction(copyFor('hero'), 'canonical', null, null, null, null, null, false, false, OFFER, null)
+    expect(hero).toContain('Oferta por tiempo limitado')
+    expect(hero).toContain('single metallic-gold urgency badge')
+    expect(hero).toContain('FEATURED PRICE') // el precio del tier destacado se inyecta (no se inventa)
+    expect(hero).toContain('S/ 199')
+    // sin urgency en el offer, no se inyecta el badge (pero sí el precio)
+    const noUrg = buildDiffusionInstruction(copyFor('hero'), 'canonical', null, null, null, null, null, false, false, { tiers: OFFER.tiers }, null)
+    expect(noUrg).not.toContain('single metallic-gold urgency badge')
+  })
+
+  it('ya NO hardcodea "SOLO HOY" en el spec de oferta/cta-final', () => {
+    expect(buildSectionInstruction(copyFor('oferta'), 'canonical')).not.toContain('SOLO HOY')
+    expect(buildSectionInstruction(copyFor('cta-final'), 'canonical')).not.toContain('SOLO HOY')
+  })
+
+  it('reserva la franja del lockup solo cuando reserveLockup=true', () => {
+    const withL = buildDiffusionInstruction(copyFor('hero'), 'canonical', null, null, null, null, null, false, false, null, null, null, true)
+    expect(withL).toContain('BRAND LOCKUP (do NOT draw)')
+    const without = buildDiffusionInstruction(copyFor('hero'), 'canonical', null, null, null, null, null, false, false, null, null, null, false)
+    expect(without).not.toContain('BRAND LOCKUP (do NOT draw)')
+  })
+})
+
+describe('brandLockupText — deriva un wordmark corto y limpio', () => {
+  it('prefiere la 1ª línea del label impreso si es corta', () => {
+    expect(brandLockupText('CLEARSTEM\n90 Capsules', 'Suplemento X')).toBe('CLEARSTEM')
+  })
+  it('cae al product_name cuando no hay label', () => {
+    expect(brandLockupText(null, 'JR Studio')).toBe('JR Studio')
+  })
+  it('salta nombres largos que no leen como lockup', () => {
+    expect(brandLockupText(null, 'Colágeno Hidrolizado Marino Premium')).toBeNull()
+    expect(brandLockupText('', '')).toBeNull()
   })
 })
 

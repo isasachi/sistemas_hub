@@ -18,7 +18,8 @@ Reglas de la sección OFERTA (esquema OfferGen/OfferCopy):
 - 2 a 4 tiers de cantidad. Exactamente UNO con `featured:true`: el mediano-alto (decoy), el de mejor relación precio/cantidad — NO el más caro por unidad.
 - Precio ancla: SIEMPRE da un `priceBefore` REALISTA (precio regular más alto) cuando haya descuento. NO calcules `savingsPct` — el sistema lo computa de priceBefore/price (y el destacado mostrará el mayor); puedes omitirlo.
 - Costo por unidad: SIEMPRE `perUnit` EXACTO = precio ÷ (unidades × piezas por unidad), redondeado a 2 decimales (ej "S/ 0.74 por cápsula"); no aproximes de más.
-- `badge` corto solo en el featured. `urgency` solo si aplica. `cta` de 1-3 palabras por tier.
+- `badge` corto solo en el featured. `cta` de 1-3 palabras por tier.
+- `urgency` (opcional): UNA frase de urgencia HONESTA por tiempo limitado, variada — ej "Oferta por tiempo limitado", "Precio de lanzamiento", "Solo esta semana". NO inventes cifras de stock ("quedan 5 unidades") ni fechas/plazos concretos salvo que el usuario los haya dado. El sistema la muestra UNA sola vez por sección (no repitas "Solo hoy" en cada bloque).
 - No inventes precios: deriva los tiers del precio base que dio el usuario. Sin precio, no generes oferta con cifras falsas.
 
 Devuelve JSON que cumpla el esquema. Una entrada por cada sección pedida, en el mismo orden.

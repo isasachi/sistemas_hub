@@ -73,3 +73,28 @@ export async function cropProduct(buffer: Buffer, box: ProductBox): Promise<Buff
     return buffer // sharp no cargó o el extract falló → render completo (nunca peor que hoy)
   }
 }
+
+// Pack multi-unidad para oferta/cta-final. La difusión, al inventar un pack de 2-3 frascos desde
+// UN solo frasco de referencia, garabatea el label distinto en cada uno (CLEARSTE/BSTEM). Aquí
+// duplicamos el MISMO crop canónico N veces con sharp → una imagen-referencia donde las N unidades
+// llevan el label IDÉNTICO, así el modelo tiene menos margen para variarlo por frasco. Es una
+// REFERENCIA (la difusión re-dibuja el pack en la escena), no un composite final — el crop es
+// rectangular con fondo, no un recorte transparente. ponytail: si el label sigue saliendo mal,
+// el siguiente escalón es recortar el fondo y compositar el pack en una zona reservada.
+export async function buildProductPack(canonical: Buffer, units = 3): Promise<Buffer> {
+  try {
+    const sharp = (await import('sharp')).default
+    const H = 900
+    const one = await sharp(canonical).resize({ height: H }).png().toBuffer()
+    const w = (await sharp(one).metadata()).width ?? H
+    const step = w - Math.round(w * 0.24) // solape del 24% entre unidades contiguas
+    const canvasW = w + step * (units - 1)
+    const layers = Array.from({ length: units }, (_, i) => ({ input: one, left: i * step, top: 0 }))
+    return await sharp({ create: { width: canvasW, height: H, channels: 4, background: { r: 255, g: 255, b: 255, alpha: 0 } } })
+      .composite(layers)
+      .png()
+      .toBuffer()
+  } catch {
+    return canonical // sin sharp o falla de composición → una sola unidad (nunca peor que hoy)
+  }
+}

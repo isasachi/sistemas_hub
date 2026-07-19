@@ -19,9 +19,9 @@ import type { SectionCopy, SectionType, LandingPalette, LandingTypography, Deriv
 // marca, gold = dorado invariante). Cada sección CIERRA anclada abajo, nunca en aire.
 const SECTION_SPECS: Record<SectionType, string> = {
   hero:
-    'HERO section — a diagonal Z-path: headline TOP-LEFT → beneficiary TOP-RIGHT → product CENTRE-LOW → price block → trust bar. Headline is up to 3 lines (imperative verb + the specific problem + the hidden differential), bicolor. Grey subcopy of 2 lines (mechanism "from within" + result). Beneficiary: ONE real person fitting the audience, cut out with NO background, BLEEDING off the RIGHT edge, ~35% of the width, aligned to the upper-right third, touching their face, gentle contained smile, looking at camera. A SMALL rounded "before"/problem thumbnail (~22% width) BOTTOM-LEFT with a small solid deep-tone chip labelled "ANTES". Product: the real unit CENTRE-LOW, slightly IN FRONT of the beneficiary (upper layer), with a contact shadow and floor reflection, plus a couple of product-relevant natural props at its base and translucent accent spheres to its right. A circular GOLD "MEJOR VALOR" badge with a double ring sits on the product\'s lower-right, rotated ~-8°. Price block: a rounded deep-tone rectangle, two lines — a small "Paquete 3x2" over a bold "¡S/199 HOY!" at ~2× size, ~75% panel width, centred. Trust bar: a white card split into 3 equal cells with thin dividers — truck (Envío 24/48h), cash (Pago Contraentrega), shield (Compra 100% Segura), each icon flat ~24px in its own color (blue/green/gold), 2 short lines.',
+    'HERO section — a diagonal Z-path: headline TOP-LEFT → beneficiary TOP-RIGHT → product CENTRE-LOW → price block → trust bar. Headline is up to 3 lines (imperative verb + the specific problem + the hidden differential), bicolor. Grey subcopy of 2 lines (mechanism "from within" + result). Beneficiary: ONE real person fitting the audience, cut out with NO background, BLEEDING off the RIGHT edge, ~35% of the width, aligned to the upper-right third, touching their face, gentle contained smile, looking at camera. A SMALL rounded "before"/problem thumbnail (~22% width) BOTTOM-LEFT with a small solid deep-tone chip labelled "ANTES". Product: the real unit CENTRE-LOW, slightly IN FRONT of the beneficiary (upper layer), with a contact shadow and floor reflection, plus a couple of product-relevant natural props at its base and translucent accent spheres to its right. A circular metallic-gold badge (double ring) reading only "MEJOR VALOR" sits on the product\'s lower-right, rotated ~-8°. Price block: a rounded deep-tone rectangle, two lines — a small pack descriptor over the featured tier\'s bold price at ~2× size, ~75% panel width, centred (use the real price from the copy, never an invented number). Trust bar: a white card split into 3 equal cells with thin dividers — truck (Envío 24/48h), cash (Pago Contraentrega), shield (Compra 100% Segura), each icon flat ~24px in its own color (blue/green/gold), 2 short lines.',
   oferta:
-    'OFFER section — STRICT axial symmetry with the CENTER tier elevated: the middle card is ~15% taller and ~10% wider than the two sides, with a cream/gold fill (not white) and a 2px GOLD border. Top: a GOLD capsule badge with a drop medallion on the left and two lines "OFERTA EXCLUSIVA / SOLO HOY" flanked by short horizontal rules. Title + an uppercase kicker flanked by dash rules. Show the multi-unit product ONCE, behind/inside the center card (never per option). The 3 price cards share the IDENTICAL structure so prices are comparable: a gold savings tag showing that tier\'s saving % on EVERY card (the FEATURED center card carries the LARGEST % — it MUST be visible, never hidden by the crown), the quantity ("1 Frasco"), a struck-through "Antes: S/X", a big price (small "S/" + a giant number), a CTA pill (deep-tone on the sides, a large GOLD "Comprar Ya" on the center), and fine print (units + accurate per-unit cost). A "Recomendado" crown ribbon tops the center card, with its "ahorra X%" tag still shown below the crown. On-screen order is 1 → 3 → 2 units (the dearest/decoy in the MIDDLE, not the right). The FEATURED tier must show the LARGEST saving % of the three. Bottom: a deep-tone payment block, "Paga como prefieras" over rows of payment logos (composited afterwards — leave the band clean). Confident, conversion-focused.',
+    'OFFER section — STRICT axial symmetry with the CENTER tier elevated: the middle card is ~15% taller and ~10% wider than the two sides, with a cream/gold fill (not white) and a 2px gold border. Top: a golden pill-shaped badge with a drop medallion on the left, carrying EXACTLY the offer\'s urgency line and nothing else (from the copy, if one is provided — otherwise omit the badge; never invent a word) flanked by short horizontal rules. Title + an uppercase kicker flanked by dash rules. Show the multi-unit product ONCE, behind/inside the center card (never per option). The 3 price cards share the IDENTICAL structure so prices are comparable: a gold savings tag showing that tier\'s saving % on EVERY card (the FEATURED center card carries the LARGEST % — it MUST be visible, never hidden by the crown), the quantity ("1 Frasco"), a struck-through "Antes: S/X", a big price (small "S/" + a giant number), a CTA pill (deep-tone on the sides, a large metallic-gold CTA reading its button label on the center), and fine print (units + accurate per-unit cost). A "Recomendado" crown ribbon tops the center card, with its "ahorra X%" tag still shown below the crown. On-screen order is 1 → 3 → 2 units (the dearest/decoy in the MIDDLE, not the right). The FEATURED tier must show the LARGEST saving % of the three. Bottom: a deep-tone payment block, "Paga como prefieras" over rows of payment logos (composited afterwards — leave the band clean). Confident, conversion-focused.',
   'antes-despues':
     'BEFORE/AFTER section — a top block of VISUAL proof + a bottom block of CONCEPTUAL proof, in perfect mirror symmetry about a central axis. Bicolor headline (second half in accent) + a mechanism subcopy. A PAIR of face photos with the SAME framing, angle and lighting, EYES CLOSED (directs the eye to the skin, avoids identification), each in a white frame with a centred deep-tone chip on top: "ANTES" / "DESPUÉS". A blue circular ARROW sits on the central axis at mid-height, overlapping BOTH frames (the seam that binds the pair). Below, a DOUBLE column of chips, 4 per side at matching row heights so they read as opposite pairs: LEFT a red circle with ✗ (problems), RIGHT a green circle with ✓ (results); the 4th pair may jump from physical to emotional. Close with a solid deep-tone strip "El cambio comienza desde adentro", with faint accent molecules to the left grazing the strip.',
   beneficios:
@@ -33,7 +33,7 @@ const SECTION_SPECS: Record<SectionType, string> = {
   garantia:
     'GUARANTEE / TRUST section — a bicolor headline (second line accent) + a 1-line subcopy. 4 ROW cards, each with a big 3D icon on the LEFT (~40px): a truck with country flags, a green cash stack, a blue shield with a check, a gold 100% seal; a deep-tone bold title + a grey 2-line description. Then the SAME payment block component as the offer ("Paga como prefieras" + logo rows — composited afterwards, leave the band clean). Close with a FULL-BLEED deep-tone strip carrying a shield-check and "Tu compra está protegida de principio a fin". This is the heaviest panel (double close: payments + strip).',
   'cta-final':
-    'FINAL CTA section — the hero MIRRORED, without a model. Headline with one accent phrase → an urgency subcopy → a GOLD "OFERTA EXCLUSIVA SOLO HOY" badge → a staggered TRIAD of 3 bottles with a few loose capsules in front and a natural prop to the right → a small "Paquete 3x2" over a deep-tone "¡S/199 HOY!" block → a WIDE GOLD CTA "Comprar Ahora" (the single highest-contrast element of the whole set) → a 3-cell trust pill bar → a full-bleed deep-tone strip "¡Confiable, fácil y rápido!". Decisive, high-contrast.',
+    'FINAL CTA section — the hero MIRRORED, without a model. Headline with one accent phrase → an urgency subcopy → a golden badge carrying EXACTLY the offer\'s urgency line and nothing else (from the copy, if provided; otherwise omit it) → a staggered TRIAD of 3 IDENTICAL bottles (same label on each, copied from the reference) with a few loose capsules in front and a natural prop to the right → a small pack descriptor over a deep-tone block showing the featured tier\'s real price → a WIDE metallic-gold CTA reading its button label (the single highest-contrast element of the whole set) → a 3-cell trust pill bar → a full-bleed deep-tone strip "¡Confiable, fácil y rápido!". Decisive, high-contrast.',
 }
 
 // MASTER LAYOUT — el esqueleto compartido (QUÉ / DÓNDE). Solo posición y jerarquía; el
@@ -55,15 +55,16 @@ const MASTER_LAYOUT = [
 // ejemplar, no un mandato). Esta es la capa que de-generaliza: sin ella el modelo rinde
 // estructura correcta pero fondos planos y elementos sin vida.
 const DESIGN_SYSTEM = [
-  `DESIGN SYSTEM — render this as a polished, high-converting direct-response e-commerce SECTION, CLINICAL-PREMIUM (never a flat template, never a warm-cosmetic wash). The CRAFT below is FIXED; execute it with THIS brand's palette and a mood that fits the niche (clinical-luminous for health/supplements, energetic for fitness, warm for food — the recipe stays, the mood adapts):`,
-  `• Background (constant): a LUMINOUS gradient built from the brand palette — a light tint at the edges brightening to near-white in the UPPER-CENTRE, with a soft radial HALO behind the focal product. Add a niche-appropriate particle texture: soft white bokeh + translucent 3D accent-colored spheres/bubbles chained like a molecular/serum motif (for health & liquid products). These particles live ONLY in the LOWER ~15% and the SIDE MARGINS — they NEVER invade the text area. Airy and clinical; NEVER a plain flat fill.`,
-  `• Two-color rule: exactly TWO colors lead every panel — the brand's DEEP/primary tone (headlines, price blocks, secondary buttons, closing strips) and metallic GOLD (offer badges, the main CTA, stars, seals). The brand ACCENT color is used for ONE headline phrase and card titles ONLY. GREEN = benefit/verified checks; RED = problem ✗ — each functional color used sparingly, at most one role each. GOLD is RESERVED for value / urgency / CTA / stars / seals — NEVER body text, navigation or default furniture. No rainbow.`,
+  `DESIGN SYSTEM — render this as a polished, high-converting direct-response e-commerce SECTION, CLINICAL-PREMIUM with a VIBRANT, high-gloss finish (never a flat template, never a washed-out pastel wash). The CRAFT below is FIXED; execute it with THIS brand's palette and a mood that fits the niche (clinical-luminous for health/supplements, energetic for fitness, warm for food — the recipe stays, the mood adapts):`,
+  `• Background (constant): a LUMINOUS gradient built from the brand palette — SATURATED, vivid brand-color tints at the edges and corners resolving to a bright near-white core in the UPPER-CENTRE behind the product; an AGGRESSIVE multi-stop gradient with a strong radial HALO / light-bloom behind the focal product and a subtle darkened vignette at the outer corners for depth and pop. Add a niche-appropriate particle texture: glowing white bokeh + translucent, luminous 3D accent-colored spheres/bubbles chained like a molecular/serum motif, each with a bright specular highlight. These particles and the vignette live ONLY in the LOWER ~15% and the SIDE MARGINS — they NEVER invade the text area, which stays clean and high-contrast for legibility. Rich and dimensional; NEVER a plain flat fill.`,
+  `• Two-color rule: exactly TWO colors lead every panel — the brand's DEEP/primary tone (headlines, price blocks, secondary buttons, closing strips) and metallic GOLD (offer badges, the main CTA, stars, seals). The brand ACCENT color is used for ONE headline phrase and card titles ONLY, at FULL vivid saturation. GREEN = benefit/verified checks; RED = problem ✗ — each functional color used sparingly, at most one role each. GOLD is RESERVED for value / urgency / CTA / stars / seals — NEVER body text, navigation or default furniture. No rainbow.`,
+  `• Metallic & glow finish (RATIONED to the VALUE + PRODUCT layers ONLY): render GOLD as brushed/foil METAL with a bright diagonal specular sweep and a warm outer glow; give the main CTA pill a glossy gradient face, a soft rim-light and a colored drop-glow so it reads as the highest-energy element on the panel; wrap the product in a bright bloom/halo with crisp reflections; make badges, seals, ribbons and crowns dimensional, glossy and metallic. Keep ALL of this OFF the text — headlines, subcopy, body and card text stay clean, matte and flat for maximum legibility. The glow serves the offer and the product, NEVER the paragraph.`,
   `• Typography: ONE geometric sans family (Poppins/Montserrat style) in 3 weights — Bold (headlines + price numerals), SemiBold (card titles + buttons), Regular (body/descriptions). Per panel: an UPPERCASE spaced kicker → a 2-3 line BICOLOR headline → a 1-2 line grey subcopy → the content, in descending size.`,
-  `• Cards: WHITE, ~18px radius, a 1px light border, a very soft diffuse shadow, ~16px inner padding, ~10-12px apart. Comparable rows/tiers share the EXACT same structure so they read as a set.`,
-  `• Depth & product: stage background → beneficiary → product/cards as distinct planes with soft contact shadows and a glow halo so nothing looks pasted-on. Product crisp and magazine-grade with a grounding shadow/reflection. Reproduce the product's real printed label EXACTLY and IDENTICALLY on every unit shown — never garble, drop or vary it across bottles.`,
-  `• Icons: 3D SOFT-GRADIENT circular discs lit from the UPPER-LEFT, each carrying ONE symbol, often with a small green check badge — NEVER flat line-art and never mixed styles. Badges, ribbons and seals are glossy and dimensional and carry NO lettering of their own (symbols only) unless the copy supplies the exact word.`,
+  `• Cards: WHITE (or a very subtle top-light gradient sheen), ~18px radius, a 1px light border, a soft diffuse shadow with a faint accent-tinted glow, ~16px inner padding, ~10-12px apart. Comparable rows/tiers share the EXACT same structure so they read as a set.`,
+  `• Depth & product: stage background → beneficiary → product/cards as distinct planes with soft contact shadows and a luminous glow halo so nothing looks pasted-on. Product crisp and magazine-grade with a grounding shadow/reflection and a bright bloom. Reproduce the product's real printed label EXACTLY and IDENTICALLY on every unit shown — never garble, drop or vary it across bottles.`,
+  `• Icons: 3D SOFT-GRADIENT circular discs lit from the UPPER-LEFT with a glossy metallic sheen and a small specular highlight, each carrying ONE symbol, often with a small green check badge — NEVER flat line-art and never mixed styles. Badges, ribbons and seals are glossy, metallic and dimensional and carry NO lettering of their own (symbols only) unless the copy supplies the exact word.`,
   `• Section closer (MANDATORY): every section ends ANCHORED at the bottom — a row of trust pills, a payment block, a solid brand-deep strip with a short phrase, or an atmospheric particle band. A section NEVER ends in empty air.`,
-  `• Polish: richness comes from the provided copy, the product, the luminous background and generous whitespace — NOT from padding. Little copy → stays clean and sparse; never fabricate grids, chips or captions to fill the canvas. Magazine-grade finish throughout.`,
+  `• Polish: richness comes from the provided copy, the product, the vibrant luminous background and generous whitespace — NOT from padding. Little copy → stays clean and sparse; never fabricate grids, chips or captions to fill the canvas. Magazine-grade finish throughout.`,
 ].join('\n')
 
 // Disciplina de texto (CRÍTICA): el design system mete vocabulario denso (badges, seals,
@@ -224,6 +225,36 @@ export function buildSectionInstruction(
 // Secciones que llevan la banda de logos de pago compuesta (el resto NO reserva banda).
 export const PAYMENT_SECTIONS: Set<SectionType> = new Set(['oferta', 'garantia'])
 
+// Secciones que muestran un PACK de varias unidades (no un solo frasco). La ruta les pasa el pack
+// pre-compuesto (buildProductPack) como Image 1 y este builder inyecta PACK_NOTE.
+export const MULTI_UNIT_SECTIONS: Set<SectionType> = new Set(['oferta', 'cta-final'])
+
+// Nota de pack: refuerza que las N unidades comparten el label IDÉNTICO de Image 1. End-weighted
+// junto al resto de reglas de fidelidad. La escena re-dibuja el pack; esto acota la variación.
+function packNote(units: number): string {
+  return `MULTI-UNIT PACK: Image 1 is a REFERENCE PACK showing ${units} copies of the SAME single product side by side. Render exactly ${units} units of THIS product as a tight cluster/pack, and copy the IDENTICAL printed label from Image 1 onto every single unit — same wordmark, same secondary text, same colours on all ${units}; never garble, shorten or vary the label from one unit to the next.`
+}
+
+// Urgencia data-driven ($0, honesta): se renderiza como un badge dorado con la línea de urgencia
+// del copy (nunca inventada). offerText ya la inyecta en oferta; esto la lleva a hero/cta-final
+// para que la urgencia salga UNA vez por sección y consistente, sin el viejo "SOLO HOY" hardcodeado.
+function urgencyText(offer: Offer): string {
+  return `URGENCY: render a single metallic-gold urgency badge carrying EXACTLY this text and nothing else: "${offer.urgency}". Do not repeat it elsewhere or invent any other urgency line, stock count or deadline.`
+}
+
+// Precio destacado para hero/cta-final: sin él, la difusión INVENTA un precio/moneda ("$25.0",
+// "manuel"). Inyecta la cifra EXACTA del tier destacado (la oferta vive en la sesión, F5).
+function featuredPriceText(offer: Offer): string {
+  const f = offer.tiers.find((t) => t.featured) ?? offer.tiers[0]
+  const bits = [
+    `the pack label "${f.label}"`,
+    `the price EXACTLY "${f.price}"`,
+    f.priceBefore ? `a struck-through "Antes: ${f.priceBefore}"` : null,
+    f.perUnit ? `fine print "${f.perUnit}"` : null,
+  ].filter(Boolean).join(', ')
+  return `FEATURED PRICE — the price block shows ONLY the featured offer: ${bits}. Use these EXACT figures with the "S/" currency symbol; NEVER invent a price, a "$" amount, a decimal or a pack name.`
+}
+
 function offerText(offer: Offer): string {
   const lines = offer.tiers.map((t) => {
     const bits = [
@@ -237,7 +268,7 @@ function offerText(offer: Offer): string {
     ].filter(Boolean).join(', ')
     return `  - ${bits}`
   }).join('\n')
-  return `PRICE TIERS — render EXACTLY these ${offer.tiers.length} price cards, one per tier, and NO others; VISUALLY ELEVATE the DESTACADO one (crown it with a gold "Recomendado"/"Mejor valor" ribbon and a gold CTA pill; the rest use the brand-accent CTA); show each struck-through "antes" price and per-unit cost where given:\n${lines}${offer.urgency ? `\n  Gold urgency banner at the top: "${offer.urgency}".` : ''}`
+  return `PRICE TIERS — render EXACTLY these ${offer.tiers.length} price cards, one per tier, and NO others; VISUALLY ELEVATE the DESTACADO one (crown it with a gold "Recomendado"/"Mejor valor" ribbon and a gold CTA pill; the rest use the brand-accent CTA); show each struck-through "antes" price and per-unit cost where given:\n${lines}${offer.urgency ? `\n  Urgency badge at the top carrying EXACTLY this text and nothing else: "${offer.urgency}".` : ''}`
 }
 
 function trustText(trust: TrustBlock): string {
@@ -255,6 +286,10 @@ function trustText(trust: TrustBlock): string {
 const PAYMENT_BAND =
   'PAYMENT LOGOS (do NOT draw): leave the BOTTOM ~12% of the image as a CLEAN, calm horizontal band (a subtle light strip is fine) with NO payment logos, card icons, brand marks, wallet logos, country flags or the words "yape/visa/mastercard/mercado pago" anywhere — the REAL payment-brand logos are composited into that band afterwards. You MAY render a short heading like "Paga como prefieras" just ABOVE the band, but no logos.'
 
+// Reserva la franja superior para el lockup de marca (compuesto por Satori, no dibujado).
+const LOCKUP_BAND =
+  'BRAND LOCKUP (do NOT draw): keep the very TOP ~6% center strip clean and empty — a small crisp brand wordmark lockup is composited there afterwards. Do NOT render any logo, wordmark, brand name or badge in that top strip yourself; start the headline below it.'
+
 export function buildDiffusionInstruction(
   copy: SectionCopy,
   productMode: ProductMode,
@@ -267,11 +302,19 @@ export function buildDiffusionInstruction(
   noPersonSection = false,
   offer?: Offer | null,
   trust?: TrustBlock | null,
+  packUnits?: number | null,
+  reserveLockup = false,
 ): string {
   const base = buildSectionInstruction(copy, productMode, palette, typography, brandStyle, productLabels, brand, hasTalent, noPersonSection)
   const extra: string[] = []
   if (copy.type === 'oferta' && offer) extra.push(offerText(offer))
+  // Precio + urgencia en hero/cta-final: la cifra EXACTA del tier destacado y el badge único con la
+  // línea del copy (oferta ya trae ambos en offerText). Sin esto, hero/cta inventan precio y moneda.
+  if (offer && (copy.type === 'hero' || copy.type === 'cta-final')) extra.push(featuredPriceText(offer))
+  if (offer?.urgency && (copy.type === 'hero' || copy.type === 'cta-final')) extra.push(urgencyText(offer))
   if (trust && (copy.type === 'garantia' || copy.type === 'cta-final' || copy.type === 'hero')) extra.push(trustText(trust))
+  if (packUnits && packUnits > 1) extra.push(packNote(packUnits))
+  if (reserveLockup) extra.push(LOCKUP_BAND)
   if (PAYMENT_SECTIONS.has(copy.type)) extra.push(PAYMENT_BAND)
   return [base, ...extra].filter(Boolean).join('\n\n')
 }

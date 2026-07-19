@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getLandingSession, updateLandingSession } from '@/lib/landing/db'
 import { fetchAsBase64, uploadToStorage } from '@/lib/storage'
 import { generateImage, editWithPrompt } from '@/lib/gemini'
-import { buildSectionInstruction, buildSceneInstruction, buildDiffusionInstruction, PAYMENT_SECTIONS, type ProductMode } from '@/lib/landing/instructions'
+import { buildSectionInstruction, buildSceneInstruction, buildDiffusionInstruction, PAYMENT_SECTIONS, MULTI_UNIT_SECTIONS, type ProductMode } from '@/lib/landing/instructions'
 import { PaymentBar } from '@/lib/landing/layouts/payment-bar'
+import { BrandLockup, brandLockupText } from '@/lib/landing/layouts/brand-lockup'
+import { buildProductPack } from '@/lib/landing/product-box'
 import { HYBRID_SECTIONS, NO_TALENT_SECTIONS, NO_PERSON_SECTIONS } from '@/lib/landing/engine-registry'
 import { extractLandingStyle } from '@/lib/landing/style-extract'
 import { generateOfferCopy } from '@/lib/landing/copy'
@@ -86,6 +88,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // el resto pixel-idéntico (y nos ahorra fetch de fotos + extracción de estilo). Sin
   // prompt o sin imagen previa, genera la sección desde cero.
   const existing = (session.sections ?? []).find((s) => s.type === parsedType.data)
+  // Lockup de marca (tarea 4): solo hero/cta-final, si hay un wordmark corto y limpio. Se computa
+  // acá para reservar la franja superior en el prompt Y compositarlo después. Null en el path de
+  // edición por precisión (el lockup ya está horneado en la imagen previa; no re-compositar).
+  let lockup: string | null = null
   let b64: string
   if (precision && existing?.imageUrl) {
     const prev = await fetchAsBase64(existing.imageUrl)
@@ -125,11 +131,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // la foto cruda si no se pudo derivar — el prompt 'canonical' ignora su fondo); Image 2+ =
     // fotos reales como ground-truth de labels. La ruta ya NO siembra ni deriva el ancla: queda
     // SIN estado compartido entre secciones → secciones independientes (habilita la Fase 6).
+    // Pack multi-unidad (tarea 2): oferta/cta-final muestran un pack; en vez de que la difusión
+    // invente 2-3 frascos desde 1 (y garabatee el label distinto en cada uno), le pasamos el pack
+    // pre-compuesto (mismo crop ×N) como Image 1 → los N labels salen idénticos.
     const parts: Part[] = []
     let mode: ProductMode = 'none'
+    let packUnits: number | null = null
     if (session.product_canonical_url) {
       const anchor = await fetchAsBase64(session.product_canonical_url)
-      parts.push({ inlineData: { mimeType: anchor.mimeType, data: anchor.data } }, ...photoParts)
+      if (MULTI_UNIT_SECTIONS.has(parsedType.data)) {
+        const pack = await buildProductPack(Buffer.from(anchor.data, 'base64'), 3)
+        parts.push({ inlineData: { mimeType: 'image/png', data: pack.toString('base64') } }, ...photoParts)
+        packUnits = 3
+      } else {
+        parts.push({ inlineData: { mimeType: anchor.mimeType, data: anchor.data } }, ...photoParts)
+      }
       mode = 'canonical'
     } else if (photoParts.length) {
       parts.push(...photoParts)
@@ -148,7 +164,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
     // Motor de DIFUSIÓN: la IA renderiza toda la sección con su texto; se le inyectan los tiers
     // de la oferta y las filas de confianza (F5 los sacó del copy), y se reserva la banda de logos.
-    parts.push({ text: buildDiffusionInstruction(copy, mode, palette, typography, session.brand_style, session.product_labels, brand, hasTalent, noPersonSection, offer, trust) })
+    if (parsedType.data === 'hero' || parsedType.data === 'cta-final') lockup = brandLockupText(session.product_labels, session.product_name)
+    parts.push({ text: buildDiffusionInstruction(copy, mode, palette, typography, session.brand_style, session.product_labels, brand, hasTalent, noPersonSection, offer, trust, packUnits, !!lockup) })
     b64 = await generateImage(parts, 3, { aspectRatio: '9:16' })
   }
   if (!b64) return NextResponse.json({ error: 'No se pudo generar la sección', retryable: true }, { status: 502 })
@@ -158,13 +175,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // la imagen de difusión tal cual.
   const needsBar = PAYMENT_SECTIONS.has(parsedType.data) && !!trust?.paymentMethods.length
   let outBuf = Buffer.from(b64, 'base64')
-  if (needsBar) {
+  // Overlay de logos/lockup (Satori). Bandas disjuntas: pago en oferta/garantía, lockup en
+  // hero/cta-final → a lo sumo un overlay por sección. Ambos usan el mismo theme + fuentes.
+  if (needsBar || lockup) {
     const dbrand = session.derived_brand
     const pair = dbrand?.typePair ?? DEFAULT_TYPE_PAIR
     const theme = buildTheme(dbrand?.palette ?? session.palette ?? FALLBACK_PALETTE, pair)
-    outBuf = Buffer.from(await renderComposite(outBuf, PaymentBar({ trust: trust!, theme }), { fonts: loadPairFonts(pair), width: 1080, height: 1920 }))
+    const overlay = needsBar ? PaymentBar({ trust: trust!, theme }) : BrandLockup({ text: lockup!, theme })
+    outBuf = Buffer.from(await renderComposite(outBuf, overlay, { fonts: loadPairFonts(pair), width: 1080, height: 1920 }))
   }
-  const imageUrl = await uploadToStorage(id, outBuf, needsBar ? 'image/jpeg' : 'image/png', `section-${copy.type}`)
+  const imageUrl = await uploadToStorage(id, outBuf, (needsBar || lockup) ? 'image/jpeg' : 'image/png', `section-${copy.type}`)
 
   // Upsert en el array sections (read-modify-write). El `order` viene del cliente
   // (índice en selected_sections); al regenerar se preserva el existente.
