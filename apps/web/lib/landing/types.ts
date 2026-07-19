@@ -33,10 +33,16 @@ export const SECTION_LABELS: Record<SectionType, string> = {
 export const SectionCopySchema = z.object({
   type: SectionType,
   headline: z.string().max(60),
+  // Sub-cadena EXACTA del headline a resaltar en color de marca (ADN: 1 palabra/frase acento).
+  accentWord: z.string().max(40).optional(),
   subheadline: z.string().max(90).optional(),
-  bullets: z.array(z.string().max(40)).max(5).optional(),
-  // cards: testimonios ({title=autor, body=reseña}) · FAQ ({title=pregunta, body=respuesta})
-  cards: z.array(z.object({ title: z.string().max(40), body: z.string().max(90) })).max(4).optional(),
+  // bullets: lista genérica. En `antes-despues` = columna ANTES (problemas). En otras, lista suelta.
+  bullets: z.array(z.string().max(40)).max(6).optional(),
+  // bulletsAfter: SOLO `antes-despues` = columna DESPUÉS (resultados). Emparejada con bullets.
+  bulletsAfter: z.array(z.string().max(40)).max(6).optional(),
+  // cards: testimonios ({title="Nombre, Ciudad", body=reseña}) · FAQ ({title=pregunta, body=respuesta})
+  //        · beneficios ({title=beneficio, body=detalle de una línea}). Hasta 6 (FAQ llega a 5).
+  cards: z.array(z.object({ title: z.string().max(40), body: z.string().max(90) })).max(6).optional(),
   cta: z.string().max(25).optional(),
 })
 export type SectionCopy = z.infer<typeof SectionCopySchema>

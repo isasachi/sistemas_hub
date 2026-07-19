@@ -13,6 +13,11 @@ import { TYPE_PAIRS, type TypePairId } from '@/lib/landing/typography-catalog'
 import { OfertaLayout } from '@/lib/landing/layouts/oferta'
 import { GarantiaLayout } from '@/lib/landing/layouts/garantia'
 import { CtaFinalLayout } from '@/lib/landing/layouts/cta-final'
+import { HeroLayout } from '@/lib/landing/layouts/hero'
+import { AntesDespuesLayout } from '@/lib/landing/layouts/antes-despues'
+import { BeneficiosLayout } from '@/lib/landing/layouts/beneficios'
+import { TestimoniosLayout } from '@/lib/landing/layouts/testimonios'
+import { FaqLayout } from '@/lib/landing/layouts/faq'
 import { SectionCopySchema, OfferCopySchema, SectionType, resolveOffer, type LandingSection, type SectionCopy, type LandingPalette, type LandingTypography, type LandingSessionResponse } from '@/lib/landing/types'
 import type { ReactElement } from 'react'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
@@ -220,7 +225,7 @@ async function generateHybridSection(
   //    - garantia:  el TrustBlock que cargó el usuario + su SectionCopy. Compat pre-F5 vía resolveOffer.
   let offer = resolveOffer(session)
   let offerCopy = OfferCopySchema.safeParse(session.offer_copy).success ? OfferCopySchema.parse(session.offer_copy) : null
-  const needsOffer = type === 'oferta' || type === 'cta-final'
+  const needsOffer = type === 'oferta' || type === 'cta-final' || type === 'hero'
   if (needsOffer && (!offer || (type === 'oferta' && !offerCopy))) {
     const gen = await generateOfferCopy(session)
     offer = gen.offer
@@ -263,10 +268,18 @@ async function generateHybridSection(
   const fonts = loadPairFonts(typePair)
   const sceneBuf = Buffer.from(sceneB64, 'base64')
   const blurBg = await blurToDataUri(sceneBuf)
-  const layout: ReactElement =
-    type === 'garantia' ? GarantiaLayout({ trust, copy: bodyCopy, theme, blurBg })
-    : type === 'cta-final' ? CtaFinalLayout({ offer, trust, copy: bodyCopy, theme, blurBg })
-    : OfertaLayout({ offer: offer!, copy: offerCopy!, theme, blurBg })
+  let layout: ReactElement
+  switch (type) {
+    case 'hero': layout = HeroLayout({ offer, trust, copy: bodyCopy, theme }); break
+    case 'antes-despues': layout = AntesDespuesLayout({ copy: bodyCopy, theme, blurBg }); break
+    case 'beneficios': layout = BeneficiosLayout({ copy: bodyCopy, theme, blurBg }); break
+    // ponytail: avatares de testimonios aún no se generan aparte → placeholder; TODO gen+cache.
+    case 'testimonios': layout = TestimoniosLayout({ copy: bodyCopy, avatars: [], theme, blurBg }); break
+    case 'faq': layout = FaqLayout({ copy: bodyCopy, theme, blurBg }); break
+    case 'garantia': layout = GarantiaLayout({ trust, copy: bodyCopy, theme, blurBg }); break
+    case 'cta-final': layout = CtaFinalLayout({ offer, trust, copy: bodyCopy, theme, blurBg }); break
+    default: layout = OfertaLayout({ offer: offer!, copy: offerCopy!, theme, blurBg })
+  }
   const jpeg = await renderComposite(sceneBuf, layout, { fonts, width: 1080, height: 1920 })
   const imageUrl = await uploadToStorage(id, jpeg, 'image/jpeg', `section-${type}`)
 

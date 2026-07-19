@@ -7,7 +7,7 @@
 // fiable en Satori); solo se usa <svg> donde la geometría lo exige (círculos Mastercard,
 // checks, estrellas, iconos de confianza). Los logos de pago son assets de terceros con
 // COLORES DE MARCA FIJOS (verificados de brand kits reales), nunca del accent de la campaña.
-import type { CSSProperties } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import type { PaymentMethod } from '../types'
 
 // ─── Oro (invariante #4: valor / urgencia / confianza) ───────────────────────
@@ -111,6 +111,46 @@ export function ClockIcon({ color = '#334155', size = 40 }: IconProps) {
 }
 export function LockIcon({ color = '#334155', size = 40 }: IconProps) {
   return <svg width={size} height={size} viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2" {...stroke(color)} /><path d="M8 11V8a4 4 0 018 0v3" {...stroke(color)} /></svg>
+}
+export function BalanceIcon({ color = '#334155', size = 40 }: IconProps) {
+  return <svg width={size} height={size} viewBox="0 0 24 24"><path d="M12 3v18M6 21h12M12 6l-6 2 3 5a3 3 0 01-6 0l3-5M12 6l6 2-3 5a3 3 0 006 0l-3-5" {...stroke(color)} /></svg>
+}
+export function DropIcon({ color = '#334155', size = 40 }: IconProps) {
+  return <svg width={size} height={size} viewBox="0 0 24 24"><path d="M12 3s6 6.5 6 11a6 6 0 01-12 0c0-4.5 6-11 6-11z" {...stroke(color)} /></svg>
+}
+export function SparkleIcon({ color = '#334155', size = 40 }: IconProps) {
+  return <svg width={size} height={size} viewBox="0 0 24 24"><path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z" {...stroke(color)} /></svg>
+}
+export function HeartIcon({ color = '#334155', size = 40 }: IconProps) {
+  return <svg width={size} height={size} viewBox="0 0 24 24"><path d="M12 20s-7-4.5-7-9a4 4 0 017-2.6A4 4 0 0119 11c0 4.5-7 9-7 9z" {...stroke(color)} /></svg>
+}
+export function PlusIcon({ color = '#334155', size = 32 }: IconProps) {
+  return <svg width={size} height={size} viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" {...stroke(color)} /></svg>
+}
+export function XMark({ size = 30 }: { size?: number }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: size, height: size, borderRadius: 999, background: '#e23b3b' }}>
+      <svg width={size * 0.58} height={size * 0.58} viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" /></svg>
+    </div>
+  )
+}
+export function CheckMark({ size = 30, color = '#16a34a' }: { size?: number; color?: string }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: size, height: size, borderRadius: 999, background: color }}>
+      <svg width={size * 0.6} height={size * 0.6} viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" fill="none" stroke="#fff" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
+    </div>
+  )
+}
+// Disco glossy con icono SVG + badge de check verde (filas de beneficio).
+export function IconDisc({ children, accent, size = 84 }: { children: ReactNode; accent: string; size?: number }) {
+  return (
+    <div style={{ display: 'flex', position: 'relative', width: size, height: size }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: size, height: size, borderRadius: 999, backgroundImage: `radial-gradient(circle at 35% 28%, rgba(255,255,255,0.7), ${accent} 74%)`, boxShadow: `0 8px 18px ${accent}55` }}>{children}</div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'absolute', right: -3, bottom: -3, width: size * 0.32, height: size * 0.32, borderRadius: 999, background: '#16a34a', border: '2px solid #fff' }}>
+        <svg width={size * 0.18} height={size * 0.18} viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" fill="none" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+      </div>
+    </div>
+  )
 }
 
 // ─── Logos de pago (colores de marca FIJOS, verificados) ─────────────────────

@@ -149,6 +149,24 @@ describe('buildSceneInstruction — plato de fondo híbrido', () => {
     expect(c).toContain('FINAL CTA background plate')
     expect(c).toContain('NO TEXT (absolute)')
   })
+
+  it('las 8 secciones tienen plato de escena propio y sin texto', () => {
+    const anchor: Record<SectionType, string> = {
+      hero: 'HERO background plate',
+      oferta: 'OFFER background plate',
+      'antes-despues': 'BEFORE/AFTER background plate',
+      beneficios: 'BENEFITS background plate',
+      testimonios: 'TESTIMONIALS background plate',
+      garantia: 'GUARANTEE / TRUST background plate',
+      faq: 'FAQ background plate',
+      'cta-final': 'FINAL CTA background plate',
+    }
+    for (const type of ALL) {
+      const out = buildSceneInstruction(type, 'canonical')
+      expect(out).toContain(anchor[type])
+      expect(out).toContain('NO TEXT (absolute)')
+    }
+  })
 })
 
 describe('talento canónico (Fase 4)', () => {

@@ -6,9 +6,13 @@ Reglas de copy:
 - Respeta SIEMPRE los límites de caracteres del esquema. Si no entra, recórtalo.
 - Cada sección tiene una intención distinta (la describe el usuario por tipo). Adapta el copy a esa intención.
 - No inventes datos falsos (precios, estadísticas, certificaciones) que el usuario no haya dado. Si no hay precio, no lo menciones.
-- Para `testimonios`: cada card es {title = nombre de cliente peruano realista, body = reseña corta en primera persona}.
-- Para `faq`: cada card es {title = pregunta corta, body = respuesta de una línea}.
-- Para `beneficios`: usa `bullets` (3-5 beneficios concretos, muy cortos).
+- Para `hero`: `headline` con UNA idea potente (el sistema resalta una palabra); `subheadline` de apoyo; `cta` corto.
+- Para `beneficios`: usa `cards` (3-4 beneficios). Cada card = {title = beneficio en 2-4 palabras (negrita), body = detalle de una línea que lo explique}.
+- Para `antes-despues`: `bullets` = 3-4 problemas del ESTADO ANTES (síntomas, muy cortos, ej "Brotes frecuentes"); `bulletsAfter` = 3-4 resultados del ESTADO DESPUÉS, emparejados (ej "Piel más limpia"). `subheadline` de apoyo.
+- Para `testimonios`: cada card es {title = "Nombre, Ciudad" de cliente peruano realista (ej "Andrea, Lima"), body = reseña corta en primera persona}. 3 cards.
+- Para `faq`: cada card es {title = pregunta corta, body = respuesta de una línea}. Hasta 5 preguntas.
+- Para `garantia` y `cta-final`: `headline` + `subheadline`; los medios de pago, plazos y garantía salen de datos del negocio (no los inventes en el copy). `cta` corto.
+- `accentWord`: en TODA sección, incluí una sub-cadena EXACTA del `headline` (1 palabra o frase corta, la idea clave) para resaltarla en color de marca. Debe aparecer tal cual dentro del headline.
 - `cta` es el texto del botón (ej: "Pídelo ahora", "Quiero el mío").
 
 Reglas de la sección OFERTA (esquema OfferCopy, cuando se pida por separado):
