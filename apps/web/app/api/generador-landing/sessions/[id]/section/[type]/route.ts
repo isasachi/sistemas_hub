@@ -2,16 +2,28 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getLandingSession, updateLandingSession } from '@/lib/landing/db'
 import { fetchAsBase64, uploadToStorage } from '@/lib/storage'
 import { generateImage, editWithPrompt } from '@/lib/gemini'
-import { buildSectionInstruction, buildSceneInstruction, type ProductMode } from '@/lib/landing/instructions'
-import { HYBRID_SECTIONS, NO_TALENT_SECTIONS } from '@/lib/landing/engine-registry'
+import { buildSectionInstruction, buildSceneInstruction, buildDiffusionInstruction, PAYMENT_SECTIONS, MULTI_UNIT_SECTIONS, type ProductMode } from '@/lib/landing/instructions'
+import { PaymentBar } from '@/lib/landing/layouts/payment-bar'
+import { BrandLockup, brandLockupText } from '@/lib/landing/layouts/brand-lockup'
+import { buildProductPack } from '@/lib/landing/product-box'
+import { HYBRID_SECTIONS, NO_TALENT_SECTIONS, NO_PERSON_SECTIONS, NO_PRODUCT_SECTIONS } from '@/lib/landing/engine-registry'
 import { extractLandingStyle } from '@/lib/landing/style-extract'
 import { generateOfferCopy } from '@/lib/landing/copy'
+import { generateAvatars } from '@/lib/landing/avatars'
 import { renderComposite, blurToDataUri } from '@/lib/landing/composite'
 import { buildTheme } from '@/lib/landing/theme'
 import { loadPairFonts } from '@/lib/landing/fonts'
 import { TYPE_PAIRS, type TypePairId } from '@/lib/landing/typography-catalog'
 import { OfertaLayout } from '@/lib/landing/layouts/oferta'
-import { SectionCopySchema, OfferCopySchema, SectionType, type LandingSection, type OfferCopy, type LandingPalette, type LandingTypography, type LandingSessionResponse } from '@/lib/landing/types'
+import { GarantiaLayout } from '@/lib/landing/layouts/garantia'
+import { CtaFinalLayout } from '@/lib/landing/layouts/cta-final'
+import { HeroLayout } from '@/lib/landing/layouts/hero'
+import { AntesDespuesLayout } from '@/lib/landing/layouts/antes-despues'
+import { BeneficiosLayout } from '@/lib/landing/layouts/beneficios'
+import { TestimoniosLayout } from '@/lib/landing/layouts/testimonios'
+import { FaqLayout } from '@/lib/landing/layouts/faq'
+import { SectionCopySchema, OfferCopySchema, SectionType, resolveOffer, type LandingSection, type SectionCopy, type LandingPalette, type LandingTypography, type LandingSessionResponse } from '@/lib/landing/types'
+import type { ReactElement } from 'react'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 import type { Part } from '@google/genai'
@@ -49,10 +61,25 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return generateHybridSection(session, id, parsedType.data, body, precision, userId, kind, regensLeft)
   }
 
+  // Motor de DIFUSIÓN: la oferta y la confianza (que F5 sacó del copy) se INYECTAN al prompt.
+  let offer = resolveOffer(session)
+  const trust = session.trust_block
+
   let copy = SectionCopySchema.safeParse(body.copy).success ? SectionCopySchema.parse(body.copy) : null
   if (!copy) {
     const approved = (session.copy ?? []).find((c) => c.type === parsedType.data)
     if (approved) copy = SectionCopySchema.parse(approved)
+  }
+  // Oferta: su texto vive en offer_copy + los tiers en session.offer (F5). Se arma el SectionCopy
+  // desde offer_copy (generando ambos si faltan) para que la difusión tenga headline/subheadline.
+  if (!copy && parsedType.data === 'oferta') {
+    let offerCopy = OfferCopySchema.safeParse(session.offer_copy).success ? OfferCopySchema.parse(session.offer_copy) : null
+    if (!offer || !offerCopy) {
+      const gen = await generateOfferCopy(session)
+      offer = gen.offer; offerCopy = gen.copy
+      await updateLandingSession(id, { offer, offer_copy: offerCopy })
+    }
+    copy = { type: 'oferta', headline: offerCopy.headline, subheadline: offerCopy.subheadline, cta: offer.tiers.find((t) => t.featured)?.cta }
   }
   if (!copy || copy.type !== parsedType.data)
     return NextResponse.json({ error: 'Falta el copy de la sección' }, { status: 400 })
@@ -61,6 +88,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // el resto pixel-idéntico (y nos ahorra fetch de fotos + extracción de estilo). Sin
   // prompt o sin imagen previa, genera la sección desde cero.
   const existing = (session.sections ?? []).find((s) => s.type === parsedType.data)
+  // Lockup de marca (tarea 4): solo hero/cta-final, si hay un wordmark corto y limpio. Se computa
+  // acá para reservar la franja superior en el prompt Y compositarlo después. Null en el path de
+  // edición por precisión (el lockup ya está horneado en la imagen previa; no re-compositar).
+  let lockup: string | null = null
   let b64: string
   if (precision && existing?.imageUrl) {
     const prev = await fetchAsBase64(existing.imageUrl)
@@ -100,11 +131,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // la foto cruda si no se pudo derivar — el prompt 'canonical' ignora su fondo); Image 2+ =
     // fotos reales como ground-truth de labels. La ruta ya NO siembra ni deriva el ancla: queda
     // SIN estado compartido entre secciones → secciones independientes (habilita la Fase 6).
+    // Pack multi-unidad (tarea 2): oferta/cta-final muestran un pack; en vez de que la difusión
+    // invente 2-3 frascos desde 1 (y garabatee el label distinto en cada uno), le pasamos el pack
+    // pre-compuesto (mismo crop ×N) como Image 1 → los N labels salen idénticos.
     const parts: Part[] = []
     let mode: ProductMode = 'none'
+    let packUnits: number | null = null
     if (session.product_canonical_url) {
       const anchor = await fetchAsBase64(session.product_canonical_url)
-      parts.push({ inlineData: { mimeType: anchor.mimeType, data: anchor.data } }, ...photoParts)
+      if (MULTI_UNIT_SECTIONS.has(parsedType.data)) {
+        const pack = await buildProductPack(Buffer.from(anchor.data, 'base64'), 3)
+        parts.push({ inlineData: { mimeType: 'image/png', data: pack.toString('base64') } }, ...photoParts)
+        packUnits = 3
+      } else {
+        parts.push({ inlineData: { mimeType: anchor.mimeType, data: anchor.data } }, ...photoParts)
+      }
       mode = 'canonical'
     } else if (photoParts.length) {
       parts.push(...photoParts)
@@ -113,17 +154,38 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // Talento canónico (Fase 4): la persona va como ÚLTIMA imagen del parts[] — el contrato de
     // orden (producto canónico → fotos → talento) lo asume talentLine ("FINAL reference image").
     // testimonios se excluye: muestra clientes distintos, no al protagonista canónico.
+    // Talento canónico: no va en testimonios/faq/beneficios. Persona del todo suprimida solo en
+    // beneficios/faq (testimonios SÍ muestra clientes, caras distintas que la difusión renderiza).
+    const noPersonSection = NO_PERSON_SECTIONS.has(parsedType.data)
     const hasTalent = !!(brand?.casting.present && session.talent_canonical_url && !NO_TALENT_SECTIONS.has(parsedType.data))
     if (hasTalent) {
       const talent = await fetchAsBase64(session.talent_canonical_url!)
       parts.push({ inlineData: { mimeType: talent.mimeType, data: talent.data } })
     }
-    parts.push({ text: buildSectionInstruction(copy, mode, palette, typography, session.brand_style, session.product_labels, brand, hasTalent) })
+    // Motor de DIFUSIÓN: la IA renderiza toda la sección con su texto; se le inyectan los tiers
+    // de la oferta y las filas de confianza (F5 los sacó del copy), y se reserva la banda de logos.
+    if (parsedType.data === 'hero' || parsedType.data === 'cta-final') lockup = brandLockupText(session.product_labels, session.product_name)
+    const noProduct = NO_PRODUCT_SECTIONS.has(parsedType.data)
+    parts.push({ text: buildDiffusionInstruction(copy, mode, palette, typography, session.brand_style, session.product_labels, brand, hasTalent, noPersonSection, offer, trust, packUnits, !!lockup, noProduct) })
     b64 = await generateImage(parts, 3, { aspectRatio: '9:16' })
   }
   if (!b64) return NextResponse.json({ error: 'No se pudo generar la sección', retryable: true }, { status: 502 })
 
-  const imageUrl = await uploadToStorage(id, Buffer.from(b64, 'base64'), 'image/png', `section-${copy.type}`)
+  // Overlay de logos de marca REALES (medios de pago + banderas + sello) sobre la banda que la
+  // difusión dejó limpia. Solo las secciones con strip de pagos (oferta/garantía). El resto sube
+  // la imagen de difusión tal cual.
+  const needsBar = PAYMENT_SECTIONS.has(parsedType.data) && !!trust?.paymentMethods.length
+  let outBuf = Buffer.from(b64, 'base64')
+  // Overlay de logos/lockup (Satori). Bandas disjuntas: pago en oferta/garantía, lockup en
+  // hero/cta-final → a lo sumo un overlay por sección. Ambos usan el mismo theme + fuentes.
+  if (needsBar || lockup) {
+    const dbrand = session.derived_brand
+    const pair = dbrand?.typePair ?? DEFAULT_TYPE_PAIR
+    const theme = buildTheme(dbrand?.palette ?? session.palette ?? FALLBACK_PALETTE, pair)
+    const overlay = needsBar ? PaymentBar({ trust: trust!, theme }) : BrandLockup({ text: lockup!, theme })
+    outBuf = Buffer.from(await renderComposite(outBuf, overlay, { fonts: loadPairFonts(pair), width: 1080, height: 1920 }))
+  }
+  const imageUrl = await uploadToStorage(id, outBuf, (needsBar || lockup) ? 'image/jpeg' : 'image/png', `section-${copy.type}`)
 
   // Upsert en el array sections (read-modify-write). El `order` viene del cliente
   // (índice en selected_sections); al regenerar se preserva el existente.
@@ -134,7 +196,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (idx >= 0) sections[idx] = section
   else sections.push(section)
 
-  await updateLandingSession(id, { step: Math.max(session.step, 4), sections })
+  await updateLandingSession(id, { step: Math.max(session.step, 5), sections })
   await recordGenQuota(id, kind, userId)
   return NextResponse.json({ section, regensLeft })
 }
@@ -151,6 +213,7 @@ const FALLBACK_PALETTE: LandingPalette = [{ name: 'accent', hex: '#0EA5A4' }]
 async function generateScenePlate(
   session: LandingSessionResponse,
   id: string,
+  type: SectionType,
 ): Promise<{ sceneB64: string; palette: LandingPalette | null }> {
   const photoParts: Part[] = []
   let firstPhoto: { data: string; mimeType: string } | null = null
@@ -184,12 +247,15 @@ async function generateScenePlate(
     mode = 'canonical'
   }
   // Talento canónico (Fase 4): última imagen del parts[] (contrato producto → fotos → talento).
-  const hasTalent = !!(brand?.casting.present && session.talent_canonical_url)
+  // Igual que el motor viejo, respeta NO_TALENT_SECTIONS (testimonios/faq/beneficios no llevan
+  // persona). noPersonSection suprime a la persona en la escena AUNQUE la campaña tenga casting.
+  const noPersonSection = NO_TALENT_SECTIONS.has(type)
+  const hasTalent = !!(brand?.casting.present && session.talent_canonical_url && !noPersonSection)
   if (hasTalent) {
     const talent = await fetchAsBase64(session.talent_canonical_url!)
     parts.push({ inlineData: { mimeType: talent.mimeType, data: talent.data } })
   }
-  parts.push({ text: buildSceneInstruction('oferta', mode, palette, session.brand_style, session.product_labels, brand, hasTalent) })
+  parts.push({ text: buildSceneInstruction(type, mode, palette, session.brand_style, session.product_labels, brand, hasTalent, noPersonSection) })
   const sceneB64 = await generateImage(parts, 3, { aspectRatio: '9:16', imageSize: '2K' })
   return { sceneB64, palette }
 }
@@ -198,25 +264,27 @@ async function generateHybridSection(
   session: LandingSessionResponse,
   id: string,
   type: SectionType,
-  body: { offerCopy?: unknown; order?: number; prompt?: string },
+  body: { order?: number; prompt?: string },
   precision: string,
   userId: string | null,
   kind: string,
   regensLeft: number | null,
 ): Promise<NextResponse> {
-  // 1. Copy de oferta: edición del body > persistido en la sesión > generar (y persistir).
-  const offerEdited = OfferCopySchema.safeParse(body.offerCopy).success
-  let offer: OfferCopy | null = offerEdited
-    ? OfferCopySchema.parse(body.offerCopy)
-    : OfferCopySchema.safeParse(session.offer_copy).success
-      ? OfferCopySchema.parse(session.offer_copy)
-      : null
-  if (!offer) {
-    offer = await generateOfferCopy(session)
-    await updateLandingSession(id, { offer_copy: offer })
-  } else if (offerEdited) {
-    await updateLandingSession(id, { offer_copy: offer })
+  // 1. Datos de composición según el tipo (C5.5 generalizó el dispatch, antes solo oferta):
+  //    - oferta:    tiers (nivel de sesión, C5.1) + su copy propio; los genera si faltan.
+  //    - cta-final: referencia el tier destacado (offer, no lo re-inventa); su texto sale del SectionCopy aprobado.
+  //    - garantia:  el TrustBlock que cargó el usuario + su SectionCopy. Compat pre-F5 vía resolveOffer.
+  let offer = resolveOffer(session)
+  let offerCopy = OfferCopySchema.safeParse(session.offer_copy).success ? OfferCopySchema.parse(session.offer_copy) : null
+  const needsOffer = type === 'oferta' || type === 'cta-final' || type === 'hero'
+  if (needsOffer && (!offer || (type === 'oferta' && !offerCopy))) {
+    const gen = await generateOfferCopy(session)
+    offer = gen.offer
+    offerCopy = offerCopy ?? gen.copy
+    await updateLandingSession(id, { offer, offer_copy: offerCopy })
   }
+  const trust = session.trust_block
+  const bodyCopy = (session.copy ?? []).find((c) => c.type === type) ?? null
 
   // 2. Escena. Reuso $0 (recompose): CUALQUIER regen sin prompt de precisión, con escena
   // cacheada, reutiliza la escena y re-compone con el theme (paleta/tipografía de derived_brand)
@@ -235,13 +303,13 @@ async function generateHybridSection(
     sceneB64 = await editWithPrompt(prev.data, prev.mimeType, precision, { aspectRatio: '9:16' })
     sceneUrl = null
   } else {
-    const plate = await generateScenePlate(session, id)
+    const plate = await generateScenePlate(session, id, type)
     sceneB64 = plate.sceneB64
     palette = plate.palette
     sceneUrl = null
   }
   if (!sceneB64) return NextResponse.json({ error: 'No se pudo generar la escena', retryable: true }, { status: 502 })
-  if (!sceneUrl) sceneUrl = await uploadToStorage(id, Buffer.from(sceneB64, 'base64'), 'image/png', 'scene-oferta')
+  if (!sceneUrl) sceneUrl = await uploadToStorage(id, Buffer.from(sceneB64, 'base64'), 'image/png', `scene-${type}`)
 
   // 3. Composición Satori sobre la escena → JPEG final. Glass real (Camino B): la escena
   // pre-desenfocada se embebe en las cards para el frosted glass alineado.
@@ -251,20 +319,56 @@ async function generateHybridSection(
   const fonts = loadPairFonts(typePair)
   const sceneBuf = Buffer.from(sceneB64, 'base64')
   const blurBg = await blurToDataUri(sceneBuf)
-  const jpeg = await renderComposite(sceneBuf, OfertaLayout({ copy: offer, theme, blurBg }), { fonts, width: 1080, height: 1920 })
-  const imageUrl = await uploadToStorage(id, jpeg, 'image/jpeg', 'section-oferta')
 
-  // 4. Upsert. LandingSection.copy es SectionCopy → sintetizamos una mínima desde la oferta
-  // para el preview/historial; los tiers viven en session.offer_copy.
-  const sectionCopy = { type: 'oferta' as const, headline: offer.headline, subheadline: offer.subheadline, cta: offer.tiers.find((t) => t.featured)?.cta }
+  // Avatares de testimonios (se componen como <img>): cacheados en la sesión, o generados +
+  // subidos + persistidos UNA vez. Se re-encodan a JPEG para fijar el mime (Satori es estricto:
+  // un JPEG etiquetado png no decodifica). El resto de secciones no los necesita.
+  let avatars: string[] = []
+  if (type === 'testimonios') {
+    const cached = session.testimonial_avatars
+    if (cached?.length) {
+      avatars = await Promise.all(cached.map(async (u) => { const a = await fetchAsBase64(u); return `data:${a.mimeType};base64,${a.data}` }))
+    } else {
+      const sharp = (await import('sharp')).default
+      const urls: string[] = []
+      for (const b of await generateAvatars(session.derived_brand?.casting)) {
+        if (!b) continue
+        const jpg = await sharp(Buffer.from(b, 'base64')).jpeg({ quality: 88 }).toBuffer()
+        urls.push(await uploadToStorage(id, jpg, 'image/jpeg', `avatar-${urls.length}`))
+        avatars.push(`data:image/jpeg;base64,${jpg.toString('base64')}`)
+      }
+      if (urls.length) await updateLandingSession(id, { testimonial_avatars: urls })
+    }
+  }
+
+  let layout: ReactElement
+  switch (type) {
+    case 'hero': layout = HeroLayout({ offer, trust, copy: bodyCopy, theme }); break
+    case 'antes-despues': layout = AntesDespuesLayout({ copy: bodyCopy, theme, blurBg }); break
+    case 'beneficios': layout = BeneficiosLayout({ copy: bodyCopy, theme, blurBg }); break
+    case 'testimonios': layout = TestimoniosLayout({ copy: bodyCopy, avatars, theme, blurBg }); break
+    case 'faq': layout = FaqLayout({ copy: bodyCopy, theme, blurBg }); break
+    case 'garantia': layout = GarantiaLayout({ trust, copy: bodyCopy, theme, blurBg }); break
+    case 'cta-final': layout = CtaFinalLayout({ offer, trust, copy: bodyCopy, theme, blurBg }); break
+    default: layout = OfertaLayout({ offer: offer!, copy: offerCopy!, theme, blurBg })
+  }
+  const jpeg = await renderComposite(sceneBuf, layout, { fonts, width: 1080, height: 1920 })
+  const imageUrl = await uploadToStorage(id, jpeg, 'image/jpeg', `section-${type}`)
+
+  // 4. Upsert. LandingSection.copy es SectionCopy → para oferta la sintetizamos de su copy + el CTA
+  // del tier destacado; garantia/cta-final ya tienen su SectionCopy aprobado.
+  const outCopy: SectionCopy =
+    type === 'oferta'
+      ? { type: 'oferta', headline: offerCopy!.headline, subheadline: offerCopy!.subheadline, cta: offer!.tiers.find((t) => t.featured)?.cta }
+      : (bodyCopy ?? { type, headline: '' })
   const sections: LandingSection[] = [...(session.sections ?? [])]
   const idx = sections.findIndex((s) => s.type === type)
   const order = idx >= 0 ? sections[idx].order : (typeof body.order === 'number' ? body.order : sections.length)
-  const section: LandingSection = { type, order, copy: sectionCopy, imageUrl, status: 'done', sceneUrl }
+  const section: LandingSection = { type, order, copy: outCopy, imageUrl, status: 'done', sceneUrl }
   if (idx >= 0) sections[idx] = section
   else sections.push(section)
 
-  await updateLandingSession(id, { step: Math.max(session.step, 4), sections })
+  await updateLandingSession(id, { step: Math.max(session.step, 5), sections })
   await recordGenQuota(id, kind, userId)
   return NextResponse.json({ section, regensLeft })
 }

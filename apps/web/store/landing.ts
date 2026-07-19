@@ -1,14 +1,15 @@
 'use client'
 
 import { create } from 'zustand'
-import type { SectionType, SectionCopy, LandingSection, LandingSessionResponse, DerivedBrand } from '@/lib/landing/types'
+import type { SectionType, SectionCopy, LandingSection, LandingSessionResponse, DerivedBrand, TrustBlock, Offer } from '@/lib/landing/types'
 
 export const SESSION_KEY = 'landing_session_id'
 
 // Máquina de pasos del wizard de landing. `step` = etapa alcanzada.
-//   0 Producto · 1 Fotos · 2 Identidad visual · 3 Secciones+copy · 4 Preview (final)
+//   0 Producto · 1 Fotos · 2 Identidad visual · 3 Confianza y pagos · 4 Secciones+copy · 5 Preview
 //   La plantilla ya no es un paso: el análisis es interno (plantilla maestra).
 //   Identidad (F3): revisión bloqueante de la marca derivada antes de generar imagen.
+//   Confianza (F5): el usuario carga los hechos operativos (contraentrega/pagos/garantía).
 
 interface LandingState {
   sessionId: string | null
@@ -23,6 +24,8 @@ interface LandingState {
   productPhotoUrls: string[]
   derivedBrand: DerivedBrand | null
   talentUrl: string | null
+  trustBlock: TrustBlock | null
+  offer: Offer | null
   selectedSections: SectionType[]
   copy: SectionCopy[]
   sections: LandingSection[]
@@ -36,6 +39,8 @@ interface LandingActions {
   setDerivedBrand: (brand: DerivedBrand | null) => void
   setTalentUrl: (url: string | null) => void
   confirmIdentity: () => void
+  setTrustBlock: (trust: TrustBlock | null) => void
+  confirmTrust: () => void
   setSelectedSections: (sections: SectionType[]) => void
   setCopy: (copy: SectionCopy[]) => void
   approveCopy: () => void
@@ -60,6 +65,8 @@ const initialState: LandingState = {
   productPhotoUrls: [],
   derivedBrand: null,
   talentUrl: null,
+  trustBlock: null,
+  offer: null,
   selectedSections: [],
   copy: [],
   sections: [],
@@ -80,14 +87,19 @@ export const useLandingStore = create<LandingState & LandingActions>((set) => ({
 
   setTalentUrl: (talentUrl) => set({ talentUrl }),
 
-  // Confirmación del checkpoint bloqueante de identidad → avanza a secciones.
+  // Confirmación del checkpoint bloqueante de identidad → avanza a Confianza y pagos.
   confirmIdentity: () => set({ step: 3 }),
+
+  setTrustBlock: (trustBlock) => set({ trustBlock }),
+
+  // Confirmación del bloque de confianza → avanza a Secciones+copy.
+  confirmTrust: () => set({ step: 4 }),
 
   setSelectedSections: (selectedSections) => set({ selectedSections }),
 
   setCopy: (copy) => set({ copy }),
 
-  approveCopy: () => set({ step: 4 }),
+  approveCopy: () => set({ step: 5 }),
 
   // Upsert por tipo: el evento progress del SSE va llenando el array.
   setSectionImage: (section) =>
@@ -112,6 +124,8 @@ export const useLandingStore = create<LandingState & LandingActions>((set) => ({
       productPhotoUrls: s.product_photo_urls ?? [],
       derivedBrand: s.derived_brand ?? null,
       talentUrl: s.talent_canonical_url ?? null,
+      trustBlock: s.trust_block ?? null,
+      offer: s.offer ?? null,
       selectedSections: s.selected_sections ?? [],
       copy: s.copy ?? [],
       sections: (s.sections ?? []).slice().sort((a, b) => a.order - b.order),

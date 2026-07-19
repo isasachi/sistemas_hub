@@ -4,9 +4,24 @@ import type { SectionType } from './types'
 // NO están acá usan el motor viejo (`buildSectionInstruction`, imagen íntegra con texto). Se
 // va llenando por fase; la ruta de sección bifurca según este set. Con el set vacío, el
 // comportamiento es idéntico al de antes de la migración. Ver migration/MIGRATION.md §5.
-export const HYBRID_SECTIONS: Set<SectionType> = new Set(['oferta'])
+// Goal 2026-07-18: el motor volvió a DIFUSIÓN COMPLETA (la IA renderiza el texto). El set queda
+// VACÍO → la ruta no toma el camino híbrido; todas las secciones usan buildDiffusionInstruction +
+// overlay de logos reales. El código híbrido (layouts Satori) queda intacto por si se revierte.
+export const HYBRID_SECTIONS: Set<SectionType> = new Set([])
 
-// Secciones que NO usan el talento canónico (Fase 4). `testimonios` muestra clientes DISTINTOS
-// por definición — forzar la misma cara en cada reseña se ve falso. El talento es para el/la
-// protagonista de la campaña (hero, oferta, beneficios, antes/después, cta), no para avatares.
-export const NO_TALENT_SECTIONS: Set<SectionType> = new Set(['testimonios'])
+// Secciones que NO reciben el talento canónico. `testimonios` muestra clientes DISTINTOS (sus
+// avatares se generan aparte). `faq` y `beneficios` no llevan persona en el ADN (solo producto +
+// motivos): pasarles el talento mete una figura que la composición tapa. El talento es para el/la
+// protagonista de la campaña (hero, oferta, antes/después, garantía, cta).
+export const NO_TALENT_SECTIONS: Set<SectionType> = new Set(['testimonios', 'faq', 'beneficios'])
+
+// Secciones SIN NINGUNA persona en el ADN (solo producto + motivos). Distinto de NO_TALENT:
+// `testimonios` no lleva el talento canónico PERO sí muestra clientes (caras distintas), así que
+// NO va acá. `beneficios`/`faq` no llevan persona alguna → suprimir del todo.
+export const NO_PERSON_SECTIONS: Set<SectionType> = new Set(['beneficios', 'faq'])
+
+// Secciones que NO destacan el producto en el ADN (son texto/personas): antes/después = caras +
+// columnas; testimonios = clientes + reseñas; faq = solo texto. Sin esto, la difusión mete el
+// frasco (se le pasa como referencia de labels) y tapa el copy. beneficios NO va acá: cierra con
+// un frasco pequeño a propósito. hero/oferta/cta sí destacan el producto.
+export const NO_PRODUCT_SECTIONS: Set<SectionType> = new Set(['antes-despues', 'testimonios', 'faq'])
