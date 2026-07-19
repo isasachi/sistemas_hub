@@ -6,7 +6,7 @@ import { buildSectionInstruction, buildSceneInstruction, buildDiffusionInstructi
 import { PaymentBar } from '@/lib/landing/layouts/payment-bar'
 import { BrandLockup, brandLockupText } from '@/lib/landing/layouts/brand-lockup'
 import { buildProductPack } from '@/lib/landing/product-box'
-import { HYBRID_SECTIONS, NO_TALENT_SECTIONS, NO_PERSON_SECTIONS } from '@/lib/landing/engine-registry'
+import { HYBRID_SECTIONS, NO_TALENT_SECTIONS, NO_PERSON_SECTIONS, NO_PRODUCT_SECTIONS } from '@/lib/landing/engine-registry'
 import { extractLandingStyle } from '@/lib/landing/style-extract'
 import { generateOfferCopy } from '@/lib/landing/copy'
 import { generateAvatars } from '@/lib/landing/avatars'
@@ -165,7 +165,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // Motor de DIFUSIÓN: la IA renderiza toda la sección con su texto; se le inyectan los tiers
     // de la oferta y las filas de confianza (F5 los sacó del copy), y se reserva la banda de logos.
     if (parsedType.data === 'hero' || parsedType.data === 'cta-final') lockup = brandLockupText(session.product_labels, session.product_name)
-    parts.push({ text: buildDiffusionInstruction(copy, mode, palette, typography, session.brand_style, session.product_labels, brand, hasTalent, noPersonSection, offer, trust, packUnits, !!lockup) })
+    const noProduct = NO_PRODUCT_SECTIONS.has(parsedType.data)
+    parts.push({ text: buildDiffusionInstruction(copy, mode, palette, typography, session.brand_style, session.product_labels, brand, hasTalent, noPersonSection, offer, trust, packUnits, !!lockup, noProduct) })
     b64 = await generateImage(parts, 3, { aspectRatio: '9:16' })
   }
   if (!b64) return NextResponse.json({ error: 'No se pudo generar la sección', retryable: true }, { status: 502 })

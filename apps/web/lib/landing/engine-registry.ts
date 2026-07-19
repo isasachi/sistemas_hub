@@ -19,3 +19,9 @@ export const NO_TALENT_SECTIONS: Set<SectionType> = new Set(['testimonios', 'faq
 // `testimonios` no lleva el talento canónico PERO sí muestra clientes (caras distintas), así que
 // NO va acá. `beneficios`/`faq` no llevan persona alguna → suprimir del todo.
 export const NO_PERSON_SECTIONS: Set<SectionType> = new Set(['beneficios', 'faq'])
+
+// Secciones que NO destacan el producto en el ADN (son texto/personas): antes/después = caras +
+// columnas; testimonios = clientes + reseñas; faq = solo texto. Sin esto, la difusión mete el
+// frasco (se le pasa como referencia de labels) y tapa el copy. beneficios NO va acá: cierra con
+// un frasco pequeño a propósito. hero/oferta/cta sí destacan el producto.
+export const NO_PRODUCT_SECTIONS: Set<SectionType> = new Set(['antes-despues', 'testimonios', 'faq'])

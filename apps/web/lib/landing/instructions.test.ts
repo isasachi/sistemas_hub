@@ -122,6 +122,20 @@ describe('buildDiffusionInstruction — pack, urgencia, lockup (goal 2026-07-18)
     expect(buildSectionInstruction(copyFor('cta-final'), 'canonical')).not.toContain('SOLO HOY')
   })
 
+  it('override no-producto suprime el frasco en secciones de texto/personas', () => {
+    const withNP = buildDiffusionInstruction(copyFor('testimonios'), 'canonical', null, null, null, null, null, false, false, null, null, null, false, true)
+    expect(withNP).toContain('NO PRODUCT FEATURE')
+    const without = buildDiffusionInstruction(copyFor('testimonios'), 'canonical', null, null, null, null, null, false, false, null, null, null, false, false)
+    expect(without).not.toContain('NO PRODUCT FEATURE')
+  })
+
+  it('disciplina de texto: prohíbe kicker/subhead/strip inventados', () => {
+    const out = buildSectionInstruction(copyFor('faq'), 'canonical')
+    expect(out).toContain('KICKER: render an uppercase kicker')
+    expect(out).toContain('render a subheadline ONLY if')
+    expect(out).toContain('NEVER invent closing words')
+  })
+
   it('reserva la franja del lockup solo cuando reserveLockup=true', () => {
     const withL = buildDiffusionInstruction(copyFor('hero'), 'canonical', null, null, null, null, null, false, false, null, null, null, true)
     expect(withL).toContain('BRAND LOCKUP (do NOT draw)')

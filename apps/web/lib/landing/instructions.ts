@@ -59,11 +59,11 @@ const DESIGN_SYSTEM = [
   `• Background (constant): a LUMINOUS gradient built from the brand palette — SATURATED, vivid brand-color tints at the edges and corners resolving to a bright near-white core in the UPPER-CENTRE behind the product; an AGGRESSIVE multi-stop gradient with a strong radial HALO / light-bloom behind the focal product and a subtle darkened vignette at the outer corners for depth and pop. Add a niche-appropriate particle texture: glowing white bokeh + translucent, luminous 3D accent-colored spheres/bubbles chained like a molecular/serum motif, each with a bright specular highlight. These particles and the vignette live ONLY in the LOWER ~15% and the SIDE MARGINS — they NEVER invade the text area, which stays clean and high-contrast for legibility. Rich and dimensional; NEVER a plain flat fill.`,
   `• Two-color rule: exactly TWO colors lead every panel — the brand's DEEP/primary tone (headlines, price blocks, secondary buttons, closing strips) and metallic GOLD (offer badges, the main CTA, stars, seals). The brand ACCENT color is used for ONE headline phrase and card titles ONLY, at FULL vivid saturation. GREEN = benefit/verified checks; RED = problem ✗ — each functional color used sparingly, at most one role each. GOLD is RESERVED for value / urgency / CTA / stars / seals — NEVER body text, navigation or default furniture. No rainbow.`,
   `• Metallic & glow finish (RATIONED to the VALUE + PRODUCT layers ONLY): render GOLD as brushed/foil METAL with a bright diagonal specular sweep and a warm outer glow; give the main CTA pill a glossy gradient face, a soft rim-light and a colored drop-glow so it reads as the highest-energy element on the panel; wrap the product in a bright bloom/halo with crisp reflections; make badges, seals, ribbons and crowns dimensional, glossy and metallic. Keep ALL of this OFF the text — headlines, subcopy, body and card text stay clean, matte and flat for maximum legibility. The glow serves the offer and the product, NEVER the paragraph.`,
-  `• Typography: ONE geometric sans family (Poppins/Montserrat style) in 3 weights — Bold (headlines + price numerals), SemiBold (card titles + buttons), Regular (body/descriptions). Per panel: an UPPERCASE spaced kicker → a 2-3 line BICOLOR headline → a 1-2 line grey subcopy → the content, in descending size.`,
+  `• Typography: ONE geometric sans family (Poppins/Montserrat style) in 3 weights — Bold (headlines + price numerals), SemiBold (card titles + buttons), Regular (body/descriptions). Per panel: an optional UPPERCASE spaced kicker (ONLY as a short echo of the headline's own words, else omit — never a design/section word) → a 2-3 line BICOLOR headline → a grey subcopy ONLY if the copy provides one → the content, in descending size.`,
   `• Cards: WHITE (or a very subtle top-light gradient sheen), ~18px radius, a 1px light border, a soft diffuse shadow with a faint accent-tinted glow, ~16px inner padding, ~10-12px apart. Comparable rows/tiers share the EXACT same structure so they read as a set.`,
   `• Depth & product: stage background → beneficiary → product/cards as distinct planes with soft contact shadows and a luminous glow halo so nothing looks pasted-on. Product crisp and magazine-grade with a grounding shadow/reflection and a bright bloom. Reproduce the product's real printed label EXACTLY and IDENTICALLY on every unit shown — never garble, drop or vary it across bottles.`,
   `• Icons: 3D SOFT-GRADIENT circular discs lit from the UPPER-LEFT with a glossy metallic sheen and a small specular highlight, each carrying ONE symbol, often with a small green check badge — NEVER flat line-art and never mixed styles. Badges, ribbons and seals are glossy, metallic and dimensional and carry NO lettering of their own (symbols only) unless the copy supplies the exact word.`,
-  `• Section closer (MANDATORY): every section ends ANCHORED at the bottom — a row of trust pills, a payment block, a solid brand-deep strip with a short phrase, or an atmospheric particle band. A section NEVER ends in empty air.`,
+  `• Section closer (MANDATORY): every section ends ANCHORED at the bottom — a row of trust pills, a payment block, a brand-deep strip carrying a phrase ONLY if the copy provides one, or an atmospheric particle band. A section NEVER ends in empty air, but NEVER invent closing words to fill a strip — a text-free band is the default closer.`,
   `• Polish: richness comes from the provided copy, the product, the vibrant luminous background and generous whitespace — NOT from padding. Little copy → stays clean and sparse; never fabricate grids, chips or captions to fill the canvas. Magazine-grade finish throughout.`,
 ].join('\n')
 
@@ -75,6 +75,9 @@ const TEXT_RULES = [
   'Badges, seals, ribbons, icons and price tags carry NO words of their own — decorate them with symbols (✓, ★, %), never with labels, unless that exact word appears in the copy.',
   'NEVER render instruction or design words (e.g. "badge", "seal", "gold", "value", "guarantee", "premium", "e-commerce", "market", "ingredients", "specification", "dimensional", "section", "palette", "typography", "glassmorphism", "mood"), field or role names ("headline", "subheadline", "bullets", "cta"), any bracketed field label or annotation wrapping a copy line, hex codes, font names, lorem ipsum, or any wording from this prompt.',
   'Render each copy string EXACTLY ONCE and render exactly as many cards / price tiers as the copy lists — never duplicate, pad or invent an extra one. The image\'s only text is the Copy-block strings plus the product\'s own printed labels. Keep every word short and highly legible.',
+  'KICKER: render an uppercase kicker/eyebrow ONLY as a short echo of the headline\'s OWN words (or omit it entirely) — NEVER invent a kicker from these instructions or from the section\'s English name (never render "TESTIMONIALS", "BENEFITS", "FAQ", "HERO", "BICOLOR", "section", "mechanism", "outcome" or any design word as a kicker or heading).',
+  'SUBHEADLINE: render a subheadline ONLY if one is explicitly given in the Copy block below. If no subheadline is provided, render NONE — never fabricate one from these design notes (no "Mecanismo / Resultado", no paraphrase of the instructions).',
+  'CLOSING STRIP: if a section closes with a solid brand-deep strip, its words must come from the Copy block (e.g. the CTA or a closing line the copy provides). If the copy has NO closing phrase, close with a TEXT-FREE band (particles, trust pills or the payment row) — NEVER invent closing words.',
   'Emphasize a word ONLY with color or weight — NEVER wrap any word in brackets [ ], parentheses, quotes, asterisks or an underline for emphasis; render the accent word as plain text in the accent color.',
   'Spanish typography: render quotes as proper curly marks (“ ”), never straight or broken glyphs; write the affirmative "Sí" WITH its accent; and every accented Spanish letter correctly (á é í ó ú ñ ¿ ¡). Neutral Peruvian Spanish, NO voseo ("Acaba con", not "Acabá").',
 ].join(' ')
@@ -194,6 +197,7 @@ export function buildSectionInstruction(
   brand?: DerivedBrand | null,
   hasTalent = false,
   noPersonSection = false,
+  noProduct = false,
 ): string {
   const productOnly = !!brand && !brand.casting.present
   const noPersonHere = noPersonSection && !!brand && brand.casting.present
@@ -212,6 +216,7 @@ export function buildSectionInstruction(
     ``,
     TEXT_RULES,
     productOnly ? PRODUCT_ONLY_OVERRIDE : noPersonHere ? NO_PERSON_SCENE : '',
+    noProduct ? NO_PRODUCT_OVERRIDE : '',
   ].filter(Boolean).join('\n')
 }
 
@@ -304,8 +309,9 @@ export function buildDiffusionInstruction(
   trust?: TrustBlock | null,
   packUnits?: number | null,
   reserveLockup = false,
+  noProduct = false,
 ): string {
-  const base = buildSectionInstruction(copy, productMode, palette, typography, brandStyle, productLabels, brand, hasTalent, noPersonSection)
+  const base = buildSectionInstruction(copy, productMode, palette, typography, brandStyle, productLabels, brand, hasTalent, noPersonSection, noProduct)
   const extra: string[] = []
   if (copy.type === 'oferta' && offer) extra.push(offerText(offer))
   // Precio + urgencia en hero/cta-final: la cifra EXACTA del tier destacado y el badge único con la
@@ -376,6 +382,11 @@ const PRODUCT_ONLY_OVERRIDE =
 // diferencia de PRODUCT_ONLY_OVERRIDE) — respeta el plato de la sección (atmósfera y/o producto).
 const NO_PERSON_SCENE =
   'NO PERSON in this section (absolute, OVERRIDES everything above): do NOT render any human, face, model, hand, arm, shoulder or silhouette anywhere in this image; IGNORE every earlier mention of a beneficiary or campaign person. Show ONLY what the section plate above describes (product and/or atmosphere) — no people at all.'
+
+// La sección NO destaca el producto (antes/después, testimonios, faq). El producto se pasa como
+// referencia de labels, pero NO debe aparecer como sujeto (tapaba el copy en testimonios).
+const NO_PRODUCT_OVERRIDE =
+  'NO PRODUCT FEATURE (absolute, OVERRIDES everything above): do NOT feature, place, enlarge or draw the product package/bottle anywhere in this section — it is text/people only. IGNORE any instruction to place the product in the scene; the product reference image is provided ONLY as label ground-truth, NOT as a subject to render here. The product must NOT overlap or cover any text.'
 
 // Bloque de TALENTO canónico (Fase 4), paralelo a productLine y con el mismo rigor: la persona
 // es una imagen de referencia (la ÚLTIMA del parts[]) que debe salir IDÉNTICA en todas las
