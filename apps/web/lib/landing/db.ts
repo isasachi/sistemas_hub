@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import type { LandingSessionResponse } from './types'
+import type { LandingSessionResponse, LandingSection } from './types'
 
 // Cliente lazy singleton dedicado al wizard de landing (espeja branding/db.ts).
 let _db: SupabaseClient | null = null
@@ -65,5 +65,14 @@ export async function updateLandingSession(
     .eq('id', id)
     .select()
     .single()
+  if (error) throw new Error(error.message)
+}
+
+// Fase 6 (paralelización): upsert ATÓMICO de UNA sección en el array jsonb `sections` vía RPC
+// `landing_upsert_section` (FOR UPDATE + reconstrucción por `type`). Reemplaza el read-modify-write
+// del array completo, que perdía updates cuando el cliente genera las secciones en paralelo. La RPC
+// también sube `step` a ≥5. Devuelve la sección tal cual para que el caller la retorne al cliente.
+export async function upsertLandingSection(id: string, section: LandingSection): Promise<void> {
+  const { error } = await getDb().rpc('landing_upsert_section', { p_id: id, p_section: section })
   if (error) throw new Error(error.message)
 }

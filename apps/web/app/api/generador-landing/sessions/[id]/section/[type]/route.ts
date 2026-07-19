@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getLandingSession, updateLandingSession } from '@/lib/landing/db'
+import { getLandingSession, updateLandingSession, upsertLandingSection } from '@/lib/landing/db'
 import { fetchAsBase64, uploadToStorage } from '@/lib/storage'
 import { generateImage, editWithPrompt } from '@/lib/gemini'
 import { buildSectionInstruction, buildSceneInstruction, buildDiffusionInstruction, PAYMENT_SECTIONS, MULTI_UNIT_SECTIONS, type ProductMode } from '@/lib/landing/instructions'
@@ -187,16 +187,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
   const imageUrl = await uploadToStorage(id, outBuf, (needsBar || lockup) ? 'image/jpeg' : 'image/png', `section-${copy.type}`)
 
-  // Upsert en el array sections (read-modify-write). El `order` viene del cliente
-  // (índice en selected_sections); al regenerar se preserva el existente.
-  const sections: LandingSection[] = [...(session.sections ?? [])]
-  const idx = sections.findIndex((s) => s.type === parsedType.data)
-  const order = idx >= 0 ? sections[idx].order : (typeof body.order === 'number' ? body.order : sections.length)
+  // Upsert ATÓMICO de la sección (Fase 6): el `order` lo manda el cliente (índice en
+  // selected_sections); al regenerar se preserva el existente. Se persiste vía RPC atómica
+  // (no read-modify-write del array) para que las secciones concurrentes no se pisen.
+  const existingSection = (session.sections ?? []).find((s) => s.type === parsedType.data)
+  const order = existingSection ? existingSection.order : (typeof body.order === 'number' ? body.order : (session.sections?.length ?? 0))
   const section: LandingSection = { type: copy.type, order, copy, imageUrl, status: 'done' }
-  if (idx >= 0) sections[idx] = section
-  else sections.push(section)
-
-  await updateLandingSession(id, { step: Math.max(session.step, 5), sections })
+  await upsertLandingSection(id, section)
   await recordGenQuota(id, kind, userId)
   return NextResponse.json({ section, regensLeft })
 }
@@ -361,14 +358,10 @@ async function generateHybridSection(
     type === 'oferta'
       ? { type: 'oferta', headline: offerCopy!.headline, subheadline: offerCopy!.subheadline, cta: offer!.tiers.find((t) => t.featured)?.cta }
       : (bodyCopy ?? { type, headline: '' })
-  const sections: LandingSection[] = [...(session.sections ?? [])]
-  const idx = sections.findIndex((s) => s.type === type)
-  const order = idx >= 0 ? sections[idx].order : (typeof body.order === 'number' ? body.order : sections.length)
+  const existingSection = (session.sections ?? []).find((s) => s.type === type)
+  const order = existingSection ? existingSection.order : (typeof body.order === 'number' ? body.order : (session.sections?.length ?? 0))
   const section: LandingSection = { type, order, copy: outCopy, imageUrl, status: 'done', sceneUrl }
-  if (idx >= 0) sections[idx] = section
-  else sections.push(section)
-
-  await updateLandingSession(id, { step: Math.max(session.step, 5), sections })
+  await upsertLandingSection(id, section)
   await recordGenQuota(id, kind, userId)
   return NextResponse.json({ section, regensLeft })
 }

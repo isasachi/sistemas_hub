@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useLandingStore } from '@/store/landing'
 import { SECTION_LABELS, type LandingSection, type SectionCopy, type SectionType } from '@/lib/landing/types'
-import { Smartphone, Monitor } from 'lucide-react'
+import { Smartphone, Monitor, Loader2, AlertCircle } from 'lucide-react'
 import { RegenControls } from '@/components/tools/ui/RegenControls'
 import { GenerationProgress } from '@/components/tools/ui/GenerationProgress'
 
@@ -13,7 +13,17 @@ const btnGhost =
   'h-9 px-3 rounded-lg border border-white/[0.14] text-[#f5f5f5] text-[12px] font-medium hover:bg-white/[0.05] transition-colors cursor-pointer bg-transparent'
 const fieldClass = 'jr-field w-full rounded-lg px-3 py-2 text-[13px]'
 
-// POST una sección (genera o regenera). Reusado por el loop inicial y por el editor.
+// Estado de generación por sección (cliente): 'pending' en cola, 'generating' en vuelo,
+// 'done' lista (ya en el store), 'error' falló tras los reintentos.
+type GenStatus = 'pending' | 'generating' | 'done' | 'error'
+
+// Error de generación con flag de reintentable (la ruta manda retryable:true en 502; 5xx = red).
+class GenError extends Error {
+  retryable: boolean
+  constructor(message: string, retryable: boolean) { super(message); this.retryable = retryable }
+}
+
+// POST una sección (genera o regenera). Reusado por el pool inicial y por el editor.
 async function genSection(
   sessionId: string, type: SectionType, copy: SectionCopy, order: number, prompt?: string,
 ): Promise<{ section: LandingSection; regensLeft?: number }> {
@@ -22,9 +32,40 @@ async function genSection(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ copy, order, prompt: prompt?.trim() || undefined }),
   })
-  const data = (await res.json()) as { section?: LandingSection; regensLeft?: number; error?: string }
-  if (!res.ok || !data.section) throw new Error(data.error ?? 'No se pudo generar la sección')
+  const data = (await res.json()) as { section?: LandingSection; regensLeft?: number; error?: string; retryable?: boolean }
+  if (!res.ok || !data.section) throw new GenError(data.error ?? 'No se pudo generar la sección', res.status >= 500 || data.retryable === true)
   return { section: data.section, regensLeft: data.regensLeft }
+}
+
+// Reintento automático de las fallas REINTENTABLES (hasta 2), con backoff corto (evita recolisión
+// con el rate limit de Gemini). Una falla no-reintentable (400, cuota) corta al toque.
+async function genWithRetry(
+  sessionId: string, type: SectionType, copy: SectionCopy, order: number, retries = 2,
+): Promise<{ section: LandingSection; regensLeft?: number }> {
+  let last: unknown
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await genSection(sessionId, type, copy, order)
+    } catch (err) {
+      last = err
+      if (!(err instanceof GenError) || !err.retryable || attempt === retries) throw err
+      await new Promise((r) => setTimeout(r, 800 * (attempt + 1)))
+    }
+  }
+  throw last
+}
+
+// Pool de concurrencia acotada: procesa `items` con a lo sumo `limit` en vuelo. Cada worker no
+// lanza (captura su error) → un ítem que falla no aborta a los demás (criterio de aceptación #3).
+async function runPool<T>(items: T[], limit: number, worker: (item: T) => Promise<void>): Promise<void> {
+  let i = 0
+  async function next(): Promise<void> {
+    const idx = i++
+    if (idx >= items.length) return
+    await worker(items[idx])
+    return next()
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => next()))
 }
 
 function SectionCard({ section }: { section: LandingSection }) {
@@ -111,49 +152,64 @@ function SectionCard({ section }: { section: LandingSection }) {
   )
 }
 
+// Placeholder por sección aún no lista, con su estado (en cola / generando / falló).
+function SectionSkeleton({ type, status }: { type: SectionType; status: GenStatus }) {
+  return (
+    <div className={`relative w-full aspect-[9/16] bg-[#141414] border-t border-white/[0.06] flex flex-col items-center justify-center gap-2 ${status === 'generating' ? 'animate-pulse' : ''}`}>
+      <span className="text-[12px] text-[#8a8a8a] font-medium">{SECTION_LABELS[type]}</span>
+      {status === 'generating' && <span className="flex items-center gap-1.5 text-[11px] text-[#ff9c4d]"><Loader2 className="w-3.5 h-3.5 animate-spin" />Generando…</span>}
+      {status === 'pending' && <span className="text-[11px] text-[#6a6a6a]">En cola</span>}
+      {status === 'error' && <span className="flex items-center gap-1.5 text-[11px] text-red-400"><AlertCircle className="w-3.5 h-3.5" />Falló · usa Reanudar</span>}
+    </div>
+  )
+}
+
 export default function Section4Preview() {
   const { sessionId, copy, sections, setSectionImage, startNewSession, setRegen } = useLandingStore()
   const [generating, setGenerating] = useState(false)
-  const [done, setDone] = useState(0)
+  const [status, setStatus] = useState<Record<string, GenStatus>>({})
   const [error, setError] = useState<string | null>(null)
   const [device, setDevice] = useState<'mobile' | 'desktop'>('mobile')
   const [downloading, setDownloading] = useState(false)
 
-  // Genera secuencialmente, una request por sección (Hobby-safe). Cada éxito puebla
-  // el preview. Una sección que falla no aborta las demás.
-  async function generate() {
+  // Genera las secciones en PARALELO con concurrencia 3 (Fase 6). El ancla de producto ya es
+  // canónica (derivada de la foto en la etapa 2), así que las secciones son independientes y el
+  // orden de generación es indiferente. `resume` genera solo las que faltan (pending/error).
+  async function generate(opts?: { resume?: boolean }) {
     if (!sessionId || generating || copy.length === 0) return
     setGenerating(true)
-    setDone(0)
     setError(null)
-    let failed = 0
-    // El ancla de producto (consistencia+fidelidad entre secciones) la siembra la PRIMERA
-    // sección generada (route: mode 'source'). Generamos primero la sección con el producto
-    // único más grande y limpio → ancla buena; las demás la calcan. El orden de DISPLAY no
-    // cambia (order = índice original; el store ordena por `order`). ponytail: prioridad fija;
-    // oferta (multiplica el producto a un pack) y las small-product van al final para no
-    // sembrar el ancla salvo que no haya nada mejor seleccionado.
-    const ANCHOR_PRIORITY: SectionType[] = ['hero', 'cta-final', 'beneficios', 'antes-despues', 'garantia', 'oferta', 'faq', 'testimonios']
-    const genOrder = copy
+
+    const doneTypes = new Set(sections.filter((s) => s.imageUrl).map((s) => s.type))
+    const targets = copy
       .map((c, i) => ({ c, order: i }))
-      .sort((a, b) => ANCHOR_PRIORITY.indexOf(a.c.type) - ANCHOR_PRIORITY.indexOf(b.c.type))
-    let done = 0
-    for (const { c, order } of genOrder) {
+      .filter(({ c }) => !opts?.resume || !doneTypes.has(c.type))
+
+    // Estado inicial: las ya hechas 'done', las que vamos a generar 'pending'.
+    const initial: Record<string, GenStatus> = {}
+    for (const c of copy) initial[c.type] = doneTypes.has(c.type) ? 'done' : 'pending'
+    setStatus(initial)
+
+    let failed = 0
+    await runPool(targets, 3, async ({ c, order }) => {
+      setStatus((s) => ({ ...s, [c.type]: 'generating' }))
       try {
-        const { section, regensLeft } = await genSection(sessionId, c.type, c, order)
+        const { section, regensLeft } = await genWithRetry(sessionId, c.type, c, order)
         setSectionImage(section)
         if (typeof regensLeft === 'number') setRegen(`landing-section:${c.type}`, regensLeft)
+        setStatus((s) => ({ ...s, [c.type]: 'done' }))
       } catch (err) {
         failed++
+        setStatus((s) => ({ ...s, [c.type]: 'error' }))
         console.error(err)
       }
-      setDone(++done)
-    }
+    })
+
     if (failed > 0) {
       setError(
-        failed === copy.length
-          ? 'No se pudo generar ninguna sección. Intenta de nuevo.'
-          : `${failed} de ${copy.length} secciones fallaron. Usa "Regenerar todo" para reintentar.`
+        failed === targets.length
+          ? 'No se pudo generar ninguna sección. Reintenta con “Reanudar”.'
+          : `${failed} de ${targets.length} secciones fallaron. Usa “Reanudar” para reintentar solo esas.`
       )
     }
     setGenerating(false)
@@ -185,20 +241,22 @@ export default function Section4Preview() {
   if (!sessionId) return null
 
   const frameWidth = device === 'mobile' ? 'max-w-[380px]' : 'max-w-[720px]'
+  const doneCount = sections.filter((s) => s.imageUrl).length
+  const missing = copy.length - doneCount // secciones sin generar (para Reanudar)
 
   return (
     <div className="flex flex-col gap-4">
       {sections.length === 0 && !generating && (
-        <button onClick={generate} className={btnPrimary}>
+        <button onClick={() => generate()} className={btnPrimary}>
           Generar mi landing ({copy.length} secciones)
         </button>
       )}
 
       {generating && (
         <GenerationProgress
-          percent={copy.length ? (done / copy.length) * 100 : 0}
-          label={`Generando secciones · ${done}/${copy.length}`}
-          hint="Esto puede tomar unos segundos por sección."
+          percent={copy.length ? (doneCount / copy.length) * 100 : 0}
+          label={`Generando en paralelo · ${doneCount}/${copy.length}`}
+          hint="Las secciones aparecen a medida que terminan (hasta 3 a la vez)."
         />
       )}
 
@@ -214,20 +272,30 @@ export default function Section4Preview() {
             </div>
           </div>
 
-          {/* Frame: imágenes apiladas de aspecto fijo; el toggle cambia solo el ancho del marco. */}
+          {/* En orden de sección: la lista viene a medida que termina cada una; las que faltan
+              muestran un placeholder con su estado (Fase 6 · progreso real). */}
           <div className={`mx-auto w-full ${frameWidth} rounded-2xl overflow-hidden border border-white/[0.08] bg-white transition-all duration-300`}>
-            {sections.map((s) => <SectionCard key={s.type} section={s} />)}
-            {generating && Array.from({ length: Math.max(0, copy.length - sections.length) }).map((_, i) => (
-              <div key={`sk-${i}`} className="w-full aspect-[9/16] bg-[#141414] animate-pulse border-t border-white/[0.06]" />
-            ))}
+            {copy.map((c) => {
+              const s = sections.find((x) => x.type === c.type && x.imageUrl)
+              return s
+                ? <SectionCard key={c.type} section={s} />
+                : <SectionSkeleton key={c.type} type={c.type} status={status[c.type] ?? 'pending'} />
+            })}
           </div>
 
           {!generating && sections.length > 0 && (
-            <div className="flex gap-2 items-center">
-              <button onClick={download} disabled={downloading} className={btnPrimary + ' flex-1'}>
-                {downloading ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Descargando...</> : '↓ Descargar secciones'}
-              </button>
-              <button onClick={generate} className={btnGhost}>↻ Regenerar todo</button>
+            <div className="flex gap-2 items-center flex-wrap">
+              {missing > 0 && (
+                <button onClick={() => generate({ resume: true })} className={btnPrimary + ' flex-1'}>
+                  ↻ Reanudar generación ({missing} pendiente{missing > 1 ? 's' : ''})
+                </button>
+              )}
+              {missing === 0 && (
+                <button onClick={download} disabled={downloading} className={btnPrimary + ' flex-1'}>
+                  {downloading ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Descargando...</> : '↓ Descargar secciones'}
+                </button>
+              )}
+              <button onClick={() => generate()} className={btnGhost}>↻ Regenerar todo</button>
               <button onClick={startNewSession} className={btnGhost}>Nueva landing</button>
             </div>
           )}
