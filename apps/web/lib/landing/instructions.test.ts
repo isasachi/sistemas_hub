@@ -16,12 +16,13 @@ describe('buildSectionInstruction — ADN de referencia', () => {
     for (const type of ALL) {
       for (const mode of ['source', 'anchored', 'none'] as const) {
         const out = buildSectionInstruction(copyFor(type), mode)
-        expect(out).toContain('luminous, dimensional background') // atmósfera
-        expect(out.toLowerCase()).toContain('glassmorphism')      // superficies (firma)
-        expect(out).toContain('METALLIC GOLD')                    // dorado = solo valor
-        expect(out).toContain('SCENE/MOOD that fits')             // mood por nicho
-        expect(out).toContain('TEXT DISCIPLINE')                  // guardrail de texto
-        expect(out).toContain('ACNE-HEADLINE-XYZ')                // el copy se inyecta
+        expect(out).toContain('LUMINOUS gradient')          // fondo clínico celeste
+        expect(out).toContain('Two-color rule')             // regla 2 colores (deep+dorado)
+        expect(out).toContain('metallic GOLD')              // dorado = solo valor
+        expect(out).toContain('BICOLOR headline')           // headline bicolor obligatorio
+        expect(out).toContain('Section closer (MANDATORY)') // cierre inferior obligatorio
+        expect(out).toContain('TEXT DISCIPLINE')            // guardrail de texto
+        expect(out).toContain('ACNE-HEADLINE-XYZ')          // el copy se inyecta
       }
     }
   })

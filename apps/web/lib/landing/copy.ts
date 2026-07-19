@@ -45,6 +45,25 @@ export async function generateLandingCopy(
 // el decoy: ≥2 tiers, exactamente uno featured); el resultado se PARTE en `offer` (tiers/urgency,
 // nivel de sesión — Fase 5 C5.1) y `copy` (headline/subheadline, propio de la sección). El
 // `.refine` se valida post-hoc en callStructured → reintenta si el modelo no cumple.
+// El % de ahorro se CALCULA de los precios (no lo escribe el LLM, que se equivoca y a veces omite
+// el mayor descuento en el tier destacado). Sin ancla válida → sin %.
+function parsePrice(s?: string): number | null {
+  const m = s?.replace(/\s/g, '').match(/(\d[\d.,]*)/)
+  if (!m) return null
+  const n = parseFloat(m[1].replace(/,/g, ''))
+  return Number.isFinite(n) ? n : null
+}
+function recomputeSavings(offer: Offer): Offer {
+  return {
+    ...offer,
+    tiers: offer.tiers.map((t) => {
+      const now = parsePrice(t.price), before = parsePrice(t.priceBefore)
+      const pct = now && before && before > now ? Math.round((1 - now / before) * 100) : undefined
+      return { ...t, savingsPct: pct }
+    }),
+  }
+}
+
 export async function generateOfferCopy(
   session: LandingSessionResponse,
   feedback?: string,
@@ -74,7 +93,7 @@ export async function generateOfferCopy(
   ]
   const gen = await callStructured('landing_offer_copy', OfferGenSchema, parts, 3, LANDING_SYSTEM_PROMPT)
   return {
-    offer: { tiers: gen.tiers, urgency: gen.urgency },
+    offer: recomputeSavings({ tiers: gen.tiers, urgency: gen.urgency }),
     copy: { type: 'oferta', headline: gen.headline, subheadline: gen.subheadline },
   }
 }
