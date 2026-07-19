@@ -22,6 +22,29 @@ export const BRANDING_SYSTEM_PROMPT = fs.readFileSync(
   'utf-8'
 )
 
+// Gemini IGNORA los maxLength del responseSchema y a veces devuelve strings más largos que el
+// `.max()` del esquema → el safeParse estricto tiraba ZodError (y 500-eaba /copy tras 3 reintentos).
+// Los `.max()` de copy son una defensa contra texto largo, no una validación dura: recortamos los
+// strings 'too_big' a su máximo y reintentamos el parse en vez de rechazar. Solo toca strings
+// (un array/número 'too_big' no se recorta → se deja fallar como antes). Puro y testeable.
+function valueAtPath(obj: unknown, path: readonly (string | number | symbol)[]): unknown {
+  return path.reduce<unknown>((o, k) => (o == null ? o : (o as Record<string | number, unknown>)[k as string | number]), obj)
+}
+export function clampTooBigStrings(obj: unknown, error: z.ZodError): boolean {
+  let changed = false
+  for (const issue of error.issues) {
+    if (issue.code !== 'too_big' || typeof issue.maximum !== 'number' || issue.path.length === 0) continue
+    const parent = valueAtPath(obj, issue.path.slice(0, -1))
+    const key = issue.path[issue.path.length - 1] as string | number
+    const cur = parent == null ? undefined : (parent as Record<string | number, unknown>)[key]
+    if (typeof cur === 'string' && cur.length > issue.maximum) {
+      ;(parent as Record<string | number, unknown>)[key] = cur.slice(0, issue.maximum)
+      changed = true
+    }
+  }
+  return changed
+}
+
 export async function callStructured<T>(
   schemaName: string,
   schema: z.ZodSchema<T>,
@@ -41,8 +64,10 @@ export async function callStructured<T>(
           responseSchema: z.toJSONSchema(schema) as Schema,
         },
       })
-      const text = res.text ?? ''
-      const parsed = schema.safeParse(JSON.parse(text))
+      const obj = JSON.parse(res.text ?? '')
+      let parsed = schema.safeParse(obj)
+      // Recupera el caso común: strings sobre el límite → recorta y reintenta el parse (no la API).
+      if (!parsed.success && clampTooBigStrings(obj, parsed.error)) parsed = schema.safeParse(obj)
       if (parsed.success) return parsed.data
       lastError = parsed.error
     } catch (e) {
