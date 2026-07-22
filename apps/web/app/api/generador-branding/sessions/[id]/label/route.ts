@@ -1,10 +1,9 @@
-import { NextRequest } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { getBrandingSession, updateBrandingSession } from '@/lib/branding/db'
-import { fetchAsBase64, uploadToStorage } from '@/lib/storage'
-import { generateImage, editWithPrompt } from '@/lib/gemini'
-import { DirectionSchema, type LabelData } from '@/lib/branding/types'
-import { buildLabelInstruction } from '@/lib/branding/instructions'
-import { parseDesignDna } from '@/lib/branding/style-extract'
+import { generateImage } from '@/lib/gemini'
+import { uploadToStorage, fetchAsBase64 } from '@/lib/storage'
+import { resolveEffectivePreset, sessionBrief, styleRefParts } from '@/lib/branding/effective-preset'
+import { buildPromptFromPreset } from '@/lib/branding/generation-prompts'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 import type { Part } from '@google/genai'
@@ -12,93 +11,33 @@ import type { Part } from '@google/genai'
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-// Etapa 4 — diseña la etiqueta (logo elegido + paleta + brief del producto). SSE.
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+  let precision = ''
+  try { const b = await req.json(); precision = (b?.prompt ?? '').trim() } catch { /* */ }
 
   const { blocked, regensLeft } = await checkGenQuota(id, 'branding-label')
   if (blocked) return blocked
   const userId = await readUserId()
 
-  let body: { labelData?: LabelData; prompt?: string } = {}
-  try { body = await req.json() } catch { /* sin body: reusa el guardado */ }
-  const precision = (body.prompt ?? '').trim()
+  const session = await getBrandingSession(id)
+  if (!session || !session.style_id || !session.brand_name)
+    return NextResponse.json({ error: 'Falta el estilo o el nombre de marca' }, { status: 400 })
 
-  const stream = new ReadableStream({
-    async start(controller) {
-      const send = (data: Record<string, unknown>) =>
-        controller.enqueue(`data: ${JSON.stringify(data)}\n\n`)
+  const preset = resolveEffectivePreset(session)
+  const { prompt } = buildPromptFromPreset('label', preset, sessionBrief(session))
+  const refParts = await styleRefParts(session)
+  const logoPart: Part[] = session.logo_url
+    ? await fetchAsBase64(session.logo_url).then(({ data, mimeType }) => [{ inlineData: { mimeType, data } }]).catch(() => [])
+    : []
 
-      try {
-        const session = await getBrandingSession(id)
-        if (!session || !session.direction || !session.brand_name || !session.logo_url) {
-          send({ status: 'error', message: 'Falta el logo o la dirección de marca' })
-          return controller.close()
-        }
-        const labelData = (body.labelData ?? session.label_data) as LabelData | null
-        if (!labelData?.packagingFormat?.trim()) {
-          send({ status: 'error', message: 'Falta el formato del empaque' })
-          return controller.close()
-        }
+  const parts: Part[] = [...refParts, ...logoPart, { text: prompt }]
+  if (precision) parts.push({ text: `Ajuste solicitado (priorízalo): ${precision}` })
 
-        const direction = DirectionSchema.parse(session.direction)
-        const productName = (session.product_name || session.brand_name).trim()
-
-        send({ status: 'loading_images' })
-        // Regen con prompt sobre una etiqueta ya generada = edición exclusiva: solo ese
-        // cambio, el resto idéntico (no rehacer desde cero). Sin prompt o sin etiqueta
-        // previa, genera completa: logo (Image 1) + etiqueta de referencia opcional.
-        let b64: string
-        if (precision && session.label_url) {
-          const prev = await fetchAsBase64(session.label_url)
-          send({ status: 'generating' })
-          b64 = await editWithPrompt(prev.data, prev.mimeType, precision)
-        } else {
-          const parts: Part[] = []
-          const logo = await fetchAsBase64(session.logo_url)
-          parts.push({ inlineData: { mimeType: logo.mimeType, data: logo.data } })
-          const ref = session.label_reference_url
-            ? await fetchAsBase64(session.label_reference_url)
-            : null
-          if (ref) parts.push({ inlineData: { mimeType: ref.mimeType, data: ref.data } })
-          const refDna = parseDesignDna(session.label_reference_analysis)
-          parts.push({ text: buildLabelInstruction(direction, session.brand_name, productName, labelData, !!ref, refDna) })
-          if (precision) parts.push({ text: `\nAjuste solicitado por el usuario (priorízalo): ${precision}` })
-
-          send({ status: 'generating' })
-          b64 = await generateImage(parts)
-        }
-        if (!b64) {
-          send({ status: 'error', message: 'La generación devolvió un resultado vacío', retryable: true })
-          return controller.close()
-        }
-
-        send({ status: 'uploading' })
-        const labelUrl = await uploadToStorage(id, Buffer.from(b64, 'base64'), 'image/png', 'label')
-
-        await updateBrandingSession(id, {
-          step: Math.max(session.step, 4),
-          label_data: labelData,
-          label_url: labelUrl,
-        })
-        await recordGenQuota(id, 'branding-label', userId)
-        send({ status: 'done', imageUrl: labelUrl, regensLeft })
-      } catch (err) {
-        send({ status: 'error', message: String(err), retryable: true })
-      } finally {
-        controller.close()
-      }
-    },
-  })
-
-  return new Response(stream, {
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      Connection: 'keep-alive',
-    },
-  })
+  const b64 = await generateImage(parts)
+  if (!b64) return NextResponse.json({ error: 'No se pudo generar la etiqueta', retryable: true }, { status: 502 })
+  const url = await uploadToStorage(id, Buffer.from(b64, 'base64'), 'image/png', 'label')
+  await updateBrandingSession(id, { label_url: url })
+  await recordGenQuota(id, 'branding-label', userId)
+  return NextResponse.json({ url, regensLeft })
 }

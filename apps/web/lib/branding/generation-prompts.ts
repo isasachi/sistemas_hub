@@ -186,21 +186,33 @@ export const ARTIFACTS: Record<ArtifactType, ArtifactSpec> = {
  * API del flujo
  * ------------------------------------------------------------------------ */
 
-/** Construye un prompt para un artefacto + estilo + brief. */
+/**
+ * Construye un prompt para un artefacto + un StylePreset YA RESUELTO (p.ej. el
+ * efectivo de `resolveEffectivePreset`, que fusiona overrides de modo B/paso 3).
+ * Preferir esta función sobre `buildPrompt` cuando el preset no es el crudo por id.
+ */
+export function buildPromptFromPreset(
+  artifact: ArtifactType,
+  preset: StylePreset,
+  brief: BrandBrief,
+): GeneratedPrompt {
+  const spec = ARTIFACTS[artifact];
+  return {
+    artifact,
+    styleId: preset.id,
+    aspectRatio: spec.aspectRatio,
+    prompt: spec.build(brief, preset),
+    styleReferences: attachStyleRefs(preset),
+  };
+}
+
+/** Construye un prompt para un artefacto + estilo (por id) + brief. */
 export function buildPrompt(
   artifact: ArtifactType,
   styleId: string,
   brief: BrandBrief,
 ): GeneratedPrompt {
-  const preset = getPreset(styleId);
-  const spec = ARTIFACTS[artifact];
-  return {
-    artifact,
-    styleId,
-    aspectRatio: spec.aspectRatio,
-    prompt: spec.build(brief, preset),
-    styleReferences: attachStyleRefs(preset),
-  };
+  return buildPromptFromPreset(artifact, getPreset(styleId), brief);
 }
 
 /**
