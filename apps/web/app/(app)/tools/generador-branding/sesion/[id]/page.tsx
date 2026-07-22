@@ -61,11 +61,11 @@ export default function BrandingDetalle() {
               <Asset url={s.label_url} label="Etiqueta" />
             </div>
 
-            {s.direction?.palette?.length ? (
+            {s.selected_palette?.length ? (
               <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-4">
                 <p className="text-[11px] font-bold text-[#8a8a8a] tracking-[1px] uppercase mb-3">Paleta</p>
                 <div className="flex flex-wrap gap-3">
-                  {s.direction.palette.map((c, i) => (
+                  {s.selected_palette.map((c, i) => (
                     <div key={i} className="flex items-center gap-2">
                       <span className="w-7 h-7 rounded-md border border-white/[0.1]" style={{ background: c.hex }} />
                       <div>
