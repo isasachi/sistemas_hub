@@ -1,20 +1,27 @@
 import { z } from 'zod'
+import type { PaletteColor, Typography } from './style-presets'
 
 // ─── Etapa 2: Dirección de marca (gate de aprobación) ────────────────────────
+// Nota: tipos Direction-específicos con "usage" y "rationale". Renombrados
+// para evitar conflicto con los tipos de style-presets (que usamos en el nuevo flujo).
 
-export const PaletteColorSchema = z.object({
+export const DirectionPaletteColorSchema = z.object({
   name: z.string(),        // "Terracota cálido"
   hex: z.string(),         // "#C75B39"
   usage: z.string(),       // "Color principal — botones, acentos de marca"
 })
-export type PaletteColor = z.infer<typeof PaletteColorSchema>
+export type DirectionPaletteColor = z.infer<typeof DirectionPaletteColorSchema>
+// Backward compat alias — código antiguo que importa PaletteColor de types.ts
+export const PaletteColorSchema = DirectionPaletteColorSchema
 
-export const TypographySchema = z.object({
+export const DirectionTypographySchema = z.object({
   headline: z.string(),    // familia tipográfica para titulares
   body: z.string(),        // familia para cuerpo de texto
   rationale: z.string(),   // por qué encaja con la marca
 })
-export type Typography = z.infer<typeof TypographySchema>
+export type DirectionTypography = z.infer<typeof DirectionTypographySchema>
+// Backward compat alias — código antiguo que importa Typography de types.ts
+export const TypographySchema = DirectionTypographySchema
 
 // ─── Design DNA: extracción quirúrgica de estilo (refs del usuario + biblioteca) ──
 // Mismo esquema para el extractor runtime (style-extract.ts, gemini-2.5-flash sobre
@@ -48,8 +55,8 @@ export const DesignSystemRefSchema = z.object({
 export const DirectionSchema = z.object({
   concept: z.string(),                          // concepto/vibe en una frase
   rationale: z.string(),                         // por qué esta dirección para esta marca
-  palette: z.array(PaletteColorSchema).min(3).max(6),
-  typography: TypographySchema,
+  palette: z.array(DirectionPaletteColorSchema).min(3).max(6),
+  typography: DirectionTypographySchema,
   logoDirection: z.string(),                    // cómo debería verse/sentirse el logo
   summaryForUser: z.string(),                   // resumen amable en español para mostrar
   designSystem: DesignSystemRefSchema.optional(), // exemplar curado que ancla el estilo
@@ -97,4 +104,49 @@ export interface BrandingSessionResponse {
   container_desc: string | null
   container_url: string | null
   mockup_url: string | null
+  // ── flujo por estilo (refactor 2026-07) ──
+  source_mode: 'preset' | 'upload' | null
+  style_id: string | null
+  product_type: string | null
+  descriptor: string | null
+  tagline: string | null
+  container_type: string | null
+  uploaded_image_url: string | null
+  image_analysis: ExtractedStyle | null
+  selected_palette: PaletteColor[] | null
+  selected_typography: Typography | null
 }
+
+// ─── Modo B (upload): estilo extraído de la imagen del usuario ────────────────
+// Misma forma que StylePreset MENOS meta (id/index/name/referenceFolder), MÁS
+// bestFitStyleId. Lo produce style-extract.analyzeUploadedStyle (Gemini vision).
+export const ExtractedPaletteColorSchema = z.object({
+  hex: z.string(),
+  name: z.string(),
+  role: z.enum(['primary', 'secondary', 'accent', 'neutral', 'background']),
+})
+export const ExtractedTypographySchema = z.object({
+  primary: z.string(),
+  secondary: z.string(),
+  case: z.enum(['uppercase', 'lowercase', 'title', 'mixed']),
+  detail: z.string(),
+})
+export const ExtractedStyleSchema = z.object({
+  essence: z.string(),
+  keywords: z.array(z.string()),
+  palette: z.array(ExtractedPaletteColorSchema).min(3).max(6),
+  typography: ExtractedTypographySchema,
+  materials: z.array(z.string()),
+  composition: z.string(),
+  lighting: z.string(),
+  mood: z.array(z.string()),
+  motifs: z.array(z.string()),
+  avoid: z.array(z.string()),
+  styleBlock: z.string(),
+  bestFitStyleId: z.string(),
+})
+export type ExtractedStyle = z.infer<typeof ExtractedStyleSchema>
+
+// Paleta/tipo elegidos en el paso 3 (o extraídos en modo B). Reusa las formas del preset.
+export const SelectedPaletteSchema = z.array(ExtractedPaletteColorSchema).min(3).max(6)
+export const SelectedTypographySchema = ExtractedTypographySchema
