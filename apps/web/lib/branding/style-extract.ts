@@ -74,11 +74,3 @@ export async function analyzeUploadedStyle(
   return result
 }
 
-export function parseExtractedStyle(s: string | null | undefined): ExtractedStyle | null {
-  if (!s?.trim() && typeof s !== 'object') return null
-  try {
-    const obj = typeof s === 'string' ? JSON.parse(s) : s
-    const r = ExtractedStyleSchema.safeParse(obj)
-    return r.success ? r.data : null
-  } catch { return null }
-}
