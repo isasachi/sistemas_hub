@@ -27,11 +27,16 @@ function getStatus(sectionStep: number, currentStep: number, maxStep: number): '
 }
 
 async function patchSession(sessionId: string, patch: Record<string, unknown>) {
-  await fetch(`/api/generador-branding/sessions/${sessionId}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(patch),
-  })
+  try {
+    const res = await fetch(`/api/generador-branding/sessions/${sessionId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    })
+    if (!res.ok) console.error(`Failed to patch session ${sessionId}:`, res.status, res.statusText)
+  } catch (e) {
+    console.error(`Error patching session ${sessionId}:`, e)
+  }
 }
 
 export default function BrandingWizard() {

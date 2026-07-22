@@ -25,7 +25,7 @@ export default function Section3Palette({
 
   useEffect(() => {
     fetch(`/api/generador-branding/sessions/${sessionId}/templates`, { method: 'POST' })
-      .then((r) => r.json())
+      .then((r) => (r.ok ? r.json() : { templates: [] }))
       .then((d) => setTemplates(d.templates ?? []))
       .catch(() => { setTemplates([]); setError('No se pudieron generar variaciones') })
   }, [sessionId])

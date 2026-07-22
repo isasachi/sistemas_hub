@@ -22,6 +22,6 @@ export async function POST(
   if (!logoUrl || !(session.logo_options ?? []).includes(logoUrl))
     return NextResponse.json({ error: 'Logo inválido' }, { status: 400 })
 
-  await updateBrandingSession(id, { logo_url: logoUrl, step: Math.max(session.step, 3) })
+  await updateBrandingSession(id, { logo_url: logoUrl, step: Math.max(session.step, 4) })
   return NextResponse.json({ logoUrl })
 }
