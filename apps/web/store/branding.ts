@@ -6,9 +6,9 @@ import type { PaletteColor, Typography } from '@/lib/branding/style-presets'
 
 export const SESSION_KEY = 'branding_session_id'
 
-// Máquina de pasos del wizard de branding (refactor 2026-07, flujo por estilo).
+// Máquina de pasos del wizard de branding (refactor 2026-07, pipeline compose-first).
 // `step` = nº de secciones completadas; la sección activa es `step`.
-//   0 Estilo · 1 Tu marca · 2 Paleta y tipografía · 3 Logo · 4 Etiqueta · 5 Mockup · 6 Guía (final)
+//   0 Estilo · 1 Tu marca · 2 Paleta y tipografía · 3 Marca (compose→elegir→derivar) · 4 Guía (final)
 
 // Subconjunto de ExtractedStyle (solo lo que consume la UI: la paleta/tipo
 // "originales" para mostrar en el paso de paleta). `image_analysis` en DB es el
@@ -41,7 +41,7 @@ interface BrandingState {
   // re-quemar la llamada a Gemini cada vez que se reabre la sección (remount)
   paletteTemplates: PaletteTemplate[] | null
   // resultados
-  logoOptions: string[]
+  mockupOptions: string[]
   logoUrl: string | null
   labelUrl: string | null
   mockupUrl: string | null
@@ -69,10 +69,11 @@ interface BrandingActions {
   }) => void
   setPaletteChoice: (data: { selectedPalette: PaletteColor[] | null; selectedTypography: Typography | null }) => void
   setPaletteTemplates: (templates: PaletteTemplate[]) => void
-  setLogoOptions: (logoOptions: string[]) => void
-  selectLogo: (logoUrl: string) => void
+  setMockupOptions: (mockupOptions: string[]) => void
+  setDerived: (data: { logoUrl: string; labelUrl: string; mockupUrl: string }) => void
+  setLogo: (logoUrl: string) => void
   setLabel: (labelUrl: string) => void
-  setMockup: (mockupUrl: string) => void
+  goToGuide: () => void
   hydrateFromSession: (s: BrandingSessionResponse) => void
   startNewSession: () => Promise<void>
   setRegens: (m: Record<string, number>) => void
@@ -96,7 +97,7 @@ const initialState: BrandingState = {
   selectedPalette: null,
   selectedTypography: null,
   paletteTemplates: null,
-  logoOptions: [],
+  mockupOptions: [],
   logoUrl: null,
   labelUrl: null,
   mockupUrl: null,
@@ -137,13 +138,18 @@ export const useBrandingStore = create<BrandingState & BrandingActions>((set) =>
 
   setPaletteTemplates: (paletteTemplates) => set({ paletteTemplates }),
 
-  setLogoOptions: (logoOptions) => set({ logoOptions }),
+  setMockupOptions: (mockupOptions) => set({ mockupOptions }),
 
-  selectLogo: (logoUrl) => set({ logoUrl, step: 4 }),
+  // Elegir mockup + derivar (target:'both') deja los 3 artefactos consistentes,
+  // pero el paso 3 "Marca" sigue activo (muestra los 3 con sus regens) hasta que
+  // el usuario confirma con "Continuar a la guía" → goToGuide. No tocar `step` acá.
+  setDerived: ({ logoUrl, labelUrl, mockupUrl }) => set({ logoUrl, labelUrl, mockupUrl }),
 
-  setLabel: (labelUrl) => set({ labelUrl, step: 5 }),
+  setLogo: (logoUrl) => set({ logoUrl }),
 
-  setMockup: (mockupUrl) => set({ mockupUrl, step: 6 }),
+  setLabel: (labelUrl) => set({ labelUrl }),
+
+  goToGuide: () => set({ step: 4 }),
 
   hydrateFromSession: (s) => {
     if (typeof window !== 'undefined') localStorage.setItem(SESSION_KEY, s.id)
@@ -162,7 +168,7 @@ export const useBrandingStore = create<BrandingState & BrandingActions>((set) =>
       containerType: s.container_type,
       selectedPalette: s.selected_palette,
       selectedTypography: s.selected_typography,
-      logoOptions: s.logo_options ?? [],
+      mockupOptions: s.mockup_options ?? [],
       logoUrl: s.logo_url,
       labelUrl: s.label_url,
       mockupUrl: s.mockup_url,

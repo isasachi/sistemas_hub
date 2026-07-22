@@ -11,13 +11,11 @@ import AccordionSection from '@/components/tools/generador-anuncios/AccordionSec
 import Section1Style, { type AnalyzeResult } from './sections/Section1Style'
 import Section2Brief from './sections/Section2Brief'
 import Section3Palette from './sections/Section3Palette'
-import Section4Logo from './sections/Section4Logo'
-import Section5Label from './sections/Section5Label'
-import Section6Mockup from './sections/Section6Mockup'
-import Section7Guide from './sections/Section7Guide'
+import Section4Marca from './sections/Section4Marca'
+import Section5Guide from './sections/Section5Guide'
 
-// Wizard de branding por estilo (refactor 2026-07). 7 secciones, `step` 0..6:
-//   0 Estilo · 1 Tu marca · 2 Paleta y tipografía · 3 Logo · 4 Etiqueta · 5 Mockup · 6 Guía (final)
+// Wizard de branding compose-first (refactor 2026-07). 5 secciones, `step` 0..4:
+//   0 Estilo · 1 Tu marca · 2 Paleta y tipografía · 3 Marca (compose→elegir→derivar) · 4 Guía (final)
 // `maxStep` = paso más avanzado alcanzado; una sección ya visitada queda 'completed'
 // (reabrible) aunque retrocedas, para navegar adelante/atrás sin reenviar (re-quemar LLM).
 function getStatus(sectionStep: number, currentStep: number, maxStep: number): 'locked' | 'active' | 'completed' {
@@ -44,7 +42,7 @@ export default function BrandingWizard() {
     step, sessionId, sessionError, startNewSession, hydrateFromSession, setStep, setRegens,
     sourceMode, styleId, imageAnalysis, setStyle, setUploaded,
     brandName, productType, setPaletteChoice,
-    selectedPalette, logoUrl, labelUrl, setLabel, mockupUrl, setMockup,
+    selectedPalette, mockupUrl, goToGuide,
   } = useBrandingStore()
 
   // Reanudar: si hay un id guardado y la sesión existe, rehidratar; si no, una nueva.
@@ -68,7 +66,7 @@ export default function BrandingWizard() {
   if (prevSession.current !== sessionId) { prevSession.current = sessionId; maxStep.current = 0 }
   maxStep.current = Math.max(maxStep.current, step)
 
-  const progressPct = Math.round((Math.min(step, 6) / 6) * 100)
+  const progressPct = Math.round((Math.min(step, 4) / 4) * 100)
 
   // El `step` persistido en DB debe ser un high-water mark: nunca regresa, aunque el
   // usuario reabra una sección anterior y la reenvíe (ej. edita el brief tras ya
@@ -110,14 +108,12 @@ export default function BrandingWizard() {
     setPaletteChoice(sel)
   }
 
-  async function onLabelChosen(url: string) {
-    if (sessionId) await patchSession(sessionId, { step: Math.max(maxStep.current, 5) })
-    setLabel(url)
-  }
-
-  async function onMockupChosen(url: string) {
-    if (sessionId) await patchSession(sessionId, { step: Math.max(maxStep.current, 6) })
-    setMockup(url)
+  // "Continuar a la guía" (botón en Section4Marca, fase `derived`): la elección
+  // de mockup ya fijó step:3 server-side (derive target:'both'), acá solo falta
+  // avanzar a la Guía (step 4) — high-water mark, igual que el resto de pasos.
+  async function onGuide() {
+    if (sessionId) await patchSession(sessionId, { step: Math.max(maxStep.current, 4) })
+    goToGuide()
   }
 
   if (sessionError && !sessionId) {
@@ -183,48 +179,26 @@ export default function BrandingWizard() {
           )}
         </AccordionSection>
 
-        {/* 4 — Logo */}
+        {/* 4 — Marca (compose→elegir→derivar) */}
         <AccordionSection
           index={4}
-          title="Logo"
+          title="Tu marca"
           status={getStatus(3, step, maxStep.current)}
-          summary={logoUrl ? 'Logo elegido' : undefined}
+          summary={mockupUrl ? 'Marca lista' : undefined}
           onReopen={() => setStep(3)}
         >
-          <Section4Logo />
+          <Section4Marca onGuide={onGuide} />
         </AccordionSection>
 
-        {/* 5 — Etiqueta */}
+        {/* 5 — Guía de marca (final): reabrible una vez alcanzada (maxStep) */}
         <AccordionSection
           index={5}
-          title="Etiqueta"
-          status={getStatus(4, step, maxStep.current)}
-          summary={labelUrl ? 'Etiqueta lista' : undefined}
+          title={mockupUrl ? '¡Tu marca está lista!' : 'Guía de marca'}
+          status={step === 4 ? 'active' : maxStep.current >= 4 ? 'completed' : 'locked'}
+          summary={mockupUrl ? 'Marca lista' : undefined}
           onReopen={() => setStep(4)}
         >
-          <Section5Label onUse={onLabelChosen} />
-        </AccordionSection>
-
-        {/* 6 — Mockup */}
-        <AccordionSection
-          index={6}
-          title="Mockup"
-          status={getStatus(5, step, maxStep.current)}
-          summary={mockupUrl ? 'Mockup listo' : undefined}
-          onReopen={() => setStep(5)}
-        >
-          <Section6Mockup onUse={onMockupChosen} />
-        </AccordionSection>
-
-        {/* 7 — Guía de marca (final): reabrible una vez alcanzada (maxStep) */}
-        <AccordionSection
-          index={7}
-          title={mockupUrl ? '¡Tu marca está lista!' : 'Guía de marca'}
-          status={step === 6 ? 'active' : maxStep.current >= 6 ? 'completed' : 'locked'}
-          summary={mockupUrl ? 'Marca lista' : undefined}
-          onReopen={() => setStep(6)}
-        >
-          <Section7Guide />
+          <Section5Guide />
         </AccordionSection>
       </div>
     </div>

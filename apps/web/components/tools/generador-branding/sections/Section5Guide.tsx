@@ -18,7 +18,7 @@ async function downloadImage(url: string, filename: string) {
 
 // Guía de marca final: muestra logo/etiqueta/mockup + la paleta y tipografía
 // EFECTIVAS (elegidas en el paso 3, o si no, las del estilo/producto extraído).
-export default function Section7Guide() {
+export default function Section5Guide() {
   const {
     sessionId, brandName, tagline, sourceMode, styleId, imageAnalysis,
     selectedPalette, selectedTypography, logoUrl, labelUrl, mockupUrl, startNewSession,
