@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getBrandingSession } from '@/lib/branding/db'
+import { resolveEffectivePreset } from '@/lib/branding/effective-preset'
 import { createLandingSession, updateLandingSession } from '@/lib/landing/db'
 import { readUserId } from '@/lib/product-hunter/session'
 import type { SectionType } from '@/lib/landing/types'
@@ -42,24 +43,23 @@ export async function POST(req: NextRequest) {
   const personality = bs.personality ?? []
   const tone = [...new Set(personality.map((p) => TONE_MAP[p] ?? 'Profesional'))]
   const photo = bs.mockup_url || bs.logo_url
-  const direction = bs.direction
-  // Estilo gráfico de marca para los devices/motivos que el modelo genera en la landing:
-  // concept (vibe) + personalidad visual + logoDirection. Solo en el handoff tool-to-tool.
-  const brandStyle = [direction?.concept, personality.join(', '), direction?.logoDirection]
-    .filter(Boolean)
-    .join('. ') || null
+  const eff = bs.style_id ? resolveEffectivePreset(bs) : null
+  // Estilo gráfico para los devices/motivos de la landing.
+  const brandStyle = eff
+    ? [eff.essence, eff.styleBlock, bs.descriptor].filter(Boolean).join('. ')
+    : null
 
   const id = await createLandingSession((await readUserId()) ?? undefined)
   await updateLandingSession(id, {
     product_name: bs.product_name ?? bs.brand_name ?? null,
-    audience: bs.target_audience ?? null,
-    // ponytail: el branding captura vibe, no beneficios; el copy LLM lo completa luego.
-    benefits: bs.brief_notes || direction?.summaryForUser || direction?.concept || null,
+    audience: null, // el brief nuevo no captura público; el copy LLM lo completa.
+    benefits: bs.descriptor || bs.tagline || null,
     price: '',
     tone,
     product_photo_urls: photo ? [photo] : [],
-    palette: direction?.palette ?? null,
-    typography: direction ? { headline: direction.typography.headline, body: direction.typography.body } : null,
+    // paleta del preset → shape de landing {name, hex, usage}
+    palette: eff ? eff.palette.map((c) => ({ name: c.name, hex: c.hex, usage: c.role })) : null,
+    typography: eff ? { headline: eff.typography.primary, body: eff.typography.secondary } : null,
     brand_style: brandStyle,
     selected_sections: DEFAULT_SECTIONS,
     // Para en el paso de IDENTIDAD visual (step 2, F3): el usuario revisa la marca derivada
