@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { callStructured } from '@/lib/gemini'
+import { callStructured, BRANDING_SYSTEM_PROMPT } from '@/lib/gemini'
 import { getBrandingSession } from '@/lib/branding/db'
 import { resolveEffectivePreset } from '@/lib/branding/effective-preset'
 import { paletteToText } from '@/lib/branding/style-presets'
@@ -50,7 +50,13 @@ export async function POST(
     ].join('\n'),
   }]
 
-  const result = await callStructured('branding_templates', TemplatesSchema, parts, 3)
+  let result
+  try {
+    result = await callStructured('branding_templates', TemplatesSchema, parts, 3, BRANDING_SYSTEM_PROMPT)
+  } catch (err) {
+    console.error('[branding-templates]', err)
+    return NextResponse.json({ error: 'No se pudieron generar variaciones' }, { status: 500 })
+  }
   await recordGenQuota(id, 'branding-templates', userId)
   return NextResponse.json(result)
 }
