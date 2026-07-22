@@ -36,6 +36,7 @@ export interface BrandingSessionResponse {
   container_desc: string | null
   container_url: string | null
   mockup_url: string | null
+  mockup_options: string[] | null
   // ── flujo por estilo (refactor 2026-07) ──
   source_mode: 'preset' | 'upload' | null
   style_id: string | null

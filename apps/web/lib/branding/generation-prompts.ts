@@ -183,6 +183,47 @@ export const ARTIFACTS: Record<ArtifactType, ArtifactSpec> = {
 };
 
 /* --------------------------------------------------------------------------
+ * Pipeline compose-first (2026-07): mockup master → derivar etiqueta + logo.
+ * En vez de generar los 3 artefactos por separado (logo perdido/incongruente
+ * con la etiqueta), se genera el MOCKUP COMPUESTO completo (envase con logo Y
+ * etiqueta integrados) primero; el usuario elige una variante; de ESE diseño
+ * se derivan la etiqueta plana y el logo aislado — consistentes entre sí.
+ * ------------------------------------------------------------------------ */
+
+// Master compuesto: mockup fotorrealista con etiqueta Y logo integrados coherentemente.
+// El logo NO debe quedar perdido ni incongruente con la etiqueta.
+export function buildComposedMockupPrompt(brief: BrandBrief, preset: StylePreset): string {
+  const container = brief.containerType ?? "product packaging";
+  return [
+    `Create a photorealistic product mockup: a ${container} for "${brief.brandName}", a ${brief.productType}, with its COMPLETE packaging design fully applied — as one cohesive professional brand system.`,
+    preset.styleBlock,
+    paletteLine(preset, brief),
+    `The packaging must show BOTH elements, integrated coherently as a single deliberate design: (1) a clear brand LOGO / wordmark for "${brief.brandName}" — prominent, legible and well-placed, NOT lost in the artwork and NOT clashing with the label; and (2) the full front label with${brief.descriptor ? ` the descriptor "${brief.descriptor}",` : ""}${brief.tagline ? ` the tagline "${brief.tagline}",` : ""} plus small realistic legal / net-weight / ingredient microtext.`,
+    `Layout & composition: ${preset.composition}. Materials & finish: ${preset.materials.join(", ")}.`,
+    `Studio product photography: ${preset.lighting}. Mood: ${preset.mood.join(", ")}. Realistic reflections, soft contact shadow, believable depth of field.`,
+    exactText("brand name on the packaging", brief.brandName).trim(),
+    tail(preset, brief),
+  ].filter(Boolean).join(" ");
+}
+
+// Derivación: se pasa el mockup compuesto como imagen a generateImage + este texto.
+// NO usar editWithPrompt (su framing "cambio mínimo pixel-idéntico" pelea con una transformación).
+export function labelFromMockupPrompt(brief: BrandBrief): string {
+  return [
+    `The attached image is a product mockup. Reproduce its FRONT LABEL as standalone FLAT 2D artwork:`,
+    `exactly the printed label panel seen on the packaging — same logo, brand name "${brief.brandName}", colors, typography, graphics and text hierarchy — but rendered front-on and flattened,`,
+    `with NO 3D packaging, NO perspective, NO product body, NO background scene. Just the flat label design filling the frame, print-ready. Keep every visible word spelled exactly as on the mockup.`,
+  ].join(" ");
+}
+export function logoFromMockupPrompt(brief: BrandBrief): string {
+  return [
+    `The attached image is a product mockup. Extract and reproduce ONLY the brand LOGO / wordmark for "${brief.brandName}"`,
+    `exactly as it appears on the packaging — same letterforms, weight, colors and mark — as a clean, isolated, high-resolution logo`,
+    `centered on a plain solid white/neutral background with generous margins. No packaging, no product, no scenery, no extra text — just the logo, crisp and reusable.`,
+  ].join(" ");
+}
+
+/* --------------------------------------------------------------------------
  * API del flujo
  * ------------------------------------------------------------------------ */
 
