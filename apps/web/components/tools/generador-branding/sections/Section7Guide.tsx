@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useBrandingStore } from '@/store/branding'
+import { STYLE_PRESETS } from '@/lib/branding/style-presets'
 
 async function downloadImage(url: string, filename: string) {
   try {
@@ -15,12 +16,20 @@ async function downloadImage(url: string, filename: string) {
   } catch { window.open(url, '_blank') }
 }
 
-export default function Section6Guide() {
-  const { sessionId, brandName, direction, logoUrl, labelUrl, mockupUrl, startNewSession } = useBrandingStore()
+// Guía de marca final: muestra logo/etiqueta/mockup + la paleta y tipografía
+// EFECTIVAS (elegidas en el paso 3, o si no, las del estilo/producto extraído).
+export default function Section7Guide() {
+  const {
+    sessionId, brandName, tagline, sourceMode, styleId, imageAnalysis,
+    selectedPalette, selectedTypography, logoUrl, labelUrl, mockupUrl, startNewSession,
+  } = useBrandingStore()
   const router = useRouter()
   const [landingLoading, setLandingLoading] = useState(false)
 
-  if (!direction) return null
+  if (!styleId) return null
+  const preset = STYLE_PRESETS[styleId]
+  const palette = selectedPalette ?? (sourceMode === 'upload' && imageAnalysis ? imageAnalysis.palette : preset.palette)
+  const typography = selectedTypography ?? (sourceMode === 'upload' && imageAnalysis ? imageAnalysis.typography : preset.typography)
   const slug = (brandName ?? 'marca').toLowerCase().replace(/\s+/g, '-')
 
   async function createLanding() {
@@ -47,6 +56,7 @@ export default function Section6Guide() {
     <div className="flex flex-col gap-2">
       <p className="text-[10px] font-bold uppercase tracking-widest text-[#8a8a8a]">{label}</p>
       <div className="relative rounded-2xl overflow-hidden border border-white/[0.08] group">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={url} alt={label} className="w-full object-contain bg-[#0f0f0f]" />
         <button
           onClick={() => downloadImage(url, file)}
@@ -63,7 +73,7 @@ export default function Section6Guide() {
       <div>
         <p className="text-[10px] font-bold uppercase tracking-widest text-[#8a8a8a] mb-1">Guía de marca</p>
         <h2 className="text-[22px] font-bold text-[#f5f5f5]">{brandName}</h2>
-        <p className="text-[13px] text-[#bdbdbd] mt-1">{direction.concept}</p>
+        <p className="text-[13px] text-[#bdbdbd] mt-1">{tagline || preset.essence}</p>
       </div>
 
       {mockupUrl && <Asset url={mockupUrl} label="Producto final" file={`${slug}-mockup.png`} />}
@@ -74,7 +84,7 @@ export default function Section6Guide() {
       <div>
         <p className="text-[10px] font-bold uppercase tracking-widest text-[#8a8a8a] mb-2">Paleta de colores</p>
         <div className="grid grid-cols-2 gap-2">
-          {direction.palette.map((c) => (
+          {palette.map((c) => (
             <div key={c.hex} className="flex items-center gap-2.5 rounded-xl border border-white/[0.06] p-2">
               <div className="w-8 h-8 rounded-lg border border-white/[0.12] shrink-0" style={{ backgroundColor: c.hex }} />
               <div className="min-w-0">
@@ -96,8 +106,8 @@ export default function Section6Guide() {
       <div>
         <p className="text-[10px] font-bold uppercase tracking-widest text-[#8a8a8a] mb-2">Tipografía</p>
         <div className="rounded-xl border border-white/[0.06] p-3 flex flex-col gap-1">
-          <p className="text-[13px] text-[#f5f5f5]"><span className="font-semibold">Titulares:</span> {direction.typography.headline}</p>
-          <p className="text-[13px] text-[#f5f5f5]"><span className="font-semibold">Cuerpo:</span> {direction.typography.body}</p>
+          <p className="text-[13px] text-[#f5f5f5]"><span className="font-semibold">Titulares:</span> {typography.primary}</p>
+          <p className="text-[13px] text-[#f5f5f5]"><span className="font-semibold">Cuerpo:</span> {typography.secondary}</p>
         </div>
       </div>
 

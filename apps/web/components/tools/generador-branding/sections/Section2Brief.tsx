@@ -3,17 +3,11 @@
 import { useState } from 'react'
 import { useBrandingStore } from '@/store/branding'
 import { FieldGroup } from '@/components/tools/ui/FieldGroup'
-import { ChipGroup } from '@/components/tools/ui/ChipGroup'
 
 const btnPrimary =
   'rounded-xl jr-cta text-[13px] font-bold disabled:opacity-40 transition-all duration-200 cursor-pointer border-0 font-sans flex items-center justify-center gap-2'
 
-const PERSONALITY_OPTIONS = [
-  'Premium', 'Natural', 'Divertido', 'Minimalista', 'Cálido',
-  'Moderno', 'Artesanal', 'Confiable', 'Juvenil', 'Elegante', 'Atrevido',
-]
-
-// Control segmentado de 2 opciones (mismo look que los tabs de Section5).
+// Control segmentado de 2 opciones (mismo look que los tabs de otras secciones).
 function Toggle({ value, onChange, yes, no }: { value: boolean; onChange: (v: boolean) => void; yes: string; no: string }) {
   const btn = (active: boolean, label: string, v: boolean) => (
     <button
@@ -55,12 +49,12 @@ function Suggestions({ names, onPick }: { names: string[]; onPick: (n: string) =
   )
 }
 
-export default function Section1Brief() {
-  const { sessionId, setBrief, setDirection } = useBrandingStore()
-  const [productCategory, setProductCategory] = useState('')
-  const [targetAudience, setTargetAudience] = useState('')
-  const [personality, setPersonality] = useState<string[]>([])
-  const [briefNotes, setBriefNotes] = useState('')
+export default function Section2Brief({ maxStep }: { maxStep: number }) {
+  const { sessionId, setBrief } = useBrandingStore()
+  const [productType, setProductType] = useState('')
+  const [descriptor, setDescriptor] = useState('')
+  const [tagline, setTagline] = useState('')
+  const [containerType, setContainerType] = useState('')
 
   const [hasBrand, setHasBrand] = useState(true)
   const [brandName, setBrandName] = useState('')
@@ -68,17 +62,16 @@ export default function Section1Brief() {
 
   const [hasProductName, setHasProductName] = useState(true)
   const [productName, setProductName] = useState('')
-  const [nameIdea, setNameIdea] = useState('')
   const [productNames, setProductNames] = useState<string[]>([])
 
   const [suggesting, setSuggesting] = useState<'brand' | 'product' | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const canSubmit = brandName.trim() && productName.trim() && productCategory.trim() && !loading
+  const canSubmit = brandName.trim() && productName.trim() && productType.trim() && !loading
 
   async function suggest(kind: 'brand' | 'product') {
-    if (!sessionId || !productCategory.trim() || suggesting) return
+    if (!sessionId || !productType.trim() || suggesting) return
     setSuggesting(kind)
     setError(null)
     try {
@@ -87,10 +80,7 @@ export default function Section1Brief() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           kind,
-          category: productCategory,
-          audience: targetAudience,
-          personality,
-          idea: kind === 'product' ? nameIdea : undefined,
+          category: productType,
           brandName: kind === 'product' ? brandName : undefined,
         }),
       })
@@ -110,16 +100,30 @@ export default function Section1Brief() {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/generador-branding/sessions/${sessionId}/direction`, {
-        method: 'POST',
+      const data = {
+        brand_name: brandName.trim(),
+        product_name: productName.trim(),
+        product_type: productType.trim(),
+        descriptor: descriptor.trim(),
+        tagline: tagline.trim(),
+        container_type: containerType.trim(),
+      }
+      const res = await fetch(`/api/generador-branding/sessions/${sessionId}`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ brandName, productName, productCategory, targetAudience, personality, briefNotes }),
+        // El step persistido nunca regresa (high-water mark) — ver nota en BrandingWizard.
+        body: JSON.stringify({ ...data, step: Math.max(maxStep, 2) }),
       })
-      const data = (await res.json()) as { direction?: unknown; error?: string }
-      if (!res.ok) throw new Error(data.error ?? 'Error al generar la dirección')
-      setBrief({ brandName, productName, productCategory, targetAudience, personality, briefNotes })
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      setDirection(data.direction as any)
+      const resData = (await res.json()) as { error?: string }
+      if (!res.ok) throw new Error(resData.error ?? 'Error al guardar el brief')
+      setBrief({
+        brandName: data.brand_name,
+        productName: data.product_name,
+        productType: data.product_type,
+        descriptor: data.descriptor,
+        tagline: data.tagline,
+        containerType: data.container_type,
+      })
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -130,18 +134,13 @@ export default function Section1Brief() {
   return (
     <div className="flex flex-col gap-4">
       <p className="text-[13px] text-[#bdbdbd]">
-        Cuéntanos lo básico de tu negocio. Con esto definimos el rumbo visual antes de generar nada.
+        Cuéntanos lo básico de tu marca y tu producto. Con esto generamos el logo, la etiqueta y el mockup.
       </p>
 
       <FieldGroup
-        type="input" id="productCategory" label="¿Qué producto vendes?" required
-        placeholder="Ej: gomitas de fruta, café orgánico, jabones artesanales"
-        value={productCategory} onChange={setProductCategory}
-      />
-      <FieldGroup
-        type="input" id="targetAudience" label="¿Para quién es?" helper="(opcional)"
-        placeholder="Ej: jóvenes fitness, mamás, oficinistas"
-        value={targetAudience} onChange={setTargetAudience}
+        type="input" id="productType" label="¿Qué producto vendes?" required
+        placeholder="Ej: sérum facial, café en grano, gomitas de fruta"
+        value={productType} onChange={setProductType}
       />
 
       {/* Marca: ¿ya tiene una? */}
@@ -162,7 +161,7 @@ export default function Section1Brief() {
               value={brandName} onChange={setBrandName}
             />
             <button
-              type="button" onClick={() => suggest('brand')} disabled={!productCategory.trim() || suggesting === 'brand'}
+              type="button" onClick={() => suggest('brand')} disabled={!productType.trim() || suggesting === 'brand'}
               className="h-9 px-3 self-start rounded-xl border border-white/[0.14] text-[#f5f5f5] text-[12px] font-medium hover:bg-white/[0.05] transition-colors cursor-pointer bg-transparent disabled:opacity-40 flex items-center gap-2"
             >
               {suggesting === 'brand' ? '✦ Pensando...' : brandNames.length ? '↻ Otras opciones' : '✦ Sugerir nombres de marca'}
@@ -185,17 +184,12 @@ export default function Section1Brief() {
         ) : (
           <div className="flex flex-col gap-2">
             <FieldGroup
-              type="input" id="nameIdea" label="¿Tienes una idea del tipo de nombre?" helper="(opcional)"
-              placeholder="Ej: algo con la fruta, divertido, en quechua..."
-              value={nameIdea} onChange={setNameIdea}
-            />
-            <FieldGroup
               type="input" id="productName" label="Nombre del producto elegido" required
               placeholder="Elige una sugerencia o escríbela"
               value={productName} onChange={setProductName}
             />
             <button
-              type="button" onClick={() => suggest('product')} disabled={!productCategory.trim() || suggesting === 'product'}
+              type="button" onClick={() => suggest('product')} disabled={!productType.trim() || suggesting === 'product'}
               className="h-9 px-3 self-start rounded-xl border border-white/[0.14] text-[#f5f5f5] text-[12px] font-medium hover:bg-white/[0.05] transition-colors cursor-pointer bg-transparent disabled:opacity-40 flex items-center gap-2"
             >
               {suggesting === 'product' ? '✦ Pensando...' : productNames.length ? '↻ Otras opciones' : '✦ Sugerir nombres'}
@@ -205,23 +199,20 @@ export default function Section1Brief() {
         )}
       </div>
 
-      <div className="flex flex-col gap-2">
-        <label className="text-[13px] font-semibold text-[#f5f5f5]">
-          Personalidad de la marca <span className="text-[#8a8a8a] font-normal ml-1.5">(elige las que apliquen)</span>
-        </label>
-        <ChipGroup
-          options={PERSONALITY_OPTIONS}
-          selected={personality}
-          multi
-          onChange={(v) => setPersonality(v as string[])}
-        />
-      </div>
-
       <FieldGroup
-        type="textarea" id="briefNotes" label="Algo más que debamos saber" helper="(opcional)"
-        placeholder="Colores que te gustan, referencias, lo que quieras transmitir..."
-        rows={2}
-        value={briefNotes} onChange={setBriefNotes}
+        type="input" id="descriptor" label="Posicionamiento / claim corto" helper="(opcional)"
+        placeholder="Ej: hidratación 24h, tueste artesanal"
+        value={descriptor} onChange={setDescriptor}
+      />
+      <FieldGroup
+        type="input" id="tagline" label="Tagline" helper="(opcional)"
+        placeholder="Ej: Despierta renovada"
+        value={tagline} onChange={setTagline}
+      />
+      <FieldGroup
+        type="input" id="containerType" label="Tipo de envase" helper="(opcional)"
+        placeholder="Ej: frasco con gotero, doypack, caja, tubo"
+        value={containerType} onChange={setContainerType}
       />
 
       {error && (
@@ -232,10 +223,10 @@ export default function Section1Brief() {
         {loading ? (
           <>
             <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-            Definiendo dirección...
+            Guardando...
           </>
         ) : (
-          'Crear dirección de marca'
+          'Continuar →'
         )}
       </button>
     </div>

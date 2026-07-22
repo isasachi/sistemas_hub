@@ -4,28 +4,19 @@ import { useRef, useState } from 'react'
 import { Check } from 'lucide-react'
 import { useBrandingStore } from '@/store/branding'
 import { SSEStatus } from '@/components/tools/ui/SSEStatus'
-import { FileUpload } from '@/components/tools/ui/FileUpload'
 import { RegenControls } from '@/components/tools/ui/RegenControls'
 
 const btnPrimary =
   'rounded-xl jr-cta text-[13px] font-bold disabled:opacity-40 transition-all duration-200 cursor-pointer border-0 font-sans flex items-center justify-center gap-2'
 
-export default function Section3Logo() {
-  const { sessionId, logoOptions, logoUrl, setLogoOptions, setLogoReference, selectLogo, regens, setRegen } = useBrandingStore()
+export default function Section4Logo() {
+  const { sessionId, logoOptions, logoUrl, setLogoOptions, selectLogo, regens, setRegen } = useBrandingStore()
   const [generating, setGenerating] = useState(false)
-  const [saving, setSaving] = useState(false)
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [picking, setPicking] = useState<string | null>(null)
-  const [refFile, setRefFile] = useState<File | null>(null)
-  const [refPreview, setRefPreview] = useState<string | null>(null)
   const [prompt, setPrompt] = useState('')
   const sseKey = useRef(0)
-
-  function onRefFile(f: File) {
-    setRefFile(f)
-    setRefPreview(URL.createObjectURL(f))
-  }
 
   function handleEvent(e: { status: string; images?: string[]; message?: string; done?: number; total?: number; regensLeft?: number }) {
     if (e.status === 'progress' && typeof e.done === 'number' && typeof e.total === 'number') {
@@ -42,31 +33,13 @@ export default function Section3Logo() {
     }
   }
 
-  // Sube la referencia (si hay nueva) — el backend la analiza una vez — y dispara
-  // el SSE de generación. La imagen cruda NO se reusa al generar: solo sus patrones.
-  async function generate() {
-    if (!sessionId || saving || generating) return
+  function generate() {
+    if (!sessionId || generating) return
     setError(null)
     setProgress(null)
     setLogoOptions([])
-    setSaving(true)
-    try {
-      if (refFile) {
-        const fd = new FormData()
-        fd.append('reference', refFile)
-        const res = await fetch(`/api/generador-branding/sessions/${sessionId}/logo-reference`, { method: 'POST', body: fd })
-        const data = (await res.json()) as { referenceUrl?: string; error?: string }
-        if (!res.ok) throw new Error(data.error ?? 'No se pudo subir la referencia')
-        setLogoReference(data.referenceUrl ?? null)
-        setRefFile(null)
-      }
-      setGenerating(true)
-      sseKey.current += 1
-    } catch (err) {
-      setError((err as Error).message)
-    } finally {
-      setSaving(false)
-    }
+    setGenerating(true)
+    sseKey.current += 1
   }
 
   async function pick(url: string) {
@@ -94,18 +67,8 @@ export default function Section3Logo() {
   return (
     <div className="flex flex-col gap-4">
       <p className="text-[13px] text-[#bdbdbd]">
-        Generamos varias opciones a partir de tu dirección. Elige la que más te guste.
+        Generamos varias opciones de logo fieles a tu estilo y paleta. Elige la que más te guste.
       </p>
-
-      <div className="flex flex-col gap-2">
-        <label className="text-[13px] font-semibold text-[#f5f5f5]">
-          Logo de referencia <span className="text-[#8a8a8a] font-normal ml-1.5">(opcional)</span>
-        </label>
-        <p className="text-[12px] text-[#8a8a8a]">
-          Ahora ve a Pinterest y busca el producto que quieres vender (ej: gomitas de creatina). Sube aquí un logo que te guste: aprendemos sus patrones, formas y espacios —no lo copiamos literal.
-        </p>
-        <FileUpload label="Sube un logo de referencia" onFile={onRefFile} preview={refPreview} variant="ghost" />
-      </div>
 
       {generating && (
         <>
@@ -173,19 +136,14 @@ export default function Section3Logo() {
             prompt={prompt}
             onPromptChange={setPrompt}
             onRegenerate={generate}
-            busy={saving || generating}
+            busy={generating}
           />
         </>
       )}
 
       {!generating && logoOptions.length === 0 && (
-        <button onClick={generate} disabled={saving} className={btnPrimary + ' h-11 w-full'}>
-          {saving ? (
-            <>
-              <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              Preparando...
-            </>
-          ) : 'Generar logos'}
+        <button onClick={generate} className={btnPrimary + ' h-11 w-full'}>
+          Generar logos
         </button>
       )}
     </div>
