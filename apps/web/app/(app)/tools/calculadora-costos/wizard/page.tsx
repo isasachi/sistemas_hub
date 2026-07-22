@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import ToolShell from "@/components/tools/ui/ToolShell";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
 import {
   calcular,
@@ -83,6 +83,7 @@ function Field({
 }
 
 function CalculadoraWizard() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<CalcInputs>(structuredClone(DEFAULTS.leads));
@@ -128,6 +129,18 @@ function CalculadoraWizard() {
     setForm(structuredClone(DEFAULTS[f]));
     setTouched(new Set());
     setStep(1);
+  }
+
+  // Reinicia el wizard de cero: descarta la sesión guardada (calcId + ?sesion=)
+  // y vuelve a los defaults del primer funnel. Clickeable en cualquier paso.
+  function resetSession() {
+    setForm(structuredClone(DEFAULTS.leads));
+    setTouched(new Set());
+    setStep(0);
+    setCalcId(null);
+    setExporting(false);
+    setExportError(null);
+    router.replace("/tools/calculadora-costos/wizard");
   }
 
   // Helper para construir un campo del paso (toma path absoluto del form).
@@ -334,7 +347,7 @@ function CalculadoraWizard() {
   }, [isLast, ready]);
 
   return (
-    <ToolShell name="Calculadora de Costos" slug="calculadora-costos" trail="Sesión">
+    <ToolShell name="Calculadora de Costos" slug="calculadora-costos" trail="Sesión" onReset={resetSession}>
       <div className="flex flex-1 min-h-0">
         {/* Panel de preguntas */}
         <div className="flex-1 px-12 py-10 border-r border-white/[0.06] overflow-y-auto">
