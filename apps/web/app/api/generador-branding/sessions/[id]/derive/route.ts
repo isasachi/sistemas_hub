@@ -40,9 +40,9 @@ export async function POST(
     const brief = sessionBrief(session)
     const userId = await readUserId()
 
-    const deriveOne = async (kind: 'logo' | 'label'): Promise<{ url: string } | { error: Response }> => {
+    const deriveOne = async (kind: 'logo' | 'label'): Promise<{ url: string; regensLeft: number | null } | { error: Response }> => {
       const quotaKind = kind === 'logo' ? 'branding-logo' : 'branding-label'
-      const { blocked } = await checkGenQuota(id, quotaKind)
+      const { blocked, regensLeft } = await checkGenQuota(id, quotaKind)
       if (blocked) return { error: blocked }
 
       const { data, mimeType } = await fetchAsBase64(srcUrl)
@@ -58,7 +58,7 @@ export async function POST(
       const url = await uploadToStorage(id, Buffer.from(b64, 'base64'), 'image/png', `mockup-derived-${kind}`)
       await updateBrandingSession(id, kind === 'logo' ? { logo_url: url } : { label_url: url })
       await recordGenQuota(id, quotaKind, userId)
-      return { url }
+      return { url, regensLeft }
     }
 
     if (target === 'both') {
@@ -74,7 +74,7 @@ export async function POST(
 
     const result = await deriveOne(target)
     if ('error' in result) return result.error
-    return NextResponse.json(target === 'logo' ? { logoUrl: result.url } : { labelUrl: result.url })
+    return NextResponse.json(target === 'logo' ? { logoUrl: result.url, regensLeft: result.regensLeft } : { labelUrl: result.url, regensLeft: result.regensLeft })
   } catch (err) {
     return NextResponse.json({ error: String(err), retryable: true }, { status: 500 })
   }

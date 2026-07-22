@@ -182,7 +182,7 @@ export default function BrandingWizard() {
         {/* 4 — Marca (compose→elegir→derivar) */}
         <AccordionSection
           index={4}
-          title="Tu marca"
+          title="Logo, etiqueta y mockup"
           status={getStatus(3, step, maxStep.current)}
           summary={mockupUrl ? 'Marca lista' : undefined}
           onReopen={() => setStep(3)}

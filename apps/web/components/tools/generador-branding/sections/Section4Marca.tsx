@@ -107,10 +107,16 @@ export default function Section4Marca({ onGuide }: { onGuide: () => void }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ target, prompt: precision.trim() || undefined }),
       })
-      const data = (await res.json()) as { logoUrl?: string; labelUrl?: string; error?: string }
+      const data = (await res.json()) as { logoUrl?: string; labelUrl?: string; regensLeft?: number; error?: string }
       if (!res.ok) throw new Error(data.error ?? `No se pudo regenerar ${target === 'logo' ? 'el logo' : 'la etiqueta'}`)
-      if (target === 'logo' && data.logoUrl) setLogo(data.logoUrl)
-      if (target === 'label' && data.labelUrl) setLabel(data.labelUrl)
+      if (target === 'logo' && data.logoUrl) {
+        setLogo(data.logoUrl)
+        if (typeof data.regensLeft === 'number') setRegen('branding-logo', data.regensLeft)
+      }
+      if (target === 'label' && data.labelUrl) {
+        setLabel(data.labelUrl)
+        if (typeof data.regensLeft === 'number') setRegen('branding-label', data.regensLeft)
+      }
     } catch (err) {
       setError((err as Error).message)
     } finally {
