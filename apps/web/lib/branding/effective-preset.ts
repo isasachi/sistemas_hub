@@ -9,11 +9,16 @@ import type { Part } from '@google/genai'
 const STORAGE_BASE = () =>
   `${(process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL)!}/storage/v1/object/public/ad-uploads/branding-refs`
 
-/** Las 5 URLs de Storage de las refs del estilo. [0] es el thumbnail del picker. */
+/** Las 5 URLs de Storage de las refs del estilo (siguen adjuntándose a Gemini como style refs). */
 export function refUrls(styleId: string): string[] {
   const folder = getPreset(styleId).referenceFolder
   const files = REF_MANIFEST[folder] ?? []
   return files.map((f) => `${STORAGE_BASE()}/${folder}/${f}`)
+}
+
+/** Thumbnail generado (original, sin riesgo de copyright) para el picker. */
+export function thumbUrl(styleId: string): string {
+  return `${(process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL)!}/storage/v1/object/public/ad-uploads/branding-refs/thumbnails/${styleId}.png`
 }
 
 /**

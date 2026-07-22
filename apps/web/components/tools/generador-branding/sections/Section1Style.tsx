@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Upload } from 'lucide-react'
 import { STYLE_LIST } from '@/lib/branding/style-presets'
-import { refUrls } from '@/lib/branding/effective-preset'
+import { thumbUrl } from '@/lib/branding/effective-preset'
 import type { PaletteColor, Typography } from '@/lib/branding/style-presets'
 
 export interface AnalyzeResult {
@@ -91,7 +91,7 @@ export default function Section1Style({
               className="group rounded-xl overflow-hidden border border-white/[0.08] hover:border-[rgba(255,156,77,0.5)] text-left transition-colors cursor-pointer bg-[#141414]"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={refUrls(p.id)[0]} alt={p.name} className="aspect-square w-full object-cover" loading="lazy" />
+              <img src={thumbUrl(p.id)} alt={p.name} className="aspect-square w-full object-cover" loading="lazy" />
               <div className="p-2.5">
                 <div className="text-[12px] font-semibold text-[#f5f5f5]">{p.name}</div>
                 <div className="text-[11px] text-[#8a8a8a] line-clamp-2">{p.essence}</div>
