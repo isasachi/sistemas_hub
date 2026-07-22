@@ -98,18 +98,21 @@ function CalculadoraWizard() {
 
   // Reanudar por ?sesion=<id>: carga los inputs guardados y salta a resultados.
   useEffect(() => {
+    let cancelled = false;
     const sid = searchParams.get("sesion");
     if (!sid) { setReady(true); return; }
     fetch(`/api/calculadora-costos/sessions/${sid}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
+        if (cancelled) return;
         if (d?.inputs) {
           setForm(d.inputs);
           setCalcId(sid);
           setStep(999); // clamp al último paso (resultados)
         }
       })
-      .finally(() => setReady(true));
+      .finally(() => { if (!cancelled) setReady(true); });
+    return () => { cancelled = true; };
   }, [searchParams]);
 
   function set(path: string, val: number) {
