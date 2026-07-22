@@ -76,7 +76,16 @@ export default function BrandingWizard() {
   // Math.max(maxStep.current, N) — igual que hace `select-logo` server-side.
   async function onStyleChosen(id: string) {
     if (!sessionId) return
-    await patchSession(sessionId, { source_mode: 'preset', style_id: id, step: Math.max(maxStep.current, 1) })
+    // Limpia selected_palette/selected_typography: si el usuario ya había elegido
+    // paleta (de este preset, de otro, o del modo upload), la fila queda pisando el
+    // nuevo estilo vía resolveEffectivePreset si no se resetea acá.
+    await patchSession(sessionId, {
+      source_mode: 'preset',
+      style_id: id,
+      selected_palette: null,
+      selected_typography: null,
+      step: Math.max(maxStep.current, 1),
+    })
     setStyle({ sourceMode: 'preset', styleId: id })
   }
 

@@ -14,7 +14,9 @@ const btnPrimary =
 export default function Section5Label({ onUse }: { onUse: (url: string) => void }) {
   const { sessionId, labelUrl, regens, setRegen } = useBrandingStore()
   const [generating, setGenerating] = useState(false)
-  const [result, setResult] = useState<string | null>(null)
+  // Si la sección se reabre (remount) y ya hay una etiqueta generada en la sesión,
+  // mostrarla en vez de forzar otra generación pagada de Gemini.
+  const [result, setResult] = useState<string | null>(labelUrl)
   const [error, setError] = useState<string | null>(null)
   const [prompt, setPrompt] = useState('')
 

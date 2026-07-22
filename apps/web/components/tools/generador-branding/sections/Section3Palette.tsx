@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useBrandingStore } from '@/store/branding'
 import { STYLE_PRESETS } from '@/lib/branding/style-presets'
 import type { PaletteColor, Typography } from '@/lib/branding/style-presets'
 
@@ -19,15 +20,26 @@ export default function Section3Palette({
   extracted: { palette: PaletteColor[]; typography: Typography } | null
   onChosen: (sel: { selectedPalette: PaletteColor[] | null; selectedTypography: Typography | null }) => void
 }) {
-  const [templates, setTemplates] = useState<Template[] | null>(null)
+  const { paletteTemplates, setPaletteTemplates } = useBrandingStore()
+  const [templates, setTemplates] = useState<Template[] | null>(paletteTemplates)
   const [error, setError] = useState<string | null>(null)
   const original = extracted ?? { palette: STYLE_PRESETS[styleId].palette, typography: STYLE_PRESETS[styleId].typography }
 
+  // Cachea en el store: reabrir esta sección (remount por AccordionSection) no debe
+  // volver a llamar a Gemini si ya tenemos las variaciones de esta sesión.
   useEffect(() => {
+    if (paletteTemplates !== null) return
     fetch(`/api/generador-branding/sessions/${sessionId}/templates`, { method: 'POST' })
-      .then((r) => (r.ok ? r.json() : { templates: [] }))
-      .then((d) => setTemplates(d.templates ?? []))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const t = d?.templates ?? []
+        setTemplates(t)
+        // Solo cachea un éxito real — un !r.ok (ej. quota bloqueada) no debe
+        // dejar la sección varada sin variaciones por el resto de la sesión.
+        if (d) setPaletteTemplates(t)
+      })
       .catch(() => { setTemplates([]); setError('No se pudieron generar variaciones') })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId])
 
   function Card({ label, palette, typography, isDefault }: { label: string; palette: PaletteColor[]; typography: Typography; isDefault?: boolean }) {

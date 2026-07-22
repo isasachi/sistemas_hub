@@ -15,6 +15,9 @@ export const SESSION_KEY = 'branding_session_id'
 // ExtractedStyle completo — estructuralmente asignable acá, no hace falta el tipo entero.
 type ExtractedStyleUi = { palette: PaletteColor[]; typography: Typography }
 
+// Plantilla de paleta/tipografía sugerida por el LLM en el paso 3 (Section3Palette).
+type PaletteTemplate = { label: string; palette: PaletteColor[]; typography: Typography }
+
 interface BrandingState {
   sessionId: string | null
   sessionError: boolean
@@ -34,6 +37,9 @@ interface BrandingState {
   // paleta/tipo elegidas (null = default del estilo)
   selectedPalette: PaletteColor[] | null
   selectedTypography: Typography | null
+  // plantillas sugeridas por el LLM en el paso 3, cacheadas por sesión para no
+  // re-quemar la llamada a Gemini cada vez que se reabre la sección (remount)
+  paletteTemplates: PaletteTemplate[] | null
   // resultados
   logoOptions: string[]
   logoUrl: string | null
@@ -62,6 +68,7 @@ interface BrandingActions {
     containerType: string
   }) => void
   setPaletteChoice: (data: { selectedPalette: PaletteColor[] | null; selectedTypography: Typography | null }) => void
+  setPaletteTemplates: (templates: PaletteTemplate[]) => void
   setLogoOptions: (logoOptions: string[]) => void
   selectLogo: (logoUrl: string) => void
   setLabel: (labelUrl: string) => void
@@ -88,6 +95,7 @@ const initialState: BrandingState = {
   containerType: null,
   selectedPalette: null,
   selectedTypography: null,
+  paletteTemplates: null,
   logoOptions: [],
   logoUrl: null,
   labelUrl: null,
@@ -100,9 +108,15 @@ export const useBrandingStore = create<BrandingState & BrandingActions>((set) =>
 
   setStep: (step) => set({ step }),
 
-  setStyle: ({ sourceMode, styleId }) => set({ sourceMode, styleId, step: 1 }),
+  // Al (re)elegir un preset se descarta cualquier paleta/tipo elegidos antes (ej. de
+  // un preset previo o de modo upload) — si no, `resolveEffectivePreset` sigue
+  // aplicando la paleta abandonada sobre el nuevo estilo.
+  setStyle: ({ sourceMode, styleId }) =>
+    set({ sourceMode, styleId, selectedPalette: null, selectedTypography: null, paletteTemplates: null, step: 1 }),
 
   // Modo B (upload): analyze ya devolvió estilo + paleta/tipo del producto real.
+  // paletteTemplates también se limpia: son sugerencias del LLM atadas al estilo/
+  // paleta anteriores, ya no aplican al nuevo análisis.
   setUploaded: ({ styleId, uploadedImageUrl, imageAnalysis, selectedPalette, selectedTypography }) =>
     set({
       sourceMode: 'upload',
@@ -111,6 +125,7 @@ export const useBrandingStore = create<BrandingState & BrandingActions>((set) =>
       imageAnalysis,
       selectedPalette,
       selectedTypography,
+      paletteTemplates: null,
       step: 1,
     }),
 
@@ -119,6 +134,8 @@ export const useBrandingStore = create<BrandingState & BrandingActions>((set) =>
 
   setPaletteChoice: ({ selectedPalette, selectedTypography }) =>
     set({ selectedPalette, selectedTypography, step: 3 }),
+
+  setPaletteTemplates: (paletteTemplates) => set({ paletteTemplates }),
 
   setLogoOptions: (logoOptions) => set({ logoOptions }),
 

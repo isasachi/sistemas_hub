@@ -14,7 +14,9 @@ const btnPrimary =
 export default function Section6Mockup({ onUse }: { onUse: (url: string) => void }) {
   const { sessionId, mockupUrl, regens, setRegen } = useBrandingStore()
   const [generating, setGenerating] = useState(false)
-  const [result, setResult] = useState<string | null>(null)
+  // Si la sección se reabre (remount) y ya hay un mockup generado en la sesión,
+  // mostrarlo en vez de forzar otra generación pagada de Gemini.
+  const [result, setResult] = useState<string | null>(mockupUrl)
   const [error, setError] = useState<string | null>(null)
   const [prompt, setPrompt] = useState('')
 
