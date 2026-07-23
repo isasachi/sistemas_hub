@@ -66,7 +66,6 @@ function build(section: SectionType, extra: Partial<Parameters<typeof buildDiffu
     dna: DNA,
     productLabels: null,
     hasTalent: true,
-    attrBandOrientation: 'horizontal',
     ...extra,
   })
 }
@@ -248,7 +247,7 @@ describe('buildDiffusionInstruction — DNA-driven (spec 2026-07-23)', () => {
   it('renderiza los campos de copy nuevos cuando están presentes', () => {
     const out = buildDiffusionInstruction({
       section: 'cta-final', copy: { type: 'cta-final', headline: 'H', ctaHeadline: 'PIDE EL TUYO', ctaSub: 'ya' },
-      dna: DNA, productLabels: null, hasTalent: false, attrBandOrientation: 'horizontal',
+      dna: DNA, productLabels: null, hasTalent: false,
     })
     expect(out).toContain('PIDE EL TUYO')
   })
@@ -256,7 +255,7 @@ describe('buildDiffusionInstruction — DNA-driven (spec 2026-07-23)', () => {
   it('partículas OFF cuando dna.particles_on es false', () => {
     const out = buildDiffusionInstruction({
       section: 'hero', copy: copyFor('hero'), dna: { ...DNA, particles_on: false },
-      productLabels: null, hasTalent: true, attrBandOrientation: 'horizontal',
+      productLabels: null, hasTalent: true,
     })
     expect(out).toContain('SIN partículas')
     // no debe quedar un remanente contradictorio de otra capa diciendo lo contrario

@@ -29,6 +29,11 @@ describe('contrato landing (spec 2026-07-23)', () => {
       expect(SECTION_SPEC_KEY[s]).toBeTruthy()
     }
   })
+  it('SECTION_REF apunta al prefijo de plantillas', () => {
+    // El prefijo `landing-templates/` lo agrega la ruta al construir la URL; SECTION_REF
+    // sigue siendo solo el filename (Task 4).
+    expect(SECTION_REF.hero).toBe('hero_problem.png')
+  })
   it('NicheClassification rechaza niche fuera del set', () => {
     expect(NicheClassification.safeParse({ niche_id: 'inventado', demographic_id: 'no_talent', confidence: 0.9, reasoning: 'x' }).success).toBe(false)
   })

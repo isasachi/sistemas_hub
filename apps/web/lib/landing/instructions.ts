@@ -253,9 +253,6 @@ export function buildDiffusionInstruction(args: {
   hasTalent: boolean            // false solo si demographic_id === 'no_talent'
   talentSubstitute?: string     // NO_TALENT_SUBSTITUTE[niche] cuando !hasTalent
   reserveLockup?: boolean
-  // Ya NO consumido acá: la banda de atributos (Z3) la lleva la plantilla adjunta, no el prompt.
-  // Se mantiene en la firma porque la ruta del section endpoint aún la pasa (Task 4 la retira).
-  attrBandOrientation: 'horizontal' | 'vertical' | 'grid_2x2'
 }): string {
   const { section, copy, dna, productLabels, offer, trust, packUnits, hasTalent, talentSubstitute, reserveLockup } = args
 

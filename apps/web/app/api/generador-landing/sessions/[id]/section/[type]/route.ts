@@ -36,20 +36,6 @@ export const maxDuration = 60 // path source = gen imagen (~15s); cabe en 60s (V
 // código muerto — typography-catalog.ts sigue vivo por buildTheme/fonts.ts, ver task-10-report.md).
 const DEFAULT_TYPE_PAIR: TypePairId = 'dr-conversion'
 
-// Orientación de la banda de 4 atributos (Z3, spec §3.4): mapa fijo por sección para romper
-// monotonía entre secciones del mismo funnel — el contenido de los atributos no cambia, la
-// disposición sí.
-const ATTR_BAND_ORIENTATION: Record<SectionType, 'horizontal' | 'vertical' | 'grid_2x2'> = {
-  hero: 'horizontal',
-  beneficios: 'grid_2x2',
-  'antes-despues': 'horizontal',
-  testimonios: 'vertical',
-  faq: 'grid_2x2',
-  garantia: 'horizontal',
-  oferta: 'horizontal',
-  'cta-final': 'horizontal',
-}
-
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string; type: string }> }) {
   const { id, type } = await params
 
@@ -114,7 +100,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // 1) producto canónico (o pack multi-unidad) — Imagen 1.
     // 2) fotos reales del producto — ground-truth de labels.
     // 3) retrato del talento, si esta campaña lo tiene — penúltima.
-    // 4) referencia de composición de ESTA sección — ÚLTIMA (solo apoyo, mutable).
+    // 4) plantilla curada de composición de ESTA sección — ÚLTIMA (fuente de verdad de
+    //    estructura; fetch fail-safe, ver comentario junto al try/catch más abajo).
     const parts: Part[] = []
     let packUnits: number | null = null
     if (session.product_canonical_url) {
@@ -133,22 +120,25 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     const hasTalent = session.demographic_id !== 'no_talent' && !!session.talent_canonical_url
-    // faq/testimonios NUNCA llevan al protagonista (ajuste post-smoke): no se adjunta su retrato.
+    // faq/testimonios/garantia/cta-final NUNCA llevan al protagonista (NO_TALENT_SECTIONS,
+    // ampliado en Task 3 con el motor plantilla-como-scaffold): no se adjunta su retrato.
     const showProtagonist = hasTalent && !NO_TALENT_SECTIONS.has(parsedType.data)
     if (showProtagonist) {
       const talent = await fetchAsBase64(session.talent_canonical_url!)
       parts.push({ inlineData: { mimeType: talent.mimeType, data: talent.data } })
     }
 
-    // Ref de composición (última): SOLO apoyo de zonas/anatomía, mutable — un fallo al traerla
-    // NUNCA debe tumbar la generación completa (la instrucción de texto sola ya especifica el
-    // layout entero); se loguea y se continúa sin ella.
+    // Plantilla curada de composición (última, Task 4: prefijo landing-templates/, reemplaza
+    // a las viejas landing-refs/ del motor DNA) — AHORA es la fuente de verdad de estructura
+    // (zonas, anatomía de cards, encuadre), ver templateNote() en instructions.ts. Igual se
+    // trata como fetch fail-safe: un fallo al traerla NUNCA debe tumbar la generación completa
+    // (se loguea y se continúa sin ella, con peor fidelidad de layout pero sin 502).
     try {
-      const refUrl = storagePublicUrl(`landing-refs/${SECTION_REF[parsedType.data]}`)
+      const refUrl = storagePublicUrl(`landing-templates/${SECTION_REF[parsedType.data]}`)
       const ref = await fetchAsBase64(refUrl)
       parts.push({ inlineData: { mimeType: ref.mimeType, data: ref.data } })
     } catch (err) {
-      console.warn('[landing-section] ref de composición no disponible, se continúa sin ella', err)
+      console.warn('[landing-section] plantilla de composición no disponible, se continúa sin ella', err)
     }
 
     const talentSubstitute = !hasTalent
@@ -169,7 +159,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         hasTalent,
         talentSubstitute,
         reserveLockup: !!lockup,
-        attrBandOrientation: ATTR_BAND_ORIENTATION[parsedType.data],
       }),
     })
     b64 = await generateImage(parts, 3, { aspectRatio: '9:16' })

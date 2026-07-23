@@ -85,8 +85,9 @@ export const LandingDnaSchema = z.object({
 })
 export type LandingDna = z.infer<typeof LandingDnaSchema>
 
-// Puente slug interno ↔ lenguaje del spec + archivo de ref de composición en Storage
-// (bucket ad-uploads, prefijo landing-refs/, subidas por scripts/seed-landing-refs.ts).
+// Puente slug interno ↔ lenguaje del spec + archivo de plantilla curada en Storage
+// (bucket ad-uploads, prefijo landing-templates/, subidas por scripts/seed-landing-templates.ts;
+// Task 4 — reemplaza al viejo landing-refs/ del motor DNA, ver seed-landing-templates.ts).
 export const SECTION_SPEC_KEY: Record<SectionType, string> = {
   hero: 'hero_problem', beneficios: 'benefits', 'antes-despues': 'before_after',
   testimonios: 'testimonials', faq: 'faq', garantia: 'guarantee',
