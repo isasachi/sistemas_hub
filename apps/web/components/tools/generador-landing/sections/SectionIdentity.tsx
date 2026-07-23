@@ -35,6 +35,8 @@ export default function SectionIdentity() {
   const [nicheOpen, setNicheOpen] = useState(false)
   // Aviso de cambio de nicho (spec Paso 3): nicho candidato mientras se confirma la advertencia.
   const [pendingNiche, setPendingNiche] = useState<NicheId | null>(null)
+  // Mismo aviso para demografía: también invalida landing_dna (model_persona/poses derivan de ella).
+  const [pendingDemo, setPendingDemo] = useState<DemographicId | null>(null)
 
   const [editing, setEditing] = useState(!landingDna)
   const [saving, setSaving] = useState(false)
@@ -73,7 +75,27 @@ export default function SectionIdentity() {
   }
   function cancelNicheChange() { setPendingNiche(null) }
 
-  // Paso 3: persiste (PUT), extrae el ADN si hace falta (POST) y genera el talento (POST).
+  // Paso 2b: mismo flujo de advertencia para la demografía — también invalida el ADN (el retrato
+  // de talento y las poses dependen de ella), así que amerita la misma pausa de confirmación.
+  function pickDemo(d: DemographicId) {
+    const risky = !!demographicId && d !== demographicId && sections.length > 0
+    if (risky) { setPendingDemo(d); return }
+    setSelDemo(d)
+    setPendingDemo(null)
+  }
+  function confirmDemoChange() {
+    if (!pendingDemo) return
+    setSelDemo(pendingDemo)
+    setPendingDemo(null)
+  }
+  function cancelDemoChange() { setPendingDemo(null) }
+
+  // Paso 3: persiste (PUT), extrae el ADN si hace falta (POST) y genera el talento SOLO si hace
+  // falta (POST) — nunca incondicional: regenerar el retrato sin motivo rompe "misma persona en
+  // las 8 secciones" (nueva cara sobre secciones ya generadas con la anterior) y gasta una gen de
+  // imagen de balde. El PUT devuelve nicheChanged/demographicChanged: si cambió algo, el server ya
+  // nulificó landing_dna (nueva persona → hay que regenerar el retrato); si no cambió nada,
+  // landing_dna se reusa (idempotente) y el retrato existente sigue siendo válido.
   async function confirmAndExtract() {
     if (!sessionId || !selNiche || !selDemo || saving) return
     setSaving(true)
@@ -84,12 +106,21 @@ export default function SectionIdentity() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ niche_id: selNiche, demographic_id: selDemo }),
       })
-      const putData = (await putRes.json()) as { landing_dna?: LandingDna | null; error?: string }
+      const putData = (await putRes.json()) as {
+        landing_dna?: LandingDna | null
+        nicheChanged?: boolean
+        demographicChanged?: boolean
+        error?: string
+      }
       if (!putRes.ok) throw new Error(putData.error ?? 'No se pudo guardar la identidad')
       setNicheId(selNiche)
       setDemographicId(selDemo)
       let dna = putData.landing_dna ?? null
       setLandingDna(dna)
+
+      const changed = !!putData.nicheChanged || !!putData.demographicChanged
+      // Limpia la cara vieja de inmediato para que la UI no la muestre mientras se regenera.
+      if (changed) setTalentUrl(null)
 
       if (!dna) {
         const extractRes = await fetch(`/api/generador-landing/sessions/${sessionId}/brand`, { method: 'POST' })
@@ -99,10 +130,14 @@ export default function SectionIdentity() {
         setLandingDna(dna)
       }
 
-      const talentRes = await fetch(`/api/generador-landing/sessions/${sessionId}/talent`, { method: 'POST' })
-      const talentData = (await talentRes.json()) as { talentUrl?: string | null; error?: string }
-      if (!talentRes.ok) throw new Error(talentData.error ?? 'No se pudo generar el talento')
-      setTalentUrl(talentData.talentUrl ?? null)
+      // Solo regenera el talento si algo cambió (nueva persona requerida) o si aún no existe
+      // retrato (primera confirmación). Si nada cambió y ya hay retrato, se reusa tal cual.
+      if (changed || !talentUrl) {
+        const talentRes = await fetch(`/api/generador-landing/sessions/${sessionId}/talent`, { method: 'POST' })
+        const talentData = (await talentRes.json()) as { talentUrl?: string | null; error?: string }
+        if (!talentRes.ok) throw new Error(talentData.error ?? 'No se pudo generar el talento')
+        setTalentUrl(talentData.talentUrl ?? null)
+      }
 
       setEditing(false)
     } catch (e) {
@@ -199,14 +234,28 @@ export default function SectionIdentity() {
       {/* Demografía — siempre editable, default = valor actual o el del nicho */}
       <div className="flex flex-col gap-1.5">
         <span className={lbl}>Demografía del comprador</span>
-        <select value={activeDemo} onChange={(e) => setSelDemo(DemographicId.parse(e.target.value))} className={field}>
+        <select
+          value={pendingDemo ?? activeDemo}
+          onChange={(e) => pickDemo(DemographicId.parse(e.target.value))}
+          className={field}
+        >
           {DemographicId.options.map((d) => <option key={d} value={d}>{DEMOGRAPHIC_LABELS[d]}</option>)}
         </select>
       </div>
 
+      {pendingDemo && (
+        <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-[12px] text-amber-300 flex flex-col gap-2">
+          <p>Ya generaste secciones con la demografía anterior. Cambiar de demografía invalidará la persona y las poses del talento — vas a tener que regenerar desde la sección ancla.</p>
+          <div className="flex gap-2">
+            <button type="button" onClick={confirmDemoChange} className={btnGhost}>Sí, cambiar de demografía</button>
+            <button type="button" onClick={cancelDemoChange} className={btnGhost}>Cancelar</button>
+          </div>
+        </div>
+      )}
+
       {error && <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-[12px] text-red-400">{error}</div>}
 
-      <button onClick={confirmAndExtract} disabled={saving || !selNiche || !!pendingNiche} className={btnPrimary}>
+      <button onClick={confirmAndExtract} disabled={saving || !selNiche || !!pendingNiche || !!pendingDemo} className={btnPrimary}>
         {saving ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Confirmando…</> : 'Confirmar identidad visual'}
       </button>
     </div>
