@@ -40,10 +40,12 @@ export async function POST(
     const brief = sessionBrief(session)
     const userId = await readUserId()
 
-    const deriveOne = async (kind: 'logo' | 'label'): Promise<{ url: string; regensLeft: number | null } | { error: Response }> => {
+    type DeriveOk = { ok: true; url: string; regensLeft: number | null }
+    type DeriveErr = { ok: false; message: string; status: number; blocked?: Response }
+    const deriveOne = async (kind: 'logo' | 'label'): Promise<DeriveOk | DeriveErr> => {
       const quotaKind = kind === 'logo' ? 'branding-logo' : 'branding-label'
       const { blocked, regensLeft } = await checkGenQuota(id, quotaKind)
-      if (blocked) return { error: blocked }
+      if (blocked) return { ok: false, message: 'quota', status: 429, blocked }
 
       const { data, mimeType } = await fetchAsBase64(srcUrl)
       const prompt = kind === 'label' ? labelFromMockupPrompt(brief) : logoFromMockupPrompt(brief)
@@ -53,27 +55,40 @@ export async function POST(
       if (precision) parts.push({ text: `Ajuste solicitado (priorízalo): ${precision}` })
 
       const b64 = await generateImage(parts, 3, { aspectRatio })
-      if (!b64) return { error: NextResponse.json({ error: `No se pudo derivar ${kind === 'logo' ? 'el logo' : 'la etiqueta'}`, retryable: true }, { status: 502 }) }
+      if (!b64) return { ok: false, message: `No se pudo derivar ${kind === 'logo' ? 'el logo' : 'la etiqueta'}`, status: 502 }
 
       const url = await uploadToStorage(id, Buffer.from(b64, 'base64'), 'image/png', `mockup-derived-${kind}`)
       await updateBrandingSession(id, kind === 'logo' ? { logo_url: url } : { label_url: url })
       await recordGenQuota(id, quotaKind, userId)
-      return { url, regensLeft }
+      return { ok: true, url, regensLeft }
     }
 
     if (target === 'both') {
-      await updateBrandingSession(id, { mockup_url: srcUrl, step: Math.max(session.step, 3) })
+      // Fija el mockup elegido (la llamada cara) + avanza; luego deriva en PARALELO.
+      await updateBrandingSession(id, { mockup_url: srcUrl, generation_status: 'deriving', generation_error: null, step: Math.max(session.step, 2) })
 
-      const logoResult = await deriveOne('logo')
-      if ('error' in logoResult) return logoResult.error
-      const labelResult = await deriveOne('label')
-      if ('error' in labelResult) return labelResult.error
+      // Promise.all: label y logo son independientes → paralelo (~40% menos tiempo).
+      const [logoR, labelR] = await Promise.all([deriveOne('logo'), deriveOne('label')])
 
-      return NextResponse.json({ logoUrl: logoResult.url, labelUrl: labelResult.url, mockupUrl: srcUrl })
+      // Fallo parcial (8.3): NUNCA se tira el mockup. Se presenta lo que salió y se
+      // ofrece reintento por artefacto. 'done' solo si ambos derivados existen.
+      const bothOk = logoR.ok && labelR.ok
+      const status: 'done' | 'deriving' | 'failed' = bothOk ? 'done' : (!logoR.ok && !labelR.ok ? 'failed' : 'deriving')
+      await updateBrandingSession(id, {
+        generation_status: status,
+        generation_error: bothOk ? null : [!logoR.ok ? 'logo' : '', !labelR.ok ? 'etiqueta' : ''].filter(Boolean).join(' + ') + ' falló',
+      })
+      return NextResponse.json({
+        mockupUrl: srcUrl,
+        logoUrl: logoR.ok ? logoR.url : null,
+        labelUrl: labelR.ok ? labelR.url : null,
+        errors: { logo: logoR.ok ? null : logoR.message, label: labelR.ok ? null : labelR.message },
+      })
     }
 
     const result = await deriveOne(target)
-    if ('error' in result) return result.error
+    if (!result.ok) return result.blocked ?? NextResponse.json({ error: result.message, retryable: true }, { status: result.status })
+    // regen individual: si ya existen ambos derivados, el estado sigue 'done'
     return NextResponse.json(target === 'logo' ? { logoUrl: result.url, regensLeft: result.regensLeft } : { labelUrl: result.url, regensLeft: result.regensLeft })
   } catch (err) {
     return NextResponse.json({ error: String(err), retryable: true }, { status: 500 })
