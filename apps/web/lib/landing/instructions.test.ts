@@ -122,30 +122,30 @@ describe('buildDiffusionInstruction — DNA-driven (spec 2026-07-23)', () => {
     const faq = build('faq', { hasTalent: true })
     expect(faq).toContain('NO lleva persona alguna')
     expect(faq).not.toContain(DNA.model_persona)
-    expect(faq).toContain('No hay imagen de talento adjunta') // nota de composición no promete retrato
+    expect(faq).toContain('No hay imagen de talento adjunta') // nota de plantilla no promete retrato
     const testi = build('testimonios', { hasTalent: true })
-    expect(testi).toContain('CLIENTES de las tarjetas de testimonio')
+    expect(testi).toContain('CLIENTES de las tarjetas')
     expect(testi).not.toContain(DNA.model_persona)
   })
 
-  it('nota de referencia de composición: presente, marcada apoyo/mutable, subordinada a la instrucción', () => {
+  it('nota de plantilla: presente, marcada fuente de verdad de estructura, subordinada al resto de la instrucción', () => {
     const out = build('hero')
-    expect(out).toContain('REFERENCIA DE COMPOSICIÓN')
-    expect(out).toContain('solo apoyo, MUTABLE')
-    expect(out).toContain('Manda esta instrucción, no la imagen')
+    expect(out).toContain('PLANTILLA DE COMPOSICIÓN')
+    expect(out).toContain('fuente de verdad de estructura')
+    expect(out).toContain('La ESTRUCTURA manda la plantilla')
   })
 
   it('hasTalent:false — la nota nombra el sustituto y NO reintroduce persona', () => {
     const out = build('hero', { hasTalent: false, talentSubstitute: 'El dispositivo en uso, en contexto real, a escala humana' })
     expect(out).toContain('El dispositivo en uso, en contexto real, a escala humana')
-    expect(out).toContain('NO debe reintroducir a ninguna persona')
+    expect(out).toContain('NO reintroduzcas ninguna persona')
     expect(out).not.toContain('CAMPAIGN TALENT')
     expect(out).not.toContain(DNA.model_persona)
   })
 
-  it('no_talent: no nombra persona en ningún lugar del prompt, usa el sustituto en MASTER_LAYOUT', () => {
+  it('no_talent: no nombra persona en ningún lugar del prompt, usa el sustituto en CONTENIDO DE CARRILES', () => {
     const out = build('beneficios', { hasTalent: false, talentSubstitute: 'Mano y antebrazo en acción sobre la superficie, sin rostro' })
-    expect(out).toContain('Sin talento humano en este producto')
+    expect(out).toContain('Sin talento humano: el carril lo ocupa el sustituto')
     expect(out).toContain('Mano y antebrazo en acción sobre la superficie, sin rostro')
     expect(out).not.toContain(DNA.model_persona)
   })
@@ -230,5 +230,36 @@ describe('buildDiffusionInstruction — DNA-driven (spec 2026-07-23)', () => {
       expect(out).toContain('ACNE-HEADLINE-XYZ')
       expect(out).toContain('Compra Ya')
     }
+  })
+
+  it('NO_TALENT_SECTIONS incluye garantia y cta-final (corrección contra plantillas)', () => {
+    expect(NO_TALENT_SECTIONS.has('garantia')).toBe(true)
+    expect(NO_TALENT_SECTIONS.has('cta-final')).toBe(true)
+    expect(NO_TALENT_SECTIONS.has('oferta')).toBe(false)
+  })
+
+  it('el prompt ordena seguir la composición de la plantilla adjunta (no describe zonas Z1–Z6)', () => {
+    const out = build('hero')
+    expect(out).toContain('PLANTILLA DE COMPOSICIÓN')
+    expect(out).toContain('reproduce EXACTAMENTE su composición')
+    expect(out).not.toContain('Z1 (0-22%)') // el texto de zonas se eliminó
+  })
+
+  it('renderiza los campos de copy nuevos cuando están presentes', () => {
+    const out = buildDiffusionInstruction({
+      section: 'cta-final', copy: { type: 'cta-final', headline: 'H', ctaHeadline: 'PIDE EL TUYO', ctaSub: 'ya' },
+      dna: DNA, productLabels: null, hasTalent: false, attrBandOrientation: 'horizontal',
+    })
+    expect(out).toContain('PIDE EL TUYO')
+  })
+
+  it('partículas OFF cuando dna.particles_on es false', () => {
+    const out = buildDiffusionInstruction({
+      section: 'hero', copy: copyFor('hero'), dna: { ...DNA, particles_on: false },
+      productLabels: null, hasTalent: true, attrBandOrientation: 'horizontal',
+    })
+    expect(out).toContain('SIN partículas')
+    // no debe quedar un remanente contradictorio de otra capa diciendo lo contrario
+    expect(out).not.toContain('Siempre presentes')
   })
 })

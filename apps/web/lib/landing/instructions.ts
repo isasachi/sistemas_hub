@@ -6,18 +6,25 @@ import { SECTION_SPEC_KEY } from './types'
 // El ADN (`LandingDna`, extraído UNA vez por sesión en el step previo 0.b) reemplaza a la marca
 // derivada/paleta suelta del motor viejo: paleta por fórmula, partículas, props, tipografía,
 // halo, persona y poses ya vienen resueltos y se inyectan literales, sin recalcularlos acá.
-// Capas ensambladas en orden (spec): BRAND → DESIGN_SYSTEM → MASTER_LAYOUT → SECTION_SPECS →
-// Copy → TEXT_RULES → referencias adjuntas (nota de composición).
+// Capas ensambladas en orden (spec): BRAND → DESIGN_SYSTEM → CONTENIDO DE CARRILES →
+// SECTION_SPECS → Copy → TEXT_RULES → referencias adjuntas (nota de plantilla).
+// Motor plantilla-como-scaffold (2026-07-23 cont.): la composición (zonas Z1-Z6, anatomía de
+// cards, carriles) ya NO se describe en texto — la lleva la última imagen adjunta (plantilla
+// curada por sección). El prompt solo inyecta lo que la plantilla no puede saber: talento/
+// sustituto, props del nicho y partículas on/off (ver `masterLayoutBlock`/`templateNote`).
 //
 // Filosofía (spec 2026-07-23): las secciones llevan talento (o su sustituto) Y producto Y props.
-// EXCEPCIÓN (ajuste 2026-07-23 post-smoke): `faq` y `testimonios` NUNCA llevan al talento/
-// protagonista de la campaña (`NO_TALENT_SECTIONS`) — faq no lleva persona alguna; testimonios
-// solo muestra clientes distintos en sus tarjetas, no al protagonista.
+// EXCEPCIÓN (ajuste 2026-07-23 post-smoke; ampliada motor-plantilla): `faq`, `testimonios`,
+// `garantia` y `cta-final` NUNCA llevan al talento/protagonista de la campaña
+// (`NO_TALENT_SECTIONS`) — las plantillas curadas de esas 4 secciones no reservan carril de
+// persona; faq/garantia/cta-final no llevan persona alguna, testimonios solo muestra clientes
+// distintos en sus tarjetas, no al protagonista.
 
-// Secciones que NUNCA muestran al talento/protagonista de la campaña (ajuste post-smoke). No es
-// el `no_talent` del nicho (sin gente): acá el nicho puede tener talento, pero ESTAS secciones no
-// lo usan. `testimonios` sí muestra clientes (caras distintas) en sus cards; `faq` no lleva persona.
-export const NO_TALENT_SECTIONS: Set<SectionType> = new Set(['faq', 'testimonios'])
+// Secciones que NUNCA muestran al talento/protagonista de la campaña (contrato fijado por la
+// plantilla adjunta, no por el nicho). No es el `no_talent` del nicho (sin gente): acá el nicho
+// puede tener talento, pero ESTAS secciones no lo usan. `testimonios` sí muestra clientes (caras
+// distintas) en sus cards; `faq`/`garantia`/`cta-final` no llevan persona alguna.
+export const NO_TALENT_SECTIONS: Set<SectionType> = new Set(['faq', 'testimonios', 'garantia', 'cta-final'])
 
 function copyBlock(copy: SectionCopy): string {
   const lines: string[] = [`Headline: "${copy.headline}".`]
@@ -31,6 +38,11 @@ function copyBlock(copy: SectionCopy): string {
   if (copy.cards?.length)
     lines.push(`Cards:\n${copy.cards.map((c) => `  - "${c.title}": "${c.body}"`).join('\n')}`)
   if (copy.cta) lines.push(`Call-to-action button label: "${copy.cta}".`)
+  if (copy.kicker) lines.push(`Kicker (subtítulo dorado con guiones laterales "— TEXTO —"): "${copy.kicker}".`)
+  if (copy.closingBold) lines.push(`Closing card — frase bold: "${copy.closingBold}"${copy.closingSub ? `; subcopy: "${copy.closingSub}"` : ''}.`)
+  if (copy.closingStrip) lines.push(`Franja de cierre inferior (mayúsculas, reemplaza la barra de confianza): "${copy.closingStrip}".`)
+  if (copy.socialProof) lines.push(`Banda de prueba social (con escudo): "${copy.socialProof}".`)
+  if (copy.ctaHeadline) lines.push(`Bloque CTA — titular en mayúsculas: "${copy.ctaHeadline}"${copy.ctaSub ? `; subcopy: "${copy.ctaSub}"` : ''}.`)
   return lines.join('\n')
 }
 
@@ -57,13 +69,16 @@ function brandBlock(productLabels: string | null): string {
 // ─── Capa 3 — DESIGN_SYSTEM (spec §2) ────────────────────────────────────────
 // Paleta aplicada POR ROL (nunca "elige un color bonito"): cada token del ADN tiene un uso fijo.
 // El oro (#B8860B→#F5D372) y el precio tachado (#D93025) son invariantes, no salen de `dna`.
+// NOTA (motor plantilla-como-scaffold, desviación deliberada del brief): la línea de partículas
+// que vivía acá se retiró — `masterLayoutBlock` es ahora el ÚNICO emisor de la instrucción de
+// partículas (on/off vía `dna.particles_on`). Dejarla acá duplicada contradecía el caso OFF: el
+// prompt decía "Siempre presentes" (esta capa) Y "SIN partículas" (masterLayoutBlock) a la vez.
 function designSystemBlock(dna: LandingDna): string {
   const p: PaletteTokens = dna.palette
   return [
     'DESIGN_SYSTEM —',
     `Fondo: degradado vertical/diagonal suave de ${p.bg_start} (superior) a ${p.bg_end} (inferior). Nunca fondo plano, nunca blanco puro.`,
     `Halo: ${dna.halo}, detrás del talento (o de su sustituto).${dna.halo === 'none' ? ' La separación figura-fondo se resuelve solo con el degradado y la profundidad.' : ''} Constante en todo el funnel.`,
-    `Partículas: ${dna.particle_type}, densidad ${dna.particle_density}. Siempre presentes, coherentes con el nicho y con los props (${dna.props.join(', ')}). En el aire, sin invadir zonas de texto.`,
     'Base (invariante): superficie reflectante en el borde inferior donde el envase proyecta reflejo vertical difuso.',
     'Profundidad (invariante): tres planos — fondo atmosférico, talento, producto + props en primer plano. Ligera profundidad de campo en el fondo.',
     `Paleta aplicada por ROL: titular base en ${p.color_headline}; palabra destacada del titular en ${p.color_accent}; cuerpo de texto en ${p.color_body}; superficie de card en ${p.color_surface} al 75-85% de opacidad; iconos en ${p.color_icon.join(', ')} (uno por atributo).`,
@@ -75,37 +90,33 @@ function designSystemBlock(dna: LandingDna): string {
   ].join('\n')
 }
 
-// ─── Capa 4 — MASTER_LAYOUT (spec §3) ────────────────────────────────────────
-// Toda sección lleva talento (o su sustituto) Y producto Y props — sin ramas de supresión.
+// ─── Capa 4 — CONTENIDO DE CARRILES (spec §3, motor plantilla-como-scaffold) ─
+// La composición (zonas, carriles, anatomía de cards) la lleva la PLANTILLA adjunta (ver
+// `templateNote`): este bloque ya NO la describe. Solo cubre lo que la plantilla NO puede saber:
+// quién ocupa el carril de talento (persona/sustituto/ninguno), qué props del nicho lleva el
+// producto (excluyendo los de otro nicho aunque la plantilla los muestre) y si van partículas.
 function masterLayoutBlock(
   dna: LandingDna,
   section: SectionType,
   hasTalent: boolean,
   talentSubstitute: string | undefined,
-  attrBandOrientation: 'horizontal' | 'vertical' | 'grid_2x2',
 ): string {
   const pose = dna.poses[section] ?? ''
-  // `faq`/`testimonios` nunca llevan al protagonista (ajuste post-smoke), aunque el nicho tenga
-  // talento — distinto del sustituto del nicho `no_talent`.
   const talentText = NO_TALENT_SECTIONS.has(section)
     ? section === 'testimonios'
-      ? 'Talento: esta sección NO muestra al talento/protagonista de la campaña. Las ÚNICAS personas son los CLIENTES de las tarjetas de testimonio (rostros DISTINTOS entre sí, gente común peruana), según el módulo central. El/la protagonista de la campaña NO aparece en ningún lugar.'
-      : 'Talento: esta sección NO lleva persona alguna — ni el/la protagonista de la campaña ni ningún otro rostro o silueta humana. El carril derecho lo ocupan el producto, sus props y la atmósfera.'
+      ? 'Talento: esta sección NO muestra al protagonista de la campaña. Las únicas personas son los CLIENTES de las tarjetas (rostros DISTINTOS, gente común peruana).'
+      : 'Talento: esta sección NO lleva persona alguna. El carril lo ocupan el producto, sus props y la atmósfera.'
     : hasTalent
-    ? `Persona (invariante entre secciones de un mismo producto): ${dna.model_persona}. Misma cara, mismo pelo, misma ropa, mismos accesorios en las piezas con protagonista. Pose de ESTA sección (distinta a las demás, no se repite en el funnel): ${pose}.`
-    : `Sin talento humano en este producto: el carril derecho lo ocupa el sustituto — "${talentSubstitute}" — con las mismas reglas de carril, sangrado y no-invasión del texto. No renderizar ninguna persona, rostro ni silueta humana en ningún lugar de la imagen.`
-  const hasLogisticsBand = section === 'oferta' || section === 'garantia' || section === 'cta-final'
-  const logisticsLine = hasLogisticsBand
-    ? 'Banda logística (Z4, 80-92%: envíos, plazo, contraentrega, pago seguro) y métodos de pago + sello de garantía (Z5, 92-97%): SÍ aplican en esta sección.'
-    : 'Banda logística (Z4) y métodos de pago (Z5): NO aplican en esta sección — Z2 y Z3 se expanden; nunca queda aire muerto en el pie.'
+    ? `Persona (misma en todas las secciones con protagonista): ${dna.model_persona}. Pose de ESTA sección (variable, no se repite): ${pose}.`
+    : `Sin talento humano: el carril lo ocupa el sustituto — "${talentSubstitute}" — sin renderizar ninguna persona/rostro/silueta.`
+  const particles = dna.particles_on
+    ? `Partículas: ${dna.particle_type}, densidad ${dna.particle_density}, coherentes con el nicho y los props. En el aire, sin invadir texto.`
+    : 'SIN partículas de fondo en este nicho — el fondo queda limpio, solo el degradado re-tintado.'
   return [
-    'MASTER_LAYOUT — lienzo 9:16, full-bleed, sin márgenes blancos.',
-    'Carril de texto: 55-60% izquierdo — todo el copy y todas las cards viven ahí. Carril de talento: 35-45% derecho.',
+    'CONTENIDO DE CARRILES (lo que la plantilla no puede saber; la composición la manda la plantilla adjunta):',
     talentText,
-    'Encuadre por defecto del carril de talento: sangra por el borde derecho y superior, corte a la altura del pecho (right_bleed). El talento (o su sustituto) NUNCA compite con el copy ni lo tapa — se mantiene en su carril.',
-    `Producto (invariante): cuadrante inferior derecho, superpuesto parcialmente sobre el talento/sustituto, con reflejo en la base. Props orbitando el envase, a escala realista, apoyados en la base con sombra de contacto, siempre derivados del producto real (nunca decorativos genéricos): ${dna.props.join(', ')}. El envase debe ser legible; su etiqueta es texto crítico, no textura.`,
-    `Zonas verticales: Z1 (0-22%) titular + subtítulo — en TODAS las secciones. Z2 (22-68%) módulo central (ver SECTION_SPECS) — en TODAS. Z3 banda de 4 atributos fijos en estructura (icono coloreado + título uppercase bold + descriptor de 1 línea) — en TODAS, orientación ${attrBandOrientation} (la orientación varía entre secciones para romper monotonía; el contenido no). Z6 (97-100%) micro-cierre centrado sobre banda de color — en TODAS.`,
-    logisticsLine,
+    `Producto (invariante): en su slot de la plantilla, con reflejo en la base. Props derivados del nicho, apoyados con sombra de contacto: ${dna.props.join(', ')}. SOLO estos props — no agregues objetos de otro nicho (p. ej. moléculas/cápsulas fuera de suplementos) aunque la plantilla los muestre.`,
+    particles,
   ].join('\n')
 }
 
@@ -142,20 +153,21 @@ const TEXT_RULES = [
   'Disciplina de texto: todo texto visible sale ÚNICAMENTE del copy de abajo + lo impreso en el producto — nunca renderices vocabulario de esta instrucción (nombres de capas, "ADN", "invariante", códigos hex, nombres de fuente) como si fuera copy de la pieza.',
 ].join('\n')
 
-// ─── Capa 8 — Referencias adjuntas / nota de composición ────────────────────
+// ─── Capa 8 — Referencias adjuntas / nota de plantilla ──────────────────────
 // Alineada con el contrato de orden de parts[] de la ruta (Task 9): producto canónico → fotos
-// reales → talento (si hay) → ref de composición (última, MUTABLE). La ref manda solo zonas/
-// anatomía; la instrucción manda todo lo demás — y si la instrucción no trae persona/props, la
-// ref NO puede reintroducirlos.
-function compositionRefNote(talentImageAttached: boolean): string {
+// reales → talento (si hay) → plantilla de composición (última). A diferencia del motor viejo,
+// la plantilla es ahora la FUENTE DE VERDAD de estructura (no un "apoyo mutable"): manda zonas,
+// anatomía de cards, encuadre y tratamiento. Lo que cambia respecto a ella lo dice el resto de la
+// instrucción (producto, cara del talento, copy, re-tinte de color, props/partículas del nicho).
+function templateNote(talentImageAttached: boolean): string {
   const persona = talentImageAttached
-    ? 'Penúltima = retrato del talento (misma persona: cara, pelo, ropa, accesorios idénticos).'
-    : 'No hay imagen de talento adjunta; la referencia de composición NO debe reintroducir a ninguna persona que la instrucción no pida.'
+    ? 'Penúltima = retrato del talento (misma persona: cara, pelo, ropa idénticos).'
+    : 'No hay imagen de talento adjunta; NO reintroduzcas ninguna persona que la instrucción no pida.'
   return [
     'REFERENCIAS ADJUNTAS (orden) —',
-    'Imagen 1 = envase canónico (fidelidad exacta de forma y labels). Imagen(es) siguientes = fotos reales del producto.',
+    'Imagen 1 = envase canónico (fidelidad EXACTA de forma y labels). Siguientes = fotos reales del producto.',
     persona,
-    'ÚLTIMA = REFERENCIA DE COMPOSICIÓN (solo apoyo, MUTABLE): toma de ella la distribución de zonas y la anatomía de la sección, nada más. Manda esta instrucción, no la imagen — NO copies su producto, rostro, marca, textos ni colores. Y si la instrucción no incluye persona (usa el sustituto en el carril derecho) o no incluye props, NO los agregues aunque la ref los muestre: reacomoda el carril a lo que la instrucción sí pide.',
+    'ÚLTIMA = PLANTILLA DE COMPOSICIÓN (fuente de verdad de estructura): reproduce EXACTAMENTE su composición, distribución de zonas, anatomía de tarjetas, encuadre y tratamiento. La ESTRUCTURA manda la plantilla. Cambia SOLO lo que esta instrucción indica: producto, cara del talento, copy, re-tinte de color, props/partículas del nicho. NO copies de la plantilla su producto, marca, textos, ni props/persona de otro nicho.',
   ].join('\n')
 }
 
@@ -241,26 +253,29 @@ export function buildDiffusionInstruction(args: {
   hasTalent: boolean            // false solo si demographic_id === 'no_talent'
   talentSubstitute?: string     // NO_TALENT_SUBSTITUTE[niche] cuando !hasTalent
   reserveLockup?: boolean
+  // Ya NO consumido acá: la banda de atributos (Z3) la lleva la plantilla adjunta, no el prompt.
+  // Se mantiene en la firma porque la ruta del section endpoint aún la pasa (Task 4 la retira).
   attrBandOrientation: 'horizontal' | 'vertical' | 'grid_2x2'
 }): string {
-  const { section, copy, dna, productLabels, offer, trust, packUnits, hasTalent, talentSubstitute, reserveLockup, attrBandOrientation } = args
+  const { section, copy, dna, productLabels, offer, trust, packUnits, hasTalent, talentSubstitute, reserveLockup } = args
 
   // El talento/protagonista se muestra solo si el nicho lo tiene Y la sección no está en
-  // NO_TALENT_SECTIONS (faq/testimonios). Determina si se adjunta el retrato (nota de composición).
+  // NO_TALENT_SECTIONS (faq/testimonios/garantia/cta-final). Determina si se adjunta el retrato
+  // (nota de plantilla).
   const talentImageAttached = hasTalent && !NO_TALENT_SECTIONS.has(section)
 
   const base = [
-    'Diseña una única SECCIÓN de landing-page vertical como una sola imagen de alta resolución, formato retrato 9:16 full-bleed (sin márgenes blancos), fotografía de producto comercial premium, mobile-first.',
+    'Diseña UNA sección de landing 9:16 full-bleed, calidad de anuncio comercial premium, mobile-first. La ÚLTIMA imagen adjunta es la PLANTILLA DE COMPOSICIÓN — reproduce EXACTAMENTE su composición y estructura; esta instrucción solo cambia producto, talento, copy, colores y props del nicho.',
     brandBlock(productLabels),
     designSystemBlock(dna),
-    masterLayoutBlock(dna, section, hasTalent, talentSubstitute, attrBandOrientation),
+    masterLayoutBlock(dna, section, hasTalent, talentSubstitute),
     sectionSpecBlock(section),
     '',
     'Copy a renderizar (y SOLO este copy):',
     copyBlock(copy),
     '',
     TEXT_RULES,
-    compositionRefNote(talentImageAttached),
+    templateNote(talentImageAttached),
   ]
 
   const extra: string[] = []
