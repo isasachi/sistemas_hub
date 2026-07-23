@@ -1,7 +1,7 @@
 'use client'
 
 import { create } from 'zustand'
-import type { SectionType, SectionCopy, LandingSection, LandingSessionResponse, DerivedBrand, TrustBlock, Offer } from '@/lib/landing/types'
+import type { SectionType, SectionCopy, LandingSection, LandingSessionResponse, NicheId, DemographicId, LandingDna, TrustBlock, Offer } from '@/lib/landing/types'
 
 export const SESSION_KEY = 'landing_session_id'
 
@@ -22,7 +22,9 @@ interface LandingState {
   tone: string[]
   productLabels: string | null
   productPhotoUrls: string[]
-  derivedBrand: DerivedBrand | null
+  nicheId: NicheId | null
+  demographicId: DemographicId | null
+  landingDna: LandingDna | null
   talentUrl: string | null
   trustBlock: TrustBlock | null
   offer: Offer | null
@@ -36,7 +38,9 @@ interface LandingActions {
   setStep: (step: number) => void
   setDetails: (data: { productName: string; price: string; benefits: string; audience: string; tone: string[]; productLabels: string }) => void
   setPhotos: (urls: string[]) => void
-  setDerivedBrand: (brand: DerivedBrand | null) => void
+  setNicheId: (id: NicheId | null) => void
+  setDemographicId: (id: DemographicId | null) => void
+  setLandingDna: (dna: LandingDna | null) => void
   setTalentUrl: (url: string | null) => void
   confirmIdentity: () => void
   setTrustBlock: (trust: TrustBlock | null) => void
@@ -63,7 +67,9 @@ const initialState: LandingState = {
   tone: [],
   productLabels: null,
   productPhotoUrls: [],
-  derivedBrand: null,
+  nicheId: null,
+  demographicId: null,
+  landingDna: null,
   talentUrl: null,
   trustBlock: null,
   offer: null,
@@ -83,7 +89,9 @@ export const useLandingStore = create<LandingState & LandingActions>((set) => ({
 
   setPhotos: (urls) => set({ productPhotoUrls: urls, step: 2 }),
 
-  setDerivedBrand: (derivedBrand) => set({ derivedBrand }),
+  setNicheId: (nicheId) => set({ nicheId }),
+  setDemographicId: (demographicId) => set({ demographicId }),
+  setLandingDna: (landingDna) => set({ landingDna }),
 
   setTalentUrl: (talentUrl) => set({ talentUrl }),
 
@@ -122,7 +130,9 @@ export const useLandingStore = create<LandingState & LandingActions>((set) => ({
       tone: s.tone ?? [],
       productLabels: s.product_labels,
       productPhotoUrls: s.product_photo_urls ?? [],
-      derivedBrand: s.derived_brand ?? null,
+      nicheId: s.niche_id ?? null,
+      demographicId: s.demographic_id ?? null,
+      landingDna: s.landing_dna ?? null,
       talentUrl: s.talent_canonical_url ?? null,
       trustBlock: s.trust_block ?? null,
       offer: s.offer ?? null,

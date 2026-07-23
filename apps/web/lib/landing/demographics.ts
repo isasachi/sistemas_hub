@@ -1,5 +1,16 @@
 import type { DemographicId, NicheId, SectionType } from './types'
 
+// Nombre legible (UI) por demografía — paso 0.a Paso 2 del wizard (selector siempre editable).
+export const DEMOGRAPHIC_LABELS: Record<DemographicId, string> = {
+  female_18_30: 'Mujer 18-30',
+  female_30_45: 'Mujer 30-45',
+  female_45_plus: 'Mujer 45+',
+  male_20_35: 'Hombre 20-35',
+  male_35_55: 'Hombre 35-55',
+  senior_55_plus: 'Adulto mayor 55+',
+  no_talent: 'Sin persona / solo producto',
+}
+
 // ─── Anexo B — banco de poses por demografía ────────────────────────────────
 // El spec (Anexo B.1–B.6) da 6 poses por banco; acá se autorea hasta ≥8 por demografía
 // manteniendo el estilo (mano/mirada/encuadre) y la regla transversal: nunca dolor explícito,

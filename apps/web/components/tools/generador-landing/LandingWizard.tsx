@@ -7,7 +7,7 @@ import { fetchRegens } from '@/lib/gen-quota-client'
 import { SECTION_LABELS } from '@/lib/landing/types'
 import { SessionErrorRetry } from '@/components/tools/ui/SessionErrorRetry'
 import AccordionSection from '@/components/tools/generador-anuncios/AccordionSection'
-import { TYPE_PAIRS } from '@/lib/landing/typography-catalog'
+import { NICHE_LABELS } from '@/lib/landing/niches'
 import Section1Product from './sections/Section1Product'
 import Section2Photos from './sections/Section2Photos'
 import SectionIdentity from './sections/SectionIdentity'
@@ -24,7 +24,7 @@ function getStatus(sectionStep: number, currentStep: number, maxStep: number): '
 }
 
 export default function LandingWizard() {
-  const { step, sessionId, sessionError, startNewSession, hydrateFromSession, setStep, setRegens, productName, productPhotoUrls, derivedBrand, trustBlock, selectedSections, sections } =
+  const { step, sessionId, sessionError, startNewSession, hydrateFromSession, setStep, setRegens, productName, productPhotoUrls, nicheId, trustBlock, selectedSections, sections } =
     useLandingStore()
 
   useEffect(() => {
@@ -93,7 +93,7 @@ export default function LandingWizard() {
           index={3}
           title="Identidad visual"
           status={getStatus(2, step, maxStep.current)}
-          summary={derivedBrand ? `${derivedBrand.niche} · ${TYPE_PAIRS[derivedBrand.typePair].display}` : undefined}
+          summary={nicheId ? NICHE_LABELS[nicheId] : undefined}
           onReopen={() => setStep(2)}
         >
           <SectionIdentity />
