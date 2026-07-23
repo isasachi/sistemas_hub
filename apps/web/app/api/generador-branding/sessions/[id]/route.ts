@@ -14,11 +14,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 }
 
 // Campos que el cliente puede escribir directo (writes baratos, sin generación):
-// elegir estilo, brief y elegir paleta/tipo. Sin LLM ni Playwright → respeta la
-// regla de costo. Un único PATCH whitelisted en vez de una ruta por campo.
+// elegir estilo y el brief. Sin LLM ni Playwright → respeta la regla de costo.
+// Un único PATCH whitelisted en vez de una ruta por campo.
 const WRITABLE = new Set([
   'source_mode', 'style_id', 'brand_name', 'product_name', 'product_type',
-  'descriptor', 'tagline', 'container_type', 'selected_palette', 'selected_typography', 'step',
+  'descriptor', 'tagline', 'container_type', 'step',
 ])
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {

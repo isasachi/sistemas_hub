@@ -4,18 +4,17 @@ import { useEffect, useRef } from 'react'
 import { useBrandingStore, SESSION_KEY } from '@/store/branding'
 import type { BrandingSessionResponse } from '@/lib/branding/types'
 import { STYLE_PRESETS } from '@/lib/branding/style-presets'
-import type { PaletteColor, Typography } from '@/lib/branding/style-presets'
+import type { StylePreset } from '@/lib/branding/style-presets'
 import { fetchRegens } from '@/lib/gen-quota-client'
 import { SessionErrorRetry } from '@/components/tools/ui/SessionErrorRetry'
 import AccordionSection from '@/components/tools/generador-anuncios/AccordionSection'
 import Section1Style, { type AnalyzeResult } from './sections/Section1Style'
 import Section2Brief from './sections/Section2Brief'
-import Section3Palette from './sections/Section3Palette'
 import Section4Marca from './sections/Section4Marca'
 import Section5Guide from './sections/Section5Guide'
 
-// Wizard de branding compose-first (refactor 2026-07). 5 secciones, `step` 0..4:
-//   0 Estilo · 1 Tu marca · 2 Paleta y tipografía · 3 Marca (compose→elegir→derivar) · 4 Guía (final)
+// Wizard de branding compose-first, identidad fija (migración fase 10). 4 secciones,
+// `step` 0..3: 0 Estilo · 1 Tu marca · 2 Marca (compose→derivar, auto-orquestado) · 3 Guía (final)
 // `maxStep` = paso más avanzado alcanzado; una sección ya visitada queda 'completed'
 // (reabrible) aunque retrocedas, para navegar adelante/atrás sin reenviar (re-quemar LLM).
 function getStatus(sectionStep: number, currentStep: number, maxStep: number): 'locked' | 'active' | 'completed' {
@@ -40,9 +39,9 @@ async function patchSession(sessionId: string, patch: Record<string, unknown>) {
 export default function BrandingWizard() {
   const {
     step, sessionId, sessionError, startNewSession, hydrateFromSession, setStep, setRegens,
-    sourceMode, styleId, imageAnalysis, setStyle, setUploaded,
-    brandName, productType, setPaletteChoice,
-    selectedPalette, mockupUrl, goToGuide,
+    sourceMode, styleId, setStyle, setUploaded,
+    brandName, productType,
+    mockupUrl, goToGuide,
   } = useBrandingStore()
 
   // Reanudar: si hay un id guardado y la sesión existe, rehidratar; si no, una nueva.
@@ -66,7 +65,7 @@ export default function BrandingWizard() {
   if (prevSession.current !== sessionId) { prevSession.current = sessionId; maxStep.current = 0 }
   maxStep.current = Math.max(maxStep.current, step)
 
-  const progressPct = Math.round((Math.min(step, 4) / 4) * 100)
+  const progressPct = Math.round((Math.min(step, 3) / 3) * 100)
 
   // El `step` persistido en DB debe ser un high-water mark: nunca regresa, aunque el
   // usuario reabra una sección anterior y la reenvíe (ej. edita el brief tras ya
@@ -74,14 +73,9 @@ export default function BrandingWizard() {
   // Math.max(maxStep.current, N) — igual que hace `select-logo` server-side.
   async function onStyleChosen(id: string) {
     if (!sessionId) return
-    // Limpia selected_palette/selected_typography: si el usuario ya había elegido
-    // paleta (de este preset, de otro, o del modo upload), la fila queda pisando el
-    // nuevo estilo vía resolveEffectivePreset si no se resetea acá.
     await patchSession(sessionId, {
       source_mode: 'preset',
       style_id: id,
-      selected_palette: null,
-      selected_typography: null,
       step: Math.max(maxStep.current, 1),
     })
     setStyle({ sourceMode: 'preset', styleId: id })
@@ -89,30 +83,14 @@ export default function BrandingWizard() {
 
   async function onUploaded(r: AnalyzeResult) {
     if (sessionId) await patchSession(sessionId, { step: Math.max(maxStep.current, 1) })
-    setUploaded({
-      styleId: r.styleId,
-      uploadedImageUrl: r.uploadedImageUrl,
-      imageAnalysis: { palette: r.palette, typography: r.typography },
-      selectedPalette: r.palette,
-      selectedTypography: r.typography,
-    })
+    setUploaded({ styleId: r.styleId, uploadedImageUrl: r.uploadedImageUrl })
   }
 
-  async function onPaletteChosen(sel: { selectedPalette: PaletteColor[] | null; selectedTypography: Typography | null }) {
-    if (!sessionId) return
-    await patchSession(sessionId, {
-      selected_palette: sel.selectedPalette,
-      selected_typography: sel.selectedTypography,
-      step: Math.max(maxStep.current, 3),
-    })
-    setPaletteChoice(sel)
-  }
-
-  // "Continuar a la guía" (botón en Section4Marca, fase `derived`): la elección
-  // de mockup ya fijó step:3 server-side (derive target:'both'), acá solo falta
-  // avanzar a la Guía (step 4) — high-water mark, igual que el resto de pasos.
+  // "Continuar a la guía" (botón en Section4Marca, fase `done`): la derivación
+  // ya fijó step:2 server-side (derive target:'both'), acá solo falta avanzar
+  // a la Guía (step 3) — high-water mark, igual que el resto de pasos.
   async function onGuide() {
-    if (sessionId) await patchSession(sessionId, { step: Math.max(maxStep.current, 4) })
+    if (sessionId) await patchSession(sessionId, { step: Math.max(maxStep.current, 3) })
     goToGuide()
   }
 
@@ -125,11 +103,9 @@ export default function BrandingWizard() {
   }
 
   const styleSummary = styleId
-    ? sourceMode === 'upload' ? 'Producto subido' : STYLE_PRESETS[styleId]?.name
+    ? sourceMode === 'upload' ? 'Producto subido' : (STYLE_PRESETS as Record<string, StylePreset>)[styleId]?.name
     : undefined
   const briefSummary = brandName && productType ? `${brandName} · ${productType}` : undefined
-  const paletteSummary = styleId ? (selectedPalette ? 'Paleta personalizada' : 'Paleta original') : undefined
-  const extracted = sourceMode === 'upload' && imageAnalysis ? imageAnalysis : null
 
   return (
     <div className="flex flex-col min-h-screen bg-[#0a0a0a]">
@@ -166,37 +142,24 @@ export default function BrandingWizard() {
           <Section2Brief maxStep={maxStep.current} />
         </AccordionSection>
 
-        {/* 3 — Paleta y tipografía */}
+        {/* 3 — Marca (compose→derivar, auto-orquestado) */}
         <AccordionSection
           index={3}
-          title="Paleta y tipografía"
-          status={getStatus(2, step, maxStep.current)}
-          summary={paletteSummary}
-          onReopen={() => setStep(2)}
-        >
-          {sessionId && styleId && (
-            <Section3Palette sessionId={sessionId} styleId={styleId} extracted={extracted} onChosen={onPaletteChosen} />
-          )}
-        </AccordionSection>
-
-        {/* 4 — Marca (compose→elegir→derivar) */}
-        <AccordionSection
-          index={4}
           title="Logo, etiqueta y mockup"
-          status={getStatus(3, step, maxStep.current)}
+          status={getStatus(2, step, maxStep.current)}
           summary={mockupUrl ? 'Marca lista' : undefined}
-          onReopen={() => setStep(3)}
+          onReopen={() => setStep(2)}
         >
           <Section4Marca onGuide={onGuide} />
         </AccordionSection>
 
-        {/* 5 — Guía de marca (final): reabrible una vez alcanzada (maxStep) */}
+        {/* 4 — Guía de marca (final): reabrible una vez alcanzada (maxStep) */}
         <AccordionSection
-          index={5}
+          index={4}
           title={mockupUrl ? '¡Tu marca está lista!' : 'Guía de marca'}
-          status={step === 4 ? 'active' : maxStep.current >= 4 ? 'completed' : 'locked'}
+          status={step === 3 ? 'active' : maxStep.current >= 3 ? 'completed' : 'locked'}
           summary={mockupUrl ? 'Marca lista' : undefined}
-          onReopen={() => setStep(4)}
+          onReopen={() => setStep(3)}
         >
           <Section5Guide />
         </AccordionSection>

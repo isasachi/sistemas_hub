@@ -4,13 +4,10 @@ import { useState } from 'react'
 import { Upload } from 'lucide-react'
 import { STYLE_LIST } from '@/lib/branding/style-presets'
 import { thumbUrl } from '@/lib/branding/effective-preset'
-import type { PaletteColor, Typography } from '@/lib/branding/style-presets'
 
 export interface AnalyzeResult {
   styleId: string
   styleName: string
-  palette: PaletteColor[]
-  typography: Typography
   uploadedImageUrl: string
 }
 

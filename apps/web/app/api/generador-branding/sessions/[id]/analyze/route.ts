@@ -9,9 +9,11 @@ import { readUserId } from '@/lib/product-hunter/session'
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-// Modo B: el usuario sube su producto. Lo guardamos, lo analizamos (Gemini vision)
-// y persistimos el estilo extraído + el bestFit + paleta/tipo por defecto (los del
-// producto real). NO genera imágenes — es un paso de análisis barato.
+// Modo B: el usuario sube su producto. Lo guardamos, lo analizamos (Gemini vision,
+// solo CLASIFICADOR) y persistimos el bestFit + el análisis reducido
+// {bestFitStyleId, essence, keywords} — identidad fija: paleta/tipografía SIEMPRE
+// las del preset asignado, nunca las del producto real. NO genera imágenes —
+// es un paso de análisis barato.
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -46,17 +48,12 @@ export async function POST(
     style_id: extracted.bestFitStyleId,
     uploaded_image_url: uploadedUrl,
     image_analysis: extracted,
-    // default: paleta/tipo del producto real (el usuario puede variarlos en el paso 3)
-    selected_palette: extracted.palette,
-    selected_typography: extracted.typography,
   })
   await recordGenQuota(id, 'branding-analyze', userId)
 
   return NextResponse.json({
     styleId: extracted.bestFitStyleId,
     styleName: preset.name,
-    palette: extracted.palette,
-    typography: extracted.typography,
     uploadedImageUrl: uploadedUrl,
   })
 }

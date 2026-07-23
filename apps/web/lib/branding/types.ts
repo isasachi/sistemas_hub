@@ -1,5 +1,4 @@
 import { z } from 'zod'
-import type { PaletteColor, Typography } from './style-presets'
 
 // ─── Etiqueta: datos estructurados ──────────────────────────────────────────
 
@@ -46,43 +45,18 @@ export interface BrandingSessionResponse {
   container_type: string | null
   uploaded_image_url: string | null
   image_analysis: ExtractedStyle | null
-  selected_palette: PaletteColor[] | null
-  selected_typography: Typography | null
   preset_version: number | null
   generation_status: 'pending' | 'mockup' | 'deriving' | 'done' | 'failed' | null
   generation_error: string | null
 }
 
 // ─── Modo B (upload): estilo extraído de la imagen del usuario ────────────────
-// Misma forma que StylePreset MENOS meta (id/index/name/referenceFolder), MÁS
-// bestFitStyleId. Lo produce style-extract.analyzeUploadedStyle (Gemini vision).
-export const ExtractedPaletteColorSchema = z.object({
-  hex: z.string(),
-  name: z.string(),
-  role: z.enum(['primary', 'secondary', 'accent', 'neutral', 'background']),
-})
-export const ExtractedTypographySchema = z.object({
-  primary: z.string(),
-  secondary: z.string(),
-  case: z.enum(['uppercase', 'lowercase', 'title', 'mixed']),
-  detail: z.string(),
-})
+// Migración fase 10: modo upload es solo un CLASIFICADOR — decide a cuál de los
+// 7 estilos de identidad fija se parece más la imagen (bestFitStyleId); ya no
+// extrae paleta/tipografía/etc (identidad fija = siempre la del preset).
 export const ExtractedStyleSchema = z.object({
+  bestFitStyleId: z.string(),
   essence: z.string(),
   keywords: z.array(z.string()),
-  palette: z.array(ExtractedPaletteColorSchema).min(3).max(6),
-  typography: ExtractedTypographySchema,
-  materials: z.array(z.string()),
-  composition: z.string(),
-  lighting: z.string(),
-  mood: z.array(z.string()),
-  motifs: z.array(z.string()),
-  avoid: z.array(z.string()),
-  styleBlock: z.string(),
-  bestFitStyleId: z.string(),
 })
 export type ExtractedStyle = z.infer<typeof ExtractedStyleSchema>
-
-// Paleta/tipo elegidos en el paso 3 (o extraídos en modo B). Reusa las formas del preset.
-export const SelectedPaletteSchema = z.array(ExtractedPaletteColorSchema).min(3).max(6)
-export const SelectedTypographySchema = ExtractedTypographySchema

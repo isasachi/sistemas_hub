@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useBrandingStore } from '@/store/branding'
-import { STYLE_PRESETS } from '@/lib/branding/style-presets'
+import { getPreset } from '@/lib/branding/style-presets'
 
 async function downloadImage(url: string, filename: string) {
   try {
@@ -16,20 +16,21 @@ async function downloadImage(url: string, filename: string) {
   } catch { window.open(url, '_blank') }
 }
 
-// Guía de marca final: muestra logo/etiqueta/mockup + la paleta y tipografía
-// EFECTIVAS (elegidas en el paso 3, o si no, las del estilo/producto extraído).
+// Guía de marca final: muestra logo/etiqueta/mockup + la paleta y tipografía del
+// preset asignado (identidad fija — modo upload ya resolvió `styleId` al
+// bestFitStyleId server-side, así que siempre es `getPreset(styleId)`).
 export default function Section5Guide() {
   const {
-    sessionId, brandName, tagline, sourceMode, styleId, imageAnalysis,
-    selectedPalette, selectedTypography, logoUrl, labelUrl, mockupUrl, startNewSession,
+    sessionId, brandName, tagline, styleId,
+    logoUrl, labelUrl, mockupUrl, startNewSession,
   } = useBrandingStore()
   const router = useRouter()
   const [landingLoading, setLandingLoading] = useState(false)
 
   if (!styleId) return null
-  const preset = STYLE_PRESETS[styleId]
-  const palette = selectedPalette ?? (sourceMode === 'upload' && imageAnalysis ? imageAnalysis.palette : preset.palette)
-  const typography = selectedTypography ?? (sourceMode === 'upload' && imageAnalysis ? imageAnalysis.typography : preset.typography)
+  const preset = getPreset(styleId)
+  const palette = preset.palette
+  const typography = preset.typography
   const slug = (brandName ?? 'marca').toLowerCase().replace(/\s+/g, '-')
 
   async function createLanding() {

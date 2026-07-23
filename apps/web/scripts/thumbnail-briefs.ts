@@ -15,9 +15,11 @@
  */
 
 import type { BrandBrief } from "../lib/branding/generation-prompts";
-import type { StyleId } from "../lib/branding/style-presets";
 
-export const THUMBNAIL_BRIEFS: Record<StyleId, BrandBrief> = {
+// Record<string, ...> (no StyleId): `satisfies` en style-presets.ts estrictizó
+// StyleId al union literal de los 7 ids, y este mapa se indexa con `preset.id`
+// (string) en gen-thumbnails*.ts — un Record<StyleId,...> rompería ese indexer.
+export const THUMBNAIL_BRIEFS: Record<string, BrandBrief> = {
   // Grounded en tónicos/tinturas herbales reales (apothecary tonics: botella de
   // vidrio ámbar con gotero, sello circular, nombre evocador de botánica).
   // "Thistlewood Tonics" verificado (WebSearch) sin colisión con marca real.

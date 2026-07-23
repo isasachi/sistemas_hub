@@ -82,7 +82,7 @@ export function paletteToText(palette: PaletteColor[]): string {
   return palette.map((c) => `${c.name} (${c.hex}, ${c.role})`).join(", ");
 }
 
-export const STYLE_PRESETS: Record<string, StylePreset> = {
+export const STYLE_PRESETS = {
   "neo-apotecario": {
     id: "neo-apotecario",
     index: 1,
@@ -416,7 +416,7 @@ export const STYLE_PRESETS: Record<string, StylePreset> = {
       "Future-nostalgia packaging design language: a 3D chrome bubble wordmark with real volume and reflections floating in front of a holographic gradient backdrop, starbursts and organic blobs layered behind it, neon pink, cyan and acid-lime color capsules over a near-black anchor. Bright glossy light with strong reflections on a chrome vessel. Nostalgic, playful, futuristic and vibrant.",
     referenceFolder: "07_future_nostalgia",
   },
-};
+} satisfies Record<string, StylePreset>;
 
 /** Lista ordenada por índice de grid (1..7). */
 export const STYLE_LIST: StylePreset[] = Object.values(STYLE_PRESETS).sort(
@@ -428,7 +428,7 @@ export type StyleId = keyof typeof STYLE_PRESETS;
 
 /** Acceso seguro por id con error explícito. */
 export function getPreset(id: string): StylePreset {
-  const p = STYLE_PRESETS[id];
+  const p = (STYLE_PRESETS as Record<string, StylePreset>)[id];
   if (!p) {
     throw new Error(
       `Estilo desconocido: "${id}". Válidos: ${Object.keys(STYLE_PRESETS).join(", ")}`,
