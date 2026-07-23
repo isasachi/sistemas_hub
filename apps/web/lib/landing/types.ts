@@ -1,5 +1,4 @@
 import { z } from 'zod'
-import { TypePairId } from './typography-catalog'
 
 // ─── Catálogo de secciones ───────────────────────────────────────────────────
 // El orden del enum NO es el orden de la landing — ese lo define `order` por sesión.
@@ -218,49 +217,6 @@ export type LandingStyle = z.infer<typeof LandingStyleSchema>
 export type LandingPalette = LandingStyle['palette']
 export type LandingTypography = LandingStyle['typography']
 
-// ─── Marca derivada del producto (Fase 3) ────────────────────────────────────
-// `DerivedBrand` se resuelve UNA vez por sesión (etapa 2→3), es editable por el usuario
-// en el wizard y tiene DOS consumidores: tokens CSS para la composición Satori (theme.ts)
-// y descripción textual para el prompt de escena (instructions.ts). Supera a
-// `palette`/`typography` (legado + canal del handoff de branding) cuando existe.
-
-// Familia cromática del NICHO — la atmósfera no sale de los píxeles del packaging (el frasco
-// blanco de un suplemento no "sabe" que su nicho es azul-pureza). El LLM la clasifica.
-/** @deprecated Reemplazado por `NicheId` (spec 2026-07-23). Se retira en Task 10. */
-export const NicheCode = z.enum([
-  'salud-clinico',   // azul-blanco, pureza    → suplementos, skincare
-  'fitness-energia', // negro-naranja-lima     → deporte, quemadores
-  'belleza-premium', // nude-dorado-crema      → cosmética, joyería
-  'hogar-calido',    // terracota-beige        → cocina, decoración
-  'tech-limpio',     // gris-azul brillante    → gadgets, electrónica
-  'bebe-pastel',     // pastel suave           → bebé, maternidad
-])
-export type NicheCode = z.infer<typeof NicheCode>
-
-// Casting del talento: demografía como DATO (no texto libre) → la misma persona en todas las
-// secciones. `present:false` = producto solo (gadget de auto, herramienta) sin beneficiario.
-/** @deprecated Reemplazado por `LandingDna.model_persona`/`poses` (spec 2026-07-23). Se retira en Task 10. */
-export const CastingSpecSchema = z.object({
-  present:    z.boolean(),
-  ageRange:   z.enum(['18-25', '25-35', '35-50', '50-65', '65+']).optional(),
-  gender:     z.enum(['femenino', 'masculino', 'mixto']).optional(),
-  appearance: z.string().max(120).optional(), // rasgos latinoamericanos, piel real, etc.
-  context:    z.string().max(60).optional(),  // baño, cocina, gimnasio, exterior
-  wardrobe:   z.string().max(60).optional(),
-  expression: z.string().max(60).optional(),  // serena y segura / enérgica
-})
-export type CastingSpec = z.infer<typeof CastingSpecSchema>
-
-/** @deprecated Reemplazado por `niche_id`/`demographic_id`/`landing_dna` (spec 2026-07-23). Se retira en Task 10. */
-export const DerivedBrandSchema = z.object({
-  niche:     NicheCode,
-  palette:   LandingStyleSchema.shape.palette, // reusa el shape actual (1-6 colores con rol)
-  typePair:  TypePairId,                        // ENUM CERRADO del catálogo (Fase 0), nunca texto libre
-  casting:   CastingSpecSchema,
-  sceneMood: z.string().max(160),               // reemplazo estructurado de brand_style suelto → prompt de escena
-})
-export type DerivedBrand = z.infer<typeof DerivedBrandSchema>
-
 // Sección renderizada: copy + imagen.
 export interface LandingSection {
   type: SectionType
@@ -314,13 +270,9 @@ export interface LandingSessionResponse {
   // Origen de la placa canónica (Fase 2): 'photo' = derivada de la foto real en etapa 2;
   // 'render' (legado) o null = recortada del render de la 1ª sección. Ver product-box.ts.
   product_canonical_source: string | null
-  // Marca derivada del producto (Fase 3): nicho, paleta fusionada, par tipográfico del catálogo,
-  // casting del talento y mood de escena. Resuelto una vez (etapa 2→3), editable, alimenta
-  // composición (tokens) y prompt de escena (texto). Supera a palette/typography. Ver DerivedBrand.
-  derived_brand: DerivedBrand | null
   // Placa canónica del talento (Fase 4): retrato del beneficiario generado UNA vez desde el
-  // CastingSpec, sobre fondo neutro. Se pasa como referencia a todas las secciones para que la
-  // persona no cambie entre ellas. Null si el producto no lleva persona (casting.present=false).
+  // casting del talento, sobre fondo neutro. Se pasa como referencia a todas las secciones para
+  // que la persona no cambie entre ellas. Null si el producto no lleva persona.
   talent_canonical_url: string | null
   // Avatares de testimonios: 3 retratos de clientes DISTINTOS, generados una vez y cacheados,
   // que la sección testimonios compone como <img> (Satori no genera caras). Null hasta generarlos.

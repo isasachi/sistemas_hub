@@ -1,4 +1,4 @@
-import type { LandingPalette, DerivedBrand } from './types'
+import type { LandingPalette } from './types'
 import { TYPE_PAIRS, type TypePairId } from './typography-catalog'
 
 // Traduce paleta de marca + par tipográfico a tokens planos que consumen los layouts de
@@ -48,11 +48,4 @@ export function buildTheme(palette: LandingPalette, pairId: TypePairId): ThemeTo
     goldDark: GOLD_DARK,
     fonts: { display: pair.display, body: pair.body },
   }
-}
-
-// Fase 3 C3.5: DerivedBrand → ThemeTokens. La paleta ya viene fusionada y el par tipográfico
-// sale del catálogo (reemplaza al DEFAULT_TYPE_PAIR fijo de F1). Los call sites usan este
-// wrapper cuando la sesión tiene derived_brand; sin él, siguen con buildTheme + fallback.
-export function buildThemeFromBrand(brand: DerivedBrand): ThemeTokens {
-  return buildTheme(brand.palette, brand.typePair)
 }

@@ -25,14 +25,16 @@ export const maxDuration = 60 // path source = gen imagen (~15s); cabe en 60s (V
 // las 8 en un solo request (que excedería el cap). Sirve para generar Y regenerar.
 
 // Motor de DIFUSIÓN, DNA-driven (spec 2026-07-23): reemplaza al motor viejo (paleta/typography
-// sueltas + DerivedBrand) y al motor híbrido (escena Gemini + composición Satori de texto). La
-// IA renderiza la sección COMPLETA con su texto a partir del ADN de la sesión (`landing_dna`,
-// extraído UNA vez en el step previo del wizard). Lo ÚNICO compuesto aparte son los logos reales
-// de marca (medios de pago, banderas, lockup) — la difusión los garabatea si los dibuja ella.
+// sueltas + marca derivada) y al motor híbrido (escena Gemini + composición Satori de texto,
+// borrado en Task 10). La IA renderiza la sección COMPLETA con su texto a partir del ADN de la
+// sesión (`landing_dna`, extraído UNA vez en el step previo del wizard). Lo ÚNICO compuesto
+// aparte son los logos reales de marca (medios de pago, banderas, lockup) — la difusión los
+// garabatea si los dibuja ella.
 
-// Par tipográfico fijo para las fuentes de overlay (PaymentBar/BrandLockup). Los overlays ya no
-// reciben el `typePair` de un DerivedBrand (retirado): fuente bundleada fija hasta que la Task 10
-// la reemplace por Poppins fijo en todo el pipeline.
+// Par tipográfico fijo para las fuentes de overlay (PaymentBar/BrandLockup). Los overlays no
+// reciben un par tipográfico por sesión (el motor de marca derivada que lo resolvía fue
+// retirado en Task 10): fuente bundleada fija (ponytail: swap a loadFixedFonts() no reduce
+// código muerto — typography-catalog.ts sigue vivo por buildTheme/fonts.ts, ver task-10-report.md).
 const DEFAULT_TYPE_PAIR: TypePairId = 'dr-conversion'
 
 // Orientación de la banda de 4 atributos (Z3, spec §3.4): mapa fijo por sección para romper

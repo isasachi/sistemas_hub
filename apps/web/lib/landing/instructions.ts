@@ -10,8 +10,8 @@ import { SECTION_SPEC_KEY } from './types'
 // Copy → TEXT_RULES → referencias adjuntas (nota de composición).
 //
 // Filosofía nueva (spec 2026-07-23): NINGUNA sección suprime persona ni producto — las 8
-// llevan talento (o su sustituto) Y producto Y props. Las ramas de supresión del motor viejo
-// (NO_PERSON_SECTIONS/NO_PRODUCT_SECTIONS/NO_TALENT_SECTIONS de engine-registry.ts) ya no
+// llevan talento (o su sustituto) Y producto Y props. Las ramas de supresión del motor híbrido
+// (sets NO_PERSON/NO_PRODUCT/NO_TALENT por sección, borrados junto al motor en Task 10) ya no
 // aplican a este builder.
 
 function copyBlock(copy: SectionCopy): string {
