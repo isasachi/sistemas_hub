@@ -224,9 +224,6 @@ export interface LandingSection {
   copy: SectionCopy
   imageUrl: string | null
   status: 'pending' | 'done'
-  // Secciones híbridas: URL de la ESCENA cruda (plato de fondo de Gemini, pre-Satori). Se
-  // cachea para re-componer el texto/precio a $0 (renderComposite) sin re-generar imagen.
-  sceneUrl?: string | null
 }
 
 // ─── Sesión (forma de respuesta de la API) ───────────────────────────────────

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { validateSet } from './validate-set'
-import type { LandingSessionResponse, Offer, TrustBlock, SectionCopy } from './types'
+import { derivePalette } from './palette-derive'
+import type { LandingSessionResponse, Offer, TrustBlock, SectionCopy, LandingDna } from './types'
 
 const OFFER: Offer = {
   urgency: 'Solo hoy',
@@ -15,9 +16,27 @@ const TRUST: TrustBlock = {
 }
 
 function session(copy: SectionCopy[], over: Partial<LandingSessionResponse> = {}): LandingSessionResponse {
-  return { offer: OFFER, offer_copy: null, trust_block: TRUST, copy, ...over } as LandingSessionResponse
+  return { offer: OFFER, offer_copy: null, trust_block: TRUST, copy, landing_dna: null, ...over } as LandingSessionResponse
 }
 const sec = (type: SectionCopy['type'], headline: string, extra: Partial<SectionCopy> = {}): SectionCopy => ({ type, headline, ...extra })
+
+// Fixture de ADN: paleta derivada por fórmula (garantiza contraste ≥7:1 — QA#8) salvo que un
+// test la pise a mano para probar el caso "hand-edited" que R8 debe atrapar.
+const VALID_PALETTE = derivePalette({ h: 210, s: 40, l: 45 })
+function dna(poses: Record<string, string>, palette = VALID_PALETTE): LandingDna {
+  return {
+    brand_base: { hex: '#2255AA', h: 210, s: 40, l: 45 },
+    palette,
+    particle_type: 'polvo suspendido',
+    particle_density: 'low',
+    props: ['frasco'],
+    font_family: 'Poppins',
+    font_accent: null,
+    halo: 'none',
+    model_persona: 'mujer 30-45',
+    poses,
+  }
+}
 
 describe('validateSet — coherencia cruzada del set', () => {
   it('set coherente → sin issues', () => {
@@ -94,5 +113,52 @@ describe('validateSet — coherencia cruzada del set', () => {
   it('sin offer ni trust_block no explota (best-effort)', () => {
     const s = session([sec('hero', 'S/ 999 con Bitcoin')], { offer: null, offer_copy: null, trust_block: null })
     expect(validateSet(s)).toEqual([])
+  })
+
+  describe('R7: unicidad de pose (QA#6)', () => {
+    it('pose repetida entre dos secciones → error pose-duplicate', () => {
+      const s = session([sec('hero', 'Título'), sec('beneficios', 'Beneficios')], {
+        landing_dna: dna({ hero: 'de pie, mirando a cámara', beneficios: 'de pie, mirando a cámara' }),
+      })
+      const issues = validateSet(s)
+      expect(issues.some((i) => i.rule === 'pose-duplicate' && i.severity === 'error')).toBe(true)
+      expect(issues.find((i) => i.rule === 'pose-duplicate')?.message).toMatch(/hero/)
+      expect(issues.find((i) => i.rule === 'pose-duplicate')?.message).toMatch(/beneficios/)
+    })
+
+    it('todas las poses vacías (no_talent) no dispara falso positivo', () => {
+      const s = session([sec('hero', 'Título'), sec('beneficios', 'Beneficios')], {
+        landing_dna: dna({ hero: '', beneficios: '' }),
+      })
+      expect(validateSet(s).some((i) => i.rule === 'pose-duplicate')).toBe(false)
+    })
+
+    it('poses únicas no dispara', () => {
+      const s = session([sec('hero', 'Título'), sec('beneficios', 'Beneficios')], {
+        landing_dna: dna({ hero: 'de pie, mirando a cámara', beneficios: 'sentada, sonriendo' }),
+      })
+      expect(validateSet(s).some((i) => i.rule === 'pose-duplicate')).toBe(false)
+    })
+
+    it('sin landing_dna (sesión legada) no explota', () => {
+      const s = session([sec('hero', 'Título')], { landing_dna: null })
+      expect(validateSet(s).some((i) => i.rule === 'pose-duplicate')).toBe(false)
+    })
+  })
+
+  describe('R8: contraste headline/fondo (QA#8)', () => {
+    it('paleta derivada por fórmula (≥7:1) no dispara', () => {
+      const s = session([sec('hero', 'Título')], { landing_dna: dna({ hero: 'de pie' }) })
+      expect(validateSet(s).some((i) => i.rule === 'contrast-low')).toBe(false)
+    })
+
+    it('paleta editada a mano con bajo contraste → error contrast-low', () => {
+      // Titular claro sobre fondo claro: contraste bajo a propósito.
+      const badPalette = { ...VALID_PALETTE, color_headline: '#EEEEEE', bg_start: '#F5F5F5' }
+      const s = session([sec('hero', 'Título')], { landing_dna: dna({ hero: 'de pie' }, badPalette) })
+      const issues = validateSet(s)
+      expect(issues.some((i) => i.rule === 'contrast-low' && i.severity === 'error')).toBe(true)
+      expect(issues.find((i) => i.rule === 'contrast-low')?.message).toMatch(/7:1/)
+    })
   })
 })
