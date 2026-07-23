@@ -43,8 +43,10 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
 }
 
 // PUT: guarda ediciones del usuario al ADN / niche_id / demographic_id y sube step≥3. Si cambia
-// niche_id, invalida landing_dna (paleta/tipografía/partículas/props ya no aplican) — el POST
-// siguiente re-extrae; devuelve nicheChanged para que la UI avise antes de aplicar (spec 0.a).
+// niche_id O demographic_id, invalida landing_dna — niche_id porque paleta/tipografía/
+// partículas/props ya no aplican; demographic_id porque model_persona/poses se derivan de la
+// demografía y quedarían obsoletos. El POST siguiente re-extrae; devuelve nicheChanged/
+// demographicChanged para que la UI avise antes de aplicar (spec 0.a, solo para niche_id).
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const session = await getLandingSession(id)
@@ -55,6 +57,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const patch: Partial<Omit<LandingSessionResponse, 'id' | 'created_at'>> = { step: Math.max(session.step, 3) }
   let nicheChanged = false
+  let demographicChanged = false
 
   if (body.niche_id !== undefined) {
     const parsedNiche = NicheId.safeParse(body.niche_id)
@@ -67,6 +70,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const parsedDemo = DemographicId.safeParse(body.demographic_id)
     if (!parsedDemo.success) return NextResponse.json({ error: 'demographic_id inválido' }, { status: 400 })
     patch.demographic_id = parsedDemo.data
+    demographicChanged = !!session.demographic_id && parsedDemo.data !== session.demographic_id
   }
 
   if (body.landing_dna !== undefined) {
@@ -75,13 +79,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     patch.landing_dna = parsedDna.data
   }
 
-  // El cambio de niche_id SIEMPRE invalida el ADN cacheado, aunque el body también trajera un
-  // landing_dna editado a mano — ya no es coherente con el nicho nuevo.
-  if (nicheChanged) patch.landing_dna = null
+  // El cambio de niche_id o demographic_id SIEMPRE invalida el ADN cacheado, aunque el body
+  // también trajera un landing_dna editado a mano — ya no es coherente con el nuevo nicho/demografía.
+  if (nicheChanged || demographicChanged) patch.landing_dna = null
 
   await updateLandingSession(id, patch)
   return NextResponse.json({
     landing_dna: patch.landing_dna !== undefined ? patch.landing_dna : session.landing_dna,
     nicheChanged,
+    demographicChanged,
   })
 }
