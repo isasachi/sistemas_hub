@@ -35,7 +35,7 @@ import type { BrandBrief } from '../lib/branding/generation-prompts'
 const OUT_DIR = path.join(__dirname, '..', 'generated-mockups')
 const MODEL = 'gpt-image-2'
 const SIZE = '1024x1536' // retrato ~2:3 para el mockup de producto
-const EDIT_ENDPOINT = 'https://api.openai.com/v1/images/edit'
+const EDIT_ENDPOINT = 'https://api.openai.com/v1/images/edits'
 
 /**
  * Prompt del mockup compuesto — misma receta que buildComposedMockupPrompt del
