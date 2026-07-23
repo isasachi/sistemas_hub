@@ -96,8 +96,8 @@ function masterLayoutBlock(
     : `Sin talento humano en este producto: el carril derecho lo ocupa el sustituto — "${talentSubstitute}" — con las mismas reglas de carril, sangrado y no-invasión del texto. No renderizar ninguna persona, rostro ni silueta humana en ningún lugar de la imagen.`
   const hasLogisticsBand = section === 'oferta' || section === 'garantia' || section === 'cta-final'
   const logisticsLine = hasLogisticsBand
-    ? 'Banda logística (Z4, 80-92%: envíos, plazo, contraentrega, pago seguro) y sello de garantía (Z5, 92-97%): SÍ aplican en esta sección. NO dibujes iconos/logos de métodos de pago (Yape/Visa/Mastercard/Mercado Pago) en ningún lado.'
-    : 'Banda logística (Z4) y sello de garantía (Z5): NO aplican en esta sección — Z2 y Z3 se expanden; nunca queda aire muerto en el pie. NO dibujes iconos/logos de métodos de pago.'
+    ? 'Banda logística (Z4, 80-92%: envíos, plazo, contraentrega, pago seguro) y métodos de pago + sello de garantía (Z5, 92-97%): SÍ aplican en esta sección.'
+    : 'Banda logística (Z4) y métodos de pago (Z5): NO aplican en esta sección — Z2 y Z3 se expanden; nunca queda aire muerto en el pie.'
   return [
     'MASTER_LAYOUT — lienzo 9:16, full-bleed, sin márgenes blancos.',
     'Carril de texto: 55-60% izquierdo — todo el copy y todas las cards viven ahí. Carril de talento: 35-45% derecho.',
@@ -118,7 +118,7 @@ const SECTION_SPECS_TEXT: Record<string, string> = {
   before_after: '2 cards con pill "ANTES"/"DESPUÉS", chevron central, caption con ✕/✓ debajo de cada una, línea de plazo realista.',
   testimonials: '3 cards: avatar circular + nombre + "edad · ciudad" + 5 estrellas oro + quote de 2-3 líneas + comilla decorativa. Cierra con barra agregada (nº de clientes, rating, nº de reseñas).',
   faq: '4 cards: icono + pregunta en bold + respuesta de 2-3 líneas.',
-  guarantee: '4 cards horizontales con icono 3D grande a la izquierda + sello central de devolución (SIN grid ni iconos de métodos de pago).',
+  guarantee: '4 cards horizontales con icono 3D grande a la izquierda + grid de pagos + sello central de devolución.',
   offer: '3 columnas; la central elevada, enmarcada en oro y con corona. Precio gigante, ancla tachada, precio por unidad, badge de % de ahorro, CTA por columna.',
   cta_final: 'Repetición condensada de la oferta ganadora + refuerzo de garantía + CTA único a ancho completo.',
 }
@@ -160,6 +160,10 @@ function compositionRefNote(talentImageAttached: boolean): string {
 }
 
 // ─── Secciones/notas auxiliares (reusadas sin cambios funcionales) ───────────
+
+// Secciones que reservan la banda inferior de métodos de pago en el prompt. El overlay de logos
+// reales (PaymentBar) se retiró post-smoke, pero el prompt sigue pidiendo la banda como estaba.
+export const PAYMENT_SECTIONS: Set<SectionType> = new Set(['oferta', 'garantia'])
 
 // Secciones que muestran un PACK de varias unidades (no un solo frasco). La ruta les pasa el pack
 // pre-compuesto (buildProductPack) como Image 1 y este builder inyecta packNote.
@@ -216,6 +220,11 @@ function trustText(trust: TrustBlock): string {
   return `TRUST ROWS — render each of these as a frosted pill with a glossy icon (truck / clock / check / shield) + a bold title + a lighter line, using EXACTLY these facts (invent none):\n${rows.map((r) => `  - ${r}`).join('\n')}`
 }
 
+// Reserva la banda inferior de métodos de pago. Como antes: la difusión deja la banda limpia y
+// puede rotular "Paga como prefieras". (El overlay de logos reales se retiró post-smoke.)
+const PAYMENT_BAND =
+  'PAYMENT LOGOS (do NOT draw): leave the BOTTOM ~12% of the image as a CLEAN, calm horizontal band (a subtle light strip is fine) with NO payment logos, card icons, brand marks, wallet logos, country flags or the words "yape/visa/mastercard/mercado pago" anywhere. You MAY render a short heading like "Paga como prefieras" just ABOVE the band, but no logos.'
+
 // Reserva la franja superior para el lockup de marca (compuesto aparte, no dibujado).
 const LOCKUP_BAND =
   'BRAND LOCKUP (do NOT draw): keep the very TOP ~6% center strip clean and empty — a small crisp brand wordmark lockup is composited there afterwards. Do NOT render any logo, wordmark, brand name or badge in that top strip yourself; start the headline below it.'
@@ -263,6 +272,7 @@ export function buildDiffusionInstruction(args: {
   if (trust && (section === 'garantia' || section === 'cta-final' || section === 'hero')) extra.push(trustText(trust))
   if (packUnits && packUnits > 1) extra.push(packNote(packUnits))
   if (reserveLockup) extra.push(LOCKUP_BAND)
+  if (PAYMENT_SECTIONS.has(section)) extra.push(PAYMENT_BAND)
 
   return [...base, ...extra].filter(Boolean).join('\n\n')
 }

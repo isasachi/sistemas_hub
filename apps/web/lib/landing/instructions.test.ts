@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildDiffusionInstruction, MULTI_UNIT_SECTIONS, NO_TALENT_SECTIONS } from './instructions'
+import { buildDiffusionInstruction, MULTI_UNIT_SECTIONS, PAYMENT_SECTIONS, NO_TALENT_SECTIONS } from './instructions'
 import type { SectionCopy, SectionType, LandingDna, Offer, TrustBlock } from './types'
 
 const ALL: SectionType[] = [
@@ -127,14 +127,6 @@ describe('buildDiffusionInstruction — DNA-driven (spec 2026-07-23)', () => {
     expect(testi).not.toContain(DNA.model_persona)
   })
 
-  it('no se pide una banda de iconos de métodos de pago en ninguna sección', () => {
-    for (const type of ALL) {
-      const out = build(type, { offer: OFFER, trust: TRUST })
-      expect(out).not.toContain('PAYMENT LOGOS')
-      expect(out).not.toContain('Paga como prefieras')
-    }
-  })
-
   it('nota de referencia de composición: presente, marcada apoyo/mutable, subordinada a la instrucción', () => {
     const out = build('hero')
     expect(out).toContain('REFERENCIA DE COMPOSICIÓN')
@@ -192,10 +184,12 @@ describe('buildDiffusionInstruction — DNA-driven (spec 2026-07-23)', () => {
     expect(build('faq', { trust: TRUST })).not.toContain('TRUST ROWS')
   })
 
-  it('MULTI_UNIT_SECTIONS y NO_TALENT_SECTIONS conservan su membresía', () => {
+  it('MULTI_UNIT / PAYMENT / NO_TALENT sections conservan su membresía', () => {
     expect(MULTI_UNIT_SECTIONS.has('oferta')).toBe(true)
     expect(MULTI_UNIT_SECTIONS.has('cta-final')).toBe(true)
     expect(MULTI_UNIT_SECTIONS.has('hero')).toBe(false)
+    expect(PAYMENT_SECTIONS.has('oferta')).toBe(true)
+    expect(PAYMENT_SECTIONS.has('garantia')).toBe(true)
     expect(NO_TALENT_SECTIONS.has('faq')).toBe(true)
     expect(NO_TALENT_SECTIONS.has('testimonios')).toBe(true)
     expect(NO_TALENT_SECTIONS.has('hero')).toBe(false)
