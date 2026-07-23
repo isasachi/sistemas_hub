@@ -111,6 +111,14 @@ export const SectionCopySchema = z.object({
   // cards: testimonios ({title="Nombre, Ciudad", body=reseña}) · FAQ ({title=pregunta, body=respuesta})
   //        · beneficios ({title=beneficio, body=detalle de una línea}). Hasta 6 (FAQ llega a 5).
   cards: z.array(z.object({ title: z.string().max(40), body: z.string().max(90) })).max(6).optional(),
+  // Campos del motor de plantillas (2026-07-23). Opcionales: cada sección llena los que aplican.
+  kicker: z.string().max(40).optional(),        // subtítulo dorado con guiones (beneficios/antes-despues/testimonios/oferta)
+  closingBold: z.string().max(40).optional(),   // beneficios: frase bold de la closing_card
+  closingSub: z.string().max(90).optional(),    // beneficios: subcopy de la closing_card
+  closingStrip: z.string().max(60).optional(),  // antes-despues: franja de cierre (reemplaza trust_bar)
+  socialProof: z.string().max(90).optional(),   // testimonios: banda de prueba social
+  ctaHeadline: z.string().max(30).optional(),   // cta-final: titular del bloque CTA (mayúsculas)
+  ctaSub: z.string().max(90).optional(),        // cta-final: subcopy del bloque CTA
   cta: z.string().max(25).optional(),
 })
 export type SectionCopy = z.infer<typeof SectionCopySchema>

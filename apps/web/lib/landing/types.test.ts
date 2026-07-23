@@ -1,7 +1,19 @@
 import { describe, it, expect } from 'vitest'
 import { NicheId, DemographicId, LandingDnaSchema, NicheClassification, SECTION_REF, SECTION_SPEC_KEY, SectionType } from './types'
 
+import { SectionCopySchema } from './types'
+
 describe('contrato landing (spec 2026-07-23)', () => {
+  it('SectionCopySchema acepta los campos nuevos del motor de plantillas', () => {
+    const parsed = SectionCopySchema.parse({
+      type: 'beneficios', headline: 'H',
+      kicker: 'RESULTADOS REALES', closingBold: 'Tu piel refleja tu equilibrio',
+      closingSub: 'Cuídate desde dentro', closingStrip: 'CUIDA TU PIEL HOY',
+      socialProof: 'Miles de personas…', ctaHeadline: 'PIDE EL TUYO', ctaSub: 'No lo dejes pasar',
+    })
+    expect(parsed.kicker).toBe('RESULTADOS REALES')
+    expect(parsed.ctaHeadline).toBe('PIDE EL TUYO')
+  })
   it('NicheId tiene los 16 valores del spec (Anexo A)', () => {
     expect(NicheId.options).toHaveLength(16)
     expect(NicheId.options).toContain('supplement_skin_female')
