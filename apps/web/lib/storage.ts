@@ -53,6 +53,12 @@ function allowedHosts(): Set<string> {
   return _allowedHosts
 }
 
+// URL pública de un path YA existente en el bucket (sin subir nada) — usado para leer refs
+// sembradas fuera de banda (p.ej. `landing-refs/<section>.png`, scripts/seed-landing-refs.ts).
+export function storagePublicUrl(path: string): string {
+  return getStorage().getPublicUrl(path).data.publicUrl
+}
+
 export async function fetchAsBase64(url: string): Promise<{ data: string; mimeType: string }> {
   let host: string
   try { host = new URL(url).host } catch { throw new Error('Invalid image URL') }
