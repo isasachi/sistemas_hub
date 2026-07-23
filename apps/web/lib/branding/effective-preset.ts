@@ -89,6 +89,7 @@ export function wireframeUrl(styleId: string): string {
 export function sessionBrief(session: BrandingSessionResponse): BrandBrief {
   return {
     brandName: session.brand_name ?? 'Marca',
+    productName: session.product_name ?? undefined,
     productType: session.product_type ?? session.product_name ?? 'producto',
     descriptor: session.descriptor ?? undefined,
     tagline: session.tagline ?? undefined,

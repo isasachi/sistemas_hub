@@ -42,8 +42,10 @@ import { contrastToPrompt } from "./contrast";
 
 /** Datos que aporta el usuario para una marca/producto concreto. */
 export interface BrandBrief {
-  /** Nombre de marca — se renderiza literal en el arte. */
+  /** Nombre de marca — se renderiza literal en el LOGO (asset). */
   brandName: string;
+  /** Nombre de producto — el wordmark HERO de la etiqueta/mockup (no el logo). */
+  productName?: string;
   /** Qué es el producto: "serum facial", "café en grano", "barra energética". */
   productType: string;
   /** Posicionamiento corto o claim ("hidratación 24h", "tueste artesanal"). */
@@ -108,16 +110,19 @@ export function buildLogoPrompt(brief: BrandBrief, preset: StylePreset): string 
 // inserta el logo generado con equilibrio y legibilidad, siguiendo el
 // esqueleto de layout y los pares de contraste legal del estilo.
 export function buildLabelPrompt(brief: BrandBrief, preset: StylePreset, layout: LabelLayout): string {
+  // El wordmark HERO de la etiqueta es el NOMBRE DE PRODUCTO (no el logo de marca,
+  // que es un asset aparte). Si no hay nombre de producto, cae al de marca.
+  const wordmark = brief.productName?.trim() || brief.brandName;
   return [
-    `Design the FLAT front label / packaging panel artwork for "${brief.brandName}", a ${brief.productType}. This is flat 2D label artwork — front-on, NO 3D packaging, NO perspective, NO product body, NO background scene — print-ready, filling the frame.`,
+    `Design the FLAT front label / packaging panel artwork for the product "${wordmark}", a ${brief.productType}. This is flat 2D label artwork — front-on, NO 3D packaging, NO perspective, NO product body, NO background scene — print-ready, filling the frame.`,
     preset.styleBlock,
     paletteLine(preset, brief),
     contrastToPrompt(preset),
-    `The FIRST attached image is the finished brand LOGO. Place that EXACT logo into the label at: ${layout.logoPlacement}. Integrate it with balanced contrast, scale and spacing so it is prominent and legible, harmonious with the rest of the composition, and NEVER lost in the artwork or clashing with what is behind it — keep the logo's own colors and forms intact; do not redraw it.`,
+    `Build a fresh TYPOGRAPHIC WORDMARK for the product name "${wordmark}" — set it in the label's own typography and place it at: ${layout.logoPlacement}. It is the hero of the panel: give it prominence, balanced contrast, scale and spacing so it reads clearly and is NEVER lost in the artwork or clashing with what is behind it. Do NOT paste or reuse a separate logo mark — construct the wordmark from the product name as the style and this layout require.`,
     layoutToPrompt(layout),
-    `Text hierarchy: the brand name "${brief.brandName}"${brief.descriptor ? `, the descriptor "${brief.descriptor}"` : ""}${brief.tagline ? `, the tagline "${brief.tagline}"` : ""}, plus small realistic legal / net-weight / ingredient microtext (microtext MUST use the highest-contrast pairing).`,
+    `Text hierarchy: the product name "${wordmark}"${brief.descriptor ? `, the descriptor "${brief.descriptor}"` : ""}${brief.tagline ? `, the tagline "${brief.tagline}"` : ""}, plus small realistic legal / net-weight / ingredient microtext (microtext MUST use the highest-contrast pairing).`,
     `The FINAL attached image is a LAYOUT SKELETON, not a style reference. Follow its spatial arrangement of zones exactly; ignore its colors and treat it as structure only.`,
-    exactText("brand name", brief.brandName).trim(),
+    exactText("product name", wordmark).trim(),
     exactText("tagline", brief.tagline).trim(),
     `Avoid: ${[...preset.avoid, ...layout.avoidLayout].join(", ")}. High-resolution, sharp, no watermark, no stray or misspelled text.`,
   ].filter(Boolean).join(" ");
@@ -127,12 +132,13 @@ export function buildLabelPrompt(brief: BrandBrief, preset: StylePreset, layout:
 // aplica al envase — último artefacto de la cadena.
 export function buildMockupPrompt(brief: BrandBrief, preset: StylePreset): string {
   const container = brief.containerType ?? "product packaging";
+  const wordmark = brief.productName?.trim() || brief.brandName;
   return [
-    `Create a photorealistic product mockup: a ${container} for "${brief.brandName}", a ${brief.productType}.`,
-    `The FIRST attached image is the finished FLAT LABEL artwork — apply it realistically onto the ${container} surface with correct label wrapping, material and finish (${preset.materials.join(", ")}), preserving the label's design, logo, colors and text EXACTLY.`,
+    `Create a photorealistic product mockup: a ${container} for the product "${wordmark}", a ${brief.productType}.`,
+    `The FIRST attached image is the finished FLAT LABEL artwork — apply it realistically onto the ${container} surface with correct label wrapping, material and finish (${preset.materials.join(", ")}), preserving the label's design, wordmark, colors and text EXACTLY.`,
     preset.styleBlock,
     `Studio product photography: ${preset.lighting}. Scene: ${preset.composition}. Mood: ${preset.mood.join(", ")}. Realistic reflections, soft contact shadow, believable depth of field.`,
-    exactText("brand name on the packaging", brief.brandName).trim(),
+    exactText("product name on the packaging", wordmark).trim(),
     `Avoid: ${preset.avoid.join(", ")}. High-resolution, professional commercial quality, sharp focus, no watermark, no stray or misspelled text.`,
   ].filter(Boolean).join(" ");
 }

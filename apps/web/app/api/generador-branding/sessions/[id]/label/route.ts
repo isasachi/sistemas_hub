@@ -8,7 +8,6 @@ import {
   sessionBrief,
   identityRefParts,
   wireframeRefParts,
-  imageRefParts,
 } from '@/lib/branding/effective-preset'
 import { buildLabelPrompt } from '@/lib/branding/generation-prompts'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
@@ -18,10 +17,10 @@ import type { Part } from '@google/genai'
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-// Paso 2 del pipeline SECUENCIAL: etiqueta plana que INSERTA el logo generado
-// en el paso 1 con equilibrio y legibilidad, siguiendo el wireframe de layout
-// y los pares de contraste del estilo. Orden de adjuntos (el prompt lo
-// referencia explícitamente): logo PRIMERO, wireframe ÚLTIMO.
+// Paso 2 del pipeline SECUENCIAL: etiqueta plana que construye su PROPIO wordmark
+// tipográfico con el NOMBRE DE PRODUCTO (el logo de marca es un asset aparte y NO
+// se inserta acá), siguiendo el wireframe de layout y los pares de contraste del
+// estilo. Adjunta refs de identidad + el wireframe ÚLTIMO. No depende del logo.
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -38,8 +37,6 @@ export async function POST(
     const session = await getBrandingSession(id)
     if (!session || !session.style_id || !session.brand_name)
       return NextResponse.json({ error: 'Falta el estilo o el nombre de marca' }, { status: 400 })
-    if (!session.logo_url)
-      return NextResponse.json({ error: 'Falta generar el logo primero' }, { status: 400 })
 
     const preset = resolveEffectivePreset(session)
     const layout = resolveEffectiveLayout(session)
@@ -47,7 +44,6 @@ export async function POST(
     const prompt = buildLabelPrompt(brief, preset, layout)
 
     const parts: Part[] = [
-      ...(await imageRefParts(session.logo_url)),
       ...(await identityRefParts(session)),
       ...(await wireframeRefParts(session)),
       { text: prompt },

@@ -30,12 +30,12 @@ const QUOTA_KIND: Record<Step, string> = {
 //    contraste, e inserta el logo en la etiqueta con equilibrio y legibilidad.
 // 3. POST /mockup → recibe la etiqueta generada y la aplica al envase.
 //
-// `runFrom(step)` es el único runner: corre `step` y todos los siguientes en
-// STEP_ORDER, persistiendo cada URL en el store al terminar. Así "Generar mi
-// marca" (runFrom('logo')), "reintentar" tras un fallo (runFrom(failedStep)) y
-// cada regen individual son la MISMA función — la cascada hacia abajo (regen
-// logo → recorre logo+etiqueta+mockup; regen etiqueta → etiqueta+mockup; regen
-// mockup → solo mockup) sale gratis de recorrer STEP_ORDER desde ese punto.
+// `runSteps(steps)` corre una lista de pasos secuencialmente. "Generar mi marca"
+// y "reintentar" usan `runFrom` (cadena completa desde un punto). Los regen son
+// TARGETED según dependencia real: el logo es un asset INDEPENDIENTE (la etiqueta
+// arma su wordmark con el nombre de producto, no usa el logo) → regen logo = solo
+// logo; regen etiqueta = etiqueta+mockup (el mockup aplica la etiqueta); regen
+// mockup = solo mockup.
 //
 // Anti-regen-en-reopen: si el store YA tiene logo+etiqueta+mockup (sesión
 // retomada con los 3 artefactos completos), arranca en 'done' sin llamar a
@@ -66,18 +66,18 @@ export default function Section4Marca({ onGuide }: { onGuide: () => void }) {
 
   const promptFor = (step: Step) => (step === 'logo' ? logoPrompt : step === 'label' ? labelPrompt : mockupPrompt)
 
-  // Corre `start` y todo lo que sigue en STEP_ORDER, secuencialmente. Cada
-  // ruta lee logo_url/label_url ya persistidos en DB, así que un await
-  // sucesivo es lo que hace que "nuevo logo → la etiqueta ve ese logo".
-  async function runFrom(start: Step) {
+  // Corre una lista de pasos secuencialmente, persistiendo cada URL. El mockup
+  // lee label_url ya persistido en DB, así que "nueva etiqueta → mockup ve esa
+  // etiqueta". El LOGO es un asset INDEPENDIENTE (la etiqueta arma su propio
+  // wordmark con el nombre de producto, no usa el logo) → regenerar el logo NO
+  // re-corre etiqueta/mockup.
+  async function runSteps(steps: readonly Step[]) {
     if (!sessionId || busy) return
     setBusy(true)
     setError(null)
     setFailedStep(null)
 
-    const startIdx = STEP_ORDER.indexOf(start)
-    for (let i = startIdx; i < STEP_ORDER.length; i++) {
-      const step = STEP_ORDER[i]
+    for (const step of steps) {
       setPhase(step)
       try {
         const res = await fetch(`/api/generador-branding/sessions/${sessionId}/${step}`, {
@@ -105,6 +105,10 @@ export default function Section4Marca({ onGuide }: { onGuide: () => void }) {
     setPhase('done')
     setBusy(false)
   }
+
+  // Cadena completa desde un punto: "Generar mi marca" (desde 'logo') y el
+  // "reintentar" tras un fallo (desde el paso que falló).
+  const runFrom = (start: Step) => runSteps(STEP_ORDER.slice(STEP_ORDER.indexOf(start)))
 
   if (!sessionId) return null
 
@@ -155,7 +159,7 @@ export default function Section4Marca({ onGuide }: { onGuide: () => void }) {
                 regensLeft={regens['branding-logo'] ?? 3}
                 prompt={logoPrompt}
                 onPromptChange={setLogoPrompt}
-                onRegenerate={() => runFrom('logo')}
+                onRegenerate={() => runSteps(['logo'])}
                 busy={busy}
                 label="↻ Regenerar logo"
               />
@@ -171,7 +175,7 @@ export default function Section4Marca({ onGuide }: { onGuide: () => void }) {
                 regensLeft={regens['branding-label'] ?? 3}
                 prompt={labelPrompt}
                 onPromptChange={setLabelPrompt}
-                onRegenerate={() => runFrom('label')}
+                onRegenerate={() => runSteps(['label', 'mockup'])}
                 busy={busy}
                 label="↻ Regenerar etiqueta"
               />
@@ -187,7 +191,7 @@ export default function Section4Marca({ onGuide }: { onGuide: () => void }) {
                 regensLeft={regens['branding-mockup'] ?? 3}
                 prompt={mockupPrompt}
                 onPromptChange={setMockupPrompt}
-                onRegenerate={() => runFrom('mockup')}
+                onRegenerate={() => runSteps(['mockup'])}
                 busy={busy}
                 label="↻ Regenerar mockup"
               />
