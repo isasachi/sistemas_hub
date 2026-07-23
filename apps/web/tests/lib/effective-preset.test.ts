@@ -30,19 +30,20 @@ describe('resolveEffectivePreset', () => {
     expect(eff.typography).toEqual(getPreset(id).typography)
   })
 
-  it('modo A con template elegido: pisa palette/typography', () => {
+  it('modo A: identidad fija — ignora selected_palette/typography (columnas legadas)', () => {
     const id = Object.keys(STYLE_PRESETS)[0]
     const pal = [{ hex: '#111111', name: 'x', role: 'primary' as const },
                  { hex: '#222222', name: 'y', role: 'secondary' as const },
                  { hex: '#333333', name: 'z', role: 'accent' as const }]
     const eff = resolveEffectivePreset(base({ style_id: id, selected_palette: pal }))
-    expect(eff.palette).toEqual(pal)
-    // lo no elegido queda del preset
+    // paleta/tipografía SIEMPRE son las del preset, nunca los overrides legados
+    expect(eff.palette).toEqual(getPreset(id).palette)
     expect(eff.composition).toEqual(getPreset(id).composition)
   })
 
-  it('modo B: lo extraído pisa todo menos la meta del estilo asignado', () => {
-    const id = Object.keys(STYLE_PRESETS)[0]
+  it('modo B: es solo un clasificador — devuelve el preset del bestFitStyleId, lo extraído se descarta', () => {
+    const assignedId = Object.keys(STYLE_PRESETS)[0]
+    const bestFitId = Object.keys(STYLE_PRESETS)[1]
     const extracted = {
       essence: 'E', keywords: ['k'], palette: [
         { hex: '#aaa000', name: 'a', role: 'primary' as const },
@@ -50,11 +51,12 @@ describe('resolveEffectivePreset', () => {
         { hex: '#ccc000', name: 'c', role: 'accent' as const }],
       typography: { primary: 'P', secondary: 'S', case: 'mixed' as const, detail: 'D' },
       materials: ['m'], composition: 'C', lighting: 'L', mood: ['mo'],
-      motifs: ['mt'], avoid: ['av'], styleBlock: 'SB', bestFitStyleId: id,
+      motifs: ['mt'], avoid: ['av'], styleBlock: 'SB', bestFitStyleId: bestFitId,
     }
-    const eff = resolveEffectivePreset(base({ source_mode: 'upload', style_id: id, image_analysis: extracted }))
-    expect(eff.composition).toBe('C')          // de lo extraído
-    expect(eff.palette[0].hex).toBe('#aaa000') // de lo extraído
-    expect(eff.id).toBe(getPreset(id).id)      // meta del asignado
+    const eff = resolveEffectivePreset(base({ source_mode: 'upload', style_id: assignedId, image_analysis: extracted }))
+    // el preset devuelto es el del bestFitStyleId por completo, no el assignedId ni lo extraído
+    expect(eff.id).toBe(getPreset(bestFitId).id)
+    expect(eff.composition).toBe(getPreset(bestFitId).composition)
+    expect(eff.palette).toEqual(getPreset(bestFitId).palette)
   })
 })

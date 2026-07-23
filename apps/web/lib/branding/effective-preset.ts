@@ -23,21 +23,22 @@ export function thumbUrl(styleId: string): string {
 
 /**
  * El StylePreset único que alimenta a generation-prompts.ts, en ambos modos.
- * Modo B: lo extraído de la imagen pisa el preset asignado (menos su meta).
- * selected_palette/typography (paso 3) pisan por encima de todo.
+ * Identidad fija: la paleta/tipografía SIEMPRE son las del preset (7 estilos
+ * curados), sin overrides. Modo B (upload) es un clasificador: solo decide a
+ * cuál de los 7 estilos se parece más la imagen del usuario (bestFitStyleId);
+ * lo demás extraído de la imagen se descarta.
  */
 export function resolveEffectivePreset(session: BrandingSessionResponse): StylePreset {
   if (!session.style_id) throw new Error('resolveEffectivePreset: falta style_id')
-  const assigned = getPreset(session.style_id)
-  const base: StylePreset =
-    session.source_mode === 'upload' && session.image_analysis
-      ? { ...assigned, ...session.image_analysis } // lo extraído pisa; id/index/name/referenceFolder quedan del asignado
-      : assigned
-  return {
-    ...base,
-    palette: session.selected_palette ?? base.palette,
-    typography: session.selected_typography ?? base.typography,
+  if (session.source_mode === 'upload' && session.image_analysis) {
+    return getPreset(session.image_analysis.bestFitStyleId)
   }
+  return getPreset(session.style_id)
+}
+
+/** URL de Storage del wireframe (esqueleto de layout) del estilo. */
+export function wireframeUrl(styleId: string): string {
+  return `${STORAGE_BASE()}/wireframes/${styleId}.png`
 }
 
 /** BrandBrief (input de generation-prompts) desde la sesión. */
@@ -60,13 +61,16 @@ export async function styleRefParts(session: BrandingSessionResponse): Promise<P
   const urls =
     session.source_mode === 'upload' && session.uploaded_image_url
       ? [session.uploaded_image_url]
-      : session.style_id ? refUrls(session.style_id) : []
+      : session.style_id ? [...refUrls(session.style_id), wireframeUrl(session.style_id)] : []
   const parts: Part[] = []
   for (const url of urls) {
     try {
       const { data, mimeType } = await fetchAsBase64(url)
       parts.push({ inlineData: { mimeType, data } })
-    } catch (e) { console.error('[styleRefParts] fetch', url, e) }
+    } catch (e) {
+      console.error('[styleRefParts] fetch', url, e)
+      throw new Error(`No se pudo cargar la referencia: ${url}`)
+    }
   }
   return parts
 }

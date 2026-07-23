@@ -48,6 +48,9 @@ export interface BrandingSessionResponse {
   image_analysis: ExtractedStyle | null
   selected_palette: PaletteColor[] | null
   selected_typography: Typography | null
+  preset_version: number | null
+  generation_status: 'pending' | 'mockup' | 'deriving' | 'done' | 'failed' | null
+  generation_error: string | null
 }
 
 // ─── Modo B (upload): estilo extraído de la imagen del usuario ────────────────
