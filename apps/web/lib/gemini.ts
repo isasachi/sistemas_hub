@@ -2,6 +2,7 @@ import { GoogleGenAI, Modality, type Part, type Schema } from '@google/genai'
 import { z } from 'zod'
 import fs from 'fs'
 import path from 'path'
+import { useOpenAI, openaiCallStructured, openaiCallReasoning, openaiGenerateImage } from './llm-openai'
 
 function getAI() {
   return new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY! })
@@ -52,6 +53,8 @@ export async function callStructured<T>(
   maxRetries = 3,
   systemInstruction: string = SYSTEM_PROMPT
 ): Promise<T> {
+  // Cableado alternativo temporal (LLM_PROVIDER=openai): gpt-4o-mini structured.
+  if (useOpenAI()) return openaiCallStructured(schemaName, schema, parts, maxRetries, systemInstruction)
   let lastError: unknown = new Error(`callStructured(${schemaName}): no attempts`)
   for (let i = 0; i < maxRetries; i++) {
     try {
@@ -78,6 +81,7 @@ export async function callStructured<T>(
 }
 
 export async function callReasoning(systemPrompt: string, userMessage: string): Promise<string> {
+  if (useOpenAI()) return openaiCallReasoning(systemPrompt, userMessage)
   const res = await getAI().models.generateContent({
     model: 'gemini-2.5-flash',
     contents: [{ role: 'user', parts: [{ text: userMessage }] }],
@@ -106,6 +110,8 @@ export async function generateImage(
   opts?: { aspectRatio?: string; imageSize?: string }
 ): Promise<string> {
   const allParts: Part[] = [...parts, { text: SPANISH_RULE }]
+  // Cableado alternativo temporal (LLM_PROVIDER=openai): gpt-image-2 (edit multi-imagen si hay refs).
+  if (useOpenAI()) return openaiGenerateImage(allParts, maxRetries, opts)
   let lastError: unknown = null
   for (let i = 0; i < maxRetries; i++) {
     try {
