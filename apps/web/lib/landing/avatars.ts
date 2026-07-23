@@ -1,9 +1,10 @@
 import { generateImage } from '@/lib/gemini'
-import type { CastingSpec } from './types'
+import type { DemographicId } from './types'
 
-// Avatares de testimonios (motor híbrido). Genera 3 retratos de clientes DISTINTOS, informados por
-// el casting de la campaña (mismo mercado/demografía, personas diferentes). Se generan una vez y se
-// cachean en la sesión; la sección testimonios los compone como <img>. $0-rule OK (Gemini).
+// Avatares de testimonios (motor híbrido) → paso 0.b (spec 2026-07-23). Genera 3 retratos de
+// clientes DISTINTOS, informados por la demografía de la campaña (mismo mercado/demografía,
+// personas diferentes). Se generan una vez y se cachean en la sesión; la sección testimonios
+// los compone como <img>. $0-rule OK (Gemini).
 
 const VARIANTS = [
   'age 22-30, long dark hair',
@@ -11,8 +12,16 @@ const VARIANTS = [
   'age 25-35, straight black hair, glasses',
 ]
 
-export async function generateAvatars(casting?: CastingSpec | null): Promise<(string | null)[]> {
-  const who = casting?.gender === 'masculino' ? 'man' : casting?.gender === 'mixto' ? 'person' : 'woman'
+function whoFor(demographic: DemographicId): string {
+  if (demographic.startsWith('female_')) return 'woman'
+  if (demographic.startsWith('male_')) return 'man'
+  return 'person' // senior_55_plus: mixto
+}
+
+// no_talent: sin talento en la campaña → sin caras de testimonios tampoco.
+export async function generateAvatars(demographic: DemographicId): Promise<(string | null)[]> {
+  if (demographic === 'no_talent') return []
+  const who = whoFor(demographic)
   return Promise.all(
     VARIANTS.map((v) =>
       generateImage(

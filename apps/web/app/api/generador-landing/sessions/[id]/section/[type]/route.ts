@@ -328,7 +328,7 @@ async function generateHybridSection(
     } else {
       const sharp = (await import('sharp')).default
       const urls: string[] = []
-      for (const b of await generateAvatars(session.derived_brand?.casting)) {
+      for (const b of await generateAvatars(session.demographic_id ?? 'no_talent')) {
         if (!b) continue
         const jpg = await sharp(Buffer.from(b, 'base64')).jpeg({ quality: 88 }).toBuffer()
         urls.push(await uploadToStorage(id, jpg, 'image/jpeg', `avatar-${urls.length}`))
