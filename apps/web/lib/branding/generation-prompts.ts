@@ -1,27 +1,37 @@
 /**
  * generationPrompts.ts
  * ---------------------------------------------------------------------------
- * CORE del flujo del motor de generación de marca y producto (compose-first,
- * migración fases 5-7 jul 2026: identidad fija de 7 estilos, sin overrides).
+ * CORE del flujo del motor de generación de marca y producto (pipeline
+ * SECUENCIAL, migración jul 2026: identidad fija de 7 estilos, sin overrides).
  *
  * Fusiona BrandBrief (lo que aporta el usuario) + StylePreset (el ADN visual,
  * ya resuelto por `resolveEffectivePreset`) + el esqueleto de layout
  * (`label-layouts.ts`) + los pares de contraste legal (`contrast.ts`) en un
- * único PROMPT en lenguaje natural para el MOCKUP COMPUESTO (envase con logo Y
- * etiqueta integrados); la etiqueta plana y el logo aislado se DERIVAN de ese
- * mockup elegido (`labelFromMockupPrompt`/`logoFromMockupPrompt`), no se
- * generan por separado — así quedan consistentes entre sí.
+ * PROMPT en lenguaje natural, uno por artefacto, en orden:
+ *
+ *   1. LOGO (`buildLogoPrompt`) — mark limpio, aislado, en la identidad del estilo.
+ *   2. ETIQUETA (`buildLabelPrompt`) — recibe el LOGO ya generado + el WIREFRAME
+ *      de layout + los pares de contraste, e inserta el logo en la etiqueta con
+ *      equilibrio y legibilidad (nunca perdido ni chocando con el fondo).
+ *   3. MOCKUP (`buildMockupPrompt`) — recibe la ETIQUETA ya generada y la aplica
+ *      fotorrealista sobre el envase.
+ *
+ * Cada paso es una generación independiente y sus artefactos se encadenan
+ * pasándose como IMAGEN adjunta (ver `effective-preset.ts` `imageRefParts`),
+ * no re-derivados de un compuesto — así el logo insertado en la etiqueta es
+ * pixel-el-mismo que el logo standalone, y la etiqueta aplicada al mockup es
+ * pixel-la-misma que la etiqueta standalone.
  *
  * Por qué así:
  *  - Nano Banana / Gemini responde mejor a lenguaje natural descriptivo que a
  *    listas de parámetros.
  *  - Gemini renderiza texto con fidelidad: por eso el nombre de marca se pasa
  *    ENTRECOMILLADO y con instrucción de ortografía exacta.
- *  - Gemini es fuerte usando imágenes de referencia: `preset.referenceFolder`
- *    apunta a las refs del estilo (ver `attachStyleRefs`), y el wireframe del
- *    estilo se adjunta como última ref (ver `effective-preset.ts`
- *    `styleRefParts`) — el prompt lo referencia explícitamente como esqueleto
- *    de layout, no como referencia de estilo.
+ *  - Gemini es fuerte usando imágenes de referencia y respeta el ORDEN de los
+ *    adjuntos: la etiqueta adjunta `[logo, ...identityRefs, wireframe]` (logo
+ *    PRIMERO — "the first attached image is the logo"; wireframe ÚLTIMO —
+ *    "the final attached image is a skeleton"); el mockup adjunta
+ *    `[label, ...identityRefs]` (etiqueta PRIMERO). Ver `effective-preset.ts`.
  * ---------------------------------------------------------------------------
  */
 
@@ -73,53 +83,56 @@ function exactText(label: string, value?: string): string {
 }
 
 /* --------------------------------------------------------------------------
- * Pipeline compose-first (2026-07): mockup master → derivar etiqueta + logo.
- * En vez de generar los 3 artefactos por separado (logo perdido/incongruente
- * con la etiqueta), se genera el MOCKUP COMPUESTO completo (envase con logo Y
- * etiqueta integrados) primero; el usuario elige una variante; de ESE diseño
- * se derivan la etiqueta plana y el logo aislado — consistentes entre sí.
+ * Pipeline SECUENCIAL (2026-07): logo → etiqueta (con el logo insertado) →
+ * mockup (con la etiqueta aplicada). Cada paso es una generación independiente
+ * que recibe como imagen adjunta el artefacto del paso anterior — no se
+ * derivan retrospectivamente de un compuesto, así quedan pixel-consistentes.
  * ------------------------------------------------------------------------ */
 
-// Master compuesto: mockup fotorrealista con etiqueta Y logo integrados coherentemente.
-// El logo NO debe quedar perdido ni incongruente con la etiqueta. Inyecta el
-// esqueleto de layout (label-layouts.ts), los pares de contraste legal
-// (contrast.ts) y la instrucción del wireframe adjunto (última ref, ver
-// effective-preset.ts styleRefParts) para que la composición sea consistente
-// entre generaciones del mismo estilo.
-export function buildComposedMockupPrompt(
-  brief: BrandBrief,
-  preset: StylePreset,
-  layout: LabelLayout = getLayout(preset.id),
-): string {
-  const container = brief.containerType ?? "product packaging";
+// Logo aislado, en la identidad del estilo — primer artefacto de la cadena.
+export function buildLogoPrompt(brief: BrandBrief, preset: StylePreset): string {
+  const bg = preset.palette.find((c) => c.role === "background")?.name ?? "neutral";
   return [
-    `Create a photorealistic product mockup: a ${container} for "${brief.brandName}", a ${brief.productType}, with its COMPLETE packaging design fully applied — as one cohesive professional brand system.`,
+    `Design a clean, professional brand LOGO / wordmark for "${brief.brandName}", a ${brief.productType}.`,
     preset.styleBlock,
+    `Typography: ${preset.typography.primary}; ${preset.typography.detail}.`,
     paletteLine(preset, brief),
-    contrastToPrompt(preset),
-    `The packaging must show BOTH elements, integrated coherently as a single deliberate design: (1) a clear brand LOGO / wordmark for "${brief.brandName}" — prominent, legible and well-placed, NOT lost in the artwork and NOT clashing with the label; and (2) the full front label with${brief.descriptor ? ` the descriptor "${brief.descriptor}",` : ""}${brief.tagline ? ` the tagline "${brief.tagline}",` : ""} plus small realistic legal / net-weight / ingredient microtext.`,
-    layoutToPrompt(layout),
-    `The final attached image is a LAYOUT SKELETON, not a style reference. Follow its spatial arrangement of elements exactly; ignore its colors and treat it as structure only.`,
-    `Materials & finish: ${preset.materials.join(", ")}.`,
-    `Studio product photography: ${preset.lighting}. Scene: ${preset.composition}. Mood: ${preset.mood.join(", ")}. Realistic reflections, soft contact shadow, believable depth of field.`,
-    exactText("brand name on the packaging", brief.brandName).trim(),
-    `Avoid: ${[...preset.avoid, ...layout.avoidLayout].join(", ")}. High-resolution, professional commercial quality, sharp focus, no watermark, no stray or misspelled text.${brief.extraNotes ? ` ${brief.extraNotes}` : ""}`,
+    `The logo is a scalable mark — a wordmark and/or a simple emblem — legible at small sizes, presented ISOLATED and centered on a plain flat ${bg} background with generous margins. ${brief.descriptor ? `It should feel: ${brief.descriptor}.` : `Capture the mood: ${preset.mood.join(", ")}.`}`,
+    exactText("brand name", brief.brandName).trim(),
+    `Avoid: ${preset.avoid.join(", ")}. High-resolution, sharp, no watermark, no stray or misspelled text.`,
   ].filter(Boolean).join(" ");
 }
 
-// Derivación: se pasa el mockup compuesto como imagen a generateImage + este texto.
-// NO usar editWithPrompt (su framing "cambio mínimo pixel-idéntico" pelea con una transformación).
-export function labelFromMockupPrompt(brief: BrandBrief): string {
+// Etiqueta plana: recibe el LOGO como primera imagen adjunta y el WIREFRAME
+// como última (ver effective-preset.ts identityRefParts/wireframeRefParts) —
+// inserta el logo generado con equilibrio y legibilidad, siguiendo el
+// esqueleto de layout y los pares de contraste legal del estilo.
+export function buildLabelPrompt(brief: BrandBrief, preset: StylePreset, layout: LabelLayout): string {
   return [
-    `The attached image is a product mockup. Reproduce its FRONT LABEL as standalone FLAT 2D artwork:`,
-    `exactly the printed label panel seen on the packaging — same logo, brand name "${brief.brandName}", colors, typography, graphics and text hierarchy — but rendered front-on and flattened,`,
-    `with NO 3D packaging, NO perspective, NO product body, NO background scene. Just the flat label design filling the frame, print-ready. Keep every visible word spelled exactly as on the mockup.`,
-  ].join(" ");
+    `Design the FLAT front label / packaging panel artwork for "${brief.brandName}", a ${brief.productType}. This is flat 2D label artwork — front-on, NO 3D packaging, NO perspective, NO product body, NO background scene — print-ready, filling the frame.`,
+    preset.styleBlock,
+    paletteLine(preset, brief),
+    contrastToPrompt(preset),
+    `The FIRST attached image is the finished brand LOGO. Place that EXACT logo into the label at: ${layout.logoPlacement}. Integrate it with balanced contrast, scale and spacing so it is prominent and legible, harmonious with the rest of the composition, and NEVER lost in the artwork or clashing with what is behind it — keep the logo's own colors and forms intact; do not redraw it.`,
+    layoutToPrompt(layout),
+    `Text hierarchy: the brand name "${brief.brandName}"${brief.descriptor ? `, the descriptor "${brief.descriptor}"` : ""}${brief.tagline ? `, the tagline "${brief.tagline}"` : ""}, plus small realistic legal / net-weight / ingredient microtext (microtext MUST use the highest-contrast pairing).`,
+    `The FINAL attached image is a LAYOUT SKELETON, not a style reference. Follow its spatial arrangement of zones exactly; ignore its colors and treat it as structure only.`,
+    exactText("brand name", brief.brandName).trim(),
+    exactText("tagline", brief.tagline).trim(),
+    `Avoid: ${[...preset.avoid, ...layout.avoidLayout].join(", ")}. High-resolution, sharp, no watermark, no stray or misspelled text.`,
+  ].filter(Boolean).join(" ");
 }
-export function logoFromMockupPrompt(brief: BrandBrief): string {
+
+// Mockup fotorrealista: recibe la ETIQUETA como primera imagen adjunta y la
+// aplica al envase — último artefacto de la cadena.
+export function buildMockupPrompt(brief: BrandBrief, preset: StylePreset): string {
+  const container = brief.containerType ?? "product packaging";
   return [
-    `The attached image is a product mockup. Extract and reproduce ONLY the brand LOGO / wordmark for "${brief.brandName}"`,
-    `exactly as it appears on the packaging — same letterforms, weight, colors and mark — as a clean, isolated, high-resolution logo`,
-    `centered on a plain solid white/neutral background with generous margins. No packaging, no product, no scenery, no extra text — just the logo, crisp and reusable.`,
-  ].join(" ");
+    `Create a photorealistic product mockup: a ${container} for "${brief.brandName}", a ${brief.productType}.`,
+    `The FIRST attached image is the finished FLAT LABEL artwork — apply it realistically onto the ${container} surface with correct label wrapping, material and finish (${preset.materials.join(", ")}), preserving the label's design, logo, colors and text EXACTLY.`,
+    preset.styleBlock,
+    `Studio product photography: ${preset.lighting}. Scene: ${preset.composition}. Mood: ${preset.mood.join(", ")}. Realistic reflections, soft contact shadow, believable depth of field.`,
+    exactText("brand name on the packaging", brief.brandName).trim(),
+    `Avoid: ${preset.avoid.join(", ")}. High-resolution, professional commercial quality, sharp focus, no watermark, no stray or misspelled text.`,
+  ].filter(Boolean).join(" ");
 }

@@ -8,7 +8,7 @@ export const SESSION_KEY = 'branding_session_id'
 // Máquina de pasos del wizard de branding (migración fase 10 — se elimina el
 // paso de paleta/tipografía, identidad fija: paleta/tipo SIEMPRE del preset).
 // `step` = nº de secciones completadas; la sección activa es `step`.
-//   0 Estilo · 1 Tu marca · 2 Marca (compose→derivar, auto-orquestado) · 3 Guía (final)
+//   0 Estilo · 1 Tu marca · 2 Marca (logo→etiqueta→mockup, auto-orquestado) · 3 Guía (final)
 
 interface BrandingState {
   sessionId: string | null
@@ -27,7 +27,6 @@ interface BrandingState {
   tagline: string | null
   containerType: string | null
   // resultados
-  mockupOptions: string[]
   logoUrl: string | null
   labelUrl: string | null
   mockupUrl: string | null
@@ -47,9 +46,7 @@ interface BrandingActions {
     tagline: string
     containerType: string
   }) => void
-  setMockupOptions: (mockupOptions: string[]) => void
   setMockup: (mockupUrl: string) => void
-  setDerived: (data: { logoUrl: string; labelUrl: string; mockupUrl: string }) => void
   setLogo: (logoUrl: string) => void
   setLabel: (labelUrl: string) => void
   goToGuide: () => void
@@ -73,7 +70,6 @@ const initialState: BrandingState = {
   descriptor: null,
   tagline: null,
   containerType: null,
-  mockupOptions: [],
   logoUrl: null,
   labelUrl: null,
   mockupUrl: null,
@@ -95,15 +91,11 @@ export const useBrandingStore = create<BrandingState & BrandingActions>((set) =>
   setBrief: ({ brandName, productName, productType, descriptor, tagline, containerType }) =>
     set({ brandName, productName, productType, descriptor, tagline, containerType, step: 2 }),
 
-  setMockupOptions: (mockupOptions) => set({ mockupOptions }),
-
-  // Mockup compuesto (compose, antes de derivar logo+etiqueta).
+  // Pipeline secuencial logo→etiqueta→mockup: cada paso persiste su propia URL
+  // al terminar. El paso 2 "Marca" sigue activo (muestra los 3 con sus regens)
+  // hasta que el usuario confirma con "Continuar a la guía" → goToGuide. No
+  // tocar `step` acá.
   setMockup: (mockupUrl) => set({ mockupUrl }),
-
-  // derive({target:'both'}) deja los 3 artefactos consistentes. El paso 2
-  // "Marca" sigue activo (muestra los 3 con sus regens) hasta que el usuario
-  // confirma con "Continuar a la guía" → goToGuide. No tocar `step` acá.
-  setDerived: ({ logoUrl, labelUrl, mockupUrl }) => set({ logoUrl, labelUrl, mockupUrl }),
 
   setLogo: (logoUrl) => set({ logoUrl }),
 
@@ -126,7 +118,6 @@ export const useBrandingStore = create<BrandingState & BrandingActions>((set) =>
       descriptor: s.descriptor,
       tagline: s.tagline,
       containerType: s.container_type,
-      mockupOptions: s.mockup_options ?? [],
       logoUrl: s.logo_url,
       labelUrl: s.label_url,
       mockupUrl: s.mockup_url,

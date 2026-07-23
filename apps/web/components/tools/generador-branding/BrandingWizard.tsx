@@ -13,8 +13,8 @@ import Section2Brief from './sections/Section2Brief'
 import Section4Marca from './sections/Section4Marca'
 import Section5Guide from './sections/Section5Guide'
 
-// Wizard de branding compose-first, identidad fija (migración fase 10). 4 secciones,
-// `step` 0..3: 0 Estilo · 1 Tu marca · 2 Marca (compose→derivar, auto-orquestado) · 3 Guía (final)
+// Wizard de branding, pipeline secuencial, identidad fija (migración jul 2026). 4 secciones,
+// `step` 0..3: 0 Estilo · 1 Tu marca · 2 Marca (logo→etiqueta→mockup, auto-orquestado) · 3 Guía (final)
 // `maxStep` = paso más avanzado alcanzado; una sección ya visitada queda 'completed'
 // (reabrible) aunque retrocedas, para navegar adelante/atrás sin reenviar (re-quemar LLM).
 function getStatus(sectionStep: number, currentStep: number, maxStep: number): 'locked' | 'active' | 'completed' {
@@ -86,9 +86,9 @@ export default function BrandingWizard() {
     setUploaded({ styleId: r.styleId, uploadedImageUrl: r.uploadedImageUrl, imageAnalysis: r.analysis ?? null })
   }
 
-  // "Continuar a la guía" (botón en Section4Marca, fase `done`): la derivación
-  // ya fijó step:2 server-side (derive target:'both'), acá solo falta avanzar
-  // a la Guía (step 3) — high-water mark, igual que el resto de pasos.
+  // "Continuar a la guía" (botón en Section4Marca, fase `done`): el pipeline
+  // logo→etiqueta→mockup ya corrió, acá solo falta avanzar a la Guía (step 3)
+  // — high-water mark, igual que el resto de pasos.
   async function onGuide() {
     if (sessionId) await patchSession(sessionId, { step: Math.max(maxStep.current, 3) })
     goToGuide()
@@ -142,7 +142,7 @@ export default function BrandingWizard() {
           <Section2Brief maxStep={maxStep.current} />
         </AccordionSection>
 
-        {/* 3 — Marca (compose→derivar, auto-orquestado) */}
+        {/* 3 — Marca (logo→etiqueta→mockup, auto-orquestado) */}
         <AccordionSection
           index={3}
           title="Logo, etiqueta y mockup"

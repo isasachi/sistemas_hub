@@ -28,7 +28,7 @@ export function thumbUrl(styleId: string): string {
  * (identidad completa: paleta, tipografía, materiales, composición, lighting,
  * mood, motifs, avoid, styleBlock — todo derivado de la imagen real, no de un
  * preset fijo). `referenceFolder: ''` porque el modo upload no adjunta refs
- * de estilo de ningún preset — adjunta la imagen del usuario (ver `styleRefParts`).
+ * de estilo de ningún preset — adjunta la imagen del usuario (ver `identityRefParts`).
  */
 function extractedToPreset(a: ExtractedStyle): StylePreset {
   return {
@@ -97,24 +97,39 @@ export function sessionBrief(session: BrandingSessionResponse): BrandBrief {
 }
 
 /**
- * Imágenes de referencia a adjuntar en la generación, cargadas UNA vez:
- * - modo upload → la imagen del usuario Y el wireframe extraído de su layout
- *   (wireframe ÚLTIMO, para que la instrucción "final attached image is a
- *   skeleton" en el prompt sea correcta).
- * - modo preset → las 5 refs del estilo + el wireframe del preset.
+ * Refs de identidad SIN wireframe (para el logo, y como contexto de estilo en
+ * el resto de pasos): modo upload → la imagen del usuario; modo preset → las
+ * 5 refs del estilo.
  */
-export async function styleRefParts(session: BrandingSessionResponse): Promise<Part[]> {
-  const urls =
-    session.source_mode === 'upload'
-      ? [session.uploaded_image_url, session.uploaded_wireframe_url].filter((u): u is string => !!u)
-      : session.style_id ? [...refUrls(session.style_id), wireframeUrl(session.style_id)] : []
+export async function identityRefParts(session: BrandingSessionResponse): Promise<Part[]> {
+  const urls = session.source_mode === 'upload' && session.uploaded_image_url
+    ? [session.uploaded_image_url]
+    : session.style_id ? refUrls(session.style_id) : []
+  return fetchParts(urls)
+}
+
+/** El wireframe (esqueleto de layout): el del preset, o el extraído del upload. */
+export async function wireframeRefParts(session: BrandingSessionResponse): Promise<Part[]> {
+  const url = session.source_mode === 'upload'
+    ? session.uploaded_wireframe_url
+    : session.style_id ? wireframeUrl(session.style_id) : null
+  return url ? fetchParts([url]) : []
+}
+
+/** Una imagen ya generada (logo_url / label_url del paso anterior) como Part. */
+export async function imageRefParts(url: string | null): Promise<Part[]> {
+  return url ? fetchParts([url]) : []
+}
+
+/** FAIL-LOUD: un fetch fallido debe abortar la generación, no seguir con refs a medias. */
+async function fetchParts(urls: string[]): Promise<Part[]> {
   const parts: Part[] = []
   for (const url of urls) {
     try {
       const { data, mimeType } = await fetchAsBase64(url)
       parts.push({ inlineData: { mimeType, data } })
     } catch (e) {
-      console.error('[styleRefParts] fetch', url, e)
+      console.error('[fetchParts]', url, e)
       throw new Error(`No se pudo cargar la referencia: ${url}`)
     }
   }
