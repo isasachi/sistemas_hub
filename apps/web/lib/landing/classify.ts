@@ -10,22 +10,23 @@ import type { Part } from '@google/genai'
 const PROMPT = `Clasifica este producto en exactamente una de las categorías del esquema. Devuelve la clave literal, nunca una descripción. Si dudas entre dos, elige la que describa mejor a QUIÉN le vendes, no de qué está hecho el producto. Devuelve además la demografía del comprador y tu nivel de confianza entre 0 y 1.`
 
 export async function classifyNiche(session: LandingSessionResponse): Promise<NicheClassification> {
-  const parts: Part[] = []
-  const photo = session.product_photo_urls?.[0]
-  if (photo) {
-    const { data, mimeType } = await fetchAsBase64(photo)
-    parts.push({ inlineData: { mimeType, data } })
-  }
-  const ctx = [
-    session.product_labels && `Etiquetas: ${session.product_labels}`,
-    session.benefits && `Beneficios: ${session.benefits}`,
-    session.audience && `Público: ${session.audience}`,
-  ].filter(Boolean).join('\n')
-  parts.push({ text: `${PROMPT}\n\n${ctx}` })
   try {
+    const parts: Part[] = []
+    const photo = session.product_photo_urls?.[0]
+    if (photo) {
+      const { data, mimeType } = await fetchAsBase64(photo)
+      parts.push({ inlineData: { mimeType, data } })
+    }
+    const ctx = [
+      session.product_labels && `Etiquetas: ${session.product_labels}`,
+      session.benefits && `Beneficios: ${session.benefits}`,
+      session.audience && `Público: ${session.audience}`,
+    ].filter(Boolean).join('\n')
+    parts.push({ text: `${PROMPT}\n\n${ctx}` })
     return await callStructured('niche_classification', NicheClassification, parts)
   } catch {
     // callStructured ya reintentó internamente (maxRetries=3) — fallback duro tras agotarlos.
+    // También captura fallos de fetchAsBase64 (foto eliminada, network error, etc).
     const niche: NicheId = 'generic'
     return { niche_id: niche, demographic_id: NICHE_DEFAULT_DEMOGRAPHIC[niche], confidence: 0, reasoning: 'fallback' }
   }
