@@ -65,3 +65,8 @@ export async function updateSession(
     .single()
   if (error) throw new Error(error.message)
 }
+
+export async function deleteSession(id: string): Promise<void> {
+  const { error } = await getDb().from('sessions').delete().eq('id', id)
+  if (error) throw new Error(error.message)
+}

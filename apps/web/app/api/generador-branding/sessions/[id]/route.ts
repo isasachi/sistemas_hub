@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getBrandingSession, updateBrandingSession } from '@/lib/branding/db'
+import { getBrandingSession, updateBrandingSession, deleteBrandingSession } from '@/lib/branding/db'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -30,4 +30,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (Object.keys(patch).length === 0) return NextResponse.json({ error: 'Nada que actualizar' }, { status: 400 })
   await updateBrandingSession(id, patch as Parameters<typeof updateBrandingSession>[1])
   return NextResponse.json({ ok: true })
+}
+
+export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  try {
+    await deleteBrandingSession(id)
+    return NextResponse.json({ ok: true })
+  } catch {
+    return NextResponse.json({ error: 'No se pudo eliminar' }, { status: 500 })
+  }
 }
