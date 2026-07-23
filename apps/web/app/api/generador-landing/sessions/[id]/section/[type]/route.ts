@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getLandingSession, updateLandingSession, upsertLandingSection } from '@/lib/landing/db'
 import { fetchAsBase64, uploadToStorage, storagePublicUrl } from '@/lib/storage'
 import { generateImage, editWithPrompt } from '@/lib/gemini'
-import { buildDiffusionInstruction, PAYMENT_SECTIONS, MULTI_UNIT_SECTIONS } from '@/lib/landing/instructions'
-import { PaymentBar } from '@/lib/landing/layouts/payment-bar'
+import { buildDiffusionInstruction, MULTI_UNIT_SECTIONS, NO_TALENT_SECTIONS } from '@/lib/landing/instructions'
 import { BrandLockup, brandLockupText } from '@/lib/landing/layouts/brand-lockup'
 import { buildProductPack } from '@/lib/landing/product-box'
 import { NO_TALENT_SUBSTITUTE } from '@/lib/landing/demographics'
@@ -31,7 +30,7 @@ export const maxDuration = 60 // path source = gen imagen (~15s); cabe en 60s (V
 // aparte son los logos reales de marca (medios de pago, banderas, lockup) — la difusión los
 // garabatea si los dibuja ella.
 
-// Par tipográfico fijo para las fuentes de overlay (PaymentBar/BrandLockup). Los overlays no
+// Par tipográfico fijo para la fuente del overlay (BrandLockup). Los overlays no
 // reciben un par tipográfico por sesión (el motor de marca derivada que lo resolvía fue
 // retirado en Task 10): fuente bundleada fija (ponytail: swap a loadFixedFonts() no reduce
 // código muerto — typography-catalog.ts sigue vivo por buildTheme/fonts.ts, ver task-10-report.md).
@@ -134,7 +133,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     const hasTalent = session.demographic_id !== 'no_talent' && !!session.talent_canonical_url
-    if (hasTalent) {
+    // faq/testimonios NUNCA llevan al protagonista (ajuste post-smoke): no se adjunta su retrato.
+    const showProtagonist = hasTalent && !NO_TALENT_SECTIONS.has(parsedType.data)
+    if (showProtagonist) {
       const talent = await fetchAsBase64(session.talent_canonical_url!)
       parts.push({ inlineData: { mimeType: talent.mimeType, data: talent.data } })
     }
@@ -153,7 +154,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const talentSubstitute = !hasTalent
       ? (session.niche_id ? NO_TALENT_SUBSTITUTE[session.niche_id] : 'Producto en contexto, a escala humana')
       : undefined
-    if (parsedType.data === 'hero' || parsedType.data === 'cta-final') lockup = brandLockupText(session.product_labels, session.product_name)
+    // Lockup dorado SOLO en cta-final (ajuste post-smoke: se quitó del hero, salía siempre arriba).
+    if (parsedType.data === 'cta-final') lockup = brandLockupText(session.product_labels, session.product_name)
 
     parts.push({
       text: buildDiffusionInstruction({
@@ -174,17 +176,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
   if (!b64) return NextResponse.json({ error: 'No se pudo generar la sección', retryable: true }, { status: 502 })
 
-  // Overlay de logos de marca REALES (medios de pago + banderas + sello, o el lockup) sobre la
-  // banda que la difusión dejó limpia. Bandas disjuntas (pago en oferta/garantía, lockup en
-  // hero/cta-final) → a lo sumo un overlay por sección. El resto sube la imagen de difusión tal cual.
-  const needsBar = PAYMENT_SECTIONS.has(parsedType.data) && !!trust?.paymentMethods.length
+  // Overlay del lockup de marca REAL (solo cta-final) sobre la franja superior que la difusión
+  // dejó limpia. Los iconos de métodos de pago compuestos se retiraron (ajuste post-smoke). El
+  // resto de secciones sube la imagen de difusión tal cual.
   let outBuf = Buffer.from(b64, 'base64')
-  if (needsBar || lockup) {
+  if (lockup) {
     const theme = buildTheme([{ name: 'accent', hex: session.landing_dna.palette.color_accent }], DEFAULT_TYPE_PAIR)
-    const overlay = needsBar ? PaymentBar({ trust: trust!, theme }) : BrandLockup({ text: lockup!, theme })
+    const overlay = BrandLockup({ text: lockup, theme })
     outBuf = Buffer.from(await renderComposite(outBuf, overlay, { fonts: loadPairFonts(DEFAULT_TYPE_PAIR), width: 1080, height: 1920 }))
   }
-  const imageUrl = await uploadToStorage(id, outBuf, (needsBar || lockup) ? 'image/jpeg' : 'image/png', `section-${copy.type}`)
+  const imageUrl = await uploadToStorage(id, outBuf, lockup ? 'image/jpeg' : 'image/png', `section-${copy.type}`)
 
   // Upsert ATÓMICO de la sección: el `order` lo manda el cliente (índice en selected_sections);
   // al regenerar se preserva el existente. Se persiste vía RPC atómica (no read-modify-write del

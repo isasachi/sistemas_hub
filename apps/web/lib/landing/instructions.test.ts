@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildDiffusionInstruction, PAYMENT_SECTIONS, MULTI_UNIT_SECTIONS } from './instructions'
+import { buildDiffusionInstruction, MULTI_UNIT_SECTIONS, NO_TALENT_SECTIONS } from './instructions'
 import type { SectionCopy, SectionType, LandingDna, Offer, TrustBlock } from './types'
 
 const ALL: SectionType[] = [
@@ -110,9 +110,28 @@ describe('buildDiffusionInstruction — DNA-driven (spec 2026-07-23)', () => {
     }
   })
 
-  it('pose de dna.poses[section] presente cuando hasTalent', () => {
+  it('pose de dna.poses[section] presente cuando hasTalent (secciones con protagonista)', () => {
     for (const type of ALL) {
+      if (NO_TALENT_SECTIONS.has(type)) continue // faq/testimonios no muestran al protagonista
       expect(build(type, { hasTalent: true })).toContain(DNA.poses[type])
+    }
+  })
+
+  it('faq/testimonios NUNCA muestran al talento/protagonista, aunque hasTalent', () => {
+    const faq = build('faq', { hasTalent: true })
+    expect(faq).toContain('NO lleva persona alguna')
+    expect(faq).not.toContain(DNA.model_persona)
+    expect(faq).toContain('No hay imagen de talento adjunta') // nota de composición no promete retrato
+    const testi = build('testimonios', { hasTalent: true })
+    expect(testi).toContain('CLIENTES de las tarjetas de testimonio')
+    expect(testi).not.toContain(DNA.model_persona)
+  })
+
+  it('no se pide una banda de iconos de métodos de pago en ninguna sección', () => {
+    for (const type of ALL) {
+      const out = build(type, { offer: OFFER, trust: TRUST })
+      expect(out).not.toContain('PAYMENT LOGOS')
+      expect(out).not.toContain('Paga como prefieras')
     }
   })
 
@@ -173,12 +192,13 @@ describe('buildDiffusionInstruction — DNA-driven (spec 2026-07-23)', () => {
     expect(build('faq', { trust: TRUST })).not.toContain('TRUST ROWS')
   })
 
-  it('MULTI_UNIT_SECTIONS / PAYMENT_SECTIONS conservan su membresía', () => {
+  it('MULTI_UNIT_SECTIONS y NO_TALENT_SECTIONS conservan su membresía', () => {
     expect(MULTI_UNIT_SECTIONS.has('oferta')).toBe(true)
     expect(MULTI_UNIT_SECTIONS.has('cta-final')).toBe(true)
     expect(MULTI_UNIT_SECTIONS.has('hero')).toBe(false)
-    expect(PAYMENT_SECTIONS.has('oferta')).toBe(true)
-    expect(PAYMENT_SECTIONS.has('garantia')).toBe(true)
+    expect(NO_TALENT_SECTIONS.has('faq')).toBe(true)
+    expect(NO_TALENT_SECTIONS.has('testimonios')).toBe(true)
+    expect(NO_TALENT_SECTIONS.has('hero')).toBe(false)
   })
 
   it('packNote se inyecta cuando packUnits > 1', () => {
@@ -193,15 +213,19 @@ describe('buildDiffusionInstruction — DNA-driven (spec 2026-07-23)', () => {
     expect(build('hero', { reserveLockup: false })).not.toContain('BRAND LOCKUP (do NOT draw)')
   })
 
-  it('ninguna sección suprime persona ni producto: las 8 mencionan persona (o sustituto) Y producto', () => {
+  it('secciones con protagonista mencionan persona Y producto; faq/testimonios suprimen al protagonista pero mantienen producto', () => {
     for (const type of ALL) {
       const withTalent = build(type, { hasTalent: true })
-      expect(withTalent).toContain(DNA.model_persona)
       expect(withTalent).toContain('Producto (invariante)')
-
-      const noTalent = build(type, { hasTalent: false, talentSubstitute: 'El animal como protagonista, con banco de poses propio' })
-      expect(noTalent).toContain('El animal como protagonista, con banco de poses propio')
-      expect(noTalent).toContain('Producto (invariante)')
+      if (NO_TALENT_SECTIONS.has(type)) {
+        expect(withTalent).not.toContain(DNA.model_persona)
+      } else {
+        expect(withTalent).toContain(DNA.model_persona)
+        // no_talent del nicho: sustituto en el carril (solo secciones con protagonista)
+        const noTalent = build(type, { hasTalent: false, talentSubstitute: 'El animal como protagonista, con banco de poses propio' })
+        expect(noTalent).toContain('El animal como protagonista, con banco de poses propio')
+        expect(noTalent).toContain('Producto (invariante)')
+      }
     }
   })
 

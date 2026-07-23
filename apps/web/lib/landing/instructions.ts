@@ -9,10 +9,15 @@ import { SECTION_SPEC_KEY } from './types'
 // Capas ensambladas en orden (spec): BRAND → DESIGN_SYSTEM → MASTER_LAYOUT → SECTION_SPECS →
 // Copy → TEXT_RULES → referencias adjuntas (nota de composición).
 //
-// Filosofía nueva (spec 2026-07-23): NINGUNA sección suprime persona ni producto — las 8
-// llevan talento (o su sustituto) Y producto Y props. Las ramas de supresión del motor híbrido
-// (sets NO_PERSON/NO_PRODUCT/NO_TALENT por sección, borrados junto al motor en Task 10) ya no
-// aplican a este builder.
+// Filosofía (spec 2026-07-23): las secciones llevan talento (o su sustituto) Y producto Y props.
+// EXCEPCIÓN (ajuste 2026-07-23 post-smoke): `faq` y `testimonios` NUNCA llevan al talento/
+// protagonista de la campaña (`NO_TALENT_SECTIONS`) — faq no lleva persona alguna; testimonios
+// solo muestra clientes distintos en sus tarjetas, no al protagonista.
+
+// Secciones que NUNCA muestran al talento/protagonista de la campaña (ajuste post-smoke). No es
+// el `no_talent` del nicho (sin gente): acá el nicho puede tener talento, pero ESTAS secciones no
+// lo usan. `testimonios` sí muestra clientes (caras distintas) en sus cards; `faq` no lleva persona.
+export const NO_TALENT_SECTIONS: Set<SectionType> = new Set(['faq', 'testimonios'])
 
 function copyBlock(copy: SectionCopy): string {
   const lines: string[] = [`Headline: "${copy.headline}".`]
@@ -80,13 +85,19 @@ function masterLayoutBlock(
   attrBandOrientation: 'horizontal' | 'vertical' | 'grid_2x2',
 ): string {
   const pose = dna.poses[section] ?? ''
-  const talentText = hasTalent
-    ? `Persona (invariante entre secciones de un mismo producto): ${dna.model_persona}. Misma cara, mismo pelo, misma ropa, mismos accesorios en las 8 piezas. Pose de ESTA sección (distinta a las demás, no se repite en el funnel): ${pose}.`
+  // `faq`/`testimonios` nunca llevan al protagonista (ajuste post-smoke), aunque el nicho tenga
+  // talento — distinto del sustituto del nicho `no_talent`.
+  const talentText = NO_TALENT_SECTIONS.has(section)
+    ? section === 'testimonios'
+      ? 'Talento: esta sección NO muestra al talento/protagonista de la campaña. Las ÚNICAS personas son los CLIENTES de las tarjetas de testimonio (rostros DISTINTOS entre sí, gente común peruana), según el módulo central. El/la protagonista de la campaña NO aparece en ningún lugar.'
+      : 'Talento: esta sección NO lleva persona alguna — ni el/la protagonista de la campaña ni ningún otro rostro o silueta humana. El carril derecho lo ocupan el producto, sus props y la atmósfera.'
+    : hasTalent
+    ? `Persona (invariante entre secciones de un mismo producto): ${dna.model_persona}. Misma cara, mismo pelo, misma ropa, mismos accesorios en las piezas con protagonista. Pose de ESTA sección (distinta a las demás, no se repite en el funnel): ${pose}.`
     : `Sin talento humano en este producto: el carril derecho lo ocupa el sustituto — "${talentSubstitute}" — con las mismas reglas de carril, sangrado y no-invasión del texto. No renderizar ninguna persona, rostro ni silueta humana en ningún lugar de la imagen.`
   const hasLogisticsBand = section === 'oferta' || section === 'garantia' || section === 'cta-final'
   const logisticsLine = hasLogisticsBand
-    ? 'Banda logística (Z4, 80-92%: envíos, plazo, contraentrega, pago seguro) y métodos de pago + sello de garantía (Z5, 92-97%): SÍ aplican en esta sección.'
-    : 'Banda logística (Z4) y métodos de pago (Z5): NO aplican en esta sección — Z2 y Z3 se expanden; nunca queda aire muerto en el pie.'
+    ? 'Banda logística (Z4, 80-92%: envíos, plazo, contraentrega, pago seguro) y sello de garantía (Z5, 92-97%): SÍ aplican en esta sección. NO dibujes iconos/logos de métodos de pago (Yape/Visa/Mastercard/Mercado Pago) en ningún lado.'
+    : 'Banda logística (Z4) y sello de garantía (Z5): NO aplican en esta sección — Z2 y Z3 se expanden; nunca queda aire muerto en el pie. NO dibujes iconos/logos de métodos de pago.'
   return [
     'MASTER_LAYOUT — lienzo 9:16, full-bleed, sin márgenes blancos.',
     'Carril de texto: 55-60% izquierdo — todo el copy y todas las cards viven ahí. Carril de talento: 35-45% derecho.',
@@ -102,12 +113,12 @@ function masterLayoutBlock(
 // El módulo central es lo ÚNICO que cambia entre secciones. Texto transcrito del spec, keyed
 // por la clave del spec (`SECTION_SPEC_KEY[section]`), no por el slug interno.
 const SECTION_SPECS_TEXT: Record<string, string> = {
-  hero_problem: 'Pregunta de dolor + card de posicionamiento de producto + par antes/después reducido.',
+  hero_problem: 'Pregunta de dolor + card de posicionamiento de producto. NO incluir un par antes/después acá (esa comparación vive en su propia sección).',
   benefits: '4 filas: icono + verbo bold + complemento regular (+ micro-línea opcional).',
   before_after: '2 cards con pill "ANTES"/"DESPUÉS", chevron central, caption con ✕/✓ debajo de cada una, línea de plazo realista.',
   testimonials: '3 cards: avatar circular + nombre + "edad · ciudad" + 5 estrellas oro + quote de 2-3 líneas + comilla decorativa. Cierra con barra agregada (nº de clientes, rating, nº de reseñas).',
   faq: '4 cards: icono + pregunta en bold + respuesta de 2-3 líneas.',
-  guarantee: '4 cards horizontales con icono 3D grande a la izquierda + grid de pagos + sello central de devolución.',
+  guarantee: '4 cards horizontales con icono 3D grande a la izquierda + sello central de devolución (SIN grid ni iconos de métodos de pago).',
   offer: '3 columnas; la central elevada, enmarcada en oro y con corona. Precio gigante, ancla tachada, precio por unidad, badge de % de ahorro, CTA por columna.',
   cta_final: 'Repetición condensada de la oferta ganadora + refuerzo de garantía + CTA único a ancho completo.',
 }
@@ -136,10 +147,10 @@ const TEXT_RULES = [
 // reales → talento (si hay) → ref de composición (última, MUTABLE). La ref manda solo zonas/
 // anatomía; la instrucción manda todo lo demás — y si la instrucción no trae persona/props, la
 // ref NO puede reintroducirlos.
-function compositionRefNote(hasTalent: boolean, talentSubstitute?: string): string {
-  const persona = hasTalent
+function compositionRefNote(talentImageAttached: boolean): string {
+  const persona = talentImageAttached
     ? 'Penúltima = retrato del talento (misma persona: cara, pelo, ropa, accesorios idénticos).'
-    : `No hay imagen de talento — el carril derecho lo ocupa el sustituto "${talentSubstitute}"; la referencia de composición NO debe reintroducir a ninguna persona.`
+    : 'No hay imagen de talento adjunta; la referencia de composición NO debe reintroducir a ninguna persona que la instrucción no pida.'
   return [
     'REFERENCIAS ADJUNTAS (orden) —',
     'Imagen 1 = envase canónico (fidelidad exacta de forma y labels). Imagen(es) siguientes = fotos reales del producto.',
@@ -149,9 +160,6 @@ function compositionRefNote(hasTalent: boolean, talentSubstitute?: string): stri
 }
 
 // ─── Secciones/notas auxiliares (reusadas sin cambios funcionales) ───────────
-
-// Secciones que llevan la banda de logos de pago compuesta (el resto NO reserva banda).
-export const PAYMENT_SECTIONS: Set<SectionType> = new Set(['oferta', 'garantia'])
 
 // Secciones que muestran un PACK de varias unidades (no un solo frasco). La ruta les pasa el pack
 // pre-compuesto (buildProductPack) como Image 1 y este builder inyecta packNote.
@@ -208,11 +216,6 @@ function trustText(trust: TrustBlock): string {
   return `TRUST ROWS — render each of these as a frosted pill with a glossy icon (truck / clock / check / shield) + a bold title + a lighter line, using EXACTLY these facts (invent none):\n${rows.map((r) => `  - ${r}`).join('\n')}`
 }
 
-// Reserva la banda inferior para el overlay de logos reales. End-weighted para ganarle a
-// cualquier mención de logos en SECTION_SPECS. La composición dibuja los logos ahí después.
-const PAYMENT_BAND =
-  'PAYMENT LOGOS (do NOT draw): leave the BOTTOM ~12% of the image as a CLEAN, calm horizontal band (a subtle light strip is fine) with NO payment logos, card icons, brand marks, wallet logos, country flags or the words "yape/visa/mastercard/mercado pago" anywhere — the REAL payment-brand logos are composited into that band afterwards. You MAY render a short heading like "Paga como prefieras" just ABOVE the band, but no logos.'
-
 // Reserva la franja superior para el lockup de marca (compuesto aparte, no dibujado).
 const LOCKUP_BAND =
   'BRAND LOCKUP (do NOT draw): keep the very TOP ~6% center strip clean and empty — a small crisp brand wordmark lockup is composited there afterwards. Do NOT render any logo, wordmark, brand name or badge in that top strip yourself; start the headline below it.'
@@ -233,6 +236,10 @@ export function buildDiffusionInstruction(args: {
 }): string {
   const { section, copy, dna, productLabels, offer, trust, packUnits, hasTalent, talentSubstitute, reserveLockup, attrBandOrientation } = args
 
+  // El talento/protagonista se muestra solo si el nicho lo tiene Y la sección no está en
+  // NO_TALENT_SECTIONS (faq/testimonios). Determina si se adjunta el retrato (nota de composición).
+  const talentImageAttached = hasTalent && !NO_TALENT_SECTIONS.has(section)
+
   const base = [
     'Diseña una única SECCIÓN de landing-page vertical como una sola imagen de alta resolución, formato retrato 9:16 full-bleed (sin márgenes blancos), fotografía de producto comercial premium, mobile-first.',
     brandBlock(productLabels),
@@ -244,7 +251,7 @@ export function buildDiffusionInstruction(args: {
     copyBlock(copy),
     '',
     TEXT_RULES,
-    compositionRefNote(hasTalent, talentSubstitute),
+    compositionRefNote(talentImageAttached),
   ]
 
   const extra: string[] = []
@@ -256,7 +263,6 @@ export function buildDiffusionInstruction(args: {
   if (trust && (section === 'garantia' || section === 'cta-final' || section === 'hero')) extra.push(trustText(trust))
   if (packUnits && packUnits > 1) extra.push(packNote(packUnits))
   if (reserveLockup) extra.push(LOCKUP_BAND)
-  if (PAYMENT_SECTIONS.has(section)) extra.push(PAYMENT_BAND)
 
   return [...base, ...extra].filter(Boolean).join('\n\n')
 }
