@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeAll } from 'vitest'
-import { refUrls, resolveEffectivePreset } from '@/lib/branding/effective-preset'
+import { refUrls, resolveEffectivePreset, resolveEffectiveLayout } from '@/lib/branding/effective-preset'
 import { STYLE_PRESETS, getPreset } from '@/lib/branding/style-presets'
-import type { BrandingSessionResponse } from '@/lib/branding/types'
+import { getLayout } from '@/lib/branding/label-layouts'
+import type { BrandingSessionResponse, ExtractedStyle } from '@/lib/branding/types'
 
 beforeAll(() => { process.env.SUPABASE_URL = 'https://demo.supabase.co' })
 
@@ -21,6 +22,33 @@ const base = (o: Partial<BrandingSessionResponse>): BrandingSessionResponse =>
   ({ style_id: Object.keys(STYLE_PRESETS)[0],
      source_mode: 'preset', image_analysis: null, ...o } as BrandingSessionResponse)
 
+const extractedFixture = (bestFitId: string): ExtractedStyle => ({
+  bestFitStyleId: bestFitId,
+  essence: 'E',
+  keywords: ['k'],
+  palette: [
+    { hex: '#FFFFFF', name: 'blanco', role: 'background' },
+    { hex: '#111111', name: 'negro', role: 'primary' },
+    { hex: '#FF0000', name: 'rojo', role: 'accent' },
+  ],
+  typography: { primary: 'serif', secondary: 'sans', case: 'uppercase', detail: 'x' },
+  materials: ['vidrio'],
+  composition: 'escena extraída',
+  lighting: 'luz extraída',
+  mood: ['sereno'],
+  motifs: ['sello'],
+  avoid: ['neón'],
+  styleBlock: 'párrafo extraído',
+  layout: {
+    anatomy: ['banda superior (~30%): logo', 'banda inferior (~70%): datos'],
+    logoPlacement: 'centrado arriba',
+    dataBlock: 'al pie',
+    margins: '6%',
+    alignment: 'centered',
+    avoidLayout: ['desorden'],
+  },
+})
+
 describe('resolveEffectivePreset', () => {
   it('modo A default: devuelve el preset tal cual', () => {
     const id = Object.keys(STYLE_PRESETS)[0]
@@ -29,14 +57,32 @@ describe('resolveEffectivePreset', () => {
     expect(eff.typography).toEqual(getPreset(id).typography)
   })
 
-  it('modo B: es solo un clasificador — devuelve el preset del bestFitStyleId, lo extraído se descarta', () => {
+  it('modo B: es un EXTRACTOR — devuelve un preset ad-hoc con la identidad extraída de la imagen, no la de ningún preset fijo', () => {
     const assignedId = Object.keys(STYLE_PRESETS)[0]
     const bestFitId = Object.keys(STYLE_PRESETS)[1]
-    const extracted = { essence: 'E', keywords: ['k'], bestFitStyleId: bestFitId }
+    const extracted = extractedFixture(bestFitId)
     const eff = resolveEffectivePreset(base({ source_mode: 'upload', style_id: assignedId, image_analysis: extracted }))
-    // el preset devuelto es el del bestFitStyleId por completo, no el assignedId ni lo extraído
-    expect(eff.id).toBe(getPreset(bestFitId).id)
-    expect(eff.composition).toBe(getPreset(bestFitId).composition)
-    expect(eff.palette).toEqual(getPreset(bestFitId).palette)
+    // el preset devuelto es ad-hoc ('upload'), con la identidad EXTRAÍDA, no la del assignedId ni la del bestFitId
+    expect(eff.id).toBe('upload')
+    expect(eff.composition).toBe(extracted.composition)
+    expect(eff.palette).toEqual(extracted.palette)
+    expect(eff.styleBlock).toBe(extracted.styleBlock)
+    expect(eff.referenceFolder).toBe('')
+  })
+})
+
+describe('resolveEffectiveLayout', () => {
+  it('modo A default: devuelve el layout fijo del estilo', () => {
+    const id = Object.keys(STYLE_PRESETS)[0]
+    const eff = resolveEffectiveLayout(base({ style_id: id }))
+    expect(eff).toEqual(getLayout(id))
+  })
+
+  it('modo B: devuelve el layout EXTRAÍDO de la imagen, no el de ningún preset fijo', () => {
+    const assignedId = Object.keys(STYLE_PRESETS)[0]
+    const bestFitId = Object.keys(STYLE_PRESETS)[1]
+    const extracted = extractedFixture(bestFitId)
+    const eff = resolveEffectiveLayout(base({ source_mode: 'upload', style_id: assignedId, image_analysis: extracted }))
+    expect(eff).toEqual(extracted.layout)
   })
 })

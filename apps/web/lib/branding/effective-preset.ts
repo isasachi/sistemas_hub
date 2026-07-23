@@ -1,7 +1,9 @@
 import { getPreset } from './style-presets'
 import type { StylePreset } from './style-presets'
 import { REF_MANIFEST } from './ref-manifest'
-import type { BrandingSessionResponse } from './types'
+import type { LabelLayout } from './label-layouts'
+import { getLayout } from './label-layouts'
+import type { BrandingSessionResponse, ExtractedStyle } from './types'
 import { fetchAsBase64 } from '@/lib/storage'
 import type { BrandBrief } from './generation-prompts'
 import type { Part } from '@google/genai'
@@ -22,18 +24,58 @@ export function thumbUrl(styleId: string): string {
 }
 
 /**
+ * Construye un StylePreset ad-hoc desde lo extraído de la imagen del usuario
+ * (identidad completa: paleta, tipografía, materiales, composición, lighting,
+ * mood, motifs, avoid, styleBlock — todo derivado de la imagen real, no de un
+ * preset fijo). `referenceFolder: ''` porque el modo upload no adjunta refs
+ * de estilo de ningún preset — adjunta la imagen del usuario (ver `styleRefParts`).
+ */
+function extractedToPreset(a: ExtractedStyle): StylePreset {
+  return {
+    id: 'upload',
+    index: 0,
+    name: 'Tu producto',
+    version: 1,
+    essence: a.essence,
+    keywords: a.keywords,
+    palette: a.palette as StylePreset['palette'],
+    typography: a.typography as StylePreset['typography'],
+    materials: a.materials,
+    composition: a.composition,
+    lighting: a.lighting,
+    mood: a.mood,
+    motifs: a.motifs,
+    avoid: a.avoid,
+    styleBlock: a.styleBlock,
+    referenceFolder: '',
+  }
+}
+
+/**
  * El StylePreset único que alimenta a generation-prompts.ts, en ambos modos.
- * Identidad fija: la paleta/tipografía SIEMPRE son las del preset (7 estilos
- * curados), sin overrides. Modo B (upload) es un clasificador: solo decide a
- * cuál de los 7 estilos se parece más la imagen del usuario (bestFitStyleId);
- * lo demás extraído de la imagen se descarta.
+ * Modo preset: identidad fija, la paleta/tipografía son las del preset curado.
+ * Modo upload: EXTRACTOR — la identidad es la extraída de la imagen real del
+ * usuario (`extractedToPreset`), no la de ningún preset fijo.
  */
 export function resolveEffectivePreset(session: BrandingSessionResponse): StylePreset {
   if (!session.style_id) throw new Error('resolveEffectivePreset: falta style_id')
   if (session.source_mode === 'upload' && session.image_analysis) {
-    return getPreset(session.image_analysis.bestFitStyleId)
+    return extractedToPreset(session.image_analysis)
   }
   return getPreset(session.style_id)
+}
+
+/**
+ * El LabelLayout efectivo, en ambos modos. Modo upload: el layout extraído de
+ * la imagen real (misma forma que `LabelLayout`). Modo preset: el esqueleto
+ * fijo de `label-layouts.ts`.
+ */
+export function resolveEffectiveLayout(session: BrandingSessionResponse): LabelLayout {
+  if (!session.style_id) throw new Error('resolveEffectiveLayout: falta style_id')
+  if (session.source_mode === 'upload' && session.image_analysis?.layout) {
+    return session.image_analysis.layout
+  }
+  return getLayout(session.style_id)
 }
 
 /** URL de Storage del wireframe (esqueleto de layout) del estilo. */
@@ -54,13 +96,15 @@ export function sessionBrief(session: BrandingSessionResponse): BrandBrief {
 
 /**
  * Imágenes de referencia a adjuntar en la generación, cargadas UNA vez:
- * - modo upload → solo la imagen del usuario (fidelidad máxima al producto).
- * - modo preset → las 5 refs del estilo.
+ * - modo upload → la imagen del usuario Y el wireframe extraído de su layout
+ *   (wireframe ÚLTIMO, para que la instrucción "final attached image is a
+ *   skeleton" en el prompt sea correcta).
+ * - modo preset → las 5 refs del estilo + el wireframe del preset.
  */
 export async function styleRefParts(session: BrandingSessionResponse): Promise<Part[]> {
   const urls =
-    session.source_mode === 'upload' && session.uploaded_image_url
-      ? [session.uploaded_image_url]
+    session.source_mode === 'upload'
+      ? [session.uploaded_image_url, session.uploaded_wireframe_url].filter((u): u is string => !!u)
       : session.style_id ? [...refUrls(session.style_id), wireframeUrl(session.style_id)] : []
   const parts: Part[] = []
   for (const url of urls) {

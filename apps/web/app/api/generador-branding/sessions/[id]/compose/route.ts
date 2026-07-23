@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server'
 import { getBrandingSession, updateBrandingSession } from '@/lib/branding/db'
 import { generateImage } from '@/lib/gemini'
 import { uploadToStorage } from '@/lib/storage'
-import { resolveEffectivePreset, sessionBrief, styleRefParts } from '@/lib/branding/effective-preset'
+import { resolveEffectivePreset, resolveEffectiveLayout, sessionBrief, styleRefParts } from '@/lib/branding/effective-preset'
 import { buildComposedMockupPrompt } from '@/lib/branding/generation-prompts'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
@@ -42,8 +42,9 @@ export async function POST(
           return controller.close()
         }
         const preset = resolveEffectivePreset(session)
+        const layout = resolveEffectiveLayout(session)
         const brief = sessionBrief(session)
-        const prompt = buildComposedMockupPrompt(brief, preset)
+        const prompt = buildComposedMockupPrompt(brief, preset, layout)
         const refParts = await styleRefParts(session)
 
         await updateBrandingSession(id, { generation_status: 'mockup', generation_error: null })

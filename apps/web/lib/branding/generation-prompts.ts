@@ -27,7 +27,7 @@
 
 import { StylePreset, paletteToText } from "./style-presets";
 import { REF_MANIFEST } from "./ref-manifest";
-import { getLayout, layoutToPrompt } from "./label-layouts";
+import { getLayout, layoutToPrompt, type LabelLayout } from "./label-layouts";
 import { contrastToPrompt } from "./contrast";
 
 /** Datos que aporta el usuario para una marca/producto concreto. */
@@ -86,9 +86,12 @@ function exactText(label: string, value?: string): string {
 // (contrast.ts) y la instrucción del wireframe adjunto (última ref, ver
 // effective-preset.ts styleRefParts) para que la composición sea consistente
 // entre generaciones del mismo estilo.
-export function buildComposedMockupPrompt(brief: BrandBrief, preset: StylePreset): string {
+export function buildComposedMockupPrompt(
+  brief: BrandBrief,
+  preset: StylePreset,
+  layout: LabelLayout = getLayout(preset.id),
+): string {
   const container = brief.containerType ?? "product packaging";
-  const layout = getLayout(preset.id);
   return [
     `Create a photorealistic product mockup: a ${container} for "${brief.brandName}", a ${brief.productType}, with its COMPLETE packaging design fully applied — as one cohesive professional brand system.`,
     preset.styleBlock,

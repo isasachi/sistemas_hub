@@ -45,18 +45,49 @@ export interface BrandingSessionResponse {
   container_type: string | null
   uploaded_image_url: string | null
   image_analysis: ExtractedStyle | null
+  uploaded_wireframe_url: string | null
   preset_version: number | null
   generation_status: 'pending' | 'mockup' | 'deriving' | 'done' | 'failed' | null
   generation_error: string | null
 }
 
-// ─── Modo B (upload): estilo extraído de la imagen del usuario ────────────────
-// Migración fase 10: modo upload es solo un CLASIFICADOR — decide a cuál de los
-// 7 estilos de identidad fija se parece más la imagen (bestFitStyleId); ya no
-// extrae paleta/tipografía/etc (identidad fija = siempre la del preset).
+// ─── Modo B (upload): estilo + layout extraídos de la imagen del usuario ──────
+// Migración: modo upload es un EXTRACTOR de identidad completa (paleta,
+// tipografía, styleBlock...) Y composición (layout) — no un clasificador. El
+// `layout` tiene la MISMA forma que `LabelLayout` (label-layouts.ts) y se usa
+// directo como tal (ver effective-preset.ts `resolveEffectiveLayout`).
+export const ExtractedLayoutSchema = z.object({
+  anatomy: z.array(z.string()).min(3),
+  logoPlacement: z.string(),
+  dataBlock: z.string(),
+  margins: z.string(),
+  alignment: z.enum(['left', 'centered', 'justified']),
+  avoidLayout: z.array(z.string()),
+})
+export type ExtractedLayout = z.infer<typeof ExtractedLayoutSchema>
+
 export const ExtractedStyleSchema = z.object({
   bestFitStyleId: z.string(),
   essence: z.string(),
   keywords: z.array(z.string()),
+  palette: z.array(z.object({
+    hex: z.string(),
+    name: z.string(),
+    role: z.enum(['primary', 'secondary', 'accent', 'neutral', 'background']),
+  })).min(3).max(6),
+  typography: z.object({
+    primary: z.string(),
+    secondary: z.string(),
+    case: z.enum(['uppercase', 'lowercase', 'title', 'mixed']),
+    detail: z.string(),
+  }),
+  materials: z.array(z.string()),
+  composition: z.string(),
+  lighting: z.string(),
+  mood: z.array(z.string()),
+  motifs: z.array(z.string()),
+  avoid: z.array(z.string()),
+  styleBlock: z.string(),
+  layout: ExtractedLayoutSchema,
 })
 export type ExtractedStyle = z.infer<typeof ExtractedStyleSchema>
