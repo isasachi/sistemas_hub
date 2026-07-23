@@ -9,6 +9,7 @@ export interface AnalyzeResult {
   styleId: string
   styleName: string
   uploadedImageUrl: string
+  analysis?: import('@/lib/branding/types').ExtractedStyle
 }
 
 // Paso 1: el usuario elige un estilo curado (12 presets) o sube una foto de su

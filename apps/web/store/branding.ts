@@ -1,7 +1,7 @@
 'use client'
 
 import { create } from 'zustand'
-import type { BrandingSessionResponse } from '@/lib/branding/types'
+import type { BrandingSessionResponse, ExtractedStyle } from '@/lib/branding/types'
 
 export const SESSION_KEY = 'branding_session_id'
 
@@ -18,6 +18,7 @@ interface BrandingState {
   sourceMode: 'preset' | 'upload' | null
   styleId: string | null
   uploadedImageUrl: string | null
+  imageAnalysis: ExtractedStyle | null
   // brief
   brandName: string | null
   productName: string | null
@@ -37,7 +38,7 @@ interface BrandingState {
 interface BrandingActions {
   setStep: (step: number) => void
   setStyle: (data: { sourceMode: 'preset' | 'upload'; styleId: string }) => void
-  setUploaded: (data: { styleId: string; uploadedImageUrl: string }) => void
+  setUploaded: (data: { styleId: string; uploadedImageUrl: string; imageAnalysis: ExtractedStyle | null }) => void
   setBrief: (data: {
     brandName: string
     productName: string
@@ -63,6 +64,7 @@ const initialState: BrandingState = {
   sessionError: false,
   step: 0,
   sourceMode: null,
+  imageAnalysis: null,
   styleId: null,
   uploadedImageUrl: null,
   brandName: null,
@@ -87,8 +89,8 @@ export const useBrandingStore = create<BrandingState & BrandingActions>((set) =>
 
   // Modo B (upload): analyze ya devolvió el estilo asignado (bestFitStyleId,
   // identidad fija — lo demás extraído de la imagen se descarta server-side).
-  setUploaded: ({ styleId, uploadedImageUrl }) =>
-    set({ sourceMode: 'upload', styleId, uploadedImageUrl, step: 1 }),
+  setUploaded: ({ styleId, uploadedImageUrl, imageAnalysis }) =>
+    set({ sourceMode: 'upload', styleId, uploadedImageUrl, imageAnalysis, step: 1 }),
 
   setBrief: ({ brandName, productName, productType, descriptor, tagline, containerType }) =>
     set({ brandName, productName, productType, descriptor, tagline, containerType, step: 2 }),
@@ -115,6 +117,7 @@ export const useBrandingStore = create<BrandingState & BrandingActions>((set) =>
       sessionId: s.id,
       step: s.step,
       sourceMode: s.source_mode,
+      imageAnalysis: s.image_analysis,
       styleId: s.style_id,
       uploadedImageUrl: s.uploaded_image_url,
       brandName: s.brand_name,

@@ -59,7 +59,9 @@ function extractedToPreset(a: ExtractedStyle): StylePreset {
  */
 export function resolveEffectivePreset(session: BrandingSessionResponse): StylePreset {
   if (!session.style_id) throw new Error('resolveEffectivePreset: falta style_id')
-  if (session.source_mode === 'upload' && session.image_analysis) {
+  // Guard: solo un análisis COMPLETO (con paleta+tipografía) sirve como estilo extraído.
+  // Filas legadas de upload (esquema reducido pre-extractor) caen al preset bestFit.
+  if (session.source_mode === 'upload' && session.image_analysis?.palette?.length && session.image_analysis?.typography) {
     return extractedToPreset(session.image_analysis)
   }
   return getPreset(session.style_id)

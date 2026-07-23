@@ -16,21 +16,22 @@ async function downloadImage(url: string, filename: string) {
   } catch { window.open(url, '_blank') }
 }
 
-// Guía de marca final: muestra logo/etiqueta/mockup + la paleta y tipografía del
-// preset asignado (identidad fija — modo upload ya resolvió `styleId` al
-// bestFitStyleId server-side, así que siempre es `getPreset(styleId)`).
+// Guía de marca final: muestra logo/etiqueta/mockup + la paleta y tipografía.
+// Modo preset → identidad fija del preset. Modo upload → la identidad EXTRAÍDA de
+// la imagen (no la del bestFit, que es solo fallback) — espeja resolveEffectivePreset.
 export default function Section5Guide() {
   const {
-    sessionId, brandName, tagline, styleId,
+    sessionId, brandName, tagline, styleId, sourceMode, imageAnalysis,
     logoUrl, labelUrl, mockupUrl, startNewSession,
   } = useBrandingStore()
   const router = useRouter()
   const [landingLoading, setLandingLoading] = useState(false)
 
   if (!styleId) return null
-  const preset = getPreset(styleId)
-  const palette = preset.palette
-  const typography = preset.typography
+  const extracted = sourceMode === 'upload' && imageAnalysis?.palette?.length && imageAnalysis?.typography ? imageAnalysis : null
+  const palette = extracted ? extracted.palette : getPreset(styleId).palette
+  const typography = extracted ? extracted.typography : getPreset(styleId).typography
+  const essence = extracted ? extracted.essence : getPreset(styleId).essence
   const slug = (brandName ?? 'marca').toLowerCase().replace(/\s+/g, '-')
 
   async function createLanding() {
@@ -74,7 +75,7 @@ export default function Section5Guide() {
       <div>
         <p className="text-[10px] font-bold uppercase tracking-widest text-[#8a8a8a] mb-1">Guía de marca</p>
         <h2 className="text-[22px] font-bold text-[#f5f5f5]">{brandName}</h2>
-        <p className="text-[13px] text-[#bdbdbd] mt-1">{tagline || preset.essence}</p>
+        <p className="text-[13px] text-[#bdbdbd] mt-1">{tagline || essence}</p>
       </div>
 
       {mockupUrl && <Asset url={mockupUrl} label="Producto final" file={`${slug}-mockup.png`} />}

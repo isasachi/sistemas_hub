@@ -83,7 +83,7 @@ export default function BrandingWizard() {
 
   async function onUploaded(r: AnalyzeResult) {
     if (sessionId) await patchSession(sessionId, { step: Math.max(maxStep.current, 1) })
-    setUploaded({ styleId: r.styleId, uploadedImageUrl: r.uploadedImageUrl })
+    setUploaded({ styleId: r.styleId, uploadedImageUrl: r.uploadedImageUrl, imageAnalysis: r.analysis ?? null })
   }
 
   // "Continuar a la guía" (botón en Section4Marca, fase `done`): la derivación

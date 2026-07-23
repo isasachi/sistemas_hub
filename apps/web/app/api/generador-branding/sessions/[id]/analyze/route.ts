@@ -60,5 +60,6 @@ export async function POST(
     styleId: extracted.bestFitStyleId,
     styleName: 'Tu producto',
     uploadedImageUrl: uploadedUrl,
+    analysis: extracted,
   })
 }
