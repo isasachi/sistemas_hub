@@ -51,13 +51,66 @@ export function splitImageParts(parts: Part[]): { prompt: string; images: { data
   return { prompt, images }
 }
 
-// z.toJSONSchema (ya usado por el path Gemini) → schema para response_format. Se limpian las
-// claves meta que OpenAI no espera dentro de json_schema.schema.
-function jsonSchemaFor<T>(schema: z.ZodSchema<T>): Record<string, unknown> {
-  const js = z.toJSONSchema(schema) as Record<string, unknown>
-  delete js.$schema
-  delete js.$id
-  return js
+// Vuelve un subschema JSON nullable (OpenAI strict exige que TODA propiedad esté en `required`;
+// la opcionalidad se expresa permitiendo `null`). Devuelve el modelo emitiendo `null` para
+// ausentes, que luego `stripNulls` convierte en ausencia real para el `.optional()` de zod.
+function makeNullable(s: Record<string, unknown>): Record<string, unknown> {
+  if (Array.isArray(s.type)) {
+    if (!s.type.includes('null')) s.type = [...s.type, 'null']
+    return s
+  }
+  if (typeof s.type === 'string') {
+    s.type = [s.type, 'null']
+    return s
+  }
+  if (Array.isArray(s.anyOf)) {
+    if (!s.anyOf.some((o) => (o as Record<string, unknown>)?.type === 'null')) s.anyOf = [...s.anyOf, { type: 'null' }]
+    return s
+  }
+  return { anyOf: [s, { type: 'null' }] }
+}
+
+// z.toJSONSchema → JSON Schema estricto que OpenAI acepta y OBLIGA a llenar (all-required +
+// additionalProperties:false; los opcionales de zod se marcan nullable). Recursivo. Mantiene
+// maxLength/maxItems/minimum/maximum (structured outputs modernos los soportan y ayudan al modelo).
+export function toStrictSchema(node: unknown): unknown {
+  if (Array.isArray(node)) return node.map(toStrictSchema)
+  if (!node || typeof node !== 'object') return node
+  const s = node as Record<string, unknown>
+  delete s.$schema
+  delete s.$id
+  delete s.default
+  if (s.properties && typeof s.properties === 'object') {
+    const props = s.properties as Record<string, Record<string, unknown>>
+    const required = Array.isArray(s.required) ? (s.required as string[]) : []
+    for (const k of Object.keys(props)) {
+      props[k] = toStrictSchema(props[k]) as Record<string, unknown>
+      if (!required.includes(k)) props[k] = makeNullable(props[k]) // opcional → nullable
+    }
+    s.required = Object.keys(props)
+    s.additionalProperties = false
+  }
+  if (s.items) s.items = toStrictSchema(s.items)
+  for (const key of ['anyOf', 'allOf', 'oneOf'] as const) {
+    if (Array.isArray(s[key])) s[key] = (s[key] as unknown[]).map(toStrictSchema)
+  }
+  return s
+}
+
+// OpenAI structured (strict) emite `null` para los campos opcionales ausentes, pero zod
+// `.optional()` espera `undefined` (rechaza `null`). Se podan los null recursivamente antes del
+// safeParse para que un opcional ausente pase como corresponde.
+export function stripNulls(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(stripNulls)
+  if (v && typeof v === 'object') {
+    const out: Record<string, unknown> = {}
+    for (const [k, val] of Object.entries(v)) {
+      if (val === null) continue
+      out[k] = stripNulls(val)
+    }
+    return out
+  }
+  return v
 }
 
 export async function openaiCallStructured<T>(
@@ -67,6 +120,13 @@ export async function openaiCallStructured<T>(
   maxRetries: number,
   systemInstruction: string,
 ): Promise<T> {
+  // strict:true OBLIGA al modelo a emitir TODOS los campos requeridos — sin esto gpt-4o-mini omite
+  // headlines en secciones tardías y el zod parse falla. No se usa el helper zodResponseFormat
+  // porque tira ante `.optional()` sin `.nullable()` (los schemas de landing usan `.optional()`).
+  const response_format = {
+    type: 'json_schema' as const,
+    json_schema: { name: schemaName, schema: toStrictSchema(z.toJSONSchema(schema)) as Record<string, unknown>, strict: true },
+  }
   let lastError: unknown = new Error(`openaiCallStructured(${schemaName}): no attempts`)
   for (let i = 0; i < maxRetries; i++) {
     try {
@@ -76,9 +136,12 @@ export async function openaiCallStructured<T>(
           { role: 'system', content: systemInstruction },
           { role: 'user', content: toChatContent(parts) },
         ],
-        response_format: { type: 'json_schema', json_schema: { name: schemaName, schema: jsonSchemaFor(schema), strict: false } },
+        response_format,
       })
-      const parsed = schema.safeParse(JSON.parse(res.choices[0]?.message?.content ?? ''))
+      const choice = res.choices[0]
+      // Output truncado por límite de tokens → JSON incompleto; reintenta en vez de parsear a medias.
+      if (choice?.finish_reason === 'length') { lastError = new Error(`openaiCallStructured(${schemaName}): respuesta truncada (length)`); continue }
+      const parsed = schema.safeParse(stripNulls(JSON.parse(choice?.message?.content ?? '')))
       if (parsed.success) return parsed.data
       lastError = parsed.error
     } catch (e) {

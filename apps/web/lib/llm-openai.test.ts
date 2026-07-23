@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { sizeFor, toChatContent, splitImageParts, useOpenAI } from './llm-openai'
+import { sizeFor, toChatContent, splitImageParts, useOpenAI, stripNulls, toStrictSchema } from './llm-openai'
+import { z } from 'zod'
 import type { Part } from '@google/genai'
 
 describe('llm-openai (cableado alternativo)', () => {
@@ -48,5 +49,40 @@ describe('llm-openai (cableado alternativo)', () => {
       { data: 'IMG1', mimeType: 'image/png' },
       { data: 'IMG2', mimeType: 'image/png' },
     ])
+  })
+
+  it('stripNulls poda null (opcionales OpenAI) sin tocar el resto, recursivo', () => {
+    expect(stripNulls({
+      headline: 'hola',
+      subheadline: null,
+      cards: [{ title: 'a', body: null }],
+      sections: [{ headline: 'x', bullets: null }],
+      keep: 0,
+      keepFalse: false,
+    })).toEqual({
+      headline: 'hola',
+      cards: [{ title: 'a' }],
+      sections: [{ headline: 'x' }],
+      keep: 0,
+      keepFalse: false,
+    })
+  })
+
+  it('toStrictSchema: all-required + additionalProperties:false + opcionales nullable (recursivo en arrays)', () => {
+    const Section = z.object({ headline: z.string().max(60), cta: z.string().max(25).optional() })
+    const Landing = z.object({ sections: z.array(Section) })
+    const strict = toStrictSchema(z.toJSONSchema(Landing)) as any
+
+    expect(strict.additionalProperties).toBe(false)
+    expect(strict.$schema).toBeUndefined()
+    const item = strict.properties.sections.items
+    expect(item.additionalProperties).toBe(false)
+    // TODAS las props ahora requeridas (headline + cta), aunque cta era opcional
+    expect(new Set(item.required)).toEqual(new Set(['headline', 'cta']))
+    // headline (requerido) sigue string; cta (opcional) se volvió nullable
+    expect(item.properties.headline.type).toBe('string')
+    expect(item.properties.cta.type).toEqual(['string', 'null'])
+    // se conservan las restricciones soportadas
+    expect(item.properties.headline.maxLength).toBe(60)
   })
 })
