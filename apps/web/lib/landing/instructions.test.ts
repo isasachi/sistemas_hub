@@ -1,15 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { buildSectionInstruction, buildSceneInstruction, buildDiffusionInstruction, MULTI_UNIT_SECTIONS } from './instructions'
-import { brandLockupText } from './layouts/brand-lockup'
-import type { SectionCopy, SectionType, DerivedBrand, Offer } from './types'
-
-const OFFER: Offer = {
-  urgency: 'Oferta por tiempo limitado',
-  tiers: [
-    { label: '1 Frasco', price: 'S/ 99', cta: 'Comprar', featured: false },
-    { label: '3 Frascos', price: 'S/ 199', priceBefore: 'S/ 297', savingsPct: 33, cta: 'Comprar Ya', featured: true },
-  ],
-}
+import { buildDiffusionInstruction, PAYMENT_SECTIONS, MULTI_UNIT_SECTIONS } from './instructions'
+import type { SectionCopy, SectionType, LandingDna, Offer, TrustBlock } from './types'
 
 const ALL: SectionType[] = [
   'hero', 'oferta', 'antes-despues', 'beneficios',
@@ -20,257 +11,205 @@ function copyFor(type: SectionType): SectionCopy {
   return { type, headline: 'ACNE-HEADLINE-XYZ', subheadline: 'sub', cta: 'Compra Ya' }
 }
 
-describe('buildSectionInstruction — ADN de referencia', () => {
-  it('inyecta la receta fija de craft en toda sección × modo', () => {
-    for (const type of ALL) {
-      for (const mode of ['source', 'anchored', 'none'] as const) {
-        const out = buildSectionInstruction(copyFor(type), mode)
-        expect(out).toContain('LUMINOUS gradient')          // fondo clínico celeste
-        expect(out).toContain('Two-color rule')             // regla 2 colores (deep+dorado)
-        expect(out).toContain('metallic GOLD')              // dorado = solo valor
-        expect(out).toContain('BICOLOR headline')           // headline bicolor obligatorio
-        expect(out).toContain('Section closer (MANDATORY)') // cierre inferior obligatorio
-        expect(out).toContain('TEXT DISCIPLINE')            // guardrail de texto
-        expect(out).toContain('ACNE-HEADLINE-XYZ')          // el copy se inyecta
-      }
-    }
-  })
+const DNA: LandingDna = {
+  brand_base: { hex: '#1E6FE8', h: 215, s: 82, l: 51 },
+  palette: {
+    color_headline: '#0A2C6B',
+    color_accent: '#1E6FE8',
+    color_body: 'rgba(10,44,107,0.7)',
+    bg_start: '#DCEBFB',
+    bg_end: '#F7FBFF',
+    color_surface: '#FFFFFF',
+    color_icon: ['#9FC8F0', '#C2B2F0', '#F5B7C8', '#EFE09A'],
+  },
+  particle_type: 'burbujas translúcidas y destellos de luz sobre agua',
+  particle_density: 'medium',
+  props: ['raíz de cúrcuma cortada', 'flor de diente de león', 'cápsulas beige sueltas'],
+  font_family: 'Poppins',
+  font_accent: null,
+  halo: 'radial_soft',
+  model_persona: 'Mujer peruana de 18-30 años, cabello recogido, camiseta blanca de tirantes',
+  poses: {
+    hero: 'Mano en la mejilla, mirada elevada en 3/4, sonrisa contenida',
+    oferta: 'Ambas manos enmarcando el rostro, mirada directa a cámara',
+    'antes-despues': 'Perfil 3/4, yemas rozando la mandíbula, ojos cerrados',
+    beneficios: 'Cabeza inclinada al hombro, mano en el cuello, sonrisa abierta',
+    testimonios: 'Mentón apoyado en el dorso de la mano, mirada a cámara',
+    faq: 'Giro sobre el hombro hacia cámara, espalda parcialmente de frente',
+    garantia: 'Recogiendo el cabello detrás de la oreja, mirada baja',
+    'cta-final': 'Sosteniendo el envase a la altura del pecho, mirada a cámara',
+  },
+}
 
-  it('incluye el spec de cada tipo de sección', () => {
+const OFFER: Offer = {
+  urgency: 'Oferta por tiempo limitado',
+  tiers: [
+    { label: '1 Frasco', price: 'S/ 99', cta: 'Comprar', featured: false },
+    { label: '3 Frascos', price: 'S/ 199', priceBefore: 'S/ 297', savingsPct: 33, cta: 'Comprar Ya', featured: true },
+  ],
+}
+
+const TRUST: TrustBlock = {
+  codDelivery: true,
+  deliveryTime: '24/48 horas',
+  coverage: ['Perú'],
+  paymentMethods: ['yape', 'visa'],
+  guaranteeDays: 30,
+  freeShipping: true,
+}
+
+function build(section: SectionType, extra: Partial<Parameters<typeof buildDiffusionInstruction>[0]> = {}) {
+  return buildDiffusionInstruction({
+    section,
+    copy: copyFor(section),
+    dna: DNA,
+    productLabels: null,
+    hasTalent: true,
+    attrBandOrientation: 'horizontal',
+    ...extra,
+  })
+}
+
+describe('buildDiffusionInstruction — DNA-driven (spec 2026-07-23)', () => {
+  it('cada sección inyecta su SECTION_SPECS (§4) por SECTION_SPEC_KEY', () => {
     const anchor: Record<SectionType, string> = {
-      hero: 'HERO section',
-      oferta: 'OFFER section',
-      'antes-despues': 'BEFORE/AFTER section',
-      beneficios: 'BENEFITS section',
-      testimonios: 'TESTIMONIALS section',
-      faq: 'FAQ section',
-      garantia: 'GUARANTEE',
-      'cta-final': 'FINAL CTA section',
+      hero: 'Pregunta de dolor',
+      oferta: '3 columnas',
+      'antes-despues': 'pill "ANTES"/"DESPUÉS"',
+      beneficios: '4 filas: icono',
+      testimonios: 'avatar circular',
+      faq: 'pregunta en bold',
+      garantia: 'sello central de devolución',
+      'cta-final': 'Repetición condensada de la oferta ganadora',
     }
     for (const type of ALL) {
-      expect(buildSectionInstruction(copyFor(type), 'source')).toContain(anchor[type])
+      expect(build(type)).toContain(anchor[type])
     }
   })
 
-  it('varía la instrucción de producto según el modo', () => {
-    const c = copyFor('hero')
-    expect(buildSectionInstruction(c, 'source')).toContain('REAL product')
-    expect(buildSectionInstruction(c, 'anchored')).toContain('ISOLATED CROP')
-    expect(buildSectionInstruction(c, 'none')).toContain('placeholder')
+  it('la paleta sale de dna.palette (headline + accent aparecen)', () => {
+    const out = build('hero')
+    expect(out).toContain(DNA.palette.color_headline)
+    expect(out).toContain(DNA.palette.color_accent)
+    expect(out).toContain(DNA.palette.color_body)
+    expect(out).toContain(DNA.palette.color_surface)
   })
 
-  it("modo 'canonical' (Fase 2): recorte aislado + fidelidad física + labels exactos", () => {
-    const out = buildSectionInstruction(copyFor('hero'), 'canonical')
-    expect(out).toContain('ISOLATED CROP')              // de anchored: no copiar encuadre/fondo
-    expect(out).toContain('do NOT recolour')            // de source: fidelidad de color
-    expect(out).toContain('ground-truth')               // Images 2+ = fotos reales
-    // también en la escena híbrida
-    expect(buildSceneInstruction('oferta', 'canonical')).toContain('ISOLATED CROP')
+  it('partículas y halo de dna presentes', () => {
+    const out = build('beneficios')
+    expect(out).toContain(DNA.particle_type)
+    expect(out).toContain(DNA.particle_density)
+    expect(out).toContain(DNA.halo)
   })
 
-  it('inyecta el ground-truth de labels solo con foto y labels', () => {
-    const c = copyFor('hero')
-    expect(
-      buildSectionInstruction(c, 'source', null, null, null, 'MINDBODYSKIN\n90 Capsules'),
-    ).toContain('PRODUCT LABEL TEXT')
-    expect(
-      buildSectionInstruction(c, 'none', null, null, null, 'x'),
-    ).not.toContain('PRODUCT LABEL TEXT')
+  it('regla de significado del oro: SOLO oferta/sellos/RECOMENDADO/DESPUÉS, en ninguna otra parte', () => {
+    for (const type of ALL) {
+      const out = build(type)
+      expect(out).toContain('#B8860B')
+      expect(out).toContain('ÚNICAMENTE ahí')
+    }
   })
 
-  it('reparte la paleta y tipografía de marca cuando se proveen', () => {
-    const out = buildSectionInstruction(
-      copyFor('hero'), 'source',
-      [{ name: 'azul', hex: '#1e3a8a', usage: 'acento' }],
-      { headline: 'Poppins', body: 'Lato' },
-      null, null,
-    )
-    expect(out).toContain('#1e3a8a')
-    expect(out).toContain('Poppins')
-  })
-})
-
-describe('buildDiffusionInstruction — pack, urgencia, lockup (goal 2026-07-18)', () => {
-  it('inyecta la nota de PACK multi-unidad cuando packUnits > 1', () => {
-    const out = buildDiffusionInstruction(copyFor('oferta'), 'canonical', null, null, null, null, null, false, false, OFFER, null, 3)
-    expect(out).toContain('MULTI-UNIT PACK')
-    expect(out).toContain('3 copies of the SAME single product')
-    // sin packUnits, no aparece
-    expect(buildDiffusionInstruction(copyFor('oferta'), 'canonical', null, null, null, null, null, false, false, OFFER, null))
-      .not.toContain('MULTI-UNIT PACK')
+  it('pose de dna.poses[section] presente cuando hasTalent', () => {
+    for (const type of ALL) {
+      expect(build(type, { hasTalent: true })).toContain(DNA.poses[type])
+    }
   })
 
-  it('oferta/cta-final son las secciones multi-unidad', () => {
+  it('nota de referencia de composición: presente, marcada apoyo/mutable, subordinada a la instrucción', () => {
+    const out = build('hero')
+    expect(out).toContain('REFERENCIA DE COMPOSICIÓN')
+    expect(out).toContain('solo apoyo, MUTABLE')
+    expect(out).toContain('Manda esta instrucción, no la imagen')
+  })
+
+  it('hasTalent:false — la nota nombra el sustituto y NO reintroduce persona', () => {
+    const out = build('hero', { hasTalent: false, talentSubstitute: 'El dispositivo en uso, en contexto real, a escala humana' })
+    expect(out).toContain('El dispositivo en uso, en contexto real, a escala humana')
+    expect(out).toContain('NO debe reintroducir a ninguna persona')
+    expect(out).not.toContain('CAMPAIGN TALENT')
+    expect(out).not.toContain(DNA.model_persona)
+  })
+
+  it('no_talent: no nombra persona en ningún lugar del prompt, usa el sustituto en MASTER_LAYOUT', () => {
+    const out = build('beneficios', { hasTalent: false, talentSubstitute: 'Mano y antebrazo en acción sobre la superficie, sin rostro' })
+    expect(out).toContain('Sin talento humano en este producto')
+    expect(out).toContain('Mano y antebrazo en acción sobre la superficie, sin rostro')
+    expect(out).not.toContain(DNA.model_persona)
+  })
+
+  it('labels ground-truth cuando hay productLabels; sin ellos, se leen de las fotos reales', () => {
+    const withLabels = build('hero', { productLabels: 'CLEARSTEM\nÁcido Hialurónico · Niacinamida\n60 Cápsulas' })
+    expect(withLabels).toContain('ground-truth')
+    expect(withLabels).toContain('Ácido Hialurónico · Niacinamida')
+    const without = build('hero', { productLabels: null })
+    expect(without).not.toContain('CLEARSTEM')
+    expect(without).toContain('fotos reales del producto')
+  })
+
+  it('oferta inyecta offerText con los tiers exactos', () => {
+    const out = build('oferta', { offer: OFFER })
+    expect(out).toContain('PRICE TIERS')
+    expect(out).toContain('S/ 199')
+    expect(out).toContain('ahorra 33%')
+  })
+
+  it('hero/cta-final inyectan featuredPriceText + urgencia', () => {
+    for (const type of ['hero', 'cta-final'] as SectionType[]) {
+      const out = build(type, { offer: OFFER })
+      expect(out).toContain('FEATURED PRICE')
+      expect(out).toContain('S/ 199')
+      expect(out).toContain('Oferta por tiempo limitado')
+    }
+  })
+
+  it('garantia/cta-final/hero inyectan trustText con los hechos del TrustBlock', () => {
+    for (const type of ['garantia', 'cta-final', 'hero'] as SectionType[]) {
+      const out = build(type, { trust: TRUST })
+      expect(out).toContain('TRUST ROWS')
+      expect(out).toContain('Pago contraentrega')
+    }
+    // faq no lo inyecta
+    expect(build('faq', { trust: TRUST })).not.toContain('TRUST ROWS')
+  })
+
+  it('MULTI_UNIT_SECTIONS / PAYMENT_SECTIONS conservan su membresía', () => {
     expect(MULTI_UNIT_SECTIONS.has('oferta')).toBe(true)
     expect(MULTI_UNIT_SECTIONS.has('cta-final')).toBe(true)
     expect(MULTI_UNIT_SECTIONS.has('hero')).toBe(false)
+    expect(PAYMENT_SECTIONS.has('oferta')).toBe(true)
+    expect(PAYMENT_SECTIONS.has('garantia')).toBe(true)
   })
 
-  it('urgencia data-driven: badge único con la línea del copy en hero/cta-final', () => {
-    const hero = buildDiffusionInstruction(copyFor('hero'), 'canonical', null, null, null, null, null, false, false, OFFER, null)
-    expect(hero).toContain('Oferta por tiempo limitado')
-    expect(hero).toContain('single metallic-gold urgency badge')
-    expect(hero).toContain('FEATURED PRICE') // el precio del tier destacado se inyecta (no se inventa)
-    expect(hero).toContain('S/ 199')
-    // sin urgency en el offer, no se inyecta el badge (pero sí el precio)
-    const noUrg = buildDiffusionInstruction(copyFor('hero'), 'canonical', null, null, null, null, null, false, false, { tiers: OFFER.tiers }, null)
-    expect(noUrg).not.toContain('single metallic-gold urgency badge')
+  it('packNote se inyecta cuando packUnits > 1', () => {
+    const out = build('oferta', { packUnits: 3 })
+    expect(out).toContain('MULTI-UNIT PACK')
+    expect(out).toContain('3 copies of the SAME single product')
+    expect(build('oferta', { packUnits: null })).not.toContain('MULTI-UNIT PACK')
   })
 
-  it('ya NO hardcodea "SOLO HOY" en el spec de oferta/cta-final', () => {
-    expect(buildSectionInstruction(copyFor('oferta'), 'canonical')).not.toContain('SOLO HOY')
-    expect(buildSectionInstruction(copyFor('cta-final'), 'canonical')).not.toContain('SOLO HOY')
+  it('reserveLockup reserva la franja superior solo cuando se pide', () => {
+    expect(build('hero', { reserveLockup: true })).toContain('BRAND LOCKUP (do NOT draw)')
+    expect(build('hero', { reserveLockup: false })).not.toContain('BRAND LOCKUP (do NOT draw)')
   })
 
-  it('override no-producto suprime el frasco en secciones de texto/personas', () => {
-    const withNP = buildDiffusionInstruction(copyFor('testimonios'), 'canonical', null, null, null, null, null, false, false, null, null, null, false, true)
-    expect(withNP).toContain('NO PRODUCT FEATURE')
-    const without = buildDiffusionInstruction(copyFor('testimonios'), 'canonical', null, null, null, null, null, false, false, null, null, null, false, false)
-    expect(without).not.toContain('NO PRODUCT FEATURE')
-  })
-
-  it('disciplina de texto: prohíbe kicker/subhead/strip inventados', () => {
-    const out = buildSectionInstruction(copyFor('faq'), 'canonical')
-    expect(out).toContain('KICKER: render an uppercase kicker')
-    expect(out).toContain('render a subheadline ONLY if')
-    expect(out).toContain('NEVER invent closing words')
-  })
-
-  it('reserva la franja del lockup solo cuando reserveLockup=true', () => {
-    const withL = buildDiffusionInstruction(copyFor('hero'), 'canonical', null, null, null, null, null, false, false, null, null, null, true)
-    expect(withL).toContain('BRAND LOCKUP (do NOT draw)')
-    const without = buildDiffusionInstruction(copyFor('hero'), 'canonical', null, null, null, null, null, false, false, null, null, null, false)
-    expect(without).not.toContain('BRAND LOCKUP (do NOT draw)')
-  })
-})
-
-describe('brandLockupText — deriva un wordmark corto y limpio', () => {
-  it('prefiere la 1ª línea del label impreso si es corta', () => {
-    expect(brandLockupText('CLEARSTEM\n90 Capsules', 'Suplemento X')).toBe('CLEARSTEM')
-  })
-  it('cae al product_name cuando no hay label', () => {
-    expect(brandLockupText(null, 'JR Studio')).toBe('JR Studio')
-  })
-  it('salta nombres largos que no leen como lockup', () => {
-    expect(brandLockupText(null, 'Colágeno Hidrolizado Marino Premium')).toBeNull()
-    expect(brandLockupText('', '')).toBeNull()
-  })
-})
-
-describe('buildSceneInstruction — plato de fondo híbrido', () => {
-  it('mantiene la mitad-de-escena y saca la mitad-de-UI', () => {
-    const out = buildSceneInstruction('oferta', 'source', [{ name: 'azul', hex: '#1e3a8a' }], null, null)
-    // escena: atmósfera + fidelidad de producto
-    expect(out).toContain('luminous, dimensional background')
-    expect(out).toContain('REAL product')
-    expect(out).toContain('#1e3a8a')
-    // negativa dura de texto (end-weighted)
-    expect(out).toContain('NO TEXT (absolute)')
-    expect(out.trimEnd().endsWith('calm and uncluttered.')).toBe(true)
-    // UI que NO debe filtrarse al prompt de escena (la compone Satori)
-    expect(out).not.toContain('glassmorphism')
-    expect(out).not.toContain('METALLIC GOLD')
-    expect(out).not.toContain('TEXT DISCIPLINE')
-  })
-
-  it('el producto lleva su texto impreso como única excepción de texto', () => {
-    const out = buildSceneInstruction('oferta', 'source', null, null, 'MINDBODYSKIN\n90 Capsules')
-    expect(out).toContain('PRODUCT LABEL TEXT')
-  })
-
-  it('con DerivedBrand (Fase 3): usa mood + casting y su paleta fusionada', () => {
-    const brand: DerivedBrand = {
-      niche: 'fitness-energia',
-      palette: [{ name: 'Naranja', hex: '#FF6A2C', usage: 'accent' }],
-      typePair: 'urgencia-condensada',
-      casting: { present: true, ageRange: '25-35', gender: 'femenino', expression: 'enérgica' },
-      sceneMood: 'energía y sudor, luz de gimnasio',
-    }
-    const out = buildSceneInstruction('oferta', 'canonical', null, 'IGNORAR-BRANDSTYLE', null, brand)
-    expect(out).toContain('#FF6A2C')                       // paleta fusionada del brand
-    expect(out).toContain('energía y sudor, luz de gimnasio') // sceneMood
-    expect(out).toContain('age 25-35')                     // casting como dato
-    expect(out).not.toContain('IGNORAR-BRANDSTYLE')        // brand gana sobre brand_style suelto
-  })
-
-  it('casting.present=false suprime al beneficiario (acceptance #2)', () => {
-    const brand: DerivedBrand = {
-      niche: 'tech-limpio',
-      palette: [{ name: 'Azul', hex: '#3B82F6' }],
-      typePair: 'tech-neutral',
-      casting: { present: false },
-      sceneMood: 'estudio limpio',
-    }
-    const out = buildSceneInstruction('oferta', 'canonical', null, null, null, brand)
-    expect(out).toContain('NO PERSON')
-    // el override PRODUCT-ONLY va al FINAL para ganarle al beneficiario del SCENE_SPECS
-    expect(out).toContain('PRODUCT-ONLY (absolute, OVERRIDES everything above)')
-    expect(out.trimEnd().endsWith('The product ALONE is the subject.')).toBe(true)
-  })
-
-  it('casting.present=true NO agrega el override product-only', () => {
-    const brand: DerivedBrand = {
-      niche: 'salud-clinico', palette: [{ name: 'Azul', hex: '#2E6FB7' }],
-      typePair: 'clinico-geometrico', casting: { present: true, ageRange: '35-50', gender: 'femenino' },
-      sceneMood: 'luz clínica',
-    }
-    const out = buildSceneInstruction('oferta', 'canonical', null, null, null, brand)
-    expect(out).not.toContain('PRODUCT-ONLY')
-  })
-
-  it('C5.5: garantía y cta-final tienen su propio plato de escena, sin texto', () => {
-    const g = buildSceneInstruction('garantia', 'canonical')
-    expect(g).toContain('GUARANTEE / TRUST background plate')
-    expect(g).toContain('NO TEXT (absolute)')
-    const c = buildSceneInstruction('cta-final', 'canonical')
-    expect(c).toContain('FINAL CTA background plate')
-    expect(c).toContain('NO TEXT (absolute)')
-  })
-
-  it('las 8 secciones tienen plato de escena propio y sin texto', () => {
-    const anchor: Record<SectionType, string> = {
-      hero: 'HERO background plate',
-      oferta: 'OFFER background plate',
-      'antes-despues': 'BEFORE/AFTER background plate',
-      beneficios: 'BENEFITS background plate',
-      testimonios: 'TESTIMONIALS background plate',
-      garantia: 'GUARANTEE / TRUST background plate',
-      faq: 'FAQ background plate',
-      'cta-final': 'FINAL CTA background plate',
-    }
+  it('ninguna sección suprime persona ni producto: las 8 mencionan persona (o sustituto) Y producto', () => {
     for (const type of ALL) {
-      const out = buildSceneInstruction(type, 'canonical')
-      expect(out).toContain(anchor[type])
-      expect(out).toContain('NO TEXT (absolute)')
+      const withTalent = build(type, { hasTalent: true })
+      expect(withTalent).toContain(DNA.model_persona)
+      expect(withTalent).toContain('Producto (invariante)')
+
+      const noTalent = build(type, { hasTalent: false, talentSubstitute: 'El animal como protagonista, con banco de poses propio' })
+      expect(noTalent).toContain('El animal como protagonista, con banco de poses propio')
+      expect(noTalent).toContain('Producto (invariante)')
     }
   })
-})
 
-describe('talento canónico (Fase 4)', () => {
-  const brandPerson: DerivedBrand = {
-    niche: 'salud-clinico', palette: [{ name: 'Azul', hex: '#2E6FB7' }],
-    typePair: 'clinico-geometrico', casting: { present: true, ageRange: '35-50', gender: 'femenino' },
-    sceneMood: 'luz clínica',
-  }
-
-  it('hasTalent inyecta el bloque de talento en la escena híbrida', () => {
-    const withT = buildSceneInstruction('oferta', 'canonical', null, null, null, brandPerson, true)
-    const without = buildSceneInstruction('oferta', 'canonical', null, null, null, brandPerson, false)
-    expect(withT).toContain('CAMPAIGN TALENT')
-    expect(withT).toContain('FINAL reference image')
-    expect(withT).toContain('ONE AND ONLY human') // exclusividad: no agregar otra persona
-    expect(without).not.toContain('CAMPAIGN TALENT')
-  })
-
-  it('hasTalent inyecta el bloque de talento en el motor viejo', () => {
-    const out = buildSectionInstruction(copyFor('hero'), 'canonical', null, null, null, null, brandPerson, true)
-    expect(out).toContain('CAMPAIGN TALENT')
-  })
-
-  it('el motor viejo también suprime la persona con present=false', () => {
-    const brandNo: DerivedBrand = { ...brandPerson, casting: { present: false } }
-    const out = buildSectionInstruction(copyFor('beneficios'), 'canonical', null, null, null, null, brandNo, false)
-    expect(out).toContain('PRODUCT-ONLY (absolute, OVERRIDES everything above)')
-    expect(out.trimEnd().endsWith('The product ALONE is the subject.')).toBe(true)
+  it('la copia del cliente (headline/cta) se inyecta siempre', () => {
+    for (const type of ALL) {
+      const out = build(type)
+      expect(out).toContain('ACNE-HEADLINE-XYZ')
+      expect(out).toContain('Compra Ya')
+    }
   })
 })
