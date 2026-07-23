@@ -1,15 +1,17 @@
 /**
  * stylePresets.ts
  * ---------------------------------------------------------------------------
- * ADN visual de los 12 estilos del generador de marca/producto.
+ * ADN visual de los 7 estilos de identidad fija del generador de marca/producto.
  *
- * Cada preset se derivó ANALIZANDO EN CONJUNTO las 5 imágenes de referencia de
- * su carpeta (branding_refs_60.zip). Las paletas son aproximaciones extraídas
- * visualmente de esas referencias: son un punto de partida afinable, no medidas
- * exactas de píxeles.
+ * Migración (fase 3, jul 2026): de 12 presets "estilo genérico" a 7 presets de
+ * IDENTIDAD FIJA. Cada uno tiene una paleta validada por contraste (ver
+ * `contrast.ts`) — los hex y roles NO se derivan de referencias visuales como
+ * en la v1, son fijos y contrast-críticos: no se cambian sin re-validar.
  *
  * Uso previsto: motor de generación de imágenes Nano Banana / Gemini.
  *   - `styleBlock` es el párrafo listo para inyectar en el prompt.
+ *   - `composition` es SOLO escena fotográfica (el layout de etiqueta vive en
+ *     `label-layouts.ts`, que se concatena aparte en el prompt).
  *   - `referenceFolder` apunta a la carpeta de refs para adjuntarlas como
  *     imágenes de estilo (Gemini es muy fuerte usando referencias visuales).
  * ---------------------------------------------------------------------------
@@ -44,10 +46,12 @@ export interface Typography {
 export interface StylePreset {
   /** id estable en kebab/lower, usado como clave del motor */
   id: string;
-  /** posición 1..12 en la grid */
+  /** posición 1..7 en la grid */
   index: number;
   /** nombre para mostrar (ES) */
   name: string;
+  /** versión de identidad; sube al afinar paleta/styleBlock de un preset en prod */
+  version: number;
   /** alma del estilo en una línea */
   essence: string;
   /** descriptores para inyección en prompt (orden = prioridad) */
@@ -57,7 +61,7 @@ export interface StylePreset {
   typography: Typography;
   /** sustratos y acabados típicos */
   materials: string[];
-  /** lógica de composición / layout */
+  /** escena fotográfica (NO layout de etiqueta — eso vive en label-layouts.ts) */
   composition: string;
   /** iluminación para renders y mockups */
   lighting: string;
@@ -65,7 +69,7 @@ export interface StylePreset {
   mood: string[];
   /** recursos gráficos recurrentes */
   motifs: string[];
-  /** anti-patrones: qué NO debe aparecer */
+  /** anti-patrones estilísticos: qué NO debe aparecer (layout vive en LabelLayout.avoidLayout) */
   avoid: string[];
   /** párrafo natural listo para inyectar en Gemini/Nano Banana */
   styleBlock: string;
@@ -79,600 +83,342 @@ export function paletteToText(palette: PaletteColor[]): string {
 }
 
 export const STYLE_PRESETS: Record<string, StylePreset> = {
-  minimalista: {
-    id: "minimalista",
+  "neo-apotecario": {
+    id: "neo-apotecario",
     index: 1,
-    name: "Minimalista",
+    name: "Neo Apotecario",
+    version: 1,
     essence:
-      "Silencio visual: mucho aire, un wordmark grueso y casi nada más.",
+      "Botica moderna: serif de alto contraste, sello circular y simetría total.",
     keywords: [
-      "minimal",
-      "reductive",
-      "negative space",
-      "editorial",
-      "matte",
-      "understated premium",
+      "apothecary",
+      "modern pharmacy",
+      "high-contrast serif",
+      "emblem seal",
+      "framed symmetry",
+      "amber glass",
+      "small caps",
+      "timeless",
     ],
     palette: [
-      { hex: "#ECE7DD", name: "crema hueso", role: "background" },
-      { hex: "#16130F", name: "tinta negra", role: "primary" },
-      { hex: "#D8CDBA", name: "arena cálida", role: "secondary" },
-      { hex: "#9A968D", name: "gris piedra", role: "neutral" },
-      { hex: "#E8622A", name: "naranja pincelada", role: "accent" },
+      { hex: "#F4EDE0", name: "crema hueso", role: "background" },
+      { hex: "#2B2420", name: "tinta parda", role: "primary" },
+      { hex: "#C0492F", name: "terracota", role: "accent" },
+      { hex: "#2E6B5E", name: "verde botica", role: "secondary" },
     ],
     typography: {
-      primary: "grotesca sans gruesa, geométrica, muy espaciada",
-      secondary: "sans pequeña en mayúsculas con tracking amplio",
-      case: "mixed",
-      detail:
-        "un solo monograma o inicial grande; claims minúsculos casi ilegibles a modo de textura",
-    },
-    materials: [
-      "cartón mate sin brillo",
-      "botellas de plástico suave (soft-touch)",
-      "etiquetas de papel no estucado",
-    ],
-    composition:
-      "objeto centrado o en bodegón limpio sobre plinto; enormes márgenes vacíos; jerarquía de 1 palabra grande + micro-texto",
-    lighting: "luz de estudio suave y difusa, sombras largas y limpias",
-    mood: ["sereno", "sofisticado", "confiable", "moderno"],
-    motifs: ["inicial/monograma", "línea divisoria fina", "bloque de color plano"],
-    avoid: [
-      "gradientes",
-      "ilustración recargada",
-      "más de dos colores dominantes",
-      "texturas ruidosas",
-      "efectos 3D exagerados",
-    ],
-    styleBlock:
-      "Minimalist packaging design language: vast negative space, a single bold geometric sans-serif wordmark, a muted off-white and black palette with one restrained warm accent, matte uncoated materials, calm studio lighting with soft long shadows. Reductive, editorial and quietly premium — every element earns its place.",
-    referenceFolder: "01_minimalista",
-  },
-
-  lujo: {
-    id: "lujo",
-    index: 2,
-    name: "Lujo / Premium",
-    essence:
-      "Tonos joya profundos, foil dorado y detalle botánico: caro al tacto.",
-    keywords: [
-      "luxury",
-      "premium",
-      "jewel tones",
-      "gold foil",
-      "embossed",
-      "botanical crest",
-    ],
-    palette: [
-      { hex: "#452C57", name: "berenjena", role: "primary" },
-      { hex: "#5E5F32", name: "oliva profundo", role: "secondary" },
-      { hex: "#C7A24C", name: "oro foil", role: "accent" },
-      { hex: "#0E0B10", name: "negro tinta", role: "neutral" },
-      { hex: "#EFE9DE", name: "marfil", role: "background" },
-    ],
-    typography: {
-      primary: "serif elegante de alto contraste o wordmark fino en capitales",
-      secondary: "sans delicada muy espaciada, en dorado",
+      primary: "high-contrast transitional/didone serif, spaced small-caps",
+      secondary: "small sans in spaced small-caps",
       case: "uppercase",
-      detail: "monograma botánico/emblema, filetes finos, foil estampado",
+      detail: "circular emblem/seal, fine rules, framed border",
     },
     materials: [
-      "cajas rígidas soft-touch",
-      "bolsas de tela con cordón",
-      "foil metálico dorado",
-      "relieve y hot-stamping",
+      "papel no estucado",
+      "vidrio ámbar de boticario",
+      "etiqueta enmarcada",
     ],
     composition:
-      "kit/lineup de packaging (caja, bolsa, tags, tarjetas) sobre superficie oscura reflejante; emblema centrado; márgenes generosos",
-    lighting: "luz cálida y dramática, reflejos suaves sobre acabados oscuros",
-    mood: ["opulento", "elegante", "íntimo", "atemporal"],
-    motifs: ["emblema botánico", "filete dorado", "sello circular", "cinta/tag"],
+      "amber apothecary glass bottle centered on a wood or marble surface",
+    lighting: "warm soft diffused",
+    mood: ["confiable", "artesanal", "curativo", "atemporal"],
+    motifs: ["sello circular", "filete rectangular", "emblema central", "regla horizontal"],
     avoid: [
-      "colores estridentes",
-      "tipografía informal",
-      "plástico barato",
-      "desorden",
-      "estética juvenil",
+      "colores neón",
+      "tipografía informal o redondeada",
+      "asimetría",
+      "gradientes digitales",
+      "acabados plásticos brillantes",
     ],
     styleBlock:
-      "Luxury packaging design language: deep jewel tones (aubergine, deep olive, black) paired with real gold foil, a delicate botanical monogram or crest, elegant high-contrast serif or finely-spaced capitals, soft-touch rigid boxes with embossing. Warm dramatic lighting on dark reflective surfaces. Expensive, timeless and quietly indulgent.",
-    referenceFolder: "02_lujo",
+      "Neo-apothecary packaging design language: a modern pharmacy reinterpreted with a high-contrast transitional serif in spaced small-caps, a circular emblem or seal anchoring total symmetry, fine rules and a framed rectangular border enclosing the panel. Amber apothecary glass on wood or marble, warm soft diffused lighting. Trustworthy, artisanal, healing and timeless — precision with a human hand.",
+    referenceFolder: "01_neo_apotecario",
   },
 
-  "vintage-retro": {
-    id: "vintage-retro",
-    index: 3,
-    name: "Vintage / Retro",
+  "citrico-max": {
+    id: "citrico-max",
+    index: 2,
+    name: "Cítrico Max",
+    version: 1,
     essence:
-      "Nostalgia mid-century: crema, rojo tomate, mostaza y mascotas ilustradas.",
+      "Maximalismo cítrico: color a sangre, fruta gigante y display enorme.",
     keywords: [
-      "vintage",
-      "retro",
-      "mid-century",
-      "nostalgic",
-      "illustrated mascot",
-      "aged paper",
+      "citrus maximalist",
+      "bleed color",
+      "oversized display",
+      "juicy",
+      "high energy",
+      "saturated",
+      "cut fruit",
+      "loud",
     ],
     palette: [
-      { hex: "#F0E6CE", name: "crema envejecida", role: "background" },
-      { hex: "#C8402B", name: "rojo tomate", role: "primary" },
-      { hex: "#E0A231", name: "mostaza", role: "secondary" },
-      { hex: "#2E7C6D", name: "teal retro", role: "accent" },
-      { hex: "#24314F", name: "azul marino", role: "neutral" },
+      { hex: "#FF7A00", name: "naranja", role: "primary" },
+      { hex: "#FFD400", name: "amarillo cítrico", role: "background" },
+      { hex: "#B6E600", name: "lima", role: "secondary" },
+      { hex: "#FF3D6E", name: "magenta", role: "accent" },
+      { hex: "#111111", name: "negro tinta", role: "neutral" },
     ],
     typography: {
-      primary: "display condensada o serif ornamental de época",
-      secondary: "script retro o sans humanista con encanto antiguo",
-      case: "mixed",
-      detail:
-        "insignias, banderolas, medias tintas (halftone), líneas de rayos de sol",
+      primary: "ultra-bold condensed display grotesque, huge",
+      secondary: "bold sans",
+      case: "uppercase",
+      detail: "color pills/ribbons, thick outlines",
     },
-    materials: [
-      "cajas de cartón tipo cereal",
-      "latas litografiadas",
-      "envoltorios estilo caramelo",
-      "papel con textura envejecida",
-    ],
+    materials: ["lata de aluminio", "film brillante", "plástico brillante"],
     composition:
-      "frente de packaging cargado y simétrico, marco decorativo, mascota o bodegón ilustrado central, jerarquía tipográfica exuberante",
-    lighting: "luz plana y pareja tipo estudio nostálgico o foto de producto vintage",
-    mood: ["nostálgico", "cálido", "juguetón", "familiar"],
-    motifs: ["mascota", "banderola/ribbon", "sunburst", "marco ornamental", "halftone"],
+      "aluminum can or bottle against a saturated solid-color backdrop with citrus splashes",
+    lighting: "hard punchy studio light",
+    mood: ["energético", "jugoso", "ruidoso", "divertido"],
+    motifs: ["fruta cítrica cortada", "pastilla de color", "cinta/ribbon", "contorno grueso"],
     avoid: [
+      "espacio en blanco vacío",
+      "paletas apagadas o pastel",
+      "tipografía delicada",
       "minimalismo",
-      "gradientes digitales modernos",
-      "tipografía neo-grotesca fría",
-      "acabados hi-tech",
+      "acabados mate",
     ],
     styleBlock:
-      "Vintage / retro packaging design language: warm aged-paper cream with tomato red, mustard and retro teal, mid-century illustration and a friendly illustrated mascot, ornate condensed display type, banners, sunburst rays and halftone shading, litho-printed tins and cereal-box cartons. Nostalgic, warm and playful — like a lovingly restored product from the 1950s–60s.",
-    referenceFolder: "03_vintage_retro",
+      "Citrus-max packaging design language: full-bleed saturated orange, citrus yellow, lime and magenta, an ultra-bold huge condensed display grotesque, thick outlines and color-pill ribbons, an oversized cut-citrus splash crashing into the frame. Aluminum can or glossy bottle under hard punchy studio light. Energetic, juicy, loud and unapologetically fun.",
+    referenceFolder: "02_citrico_max",
   },
 
-  "organico-eco": {
-    id: "organico-eco",
-    index: 4,
-    name: "Orgánico / Eco",
+  "clinical-performance": {
+    id: "clinical-performance",
+    index: 3,
+    name: "Clinical Performance",
+    version: 1,
     essence:
-      "Kraft y verdes tierra con botánica lineal: natural, honesto, sostenible.",
+      "Nutrición deportiva clínica: ficha técnica al frente y verde señal.",
     keywords: [
-      "organic",
-      "eco",
+      "sports nutrition",
+      "clinical",
+      "neo-grotesque",
+      "data-forward",
+      "hero figure",
+      "precise",
+      "signal green",
+      "performance",
+    ],
+    palette: [
+      { hex: "#FFFFFF", name: "blanco", role: "background" },
+      { hex: "#F2F4F5", name: "gris niebla", role: "neutral" },
+      { hex: "#2A2E33", name: "grafito", role: "primary" },
+      { hex: "#00E676", name: "verde señal", role: "accent" },
+    ],
+    typography: {
+      primary: "bold neo-grotesque sans, uppercase",
+      secondary: "mono or sans for data",
+      case: "uppercase",
+      detail: "data pills, thin rules, oversized hero figure",
+    },
+    materials: ["bote HDPE mate", "aluminio", "film mate"],
+    composition:
+      "matte HDPE tub or shaker on a clean light-gray surface",
+    lighting: "neutral even diffused, soft shadow",
+    mood: ["preciso", "potente", "confiable", "científico"],
+    motifs: ["cifra heroica", "pastilla de dato", "ficha técnica en grid", "filete fino"],
+    avoid: [
+      "ilustración decorativa",
+      "tipografía script o serif ornamental",
+      "colores cálidos saturados",
+      "texturas rústicas",
+      "desorden",
+    ],
+    styleBlock:
+      "Clinical-performance packaging design language: a bold uppercase neo-grotesque sans, a visible data fiche with an oversized hero figure and thin rules, signal green accenting a graphite-on-white system. Matte HDPE tub or shaker on a clean light-gray surface under neutral even diffused lighting with soft shadow. Precise, powerful, trustworthy and scientific.",
+    referenceFolder: "03_clinical_performance",
+  },
+
+  "rich-not-snobby": {
+    id: "rich-not-snobby",
+    index: 4,
+    name: "Rich Not Snobby",
+    version: 1,
+    essence:
+      "Premium cálido y táctil, sin ostentación: faja estrecha y foil discreto.",
+    keywords: [
+      "quiet luxury",
+      "warm premium",
+      "narrow band",
+      "soft-touch",
+      "understated foil",
+      "tactile",
+      "negative space",
+      "intimate",
+    ],
+    palette: [
+      { hex: "#EDE3D4", name: "arena clara", role: "background" },
+      { hex: "#3A2A22", name: "cacao oscuro", role: "primary" },
+      { hex: "#B5623F", name: "terracota tostada", role: "secondary" },
+      { hex: "#C9A24B", name: "oro suave", role: "accent" },
+    ],
+    typography: {
+      primary: "fine medium-contrast serif or elegant spaced sans, small",
+      secondary: "fine spaced sans",
+      case: "uppercase",
+      detail: "wide tracking, discreet foil, centered narrow band",
+    },
+    materials: ["envase soft-touch mate", "foil sutil", "vidrio esmerilado"],
+    composition:
+      "soft-touch matte vessel on a warm neutral surface, lots of negative space",
+    lighting: "soft directional side light",
+    mood: ["cálido", "íntimo", "premium", "sereno"],
+    motifs: ["faja centrada estrecha", "wordmark espaciado", "foil discreto"],
+    avoid: [
+      "ostentación o dorado excesivo",
+      "tipografía gruesa o gritona",
+      "panel impreso a sangre completa",
+      "colores estridentes",
+      "desorden visual",
+    ],
+    styleBlock:
+      "Rich-not-snobby packaging design language: a warm cacao and sand palette with a soft toasted-terracotta and gold accent, a small finely-spaced serif or elegant sans wordmark centered in a narrow printed band, discreet foil, soft-touch matte vessel with generous unprinted negative space above and below. Soft directional side light on a warm neutral surface. Warm, intimate, premium and serene — never loud.",
+    referenceFolder: "04_rich_not_snobby",
+  },
+
+  botanico: {
+    id: "botanico",
+    index: 5,
+    name: "Botánico",
+    version: 1,
+    essence:
+      "Botánico kraft: doypack con ventana, ilustración lineal y sellos de certificación.",
+    keywords: [
+      "botanical kraft",
+      "doypack window",
+      "line illustration",
+      "certification seals",
       "natural",
-      "kraft",
-      "botanical line art",
+      "honest",
+      "earthy",
       "sustainable",
     ],
     palette: [
-      { hex: "#B98D5F", name: "kraft", role: "background" },
-      { hex: "#7C8B57", name: "verde salvia", role: "primary" },
-      { hex: "#BE6A47", name: "terracota", role: "secondary" },
-      { hex: "#EFE7D6", name: "crema natural", role: "neutral" },
-      { hex: "#45532F", name: "verde hoja", role: "accent" },
+      { hex: "#D8CBB4", name: "kraft", role: "background" },
+      { hex: "#3B3A2E", name: "oliva tinta", role: "primary" },
+      { hex: "#7C8A5B", name: "salvia", role: "secondary" },
+      { hex: "#D89B3A", name: "ocre", role: "accent" },
     ],
     typography: {
-      primary: "sans humanista suave o serif orgánica, cálida",
-      secondary: "sans limpia en minúsculas, cómoda de leer",
+      primary: "humanist serif or organic sans",
+      secondary: "clean sans",
       case: "title",
-      detail: "sellos/badges 'eco', ilustración botánica de trazo fino",
+      detail: "botanical illustration, monogram, circular certification seals",
     },
-    materials: [
-      "papel kraft reciclado",
-      "doypacks/stand-up pouches",
-      "tapas de madera",
-      "acabados mate sin plastificar",
-    ],
+    materials: ["kraft mate", "doypack", "ventana transparente", "tinta de soja"],
     composition:
-      "familia de productos agrupada sobre superficie neutra con props naturales (hojas, piedras); botánica enmarcando el nombre; sellos de sostenibilidad",
-    lighting: "luz de día suave y natural, sombras orgánicas",
-    mood: ["natural", "honesto", "sereno", "saludable"],
-    motifs: ["hoja/rama lineal", "sello circular eco", "textura de papel reciclado"],
+      "standing kraft doypack on wood or linen with a few leaves",
+    lighting: "warm natural daylight",
+    mood: ["natural", "honesto", "terroso", "fresco"],
+    motifs: ["ilustración botánica lineal", "ventana de producto", "sello circular de certificación"],
     avoid: [
       "colores neón",
-      "cromados/metálicos brillantes",
+      "cromados o metálicos brillantes",
       "plástico evidente",
-      "estética artificial o high-tech",
-    ],
-    styleBlock:
-      "Organic / eco packaging design language: recycled kraft paper with earthy sage green, terracotta and cream, fine botanical line illustration, humanist type, eco stamps and badges, stand-up pouches and wood caps, matte uncoated finishes. Photographed in soft natural daylight with leaves and stones. Honest, wholesome and sustainable.",
-    referenceFolder: "04_organico_eco",
-  },
-
-  "bold-maximalista": {
-    id: "bold-maximalista",
-    index: 5,
-    name: "Bold / Maximalista",
-    essence:
-      "Choque de color saturado, patrón denso y energía sin espacio en blanco.",
-    keywords: [
-      "maximalist",
-      "bold",
-      "saturated color clash",
-      "psychedelic pattern",
-      "high energy",
-      "pattern-wrapped",
-    ],
-    palette: [
-      { hex: "#E4247C", name: "magenta", role: "primary" },
-      { hex: "#2555C7", name: "azul eléctrico", role: "secondary" },
-      { hex: "#6A2DAE", name: "violeta", role: "accent" },
-      { hex: "#F26522", name: "naranja", role: "accent" },
-      { hex: "#F5C518", name: "amarillo intenso", role: "accent" },
-    ],
-    typography: {
-      primary: "display chunky y deformada, integrada en el patrón",
-      secondary: "sans compacta en alto contraste sobre color",
-      case: "uppercase",
-      detail: "swirls, lunares, formas espirales, tipografía que se funde con el fondo",
-    },
-    materials: [
-      "cajas y pouches totalmente impresos edge-to-edge",
-      "acabados brillantes",
-      "superficies cubiertas de patrón",
-    ],
-    composition:
-      "superficie envuelta por completo en patrón; sin negativo; producto sobre fondo de color vibrante contrastante; máxima densidad visual",
-    lighting: "luz de estudio nítida y saturada, colores punchy",
-    mood: ["enérgico", "atrevido", "divertido", "irreverente"],
-    motifs: ["swirl psicodélico", "lunares/polka", "espiral hipnótica", "clash cromático"],
-    avoid: [
-      "espacio en blanco",
-      "paletas apagadas",
-      "minimalismo",
-      "sobriedad",
-      "un solo color plano",
-    ],
-    styleBlock:
-      "Bold maximalist packaging design language: clashing saturated colors (magenta, electric blue, violet, orange, yellow), dense psychedelic swirls, polka dots and hypnotic patterns wrapping every surface edge-to-edge, chunky distorted display type fused into the pattern, glossy finishes, product shot on a vivid contrasting background. Loud, high-energy and unapologetically busy.",
-    referenceFolder: "05_bold_maximalista",
-  },
-
-  japandi: {
-    id: "japandi",
-    index: 6,
-    name: "Japandi",
-    essence:
-      "Fusión japonés-escandinava: neutros salvia, paisajes en gradiente y calma.",
-    keywords: [
-      "japandi",
-      "japanese scandinavian",
-      "muted earth tones",
-      "gradient landscape",
-      "zen minimal",
-      "tactile",
-    ],
-    palette: [
-      { hex: "#8FA07C", name: "salvia", role: "primary" },
-      { hex: "#CFC7B4", name: "greige cálido", role: "background" },
-      { hex: "#EDE7D8", name: "crema", role: "neutral" },
-      { hex: "#3B4A35", name: "verde bosque", role: "secondary" },
-      { hex: "#B98E6E", name: "arcilla", role: "accent" },
-    ],
-    typography: {
-      primary: "sans ligera y espaciada, a veces con caracteres japoneses",
-      secondary: "sans fina, minimal, jerarquía suave",
-      case: "mixed",
-      detail: "gradientes de montaña/paisaje, formas abstractas orgánicas, mucho aire",
-    },
-    materials: [
-      "tubos y cajas cilíndricas mate",
-      "papel texturado",
-      "linos y superficies táctiles",
-    ],
-    composition:
-      "objeto único o pareja sobre superficie neutra texturada; motivo de paisaje/montaña degradado; equilibrio asimétrico y sereno",
-    lighting: "luz natural tenue, sombras suaves, atmósfera cálida y quieta",
-    mood: ["calmo", "equilibrado", "cálido", "contemplativo"],
-    motifs: ["montaña/paisaje en gradiente", "círculo (enso)", "forma orgánica abstracta"],
-    avoid: [
-      "colores saturados",
-      "patrón denso",
-      "brillos metálicos",
-      "tipografía agresiva",
-      "desorden",
-    ],
-    styleBlock:
-      "Japandi packaging design language: muted earthy neutrals (sage, greige, cream, forest green, clay), soft gradient mountain/landscape motifs, calm asymmetric balance, light spaced sans-serif sometimes with Japanese characters, matte cylindrical tubes and textured paper. Photographed in soft warm natural light. Zen, tactile and quietly balanced — where Japanese restraint meets Scandinavian warmth.",
-    referenceFolder: "06_japandi",
-  },
-
-  "hand-drawn-artesanal": {
-    id: "hand-drawn-artesanal",
-    index: 7,
-    name: "Hand-drawn / Artesanal",
-    essence:
-      "Tinta blanco y negro con ilustración a mano: indie, craft, con carácter.",
-    keywords: [
-      "hand drawn",
-      "artisanal",
-      "ink illustration",
-      "black and white",
-      "screen-print",
-      "indie craft",
-    ],
-    palette: [
-      { hex: "#1A1714", name: "tinta negra", role: "primary" },
-      { hex: "#EFEADD", name: "crema papel", role: "background" },
-      { hex: "#CFC9BC", name: "gris papel", role: "neutral" },
-      { hex: "#B5452F", name: "rojo apagado", role: "accent" },
-      { hex: "#2E2A26", name: "carbón", role: "secondary" },
-    ],
-    typography: {
-      primary: "sans dibujada a mano o de bloque con imperfección de impresión",
-      secondary: "monoespaciada/serif pequeña estilo etiqueta antigua",
-      case: "uppercase",
-      detail: "ilustración de tinta (animales, formas abstractas), trazo de serigrafía",
-    },
-    materials: [
-      "botellas de vidrio con serigrafía directa",
-      "cajas mate sin estucar",
-      "etiquetas de papel craft blanco/crema",
-    ],
-    composition:
-      "alto contraste blanco/negro; ilustración protagonista dibujada a mano; lineup limpio; texto de etiqueta al pie",
-    lighting: "luz de estudio neutra, foco en el contraste gráfico",
-    mood: ["artesanal", "auténtico", "indie", "con carácter"],
-    motifs: ["ilustración de tinta a mano", "animal/emblema", "trazo de serigrafía", "líneas orgánicas"],
-    avoid: [
-      "gradientes",
-      "colores saturados",
+      "tipografía geométrica fría",
       "acabados hi-tech",
-      "3D fotorrealista pulido en el grafismo",
-      "tipografía corporativa fría",
     ],
     styleBlock:
-      "Hand-drawn / artisanal packaging design language: high-contrast black and white with cream paper, expressive hand-inked illustration (animals, abstract linework) with a screen-print feel, hand-drawn or block lettering, direct screen-printed glass bottles and uncoated cartons, an occasional muted red accent. Indie, crafted and full of character.",
-    referenceFolder: "07_hand_drawn_artesanal",
+      "Botanical-kraft packaging design language: a humanist serif or organic sans title centered above a real or simulated product window, fine botanical line illustration framing the name, circular certification seals aligned along the base, uncoated kraft doypack with a soy-ink print. Warm natural daylight on wood or linen with a few leaves. Natural, honest, earthy and fresh.",
+    referenceFolder: "05_botanico",
   },
 
-  "moderno-tech": {
-    id: "moderno-tech",
-    index: 8,
-    name: "Moderno Tech",
+  editorial: {
+    id: "editorial",
+    index: 6,
+    name: "Editorial",
+    version: 1,
     essence:
-      "Blanco/plata ultra-limpio con toques holográficos: preciso y futurista.",
+      "Tipográfico suizo: grilla visible, asimetría deliberada, navy y amarillo señal.",
     keywords: [
-      "modern tech",
-      "clean",
-      "monochrome",
-      "holographic iridescent accent",
-      "precise grid",
-      "product-launch",
+      "swiss editorial",
+      "visible grid",
+      "deliberate asymmetry",
+      "international typographic style",
+      "navy",
+      "signal yellow",
+      "confident",
+      "precise",
     ],
     palette: [
-      { hex: "#F4F5F7", name: "blanco frío", role: "background" },
-      { hex: "#C7CBD1", name: "gris plata", role: "secondary" },
-      { hex: "#202327", name: "grafito", role: "primary" },
-      { hex: "#0C0D0F", name: "negro", role: "neutral" },
-      { hex: "#A9C7E8", name: "iridiscente holográfico", role: "accent" },
+      { hex: "#F2F1EC", name: "hueso", role: "background" },
+      { hex: "#101B3A", name: "azul tinta", role: "primary" },
+      { hex: "#F5C400", name: "amarillo señal", role: "accent" },
     ],
     typography: {
-      primary: "neo-grotesca fina y precisa, tracking neutro",
-      secondary: "sans pequeña estilo ficha técnica, muy legible",
+      primary: "large international-style neo-grotesque (Helvetica-like)",
+      secondary: "same grotesque, smaller",
       case: "mixed",
-      detail: "grids visibles, layouts tipo spec-sheet, acento holográfico sutil",
+      detail: "visible grid, thin rule, vertical metadata",
     },
-    materials: [
-      "cajas rígidas blancas/negras mate",
-      "mailers metalizados",
-      "foil holográfico/iridiscente",
-      "superficies lisas premium",
-    ],
+    materials: ["papel mate no estucado", "cartón", "impresión offset"],
     composition:
-      "flat-lay ordenado o caja en ángulo con espacio negativo controlado; grid estricto; jerarquía minimal; detalle iridiscente como único color",
-    lighting: "luz de estudio limpia y neutra, sombras suaves y precisas",
-    mood: ["preciso", "futurista", "premium", "confiable"],
-    motifs: ["grid/spec-sheet", "gradiente holográfico", "bloque monocromo"],
+      "object or box in asymmetric composition on a flat solid backdrop",
+    lighting: "clean even studio light",
+    mood: ["sofisticado", "preciso", "editorial", "seguro"],
+    motifs: ["grilla visible", "color-block plano", "metadato vertical", "regla fina"],
     avoid: [
-      "ilustración manual",
-      "colores cálidos saturados",
-      "texturas rústicas",
+      "composición centrada o simétrica",
       "ornamento",
+      "gradientes",
+      "tipografía script o serif ornamental",
       "desorden",
     ],
     styleBlock:
-      "Modern tech packaging design language: ultra-clean monochrome white, silver and graphite with a single subtle holographic / iridescent accent, precise neo-grotesque type, visible grids and spec-sheet layouts, matte rigid boxes and metallized mailers, controlled negative space. Neutral studio lighting. Precise, premium and future-facing — like a flagship tech product launch.",
-    referenceFolder: "08_moderno_tech",
+      "Editorial packaging design language: the international typographic style with a visible grid, a large confident neo-grotesque (Helvetica-like) wordmark set deliberately asymmetric against a flat navy or signal-yellow color-block, a thin rule and a vertical metadata column as the system's signature. Clean even studio light on a flat solid backdrop. Sophisticated, precise, editorial and self-assured.",
+    referenceFolder: "06_editorial",
   },
 
-  "colorido-y2k": {
-    id: "colorido-y2k",
-    index: 9,
-    name: "Colorido / Y2K",
+  "future-nostalgia": {
+    id: "future-nostalgia",
+    index: 7,
+    name: "Future Nostalgia",
+    version: 1,
     essence:
-      "Gradientes vívidos, cromados y tipo burbuja: nostalgia glossy de los 2000s.",
+      "Y2K cromado: gradiente holográfico, blobs y wordmark burbuja 3D.",
     keywords: [
-      "y2k",
-      "vibrant gradient",
-      "chrome",
-      "bubbly rounded type",
+      "y2k chrome",
+      "holographic gradient",
+      "3d bubble wordmark",
+      "starburst",
       "glossy",
-      "2000s nostalgia",
+      "nostalgic future",
+      "playful",
+      "vibrant",
     ],
     palette: [
-      { hex: "#F0399B", name: "rosa chicle", role: "primary" },
-      { hex: "#37C6E8", name: "cian", role: "secondary" },
-      { hex: "#9BE022", name: "lima", role: "accent" },
-      { hex: "#7A3FF2", name: "violeta", role: "accent" },
-      { hex: "#BFA9F0", name: "lila fondo", role: "background" },
+      { hex: "#C7CCD1", name: "cromo claro", role: "background" },
+      { hex: "#FF5CC8", name: "rosa neón", role: "primary" },
+      { hex: "#4DD8E6", name: "cian", role: "secondary" },
+      { hex: "#C6FF3D", name: "lima ácida", role: "accent" },
+      { hex: "#14121A", name: "casi negro", role: "neutral" },
     ],
     typography: {
-      primary: "display redondeada tipo burbuja, gruesa y glossy",
-      secondary: "sans redondeada compacta",
+      primary: "3D chrome bubble display",
+      secondary: "rounded sans",
       case: "uppercase",
-      detail: "gradientes arcoíris, cromados líquidos, formas blobby",
+      detail: "chrome, starbursts, color capsules, gradient",
     },
-    materials: [
-      "pouches de mylar holográfico",
-      "envases glossy brillantes",
-      "acabados cromados/metalizados líquidos",
-    ],
+    materials: ["film holográfico", "cromo", "plástico brillante"],
     composition:
-      "producto sobre fondo pastel-a-vívido saturado; gradientes y cromados; formas blobby; energía pop y dulce",
-    lighting: "luz brillante y saturada, reflejos glossy marcados",
-    mood: ["divertido", "vibrante", "dulce", "nostálgico-pop"],
-    motifs: ["gradiente arcoíris", "cromado líquido", "blob/estrella", "burbuja"],
+      "chrome vessel against a holographic gradient backdrop with sparkles",
+    lighting: "bright glossy light with strong reflections",
+    mood: ["nostálgico", "lúdico", "futurista", "vibrante"],
+    motifs: ["wordmark burbuja cromado", "starburst", "blob orgánico", "cápsula de color"],
     avoid: [
-      "paletas apagadas",
-      "acabados mate rústicos",
+      "paletas apagadas o mate",
       "minimalismo austero",
       "seriedad corporativa",
-    ],
-    styleBlock:
-      "Colorful Y2K packaging design language: vivid rainbow gradients and liquid chrome, bubbly rounded glossy display type, blobby shapes, holographic mylar pouches and high-gloss containers, candy colors (hot pink, cyan, lime, violet) on saturated backgrounds. Bright punchy lighting with glossy highlights. Fun, sweet and dripping with early-2000s nostalgia.",
-    referenceFolder: "09_colorido_y2k",
-  },
-
-  "farmaceutico-clean": {
-    id: "farmaceutico-clean",
-    index: 10,
-    name: "Farmacéutico / Clean",
-    essence:
-      "Pasteles suaves y blanco, clínico y amable: eficacia que inspira confianza.",
-    keywords: [
-      "clean clinical",
-      "soft pastels",
-      "dermatological",
-      "gentle",
-      "airy",
-      "trustworthy",
-    ],
-    palette: [
-      { hex: "#B9D4E8", name: "azul polvo", role: "primary" },
-      { hex: "#F4D2CF", name: "blush", role: "secondary" },
-      { hex: "#CBE7D8", name: "menta", role: "accent" },
-      { hex: "#FBFCFE", name: "blanco", role: "background" },
-      { hex: "#DDE3E8", name: "gris suave", role: "neutral" },
-    ],
-    typography: {
-      primary: "sans limpia y ligera, médica pero amable",
-      secondary: "sans pequeña muy legible, claims funcionales",
-      case: "mixed",
-      detail: "gradientes blush/azul suaves, mucho blanco, aire clínico",
-    },
-    materials: [
-      "tubos suaves mate",
-      "frascos con gotero",
-      "cajas blancas limpias",
-      "acabados soft-touch",
-    ],
-    composition:
-      "lineup ordenado sobre plinto pastel; abundante blanco; gradiente sutil como único adorno; jerarquía funcional clara",
-    lighting: "luz difusa y limpia, sombras muy suaves, sensación higiénica",
-    mood: ["confiable", "suave", "clínico", "sereno"],
-    motifs: ["gradiente blush/azul", "gota/burbuja abstracta", "plinto pastel"],
-    avoid: [
-      "colores saturados",
-      "ornamento",
+      "tipografía plana sin volumen",
       "texturas rústicas",
-      "estridencia",
-      "estética juguetona",
     ],
     styleBlock:
-      "Clean clinical / pharmaceutical packaging design language: soft pastels (powder blue, blush, mint) on abundant white, light gentle sans-serif, subtle blush-to-blue gradients as the only decoration, soft-touch tubes, dropper bottles and crisp white boxes, orderly lineup on a pastel plinth. Diffuse hygienic lighting. Gentle, effective and reassuringly trustworthy.",
-    referenceFolder: "10_farmaceutico_clean",
-  },
-
-  "gold-foil-dorado": {
-    id: "gold-foil-dorado",
-    index: 11,
-    name: "Gold Foil / Dorado",
-    essence:
-      "Oro metálico sobre negro y teal, con drips y emblemas: opulencia dramática.",
-    keywords: [
-      "gold foil",
-      "metallic",
-      "dramatic dark",
-      "liquid gold drip",
-      "opulent",
-      "high contrast",
-    ],
-    palette: [
-      { hex: "#C9A24B", name: "oro metálico", role: "primary" },
-      { hex: "#0C0A08", name: "negro", role: "background" },
-      { hex: "#17403B", name: "teal oscuro", role: "secondary" },
-      { hex: "#F3F0E9", name: "blanco marfil", role: "neutral" },
-      { hex: "#E6C98B", name: "arena dorada", role: "accent" },
-    ],
-    typography: {
-      primary: "serif o sans fina en foil dorado, elegante",
-      secondary: "sans espaciada en dorado o marfil",
-      case: "uppercase",
-      detail: "drips de oro líquido, emblemas, bordes ornamentales, hot-stamping",
-    },
-    materials: [
-      "cajas negras/teal soft-touch",
-      "foil dorado brillante",
-      "frascos con gotero premium",
-      "relieve metálico",
-    ],
-    composition:
-      "objeto único con foco dramático; oro como acento sobre superficie oscura; contraste alto; centrado y ceremonioso",
-    lighting: "iluminación dramática y oscura con destellos dorados especulares",
-    mood: ["opulento", "dramático", "premium", "seductor"],
-    motifs: ["drip de oro líquido", "emblema/sello dorado", "borde ornamental", "foil"],
-    avoid: [
-      "colores pastel",
-      "estética informal",
-      "planos sin contraste",
-      "acabados mate apagados sin brillo metálico",
-    ],
-    styleBlock:
-      "Gold foil / luxe packaging design language: shining metallic gold on deep black and dark teal, liquid-gold drip motifs, ornate emblems and borders, fine foil-stamped serif or sans lettering, soft-touch dark boxes and premium dropper bottles, high contrast. Dramatic dark lighting with specular gold highlights. Opulent, seductive and ceremonious.",
-    referenceFolder: "11_gold_foil_dorado",
-  },
-
-  "flat-geometrico": {
-    id: "flat-geometrico",
-    index: 12,
-    name: "Flat / Geométrico",
-    essence:
-      "Formas planas tipo Bauhaus en colores vivos: sistema modular y alegre.",
-    keywords: [
-      "flat geometric",
-      "bauhaus",
-      "modular shapes",
-      "primary-ish bold colors",
-      "vector",
-      "systematic",
-    ],
-    palette: [
-      { hex: "#2358B8", name: "azul cobalto", role: "primary" },
-      { hex: "#E23B39", name: "rojo", role: "secondary" },
-      { hex: "#F4C020", name: "amarillo", role: "accent" },
-      { hex: "#4F9E57", name: "verde", role: "accent" },
-      { hex: "#F0EBDD", name: "crema fondo", role: "background" },
-    ],
-    typography: {
-      primary: "grotesca geométrica robusta, alineada al grid",
-      secondary: "sans limpia funcional",
-      case: "mixed",
-      detail: "círculos, triángulos, arcos y semicírculos; composición modular plana",
-    },
-    materials: [
-      "cajas y pouches impresos con vectores planos",
-      "acabados mate o satinados",
-      "superficies con patrón geométrico",
-    ],
-    composition:
-      "frente construido con formas geométricas modulares que forman patrón o fruta/objeto; color plano sin gradientes; logo enmarcado; sistema replicable entre SKUs",
-    lighting: "luz de estudio clara y pareja que respeta el color plano",
-    mood: ["moderno", "alegre", "ordenado", "confiado"],
-    motifs: ["círculo/triángulo/arco", "patrón modular", "composición Bauhaus", "color-block"],
-    avoid: [
-      "gradientes",
-      "ilustración realista con volumen",
-      "texturas ruidosas",
-      "ornamento vintage",
-      "degradados fotográficos",
-    ],
-    styleBlock:
-      "Flat geometric / Bauhaus packaging design language: bright flat color-blocks (cobalt, red, yellow, green, teal on cream), modular circles, triangles, arcs and semicircles composing patterns or stylized objects, sturdy geometric grotesque type on a strict grid, no gradients, a repeatable system across SKUs. Clean even studio lighting. Modern, cheerful and systematic.",
-    referenceFolder: "12_flat_geometrico",
+      "Future-nostalgia packaging design language: a 3D chrome bubble wordmark with real volume and reflections floating in front of a holographic gradient backdrop, starbursts and organic blobs layered behind it, neon pink, cyan and acid-lime color capsules over a near-black anchor. Bright glossy light with strong reflections on a chrome vessel. Nostalgic, playful, futuristic and vibrant.",
+    referenceFolder: "07_future_nostalgia",
   },
 };
 
-/** Lista ordenada por índice de grid (1..12). */
+/** Lista ordenada por índice de grid (1..7). */
 export const STYLE_LIST: StylePreset[] = Object.values(STYLE_PRESETS).sort(
   (a, b) => a.index - b.index,
 );
