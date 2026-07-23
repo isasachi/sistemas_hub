@@ -43,7 +43,7 @@ export async function POST(
     ]
     if (precision) parts.push({ text: `Ajuste solicitado (priorízalo): ${precision}` })
 
-    const b64 = await generateImage(parts)
+    const b64 = await generateImage(parts, 3, { aspectRatio: '4:5' })
     if (!b64) throw new Error('No se pudo generar el mockup')
 
     const url = await uploadToStorage(id, Buffer.from(b64, 'base64'), 'image/png', 'mockup')

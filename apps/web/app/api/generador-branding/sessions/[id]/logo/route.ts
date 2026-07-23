@@ -38,7 +38,7 @@ export async function POST(
     const parts: Part[] = [...(await identityRefParts(session)), { text: prompt }]
     if (precision) parts.push({ text: `Ajuste solicitado (priorízalo): ${precision}` })
 
-    const b64 = await generateImage(parts)
+    const b64 = await generateImage(parts, 3, { aspectRatio: '1:1' })
     if (!b64) throw new Error('No se pudo generar el logo')
 
     const url = await uploadToStorage(id, Buffer.from(b64, 'base64'), 'image/png', 'logo')
