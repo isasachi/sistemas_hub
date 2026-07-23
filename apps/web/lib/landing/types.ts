@@ -26,6 +26,75 @@ export const SECTION_LABELS: Record<SectionType, string> = {
   'cta-final': 'Llamado final',
 }
 
+// ─── Nicho y demografía (spec 2026-07-23, Anexos A/B) ────────────────────────
+export const NicheId = z.enum([
+  'supplement_skin_female', 'skincare_topical', 'haircare',
+  'fitness_weightloss', 'supplement_male_performance',
+  'joint_mobility', 'intimate_wellness', 'herbal_natural',
+  'baby_maternity', 'pets', 'home_cleaning',
+  'tech_gadgets', 'kitchen_tools', 'jewelry_fashion',
+  'automotive', 'generic',
+])
+export type NicheId = z.infer<typeof NicheId>
+
+export const DemographicId = z.enum([
+  'female_18_30', 'female_30_45', 'female_45_plus',
+  'male_20_35', 'male_35_55', 'senior_55_plus', 'no_talent',
+])
+export type DemographicId = z.infer<typeof DemographicId>
+
+// Salida del paso 0.a (clasificación). Zod rechaza cualquier valor fuera del set.
+export const NicheClassification = z.object({
+  niche_id: NicheId,
+  demographic_id: DemographicId,
+  confidence: z.number().min(0).max(1),
+  reasoning: z.string().max(200),
+})
+export type NicheClassification = z.infer<typeof NicheClassification>
+
+// Densidad de partículas (spec 0.b C).
+export const ParticleDensity = z.enum(['low', 'medium', 'high'])
+export const Halo = z.enum(['radial_soft', 'rays', 'backlight', 'rim', 'none'])
+
+// Paleta derivada por fórmula (spec 0.b B). color_body es rgba (opacidad 70%).
+export const PaletteTokensSchema = z.object({
+  color_headline: z.string(),
+  color_accent: z.string(),
+  color_body: z.string(),
+  bg_start: z.string(),
+  bg_end: z.string(),
+  color_surface: z.string(),
+  color_icon: z.array(z.string()).length(4),
+})
+export type PaletteTokens = z.infer<typeof PaletteTokensSchema>
+
+// ADN de la sesión (spec 0.b F): fuente única de verdad para las 8 secciones.
+// `poses` mapea cada sección seleccionada a una pose única del banco (Anexo B).
+export const LandingDnaSchema = z.object({
+  brand_base: z.object({ hex: z.string(), h: z.number(), s: z.number(), l: z.number() }),
+  palette: PaletteTokensSchema,
+  particle_type: z.string(),
+  particle_density: ParticleDensity,
+  props: z.array(z.string()).min(1).max(5),
+  font_family: z.string(),
+  font_accent: z.string().nullable(),
+  halo: Halo,
+  model_persona: z.string(),
+  // clave = SectionType slug; valor = descripción de pose. Parcial: solo las secciones elegidas.
+  poses: z.record(z.string(), z.string()),
+})
+export type LandingDna = z.infer<typeof LandingDnaSchema>
+
+// Puente slug interno ↔ lenguaje del spec + archivo de ref de composición en Storage
+// (bucket ad-uploads, prefijo landing-refs/, subidas por scripts/seed-landing-refs.ts).
+export const SECTION_SPEC_KEY: Record<SectionType, string> = {
+  hero: 'hero_problem', beneficios: 'benefits', 'antes-despues': 'before_after',
+  testimonios: 'testimonials', faq: 'faq', garantia: 'guarantee',
+  oferta: 'offer', 'cta-final': 'cta_final',
+}
+export const SECTION_REF: Record<SectionType, string> =
+  Object.fromEntries(SectionType.options.map((s) => [s, `${SECTION_SPEC_KEY[s]}.png`])) as Record<SectionType, string>
+
 // ─── Copy por sección (gate de aprobación) ───────────────────────────────────
 // Un esquema flexible cubre los 8 tipos: el LLM rellena solo los campos que aplican.
 // Los `.max()` son la primera línea de defensa contra texto largo ilegible en la
@@ -157,6 +226,7 @@ export type LandingTypography = LandingStyle['typography']
 
 // Familia cromática del NICHO — la atmósfera no sale de los píxeles del packaging (el frasco
 // blanco de un suplemento no "sabe" que su nicho es azul-pureza). El LLM la clasifica.
+/** @deprecated Reemplazado por `NicheId` (spec 2026-07-23). Se retira en Task 10. */
 export const NicheCode = z.enum([
   'salud-clinico',   // azul-blanco, pureza    → suplementos, skincare
   'fitness-energia', // negro-naranja-lima     → deporte, quemadores
@@ -169,6 +239,7 @@ export type NicheCode = z.infer<typeof NicheCode>
 
 // Casting del talento: demografía como DATO (no texto libre) → la misma persona en todas las
 // secciones. `present:false` = producto solo (gadget de auto, herramienta) sin beneficiario.
+/** @deprecated Reemplazado por `LandingDna.model_persona`/`poses` (spec 2026-07-23). Se retira en Task 10. */
 export const CastingSpecSchema = z.object({
   present:    z.boolean(),
   ageRange:   z.enum(['18-25', '25-35', '35-50', '50-65', '65+']).optional(),
@@ -180,6 +251,7 @@ export const CastingSpecSchema = z.object({
 })
 export type CastingSpec = z.infer<typeof CastingSpecSchema>
 
+/** @deprecated Reemplazado por `niche_id`/`demographic_id`/`landing_dna` (spec 2026-07-23). Se retira en Task 10. */
 export const DerivedBrandSchema = z.object({
   niche:     NicheCode,
   palette:   LandingStyleSchema.shape.palette, // reusa el shape actual (1-6 colores con rol)
@@ -253,4 +325,11 @@ export interface LandingSessionResponse {
   // Avatares de testimonios: 3 retratos de clientes DISTINTOS, generados una vez y cacheados,
   // que la sección testimonios compone como <img> (Satori no genera caras). Null hasta generarlos.
   testimonial_avatars: string[] | null
+  // Nicho y demografía confirmados por el usuario (paso 0.a). Escalares: se fijan ANTES de la
+  // extracción. Null hasta que el wizard los confirma en Identidad.
+  niche_id: NicheId | null
+  demographic_id: DemographicId | null
+  // ADN visual (paso 0.b): paleta por fórmula, partículas, props, tipografía, halo, persona y
+  // poses. Fuente única para las 8 secciones. Null en sesiones legadas → el wizard re-extrae.
+  landing_dna: LandingDna | null
 }
