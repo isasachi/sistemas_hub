@@ -44,23 +44,32 @@ export async function POST(
     type DeriveErr = { ok: false; message: string; status: number; blocked?: Response }
     const deriveOne = async (kind: 'logo' | 'label'): Promise<DeriveOk | DeriveErr> => {
       const quotaKind = kind === 'logo' ? 'branding-logo' : 'branding-label'
+      const nombre = kind === 'logo' ? 'el logo' : 'la etiqueta'
       const { blocked, regensLeft } = await checkGenQuota(id, quotaKind)
-      if (blocked) return { ok: false, message: 'quota', status: 429, blocked }
+      if (blocked) return { ok: false, message: `Llegaste al límite de regeneraciones de ${nombre}.`, status: 429, blocked }
 
-      const { data, mimeType } = await fetchAsBase64(srcUrl)
-      const prompt = kind === 'label' ? labelFromMockupPrompt(brief) : logoFromMockupPrompt(brief)
-      const aspectRatio = kind === 'label' ? '4:5' : '1:1'
+      // try/catch OBLIGATORIO: generateImage/fetchAsBase64/upload LANZAN en 429/5xx/red
+      // (el modo de fallo más común). Sin esto, un throw en una derivada haría rechazar el
+      // Promise.all y saltaría el manejo de fallo parcial → estado inconsistente + doble cobro.
+      try {
+        const { data, mimeType } = await fetchAsBase64(srcUrl)
+        const prompt = kind === 'label' ? labelFromMockupPrompt(brief) : logoFromMockupPrompt(brief)
+        const aspectRatio = kind === 'label' ? '4:5' : '1:1'
 
-      const parts: Part[] = [{ inlineData: { mimeType, data } }, { text: prompt }]
-      if (precision) parts.push({ text: `Ajuste solicitado (priorízalo): ${precision}` })
+        const parts: Part[] = [{ inlineData: { mimeType, data } }, { text: prompt }]
+        if (precision) parts.push({ text: `Ajuste solicitado (priorízalo): ${precision}` })
 
-      const b64 = await generateImage(parts, 3, { aspectRatio })
-      if (!b64) return { ok: false, message: `No se pudo derivar ${kind === 'logo' ? 'el logo' : 'la etiqueta'}`, status: 502 }
+        const b64 = await generateImage(parts, 3, { aspectRatio })
+        if (!b64) return { ok: false, message: `No se pudo derivar ${nombre}`, status: 502 }
 
-      const url = await uploadToStorage(id, Buffer.from(b64, 'base64'), 'image/png', `mockup-derived-${kind}`)
-      await updateBrandingSession(id, kind === 'logo' ? { logo_url: url } : { label_url: url })
-      await recordGenQuota(id, quotaKind, userId)
-      return { ok: true, url, regensLeft }
+        const url = await uploadToStorage(id, Buffer.from(b64, 'base64'), 'image/png', `mockup-derived-${kind}`)
+        await updateBrandingSession(id, kind === 'logo' ? { logo_url: url } : { label_url: url })
+        await recordGenQuota(id, quotaKind, userId)
+        return { ok: true, url, regensLeft }
+      } catch (e) {
+        console.error(`[derive ${kind}]`, e)
+        return { ok: false, message: `No se pudo derivar ${nombre}`, status: 502 }
+      }
     }
 
     if (target === 'both') {
@@ -88,7 +97,10 @@ export async function POST(
 
     const result = await deriveOne(target)
     if (!result.ok) return result.blocked ?? NextResponse.json({ error: result.message, retryable: true }, { status: result.status })
-    // regen individual: si ya existen ambos derivados, el estado sigue 'done'
+    // Reintento individual tras fallo parcial: si con éste ya existen AMBOS derivados,
+    // promové el estado a 'done' (sino quedaría clavado en 'deriving').
+    const otherExists = target === 'logo' ? !!session.label_url : !!session.logo_url
+    if (otherExists) await updateBrandingSession(id, { generation_status: 'done', generation_error: null })
     return NextResponse.json(target === 'logo' ? { logoUrl: result.url, regensLeft: result.regensLeft } : { labelUrl: result.url, regensLeft: result.regensLeft })
   } catch (err) {
     return NextResponse.json({ error: String(err), retryable: true }, { status: 500 })
