@@ -29,6 +29,7 @@ function dna(poses: Record<string, string>, palette = VALID_PALETTE): LandingDna
     palette,
     particle_type: 'polvo suspendido',
     particle_density: 'low',
+    particles_on: true,
     props: ['frasco'],
     font_family: 'Poppins',
     font_accent: null,

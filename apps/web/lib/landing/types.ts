@@ -74,6 +74,7 @@ export const LandingDnaSchema = z.object({
   palette: PaletteTokensSchema,
   particle_type: z.string(),
   particle_density: ParticleDensity,
+  particles_on: z.boolean().default(true),   // el nicho activa/desactiva partículas de fondo (motor de plantillas)
   props: z.array(z.string()).min(1).max(5),
   font_family: z.string(),
   font_accent: z.string().nullable(),

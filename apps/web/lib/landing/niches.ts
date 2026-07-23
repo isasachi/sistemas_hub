@@ -48,6 +48,8 @@ export const NICHE_LABELS: Record<NicheId, string> = {
 //         rim = tech/automotriz/joyería · none = hogar/mascotas/cocina/genérico.
 //   particle_density: low = técnicos/masculinos · high = belleza/limpieza/bebé · medium = resto
 //   (spec 0.b C).
+//   particles_on: false = nichos donde las partículas de fondo ensucian la composición (tech,
+//   automotriz, cocina, limpieza del hogar); true = resto. Tarea 2 del refactor motor de plantillas.
 export const NICHE_FALLBACK: Record<
   NicheId,
   {
@@ -56,6 +58,7 @@ export const NICHE_FALLBACK: Record<
     particle_density: 'low' | 'medium' | 'high'
     propsFamily: string
     halo: 'radial_soft' | 'rays' | 'backlight' | 'rim' | 'none'
+    particles_on: boolean
   }
 > = {
   supplement_skin_female: {
@@ -64,6 +67,7 @@ export const NICHE_FALLBACK: Record<
     particle_density: 'high',
     propsFamily: 'Raíz o flor del ingrediente, hojas, cápsulas sueltas, molécula 3D',
     halo: 'radial_soft',
+    particles_on: true,
   },
   skincare_topical: {
     hue: 340,
@@ -71,6 +75,7 @@ export const NICHE_FALLBACK: Record<
     particle_density: 'high',
     propsFamily: 'Gotas de sérum, pétalos, cristales, textura de crema',
     halo: 'radial_soft',
+    particles_on: true,
   },
   haircare: {
     hue: 35,
@@ -78,6 +83,7 @@ export const NICHE_FALLBACK: Record<
     particle_density: 'high',
     propsFamily: 'Gotero con aceite, semillas, hojas',
     halo: 'radial_soft',
+    particles_on: true,
   },
   fitness_weightloss: {
     hue: 20,
@@ -85,6 +91,7 @@ export const NICHE_FALLBACK: Record<
     particle_density: 'low',
     propsFamily: 'Scoop de polvo, cítricos, cinta métrica, cápsulas',
     halo: 'backlight',
+    particles_on: true,
   },
   supplement_male_performance: {
     hue: 355,
@@ -92,6 +99,7 @@ export const NICHE_FALLBACK: Record<
     particle_density: 'low',
     propsFamily: 'Raíz de maca, cápsulas oscuras, textura de piedra',
     halo: 'backlight',
+    particles_on: true,
   },
   joint_mobility: {
     hue: 175,
@@ -99,6 +107,7 @@ export const NICHE_FALLBACK: Record<
     particle_density: 'medium',
     propsFamily: 'Cápsulas, raíz de cúrcuma, estructura ósea 3D',
     halo: 'radial_soft',
+    particles_on: true,
   },
   intimate_wellness: {
     hue: 340,
@@ -106,6 +115,7 @@ export const NICHE_FALLBACK: Record<
     particle_density: 'medium',
     propsFamily: 'Pétalos, tejido de seda, cápsulas',
     halo: 'radial_soft',
+    particles_on: true,
   },
   herbal_natural: {
     hue: 120,
@@ -113,6 +123,7 @@ export const NICHE_FALLBACK: Record<
     particle_density: 'medium',
     propsFamily: 'Planta fresca, mortero, semillas, miel',
     halo: 'radial_soft',
+    particles_on: true,
   },
   baby_maternity: {
     hue: 195,
@@ -120,6 +131,7 @@ export const NICHE_FALLBACK: Record<
     particle_density: 'high',
     propsFamily: 'Textil de algodón, sonajero, flor blanca',
     halo: 'radial_soft',
+    particles_on: true,
   },
   pets: {
     hue: 140,
@@ -127,6 +139,7 @@ export const NICHE_FALLBACK: Record<
     particle_density: 'medium',
     propsFamily: 'Croquetas, juguete, huella en relieve, hojas',
     halo: 'none',
+    particles_on: true,
   },
   home_cleaning: {
     hue: 185,
@@ -134,6 +147,7 @@ export const NICHE_FALLBACK: Record<
     particle_density: 'high',
     propsFamily: 'Espuma, paño, superficie reflectante, gotas',
     halo: 'none',
+    particles_on: false,
   },
   tech_gadgets: {
     hue: 225,
@@ -141,6 +155,7 @@ export const NICHE_FALLBACK: Record<
     particle_density: 'low',
     propsFamily: 'Cable, superficie mate, punto de luz LED',
     halo: 'rim',
+    particles_on: false,
   },
   kitchen_tools: {
     hue: 15,
@@ -148,6 +163,7 @@ export const NICHE_FALLBACK: Record<
     particle_density: 'medium',
     propsFamily: 'Ingredientes crudos, tabla de madera, hierbas',
     halo: 'none',
+    particles_on: false,
   },
   jewelry_fashion: {
     hue: 45,
@@ -155,6 +171,7 @@ export const NICHE_FALLBACK: Record<
     particle_density: 'medium',
     propsFamily: 'Terciopelo, espejo, estuche',
     halo: 'rim',
+    particles_on: true,
   },
   automotive: {
     hue: 215,
@@ -162,6 +179,7 @@ export const NICHE_FALLBACK: Record<
     particle_density: 'low',
     propsFamily: 'Herramienta, superficie metálica, gota de aceite',
     halo: 'rim',
+    particles_on: false,
   },
   generic: {
     hue: 210,
@@ -169,6 +187,7 @@ export const NICHE_FALLBACK: Record<
     particle_density: 'medium',
     propsFamily: 'Formato de consumo del producto + 2 ingredientes literales',
     halo: 'none',
+    particles_on: true,
   },
 }
 

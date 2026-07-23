@@ -24,6 +24,7 @@ const DNA: LandingDna = {
   },
   particle_type: 'burbujas translúcidas y destellos de luz sobre agua',
   particle_density: 'medium',
+  particles_on: true,
   props: ['raíz de cúrcuma cortada', 'flor de diente de león', 'cápsulas beige sueltas'],
   font_family: 'Poppins',
   font_accent: null,

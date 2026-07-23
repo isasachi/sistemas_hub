@@ -104,6 +104,7 @@ export async function extractDna(
     palette,
     particle_type,
     particle_density,
+    particles_on: fallback.particles_on,
     props,
     font_family,
     font_accent,

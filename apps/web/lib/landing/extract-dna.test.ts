@@ -69,6 +69,11 @@ describe('extractDna', () => {
     expect(dna.model_persona).toBe(NO_TALENT_SUBSTITUTE[niche])
   })
 
+  it('propaga particles_on del nicho al DNA', async () => {
+    const dna = await extractDna(baseSession(), 'home_cleaning', 'no_talent', ['hero'])
+    expect(typeof dna.particles_on).toBe('boolean')
+  })
+
   it('brand_base.s < 12 dispara el fallback de hue del Anexo C (envase blanco/negro/plateado)', async () => {
     const extraction = {
       brand_base: { hex: '#FDFDFD', h: 0, s: 4, l: 98 },
