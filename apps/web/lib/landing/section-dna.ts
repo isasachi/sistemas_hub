@@ -68,7 +68,7 @@ export const SECTION_DNA: Record<SectionType, SectionDna> = {
       'Barra de confianza inferior + pastilla "Recomendado por expertos"',
       'SIN el protagonista de la campaña — las únicas caras son las de los 3 clientes (distintas entre sí)',
     ],
-    copy: 'headline: 3 líneas. kicker. cards: EXACTAMENTE 3 testimonios de MUESTRA (contenido de plantilla que el vendedor editará/reemplazará por reseñas reales — NO son reseñas de personas reales, así que puedes y DEBES generarlos), cada una title="Nombre A. – Ciudad" (nombres peruanos ficticios, ciudades distintas) y body=quote corta de 2-3 líneas en primera persona. socialProof: una frase agregada (ej "Miles de personas ya…").'
+    copy: 'headline: 3 líneas. kicker. cards: EXACTAMENTE 3 (ni 2 ni 4 — SIEMPRE 3) testimonios de MUESTRA (contenido de plantilla que el vendedor editará/reemplazará por reseñas reales — NO son reseñas de personas reales, así que DEBES generar las 3 aunque tengas que inventarlas), cada una title="Nombre A. – Ciudad" (nombres peruanos ficticios, ciudades distintas) y body=quote corta de 2-3 líneas en primera persona que cubran ejes distintos (resultado, objeción resuelta, emoción). socialProof: una frase agregada (ej "Miles de personas ya…").'
     ,requires: { cards: 3 },
   },
   faq: {

@@ -104,13 +104,17 @@ export async function generateLandingCopy(
   sections.forEach((s, i) => { if (first[i]) bySection.set(s, first[i]!) })
 
   let out = shareBullets([...bySection.values()])
-  // Retry correctivo SOLO de las secciones que siguen cortas tras shareBullets (cta-final se llena
-  // con los bullets del hero, así que ya no aparece corta). Nombra los faltantes → el modelo cumple.
-  const shortSections = sections.filter((s) => missingStructure([s], out.filter((c) => c.type === s)).length > 0)
-  if (shortSections.length) {
+  // Retry correctivo de las secciones que siguen cortas tras shareBullets (cta-final se llena con los
+  // bullets del hero, así que ya no aparece corta). El strict schema de OpenAI fuerza la PRESENCIA del
+  // array pero no el CONTEO — algunas secciones (testimonios) sub-producen 1; se nombran los faltantes
+  // y se insiste hasta 2 rondas (la generación es estocástica). El mensaje ordena INVENTAR de muestra
+  // antes que devolver menos (es contenido de plantilla que el usuario editará).
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const shortSections = sections.filter((s) => missingStructure([s], out.filter((c) => c.type === s)).length > 0)
+    if (!shortSections.length) break
     await Promise.all(shortSections.map(async (s) => {
       const gaps = missingStructure([s], out.filter((c) => c.type === s))
-      const corrective = `${feedback?.trim() ? feedback.trim() + '\n' : ''}CORRIGE la estructura (obligatorio): ${gaps.join(' ')} Devuelve la sección "${s}" con su array COMPLETO y del tamaño exacto.`
+      const corrective = `${feedback?.trim() ? feedback.trim() + '\n' : ''}CORRIGE la estructura (OBLIGATORIO): ${gaps.join(' ')} Devuelve la sección "${s}" con su array del tamaño EXACTO indicado. Si te faltan ideas, INVENTA entradas realistas de muestra (es contenido de plantilla que el vendedor editará) — NUNCA devuelvas menos del conteo pedido.`
       const fixed = await generateOneSection(session, s, corrective)
       if (fixed) bySection.set(s, fixed)
     }))
