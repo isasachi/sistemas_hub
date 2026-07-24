@@ -1,7 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import { z } from 'zod'
-import { callStructured, sliceToWord } from '@/lib/gemini'
+import { callStructured } from '@/lib/gemini'
 import { LandingCopySchema, OfferGenSchema, SectionCopySchema, SECTION_LABELS, type SectionCopy, type SectionType, type Offer, type OfferCopy, type LandingSessionResponse } from './types'
 import { SECTION_DNA } from './section-dna'
 import type { Part } from '@google/genai'
@@ -95,10 +95,12 @@ export function sectionCopySchema(s: SectionType) {
   if (!req) return SectionCopySchema
   // `.length(n)` = minItems=maxItems=n → conteo EXACTO (las plantillas tienen slots fijos: no sirve
   // un rango). Fuerza contra la sub-producción de Gemini Y la sobre-producción de OpenAI.
+  // Los .max() son CEILINGS con holgura de completado — DEBEN coincidir con SectionCopySchema
+  // (types.ts): un tope más bajo acá re-introduciría el corte a mitad de frase que ya arreglamos.
   const ext: Record<string, z.ZodTypeAny> = {}
-  if (req.bullets) ext.bullets = z.array(z.string().max(40)).length(req.bullets)
-  if (req.bulletsAfter) ext.bulletsAfter = z.array(z.string().max(40)).length(req.bulletsAfter)
-  if (req.cards) ext.cards = z.array(z.object({ title: z.string().max(40), body: z.string().max(90) })).length(req.cards)
+  if (req.bullets) ext.bullets = z.array(z.string().max(55)).length(req.bullets)
+  if (req.bulletsAfter) ext.bulletsAfter = z.array(z.string().max(55)).length(req.bulletsAfter)
+  if (req.cards) ext.cards = z.array(z.object({ title: z.string().max(60), body: z.string().max(140) })).length(req.cards)
   return SectionCopySchema.extend(ext)
 }
 
@@ -121,25 +123,12 @@ async function generateOneSection(session: LandingSessionResponse, s: SectionTyp
   }
 }
 
-// Post-trim ANTI-TRUNCADO (engine-agnóstico): un string EXACTAMENTE en su tope de caracteres es señal
-// de que el modelo/schema lo cortó a mitad de palabra ("…Sient.", "…Tuali"). Se recorta al último
-// límite de palabra; los que están BAJO el tope (copy sano) no se tocan. Mapa alineado a
-// SectionCopySchema — si cambian los .max() del schema, actualizar acá.
-const COPY_MAX: Record<string, number> = {
-  headline: 60, accentWord: 40, subheadline: 90, closingBold: 40, closingSub: 90,
-  closingStrip: 60, socialProof: 90, ctaHeadline: 30, ctaSub: 90, cta: 25,
-}
-const trimAtMax = (s: string, max: number) => (s.length >= max ? sliceToWord(s, max - 1) : s)
-export function trimCopyStrings(sections: SectionCopy[]): SectionCopy[] {
-  return sections.map((s) => {
-    const c = { ...s } as Record<string, unknown>
-    for (const [k, max] of Object.entries(COPY_MAX)) if (typeof c[k] === 'string') c[k] = trimAtMax(c[k] as string, max)
-    for (const arr of ['bullets', 'bulletsAfter'] as const) if (Array.isArray(c[arr])) c[arr] = (c[arr] as string[]).map((b) => trimAtMax(b, 40))
-    if (Array.isArray(c.cards)) c.cards = (c.cards as { title: string; body: string }[]).map((card) => ({ title: trimAtMax(card.title, 40), body: trimAtMax(card.body, 90) }))
-    return c as SectionCopy
-  })
-}
-
+// (Se eliminó `trimCopyStrings`.) Antes recortaba al límite de palabra los strings pegados al tope,
+// pero un word-trim NUNCA completa una frase: solo maquillaba el corte a mitad de palabra que causaba
+// el propio `.max()` apretado (OpenAI aplica maxLength en decoding → corta la frase justo en el tope).
+// El fix real fue subir los ceilings de SectionCopySchema (holgura de completado) para que el modelo
+// TERMINE la frase; sin corte que limpiar, el post-trim sobra. La difusión auto-escala el texto, así
+// que largo-y-completo > corto-y-cortado (pedido del usuario). El ADN sigue empujando la brevedad.
 export async function generateLandingCopy(
   session: LandingSessionResponse,
   sections: SectionType[],
@@ -173,7 +162,7 @@ export async function generateLandingCopy(
     }))
     out = shareBullets([...bySection.values()])
   }
-  return trimCopyStrings(out)
+  return out
 }
 
 // Copy de la Oferta HÍBRIDA. Una call estructurada produce copy + tiers (OfferGenSchema fuerza

@@ -98,30 +98,35 @@ export const SECTION_REF: Record<SectionType, string> =
 
 // ─── Copy por sección (gate de aprobación) ───────────────────────────────────
 // Un esquema flexible cubre los 8 tipos: el LLM rellena solo los campos que aplican.
-// Los `.max()` son la primera línea de defensa contra texto largo ilegible en la
-// imagen (la segunda es el bloque de disciplina de texto en instructions.ts).
+// Los `.max()` son CEILINGS con holgura de COMPLETADO, no targets de brevedad. La brevedad la
+// manda el ADN (`section-dna.ts` fija el largo ideal, mucho menor). El ceiling existe solo para
+// que el modelo (OpenAI aplica maxLength en decoding constreñido: si el tope llega justo, CORTA
+// a mitad de palabra → "…Sient.") tenga aire para TERMINAR la frase. Español DR es ~20% más largo
+// que el inglés para el que se dimensionaron antes; topes apretados = frases cortadas. Regla:
+// ceiling ≈ 1.4× el target del ADN. NO recortamos post-hoc (un word-trim nunca completa una frase;
+// la difusión auto-escala el texto, así que largo-y-completo > corto-y-cortado — pedido del usuario).
 export const SectionCopySchema = z.object({
   type: SectionType,
-  headline: z.string().max(60),
+  headline: z.string().max(90),
   // Sub-cadena EXACTA del headline a resaltar en color de marca (ADN: 1 palabra/frase acento).
   accentWord: z.string().max(40).optional(),
-  subheadline: z.string().max(90).optional(),
+  subheadline: z.string().max(120).optional(),
   // bullets: lista genérica. En `antes-despues` = columna ANTES (problemas). En otras, lista suelta.
-  bullets: z.array(z.string().max(40)).max(6).optional(),
+  bullets: z.array(z.string().max(55)).max(6).optional(),
   // bulletsAfter: SOLO `antes-despues` = columna DESPUÉS (resultados). Emparejada con bullets.
-  bulletsAfter: z.array(z.string().max(40)).max(6).optional(),
+  bulletsAfter: z.array(z.string().max(55)).max(6).optional(),
   // cards: testimonios ({title="Nombre, Ciudad", body=reseña}) · FAQ ({title=pregunta, body=respuesta})
   //        · beneficios ({title=beneficio, body=detalle de una línea}). Hasta 6 (FAQ llega a 5).
-  cards: z.array(z.object({ title: z.string().max(40), body: z.string().max(90) })).max(6).optional(),
+  cards: z.array(z.object({ title: z.string().max(60), body: z.string().max(140) })).max(6).optional(),
   // Campos del motor de plantillas (2026-07-23). Opcionales: cada sección llena los que aplican.
-  kicker: z.string().max(40).optional(),        // subtítulo dorado con guiones (beneficios/antes-despues/testimonios/oferta)
-  closingBold: z.string().max(40).optional(),   // beneficios: frase bold de la closing_card
-  closingSub: z.string().max(90).optional(),    // beneficios: subcopy de la closing_card
-  closingStrip: z.string().max(60).optional(),  // antes-despues: franja de cierre (reemplaza trust_bar)
-  socialProof: z.string().max(90).optional(),   // testimonios: banda de prueba social
-  ctaHeadline: z.string().max(30).optional(),   // cta-final: titular del bloque CTA (mayúsculas)
-  ctaSub: z.string().max(90).optional(),        // cta-final: subcopy del bloque CTA
-  cta: z.string().max(25).optional(),
+  kicker: z.string().max(45).optional(),        // subtítulo dorado con guiones (beneficios/antes-despues/testimonios/oferta)
+  closingBold: z.string().max(55).optional(),   // beneficios: frase bold de la closing_card
+  closingSub: z.string().max(120).optional(),   // beneficios: subcopy de la closing_card
+  closingStrip: z.string().max(70).optional(),  // antes-despues: franja de cierre (reemplaza trust_bar)
+  socialProof: z.string().max(120).optional(),  // testimonios: banda de prueba social
+  ctaHeadline: z.string().max(45).optional(),   // cta-final: titular del bloque CTA (mayúsculas)
+  ctaSub: z.string().max(120).optional(),       // cta-final: subcopy del bloque CTA
+  cta: z.string().max(30).optional(),
 })
 export type SectionCopy = z.infer<typeof SectionCopySchema>
 
@@ -163,8 +168,8 @@ export const OfferCopySchema = z.object({
   // enum (no literal): z.toJSONSchema emite `const` para literal y Gemini lo IGNORA (solo
   // respeta `enum`) → el modelo omitía `type` y fallaba la validación. enum de un valor lo fuerza.
   type: z.enum(['oferta']),
-  headline: z.string().max(60),
-  subheadline: z.string().max(90).optional(),
+  headline: z.string().max(90),
+  subheadline: z.string().max(120).optional(),
 })
 export type OfferCopy = z.infer<typeof OfferCopySchema>
 
@@ -173,8 +178,8 @@ export type OfferCopy = z.infer<typeof OfferCopySchema>
 // offer_copy LEGADO (pre-F5 guardaba los tiers acá) → resolveOffer los recupera de ahí.
 export const OfferGenSchema = z.object({
   type: z.enum(['oferta']),
-  headline: z.string().max(60),
-  subheadline: z.string().max(90).optional(),
+  headline: z.string().max(90),
+  subheadline: z.string().max(120).optional(),
   urgency: z.string().max(30).optional(),
   tiers: z.array(OfferTierSchema).min(2).max(4),
 }).refine((d) => d.tiers.filter((t) => t.featured).length === 1, {
