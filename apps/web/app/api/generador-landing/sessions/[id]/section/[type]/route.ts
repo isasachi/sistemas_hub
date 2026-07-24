@@ -159,6 +159,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         hasTalent,
         talentSubstitute,
         reserveLockup: !!lockup,
+        nicheId: session.niche_id ?? undefined,
       }),
     })
     b64 = await generateImage(parts, 3, { aspectRatio: '9:16' })

@@ -1,5 +1,6 @@
-import type { SectionCopy, SectionType, LandingDna, PaletteTokens, Offer, TrustBlock } from './types'
+import type { SectionCopy, SectionType, LandingDna, PaletteTokens, Offer, TrustBlock, NicheId } from './types'
 import { SECTION_SPEC_KEY } from './types'
+import { NICHE_LABELS } from './niches'
 
 // Builders puros ($0) para el prompt de imagen de cada sección de la landing (motor de DIFUSIÓN).
 // FUENTE DE VERDAD: docs/superpowers/specs/2026-07-23-generador-landing-spec.md §1-§5 + Anexos.
@@ -187,6 +188,23 @@ function packNote(units: number): string {
   return `MULTI-UNIT PACK: Image 1 is a REFERENCE PACK showing ${units} copies of the SAME single product side by side. Render exactly ${units} units of THIS product as a tight cluster/pack, and copy the IDENTICAL printed label from Image 1 onto every single unit — same wordmark, same secondary text, same colours on all ${units}; never garble, shorten or vary the label from one unit to the next.`
 }
 
+// Antes/después ADAPTATIVO por nicho (Task 5): la plantilla de `antes-despues` viene armada sobre
+// un acné→piel-limpia genérico, pero la tool es multi-nicho (café, rodillera, limpieza del
+// hogar...). Esta nota fuerza dos estados coherentes con el nicho + copy, nunca un "acné" fijo.
+// `nicheLabel` (de NICHE_LABELS, vía `nicheId`) ancla el dominio cuando se conoce la categoría —
+// sin él, el modelo igual debe inferir el par ANTES/DESPUÉS del copy/producto, solo que sin el
+// ancla explícita de categoría.
+function beforeAfterNote(hasTalent: boolean, nicheLabel?: string): string {
+  return [
+    (nicheLabel ? `Para un producto de categoría «${nicheLabel}», ` : '') +
+      'ANTES/DESPUÉS ADAPTATIVO: los dos paneles muestran el MISMO sujeto en dos estados coherentes con el nicho y el copy —',
+    hasTalent
+      ? 'el estado ANTES = el/la protagonista con el problema del nicho visible (piel: brotes; movilidad: rigidez; etc.); el estado DESPUÉS = el mismo rostro ya resuelto. Misma persona en ambos paneles.'
+      : 'el estado ANTES = superficie/objeto/situación con el problema del nicho; el estado DESPUÉS = el mismo con el resultado logrado.',
+    'Nunca inventes una condición de otro nicho ni actúes sufrimiento explícito.',
+  ].join('\n')
+}
+
 // Urgencia data-driven ($0, honesta): se renderiza como un badge dorado con la línea de urgencia
 // del copy (nunca inventada). offerText ya la inyecta en oferta; esto la lleva a hero/cta-final.
 function urgencyText(offer: Offer): string {
@@ -253,8 +271,9 @@ export function buildDiffusionInstruction(args: {
   hasTalent: boolean            // false solo si demographic_id === 'no_talent'
   talentSubstitute?: string     // NO_TALENT_SUBSTITUTE[niche] cuando !hasTalent
   reserveLockup?: boolean
+  nicheId?: NicheId             // session.niche_id — ancla antes-despues a la categoría del nicho
 }): string {
-  const { section, copy, dna, productLabels, offer, trust, packUnits, hasTalent, talentSubstitute, reserveLockup } = args
+  const { section, copy, dna, productLabels, offer, trust, packUnits, hasTalent, talentSubstitute, reserveLockup, nicheId } = args
 
   // El talento/protagonista se muestra solo si el nicho lo tiene Y la sección no está en
   // NO_TALENT_SECTIONS (faq/testimonios/garantia/cta-final). Determina si se adjunta el retrato
@@ -276,6 +295,7 @@ export function buildDiffusionInstruction(args: {
   ]
 
   const extra: string[] = []
+  if (section === 'antes-despues') extra.push(beforeAfterNote(hasTalent, nicheId ? NICHE_LABELS[nicheId] : undefined))
   if (section === 'oferta' && offer) extra.push(offerText(offer))
   // Precio + urgencia en hero/cta-final: la cifra EXACTA del tier destacado y el badge único con la
   // línea del copy (oferta ya trae ambos en offerText). Sin esto, hero/cta inventan precio y moneda.

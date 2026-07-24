@@ -261,4 +261,21 @@ describe('buildDiffusionInstruction — DNA-driven (spec 2026-07-23)', () => {
     // no debe quedar un remanente contradictorio de otra capa diciendo lo contrario
     expect(out).not.toContain('Siempre presentes')
   })
+
+  it('antes-despues instruye estados adaptativos, no acné hardcodeado', () => {
+    const out = buildDiffusionInstruction({
+      section: 'antes-despues', copy: copyFor('antes-despues'), dna: DNA,
+      productLabels: null, hasTalent: true, nicheId: 'home_cleaning',
+    })
+    expect(out).toContain('estado ANTES')
+    expect(out).toContain('estado DESPUÉS')
+    expect(out).not.toContain('acné') // no asume piel
+  })
+
+  it('antes-despues ancla la nota a la categoría del nicho cuando nicheId está presente', () => {
+    const out = build('antes-despues', { nicheId: 'home_cleaning' })
+    expect(out).toContain('Hogar / limpieza')
+    const withoutNiche = build('antes-despues')
+    expect(withoutNiche).toContain('estado ANTES') // sigue funcionando sin nicheId
+  })
 })
