@@ -10,6 +10,8 @@ import type { Part } from '@google/genai'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
+// Genera 1 imagen (gpt-image-2 ~60-90s con OpenAI primario). Fluid Compute (vercel.json) da 300s.
+export const maxDuration = 300
 
 // Paso 1 del pipeline SECUENCIAL: logo aislado, en la identidad del estilo
 // (refs de identidad, SIN wireframe). El logo generado acá es el que la

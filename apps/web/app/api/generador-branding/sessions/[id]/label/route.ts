@@ -16,6 +16,8 @@ import type { Part } from '@google/genai'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
+// Genera 1 imagen (gpt-image-2 ~60-90s con OpenAI primario). Fluid Compute (vercel.json) da 300s.
+export const maxDuration = 300
 
 // Paso 2 del pipeline SECUENCIAL: etiqueta plana que construye su PROPIO wordmark
 // tipográfico con el NOMBRE DE PRODUCTO (el logo de marca es un asset aparte y NO

@@ -7,7 +7,7 @@ import { readUserId } from '@/lib/product-hunter/session'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-export const maxDuration = 60 // gen de imagen (retrato) ~15-30s; cabe en 60s.
+export const maxDuration = 300 // gen de imagen (retrato); con OpenAI primario (~60-90s) necesita el techo de Fluid (300s).
 
 // Talento canónico (Fase 4 C4.4 → paso 0.b, spec 2026-07-23). Genera/regenera la placa de
 // talento desde `landing_dna.model_persona` (ya resuelto por extract-dna.ts) y persiste

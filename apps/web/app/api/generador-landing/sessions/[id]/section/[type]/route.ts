@@ -18,10 +18,12 @@ import type { Part } from '@google/genai'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-export const maxDuration = 60 // path source = gen imagen (~15s); cabe en 60s (Vercel Hobby).
-// UNA imagen por request (~15s) → cabe en el cap de Vercel Hobby (60s). El cliente
-// llama esta ruta una vez por sección, secuencialmente, en vez de un SSE que genera
-// las 8 en un solo request (que excedería el cap). Sirve para generar Y regenerar.
+// UNA imagen por request. Con OpenAI primario (gpt-image-2 ~60-90s) el viejo cap de 60s no
+// alcanzaba → 504. Fluid Compute (vercel.json fluid:true) sube el techo a 300s incluso en Hobby;
+// 300 cubre 1 imagen + los reintentos de generateImage. El cliente llama esta ruta una vez por
+// sección, secuencialmente. Sirve para generar Y regenerar. (Opcional prod: LLM_IMAGE_TIMEOUT_MS
+// hace caer a Gemini antes del cap si OpenAI se cuelga.)
+export const maxDuration = 300
 
 // Motor de DIFUSIÓN, DNA-driven (spec 2026-07-23): reemplaza al motor viejo (paleta/typography
 // sueltas + marca derivada) y al motor híbrido (escena Gemini + composición Satori de texto,
