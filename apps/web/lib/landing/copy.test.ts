@@ -61,3 +61,25 @@ describe('missingStructure (validación de estructura vs ADN)', () => {
     expect(missingStructure(['oferta'] as SectionType[], [{ type: 'oferta', headline: 'h' }] as SectionCopy[])).toEqual([])
   })
 })
+
+import { sectionCopySchema } from './copy'
+
+describe('sectionCopySchema (conteo exacto de arrays por ADN)', () => {
+  const cards = (n: number) => Array.from({ length: n }, (_, i) => ({ title: `t${i}`, body: 'b' }))
+  it('testimonios exige EXACTAMENTE 3 cards (2 y 4 fallan)', () => {
+    const sc = sectionCopySchema('testimonios')
+    expect(sc.safeParse({ type: 'testimonios', headline: 'h', cards: cards(3) }).success).toBe(true)
+    expect(sc.safeParse({ type: 'testimonios', headline: 'h', cards: cards(2) }).success).toBe(false)
+    expect(sc.safeParse({ type: 'testimonios', headline: 'h', cards: cards(4) }).success).toBe(false)
+  })
+  it('antes-despues exige 4 bullets + 4 bulletsAfter', () => {
+    const sc = sectionCopySchema('antes-despues')
+    const b4 = ['a', 'b', 'c', 'd']
+    expect(sc.safeParse({ type: 'antes-despues', headline: 'h', bullets: b4, bulletsAfter: b4 }).success).toBe(true)
+    expect(sc.safeParse({ type: 'antes-despues', headline: 'h', bullets: b4, bulletsAfter: ['a'] }).success).toBe(false)
+  })
+  it('oferta (sin requires) usa el schema base sin exigir arrays', () => {
+    const sc = sectionCopySchema('oferta')
+    expect(sc.safeParse({ type: 'oferta', headline: 'h' }).success).toBe(true)
+  })
+})

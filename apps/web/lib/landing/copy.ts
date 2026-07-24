@@ -1,7 +1,8 @@
 import fs from 'fs'
 import path from 'path'
+import { z } from 'zod'
 import { callStructured } from '@/lib/gemini'
-import { LandingCopySchema, OfferGenSchema, SECTION_LABELS, type SectionCopy, type SectionType, type Offer, type OfferCopy, type LandingSessionResponse } from './types'
+import { LandingCopySchema, OfferGenSchema, SectionCopySchema, SECTION_LABELS, type SectionCopy, type SectionType, type Offer, type OfferCopy, type LandingSessionResponse } from './types'
 import { SECTION_DNA } from './section-dna'
 import type { Part } from '@google/genai'
 
@@ -85,12 +86,35 @@ function copyPromptParts(session: LandingSessionResponse, sections: SectionType[
   ]
 }
 
-// Genera el copy de UNA sección. Clave: pedir 8 secciones en una sola llamada hace que el modelo
-// omita los arrays densos (probado: batch-8 devuelve 0 cards en testimonios/faq/garantía; per-sección
-// los llena). Cada sección se genera enfocada y en paralelo.
+// Schema POR SECCIÓN: hace REQUERIDOS los arrays del ADN con `.min(conteo)`. Ataca la causa raíz de
+// que Gemini omita bullets/cards (su responseSchema los tenía opcionales → los saltaba); a OpenAI lo
+// refuerza (el strict ya los requería, ahora también fuerza el conteo vía minItems). Las secciones
+// sin `requires` (oferta) usan el schema base. El card shape replica el de SectionCopySchema.
+export function sectionCopySchema(s: SectionType) {
+  const req = SECTION_DNA[s].requires
+  if (!req) return SectionCopySchema
+  // `.length(n)` = minItems=maxItems=n → conteo EXACTO (las plantillas tienen slots fijos: no sirve
+  // un rango). Fuerza contra la sub-producción de Gemini Y la sobre-producción de OpenAI.
+  const ext: Record<string, z.ZodTypeAny> = {}
+  if (req.bullets) ext.bullets = z.array(z.string().max(40)).length(req.bullets)
+  if (req.bulletsAfter) ext.bulletsAfter = z.array(z.string().max(40)).length(req.bulletsAfter)
+  if (req.cards) ext.cards = z.array(z.object({ title: z.string().max(40), body: z.string().max(90) })).length(req.cards)
+  return SectionCopySchema.extend(ext)
+}
+
+// Genera el copy de UNA sección (per-sección enfocado > batch-8, que hacía omitir arrays densos).
+// 1º con el schema por-sección de arrays requeridos (fuerza presencia+conteo en ambos motores); si el
+// modelo no lo cumple tras los reintentos internos, best-effort con el schema laxo (evita 500 — el
+// retry correctivo de generateLandingCopy es la red final).
 async function generateOneSection(session: LandingSessionResponse, s: SectionType, feedback?: string): Promise<SectionCopy | null> {
-  const result = await callStructured('landing_copy', LandingCopySchema, copyPromptParts(session, [s], feedback), 3, LANDING_SYSTEM_PROMPT)
-  return result.sections.find((x) => x.type === s) ?? result.sections[0] ?? null
+  const pick = (r: { sections: SectionCopy[] }) => r.sections.find((x) => x.type === s) ?? r.sections[0] ?? null
+  const parts = copyPromptParts(session, [s], feedback)
+  try {
+    const strict = z.object({ sections: z.array(sectionCopySchema(s)) })
+    return pick(await callStructured('landing_copy', strict, parts, 3, LANDING_SYSTEM_PROMPT) as { sections: SectionCopy[] })
+  } catch {
+    return pick(await callStructured('landing_copy', LandingCopySchema, parts, 2, LANDING_SYSTEM_PROMPT))
+  }
 }
 
 export async function generateLandingCopy(
