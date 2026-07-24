@@ -54,6 +54,7 @@ function copyBlock(copy: SectionCopy): string {
 function brandBlock(productLabels: string | null): string {
   const lines: string[] = [
     'BRAND — el envase renderizado es SIEMPRE el mismo objeto de la Imagen 1 (envase canónico): misma forma, proporciones, tapa, material y color exacto. Nunca se reinventa forma, tapa, proporción ni material.',
+    'PROPORCIONES REALES (crítico): renderizá el envase con su relación ancho/alto NATURAL de frasco real, IDÉNTICA en todas las secciones. NUNCA lo estires, alargues, angostes ni comprimas — aunque la imagen de referencia venga recortada, parcial o angosta, reconstruí las proporciones reales del frasco. Un envase estirado o deforme es criterio de fallo.',
   ]
   if (productLabels && productLabels.trim()) {
     lines.push(

@@ -45,8 +45,14 @@ export async function extractProductBox(base64: string, mimeType: string): Promi
     const [ymin, xmin, ymax, xmax] = box_2d.map((n) => n / 1000)
     const box: ProductBox = { x: xmin, y: ymin, w: xmax - xmin, h: ymax - ymin }
     const inRange = [box.x, box.y, box.w, box.h].every((n) => n >= 0 && n <= 1)
-    // Válido y no-degenerado: descarta ruido (w/h < 8%) y desbordes.
-    if (!inRange || box.w < 0.08 || box.h < 0.08 || box.x + box.w > 1.001 || box.y + box.h > 1.001) return null
+    const ar = box.w / box.h
+    // Válido y no-degenerado: descarta desbordes. Y RECHAZA cajas demasiado ANGOSTAS/finas
+    // (w < 0.2 o w/h < 0.33): en gráficos de marketing (envase central + texto/bullets alrededor)
+    // el bbox tiende a cortar DENTRO del producto → un recorte delgado que el modelo renderiza
+    // ESTIRADO. Devolver null hace que el caller use la FOTO COMPLETA (proporciones reales), que
+    // el prompt igual sabe aislar. Trade-off: puede reintroducir texto circundante (menos malo que
+    // el estirado reportado); afinable si reaparece.
+    if (!inRange || box.w < 0.2 || box.h < 0.08 || ar < 0.33 || box.x + box.w > 1.001 || box.y + box.h > 1.001) return null
     return box
   } catch {
     return null
