@@ -109,14 +109,26 @@ async function geminiCallStructured<T>(
 }
 
 // Texto+visión estructurado: OpenAI (gpt-4o-mini) primario, Gemini fallback en fallo.
+// `preferGemini`: invierte el orden para tareas donde Gemini es netamente mejor — la detección de
+// bounding box (`extractProductBox`) usa el formato box_2d [0-1000] en el que Gemini está entrenado;
+// gpt-4o-mini devuelve cajas imprecisas (recortes cortados). Gemini primario + OpenAI fallback ahí.
 export async function callStructured<T>(
   schemaName: string,
   schema: z.ZodSchema<T>,
   parts: Part[],
   maxRetries = 3,
-  systemInstruction: string = SYSTEM_PROMPT
+  systemInstruction: string = SYSTEM_PROMPT,
+  opts?: { preferGemini?: boolean }
 ): Promise<T> {
   if (geminiForced()) return geminiCallStructured(schemaName, schema, parts, maxRetries, systemInstruction)
+  if (opts?.preferGemini) {
+    try {
+      return await geminiCallStructured(schemaName, schema, parts, maxRetries, systemInstruction)
+    } catch (e) {
+      console.warn(`[llm] Gemini structured (${schemaName}, preferGemini) falló → fallback a OpenAI`, e)
+      return openaiCallStructured(schemaName, schema, parts, maxRetries, systemInstruction)
+    }
+  }
   try {
     return await openaiCallStructured(schemaName, schema, parts, maxRetries, systemInstruction)
   } catch (e) {

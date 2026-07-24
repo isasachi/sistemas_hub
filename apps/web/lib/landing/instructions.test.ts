@@ -174,14 +174,22 @@ describe('buildDiffusionInstruction — DNA-driven (spec 2026-07-23)', () => {
     }
   })
 
-  it('garantia/cta-final/hero inyectan trustText con los hechos del TrustBlock', () => {
-    for (const type of ['garantia', 'cta-final', 'hero'] as SectionType[]) {
+  it('la barra de confianza (TRUST BAR) va en las 6 secciones que la tienen, no en oferta/antes-despues', () => {
+    for (const type of ['hero', 'beneficios', 'testimonios', 'faq', 'garantia', 'cta-final'] as SectionType[]) {
       const out = build(type, { trust: TRUST })
-      expect(out).toContain('TRUST ROWS')
+      expect(out).toContain('TRUST BAR')
       expect(out).toContain('Pago contraentrega')
+      // composición neutral: ya no dicta "frosted pill" (eso rompía la consistencia)
+      expect(out).not.toContain('frosted pill')
     }
-    // faq no lo inyecta
-    expect(build('faq', { trust: TRUST })).not.toContain('TRUST ROWS')
+    // oferta (payment_row) y antes-despues (closing_strip) NO llevan la barra
+    expect(build('oferta', { trust: TRUST })).not.toContain('TRUST BAR')
+    expect(build('antes-despues', { trust: TRUST })).not.toContain('TRUST BAR')
+  })
+
+  it('testimonios restringe las caras a la demografía objetivo cuando se pasa demographicLabel', () => {
+    const out = build('testimonios', { demographicLabel: 'Mujer 18-30' })
+    expect(out).toContain('coherentes con la demografía objetivo (Mujer 18-30)')
   })
 
   it('oferta dibuja los logos de pago de trust.paymentMethods (decisión del usuario)', () => {

@@ -19,10 +19,14 @@ const BoxSchema = z.object({
 
 const SYSTEM = [
   'You are an object-detection annotator. You will be shown ONE image of a physical product',
-  '(a bottle, jar, tube, box or package). It may be a clean packshot on a plain/white background,',
-  'a product photo in context, or a marketing piece with text, people and scenery around it.',
-  'Return the TIGHT 2D bounding box of the MAIN physical product ONLY — just the product object(s),',
-  'excluding its shadow, any surrounding text, any person and the background.',
+  '(a bottle, jar, tube, box, sachet or package). It may be a clean packshot on a plain/white',
+  'background, a product photo in context, or a marketing piece with text, people and scenery around it.',
+  'Return the TIGHT 2D bounding box of the MAIN physical product CONTAINER ONLY — just the packaging',
+  'object itself (the bottle/jar/tube/box). EXCLUDE everything around it: its shadow and reflection,',
+  'any surrounding or overlaid text, headlines, bullet points, prices, badges, seals, icons, arrows or',
+  'callouts, AND any decorative props — ingredients, fruit, plants, leaves, flowers, petals, seeds,',
+  'powder, splashes, water droplets, ice, fabric — even when they touch or overlap the product. If those',
+  'props sit in front of the container, still box only the container and clip them out of the box.',
   'Output box_2d as [ymin, xmin, ymax, xmax], each value an integer 0-1000 normalized to the image',
   '(y = top→bottom, x = left→right). If a pack of several identical units is shown, box the whole group tightly.',
 ].join(' ')
@@ -35,7 +39,9 @@ export async function extractProductBox(base64: string, mimeType: string): Promi
       { inlineData: { mimeType, data: base64 } },
       { text: 'Detect the main physical product and return its box_2d as [ymin, xmin, ymax, xmax] in 0-1000.' },
     ]
-    const { box_2d } = await callStructured('product_box', BoxSchema, parts, 2, SYSTEM)
+    // preferGemini: la detección de bbox es netamente mejor en Gemini (box_2d es su formato nativo);
+    // gpt-4o-mini devuelve cajas cortadas. Gemini primario aquí, OpenAI solo como fallback.
+    const { box_2d } = await callStructured('product_box', BoxSchema, parts, 2, SYSTEM, { preferGemini: true })
     const [ymin, xmin, ymax, xmax] = box_2d.map((n) => n / 1000)
     const box: ProductBox = { x: xmin, y: ymin, w: xmax - xmin, h: ymax - ymin }
     const inRange = [box.x, box.y, box.w, box.h].every((n) => n >= 0 && n <= 1)

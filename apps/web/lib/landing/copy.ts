@@ -43,6 +43,8 @@ export async function generateLandingCopy(
         `Público objetivo: ${session.audience || 'no especificado'}`,
         `Tono deseado: ${(session.tone ?? []).join(', ') || 'no especificado'}`,
         `Nicho: ${session.niche_id ?? 'genérico'}`,
+        `Demografía objetivo: ${session.demographic_id ?? 'no especificada'}`,
+        `IMPORTANTE — los nombres y perfiles de los testimonios deben ser COHERENTES con la demografía objetivo (mismo género y rango de edad). No mezcles géneros si la demografía es de un solo género.`,
         feedback?.trim() ? `\nAjustes pedidos por el usuario: ${feedback.trim()}` : '',
         ``,
         `Secciones a escribir (en este orden), usa exactamente estos "type":`,

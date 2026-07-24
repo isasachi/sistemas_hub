@@ -5,7 +5,7 @@ import { generateImage, editWithPrompt } from '@/lib/gemini'
 import { buildDiffusionInstruction, MULTI_UNIT_SECTIONS, NO_TALENT_SECTIONS } from '@/lib/landing/instructions'
 import { BrandLockup, brandLockupText } from '@/lib/landing/layouts/brand-lockup'
 import { buildProductPack } from '@/lib/landing/product-box'
-import { NO_TALENT_SUBSTITUTE } from '@/lib/landing/demographics'
+import { NO_TALENT_SUBSTITUTE, DEMOGRAPHIC_LABELS } from '@/lib/landing/demographics'
 import { generateOfferCopy } from '@/lib/landing/copy'
 import { renderComposite } from '@/lib/landing/composite'
 import { buildTheme } from '@/lib/landing/theme'
@@ -160,6 +160,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         talentSubstitute,
         reserveLockup: !!lockup,
         nicheId: session.niche_id ?? undefined,
+        demographicLabel: session.demographic_id ? DEMOGRAPHIC_LABELS[session.demographic_id] : undefined,
       }),
     })
     b64 = await generateImage(parts, 3, { aspectRatio: '9:16' })

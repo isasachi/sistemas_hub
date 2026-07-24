@@ -83,6 +83,7 @@ function designSystemBlock(dna: LandingDna): string {
     'Base (invariante): superficie reflectante en el borde inferior donde el envase proyecta reflejo vertical difuso.',
     'Profundidad (invariante): tres planos — fondo atmosférico, talento, producto + props en primer plano. Ligera profundidad de campo en el fondo.',
     `Paleta aplicada por ROL: titular base en ${p.color_headline}; palabra destacada del titular en ${p.color_accent}; cuerpo de texto en ${p.color_body}; superficie de card en ${p.color_surface} al 75-85% de opacidad; iconos en ${p.color_icon.join(', ')} (uno por atributo).`,
+    `CONSISTENCIA DE COLOR (crítico): estos hex son los MISMOS exactos en las 8 secciones del funnel — el acento ${p.color_accent}, el titular ${p.color_headline} y los íconos NO deben variar de tono, saturación ni brillo de una sección a otra. Son el color EXACTO de la marca, no una sugerencia aproximada.`,
     'Oferta/premium/sellos: degradado dorado #B8860B→#F5D372, y ÚNICAMENTE ahí — oferta, sellos de garantía, cinta "RECOMENDADO" y la etiqueta "DESPUÉS". En ningún otro lugar. Precio ancla tachado en #D93025. Regla de significado (invariante): el color de marca comunica confianza; el oro comunica dinero y urgencia.',
     `Tipografía: una sola familia, ${dna.font_family}. Toda la expresividad viene de peso + color + tamaño, jamás de una segunda fuente.${dna.font_accent ? ` ${dna.font_accent} se usa SOLO en el titular de hero/oferta, nunca en cuerpo ni cards.` : ''}`,
     'Titular (invariante): 3-4 líneas, alineado a la izquierda, ragged right; conviven líneas neutras en el color de titular semibold y 1-2 palabras clave en el color de acento extrabold, a mayor tamaño. Subtítulo: 1 línea, ~40% del tamaño del titular, con una palabra en el color de acento.',
@@ -101,11 +102,12 @@ function masterLayoutBlock(
   section: SectionType,
   hasTalent: boolean,
   talentSubstitute: string | undefined,
+  demographicLabel: string | undefined,
 ): string {
   const pose = dna.poses[section] ?? ''
   const talentText = NO_TALENT_SECTIONS.has(section)
     ? section === 'testimonios'
-      ? 'Talento: esta sección NO muestra al protagonista de la campaña. Las únicas personas son los CLIENTES de las tarjetas (rostros DISTINTOS, gente común peruana).'
+      ? `Talento: esta sección NO muestra al protagonista de la campaña. Las únicas personas son los CLIENTES de las tarjetas — rostros DISTINTOS entre sí, gente común peruana${demographicLabel ? `, TODOS coherentes con la demografía objetivo (${demographicLabel}): mismo género y rango de edad, aunque el nombre del testimonio sugiera otra cosa` : ''}.`
       : 'Talento: esta sección NO lleva persona alguna. El carril lo ocupan el producto, sus props y la atmósfera.'
     : hasTalent
     ? `Persona (misma en todas las secciones con protagonista): ${dna.model_persona}. Pose de ESTA sección (variable, no se repite): ${pose}.`
@@ -185,6 +187,10 @@ export const PAYMENT_SECTIONS: Set<SectionType> = new Set(['oferta', 'garantia']
 // pre-compuesto (buildProductPack) como Image 1 y este builder inyecta packNote.
 export const MULTI_UNIT_SECTIONS: Set<SectionType> = new Set(['oferta', 'cta-final'])
 
+// Secciones que llevan la barra de confianza inferior (mismas 4 filas, composición idéntica; solo
+// cambia el color de fondo). Oferta y antes-despues NO la llevan (payment_row / closing_strip).
+export const TRUST_BAND_SECTIONS: Set<SectionType> = new Set(['hero', 'beneficios', 'testimonios', 'faq', 'garantia', 'cta-final'])
+
 // Nota de pack: refuerza que las N unidades comparten el label IDÉNTICO de Image 1. End-weighted
 // junto al resto de reglas de fidelidad. La escena re-dibuja el pack; esto acota la variación.
 function packNote(units: number): string {
@@ -236,13 +242,17 @@ function offerText(offer: Offer): string {
       t.perUnit ? `(${t.perUnit})` : null,
       typeof t.savingsPct === 'number' ? `ahorra ${t.savingsPct}%` : null,
       `botón "${t.cta}"`,
-      t.featured ? 'DESTACADO' : null,
+      t.featured ? 'ESTE es el tier DESTACADO → va en el slot central elevado de la plantilla' : null,
     ].filter(Boolean).join(', ')
     return `  - ${bits}`
   }).join('\n')
-  return `PRICE TIERS — render EXACTLY these ${offer.tiers.length} price cards, one per tier, and NO others; VISUALLY ELEVATE the DESTACADO one (crown it with a gold "Recomendado"/"Mejor valor" ribbon and a gold CTA pill; the rest use the brand-accent CTA); show each struck-through "antes" price and per-unit cost where given:\n${lines}${offer.urgency ? `\n  Urgency badge at the top carrying EXACTLY this text and nothing else: "${offer.urgency}".` : ''}`
+  return `PRICE TIERS — coloca EXACTAMENTE estos ${offer.tiers.length} tiers en las columnas de precio de la plantilla, uno por columna y NINGUNO más. La PLANTILLA ya define la disposición de las 3 columnas, cuál va elevada al centro, la corona/cinta dorada "Recomendado"/"Mejor valor" y el estilo de cada botón — reprodúcela tal cual; esta instrucción solo aporta los DATOS (etiquetas, precios, ancla tachada, ahorro %, precio por unidad, texto del botón). El tier marcado DESTACADO va en el slot central elevado:\n${lines}${offer.urgency ? `\n  Badge de urgencia arriba con EXACTAMENTE este texto y nada más: "${offer.urgency}".` : ''}`
 }
 
+// Barra de confianza: los HECHOS (data). La COMPOSICIÓN la manda la plantilla — este texto ya no
+// describe "frosted pill" ni forma alguna (eso hacía que hero saliera con pills y beneficios con
+// banda sólida). La barra es IDÉNTICA en todas las secciones que la tienen; lo único que cambia
+// entre secciones es el color de fondo de la banda (re-tinte).
 function trustText(trust: TrustBlock): string {
   const rows: string[] = []
   if (trust.coverage?.length) rows.push(`Envío a domicilio en ${trust.coverage.join(' y ')}${trust.freeShipping ? ' (envío gratis)' : ''}`)
@@ -250,7 +260,7 @@ function trustText(trust: TrustBlock): string {
   if (trust.codDelivery) rows.push('Pago contraentrega — pagas en efectivo cuando llega')
   if (trust.guaranteeDays) rows.push(`Compra 100% segura${trust.guaranteeText ? ` — ${trust.guaranteeText}` : ` — garantía de ${trust.guaranteeDays} días`}`)
   if (!rows.length) return ''
-  return `TRUST ROWS — render each of these as a frosted pill with a glossy icon (truck / clock / check / shield) + a bold title + a lighter line, using EXACTLY these facts (invent none):\n${rows.map((r) => `  - ${r}`).join('\n')}`
+  return `TRUST BAR — reproduce EXACTAMENTE la banda de confianza de la plantilla, IDÉNTICA en composición a la de las demás secciones (una sola franja horizontal al pie, con estos ítems en una fila pareja: ícono + título bold + línea más ligera). NO cambies su disposición, orden, cantidad de ítems ni forma entre secciones — lo ÚNICO que varía de una sección a otra es el COLOR DE FONDO de la franja (re-tintado a la marca). Usa EXACTAMENTE estos hechos, no inventes ninguno:\n${rows.map((r) => `  - ${r}`).join('\n')}`
 }
 
 // Reserva la banda inferior de métodos de pago. Garantía deja la banda limpia y puede rotular
@@ -286,8 +296,9 @@ export function buildDiffusionInstruction(args: {
   talentSubstitute?: string     // NO_TALENT_SUBSTITUTE[niche] cuando !hasTalent
   reserveLockup?: boolean
   nicheId?: NicheId             // session.niche_id — ancla antes-despues a la categoría del nicho
+  demographicLabel?: string     // DEMOGRAPHIC_LABELS[demographic_id] — restringe caras de testimonios
 }): string {
-  const { section, copy, dna, productLabels, offer, trust, packUnits, hasTalent, talentSubstitute, reserveLockup, nicheId } = args
+  const { section, copy, dna, productLabels, offer, trust, packUnits, hasTalent, talentSubstitute, reserveLockup, nicheId, demographicLabel } = args
 
   // El talento/protagonista se muestra solo si el nicho lo tiene Y la sección no está en
   // NO_TALENT_SECTIONS (faq/testimonios/garantia/cta-final). Determina si se adjunta el retrato
@@ -298,7 +309,7 @@ export function buildDiffusionInstruction(args: {
     'Diseña UNA sección de landing 9:16 full-bleed, calidad de anuncio comercial premium, mobile-first. La ÚLTIMA imagen adjunta es la PLANTILLA DE COMPOSICIÓN — reproduce EXACTAMENTE su composición y estructura; esta instrucción solo cambia producto, talento, copy, colores y props del nicho.',
     brandBlock(productLabels),
     designSystemBlock(dna),
-    masterLayoutBlock(dna, section, hasTalent, talentSubstitute),
+    masterLayoutBlock(dna, section, hasTalent, talentSubstitute, demographicLabel),
     sectionSpecBlock(section),
     '',
     'Copy a renderizar (y SOLO este copy):',
@@ -315,7 +326,7 @@ export function buildDiffusionInstruction(args: {
   // línea del copy (oferta ya trae ambos en offerText). Sin esto, hero/cta inventan precio y moneda.
   if (offer && (section === 'hero' || section === 'cta-final')) extra.push(featuredPriceText(offer))
   if (offer?.urgency && (section === 'hero' || section === 'cta-final')) extra.push(urgencyText(offer))
-  if (trust && (section === 'garantia' || section === 'cta-final' || section === 'hero')) extra.push(trustText(trust))
+  if (trust && TRUST_BAND_SECTIONS.has(section)) extra.push(trustText(trust))
   if (packUnits && packUnits > 1) extra.push(packNote(packUnits))
   if (reserveLockup) extra.push(LOCKUP_BAND)
   if (section === 'oferta' && trust?.paymentMethods?.length) extra.push(paymentLogosText(trust.paymentMethods))
