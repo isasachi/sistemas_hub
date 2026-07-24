@@ -10,17 +10,32 @@ import type { SatoriFont } from './fonts'
 //  · la escena entra como data URI en un <img> — Satori no acepta Buffer crudo en src.
 //  · ImageResponse ES un Response, no bytes → arrayBuffer() → sharp.
 //  · el nombre de familia de las fuentes debe matchear EXACTO el fontFamily del layout.
+// Detecta el tipo real de la escena por magic bytes. Gemini/OpenAI devuelven PNG, pero etiquetarla
+// mal (p.ej. image/jpeg) hace que el decodificador de @vercel/og tire "Offset is outside the bounds
+// of the DataView" al parsear PNG como JPEG → la escena no se dibuja → root transparente → JPEG NEGRO.
+// (Ese era el bug de cta-final: única sección con composite de lockup.) Default seguro: PNG.
+export function sniffImageMime(buf: Buffer): string {
+  if (buf.length >= 4 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return 'image/png'
+  if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'image/jpeg'
+  if (buf.length >= 12 && buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WEBP') return 'image/webp'
+  return 'image/png'
+}
+
 export async function renderComposite(
   scene: Buffer | string, // escena de Gemini (Buffer o base64 sin prefijo)
   layout: ReactElement,   // JSX del layout de la sección (texto + devices)
   opts: { fonts: SatoriFont[]; width?: number; height?: number; mime?: string },
 ): Promise<Buffer> {
-  const { fonts, width = 1080, height = 1920, mime = 'image/jpeg' } = opts
-  const b64 = typeof scene === 'string' ? scene : scene.toString('base64')
+  const { fonts, width = 1080, height = 1920, mime } = opts
+  const buf = typeof scene === 'string' ? Buffer.from(scene, 'base64') : scene
+  const b64 = buf.toString('base64')
+  // El MIME de la escena se SNIFEA (no se asume): un mismatch rompe el decodificador y deja la
+  // imagen negra. `opts.mime` solo se respeta si el caller lo fuerza explícitamente.
+  const sceneMime = mime ?? sniffImageMime(buf)
 
   const root = (
     <div style={{ display: 'flex', position: 'relative', width, height }}>
-      <img src={`data:${mime};base64,${b64}`} width={width} height={height}
+      <img src={`data:${sceneMime};base64,${b64}`} width={width} height={height}
         style={{ position: 'absolute', top: 0, left: 0, width, height, objectFit: 'cover' }} />
       {layout}
     </div>
