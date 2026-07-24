@@ -1,4 +1,4 @@
-import type { SectionCopy, SectionType, LandingDna, PaletteTokens, Offer, TrustBlock, NicheId } from './types'
+import type { SectionCopy, SectionType, LandingDna, PaletteTokens, Offer, TrustBlock, NicheId, PaymentMethod } from './types'
 import { SECTION_SPEC_KEY } from './types'
 import { NICHE_LABELS } from './niches'
 
@@ -250,10 +250,21 @@ function trustText(trust: TrustBlock): string {
   return `TRUST ROWS — render each of these as a frosted pill with a glossy icon (truck / clock / check / shield) + a bold title + a lighter line, using EXACTLY these facts (invent none):\n${rows.map((r) => `  - ${r}`).join('\n')}`
 }
 
-// Reserva la banda inferior de métodos de pago. Como antes: la difusión deja la banda limpia y
-// puede rotular "Paga como prefieras". (El overlay de logos reales se retiró post-smoke.)
+// Reserva la banda inferior de métodos de pago. Garantía deja la banda limpia y puede rotular
+// "Paga como prefieras". (El overlay de logos reales se retiró post-smoke.)
 const PAYMENT_BAND =
   'PAYMENT LOGOS (do NOT draw): leave the BOTTOM ~12% of the image as a CLEAN, calm horizontal band (a subtle light strip is fine) with NO payment logos, card icons, brand marks, wallet logos, country flags or the words "yape/visa/mastercard/mercado pago" anywhere. You MAY render a short heading like "Paga como prefieras" just ABOVE the band, but no logos.'
+
+const PAYMENT_BRAND: Record<PaymentMethod, string> = {
+  yape: 'Yape', plin: 'Plin', mercadopago: 'Mercado Pago', visa: 'Visa',
+  mastercard: 'Mastercard', efectivo: 'Efectivo', transferencia: 'Transferencia',
+}
+// Oferta: el modelo DIBUJA los logos exactos elegidos por el usuario (decisión 2026-07-23),
+// como en la plantilla. Localizable por país vía la lista que arma el usuario en el wizard.
+function paymentLogosText(methods: PaymentMethod[]): string {
+  const names = methods.map((m) => PAYMENT_BRAND[m]).join(', ')
+  return `PAYMENT LOGOS (DRAW them): in the BOTTOM ~12% band, under a short heading like "Paga como prefieras", render a neat single row of the payment brand marks for EXACTLY these methods and no others: ${names}. Use each brand's recognizable logo/wordmark, evenly spaced, crisp and legible; do not invent other payment brands or add ones not listed.`
+}
 
 // Reserva la franja superior para el lockup de marca (compuesto aparte, no dibujado).
 const LOCKUP_BAND =
@@ -304,7 +315,8 @@ export function buildDiffusionInstruction(args: {
   if (trust && (section === 'garantia' || section === 'cta-final' || section === 'hero')) extra.push(trustText(trust))
   if (packUnits && packUnits > 1) extra.push(packNote(packUnits))
   if (reserveLockup) extra.push(LOCKUP_BAND)
-  if (PAYMENT_SECTIONS.has(section)) extra.push(PAYMENT_BAND)
+  if (section === 'oferta' && trust?.paymentMethods?.length) extra.push(paymentLogosText(trust.paymentMethods))
+  else if (PAYMENT_SECTIONS.has(section)) extra.push(PAYMENT_BAND)
 
   return [...base, ...extra].filter(Boolean).join('\n\n')
 }

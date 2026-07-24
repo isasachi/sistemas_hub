@@ -184,6 +184,18 @@ describe('buildDiffusionInstruction — DNA-driven (spec 2026-07-23)', () => {
     expect(build('faq', { trust: TRUST })).not.toContain('TRUST ROWS')
   })
 
+  it('oferta dibuja los logos de pago de trust.paymentMethods (decisión del usuario)', () => {
+    const out = build('oferta', { trust: TRUST })
+    expect(out).toContain('DRAW')
+    expect(out).toContain('Yape')
+    expect(out).toContain('Visa')
+  })
+
+  it('garantia mantiene la banda limpia sin logos', () => {
+    const out = build('garantia', { trust: TRUST })
+    expect(out).toContain('do NOT draw')
+  })
+
   it('MULTI_UNIT / PAYMENT / NO_TALENT sections conservan su membresía', () => {
     expect(MULTI_UNIT_SECTIONS.has('oferta')).toBe(true)
     expect(MULTI_UNIT_SECTIONS.has('cta-final')).toBe(true)
