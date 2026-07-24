@@ -12,6 +12,21 @@ const LANDING_SYSTEM_PROMPT = fs.readFileSync(
   'utf-8'
 )
 
+// Los bullets de hero/beneficios/cta-final deben coincidir (decisión #3). Toma el primer array
+// no vacío entre hero→beneficios como canónico (4), lo pone en hero y cta-final; beneficios
+// conserva su 5.º si lo tiene. $0, sin columna DB — se distribuye en generación.
+export function shareBullets(sections: SectionCopy[]): SectionCopy[] {
+  const source = sections.find((s) => s.type === 'hero')?.bullets
+    ?? sections.find((s) => s.type === 'beneficios')?.bullets
+  if (!source?.length) return sections
+  const canon = source.slice(0, 4)
+  return sections.map((s) => {
+    if (s.type === 'hero' || s.type === 'cta-final') return { ...s, bullets: canon }
+    if (s.type === 'beneficios') return { ...s, bullets: [...canon, ...(s.bullets ?? []).slice(4)] }
+    return s
+  })
+}
+
 export async function generateLandingCopy(
   session: LandingSessionResponse,
   sections: SectionType[],
@@ -27,6 +42,7 @@ export async function generateLandingCopy(
         `Beneficios clave: ${session.benefits || 'no especificados'}`,
         `Público objetivo: ${session.audience || 'no especificado'}`,
         `Tono deseado: ${(session.tone ?? []).join(', ') || 'no especificado'}`,
+        `Nicho: ${session.niche_id ?? 'genérico'}`,
         feedback?.trim() ? `\nAjustes pedidos por el usuario: ${feedback.trim()}` : '',
         ``,
         `Secciones a escribir (en este orden), usa exactamente estos "type":`,
@@ -38,7 +54,7 @@ export async function generateLandingCopy(
   ]
 
   const result = await callStructured('landing_copy', LandingCopySchema, parts, 3, LANDING_SYSTEM_PROMPT)
-  return result.sections
+  return shareBullets(result.sections)
 }
 
 // Copy de la Oferta HÍBRIDA. Una call estructurada produce copy + tiers (OfferGenSchema fuerza
