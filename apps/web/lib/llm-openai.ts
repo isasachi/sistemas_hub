@@ -114,6 +114,14 @@ export function stripNulls(v: unknown): unknown {
   return v
 }
 
+// Errores PERMANENTES de OpenAI (billing/cuota/auth): no tiene sentido reintentar N veces (gasta
+// tiempo y llamadas) — se lanzan al toque para que `gemini.ts` caiga a Gemini de inmediato. Un 429
+// `insufficient_quota` NO es rate-limit transitorio: es la cuenta sin crédito.
+function isPermanentOpenAiError(e: unknown): boolean {
+  const err = e as { status?: number; code?: string } | undefined
+  return err?.code === 'insufficient_quota' || err?.status === 401 || err?.status === 403
+}
+
 export async function openaiCallStructured<T>(
   schemaName: string,
   schema: z.ZodSchema<T>,
@@ -146,6 +154,7 @@ export async function openaiCallStructured<T>(
       if (parsed.success) return parsed.data
       lastError = parsed.error
     } catch (e) {
+      if (isPermanentOpenAiError(e)) throw e // billing/cuota/auth → fail-fast → fallback a Gemini
       lastError = e
     }
   }
@@ -182,6 +191,7 @@ export async function openaiGenerateImage(parts: Part[], maxRetries: number, opt
         if (b64) return b64
       }
     } catch (e) {
+      if (isPermanentOpenAiError(e)) throw e // billing/cuota/auth → fail-fast → fallback a Gemini
       lastError = e
     }
   }

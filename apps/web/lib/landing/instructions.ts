@@ -1,6 +1,6 @@
 import type { SectionCopy, SectionType, LandingDna, PaletteTokens, Offer, TrustBlock, NicheId, PaymentMethod } from './types'
-import { SECTION_SPEC_KEY } from './types'
 import { NICHE_LABELS } from './niches'
+import { SECTION_DNA } from './section-dna'
 
 // Builders puros ($0) para el prompt de imagen de cada sección de la landing (motor de DIFUSIÓN).
 // FUENTE DE VERDAD: docs/superpowers/specs/2026-07-23-generador-landing-spec.md §1-§5 + Anexos.
@@ -126,23 +126,15 @@ function masterLayoutBlock(
   ].join('\n')
 }
 
-// ─── Capa 5 — SECTION_SPECS (spec §4) ────────────────────────────────────────
-// El módulo central es lo ÚNICO que cambia entre secciones. Texto transcrito del spec, keyed
-// por la clave del spec (`SECTION_SPEC_KEY[section]`), no por el slug interno.
-const SECTION_SPECS_TEXT: Record<string, string> = {
-  hero_problem: 'Pregunta de dolor + card de posicionamiento de producto. NO incluir un par antes/después acá (esa comparación vive en su propia sección).',
-  benefits: '4 filas: icono + verbo bold + complemento regular (+ micro-línea opcional).',
-  before_after: '2 cards con pill "ANTES"/"DESPUÉS", chevron central, caption con ✕/✓ debajo de cada una, línea de plazo realista.',
-  testimonials: '3 cards: avatar circular + nombre + "edad · ciudad" + 5 estrellas oro + quote de 2-3 líneas + comilla decorativa. Cierra con barra agregada (nº de clientes, rating, nº de reseñas).',
-  faq: '4 cards: icono + pregunta en bold + respuesta de 2-3 líneas.',
-  guarantee: '4 cards horizontales con icono 3D grande a la izquierda + grid de pagos + sello central de devolución.',
-  offer: '3 columnas; la central elevada, enmarcada en oro y con corona. Precio gigante, ancla tachada, precio por unidad, badge de % de ahorro, CTA por columna.',
-  cta_final: 'Repetición condensada de la oferta ganadora + refuerzo de garantía + CTA único a ancho completo.',
-}
-
-function sectionSpecBlock(section: SectionType): string {
-  const key = SECTION_SPEC_KEY[section]
-  return `SECTION_SPECS — módulo central de ESTA sección (${key}): ${SECTION_SPECS_TEXT[key]}`
+// ─── Capa 5 — REFUERZO COMPOSITIVO (checklist estructural, ADN de sección) ────
+// Refuerza la composición de la plantilla con hechos ENUMERABLES por sección (conteos, roles,
+// presencia/ausencia) para que la difusión no pierda ni descuente elementos. NO re-describe layout,
+// espaciado ni tratamiento — eso lo lleva la PLANTILLA adjunta (motor plantilla-como-scaffold). El
+// ADN vive en `section-dna.ts` (fuente única, compartida con el paso de copy). Reemplaza al viejo
+// SECTION_SPECS_TEXT (one-liner por sección).
+function compositionReinforcementBlock(section: SectionType): string {
+  const items = SECTION_DNA[section].composition.map((c) => `  - ${c}`).join('\n')
+  return `REFUERZO COMPOSITIVO — checklist estructural de ESTA sección (la PLANTILLA manda el look/espaciado; esto solo asegura que estén TODOS estos elementos, en su rol, sin perder ni descontar ninguno):\n${items}`
 }
 
 // ─── Capa 7 — TEXT_RULES (spec §5) ───────────────────────────────────────────
@@ -310,7 +302,7 @@ export function buildDiffusionInstruction(args: {
     brandBlock(productLabels),
     designSystemBlock(dna),
     masterLayoutBlock(dna, section, hasTalent, talentSubstitute, demographicLabel),
-    sectionSpecBlock(section),
+    compositionReinforcementBlock(section),
     '',
     'Copy a renderizar (y SOLO este copy):',
     copyBlock(copy),

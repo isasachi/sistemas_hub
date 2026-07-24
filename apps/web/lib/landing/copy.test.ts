@@ -42,3 +42,22 @@ describe('shareBullets (decisión #3)', () => {
     expect(out.find((s: any) => s.type === 'faq')).toEqual({ type: 'faq', headline: 'f' })
   })
 })
+
+import { missingStructure } from './copy'
+import type { SectionCopy, SectionType } from './types'
+
+describe('missingStructure (validación de estructura vs ADN)', () => {
+  it('detecta arrays cortos y secciones faltantes', () => {
+    const copy = [{ type: 'testimonios', headline: 'h' }] as SectionCopy[]
+    const gaps = missingStructure(['testimonios', 'faq'] as SectionType[], copy)
+    expect(gaps.some((g) => g.includes('testimonios') && g.includes('3 cards'))).toBe(true)
+    expect(gaps.some((g) => g.includes('faq') && g.toLowerCase().includes('completa'))).toBe(true)
+  })
+  it('vacío cuando se cumplen los conteos (post-shareBullets)', () => {
+    const copy = [{ type: 'hero', headline: 'h', bullets: ['a', 'b', 'c', 'd'] }] as SectionCopy[]
+    expect(missingStructure(['hero'] as SectionType[], copy)).toEqual([])
+  })
+  it('oferta no exige arrays (tiers vía OfferGenSchema)', () => {
+    expect(missingStructure(['oferta'] as SectionType[], [{ type: 'oferta', headline: 'h' }] as SectionCopy[])).toEqual([])
+  })
+})

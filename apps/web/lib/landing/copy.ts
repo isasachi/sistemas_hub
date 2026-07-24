@@ -2,6 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import { callStructured } from '@/lib/gemini'
 import { LandingCopySchema, OfferGenSchema, SECTION_LABELS, type SectionCopy, type SectionType, type Offer, type OfferCopy, type LandingSessionResponse } from './types'
+import { SECTION_DNA } from './section-dna'
 import type { Part } from '@google/genai'
 
 // Generación de copy compartida entre la ruta /copy (regenera con feedback) y el
@@ -27,12 +28,38 @@ export function shareBullets(sections: SectionCopy[]): SectionCopy[] {
   })
 }
 
-export async function generateLandingCopy(
-  session: LandingSessionResponse,
-  sections: SectionType[],
-  feedback?: string
-): Promise<SectionCopy[]> {
-  const parts: Part[] = [
+// Checklist de arrays obligatorios (conteo exacto), derivado del ADN — el modelo tiende a omitir
+// bullets/cards; nombrarlos explícito y con conteo reduce el fallo (y `missingStructure` lo valida).
+function requiredArraysChecklist(sections: SectionType[]): string {
+  const rows = sections.map((s) => {
+    const r = SECTION_DNA[s].requires
+    if (!r) return null
+    const bits = [r.bullets && `${r.bullets} bullets`, r.bulletsAfter && `${r.bulletsAfter} bulletsAfter`, r.cards && `${r.cards} cards`].filter(Boolean)
+    return bits.length ? `  - ${s}: ${bits.join(' + ')}` : null
+  }).filter(Boolean)
+  return rows.length
+    ? `CAMPOS ARRAY OBLIGATORIOS (conteo EXACTO, NUNCA los omitas ni los dejes vacíos):\n${rows.join('\n')}`
+    : ''
+}
+
+// Falta de estructura vs el ADN (post-shareBullets): devuelve un mensaje por cada array corto. Puro.
+export function missingStructure(sections: SectionType[], copy: SectionCopy[]): string[] {
+  const gaps: string[] = []
+  for (const s of sections) {
+    const req = SECTION_DNA[s].requires
+    if (!req) continue
+    const c = copy.find((x) => x.type === s)
+    if (!c) { gaps.push(`Falta la sección "${s}" completa.`); continue }
+    const short = (have: number, need: number, field: string) => { if (have < need) gaps.push(`"${s}" necesita ${need} ${field} (tiene ${have}).`) }
+    if (req.bullets !== undefined) short(c.bullets?.length ?? 0, req.bullets, 'bullets')
+    if (req.bulletsAfter !== undefined) short(c.bulletsAfter?.length ?? 0, req.bulletsAfter, 'bulletsAfter')
+    if (req.cards !== undefined) short(c.cards?.length ?? 0, req.cards, 'cards')
+  }
+  return gaps
+}
+
+function copyPromptParts(session: LandingSessionResponse, sections: SectionType[], feedback?: string): Part[] {
+  return [
     {
       text: [
         `Escribe el copy de una landing page para este producto. Devuelve JSON (esquema LandingCopy).`,
@@ -47,16 +74,49 @@ export async function generateLandingCopy(
         `IMPORTANTE — los nombres y perfiles de los testimonios deben ser COHERENTES con la demografía objetivo (mismo género y rango de edad). No mezcles géneros si la demografía es de un solo género.`,
         feedback?.trim() ? `\nAjustes pedidos por el usuario: ${feedback.trim()}` : '',
         ``,
-        `Secciones a escribir (en este orden), usa exactamente estos "type":`,
-        ...sections.map((s, i) => `  ${i + 1}. ${s} — ${SECTION_LABELS[s]}`),
+        `Secciones a escribir (en este orden). Para CADA sección respeta EXACTAMENTE la ESTRUCTURA de su ADN de copy (conteos de bullets/cards, campos, patrón) — es la fuente de verdad y NO se toca; lo único que adaptás al producto/nicho es el WORDING:`,
+        ...sections.map((s, i) => `  ${i + 1}. type="${s}" — ${SECTION_LABELS[s]}\n     ESTRUCTURA (obligatoria): ${SECTION_DNA[s].copy}`),
         ``,
-        `Una entrada por sección, con su "type" correcto y el copy corto que aplique a ese tipo.`,
-      ].join('\n'),
+        requiredArraysChecklist(sections),
+        ``,
+        `Una entrada por sección, con su "type" correcto. La estructura manda; el wording varía por nicho/producto.`,
+      ].filter(Boolean).join('\n'),
     },
   ]
+}
 
-  const result = await callStructured('landing_copy', LandingCopySchema, parts, 3, LANDING_SYSTEM_PROMPT)
-  return shareBullets(result.sections)
+// Genera el copy de UNA sección. Clave: pedir 8 secciones en una sola llamada hace que el modelo
+// omita los arrays densos (probado: batch-8 devuelve 0 cards en testimonios/faq/garantía; per-sección
+// los llena). Cada sección se genera enfocada y en paralelo.
+async function generateOneSection(session: LandingSessionResponse, s: SectionType, feedback?: string): Promise<SectionCopy | null> {
+  const result = await callStructured('landing_copy', LandingCopySchema, copyPromptParts(session, [s], feedback), 3, LANDING_SYSTEM_PROMPT)
+  return result.sections.find((x) => x.type === s) ?? result.sections[0] ?? null
+}
+
+export async function generateLandingCopy(
+  session: LandingSessionResponse,
+  sections: SectionType[],
+  feedback?: string
+): Promise<SectionCopy[]> {
+  // Per-sección en paralelo (más fiable que batch-8 para llenar bullets/cards).
+  const bySection = new Map<SectionType, SectionCopy>()
+  const first = await Promise.all(sections.map((s) => generateOneSection(session, s, feedback)))
+  sections.forEach((s, i) => { if (first[i]) bySection.set(s, first[i]!) })
+
+  let out = shareBullets([...bySection.values()])
+  // Retry correctivo SOLO de las secciones que siguen cortas tras shareBullets (cta-final se llena
+  // con los bullets del hero, así que ya no aparece corta). Nombra los faltantes → el modelo cumple.
+  const shortSections = sections.filter((s) => missingStructure([s], out.filter((c) => c.type === s)).length > 0)
+  if (shortSections.length) {
+    await Promise.all(shortSections.map(async (s) => {
+      const gaps = missingStructure([s], out.filter((c) => c.type === s))
+      const corrective = `${feedback?.trim() ? feedback.trim() + '\n' : ''}CORRIGE la estructura (obligatorio): ${gaps.join(' ')} Devuelve la sección "${s}" con su array COMPLETO y del tamaño exacto.`
+      const fixed = await generateOneSection(session, s, corrective)
+      if (fixed) bySection.set(s, fixed)
+    }))
+    out = shareBullets([...bySection.values()])
+  }
+  return out
 }
 
 // Copy de la Oferta HÍBRIDA. Una call estructurada produce copy + tiers (OfferGenSchema fuerza

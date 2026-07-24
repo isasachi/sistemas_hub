@@ -71,18 +71,19 @@ function build(section: SectionType, extra: Partial<Parameters<typeof buildDiffu
 }
 
 describe('buildDiffusionInstruction — DNA-driven (spec 2026-07-23)', () => {
-  it('cada sección inyecta su SECTION_SPECS (§4) por SECTION_SPEC_KEY', () => {
+  it('cada sección inyecta su REFUERZO COMPOSITIVO (checklist estructural del ADN)', () => {
     const anchor: Record<SectionType, string> = {
-      hero: 'Pregunta de dolor',
-      oferta: '3 columnas',
-      'antes-despues': 'pill "ANTES"/"DESPUÉS"',
-      beneficios: '4 filas: icono',
-      testimonios: 'avatar circular',
-      faq: 'pregunta en bold',
-      garantia: 'sello central de devolución',
-      'cta-final': 'Repetición condensada de la oferta ganadora',
+      hero: 'EXACTAMENTE 4 bullets',
+      oferta: 'EXACTAMENTE 3 columnas de precio',
+      'antes-despues': '"ANTES" (etiqueta gris)',
+      beneficios: 'EXACTAMENTE 5 bullets',
+      testimonios: 'EXACTAMENTE 3 cards de testimonio',
+      faq: 'EXACTAMENTE 5 items',
+      garantia: 'EXACTAMENTE 4 cards horizontales',
+      'cta-final': 'EXACTAMENTE 4 bullets a la izquierda',
     }
     for (const type of ALL) {
+      expect(build(type)).toContain('REFUERZO COMPOSITIVO')
       expect(build(type)).toContain(anchor[type])
     }
   })
