@@ -3,14 +3,9 @@ import { getLandingSession, updateLandingSession, upsertLandingSection } from '@
 import { fetchAsBase64, uploadToStorage, storagePublicUrl } from '@/lib/storage'
 import { generateImage, editWithPrompt } from '@/lib/gemini'
 import { buildDiffusionInstruction, MULTI_UNIT_SECTIONS, NO_TALENT_SECTIONS } from '@/lib/landing/instructions'
-import { BrandLockup, brandLockupText } from '@/lib/landing/layouts/brand-lockup'
 import { buildProductPack } from '@/lib/landing/product-box'
 import { NO_TALENT_SUBSTITUTE, DEMOGRAPHIC_LABELS } from '@/lib/landing/demographics'
 import { generateOfferCopy } from '@/lib/landing/copy'
-import { renderComposite } from '@/lib/landing/composite'
-import { buildTheme } from '@/lib/landing/theme'
-import { loadPairFonts } from '@/lib/landing/fonts'
-import type { TypePairId } from '@/lib/landing/typography-catalog'
 import { SectionCopySchema, OfferCopySchema, SectionType, SECTION_REF, resolveOffer, type LandingSection, type SectionCopy } from '@/lib/landing/types'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
@@ -31,12 +26,6 @@ export const maxDuration = 300
 // sesión (`landing_dna`, extraído UNA vez en el step previo del wizard). Lo ÚNICO compuesto
 // aparte son los logos reales de marca (medios de pago, banderas, lockup) — la difusión los
 // garabatea si los dibuja ella.
-
-// Par tipográfico fijo para la fuente del overlay (BrandLockup). Los overlays no
-// reciben un par tipográfico por sesión (el motor de marca derivada que lo resolvía fue
-// retirado en Task 10): fuente bundleada fija (ponytail: swap a loadFixedFonts() no reduce
-// código muerto — typography-catalog.ts sigue vivo por buildTheme/fonts.ts, ver task-10-report.md).
-const DEFAULT_TYPE_PAIR: TypePairId = 'dr-conversion'
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string; type: string }> }) {
   const { id, type } = await params
@@ -89,10 +78,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // el resto pixel-idéntico (y nos ahorra fetch de fotos + ref + talento). Sin prompt o sin
   // imagen previa, genera la sección desde cero.
   const existing = (session.sections ?? []).find((s) => s.type === parsedType.data)
-  // Lockup de marca: solo hero/cta-final, si hay un wordmark corto y limpio. Se computa en el
-  // path de generación (para reservar la franja superior en el prompt Y compositarlo después).
-  // Null en el path de edición por precisión (el lockup ya está horneado en la imagen previa).
-  let lockup: string | null = null
   let b64: string
   if (precision && existing?.imageUrl) {
     const prev = await fetchAsBase64(existing.imageUrl)
@@ -146,8 +131,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const talentSubstitute = !hasTalent
       ? (session.niche_id ? NO_TALENT_SUBSTITUTE[session.niche_id] : 'Producto en contexto, a escala humana')
       : undefined
-    // Lockup dorado SOLO en cta-final (ajuste post-smoke: se quitó del hero, salía siempre arriba).
-    if (parsedType.data === 'cta-final') lockup = brandLockupText(session.product_labels, session.product_name)
 
     parts.push({
       text: buildDiffusionInstruction({
@@ -160,7 +143,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         packUnits,
         hasTalent,
         talentSubstitute,
-        reserveLockup: !!lockup,
         nicheId: session.niche_id ?? undefined,
         // no_talent no aplica a las caras de clientes de testimonios ("coherentes con la demografía
         // objetivo (Sin persona / solo producto)" no tiene sentido) → undefined = clientes genéricos.
@@ -171,16 +153,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
   if (!b64) return NextResponse.json({ error: 'No se pudo generar la sección', retryable: true }, { status: 502 })
 
-  // Overlay del lockup de marca REAL (solo cta-final) sobre la franja superior que la difusión
-  // dejó limpia. Los iconos de métodos de pago compuestos se retiraron (ajuste post-smoke). El
-  // resto de secciones sube la imagen de difusión tal cual.
-  let outBuf = Buffer.from(b64, 'base64')
-  if (lockup) {
-    const theme = buildTheme([{ name: 'accent', hex: session.landing_dna.palette.color_accent }], DEFAULT_TYPE_PAIR)
-    const overlay = BrandLockup({ text: lockup, theme })
-    outBuf = Buffer.from(await renderComposite(outBuf, overlay, { fonts: loadPairFonts(DEFAULT_TYPE_PAIR), width: 1080, height: 1920 }))
-  }
-  const imageUrl = await uploadToStorage(id, outBuf, lockup ? 'image/jpeg' : 'image/png', `section-${copy.type}`)
+  // La imagen de difusión se sube tal cual. (El overlay del lockup de marca en cta-final se retiró:
+  // forzaba 9:16 sobre la imagen 2:3 de OpenAI → la recortaba, y era un adorno menor; la difusión
+  // ya renderiza la marca por el label del producto. reserveLockup/BrandLockup quedan sin uso.)
+  const imageUrl = await uploadToStorage(id, Buffer.from(b64, 'base64'), 'image/png', `section-${copy.type}`)
 
   // Upsert ATÓMICO de la sección: el `order` lo manda el cliente (índice en selected_sections);
   // al regenerar se preserva el existente. Se persiste vía RPC atómica (no read-modify-write del
