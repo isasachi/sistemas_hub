@@ -193,9 +193,10 @@ export function resolveOffer(session: Pick<LandingSessionResponse, 'offer' | 'of
 
 // ── Bloque de CONFIANZA (Fase 5 C5.2) ───────────────────────────────────────
 // Hechos OPERATIVOS del negocio: un modelo no puede inferirlos y no debe inventarlos, así que
-// los llena el USUARIO en el wizard. `paymentMethods` es un enum porque cada valor mapea a un
-// SVG real de la librería de devices (Fase 0) — es lo que hace posible el ADN de confianza (los
-// logos por difusión salen deformados). garantia/cta-final consumen este bloque directamente.
+// los llena el USUARIO en el wizard. `paymentMethods` es un enum para acotar el prompt a marcas
+// reconocibles: en `oferta` el modelo DIBUJA los logos exactos de estos métodos (decisión
+// 2026-07-23, ver `paymentLogosText` en instructions.ts); `garantia` deja la banda inferior
+// limpia sin logos (ver `PAYMENT_BAND`). garantia/cta-final consumen este bloque directamente.
 export const PaymentMethod = z.enum([
   'yape', 'plin', 'mercadopago', 'visa', 'mastercard', 'efectivo', 'transferencia',
 ])

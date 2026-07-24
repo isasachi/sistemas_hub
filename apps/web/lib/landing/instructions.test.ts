@@ -274,6 +274,13 @@ describe('buildDiffusionInstruction — DNA-driven (spec 2026-07-23)', () => {
     expect(out).not.toContain('Siempre presentes')
   })
 
+  it('DNA legada sin particles_on (undefined) → partículas ON (default de intención)', () => {
+    const legacy = { ...DNA, particles_on: undefined as unknown as boolean }
+    const out = buildDiffusionInstruction({ section: 'hero', copy: copyFor('hero'), dna: legacy, productLabels: null, hasTalent: true })
+    expect(out).toContain(DNA.particle_type)
+    expect(out).not.toContain('SIN partículas')
+  })
+
   it('antes-despues instruye estados adaptativos, no acné hardcodeado', () => {
     const out = buildDiffusionInstruction({
       section: 'antes-despues', copy: copyFor('antes-despues'), dna: DNA,

@@ -110,7 +110,10 @@ function masterLayoutBlock(
     : hasTalent
     ? `Persona (misma en todas las secciones con protagonista): ${dna.model_persona}. Pose de ESTA sección (variable, no se repite): ${pose}.`
     : `Sin talento humano: el carril lo ocupa el sustituto — "${talentSubstitute}" — sin renderizar ninguna persona/rostro/silueta.`
-  const particles = dna.particles_on
+  // `undefined` = ADN legado (guardado antes de que existiera el campo; getLandingSession castea
+  // sin `.parse()`, así que el `.default(true)` del schema nunca corre en la lectura). El default
+  // de intención es ON: solo un `false` explícito apaga las partículas.
+  const particles = dna.particles_on !== false
     ? `Partículas: ${dna.particle_type}, densidad ${dna.particle_density}, coherentes con el nicho y los props. En el aire, sin invadir texto.`
     : 'SIN partículas de fondo en este nicho — el fondo queda limpio, solo el degradado re-tintado.'
   return [
