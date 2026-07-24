@@ -1,7 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import { z } from 'zod'
-import { callStructured } from '@/lib/gemini'
+import { callStructured, sliceToWord } from '@/lib/gemini'
 import { LandingCopySchema, OfferGenSchema, SectionCopySchema, SECTION_LABELS, type SectionCopy, type SectionType, type Offer, type OfferCopy, type LandingSessionResponse } from './types'
 import { SECTION_DNA } from './section-dna'
 import type { Part } from '@google/genai'
@@ -121,6 +121,25 @@ async function generateOneSection(session: LandingSessionResponse, s: SectionTyp
   }
 }
 
+// Post-trim ANTI-TRUNCADO (engine-agnóstico): un string EXACTAMENTE en su tope de caracteres es señal
+// de que el modelo/schema lo cortó a mitad de palabra ("…Sient.", "…Tuali"). Se recorta al último
+// límite de palabra; los que están BAJO el tope (copy sano) no se tocan. Mapa alineado a
+// SectionCopySchema — si cambian los .max() del schema, actualizar acá.
+const COPY_MAX: Record<string, number> = {
+  headline: 60, accentWord: 40, subheadline: 90, closingBold: 40, closingSub: 90,
+  closingStrip: 60, socialProof: 90, ctaHeadline: 30, ctaSub: 90, cta: 25,
+}
+const trimAtMax = (s: string, max: number) => (s.length >= max ? sliceToWord(s, max - 1) : s)
+export function trimCopyStrings(sections: SectionCopy[]): SectionCopy[] {
+  return sections.map((s) => {
+    const c = { ...s } as Record<string, unknown>
+    for (const [k, max] of Object.entries(COPY_MAX)) if (typeof c[k] === 'string') c[k] = trimAtMax(c[k] as string, max)
+    for (const arr of ['bullets', 'bulletsAfter'] as const) if (Array.isArray(c[arr])) c[arr] = (c[arr] as string[]).map((b) => trimAtMax(b, 40))
+    if (Array.isArray(c.cards)) c.cards = (c.cards as { title: string; body: string }[]).map((card) => ({ title: trimAtMax(card.title, 40), body: trimAtMax(card.body, 90) }))
+    return c as SectionCopy
+  })
+}
+
 export async function generateLandingCopy(
   session: LandingSessionResponse,
   sections: SectionType[],
@@ -154,7 +173,7 @@ export async function generateLandingCopy(
     }))
     out = shareBullets([...bySection.values()])
   }
-  return out
+  return trimCopyStrings(out)
 }
 
 // Copy de la Oferta HÍBRIDA. Una call estructurada produce copy + tiers (OfferGenSchema fuerza

@@ -32,3 +32,19 @@ describe('clampTooBigStrings', () => {
     expect(clampTooBigStrings(obj, r.error)).toBe(false)
   })
 })
+
+import { sliceToWord } from './gemini'
+
+describe('sliceToWord (recorte en límite de palabra)', () => {
+  it('no toca strings dentro del límite', () => {
+    expect(sliceToWord('Piel limpia', 60)).toBe('Piel limpia')
+  })
+  it('recorta en el último espacio (no a mitad de palabra) y quita separadores finales', () => {
+    const s = 'Elimina las manchas en tu piel, Hidrata profundamente, Siéntete radiante'
+    const out = sliceToWord(s, 60)
+    expect(out.length).toBeLessThanOrEqual(60)
+    expect(out.endsWith('Sié') || out.endsWith('Siént')).toBe(false) // nunca palabra parcial
+    expect(/[\s,;:.–—-]$/.test(out)).toBe(false) // sin separador final
+    expect(out).toBe('Elimina las manchas en tu piel, Hidrata profundamente')
+  })
+})

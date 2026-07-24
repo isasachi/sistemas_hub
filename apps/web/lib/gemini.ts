@@ -60,6 +60,17 @@ export const BRANDING_SYSTEM_PROMPT = fs.readFileSync(
 function valueAtPath(obj: unknown, path: readonly (string | number | symbol)[]): unknown {
   return path.reduce<unknown>((o, k) => (o == null ? o : (o as Record<string | number, unknown>)[k as string | number]), obj)
 }
+// Recorta a `max` pero en LÍMITE DE PALABRA (nunca a mitad de palabra, que dejaba basura visible
+// como "Sient." o "absor…"): corta, retrocede al último espacio si no perdés demasiado, y quita
+// separadores finales (coma, punto, guiones). Exportada: la reusa el post-trim de copy.ts.
+export function sliceToWord(s: string, max: number): string {
+  if (s.length <= max) return s
+  let cut = s.slice(0, max)
+  const lastSpace = cut.lastIndexOf(' ')
+  if (lastSpace > max * 0.5) cut = cut.slice(0, lastSpace)
+  return cut.replace(/[\s,;:.–—-]+$/, '')
+}
+
 export function clampTooBigStrings(obj: unknown, error: z.ZodError): boolean {
   let changed = false
   for (const issue of error.issues) {
@@ -68,7 +79,7 @@ export function clampTooBigStrings(obj: unknown, error: z.ZodError): boolean {
     const key = issue.path[issue.path.length - 1] as string | number
     const cur = parent == null ? undefined : (parent as Record<string | number, unknown>)[key]
     if (typeof cur === 'string' && cur.length > issue.maximum) {
-      ;(parent as Record<string | number, unknown>)[key] = cur.slice(0, issue.maximum)
+      ;(parent as Record<string | number, unknown>)[key] = sliceToWord(cur, issue.maximum)
       changed = true
     }
   }

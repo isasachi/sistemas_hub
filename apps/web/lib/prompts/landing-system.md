@@ -5,7 +5,7 @@ Reglas de copy:
 - **Español neutro de Perú, SIN VOSEO**: usa "tú"/"tu", nunca "vos". Escribe "Acaba con", no "Acabá"; "incluye", no "incluí". Tono cercano y vendedor, sin exagerar ni mentir.
 - Ortografía impecable: acentos correctos (incluida la "Sí" afirmativa con tilde), "¿" "¡" de apertura, comillas tipográficas.
 - COPY CORTO Y ESCANEABLE. El copy se renderiza DENTRO de una imagen por sección, así que el texto largo se vuelve ilegible. Titulares de pocas palabras, bullets de 3-5 palabras, botones de 1-3 palabras.
-- Respeta SIEMPRE los límites de caracteres del esquema. Si no entra, recórtalo.
+- **NUNCA llegues al límite de caracteres del esquema** — un texto al tope sale CORTADO a mitad de palabra en la imagen (basura como "profundamente, Sient."). Apuntá a MUY por debajo del límite y a una frase SIEMPRE COMPLETA. Regla de oro: **corto y completo > largo y cortado**. Si dudás entre agregar una idea más o que entre completo, elegí que entre completo.
 - No inventes datos falsos (precios, estadísticas, certificaciones) que el usuario no haya dado. Si no hay precio, no lo menciones.
 - `accentWord` (OBLIGATORIO en toda sección): el titular es SIEMPRE bicolor por diseño. Incluye una sub-cadena EXACTA del `headline` (1 palabra o frase corta = la idea clave) que aparezca tal cual dentro del headline. Ej: headline "Acaba con el acné hormonal que siempre vuelve", accentWord "acné hormonal".
 - Para `hero`: `headline` = verbo imperativo + problema específico + el diferencial oculto (ej "…que siempre vuelve"); `subheadline` = mecanismo ("desde adentro") + resultado. `cta` corto.

@@ -33,7 +33,7 @@ export const SECTION_DNA: Record<SectionType, SectionDna> = {
       'Barra de confianza inferior + pastilla inferior "Recomendado por expertos"',
       'SIN botón CTA — el hero solo presenta',
     ],
-    copy: 'headline: 3-4 líneas cortas (cláusulas separadas por coma). accentWord: 1-2 palabras del titular = el PROBLEMA o la TRANSFORMACIÓN (nunca la marca). subheadline: 2-3 líneas. bullets: EXACTAMENTE 4, cada uno "verbo + objeto" (que se renderiza como línea bold) seguido de un complemento (línea light). SIN cta.',
+    copy: 'headline: 2-3 cláusulas MUY cortas separadas por coma, ≤50 caracteres EN TOTAL, siempre una frase COMPLETA (nunca la dejes a medias ni la cortes). accentWord: 1-2 palabras del titular = el PROBLEMA o la TRANSFORMACIÓN (nunca la marca). subheadline: 1-2 líneas cortas, ≤75 caracteres, completa. bullets: EXACTAMENTE 4, cada uno una acción de 2-4 palabras (línea bold) + un complemento de 2-4 palabras (línea light). SIN cta. Prioriza que TODO el texto entre completo antes que meter más palabras.',
     requires: { bullets: 4 },
   },
   beneficios: {
@@ -79,7 +79,7 @@ export const SECTION_DNA: Record<SectionType, SectionDna> = {
       'Barra de confianza inferior + pastilla "Recomendado por expertos"',
       'SIN persona alguna',
     ],
-    copy: 'headline: 2 líneas. subheadline: 1-2 líneas. cards: EXACTAMENTE 5, cada una title=pregunta (1-2 líneas) y body=respuesta (2 líneas) — cada respuesta resuelve una objeción real de forma literal.',
+    copy: 'headline: 2 líneas cortas. subheadline: 1 línea corta. cards: EXACTAMENTE 5, title=pregunta corta (1-2 líneas), body=respuesta de 1-2 líneas MUY cortas (≤75 caracteres, SIEMPRE completa — nunca la cortes) que resuelve una objeción real de forma literal.',
     requires: { cards: 5 },
   },
   garantia: {

@@ -83,3 +83,16 @@ describe('sectionCopySchema (conteo exacto de arrays por ADN)', () => {
     expect(sc.safeParse({ type: 'oferta', headline: 'h' }).success).toBe(true)
   })
 })
+
+import { trimCopyStrings } from './copy'
+describe('trimCopyStrings (anti-truncado)', () => {
+  it('recorta strings pegados al tope al límite de palabra; deja los sanos', () => {
+    const at60 = 'Descubre lo que dicen nuestras usuarias sobre Eunoia.  Tuali' // 60, cortado
+    const out = trimCopyStrings([{ type: 'testimonios', headline: at60, cards: [{ title: 'A – Lima', body: 'ok' }] } as SectionCopy])
+    expect(out[0].headline.length).toBeLessThan(60)
+    expect(out[0].headline.endsWith('Tuali')).toBe(false)
+    // un headline sano (bajo el tope) no se toca
+    const ok = trimCopyStrings([{ type: 'hero', headline: 'Piel limpia y radiante' } as SectionCopy])
+    expect(ok[0].headline).toBe('Piel limpia y radiante')
+  })
+})
