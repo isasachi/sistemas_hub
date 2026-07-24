@@ -8,10 +8,6 @@ import type { Part } from '@google/genai'
 // callReasoning/generateImage) las llama PRIMERO y cae a Gemini solo si fallan. gpt-4o-mini para
 // texto+visión (structured), gpt-image-2 para imágenes. Requiere OPENAI_API_KEY. El escape hatch
 // `LLM_PROVIDER=gemini` (ver gemini.ts `geminiForced`) fuerza Gemini-only y saltea todo esto.
-// `useOpenAI` queda como helper legado (ya no gobierna el ruteo; el default es OpenAI-primario).
-export function useOpenAI(): boolean {
-  return process.env.LLM_PROVIDER === 'openai'
-}
 
 const TEXT_MODEL = 'gpt-4o-mini'
 const IMAGE_MODEL = 'gpt-image-2'

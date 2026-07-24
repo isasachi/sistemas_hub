@@ -107,7 +107,11 @@ export function sectionCopySchema(s: SectionType) {
 // modelo no lo cumple tras los reintentos internos, best-effort con el schema laxo (evita 500 — el
 // retry correctivo de generateLandingCopy es la red final).
 async function generateOneSection(session: LandingSessionResponse, s: SectionType, feedback?: string): Promise<SectionCopy | null> {
-  const pick = (r: { sections: SectionCopy[] }) => r.sections.find((x) => x.type === s) ?? r.sections[0] ?? null
+  // Prefiere la sección con el type correcto; si el modelo devolvió UNA sola con el type mal escrito,
+  // la coacciona a `s` (per-sección pedimos exactamente `s`, así que esa única ES `s`); si no, null —
+  // nunca guarda un objeto de OTRO type bajo la clave `s` (corrompería shareBullets/render por type).
+  const pick = (r: { sections: SectionCopy[] }): SectionCopy | null =>
+    r.sections.find((x) => x.type === s) ?? (r.sections.length === 1 ? { ...r.sections[0], type: s } : null)
   const parts = copyPromptParts(session, [s], feedback)
   try {
     const strict = z.object({ sections: z.array(sectionCopySchema(s)) })
@@ -134,12 +138,18 @@ export async function generateLandingCopy(
   // y se insiste hasta 2 rondas (la generación es estocástica). El mensaje ordena INVENTAR de muestra
   // antes que devolver menos (es contenido de plantilla que el usuario editará).
   for (let attempt = 0; attempt < 2; attempt++) {
-    const shortSections = sections.filter((s) => missingStructure([s], out.filter((c) => c.type === s)).length > 0)
+    // "Corta" = falta la sección entera (generateOneSection devolvió null — incluye oferta y demás sin
+    // `requires`, que missingStructure no chequea) O le faltan arrays del ADN.
+    const shortSections = sections.filter((s) => !out.some((c) => c.type === s) || missingStructure([s], out.filter((c) => c.type === s)).length > 0)
     if (!shortSections.length) break
     await Promise.all(shortSections.map(async (s) => {
       const gaps = missingStructure([s], out.filter((c) => c.type === s))
-      const corrective = `${feedback?.trim() ? feedback.trim() + '\n' : ''}CORRIGE la estructura (OBLIGATORIO): ${gaps.join(' ')} Devuelve la sección "${s}" con su array del tamaño EXACTO indicado. Si te faltan ideas, INVENTA entradas realistas de muestra (es contenido de plantilla que el vendedor editará) — NUNCA devuelvas menos del conteo pedido.`
-      const fixed = await generateOneSection(session, s, corrective)
+      // Con gaps de arrays → mensaje correctivo. Sin gaps (sección faltó entera, ej fallo transitorio
+      // de una sin `requires`) → simple re-generación con el feedback original.
+      const fb = gaps.length
+        ? `${feedback?.trim() ? feedback.trim() + '\n' : ''}CORRIGE la estructura (OBLIGATORIO): ${gaps.join(' ')} Devuelve la sección "${s}" con su array del tamaño EXACTO indicado. Si te faltan ideas, INVENTA entradas realistas de muestra (es contenido de plantilla que el vendedor editará) — NUNCA devuelvas menos del conteo pedido.`
+        : feedback
+      const fixed = await generateOneSection(session, s, fb)
       if (fixed) bySection.set(s, fixed)
     }))
     out = shareBullets([...bySection.values()])

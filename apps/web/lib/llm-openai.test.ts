@@ -1,19 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { sizeFor, toChatContent, splitImageParts, useOpenAI, stripNulls, toStrictSchema } from './llm-openai'
+import { sizeFor, toChatContent, splitImageParts, stripNulls, toStrictSchema } from './llm-openai'
 import { z } from 'zod'
 import type { Part } from '@google/genai'
 
-describe('llm-openai (cableado alternativo)', () => {
-  it('useOpenAI solo con LLM_PROVIDER=openai', () => {
-    const prev = process.env.LLM_PROVIDER
-    process.env.LLM_PROVIDER = 'openai'
-    expect(useOpenAI()).toBe(true)
-    process.env.LLM_PROVIDER = 'gemini'
-    expect(useOpenAI()).toBe(false)
-    delete process.env.LLM_PROVIDER
-    expect(useOpenAI()).toBe(false)
-    if (prev !== undefined) process.env.LLM_PROVIDER = prev
-  })
+describe('llm-openai (motor primario)', () => {
 
   it('sizeFor mapea aspectRatio → tamaño válido de gpt-image-2', () => {
     expect(sizeFor('9:16')).toBe('1024x1536')

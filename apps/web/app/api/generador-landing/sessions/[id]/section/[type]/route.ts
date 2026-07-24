@@ -162,7 +162,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         talentSubstitute,
         reserveLockup: !!lockup,
         nicheId: session.niche_id ?? undefined,
-        demographicLabel: session.demographic_id ? DEMOGRAPHIC_LABELS[session.demographic_id] : undefined,
+        // no_talent no aplica a las caras de clientes de testimonios ("coherentes con la demografía
+        // objetivo (Sin persona / solo producto)" no tiene sentido) → undefined = clientes genéricos.
+        demographicLabel: session.demographic_id && session.demographic_id !== 'no_talent' ? DEMOGRAPHIC_LABELS[session.demographic_id] : undefined,
       }),
     })
     b64 = await generateImage(parts, 3, { aspectRatio: '9:16' })
