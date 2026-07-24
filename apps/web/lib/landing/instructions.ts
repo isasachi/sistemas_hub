@@ -148,7 +148,8 @@ const TEXT_RULES = [
   'Oferta: ancla tachada + % de ahorro + precio por unidad + escasez temporal. Los tres precios y anclas son el MISMO set en todas las secciones del funnel.',
   'Moneda: "S/" siempre antepuesta, con el mismo formato en toda la pieza.',
   'Máximo 1 signo de exclamación por bloque. Sin mayúsculas sostenidas fuera del microcopy y las pills.',
-  'Disciplina de texto: todo texto visible sale ÚNICAMENTE del copy de abajo + lo impreso en el producto — nunca renderices vocabulario de esta instrucción (nombres de capas, "ADN", "invariante", códigos hex, nombres de fuente) como si fuera copy de la pieza.',
+  'Disciplina de texto: todo texto visible sale ÚNICAMENTE del copy de abajo + lo impreso en el producto — nunca renderices vocabulario de esta instrucción (nombres de capas, "ADN", "invariante", nombres de fuente) como si fuera copy de la pieza.',
+  'CÓDIGOS DE COLOR = NUNCA son texto visible. Los valores de color de esta instrucción (#RRGGBB, rgb(...), rgba(...) — p.ej. "rgba(28,74,74,0.7)") indican SOLO qué color aplicar; JAMÁS deben aparecer escritos como texto en la imagen (ni en microcopy, ni en cards, ni en ningún lado). Si un texto necesita color de cuerpo, aplícalo como color — no escribas el código.',
 ].join('\n')
 
 // ─── Capa 8 — Referencias adjuntas / nota de plantilla ──────────────────────
