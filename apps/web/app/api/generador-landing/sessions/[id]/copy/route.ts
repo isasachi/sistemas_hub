@@ -7,9 +7,13 @@ import { SectionType } from '@/lib/landing/types'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
+// La generación es PER-SECCIÓN en paralelo (~8 llamadas) + una ronda de retry correctivo, y con
+// OpenAI-primario cada una puede caer a Gemini → el presupuesto creció. Se fija maxDuration como
+// los hermanos (section=60), no el default de plataforma.
+export const maxDuration = 60
 
-// Etapa 3 — genera (o regenera) el copy de TODAS las secciones elegidas en una
-// llamada estructurada barata (sin imágenes → cabe en el timeout de Vercel). Gate.
+// Etapa 3 — genera (o regenera) el copy de TODAS las secciones elegidas, per-sección en paralelo
+// (sin imágenes → texto rápido; el timeout cubre el fan-out + retry). Gate de costo.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
 
