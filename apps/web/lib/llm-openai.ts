@@ -3,11 +3,12 @@ import type { ChatCompletionContentPart } from 'openai/resources/chat/completion
 import { z } from 'zod'
 import type { Part } from '@google/genai'
 
-// ─── Cableado ALTERNATIVO a OpenAI (TEMPORAL, para testing) ──────────────────
-// Gated por `LLM_PROVIDER=openai`. Con el flag apagado (default) todo el pipeline usa Gemini
-// como siempre. Con el flag encendido, las funciones de `lib/gemini.ts` (callStructured/
-// callReasoning/generateImage) delegan acá: gpt-4o-mini para texto+visión (structured),
-// gpt-image-2 para imágenes. Requiere OPENAI_API_KEY. No es producción — es un banco de pruebas.
+// ─── Motor de IA PRIMARIO: OpenAI SDK ────────────────────────────────────────
+// Estas funciones son el motor principal (2026-07-23): `lib/gemini.ts` (callStructured/
+// callReasoning/generateImage) las llama PRIMERO y cae a Gemini solo si fallan. gpt-4o-mini para
+// texto+visión (structured), gpt-image-2 para imágenes. Requiere OPENAI_API_KEY. El escape hatch
+// `LLM_PROVIDER=gemini` (ver gemini.ts `geminiForced`) fuerza Gemini-only y saltea todo esto.
+// `useOpenAI` queda como helper legado (ya no gobierna el ruteo; el default es OpenAI-primario).
 export function useOpenAI(): boolean {
   return process.env.LLM_PROVIDER === 'openai'
 }
