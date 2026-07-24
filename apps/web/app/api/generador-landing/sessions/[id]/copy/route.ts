@@ -7,10 +7,10 @@ import { SectionType } from '@/lib/landing/types'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-// La generación es PER-SECCIÓN en paralelo (~8 llamadas) + una ronda de retry correctivo, y con
-// OpenAI-primario cada una puede caer a Gemini → el presupuesto creció. Se fija maxDuration como
-// los hermanos (section=60), no el default de plataforma.
-export const maxDuration = 60
+// La generación es PER-SECCIÓN en paralelo (~8 llamadas) + retries del enforcement .length() +
+// posible fallback a Gemini → el peor caso se pasaba de 60s (timeout en prod). Fluid Compute
+// (vercel.json) permite hasta 300s incluso en Hobby: se alinea con las rutas de imagen (300).
+export const maxDuration = 300
 
 // Etapa 3 — genera (o regenera) el copy de TODAS las secciones elegidas, per-sección en paralelo
 // (sin imágenes → texto rápido; el timeout cubre el fan-out + retry). Gate de costo.
