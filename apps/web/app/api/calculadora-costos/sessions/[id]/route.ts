@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getCalcSession, updateCalcSession, type CalcSnapshot } from '@/lib/calculadora-costos/db'
+import { getCalcSession, updateCalcSession, deleteCalcSession, type CalcSnapshot } from '@/lib/calculadora-costos/db'
 import type { CalcInputs } from '@/lib/calculadora-costos/model'
 
 export const dynamic = 'force-dynamic'
@@ -28,4 +28,17 @@ export async function PUT(
     return NextResponse.json({ error: 'Faltan inputs/snapshot' }, { status: 400 })
   await updateCalcSession(id, body.inputs, body.snapshot)
   return NextResponse.json({ ok: true })
+}
+
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params
+  try {
+    await deleteCalcSession(id)
+    return NextResponse.json({ ok: true })
+  } catch {
+    return NextResponse.json({ error: 'No se pudo eliminar' }, { status: 500 })
+  }
 }

@@ -68,6 +68,11 @@ export async function updateLandingSession(
   if (error) throw new Error(error.message)
 }
 
+export async function deleteLandingSession(id: string): Promise<void> {
+  const { error } = await getDb().from('landing_sessions').delete().eq('id', id)
+  if (error) throw new Error(error.message)
+}
+
 // Fase 6 (paralelización): upsert ATÓMICO de UNA sección en el array jsonb `sections` vía RPC
 // `landing_upsert_section` (FOR UPDATE + reconstrucción por `type`). Reemplaza el read-modify-write
 // del array completo, que perdía updates cuando el cliente genera las secciones en paralelo. La RPC

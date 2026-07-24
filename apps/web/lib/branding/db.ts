@@ -69,3 +69,8 @@ export async function updateBrandingSession(
     .single()
   if (error) throw new Error(error.message)
 }
+
+export async function deleteBrandingSession(id: string): Promise<void> {
+  const { error } = await getDb().from('branding_sessions').delete().eq('id', id)
+  if (error) throw new Error(error.message)
+}

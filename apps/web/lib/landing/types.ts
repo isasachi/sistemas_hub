@@ -1,5 +1,4 @@
 import { z } from 'zod'
-import { TypePairId } from './typography-catalog'
 
 // ─── Catálogo de secciones ───────────────────────────────────────────────────
 // El orden del enum NO es el orden de la landing — ese lo define `order` por sesión.
@@ -26,6 +25,77 @@ export const SECTION_LABELS: Record<SectionType, string> = {
   'cta-final': 'Llamado final',
 }
 
+// ─── Nicho y demografía (spec 2026-07-23, Anexos A/B) ────────────────────────
+export const NicheId = z.enum([
+  'supplement_skin_female', 'skincare_topical', 'haircare',
+  'fitness_weightloss', 'supplement_male_performance',
+  'joint_mobility', 'intimate_wellness', 'herbal_natural',
+  'baby_maternity', 'pets', 'home_cleaning',
+  'tech_gadgets', 'kitchen_tools', 'jewelry_fashion',
+  'automotive', 'generic',
+])
+export type NicheId = z.infer<typeof NicheId>
+
+export const DemographicId = z.enum([
+  'female_18_30', 'female_30_45', 'female_45_plus',
+  'male_20_35', 'male_35_55', 'senior_55_plus', 'no_talent',
+])
+export type DemographicId = z.infer<typeof DemographicId>
+
+// Salida del paso 0.a (clasificación). Zod rechaza cualquier valor fuera del set.
+export const NicheClassification = z.object({
+  niche_id: NicheId,
+  demographic_id: DemographicId,
+  confidence: z.number().min(0).max(1),
+  reasoning: z.string().max(200),
+})
+export type NicheClassification = z.infer<typeof NicheClassification>
+
+// Densidad de partículas (spec 0.b C).
+export const ParticleDensity = z.enum(['low', 'medium', 'high'])
+export const Halo = z.enum(['radial_soft', 'rays', 'backlight', 'rim', 'none'])
+
+// Paleta derivada por fórmula (spec 0.b B). color_body es rgba (opacidad 70%).
+export const PaletteTokensSchema = z.object({
+  color_headline: z.string(),
+  color_accent: z.string(),
+  color_body: z.string(),
+  bg_start: z.string(),
+  bg_end: z.string(),
+  color_surface: z.string(),
+  color_icon: z.array(z.string()).length(4),
+})
+export type PaletteTokens = z.infer<typeof PaletteTokensSchema>
+
+// ADN de la sesión (spec 0.b F): fuente única de verdad para las 8 secciones.
+// `poses` mapea cada sección seleccionada a una pose única del banco (Anexo B).
+export const LandingDnaSchema = z.object({
+  brand_base: z.object({ hex: z.string(), h: z.number(), s: z.number(), l: z.number() }),
+  palette: PaletteTokensSchema,
+  particle_type: z.string(),
+  particle_density: ParticleDensity,
+  particles_on: z.boolean().default(true),   // el nicho activa/desactiva partículas de fondo (motor de plantillas)
+  props: z.array(z.string()).min(1).max(5),
+  font_family: z.string(),
+  font_accent: z.string().nullable(),
+  halo: Halo,
+  model_persona: z.string(),
+  // clave = SectionType slug; valor = descripción de pose. Parcial: solo las secciones elegidas.
+  poses: z.record(z.string(), z.string()),
+})
+export type LandingDna = z.infer<typeof LandingDnaSchema>
+
+// Puente slug interno ↔ lenguaje del spec + archivo de plantilla curada en Storage
+// (bucket ad-uploads, prefijo landing-templates/, subidas por scripts/seed-landing-templates.ts;
+// Task 4 — reemplaza al viejo landing-refs/ del motor DNA, ver seed-landing-templates.ts).
+export const SECTION_SPEC_KEY: Record<SectionType, string> = {
+  hero: 'hero_problem', beneficios: 'benefits', 'antes-despues': 'before_after',
+  testimonios: 'testimonials', faq: 'faq', garantia: 'guarantee',
+  oferta: 'offer', 'cta-final': 'cta_final',
+}
+export const SECTION_REF: Record<SectionType, string> =
+  Object.fromEntries(SectionType.options.map((s) => [s, `${SECTION_SPEC_KEY[s]}.png`])) as Record<SectionType, string>
+
 // ─── Copy por sección (gate de aprobación) ───────────────────────────────────
 // Un esquema flexible cubre los 8 tipos: el LLM rellena solo los campos que aplican.
 // Los `.max()` son la primera línea de defensa contra texto largo ilegible en la
@@ -43,6 +113,14 @@ export const SectionCopySchema = z.object({
   // cards: testimonios ({title="Nombre, Ciudad", body=reseña}) · FAQ ({title=pregunta, body=respuesta})
   //        · beneficios ({title=beneficio, body=detalle de una línea}). Hasta 6 (FAQ llega a 5).
   cards: z.array(z.object({ title: z.string().max(40), body: z.string().max(90) })).max(6).optional(),
+  // Campos del motor de plantillas (2026-07-23). Opcionales: cada sección llena los que aplican.
+  kicker: z.string().max(40).optional(),        // subtítulo dorado con guiones (beneficios/antes-despues/testimonios/oferta)
+  closingBold: z.string().max(40).optional(),   // beneficios: frase bold de la closing_card
+  closingSub: z.string().max(90).optional(),    // beneficios: subcopy de la closing_card
+  closingStrip: z.string().max(60).optional(),  // antes-despues: franja de cierre (reemplaza trust_bar)
+  socialProof: z.string().max(90).optional(),   // testimonios: banda de prueba social
+  ctaHeadline: z.string().max(30).optional(),   // cta-final: titular del bloque CTA (mayúsculas)
+  ctaSub: z.string().max(90).optional(),        // cta-final: subcopy del bloque CTA
   cta: z.string().max(25).optional(),
 })
 export type SectionCopy = z.infer<typeof SectionCopySchema>
@@ -115,9 +193,10 @@ export function resolveOffer(session: Pick<LandingSessionResponse, 'offer' | 'of
 
 // ── Bloque de CONFIANZA (Fase 5 C5.2) ───────────────────────────────────────
 // Hechos OPERATIVOS del negocio: un modelo no puede inferirlos y no debe inventarlos, así que
-// los llena el USUARIO en el wizard. `paymentMethods` es un enum porque cada valor mapea a un
-// SVG real de la librería de devices (Fase 0) — es lo que hace posible el ADN de confianza (los
-// logos por difusión salen deformados). garantia/cta-final consumen este bloque directamente.
+// los llena el USUARIO en el wizard. `paymentMethods` es un enum para acotar el prompt a marcas
+// reconocibles: en `oferta` el modelo DIBUJA los logos exactos de estos métodos (decisión
+// 2026-07-23, ver `paymentLogosText` en instructions.ts); `garantia` deja la banda inferior
+// limpia sin logos (ver `PAYMENT_BAND`). garantia/cta-final consumen este bloque directamente.
 export const PaymentMethod = z.enum([
   'yape', 'plin', 'mercadopago', 'visa', 'mastercard', 'efectivo', 'transferencia',
 ])
@@ -149,46 +228,6 @@ export type LandingStyle = z.infer<typeof LandingStyleSchema>
 export type LandingPalette = LandingStyle['palette']
 export type LandingTypography = LandingStyle['typography']
 
-// ─── Marca derivada del producto (Fase 3) ────────────────────────────────────
-// `DerivedBrand` se resuelve UNA vez por sesión (etapa 2→3), es editable por el usuario
-// en el wizard y tiene DOS consumidores: tokens CSS para la composición Satori (theme.ts)
-// y descripción textual para el prompt de escena (instructions.ts). Supera a
-// `palette`/`typography` (legado + canal del handoff de branding) cuando existe.
-
-// Familia cromática del NICHO — la atmósfera no sale de los píxeles del packaging (el frasco
-// blanco de un suplemento no "sabe" que su nicho es azul-pureza). El LLM la clasifica.
-export const NicheCode = z.enum([
-  'salud-clinico',   // azul-blanco, pureza    → suplementos, skincare
-  'fitness-energia', // negro-naranja-lima     → deporte, quemadores
-  'belleza-premium', // nude-dorado-crema      → cosmética, joyería
-  'hogar-calido',    // terracota-beige        → cocina, decoración
-  'tech-limpio',     // gris-azul brillante    → gadgets, electrónica
-  'bebe-pastel',     // pastel suave           → bebé, maternidad
-])
-export type NicheCode = z.infer<typeof NicheCode>
-
-// Casting del talento: demografía como DATO (no texto libre) → la misma persona en todas las
-// secciones. `present:false` = producto solo (gadget de auto, herramienta) sin beneficiario.
-export const CastingSpecSchema = z.object({
-  present:    z.boolean(),
-  ageRange:   z.enum(['18-25', '25-35', '35-50', '50-65', '65+']).optional(),
-  gender:     z.enum(['femenino', 'masculino', 'mixto']).optional(),
-  appearance: z.string().max(120).optional(), // rasgos latinoamericanos, piel real, etc.
-  context:    z.string().max(60).optional(),  // baño, cocina, gimnasio, exterior
-  wardrobe:   z.string().max(60).optional(),
-  expression: z.string().max(60).optional(),  // serena y segura / enérgica
-})
-export type CastingSpec = z.infer<typeof CastingSpecSchema>
-
-export const DerivedBrandSchema = z.object({
-  niche:     NicheCode,
-  palette:   LandingStyleSchema.shape.palette, // reusa el shape actual (1-6 colores con rol)
-  typePair:  TypePairId,                        // ENUM CERRADO del catálogo (Fase 0), nunca texto libre
-  casting:   CastingSpecSchema,
-  sceneMood: z.string().max(160),               // reemplazo estructurado de brand_style suelto → prompt de escena
-})
-export type DerivedBrand = z.infer<typeof DerivedBrandSchema>
-
 // Sección renderizada: copy + imagen.
 export interface LandingSection {
   type: SectionType
@@ -196,9 +235,6 @@ export interface LandingSection {
   copy: SectionCopy
   imageUrl: string | null
   status: 'pending' | 'done'
-  // Secciones híbridas: URL de la ESCENA cruda (plato de fondo de Gemini, pre-Satori). Se
-  // cachea para re-componer el texto/precio a $0 (renderComposite) sin re-generar imagen.
-  sceneUrl?: string | null
 }
 
 // ─── Sesión (forma de respuesta de la API) ───────────────────────────────────
@@ -242,15 +278,18 @@ export interface LandingSessionResponse {
   // Origen de la placa canónica (Fase 2): 'photo' = derivada de la foto real en etapa 2;
   // 'render' (legado) o null = recortada del render de la 1ª sección. Ver product-box.ts.
   product_canonical_source: string | null
-  // Marca derivada del producto (Fase 3): nicho, paleta fusionada, par tipográfico del catálogo,
-  // casting del talento y mood de escena. Resuelto una vez (etapa 2→3), editable, alimenta
-  // composición (tokens) y prompt de escena (texto). Supera a palette/typography. Ver DerivedBrand.
-  derived_brand: DerivedBrand | null
   // Placa canónica del talento (Fase 4): retrato del beneficiario generado UNA vez desde el
-  // CastingSpec, sobre fondo neutro. Se pasa como referencia a todas las secciones para que la
-  // persona no cambie entre ellas. Null si el producto no lleva persona (casting.present=false).
+  // casting del talento, sobre fondo neutro. Se pasa como referencia a todas las secciones para
+  // que la persona no cambie entre ellas. Null si el producto no lleva persona.
   talent_canonical_url: string | null
   // Avatares de testimonios: 3 retratos de clientes DISTINTOS, generados una vez y cacheados,
   // que la sección testimonios compone como <img> (Satori no genera caras). Null hasta generarlos.
   testimonial_avatars: string[] | null
+  // Nicho y demografía confirmados por el usuario (paso 0.a). Escalares: se fijan ANTES de la
+  // extracción. Null hasta que el wizard los confirma en Identidad.
+  niche_id: NicheId | null
+  demographic_id: DemographicId | null
+  // ADN visual (paso 0.b): paleta por fórmula, partículas, props, tipografía, halo, persona y
+  // poses. Fuente única para las 8 secciones. Null en sesiones legadas → el wizard re-extrae.
+  landing_dna: LandingDna | null
 }

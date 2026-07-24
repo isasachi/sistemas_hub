@@ -35,11 +35,12 @@ function CopyCard({ c }: { c: SectionCopy }) {
 }
 
 export default function Section3Sections() {
-  const { sessionId, selectedSections, copy, offer, trustBlock, setSelectedSections, setCopy, approveCopy } = useLandingStore()
+  const { sessionId, selectedSections, copy, offer, trustBlock, landingDna, setSelectedSections, setCopy, approveCopy } = useLandingStore()
   // Gate de aprobación (Fase 5 C5.4): contrasta el copy generado contra la oferta y el bloque de
   // confianza. Los issues no bloquean — el usuario decide. Los de precio requieren la oferta ya
-  // generada (pasa en el preview); los de confianza corren apenas hay trust_block.
-  const issues = copy.length ? validateSet({ offer, offer_copy: null, trust_block: trustBlock, copy }) : []
+  // generada (pasa en el preview); los de confianza corren apenas hay trust_block. R7/R8 (§6.6/§6.8)
+  // corren sobre landing_dna (pose única, contraste).
+  const issues = copy.length ? validateSet({ offer, offer_copy: null, trust_block: trustBlock, copy, landing_dna: landingDna }) : []
   const [picked, setPicked] = useState<string[]>(selectedSections.map((t) => SECTION_LABELS[t]))
   const [feedback, setFeedback] = useState('')
   const [loading, setLoading] = useState(false)

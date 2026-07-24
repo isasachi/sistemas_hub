@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Plus, CheckCircle2, Clock, ImageOff } from 'lucide-react'
+import { Plus, CheckCircle2, Clock, ImageOff, Trash2 } from 'lucide-react'
 
 // Item uniforme que devuelven todos los GET /api/<tool>/sessions.
 export interface HistoryItem {
@@ -25,6 +25,7 @@ const fmtDate = (iso: string) =>
 export default function SessionHistory({ slug, sessionKey }: { slug: string; sessionKey?: string }) {
   const router = useRouter()
   const [items, setItems] = useState<HistoryItem[] | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   useEffect(() => {
     fetch(`/api/${slug}/sessions`)
@@ -36,6 +37,23 @@ export default function SessionHistory({ slug, sessionKey }: { slug: string; ses
   function startNew() {
     if (sessionKey) localStorage.removeItem(sessionKey)
     router.push(`/tools/${slug}/wizard`)
+  }
+
+  async function handleDelete(e: React.MouseEvent, id: string) {
+    e.preventDefault()
+    e.stopPropagation()
+    if (deletingId) return
+    if (!confirm('¿Eliminar esta sesión? No se puede deshacer.')) return
+    setDeletingId(id)
+    try {
+      const res = await fetch(`/api/${slug}/sessions/${id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('delete failed')
+      setItems((prev) => prev?.filter((x) => x.id !== id) ?? null)
+    } catch {
+      alert('No se pudo eliminar la sesión')
+    } finally {
+      setDeletingId(null)
+    }
   }
 
   return (
@@ -73,6 +91,16 @@ export default function SessionHistory({ slug, sessionKey }: { slug: string; ses
             href={`/tools/${slug}/sesion/${s.id}`}
             className="group relative flex flex-col rounded-2xl jr-card p-4 no-underline overflow-hidden transition-all duration-200 hover:border-[rgba(255,156,77,0.28)] hover:-translate-y-0.5"
           >
+            <button
+              type="button"
+              title="Eliminar"
+              aria-label="Eliminar sesión"
+              disabled={deletingId === s.id}
+              onClick={(e) => handleDelete(e, s.id)}
+              className="absolute top-2.5 right-2.5 z-10 flex items-center justify-center w-8 h-8 rounded-full bg-black/40 backdrop-blur text-[#8a8a8a] opacity-0 group-hover:opacity-100 transition hover:text-[#ff6b6b] disabled:opacity-50"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
             <div className="aspect-[4/3] w-full rounded-xl overflow-hidden bg-white/[0.03] border border-white/[0.06] flex items-center justify-center mb-3">
               {s.thumb ? (
                 // eslint-disable-next-line @next/next/no-img-element

@@ -11,12 +11,21 @@ import { PaymentMethod, type TrustBlock } from '@/lib/landing/types'
 
 const btnPrimary =
   'rounded-xl jr-cta text-[13px] font-bold disabled:opacity-40 transition-all duration-200 cursor-pointer border-0 font-sans flex items-center justify-center gap-2 h-11 w-full'
+const btnGhost =
+  'h-11 px-4 rounded-xl border border-white/[0.14] text-[#f5f5f5] text-[13px] font-medium hover:bg-white/[0.05] transition-colors cursor-pointer bg-transparent'
 
 const PAYMENT_LABELS: Record<PaymentMethod, string> = {
   yape: 'Yape', plin: 'Plin', mercadopago: 'Mercado Pago', visa: 'Visa',
   mastercard: 'Mastercard', efectivo: 'Efectivo', transferencia: 'Transferencia',
 }
 const PAYMENT_OPTIONS = PaymentMethod.options.map((m) => PAYMENT_LABELS[m])
+const summary = (t: TrustBlock) => [
+  t.codDelivery && 'Contraentrega',
+  (t.paymentMethods ?? []).map((m) => PAYMENT_LABELS[m]).slice(0, 3).join('/'),
+  t.deliveryTime,
+  t.freeShipping && 'Envío gratis',
+  t.guaranteeDays ? `Garantía ${t.guaranteeDays}d` : null,
+].filter(Boolean).join(' · ')
 const LABEL_TO_METHOD = Object.fromEntries(PaymentMethod.options.map((m) => [PAYMENT_LABELS[m], m])) as Record<string, PaymentMethod>
 const COVERAGE_OPTIONS = ['Perú', 'EE.UU.', 'LATAM', 'España']
 
@@ -43,6 +52,9 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
 export default function SectionTrust() {
   const { sessionId, trustBlock, setTrustBlock, confirmTrust } = useLandingStore()
   const init = trustBlock ?? DEFAULT
+  // Arranca en modo resumen SIEMPRE (incluso sin trustBlock aún, mostrando el DEFAULT) — el
+  // objetivo es que el usuario confirme con 1 click en vez de llenar 7 campos.
+  const [editing, setEditing] = useState(false)
   const [codDelivery, setCod] = useState(init.codDelivery)
   const [freeShipping, setFree] = useState(init.freeShipping)
   const [deliveryTime, setDelivery] = useState(init.deliveryTime ?? '')
@@ -88,6 +100,23 @@ export default function SectionTrust() {
   }
 
   if (!sessionId) return null
+
+  if (!editing) {
+    const t = trustBlock ?? DEFAULT
+    return (
+      <div className="flex flex-col gap-3">
+        <p className="text-[13px] text-[#bdbdbd]">Estos datos son tuyos, no los inventa la IA. Este es el default para negocios en Perú — edítalo si el tuyo es distinto.</p>
+        <div className="rounded-xl border border-white/[0.08] bg-[#141414] px-4 py-3 text-[13px] text-[#bdbdbd]">{summary(t)}</div>
+        {error && <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-[12px] text-red-400">{error}</div>}
+        <div className="flex gap-2">
+          <button type="button" onClick={() => setEditing(true)} className={btnGhost}>Editar</button>
+          <button type="button" onClick={save} disabled={loading} className={btnPrimary + ' flex-1'}>
+            {loading ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Guardando...</> : 'Confirmar y continuar'}
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col gap-4">

@@ -1,4 +1,5 @@
 import { resolveOffer, type LandingSessionResponse, type SectionType, type SectionCopy, type PaymentMethod } from './types'
+import { contrastRatio } from '@/lib/branding/contrast'
 
 // Fase 5 C5.4 — validador CRUZADO del set completo. Función PURA sobre la sesión: detecta las
 // incoherencias entre secciones que el prompt no puede evitar (el bug real del ADN CLEARSTEM: un
@@ -14,6 +15,8 @@ export type SetIssueRule =
   | 'guarantee-without-days'
   | 'delivery-inconsistent'
   | 'cod-not-offered'
+  | 'pose-duplicate'
+  | 'contrast-low'
 
 export interface SetIssue {
   rule: SetIssueRule
@@ -60,11 +63,12 @@ function sectionText(c: SectionCopy): string {
   ].filter(Boolean).join('  ')
 }
 
-export function validateSet(session: Pick<LandingSessionResponse, 'offer' | 'offer_copy' | 'trust_block' | 'copy'>): SetIssue[] {
+export function validateSet(session: Pick<LandingSessionResponse, 'offer' | 'offer_copy' | 'trust_block' | 'copy' | 'landing_dna'>): SetIssue[] {
   const issues: SetIssue[] = []
   const offer = resolveOffer(session)
   const trust = session.trust_block
   const copies = session.copy ?? []
+  const dna = session.landing_dna
 
   // Precios válidos = todos los que aparecen en los tiers (precio, ancla y costo/unidad).
   const tierPrices = new Set<string>()
@@ -127,5 +131,29 @@ export function validateSet(session: Pick<LandingSessionResponse, 'offer' | 'off
       }
     }
   }
+
+  // R7 (QA#6): ninguna pose se repite entre secciones. `poses` es parcial (solo secciones
+  // elegidas) y el valor vacío ("") marca no_talent — se excluye para no fabricar un falso
+  // positivo (todas las secciones "sin persona" comparten el string vacío).
+  if (dna) {
+    const bySection = Object.entries(dna.poses).filter(([, pose]) => pose.trim() !== '')
+    const seen = new Map<string, SectionType[]>()
+    for (const [section, pose] of bySection) {
+      const list = seen.get(pose) ?? []
+      list.push(section as SectionType)
+      seen.set(pose, list)
+    }
+    for (const [pose, sections] of seen) {
+      if (sections.length > 1)
+        issues.push({ rule: 'pose-duplicate', severity: 'error', message: `Las secciones ${sections.join(', ')} repiten la misma pose ("${pose}") — cada sección debe tener una pose única.` })
+    }
+
+    // R8 (QA#8): contraste headline/fondo. derivePalette garantiza ≥7:1 — si esto dispara, el
+    // ADN fue editado a mano fuera de la fórmula.
+    const ratio = contrastRatio(dna.palette.color_headline, dna.palette.bg_start)
+    if (ratio < 7)
+      issues.push({ rule: 'contrast-low', severity: 'error', message: `El contraste entre el color de titular (${dna.palette.color_headline}) y el fondo (${dna.palette.bg_start}) es ${ratio.toFixed(2)}:1, menor al mínimo de 7:1.` })
+  }
+
   return issues
 }

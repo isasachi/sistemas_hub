@@ -79,3 +79,8 @@ export async function listCalcSessions(userId: string): Promise<CalcSessionRow[]
   if (error) return []
   return (data ?? []) as CalcSessionRow[]
 }
+
+export async function deleteCalcSession(id: string): Promise<void> {
+  const { error } = await getDb().from('calc_sessions').delete().eq('id', id)
+  if (error) throw new Error(error.message)
+}

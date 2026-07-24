@@ -2,9 +2,39 @@ import { GoogleGenAI, Modality, type Part, type Schema } from '@google/genai'
 import { z } from 'zod'
 import fs from 'fs'
 import path from 'path'
+import { openaiCallStructured, openaiCallReasoning, openaiGenerateImage } from './llm-openai'
 
 function getAI() {
   return new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY! })
+}
+
+// ─── Motor de IA: OpenAI PRIMARIO, Gemini FALLBACK (2026-07-23) ──────────────
+// Antes Gemini era el motor y OpenAI un cableado alternativo tras un flag. Ahora se invierte: el
+// motor principal (texto, visión, imagen) es el SDK de OpenAI (gpt-4o-mini + gpt-image-2); si una
+// llamada de OpenAI falla (error, vacío o timeout), se cae a Gemini. Escape hatch: `LLM_PROVIDER=
+// gemini` fuerza Gemini-only (sin tocar OpenAI) — útil para costo o si OpenAI está caído.
+function geminiForced(): boolean {
+  return process.env.LLM_PROVIDER === 'gemini'
+}
+
+// ⚠️ Latencia de imagen (constraint de despliegue, NO se resuelve solo con este cableado):
+// gpt-image-2 tarda ~60-90s por imagen (medido). Las rutas de imagen en Vercel Hobby tienen
+// maxDuration 60s → OpenAI como primario de imagen las 504-earía en PROD antes de poder caer a
+// Gemini (el timeout de Vercel mata el request). Default aquí = SIN timeout (0): en local/testing
+// OpenAI corre completo (honra "OpenAI primario de imagen"). Para PROD, setear `LLM_IMAGE_TIMEOUT_MS`
+// (p.ej. 45000) hace que un OpenAI lento se abandone y caiga a Gemini (~15s) dentro del presupuesto
+// — a costa de que la imagen la termine haciendo Gemini. Alternativa: `LLM_PROVIDER=gemini` (imagen
+// Gemini-primaria en prod) o subir maxDuration en un plan Vercel pago. Texto/visión (gpt-4o-mini)
+// responden en segundos y no tienen este problema.
+function imageTimeoutMs(): number {
+  const n = Number(process.env.LLM_IMAGE_TIMEOUT_MS)
+  return Number.isFinite(n) && n > 0 ? n : 0
+}
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  if (!ms || ms <= 0) return p
+  let t: ReturnType<typeof setTimeout>
+  const timeout = new Promise<never>((_, reject) => { t = setTimeout(() => reject(new Error(`timeout ${ms}ms`)), ms) })
+  return Promise.race([p.finally(() => clearTimeout(t)), timeout])
 }
 
 export const SYSTEM_PROMPT = fs.readFileSync(
@@ -45,14 +75,15 @@ export function clampTooBigStrings(obj: unknown, error: z.ZodError): boolean {
   return changed
 }
 
-export async function callStructured<T>(
+// Gemini structured (fallback). Contiene la lógica de recuperación de strings 'too_big'.
+async function geminiCallStructured<T>(
   schemaName: string,
   schema: z.ZodSchema<T>,
   parts: Part[],
-  maxRetries = 3,
-  systemInstruction: string = SYSTEM_PROMPT
+  maxRetries: number,
+  systemInstruction: string,
 ): Promise<T> {
-  let lastError: unknown = new Error(`callStructured(${schemaName}): no attempts`)
+  let lastError: unknown = new Error(`geminiCallStructured(${schemaName}): no attempts`)
   for (let i = 0; i < maxRetries; i++) {
     try {
       const res = await getAI().models.generateContent({
@@ -77,13 +108,53 @@ export async function callStructured<T>(
   throw lastError
 }
 
-export async function callReasoning(systemPrompt: string, userMessage: string): Promise<string> {
+// Texto+visión estructurado: OpenAI (gpt-4o-mini) primario, Gemini fallback en fallo.
+// `preferGemini`: invierte el orden para tareas donde Gemini es netamente mejor — la detección de
+// bounding box (`extractProductBox`) usa el formato box_2d [0-1000] en el que Gemini está entrenado;
+// gpt-4o-mini devuelve cajas imprecisas (recortes cortados). Gemini primario + OpenAI fallback ahí.
+export async function callStructured<T>(
+  schemaName: string,
+  schema: z.ZodSchema<T>,
+  parts: Part[],
+  maxRetries = 3,
+  systemInstruction: string = SYSTEM_PROMPT,
+  opts?: { preferGemini?: boolean }
+): Promise<T> {
+  if (geminiForced()) return geminiCallStructured(schemaName, schema, parts, maxRetries, systemInstruction)
+  if (opts?.preferGemini) {
+    try {
+      return await geminiCallStructured(schemaName, schema, parts, maxRetries, systemInstruction)
+    } catch (e) {
+      console.warn(`[llm] Gemini structured (${schemaName}, preferGemini) falló → fallback a OpenAI`, e)
+      return openaiCallStructured(schemaName, schema, parts, maxRetries, systemInstruction)
+    }
+  }
+  try {
+    return await openaiCallStructured(schemaName, schema, parts, maxRetries, systemInstruction)
+  } catch (e) {
+    console.warn(`[llm] OpenAI structured (${schemaName}) falló → fallback a Gemini`, e)
+    return geminiCallStructured(schemaName, schema, parts, maxRetries, systemInstruction)
+  }
+}
+
+// Texto libre (razonamiento): OpenAI primario, Gemini fallback.
+async function geminiCallReasoning(systemPrompt: string, userMessage: string): Promise<string> {
   const res = await getAI().models.generateContent({
     model: 'gemini-2.5-flash',
     contents: [{ role: 'user', parts: [{ text: userMessage }] }],
     config: { systemInstruction: systemPrompt },
   })
   return res.text ?? ''
+}
+
+export async function callReasoning(systemPrompt: string, userMessage: string): Promise<string> {
+  if (geminiForced()) return geminiCallReasoning(systemPrompt, userMessage)
+  try {
+    return await openaiCallReasoning(systemPrompt, userMessage)
+  } catch (e) {
+    console.warn('[llm] OpenAI reasoning falló → fallback a Gemini', e)
+    return geminiCallReasoning(systemPrompt, userMessage)
+  }
 }
 
 // Generación de imagen genérica (texto→imagen o imágenes+texto). La usa el
@@ -100,12 +171,12 @@ export async function callReasoning(systemPrompt: string, userMessage: string): 
 const SPANISH_RULE =
   'MANDATORY LANGUAGE RULE: every visible word rendered in the output image MUST be in neutral Latin-American Spanish (español neutro). If any reference image, template or input contains text in English or another language, TRANSLATE it into neutral Spanish — never copy, keep or render foreign-language words. This overrides any text seen in the inputs.'
 
-export async function generateImage(
-  parts: Part[],
-  maxRetries = 3,
+// Generación de imagen con Gemini (fallback). `allParts` ya trae la SPANISH_RULE.
+async function geminiGenerateImage(
+  allParts: Part[],
+  maxRetries: number,
   opts?: { aspectRatio?: string; imageSize?: string }
 ): Promise<string> {
-  const allParts: Part[] = [...parts, { text: SPANISH_RULE }]
   let lastError: unknown = null
   for (let i = 0; i < maxRetries; i++) {
     try {
@@ -128,6 +199,26 @@ export async function generateImage(
   }
   if (lastError) throw lastError
   return ''
+}
+
+export async function generateImage(
+  parts: Part[],
+  maxRetries = 3,
+  opts?: { aspectRatio?: string; imageSize?: string }
+): Promise<string> {
+  const allParts: Part[] = [...parts, { text: SPANISH_RULE }]
+  if (geminiForced()) return geminiGenerateImage(allParts, maxRetries, opts)
+  // OpenAI primario (gpt-image-2, edit multi-imagen si hay refs), acotado por timeout para caber en
+  // el presupuesto de Vercel; vacío/timeout/error → Gemini. gpt-image-2 no acepta aspectRatio libre,
+  // solo tamaños fijos (ver openaiGenerateImage/sizeFor); Gemini sí respeta opts.aspectRatio.
+  try {
+    const out = await withTimeout(openaiGenerateImage(allParts, maxRetries, opts), imageTimeoutMs())
+    if (out) return out
+    console.warn('[llm] OpenAI image vacía → fallback a Gemini')
+  } catch (e) {
+    console.warn('[llm] OpenAI image falló/timeout → fallback a Gemini', e)
+  }
+  return geminiGenerateImage(allParts, maxRetries, opts)
 }
 
 // Edición exclusiva sobre una imagen ya generada (regen con prompt en landing/branding):

@@ -1,0 +1,30 @@
+# Unit del poller de research por URL — variante USER unit (local, sin sudo).
+#
+# Para correr LOCAL (WSL / máquina personal) en vez del system unit:
+#   mkdir -p ~/.config/systemd/user
+#   cp apps/worker/deploy/url-research.user.service ~/.config/systemd/user/url-research.service
+#   loginctl enable-linger "$USER"          # arranca al boot de WSL sin sesión abierta
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now url-research
+# Observar:
+#   journalctl --user -u url-research -f
+#
+# ⚠️ SIN el guard require-egress.sh del system unit: en local navegas con IP DIRECTA
+#    (Meta bloqueará un request real). Es la variante de prueba local — para el
+#    server usar deploy/url-research.service (egress Tailscale + guard).
+# Secretos (ANTHROPIC_API_KEY, SUPABASE_*) en apps/worker/.env.local — bootstrap.ts
+# los carga vía dotenv. Ajustar WorkingDirectory al path real del clon si difiere.
+
+[Unit]
+Description=Buscador de Productos — poller research por URL (user)
+
+[Service]
+Type=simple
+WorkingDirectory=/home/isasachi/chamba/sistemas_hub/apps/worker
+ExecStart=/usr/bin/env bash scripts/url-research-loop.sh
+Restart=always
+RestartSec=30
+SyslogIdentifier=url-research
+
+[Install]
+WantedBy=default.target
