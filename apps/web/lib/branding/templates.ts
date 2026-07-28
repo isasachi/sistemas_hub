@@ -33,6 +33,10 @@ export interface TemplateMeta {
   productType: string
   /** sinónimos y términos con los que un usuario describiría este producto */
   keywords: string[]
+  /** Sinónimos del SUSTANTIVO NÚCLEO — sólo los que nombran el mismo producto.
+   *  `keywords` es ancho a propósito (atributos, síntomas) para el resaltado;
+   *  esto es angosto a propósito, porque decide clonar vs traspasar. */
+  synonyms?: string[]
   /** nombre del archivo original, tal cual vino de `branding_final/` */
   file: string
 }
@@ -60,12 +64,15 @@ export const TEMPLATES: TemplateMeta[] = [
     file: '1_belleza_y_cuidado_personal/mascarilla_facial.png' },
   { id: 'belleza/protector-solar', categoryId: 'belleza', productType: 'protector solar',
     keywords: ['protector', 'solar', 'bloqueador', 'spf', 'sunscreen', 'uv'],
+    synonyms: ['bloqueador'],
     file: '1_belleza_y_cuidado_personal/protector_solar.png' },
   { id: 'belleza/serum-facial', categoryId: 'belleza', productType: 'serum facial',
     keywords: ['serum', 'suero', 'facial', 'antiedad', 'vitamina', 'ampolla', 'arrugas'],
+    synonyms: ['suero'],
     file: '1_belleza_y_cuidado_personal/serum_facial.png' },
   { id: 'belleza/shampoo', categoryId: 'belleza', productType: 'shampoo',
     keywords: ['shampoo', 'champu', 'cabello', 'pelo', 'anticaspa', 'acondicionador'],
+    synonyms: ['champu'],
     file: '1_belleza_y_cuidado_personal/shampoo.png' },
 
   // ── 2. Salud y bienestar ───────────────────────────────────────────────────
@@ -103,6 +110,7 @@ export const TEMPLATES: TemplateMeta[] = [
     file: '3_mascotas/juguete_interactivo.png' },
   { id: 'mascotas/shampoo-para-mascotas', categoryId: 'mascotas', productType: 'shampoo para mascotas',
     keywords: ['shampoo', 'champu', 'mascota', 'perro', 'gato', 'antipulgas', 'bano'],
+    synonyms: ['champu'],
     file: '3_mascotas/shampoo_para_mascotas.png' },
   { id: 'mascotas/snacks-para-perros', categoryId: 'mascotas', productType: 'snacks para perros',
     keywords: ['snack', 'premio', 'galleta', 'treat', 'hueso', 'alimento', 'perro'],
@@ -114,15 +122,19 @@ export const TEMPLATES: TemplateMeta[] = [
     file: '4_cocina/atomizador_de_aceite.png' },
   { id: 'cocina/balanza-digital', categoryId: 'cocina', productType: 'balanza digital',
     keywords: ['balanza', 'bascula', 'peso', 'digital', 'gramos', 'reposteria'],
+    synonyms: ['bascula'],
     file: '4_cocina/balanza_digital.png' },
   { id: 'cocina/freidora-de-aire', categoryId: 'cocina', productType: 'freidora de aire',
     keywords: ['freidora', 'aire', 'fryer', 'horno', 'sin aceite'],
+    synonyms: ['fryer'],
     file: '4_cocina/freidora_de_aire.png' },
   { id: 'cocina/licuadora-portatil', categoryId: 'cocina', productType: 'licuadora portátil',
     keywords: ['licuadora', 'batidora', 'portatil', 'blender', 'smoothie', 'vaso'],
+    synonyms: ['batidora', 'blender'],
     file: '4_cocina/licuadora_portatil.png' },
   { id: 'cocina/picador-electrico', categoryId: 'cocina', productType: 'picador eléctrico',
     keywords: ['picador', 'procesador', 'electrico', 'chopper', 'triturador', 'verduras'],
+    synonyms: ['procesador', 'chopper'],
     file: '4_cocina/picador_electrico.png' },
   { id: 'cocina/sellador-al-vacio', categoryId: 'cocina', productType: 'sellador al vacío',
     keywords: ['sellador', 'vacio', 'empacadora', 'conservacion', 'bolsas'],
@@ -131,6 +143,7 @@ export const TEMPLATES: TemplateMeta[] = [
   // ── 5. Accesorios para celulares ───────────────────────────────────────────
   { id: 'celulares/audifonos-bluetooth', categoryId: 'celulares', productType: 'audífonos bluetooth',
     keywords: ['audifono', 'auricular', 'bluetooth', 'inalambrico', 'earbuds', 'headphone'],
+    synonyms: ['auricular', 'earbuds'],
     file: '5_accesorios_para_celulares/audifonos_bluetooth.png' },
   { id: 'celulares/billetera-magnetica', categoryId: 'celulares', productType: 'billetera magnética',
     keywords: ['billetera', 'cartera', 'magnetica', 'magsafe', 'tarjetero', 'funda'],
@@ -143,6 +156,7 @@ export const TEMPLATES: TemplateMeta[] = [
     file: '5_accesorios_para_celulares/cargador_inalambrico.png' },
   { id: 'celulares/power-bank', categoryId: 'celulares', productType: 'power bank',
     keywords: ['powerbank', 'bateria', 'portatil', 'externa', 'mah', 'respaldo'],
+    synonyms: ['powerbank', 'bateria'],
     file: '5_accesorios_para_celulares/power_bank.png' },
   { id: 'celulares/tripode-para-celular', categoryId: 'celulares', productType: 'trípode para celular',
     keywords: ['tripode', 'soporte', 'selfie', 'stick', 'aro', 'celular'],
@@ -164,9 +178,21 @@ const STOPWORDS = new Set([
   'una', 'uno', 'que', 'mi', 'tu', 'su', 'and', 'the',
 ])
 
-/** Recorta plurales sólo en palabras largas: "serum" no debe volverse "seru". */
+const VOWELS = new Set(['a', 'e', 'i', 'o', 'u'])
+
+/**
+ * Recorta plurales sólo en palabras largas: "serum" no debe volverse "seru".
+ * "-es" sólo es marca de plural en español cuando el singular termina en
+ * consonante ("colores"→"color", "papeles"→"papel"); si la letra previa es
+ * vocal, "-es" es un préstamo con "-e" propia y sólo la "s" final sobra
+ * ("smoothies"→"smoothie", "series"→"serie").
+ */
 function stem(t: string): string {
-  if (t.length > 5 && t.endsWith('es')) return t.slice(0, -2)
+  if (t.length > 5 && t.endsWith('es')) {
+    const beforeEs = t[t.length - 3]
+    if (beforeEs && !VOWELS.has(beforeEs)) return t.slice(0, -2)
+    return t.slice(0, -1)
+  }
   if (t.length > 4 && t.endsWith('s')) return t.slice(0, -1)
   return t
 }
@@ -179,7 +205,7 @@ export function normalizeTokens(s: string): string[] {
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, ' ')
     .split(/\s+/)
-    .filter((t) => t.length > 2 && !STOPWORDS.has(t))
+    .filter((t) => t.length > 1 && !STOPWORDS.has(t))
     .map(stem)
 }
 
@@ -216,14 +242,19 @@ export function matchTemplates(
  * No alcanza con compartir un token cualquiera: "crema facial" y "serum facial"
  * comparten "facial" y son productos distintos. Se exige que coincida el
  * SUSTANTIVO NÚCLEO — el primer token de contenido — en alguna de las dos
- * direcciones, para que los sinónimos del catálogo ("suero" → serum) cuenten.
+ * direcciones. Del lado del catálogo, ese núcleo sólo puede venir de
+ * `productType` o de `synonyms` — nunca de `keywords`, que mezcla a propósito
+ * atributos/síntomas ("vitamina", "facial") con sinónimos del sustantivo, y
+ * esta función es precision-first (un falso positivo clona el producto
+ * equivocado).
  */
 export function isSameProduct(t: TemplateMeta, userProductType: string): boolean {
   const userTokens = normalizeTokens(userProductType)
   if (!userTokens.length) return false
   const tplHead = normalizeTokens(t.productType)[0]
   if (tplHead && userTokens.includes(tplHead)) return true
-  return keywordSet(t).has(userTokens[0])
+  const synonymTokens = new Set((t.synonyms ?? []).flatMap(normalizeTokens))
+  return synonymTokens.has(userTokens[0])
 }
 
 /* ── Storage ───────────────────────────────────────────────────────────────── */

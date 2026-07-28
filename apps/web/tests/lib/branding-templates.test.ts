@@ -67,6 +67,16 @@ describe('matchTemplates', () => {
   it('devuelve vacío para algo que no matchea nada', () => {
     expect(matchTemplates('turbina hidroeléctrica')).toEqual([])
   })
+
+  it('matchea "smoothies" solo, aunque el stemmer no debe mutilar el loanword hasta separarlo de la keyword "smoothie"', () => {
+    const top = matchTemplates('smoothies')[0]
+    expect(top?.template.id).toBe('cocina/licuadora-portatil')
+  })
+
+  it('matchea "uv" aunque tenga sólo 2 caracteres', () => {
+    const top = matchTemplates('uv')[0]
+    expect(top?.template.id).toBe('belleza/protector-solar')
+  })
 })
 
 describe('isSameProduct', () => {
@@ -85,5 +95,14 @@ describe('isSameProduct', () => {
 
   it('es falso entre categorías', () => {
     expect(isSameProduct(getTemplate('belleza/serum-facial'), 'rodillera deportiva')).toBe(false)
+  })
+
+  it('es falso cuando el núcleo del usuario sólo coincide con un atributo/keyword ancho, no con un sinónimo del núcleo', () => {
+    // "vitamina" es keyword de serum-facial (atributo), pero no nombra el producto
+    expect(isSameProduct(getTemplate('belleza/serum-facial'), 'vitamina C para el rostro')).toBe(false)
+  })
+
+  it('es verdadero para "bloqueador", sinónimo de mercado peruano de protector solar', () => {
+    expect(isSameProduct(getTemplate('belleza/protector-solar'), 'bloqueador solar FPS 50')).toBe(true)
   })
 })
