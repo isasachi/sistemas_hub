@@ -28,7 +28,7 @@ import path from 'node:path'
 import { STYLE_PRESETS, getPreset, paletteToText, type StylePreset } from '../lib/branding/style-presets'
 import { getLayout, layoutToPrompt, type LabelLayout } from '../lib/branding/label-layouts'
 import { contrastToPrompt } from '../lib/branding/contrast'
-import { refUrls, wireframeUrl } from '../lib/branding/effective-preset'
+import { REF_MANIFEST } from '../lib/branding/ref-manifest'
 import { THUMBNAIL_BRIEFS } from './thumbnail-briefs'
 import type { BrandBrief } from '../lib/branding/generation-prompts'
 
@@ -36,6 +36,23 @@ const OUT_DIR = path.join(__dirname, '..', 'generated-mockups')
 const MODEL = 'gpt-image-2'
 const SIZE = '1024x1536' // retrato ~2:3 para el mockup de producto
 const EDIT_ENDPOINT = 'https://api.openai.com/v1/images/edits'
+
+// Inlineadas (antes vivían en effective-preset.ts, retirado por dna-source.ts):
+// URLs de Storage de las refs/wireframe de los 7 estilos legado. Este script
+// es tooling de un solo uso del sistema de presets viejo, no del pipeline
+// nuevo — no vale la pena moverlas a un módulo compartido.
+const STORAGE_BASE = () =>
+  `${(process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL)!}/storage/v1/object/public/ad-uploads/branding-refs`
+
+function refUrls(styleId: string): string[] {
+  const folder = getPreset(styleId).referenceFolder
+  const files = REF_MANIFEST[folder] ?? []
+  return files.map((f) => `${STORAGE_BASE()}/${folder}/${f}`)
+}
+
+function wireframeUrl(styleId: string): string {
+  return `${STORAGE_BASE()}/wireframes/${styleId}.png`
+}
 
 /**
  * Prompt del mockup compuesto — misma receta que buildComposedMockupPrompt del

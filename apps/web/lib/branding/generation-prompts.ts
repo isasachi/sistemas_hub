@@ -59,6 +59,10 @@ export interface BrandBrief {
   keyColorHint?: string;
   /** Notas libres extra que se anexan al final del prompt. */
   extraNotes?: string;
+  /** true = el producto del usuario ES el de la referencia → clonar. false → traspasar el ADN. */
+  sameProduct: boolean;
+  /** qué producto es la plantilla — sólo se usa en la rama de traspaso. */
+  referenceProductType?: string;
 }
 
 /* --------------------------------------------------------------------------

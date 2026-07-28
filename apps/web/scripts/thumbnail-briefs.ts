@@ -29,6 +29,7 @@ export const THUMBNAIL_BRIEFS: Record<string, BrandBrief> = {
     descriptor: "extracto de raíces y botánicos, 30ml",
     tagline: "Botica de siempre, ciencia de hoy",
     containerType: "botella de vidrio ámbar con gotero",
+    sameProduct: true,
   },
 
   // Grounded en bebidas energéticas cítricas reales (Reign, Zest, Bang: lata de
@@ -41,6 +42,7 @@ export const THUMBNAIL_BRIEFS: Record<string, BrandBrief> = {
     descriptor: "explosión de naranja y lima, 150mg cafeína",
     tagline: "Carga a full",
     containerType: "lata de aluminio",
+    sameProduct: true,
   },
 
   // Grounded en suplementos deportivos reales con dosis verificable (creatina
@@ -54,6 +56,7 @@ export const THUMBNAIL_BRIEFS: Record<string, BrandBrief> = {
     descriptor: "5g de creatina monohidratada por porción, sin sabor",
     tagline: "Rendimiento medible",
     containerType: "bote de plástico HDPE mate con scoop",
+    sameProduct: true,
   },
 
   // Grounded en skincare/wellness premium real (Lumity, ASYSTEM, Necessaire:
@@ -65,6 +68,7 @@ export const THUMBNAIL_BRIEFS: Record<string, BrandBrief> = {
     descriptor: "calma la piel sensible, uso diario",
     tagline: "Cuidado sin ruido",
     containerType: "frasco soft-touch mate con gotero",
+    sameProduct: true,
   },
 
   // Grounded en té orgánico real en doypack con ventana (Meadow Ridge Coffee &
@@ -77,6 +81,7 @@ export const THUMBNAIL_BRIEFS: Record<string, BrandBrief> = {
     descriptor: "cultivo orgánico certificado, cosecha de temporada",
     tagline: "De la pradera a tu taza",
     containerType: "doypack de papel kraft con ventana",
+    sameProduct: true,
   },
 
   // Grounded en objetos de diseño/fragancia editoriales reales (Comme des
@@ -88,6 +93,7 @@ export const THUMBNAIL_BRIEFS: Record<string, BrandBrief> = {
     descriptor: "50ml · edición numerada",
     tagline: "Diseño que se huele",
     containerType: "frasco de perfume rectangular de vidrio",
+    sameProduct: true,
   },
 
   // Grounded en bebidas energéticas Y2K reales (Bang, Reign: cromo, gradiente
@@ -99,5 +105,6 @@ export const THUMBNAIL_BRIEFS: Record<string, BrandBrief> = {
     descriptor: "sabor ponche de frutas, edición holográfica",
     tagline: "Vuelve el futuro",
     containerType: "lata de aluminio cromada",
+    sameProduct: true,
   },
 };
