@@ -3,7 +3,15 @@
 import { useState } from 'react'
 import { Upload } from 'lucide-react'
 import { STYLE_LIST } from '@/lib/branding/style-presets'
-import { thumbUrl } from '@/lib/branding/effective-preset'
+
+// NOTA: este componente ya no lo usa BrandingWizard (reemplazado por
+// Section2Template, Task 11 — brief primero, galería de plantillas después).
+// Queda como código muerto hasta que la Task 12 lo borre; `thumbUrl` vivía en
+// `effective-preset.ts` (borrado en la Task de resolver de ADN) y se inlinea
+// acá solo para no romper el typecheck mientras tanto.
+function thumbUrl(styleId: string): string {
+  return `${(process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL)!}/storage/v1/object/public/ad-uploads/branding-refs/thumbnails/${styleId}.png`
+}
 
 export interface AnalyzeResult {
   styleId: string

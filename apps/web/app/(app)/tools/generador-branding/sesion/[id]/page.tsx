@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { RotateCw } from "lucide-react";
 import ToolShell from "@/components/tools/ui/ToolShell";
 import type { BrandingSessionResponse } from "@/lib/branding/types";
-import { getPreset } from "@/lib/branding/style-presets";
+import { TEMPLATE_DNA } from "@/lib/branding/template-dna";
 import { SESSION_KEY } from "@/store/branding";
 
 function Asset({ url, label }: { url: string | null; label: string }) {
@@ -62,22 +62,30 @@ export default function BrandingDetalle() {
               <Asset url={s.label_url} label="Etiqueta" />
             </div>
 
-            {s.style_id ? (
-              <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-4">
-                <p className="text-[11px] font-bold text-[#8a8a8a] tracking-[1px] uppercase mb-3">Paleta</p>
-                <div className="flex flex-wrap gap-3">
-                  {getPreset(s.style_id).palette.map((c, i) => (
-                    <div key={i} className="flex items-center gap-2">
-                      <span className="w-7 h-7 rounded-md border border-white/[0.1]" style={{ background: c.hex }} />
-                      <div>
-                        <p className="text-[12px] text-[#f5f5f5]">{c.name}</p>
-                        <p className="text-[11px] text-[#8a8a8a]">{c.hex}</p>
+            {(() => {
+              const palette = s.source_mode === 'upload'
+                ? (s.palette_options?.[s.palette_variant ?? 0] ?? s.image_analysis?.palette)
+                : s.template_id
+                  ? (TEMPLATE_DNA[s.template_id]?.palettes[s.palette_variant ?? 0])
+                  : undefined
+              if (!palette?.length) return null
+              return (
+                <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-4">
+                  <p className="text-[11px] font-bold text-[#8a8a8a] tracking-[1px] uppercase mb-3">Paleta</p>
+                  <div className="flex flex-wrap gap-3">
+                    {palette.map((c, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <span className="w-7 h-7 rounded-md border border-white/[0.1]" style={{ background: c.hex }} />
+                        <div>
+                          <p className="text-[12px] text-[#f5f5f5]">{c.name}</p>
+                          <p className="text-[11px] text-[#8a8a8a]">{c.hex}</p>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ) : null}
+              )
+            })()}
           </>
         )}
       </div>
