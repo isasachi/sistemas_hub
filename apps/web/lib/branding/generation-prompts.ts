@@ -10,9 +10,10 @@
  * PROMPT en lenguaje natural, uno por artefacto, en orden:
  *
  *   1. LOGO (`buildLogoPrompt`) — mark limpio, aislado, en la identidad del estilo.
- *   2. ETIQUETA (`buildLabelPrompt`) — recibe el LOGO ya generado + el WIREFRAME
- *      de layout + los pares de contraste, e inserta el logo en la etiqueta con
- *      equilibrio y legibilidad (nunca perdido ni chocando con el fondo).
+ *   2. ETIQUETA (`buildLabelPrompt`) — construye su PROPIO wordmark tipográfico
+ *      con el nombre de producto (el logo de marca es un asset aparte y NO se
+ *      inserta acá). Recibe el WIREFRAME de layout y los pares de contraste.
+ *      Adjuntos: [refDeIdentidad, wireframe] — el wireframe SIEMPRE último.
  *   3. MOCKUP (`buildMockupPrompt`) — recibe la ETIQUETA ya generada y la aplica
  *      fotorrealista sobre el envase.
  *
@@ -28,9 +29,8 @@
  *  - Gemini renderiza texto con fidelidad: por eso el nombre de marca se pasa
  *    ENTRECOMILLADO y con instrucción de ortografía exacta.
  *  - Gemini es fuerte usando imágenes de referencia y respeta el ORDEN de los
- *    adjuntos: la etiqueta adjunta `[logo, ...identityRefs, wireframe]` (logo
- *    PRIMERO — "the first attached image is the logo"; wireframe ÚLTIMO —
- *    "the final attached image is a skeleton"); el mockup adjunta
+ *    adjuntos: la etiqueta adjunta `[...identityRefs, wireframe]` (wireframe
+ *    ÚLTIMO — "the final attached image is a skeleton"); el mockup adjunta
  *    `[label, ...identityRefs]` (etiqueta PRIMERO). Ver `effective-preset.ts`.
  * ---------------------------------------------------------------------------
  */
@@ -89,6 +89,42 @@ function exactText(label: string, value?: string): string {
   return ` Render the ${label} exactly as "${value}", spelled correctly.`;
 }
 
+/**
+ * El bloque que le dice a Gemini QUÉ hacer con la imagen de referencia adjunta.
+ *
+ * Es la única diferencia entre las dos formas de usar una plantilla:
+ *  - `sameProduct` → el producto del usuario ES el de la referencia: se clona
+ *    la composición y sólo cambian marca, copy y paleta.
+ *  - si no → se traspasa el LENGUAJE de diseño a otra anatomía de producto.
+ *
+ * En las dos ramas se exige UN elemento distintivo propio, para que el
+ * resultado sea la marca del usuario y no una copia de la referencia.
+ */
+export function referenceBlock(brief: BrandBrief): string {
+  const signature =
+    `Introduce ONE distinctive signature element of your own — a graphic mark, a rule, a compositional device — ` +
+    `derived from the brand "${brief.brandName}"${brief.descriptor ? ` and its positioning "${brief.descriptor}"` : ''}, ` +
+    `so the result is recognisably its own brand and not a copy of the reference.`;
+
+  if (brief.sameProduct) {
+    return (
+      `The attached reference image IS this same product. Reproduce its composition, packaging structure, ` +
+      `front-panel layout, materials, finish and lighting faithfully. Change ONLY: the wordmark to ` +
+      `"${brief.productName?.trim() || brief.brandName}", the copy text, and the colour palette to the one specified above. ` +
+      signature
+    );
+  }
+
+  const from = brief.referenceProductType ?? 'the reference product';
+  return (
+    `The attached reference image is a DIFFERENT product (${from}). Transfer its design LANGUAGE to ` +
+    `a ${brief.productType}${brief.containerType ? ` in a ${brief.containerType}` : ''}: keep its typographic system, ` +
+    `its palette logic, its layout grammar, its material treatment and its lighting — but re-architect them for the ` +
+    `real anatomy of a ${brief.productType}. Do not copy the silhouette, the container or the physical form of the reference. ` +
+    signature
+  );
+}
+
 /* --------------------------------------------------------------------------
  * Pipeline SECUENCIAL (2026-07): logo → etiqueta (con el logo insertado) →
  * mockup (con la etiqueta aplicada). Cada paso es una generación independiente
@@ -110,10 +146,11 @@ export function buildLogoPrompt(brief: BrandBrief, dna: BrandDna): string {
   ].filter(Boolean).join(" ");
 }
 
-// Etiqueta plana: recibe el LOGO como primera imagen adjunta y el WIREFRAME
-// como última (ver effective-preset.ts identityRefParts/wireframeRefParts) —
-// inserta el logo generado con equilibrio y legibilidad, siguiendo el
-// esqueleto de layout y los pares de contraste legal del estilo.
+// Etiqueta plana: construye su PROPIO wordmark tipográfico (el logo de marca
+// es un asset aparte y NO se inserta acá). Recibe [...identityRefs, wireframe]
+// (ver effective-preset.ts identityRefParts/wireframeRefParts, wireframe
+// SIEMPRE último), siguiendo el esqueleto de layout y los pares de contraste
+// legal del estilo.
 export function buildLabelPrompt(brief: BrandBrief, dna: BrandDna, layout: ExtractedLayout): string {
   // El wordmark HERO de la etiqueta es el NOMBRE DE PRODUCTO (no el logo de marca,
   // que es un asset aparte). Si no hay nombre de producto, cae al de marca.
@@ -123,9 +160,10 @@ export function buildLabelPrompt(brief: BrandBrief, dna: BrandDna, layout: Extra
     dna.styleBlock,
     paletteLine(dna, brief),
     contrastToPrompt(dna),
+    referenceBlock(brief),
     `Build a fresh TYPOGRAPHIC WORDMARK for the product name "${wordmark}" — set it in the label's own typography and place it at: ${layout.logoPlacement}. It is the hero of the panel: give it prominence, balanced contrast, scale and spacing so it reads clearly and is NEVER lost in the artwork or clashing with what is behind it. Do NOT paste or reuse a separate logo mark — construct the wordmark from the product name as the style and this layout require.`,
     layoutToPrompt(layout),
-    `Text hierarchy: the product name "${wordmark}"${brief.descriptor ? `, the descriptor "${brief.descriptor}"` : ""}${brief.tagline ? `, the tagline "${brief.tagline}"` : ""}, plus small realistic legal / net-weight / ingredient microtext (microtext MUST use the highest-contrast pairing).`,
+    `Text hierarchy: the product name "${wordmark}"${brief.descriptor ? `, the descriptor "${brief.descriptor}"` : ""}${brief.tagline ? `, the tagline "${brief.tagline}"` : ""}, plus small realistic microtext of the kind a real ${brief.productType} package carries — legal notices, net weight or capacity, technical specs, materials or contents as appropriate for this product (the microtext MUST use the highest-contrast pairing).`,
     `The FINAL attached image is a LAYOUT SKELETON, not a style reference. Follow its spatial arrangement of zones exactly; ignore its colors and treat it as structure only.`,
     exactText("product name", wordmark).trim(),
     exactText("tagline", brief.tagline).trim(),
@@ -142,6 +180,7 @@ export function buildMockupPrompt(brief: BrandBrief, dna: BrandDna): string {
     `Create a photorealistic product mockup: a ${container} for the product "${wordmark}", a ${brief.productType}.`,
     `The FIRST attached image is the finished FLAT LABEL artwork — apply it realistically onto the ${container} surface with correct label wrapping, material and finish (${dna.materials.join(", ")}), preserving the label's design, wordmark, colors and text EXACTLY.`,
     dna.styleBlock,
+    referenceBlock(brief),
     `Studio product photography: ${dna.lighting}. Scene: ${dna.composition}. Mood: ${dna.mood.join(", ")}. Realistic reflections, soft contact shadow, believable depth of field.`,
     exactText("product name on the packaging", wordmark).trim(),
     `Avoid: ${dna.avoid.join(", ")}. High-resolution, professional commercial quality, sharp focus, no watermark, no stray or misspelled text.`,

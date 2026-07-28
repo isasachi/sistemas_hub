@@ -28,7 +28,7 @@ export function contrastToPrompt(p: BrandDna): string {
     .map(x => `${x.text.name} (${x.text.hex}) on ${x.on.name} (${x.on.hex})`)
     .join('; ')
   return `Legal text/background pairings: ${legal}. `
-    + `The ingredient and net-weight microtext MUST use the highest-contrast pairing available: `
+    + `The legal and specification microtext MUST use the highest-contrast pairing available: `
     + `${best.text.name} (${best.text.hex}) on ${best.on.name} (${best.on.hex}). `
     + `Never place text on a gradient, chrome, photographic or high-detail area.`
 }
