@@ -5,7 +5,7 @@
  * SECUENCIAL, migración jul 2026: identidad fija de 7 estilos, sin overrides).
  *
  * Fusiona BrandBrief (lo que aporta el usuario) + BrandDna (el ADN visual,
- * ya resuelto por `resolveEffectivePreset`) + el esqueleto de layout
+ * ya resuelto por `resolveBrandDna`, en `dna-source.ts`) + el esqueleto de layout
  * (`label-layouts.ts`) + los pares de contraste legal (`contrast.ts`) en un
  * PROMPT en lenguaje natural, uno por artefacto, en orden:
  *
@@ -18,10 +18,10 @@
  *      fotorrealista sobre el envase.
  *
  * Cada paso es una generación independiente y sus artefactos se encadenan
- * pasándose como IMAGEN adjunta (ver `effective-preset.ts` `imageRefParts`),
- * no re-derivados de un compuesto — así el logo insertado en la etiqueta es
- * pixel-el-mismo que el logo standalone, y la etiqueta aplicada al mockup es
- * pixel-la-misma que la etiqueta standalone.
+ * pasándose como IMAGEN adjunta (ver `dna-source.ts` `imageRefParts`),
+ * no re-derivados de un compuesto — así la etiqueta aplicada al mockup es
+ * pixel-la-misma que la etiqueta standalone. (El logo NO sigue este camino:
+ * es un asset aparte que nunca se inserta en la etiqueta — ver punto 2.)
  *
  * Por qué así:
  *  - Nano Banana / Gemini responde mejor a lenguaje natural descriptivo que a
@@ -31,7 +31,7 @@
  *  - Gemini es fuerte usando imágenes de referencia y respeta el ORDEN de los
  *    adjuntos: la etiqueta adjunta `[...identityRefs, wireframe]` (wireframe
  *    ÚLTIMO — "the final attached image is a skeleton"); el mockup adjunta
- *    `[label, ...identityRefs]` (etiqueta PRIMERO). Ver `effective-preset.ts`.
+ *    `[label, ...identityRefs]` (etiqueta PRIMERO). Ver `dna-source.ts`.
  * ---------------------------------------------------------------------------
  */
 
@@ -98,30 +98,80 @@ function exactText(label: string, value?: string): string {
  *  - si no → se traspasa el LENGUAJE de diseño a otra anatomía de producto.
  *
  * En las dos ramas se exige UN elemento distintivo propio, para que el
- * resultado sea la marca del usuario y no una copia de la referencia.
+ * resultado sea la marca del usuario y no una copia de la referencia. Ese
+ * elemento se enumera como el ÚLTIMO cambio pedido (nunca como una frase
+ * suelta después de un "ONLY" ya cerrado) — así no compite con la lista de
+ * cambios permitidos, es parte de ella.
+ *
+ * `target` separa QUÉ propiedades de la referencia se piden reproducir/
+ * traspasar, porque `buildLabelPrompt` y `buildMockupPrompt` son pedidos de
+ * naturaleza distinta: la etiqueta es arte plano 2D (composición, jerarquía
+ * tipográfica, color) — nada de "finish"/"lighting"/"materials", que son
+ * propiedades fotográficas del mockup, no del arte imprimible. El mockup, al
+ * revés, ya recibe el wordmark y la paleta resueltos por la etiqueta (primera
+ * imagen adjunta) — la foto de referencia ahí gobierna sólo la forma física
+ * del envase y la fotografía (materiales, finish, luz, escena, encuadre).
  */
-export function referenceBlock(brief: BrandBrief): string {
-  const signature =
-    `Introduce ONE distinctive signature element of your own — a graphic mark, a rule, a compositional device — ` +
-    `derived from the brand "${brief.brandName}"${brief.descriptor ? ` and its positioning "${brief.descriptor}"` : ''}, ` +
-    `so the result is recognisably its own brand and not a copy of the reference.`;
+export function referenceBlock(brief: BrandBrief, target: 'label' | 'mockup'): string {
+  const wordmark = brief.productName?.trim() || brief.brandName;
+  // Sólo el CONTENIDO del elemento distintivo (sin verbo ni cierre) — se
+  // enmarca distinto según el target: en 'label' se pide INTRODUCIRLO (recién
+  // se está diseñando); en 'mockup' ya viene resuelto por la etiqueta (primera
+  // imagen adjunta) y sólo se pide PRESERVARLO al aplicar el envase.
+  const element =
+    `a graphic mark, a rule, a compositional device derived from the brand "${brief.brandName}"` +
+    `${brief.descriptor ? ` and its positioning "${brief.descriptor}"` : ''}`;
+
+  // En 'label' la foto de referencia es la única imagen adjunta que no es el
+  // wireframe, así que puede nombrarse directo. En 'mockup' hay DOS imágenes
+  // adjuntas (la etiqueta ya generada, primero, y esta foto, después) y el
+  // prompt del mockup ya llama a la etiqueta "the FIRST attached image" — así
+  // que acá hay que nombrar la foto como la adjunta DISTINTA y POSTERIOR, o
+  // "wordmark"/"colour" quedan gobernados por dos instrucciones a la vez.
+  const referenceSubject =
+    target === 'label'
+      ? `The attached reference photograph`
+      : `The reference photograph attached AFTER the label (a separate, later image)`;
 
   if (brief.sameProduct) {
+    if (target === 'label') {
+      return (
+        `${referenceSubject} IS this same product. Reproduce its composition, front-panel layout, typographic ` +
+        `hierarchy, graphic devices and colour placement faithfully. Change: the wordmark to "${wordmark}", the ` +
+        `copy text, the colour palette to the one specified above, and — as the one deliberate departure from the ` +
+        `reference — ONE distinctive signature element of your own (${element}), so the result is recognisably ` +
+        `its own brand and not a copy of the reference. Everything not listed above must match the reference.`
+      );
+    }
     return (
-      `The attached reference image IS this same product. Reproduce its composition, packaging structure, ` +
-      `front-panel layout, materials, finish and lighting faithfully. Change ONLY: the wordmark to ` +
-      `"${brief.productName?.trim() || brief.brandName}", the copy text, and the colour palette to the one specified above. ` +
-      signature
+      `${referenceSubject} IS this same product's packaging. Its wordmark and colours are already fixed by the ` +
+      `FIRST attached image (the finished label), so this reference governs only the physical container and the ` +
+      `photography: reproduce its packaging structure, form, materials, finish, lighting, scene and camera ` +
+      `framing faithfully, preserving on the packaging the label's ONE distinctive signature element (${element}) ` +
+      `exactly as applied, so the physical result still reads as this brand and not a copy of the reference.`
     );
   }
 
   const from = brief.referenceProductType ?? 'the reference product';
+  if (target === 'label') {
+    return (
+      `${referenceSubject} is a DIFFERENT product (${from}). Transfer its design LANGUAGE to ` +
+      `a ${brief.productType}${brief.containerType ? ` in a ${brief.containerType}` : ''}: keep its typographic ` +
+      `system, its palette logic and its layout grammar, but re-architect them for the real anatomy of a ` +
+      `${brief.productType}'s front panel — and, as the one deliberate departure from that transferred language, ` +
+      `introduce ONE distinctive signature element of your own (${element}), so the result is recognisably its ` +
+      `own brand and not a copy of the reference. Do not copy the silhouette, the container or the physical form ` +
+      `of the reference.`
+    );
+  }
   return (
-    `The attached reference image is a DIFFERENT product (${from}). Transfer its design LANGUAGE to ` +
-    `a ${brief.productType}${brief.containerType ? ` in a ${brief.containerType}` : ''}: keep its typographic system, ` +
-    `its palette logic, its layout grammar, its material treatment and its lighting — but re-architect them for the ` +
-    `real anatomy of a ${brief.productType}. Do not copy the silhouette, the container or the physical form of the reference. ` +
-    signature
+    `${referenceSubject} is a DIFFERENT product (${from}). Its wordmark and colours are already fixed by the ` +
+    `FIRST attached image (the finished label), so this reference governs only the physical container and the ` +
+    `photography: transfer its material treatment, finish, lighting, scene and camera framing to ` +
+    `a ${brief.productType}${brief.containerType ? ` in a ${brief.containerType}` : ''}, re-architected for the ` +
+    `real physical form of a ${brief.productType}, preserving on the packaging the label's ONE distinctive ` +
+    `signature element (${element}) exactly as applied. Do not copy the silhouette, the container or the ` +
+    `physical form of the reference.`
   );
 }
 
@@ -148,7 +198,7 @@ export function buildLogoPrompt(brief: BrandBrief, dna: BrandDna): string {
 
 // Etiqueta plana: construye su PROPIO wordmark tipográfico (el logo de marca
 // es un asset aparte y NO se inserta acá). Recibe [...identityRefs, wireframe]
-// (ver effective-preset.ts identityRefParts/wireframeRefParts, wireframe
+// (ver dna-source.ts identityRefParts/wireframeRefParts, wireframe
 // SIEMPRE último), siguiendo el esqueleto de layout y los pares de contraste
 // legal del estilo.
 export function buildLabelPrompt(brief: BrandBrief, dna: BrandDna, layout: ExtractedLayout): string {
@@ -160,7 +210,7 @@ export function buildLabelPrompt(brief: BrandBrief, dna: BrandDna, layout: Extra
     dna.styleBlock,
     paletteLine(dna, brief),
     contrastToPrompt(dna),
-    referenceBlock(brief),
+    referenceBlock(brief, 'label'),
     `Build a fresh TYPOGRAPHIC WORDMARK for the product name "${wordmark}" — set it in the label's own typography and place it at: ${layout.logoPlacement}. It is the hero of the panel: give it prominence, balanced contrast, scale and spacing so it reads clearly and is NEVER lost in the artwork or clashing with what is behind it. Do NOT paste or reuse a separate logo mark — construct the wordmark from the product name as the style and this layout require.`,
     layoutToPrompt(layout),
     `Text hierarchy: the product name "${wordmark}"${brief.descriptor ? `, the descriptor "${brief.descriptor}"` : ""}${brief.tagline ? `, the tagline "${brief.tagline}"` : ""}, plus small realistic microtext of the kind a real ${brief.productType} package carries — legal notices, net weight or capacity, technical specs, materials or contents as appropriate for this product (the microtext MUST use the highest-contrast pairing).`,
@@ -180,7 +230,7 @@ export function buildMockupPrompt(brief: BrandBrief, dna: BrandDna): string {
     `Create a photorealistic product mockup: a ${container} for the product "${wordmark}", a ${brief.productType}.`,
     `The FIRST attached image is the finished FLAT LABEL artwork — apply it realistically onto the ${container} surface with correct label wrapping, material and finish (${dna.materials.join(", ")}), preserving the label's design, wordmark, colors and text EXACTLY.`,
     dna.styleBlock,
-    referenceBlock(brief),
+    referenceBlock(brief, 'mockup'),
     `Studio product photography: ${dna.lighting}. Scene: ${dna.composition}. Mood: ${dna.mood.join(", ")}. Realistic reflections, soft contact shadow, believable depth of field.`,
     exactText("product name on the packaging", wordmark).trim(),
     `Avoid: ${dna.avoid.join(", ")}. High-resolution, professional commercial quality, sharp focus, no watermark, no stray or misspelled text.`,

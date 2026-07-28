@@ -28,22 +28,86 @@ const base: BrandBrief = {
 
 describe('referenceBlock', () => {
   it('en la rama de clonado manda reproducir y limitar los cambios', () => {
-    const s = referenceBlock({ ...base, sameProduct: true })
+    const s = referenceBlock({ ...base, sameProduct: true }, 'label')
     expect(s).toMatch(/same product/i)
     expect(s).toMatch(/reproduce/i)
     expect(s).not.toMatch(/DIFFERENT product/i)
   })
 
   it('en la rama de traspaso nombra el producto del usuario y prohíbe copiar la silueta', () => {
-    const s = referenceBlock({ ...base, sameProduct: false, productType: 'rodillera', referenceProductType: 'serum facial' })
+    const s = referenceBlock({ ...base, sameProduct: false, productType: 'rodillera', referenceProductType: 'serum facial' }, 'label')
     expect(s).toMatch(/DIFFERENT product/i)
     expect(s).toContain('rodillera')
     expect(s).toMatch(/do not copy the silhouette/i)
   })
 
   it('siempre pide un sello distintivo propio, en las dos ramas', () => {
-    expect(referenceBlock({ ...base, sameProduct: true })).toMatch(/ONE distinctive signature/i)
-    expect(referenceBlock({ ...base, sameProduct: false })).toMatch(/ONE distinctive signature/i)
+    expect(referenceBlock({ ...base, sameProduct: true }, 'label')).toMatch(/ONE distinctive signature/i)
+    expect(referenceBlock({ ...base, sameProduct: false }, 'label')).toMatch(/ONE distinctive signature/i)
+  })
+
+  // --- Fix round 1 (findings 1-3 del review de Task 8) ---------------------
+
+  it('finding 1: en la rama de clonado, el sello NO queda excluido por un "Change ONLY" cerrado', () => {
+    // El bug original: "Change ONLY: wordmark, copy, paleta." seguido de una
+    // frase aparte "Introduce ONE distinctive signature..." — el sello es un
+    // cuarto tipo de cambio que "ONLY" ya cerró. El modelo tiene que elegir
+    // entre honrar "ONLY" (y perder el sello) o violar el "ONLY" explícito.
+    for (const target of ['label', 'mockup'] as const) {
+      const s = referenceBlock({ ...base, sameProduct: true }, target)
+      expect(s).not.toMatch(/change only/i)
+    }
+  })
+
+  it('finding 1 (traspaso): tampoco cierra los cambios con un "ONLY" que excluya el sello', () => {
+    for (const target of ['label', 'mockup'] as const) {
+      const s = referenceBlock({ ...base, sameProduct: false, productType: 'rodillera', referenceProductType: 'serum facial' }, target)
+      expect(s).not.toMatch(/change only/i)
+    }
+  })
+
+  it('finding 2: target label no pide lighting/finish/materials (es arte plano, no foto)', () => {
+    const cloneLabel = referenceBlock({ ...base, sameProduct: true }, 'label')
+    expect(cloneLabel).not.toMatch(/lighting/i)
+    expect(cloneLabel).not.toMatch(/\bfinish\b/i)
+    expect(cloneLabel).not.toMatch(/materials?/i)
+
+    const transferLabel = referenceBlock({ ...base, sameProduct: false, productType: 'rodillera', referenceProductType: 'serum facial' }, 'label')
+    expect(transferLabel).not.toMatch(/lighting/i)
+    expect(transferLabel).not.toMatch(/\bfinish\b/i)
+    expect(transferLabel).not.toMatch(/materials?/i)
+  })
+
+  it('finding 2: target mockup SÍ pide lighting/finish/materials (propiedades físicas/foto)', () => {
+    const cloneMockup = referenceBlock({ ...base, sameProduct: true }, 'mockup')
+    expect(cloneMockup).toMatch(/lighting/i)
+    expect(cloneMockup).toMatch(/\bfinish\b/i)
+    expect(cloneMockup).toMatch(/materials?/i)
+
+    const transferMockup = referenceBlock({ ...base, sameProduct: false, productType: 'rodillera', referenceProductType: 'serum facial' }, 'mockup')
+    expect(transferMockup).toMatch(/lighting/i)
+    expect(transferMockup).toMatch(/materials?/i)
+  })
+
+  it('finding 3: target mockup nombra la referencia como FOTO distinta de la etiqueta ya adjunta', () => {
+    for (const brief of [
+      { ...base, sameProduct: true },
+      { ...base, sameProduct: false, productType: 'rodillera', referenceProductType: 'serum facial' },
+    ] as const) {
+      const s = referenceBlock(brief, 'mockup')
+      // No debe usar la frase ambigua que también podría leerse como la
+      // primera imagen adjunta (la etiqueta).
+      expect(s).not.toMatch(/the attached reference image/i)
+      expect(s).toMatch(/photograph/i)
+      // Debe dejar explícito que wordmark/color ya están resueltos por la
+      // etiqueta (primera imagen adjunta), para no pelear con esa instrucción.
+      expect(s).toMatch(/already fixed by the first attached image/i)
+    }
+  })
+
+  it('finding 3: target label sigue refiriéndose directo a la foto de referencia (única adjunta no-wireframe)', () => {
+    const s = referenceBlock({ ...base, sameProduct: true }, 'label')
+    expect(s).toMatch(/reference photograph/i)
   })
 })
 
