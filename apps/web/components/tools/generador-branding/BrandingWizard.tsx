@@ -39,7 +39,7 @@ async function patchSession(sessionId: string, patch: Record<string, unknown>) {
 export default function BrandingWizard() {
   const {
     step, sessionId, sessionError, startNewSession, hydrateFromSession, setStep, setRegens,
-    sourceMode, templateId, categoryId, setTemplate, setUploaded,
+    sourceMode, templateId, setTemplate, setUploaded,
     brandName, productType,
     mockupUrl, goToGuide,
   } = useBrandingStore()

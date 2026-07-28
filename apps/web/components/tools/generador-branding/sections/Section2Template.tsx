@@ -7,6 +7,7 @@ import {
   CATEGORIES, TEMPLATES, matchTemplates, isSameProduct, templateImageUrl, getTemplate,
 } from '@/lib/branding/templates'
 import { TEMPLATE_DNA } from '@/lib/branding/template-dna'
+import { seedSelection, selectTemplate } from '@/lib/branding/template-selection'
 import type { ExtractedStyle, PaletteColor } from '@/lib/branding/types'
 
 export interface AnalyzeResult {
@@ -27,10 +28,13 @@ export default function Section2Template({
   onTemplateChosen: (templateId: string, paletteVariant: number) => void
   onUploaded: (r: AnalyzeResult) => void
 }) {
-  const { categoryId, productType } = useBrandingStore()
+  const { categoryId, productType, templateId: storedTemplateId, paletteVariant: storedPaletteVariant } = useBrandingStore()
   const [tab, setTab] = useState<'template' | 'upload'>('template')
-  const [picked, setPicked] = useState<string | null>(null)
-  const [variant, setVariant] = useState(0)
+  // Sembrado desde el store: reabrir este paso remonta el componente (ver
+  // AccordionSection), así que sin esto la plantilla/paleta ya elegidas se
+  // pierden de vista — y re-tocar la misma tarjeta pisaría la paleta en 0.
+  const [selection, setSelection] = useState(() => seedSelection(storedTemplateId, storedPaletteVariant))
+  const { picked, variant } = selection
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -106,7 +110,8 @@ export default function Section2Template({
                       <button
                         key={t.id}
                         type="button"
-                        onClick={() => { setPicked(t.id); setVariant(0) }}
+                        onClick={() => setSelection((s) => selectTemplate(s, t.id))}
+                        aria-pressed={isPicked}
                         className={`group relative rounded-xl overflow-hidden border text-left transition-colors cursor-pointer bg-[#141414] ${
                           isPicked
                             ? 'border-[#ff9c4d]'
@@ -115,8 +120,10 @@ export default function Section2Template({
                               : 'border-white/[0.08] hover:border-white/[0.2]'
                         }`}
                       >
+                        {/* alt="": decorativa — el nombre del producto ya está en el texto
+                            visible debajo, que es lo que compone el nombre accesible del botón. */}
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={templateImageUrl(t.id)} alt={t.productType} className="aspect-[3/4] w-full object-cover" loading="lazy" />
+                        <img src={templateImageUrl(t.id)} alt="" className="aspect-[3/4] w-full object-cover" loading="lazy" />
                         <div className="p-2.5">
                           <div className="text-[12px] font-semibold text-[#f5f5f5]">{t.productType}</div>
                           {matches && (
@@ -151,7 +158,9 @@ export default function Section2Template({
               <button
                 key={i}
                 type="button"
-                onClick={() => setVariant(i)}
+                onClick={() => setSelection((s) => ({ ...s, variant: i }))}
+                aria-label={`Paleta ${i + 1}`}
+                aria-pressed={variant === i}
                 className={`flex gap-1 p-1.5 rounded-lg border transition-colors cursor-pointer ${
                   variant === i ? 'border-[#ff9c4d]' : 'border-white/[0.1] hover:border-white/[0.25]'
                 }`}
