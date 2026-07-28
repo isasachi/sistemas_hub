@@ -1,18 +1,17 @@
 import { callStructured } from '@/lib/gemini'
 import { ExtractedStyleSchema, type ExtractedStyle } from './types'
-import { STYLE_PRESETS } from './style-presets'
-import type { StylePreset } from './style-presets'
 import type { Part } from '@google/genai'
 
-// Modo B: analiza el producto/packaging que subió el usuario y lo convierte en
-// un EXTRACTOR de identidad completa (paleta, tipografía, materiales,
-// composición, lighting, mood, motifs, styleBlock) Y de composición (layout:
-// anatomy de zonas top-to-bottom, logoPlacement, dataBlock, margins,
-// alignment, avoidLayout) — no un clasificador. `bestFitStyleId` se conserva
-// solo como referencia/fallback (el más cercano de los 7 presets fijos).
-// gemini-2.5-flash (web, $0-rule OK).
-
-const STYLE_IDS = Object.keys(STYLE_PRESETS)
+// EXTRACTOR de identidad completa (paleta, tipografía, materiales, composición,
+// lighting, mood, motifs, styleBlock) Y de composición (layout: anatomy de zonas
+// top-to-bottom, logoPlacement, dataBlock, margins, alignment, avoidLayout) a
+// partir de UNA imagen de producto.
+//
+// Lo usan los dos caminos del sistema: el script de seed sobre las 30 fotos de
+// plantilla (offline, commiteado) y la ruta `analyze` sobre la referencia que
+// sube el usuario (en vivo). gemini-2.5-flash (web, regla de costo OK).
+//
+// Ya NO clasifica contra un catálogo cerrado de estilos: ese catálogo no existe.
 
 const EXTRACT_SYSTEM = [
   'You are a surgical brand-design analyst. You are shown ONE product/packaging image.',
@@ -37,9 +36,8 @@ const EXTRACT_SYSTEM = [
   'layout.alignment: the dominant alignment axis — one of left, centered, justified.',
   'layout.avoidLayout: layout anti-patterns to avoid.',
   '',
-  `bestFitStyleId: additionally choose the ONE id from this closed catalog whose aesthetic is closest, purely as a fallback reference — [${STYLE_IDS.join(', ')}]. Never invent an id.`,
-  'essence: one line describing the visual soul of the UPLOADED image.',
-  'keywords: 3-8 short descriptors of the uploaded image aesthetic.',
+  'essence: one line describing the visual soul of the image.',
+  'keywords: 3-8 short descriptors of the image aesthetic.',
 ].join(' ')
 
 export async function analyzeUploadedStyle(
@@ -50,8 +48,5 @@ export async function analyzeUploadedStyle(
     { inlineData: { mimeType, data: base64 } },
     { text: 'Analyze this product image and extract its identity + layout per the schema.' },
   ]
-  const result = await callStructured('branding_extracted_style', ExtractedStyleSchema, parts, 3, EXTRACT_SYSTEM)
-  // Blindaje: si el modelo devolvió un id fuera del catálogo, caer al primero.
-  if (!(STYLE_PRESETS as Record<string, StylePreset>)[result.bestFitStyleId]) result.bestFitStyleId = STYLE_IDS[0]
-  return result
+  return callStructured('branding_extracted_style', ExtractedStyleSchema, parts, 3, EXTRACT_SYSTEM)
 }

@@ -23,7 +23,6 @@ const base = (o: Partial<BrandingSessionResponse>): BrandingSessionResponse =>
      source_mode: 'preset', image_analysis: null, ...o } as BrandingSessionResponse)
 
 const extractedFixture = (bestFitId: string): ExtractedStyle => ({
-  bestFitStyleId: bestFitId,
   essence: 'E',
   keywords: ['k'],
   palette: [

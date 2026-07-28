@@ -117,7 +117,6 @@ export const ExtractedLayoutSchema = z.object({
 export type ExtractedLayout = z.infer<typeof ExtractedLayoutSchema>
 
 export const ExtractedStyleSchema = z.object({
-  bestFitStyleId: z.string(),
   essence: z.string(),
   keywords: z.array(z.string()),
   palette: z.array(z.object({

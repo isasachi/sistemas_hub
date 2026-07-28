@@ -49,7 +49,6 @@ export async function POST(
 
   await updateBrandingSession(id, {
     source_mode: 'upload',
-    style_id: extracted.bestFitStyleId,
     uploaded_image_url: uploadedUrl,
     image_analysis: extracted,
     uploaded_wireframe_url: wireframeUrl,
@@ -57,8 +56,6 @@ export async function POST(
   await recordGenQuota(id, 'branding-analyze', userId)
 
   return NextResponse.json({
-    styleId: extracted.bestFitStyleId,
-    styleName: 'Tu producto',
     uploadedImageUrl: uploadedUrl,
     analysis: extracted,
   })
