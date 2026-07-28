@@ -133,3 +133,61 @@ describe('isSameProduct', () => {
     expect(isSameProduct(getTemplate('belleza/shampoo'), '10 unidades de champu')).toBe(true)
   })
 })
+
+import { hasLegalPair, buildPalettes } from '@/lib/branding/palette-variants'
+import type { PaletteColor } from '@/lib/branding/types'
+
+describe('hasLegalPair', () => {
+  it('acepta una paleta con un par texto/fondo de contraste >= 4.5:1', () => {
+    const p: PaletteColor[] = [
+      { hex: '#FFFFFF', name: 'blanco', role: 'background' },
+      { hex: '#111111', name: 'negro', role: 'primary' },
+    ]
+    expect(hasLegalPair(p)).toBe(true)
+  })
+
+  it('rechaza una paleta sin ningún par legible', () => {
+    const p: PaletteColor[] = [
+      { hex: '#FFFFFF', name: 'blanco', role: 'background' },
+      { hex: '#FAFAFA', name: 'casi blanco', role: 'primary' },
+    ]
+    expect(hasLegalPair(p)).toBe(false)
+  })
+
+  it('rechaza una paleta sin fondo ni neutral (no hay sobre qué poner texto)', () => {
+    const p: PaletteColor[] = [
+      { hex: '#111111', name: 'negro', role: 'primary' },
+      { hex: '#FF0000', name: 'rojo', role: 'accent' },
+    ]
+    expect(hasLegalPair(p)).toBe(false)
+  })
+})
+
+describe('buildPalettes', () => {
+  const original: PaletteColor[] = [
+    { hex: '#FFFFFF', name: 'blanco', role: 'background' },
+    { hex: '#111111', name: 'negro', role: 'primary' },
+  ]
+  const good: PaletteColor[] = [
+    { hex: '#F4EDE0', name: 'crema', role: 'background' },
+    { hex: '#2B2420', name: 'tinta', role: 'primary' },
+  ]
+  const bad: PaletteColor[] = [
+    { hex: '#FFFFFF', name: 'blanco', role: 'background' },
+    { hex: '#FAFAFA', name: 'casi blanco', role: 'primary' },
+  ]
+
+  it('pone la original primera y conserva las variantes válidas', () => {
+    const out = buildPalettes(original, [good, good])
+    expect(out).toHaveLength(3)
+    expect(out[0]).toEqual(original)
+  })
+
+  it('descarta las variantes que no pasan el contraste', () => {
+    expect(buildPalettes(original, [good, bad])).toHaveLength(2)
+  })
+
+  it('lanza si la paleta original misma es ilegible', () => {
+    expect(() => buildPalettes(bad, [good, good])).toThrow(/paleta original/)
+  })
+})
