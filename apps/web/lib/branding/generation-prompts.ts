@@ -4,7 +4,7 @@
  * CORE del flujo del motor de generación de marca y producto (pipeline
  * SECUENCIAL, migración jul 2026: identidad fija de 7 estilos, sin overrides).
  *
- * Fusiona BrandBrief (lo que aporta el usuario) + StylePreset (el ADN visual,
+ * Fusiona BrandBrief (lo que aporta el usuario) + BrandDna (el ADN visual,
  * ya resuelto por `resolveEffectivePreset`) + el esqueleto de layout
  * (`label-layouts.ts`) + los pares de contraste legal (`contrast.ts`) en un
  * PROMPT en lenguaje natural, uno por artefacto, en orden:
@@ -35,9 +35,10 @@
  * ---------------------------------------------------------------------------
  */
 
-import { StylePreset, paletteToText } from "./style-presets";
+import type { BrandDna, ExtractedLayout } from "./types";
+import { paletteToText, layoutToPrompt } from "./types";
+import { StylePreset } from "./style-presets";
 import { REF_MANIFEST } from "./ref-manifest";
-import { getLayout, layoutToPrompt, type LabelLayout } from "./label-layouts";
 import { contrastToPrompt } from "./contrast";
 
 /** Datos que aporta el usuario para una marca/producto concreto. */
@@ -71,8 +72,8 @@ export function attachStyleRefs(preset: StylePreset): string[] {
 }
 
 /** Bloque de paleta legible para el prompt. */
-function paletteLine(preset: StylePreset, brief: BrandBrief): string {
-  const base = `Color palette: ${paletteToText(preset.palette)}.`;
+function paletteLine(dna: BrandDna, brief: BrandBrief): string {
+  const base = `Color palette: ${paletteToText(dna.palette)}.`;
   return brief.keyColorHint
     ? `${base} Bias the palette toward ${brief.keyColorHint} while staying within the style.`
     : base;
@@ -92,16 +93,16 @@ function exactText(label: string, value?: string): string {
  * ------------------------------------------------------------------------ */
 
 // Logo aislado, en la identidad del estilo — primer artefacto de la cadena.
-export function buildLogoPrompt(brief: BrandBrief, preset: StylePreset): string {
-  const bg = preset.palette.find((c) => c.role === "background")?.name ?? "neutral";
+export function buildLogoPrompt(brief: BrandBrief, dna: BrandDna): string {
+  const bg = dna.palette.find((c) => c.role === "background")?.name ?? "neutral";
   return [
     `Design a clean, professional brand LOGO / wordmark for "${brief.brandName}", a ${brief.productType}.`,
-    preset.styleBlock,
-    `Typography: ${preset.typography.primary}; ${preset.typography.detail}.`,
-    paletteLine(preset, brief),
-    `The logo is a scalable mark — a wordmark and/or a simple emblem — legible at small sizes, presented ISOLATED and centered on a plain flat ${bg} background with generous margins. ${brief.descriptor ? `It should feel: ${brief.descriptor}.` : `Capture the mood: ${preset.mood.join(", ")}.`}`,
+    dna.styleBlock,
+    `Typography: ${dna.typography.primary}; ${dna.typography.detail}.`,
+    paletteLine(dna, brief),
+    `The logo is a scalable mark — a wordmark and/or a simple emblem — legible at small sizes, presented ISOLATED and centered on a plain flat ${bg} background with generous margins. ${brief.descriptor ? `It should feel: ${brief.descriptor}.` : `Capture the mood: ${dna.mood.join(", ")}.`}`,
     exactText("brand name", brief.brandName).trim(),
-    `Avoid: ${preset.avoid.join(", ")}. High-resolution, sharp, no watermark, no stray or misspelled text.`,
+    `Avoid: ${dna.avoid.join(", ")}. High-resolution, sharp, no watermark, no stray or misspelled text.`,
   ].filter(Boolean).join(" ");
 }
 
@@ -109,36 +110,36 @@ export function buildLogoPrompt(brief: BrandBrief, preset: StylePreset): string 
 // como última (ver effective-preset.ts identityRefParts/wireframeRefParts) —
 // inserta el logo generado con equilibrio y legibilidad, siguiendo el
 // esqueleto de layout y los pares de contraste legal del estilo.
-export function buildLabelPrompt(brief: BrandBrief, preset: StylePreset, layout: LabelLayout): string {
+export function buildLabelPrompt(brief: BrandBrief, dna: BrandDna, layout: ExtractedLayout): string {
   // El wordmark HERO de la etiqueta es el NOMBRE DE PRODUCTO (no el logo de marca,
   // que es un asset aparte). Si no hay nombre de producto, cae al de marca.
   const wordmark = brief.productName?.trim() || brief.brandName;
   return [
     `Design the FLAT front label / packaging panel artwork for the product "${wordmark}", a ${brief.productType}. This is flat 2D label artwork — front-on, NO 3D packaging, NO perspective, NO product body, NO background scene — print-ready, filling the frame.`,
-    preset.styleBlock,
-    paletteLine(preset, brief),
-    contrastToPrompt(preset),
+    dna.styleBlock,
+    paletteLine(dna, brief),
+    contrastToPrompt(dna),
     `Build a fresh TYPOGRAPHIC WORDMARK for the product name "${wordmark}" — set it in the label's own typography and place it at: ${layout.logoPlacement}. It is the hero of the panel: give it prominence, balanced contrast, scale and spacing so it reads clearly and is NEVER lost in the artwork or clashing with what is behind it. Do NOT paste or reuse a separate logo mark — construct the wordmark from the product name as the style and this layout require.`,
     layoutToPrompt(layout),
     `Text hierarchy: the product name "${wordmark}"${brief.descriptor ? `, the descriptor "${brief.descriptor}"` : ""}${brief.tagline ? `, the tagline "${brief.tagline}"` : ""}, plus small realistic legal / net-weight / ingredient microtext (microtext MUST use the highest-contrast pairing).`,
     `The FINAL attached image is a LAYOUT SKELETON, not a style reference. Follow its spatial arrangement of zones exactly; ignore its colors and treat it as structure only.`,
     exactText("product name", wordmark).trim(),
     exactText("tagline", brief.tagline).trim(),
-    `Avoid: ${[...preset.avoid, ...layout.avoidLayout].join(", ")}. High-resolution, sharp, no watermark, no stray or misspelled text.`,
+    `Avoid: ${[...dna.avoid, ...layout.avoidLayout].join(", ")}. High-resolution, sharp, no watermark, no stray or misspelled text.`,
   ].filter(Boolean).join(" ");
 }
 
 // Mockup fotorrealista: recibe la ETIQUETA como primera imagen adjunta y la
 // aplica al envase — último artefacto de la cadena.
-export function buildMockupPrompt(brief: BrandBrief, preset: StylePreset): string {
+export function buildMockupPrompt(brief: BrandBrief, dna: BrandDna): string {
   const container = brief.containerType ?? "product packaging";
   const wordmark = brief.productName?.trim() || brief.brandName;
   return [
     `Create a photorealistic product mockup: a ${container} for the product "${wordmark}", a ${brief.productType}.`,
-    `The FIRST attached image is the finished FLAT LABEL artwork — apply it realistically onto the ${container} surface with correct label wrapping, material and finish (${preset.materials.join(", ")}), preserving the label's design, wordmark, colors and text EXACTLY.`,
-    preset.styleBlock,
-    `Studio product photography: ${preset.lighting}. Scene: ${preset.composition}. Mood: ${preset.mood.join(", ")}. Realistic reflections, soft contact shadow, believable depth of field.`,
+    `The FIRST attached image is the finished FLAT LABEL artwork — apply it realistically onto the ${container} surface with correct label wrapping, material and finish (${dna.materials.join(", ")}), preserving the label's design, wordmark, colors and text EXACTLY.`,
+    dna.styleBlock,
+    `Studio product photography: ${dna.lighting}. Scene: ${dna.composition}. Mood: ${dna.mood.join(", ")}. Realistic reflections, soft contact shadow, believable depth of field.`,
     exactText("product name on the packaging", wordmark).trim(),
-    `Avoid: ${preset.avoid.join(", ")}. High-resolution, professional commercial quality, sharp focus, no watermark, no stray or misspelled text.`,
+    `Avoid: ${dna.avoid.join(", ")}. High-resolution, professional commercial quality, sharp focus, no watermark, no stray or misspelled text.`,
   ].filter(Boolean).join(" ");
 }

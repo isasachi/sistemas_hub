@@ -17,33 +17,13 @@
  * ---------------------------------------------------------------------------
  */
 
+import type { BrandDna, PaletteColor, Typography, ColorRole } from "./types";
+export type { PaletteColor, Typography, ColorRole };
+export { paletteToText } from "./types";
+
 export type ArtifactType = "logo" | "label" | "mockup";
 
-export type ColorRole =
-  | "primary"
-  | "secondary"
-  | "accent"
-  | "neutral"
-  | "background";
-
-export interface PaletteColor {
-  hex: string;
-  name: string;
-  role: ColorRole;
-}
-
-export interface Typography {
-  /** Estilo del wordmark / titular */
-  primary: string;
-  /** Texto de apoyo (claims, ingredientes, legal) */
-  secondary: string;
-  /** Caja tipográfica dominante */
-  case: "uppercase" | "lowercase" | "title" | "mixed";
-  /** Detalle distintivo del lettering */
-  detail: string;
-}
-
-export interface StylePreset {
+export interface StylePreset extends BrandDna {
   /** id estable en kebab/lower, usado como clave del motor */
   id: string;
   /** posición 1..7 en la grid */
@@ -52,34 +32,8 @@ export interface StylePreset {
   name: string;
   /** versión de identidad; sube al afinar paleta/styleBlock de un preset en prod */
   version: number;
-  /** alma del estilo en una línea */
-  essence: string;
-  /** descriptores para inyección en prompt (orden = prioridad) */
-  keywords: string[];
-  /** paleta extraída de las referencias */
-  palette: PaletteColor[];
-  typography: Typography;
-  /** sustratos y acabados típicos */
-  materials: string[];
-  /** escena fotográfica (NO layout de etiqueta — eso vive en label-layouts.ts) */
-  composition: string;
-  /** iluminación para renders y mockups */
-  lighting: string;
-  /** estados emocionales que evoca */
-  mood: string[];
-  /** recursos gráficos recurrentes */
-  motifs: string[];
-  /** anti-patrones estilísticos: qué NO debe aparecer (layout vive en LabelLayout.avoidLayout) */
-  avoid: string[];
-  /** párrafo natural listo para inyectar en Gemini/Nano Banana */
-  styleBlock: string;
   /** carpeta de imágenes de referencia (para adjuntar como style refs) */
   referenceFolder: string;
-}
-
-/** Une nombre + hex de la paleta en un fragmento de texto para prompts. */
-export function paletteToText(palette: PaletteColor[]): string {
-  return palette.map((c) => `${c.name} (${c.hex}, ${c.role})`).join(", ");
 }
 
 export const STYLE_PRESETS = {

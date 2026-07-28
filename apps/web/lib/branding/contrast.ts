@@ -1,4 +1,4 @@
-import type { PaletteColor, StylePreset } from './style-presets'
+import type { PaletteColor, BrandDna } from './types'
 
 function relativeLuminance(hex: string): number {
   const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255)
@@ -10,7 +10,9 @@ export function contrastRatio(a: string, b: string): number {
   return (l1 + 0.05) / (l2 + 0.05)
 }
 export interface TextPair { text: PaletteColor; on: PaletteColor; ratio: number }
-export function legalTextPairs(p: StylePreset, min = 4.5): TextPair[] {
+// Sólo mira la paleta: aceptar el subconjunto permite validar una paleta suelta
+// (ver palette-variants.ts) sin fabricar un ADN completo alrededor.
+export function legalTextPairs(p: Pick<BrandDna, 'palette'>, min = 4.5): TextPair[] {
   const bgs = p.palette.filter(c => c.role === 'background' || c.role === 'neutral')
   const fgs = p.palette.filter(c => c.role !== 'background')
   return bgs.flatMap(on => fgs
@@ -18,7 +20,7 @@ export function legalTextPairs(p: StylePreset, min = 4.5): TextPair[] {
     .filter(x => x.ratio >= min))
     .sort((a, b) => b.ratio - a.ratio)
 }
-export function contrastToPrompt(p: StylePreset): string {
+export function contrastToPrompt(p: BrandDna): string {
   const pairs = legalTextPairs(p)
   if (!pairs.length) return ''
   const best = pairs[0]

@@ -17,20 +17,9 @@
  * ---------------------------------------------------------------------------
  */
 
-export interface LabelLayout {
-  /** Zonas de arriba a abajo. El ORDEN es fijo dentro del estilo. */
-  anatomy: string[]
-  /** Posición y escala del logo. Regla dura, no sugerencia. */
-  logoPlacement: string
-  /** Dónde vive ingredientes + peso neto + legal. */
-  dataBlock: string
-  /** Aire mínimo, como % del ancho del panel. */
-  margins: string
-  /** Eje de alineación dominante del sistema. */
-  alignment: 'left' | 'centered' | 'justified'
-  /** Anti-patrones de LAYOUT (se concatenan al `avoid` estilístico del preset). */
-  avoidLayout: string[]
-}
+import type { LabelLayout } from './types'
+export type { LabelLayout }
+export { layoutToPrompt } from './types'
 
 export const LABEL_LAYOUTS: Record<string, LabelLayout> = {
   /* Ref: plantillas de etiqueta apotecario/vintage. La constante es el MARCO:
@@ -225,14 +214,4 @@ export function getLayout(styleId: string): LabelLayout {
     )
   }
   return l
-}
-
-/** Bloque de layout listo para inyectar en el prompt del mockup compuesto. */
-export function layoutToPrompt(l: LabelLayout): string {
-  return [
-    `Front panel layout — follow this spatial structure exactly, top to bottom: ${l.anatomy.join('; ')}.`,
-    `Logo placement: ${l.logoPlacement}.`,
-    `Product data block: ${l.dataBlock}.`,
-    `Margins: ${l.margins}. Dominant alignment: ${l.alignment}.`,
-  ].join(' ')
 }

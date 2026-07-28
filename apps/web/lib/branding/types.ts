@@ -1,5 +1,55 @@
 import { z } from 'zod'
 
+// ─── ADN de marca ───────────────────────────────────────────────────────────
+// El subconjunto estructural que consumen contrast.ts y generation-prompts.ts.
+// Lo satisfacen tanto los presets fijos (legado) como cualquier ExtractedStyle,
+// así que los constructores de prompt no necesitan saber de dónde vino el ADN.
+
+export type ColorRole = 'primary' | 'secondary' | 'accent' | 'neutral' | 'background'
+
+export interface PaletteColor {
+  hex: string
+  name: string
+  role: ColorRole
+}
+
+export interface Typography {
+  /** Estilo del wordmark / titular */
+  primary: string
+  /** Texto de apoyo (claims, ingredientes, legal) */
+  secondary: string
+  /** Caja tipográfica dominante */
+  case: 'uppercase' | 'lowercase' | 'title' | 'mixed'
+  /** Detalle distintivo del lettering */
+  detail: string
+}
+
+export interface BrandDna {
+  /** alma del estilo en una línea */
+  essence: string
+  /** descriptores para inyección en prompt (orden = prioridad) */
+  keywords: string[]
+  palette: PaletteColor[]
+  typography: Typography
+  /** sustratos y acabados típicos */
+  materials: string[]
+  /** escena fotográfica (NO layout de etiqueta — eso vive en ExtractedLayout) */
+  composition: string
+  /** iluminación para renders y mockups */
+  lighting: string
+  mood: string[]
+  motifs: string[]
+  /** anti-patrones estilísticos (los de layout viven en ExtractedLayout.avoidLayout) */
+  avoid: string[]
+  /** párrafo natural listo para inyectar en Gemini */
+  styleBlock: string
+}
+
+/** Une nombre + hex de la paleta en un fragmento de texto para prompts. */
+export function paletteToText(palette: PaletteColor[]): string {
+  return palette.map((c) => `${c.name} (${c.hex}, ${c.role})`).join(', ')
+}
+
 // ─── Etiqueta: datos estructurados ──────────────────────────────────────────
 
 export interface LabelData {
@@ -54,8 +104,8 @@ export interface BrandingSessionResponse {
 // ─── Modo B (upload): estilo + layout extraídos de la imagen del usuario ──────
 // Migración: modo upload es un EXTRACTOR de identidad completa (paleta,
 // tipografía, styleBlock...) Y composición (layout) — no un clasificador. El
-// `layout` tiene la MISMA forma que `LabelLayout` (label-layouts.ts) y se usa
-// directo como tal (ver effective-preset.ts `resolveEffectiveLayout`).
+// `layout` tiene la MISMA forma que `LabelLayout` (alias de este mismo archivo,
+// ver más abajo) y se usa directo como tal (ver effective-preset.ts `resolveEffectiveLayout`).
 export const ExtractedLayoutSchema = z.object({
   anatomy: z.array(z.string()).min(3),
   logoPlacement: z.string(),
@@ -91,3 +141,20 @@ export const ExtractedStyleSchema = z.object({
   layout: ExtractedLayoutSchema,
 })
 export type ExtractedStyle = z.infer<typeof ExtractedStyleSchema>
+
+/**
+ * `ExtractedLayout` y el viejo `LabelLayout` (label-layouts.ts) son campo por
+ * campo el mismo objeto. Este alias existe para que los consumidores del viejo
+ * nombre sigan compilando mientras dura la migración; se retira en la limpieza.
+ */
+export type LabelLayout = ExtractedLayout
+
+/** Bloque de layout listo para inyectar en el prompt. */
+export function layoutToPrompt(l: ExtractedLayout): string {
+  return [
+    `Front panel layout — follow this spatial structure exactly, top to bottom: ${l.anatomy.join('; ')}.`,
+    `Logo placement: ${l.logoPlacement}.`,
+    `Product data block: ${l.dataBlock}.`,
+    `Margins: ${l.margins}. Dominant alignment: ${l.alignment}.`,
+  ].join(' ')
+}

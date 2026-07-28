@@ -13,7 +13,7 @@
  * borde rectangular interior; si mencionan "a sangre"/"sin marco" se omite.
  * ---------------------------------------------------------------------------
  */
-import type { LabelLayout } from './label-layouts'
+import type { LabelLayout } from './types'
 
 const W = 800
 const H = 1000

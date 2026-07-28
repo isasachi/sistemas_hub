@@ -1,7 +1,7 @@
 import { getPreset } from './style-presets'
 import type { StylePreset } from './style-presets'
 import { REF_MANIFEST } from './ref-manifest'
-import type { LabelLayout } from './label-layouts'
+import type { LabelLayout } from './types'
 import { getLayout } from './label-layouts'
 import type { BrandingSessionResponse, ExtractedStyle } from './types'
 import { fetchAsBase64 } from '@/lib/storage'
