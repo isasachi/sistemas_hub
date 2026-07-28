@@ -245,3 +245,42 @@ describe('los builders inyectan el bloque de referencia', () => {
     expect(p).not.toMatch(/ingredient/i)
   })
 })
+
+// --- Fix round 2 (mockup): el modelo re-tipografía en vez de warpear el label --
+//
+// Defecto real de probe (Task 9, dos de tres generaciones): en `transfer-mockup.png`
+// "PROTECCIÓN" salió como "PROTTECIÓN" (doble T) mientras el label fuente estaba
+// bien escrito; en `clone2-mockup.png` una banda entera de microtexto salió
+// MIRROREADA ("ГЛЕЯО FACIAL CON YA ЯИIL C"). El wordmark grande sobrevive intacto
+// en ambos casos — la firma del defecto es re-LETTERING del panel al componer
+// sobre el envase, no un warp geométrico del arte adjunto. La frase vieja
+// ("preserving the label's design, wordmark, colors and text EXACTLY" + "no
+// stray or misspelled text") no nombra la operación prohibida (re-dibujar texto)
+// ni el mirroring.
+
+describe('fix round 2: el mockup exige WARPEAR el label como imagen, no re-tipografiarlo', () => {
+  it('nombra la operación permitida (warp/wrap geométrico) y prohíbe re-tipografiar', () => {
+    const p = buildMockupPrompt(base, DNA)
+    expect(p).toMatch(/warp/i)
+    expect(p).toMatch(/re-typeset|re-letter|re-flow/i)
+  })
+
+  it('exige que cada carácter, incluido el microtexto legal/de ingredientes más chico, quede idéntico', () => {
+    const p = buildMockupPrompt(base, DNA)
+    expect(p).toMatch(/every character/i)
+    expect(p).toMatch(/legal.{0,20}ingredient|ingredient.{0,20}legal/i)
+  })
+
+  it('prohíbe explícitamente texto espejado/invertido/al revés', () => {
+    const p = buildMockupPrompt(base, DNA)
+    expect(p).toMatch(/mirror/i)
+    expect(p).toMatch(/revers/i)
+    expect(p).toMatch(/upside-down/i)
+  })
+
+  it('cuando la curvatura haría el texto ilegible, pide rotar el envase o dejar el texto fuera de cuadro — nunca re-dibujarlo', () => {
+    const p = buildMockupPrompt(base, DNA)
+    expect(p).toMatch(/rotate the package/i)
+    expect(p).toMatch(/out of view|fall out/i)
+  })
+})

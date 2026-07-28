@@ -287,6 +287,19 @@ export function buildMockupPrompt(brief: BrandBrief, dna: BrandDna): string {
   return [
     `Create a photorealistic product mockup: a ${container} for the product "${wordmark}", a ${brief.productType}.`,
     `The FIRST attached image is the finished FLAT LABEL artwork — apply it realistically onto the ${container} surface with correct label wrapping, material and finish (${dna.materials.join(", ")}), preserving the label's design, wordmark, colors and text EXACTLY.`,
+    // Bug real de probe (Task 9, dos de tres generaciones): con la frase de
+    // arriba nomás ("preserving ... text EXACTLY" + el "no stray or misspelled
+    // text" del cierre), el modelo re-TIPOGRAFIÓ el microtexto del panel al
+    // componerlo sobre el envase en vez de warpear el pixel del label adjunto:
+    // "PROTECCIÓN" salió "PROTTECIÓN" en un mockup, y en otro una banda entera
+    // de microtexto salió ESPEJADA. El wordmark grande sobrevivió intacto en
+    // los dos casos — la firma es re-lettering a escala chica, no un fallo de
+    // ortografía genérico, así que ninguna de las dos frases viejas lo nombra:
+    // ni dicen que re-dibujar texto es la operación prohibida, ni nombran el
+    // mirroring. Esta línea lo hace explícito y da la salida correcta cuando
+    // la curvatura del envase haría el texto ilegible (rotar o dejarlo fuera
+    // de cuadro, nunca re-dibujarlo).
+    `The label is finished artwork, not a draft to re-create: geometrically warp and wrap that exact image onto the surface — do not re-typeset, re-letter or re-flow any of its text. Every character must remain identical to the label, including the smallest legal and ingredient microtext. Text must never appear mirrored, reversed, upside-down or otherwise transformed beyond the natural perspective and curvature of the surface it sits on. Where curvature would make text illegible, rotate the package slightly or let that text fall out of view around the curve — never re-draw it.`,
     dna.styleBlock,
     referenceBlock(brief, 'mockup'),
     `Studio product photography: ${dna.lighting}. ${sceneLine(brief, dna, container)} Mood: ${dna.mood.join(", ")}. Realistic reflections, soft contact shadow, believable depth of field.`,
