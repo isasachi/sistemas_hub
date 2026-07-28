@@ -198,6 +198,11 @@ import { anatomyBandSum } from '@/lib/branding/wireframe'
 describe('integridad del manifiesto de ADN', () => {
   const entries = Object.entries(TEMPLATE_DNA)
 
+  it('las 30 plantillas del catálogo tienen ADN sembrado', () => {
+    const faltan = TEMPLATES.filter((t) => !TEMPLATE_DNA[t.id]).map((t) => t.id)
+    expect(faltan).toEqual([])
+  })
+
   it('no tiene entradas huérfanas: cada id existe en el catálogo', () => {
     const ids = new Set(TEMPLATES.map((t) => t.id))
     for (const [id] of entries) expect(ids.has(id)).toBe(true)
