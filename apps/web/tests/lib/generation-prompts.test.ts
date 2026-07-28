@@ -109,6 +109,72 @@ describe('referenceBlock', () => {
     const s = referenceBlock({ ...base, sameProduct: true }, 'label')
     expect(s).toMatch(/reference photograph/i)
   })
+
+  it('el cierre de la rama clonado x label fija que todo lo no listado debe igualar la referencia', () => {
+    // Pinnea la frase reescrita en el fix round 1, hasta ahora sólo verificada
+    // por prosa en el reporte, no por un assert.
+    const s = referenceBlock({ ...base, sameProduct: true }, 'label')
+    expect(s).toContain('Everything not listed above must match the reference.')
+  })
+})
+
+// --- Fix round 2 (findings 1-2 del re-review de Task 8) ---------------------
+//
+// Ambos findings son sobre una SEGUNDA instrucción, en otro lugar del prompt
+// ENSAMBLADO, que contradice a `referenceBlock` — por eso estos tests llaman
+// a `buildLabelPrompt`/`buildMockupPrompt` completos, no a `referenceBlock`
+// aislado (el conflicto sólo es visible en el texto ensamblado).
+
+describe('fix round 2: precedencia wireframe vs. referencia (finding 1)', () => {
+  it('el prompt de etiqueta declara que el wireframe gobierna la geometría de zonas y la referencia todo lo demás', () => {
+    for (const brief of [
+      { ...base, sameProduct: true },
+      { ...base, sameProduct: false, productType: 'rodillera', referenceProductType: 'serum facial' },
+    ] as const) {
+      const p = buildLabelPrompt(brief, DNA, LAYOUT)
+      // Precedencia explícita: el skeleton manda en geometría/proporción de
+      // zonas; la referencia manda en todo lo demás (tipografía, grafismos,
+      // color, textura). Sin esto, dos imágenes adjuntas reclaman autoridad
+      // sobre el layout sin que quede dicho cuál gana.
+      expect(p).toMatch(/LAYOUT SKELETON/)
+      expect(p).toMatch(/governs the panel's zone geometry/i)
+      expect(p).toMatch(/reference photograph governs everything else/i)
+    }
+  })
+})
+
+describe('fix round 2: el mockup de traspaso no reafirma la escena de la referencia (finding 2)', () => {
+  const transferBrief: BrandBrief = {
+    ...base,
+    sameProduct: false,
+    productType: 'rodillera',
+    referenceProductType: 'serum facial',
+    containerType: 'blíster',
+  }
+
+  it('el mockup de traspaso NO contiene la aserción desnuda "Scene: <composición de la referencia>"', () => {
+    const p = buildMockupPrompt(transferBrief, DNA)
+    // Negativo: la escena literal del producto de referencia (DNA.composition
+    // = "frasco centrado", el frasco del serum) no debe aparecer como "Scene:"
+    // desnudo para una rodillera — sería reafirmar la forma física prohibida
+    // tres frases antes por referenceBlock ("Do not copy ... the physical form").
+    expect(p).not.toContain(`Scene: ${DNA.composition}.`)
+    expect(p).not.toMatch(/Scene: frasco centrado\b/i)
+  })
+
+  it('el mockup de traspaso SÍ pide adoptar el lenguaje de puesta en escena de la referencia', () => {
+    const p = buildMockupPrompt(transferBrief, DNA)
+    expect(p).toMatch(/staging/i)
+    // Debe seguir prohibiendo copiar la forma/objeto de la referencia (ya lo
+    // hace referenceBlock) — este test confirma que la línea Scene: no lo
+    // contradice reintroduciendo el objeto de la referencia.
+    expect(p).toMatch(/do not copy the silhouette/i)
+  })
+
+  it('el mockup de CLONADO sí conserva "Scene: <composición>" (redundante pero no conflictivo)', () => {
+    const p = buildMockupPrompt({ ...base, sameProduct: true }, DNA)
+    expect(p).toContain(`Scene: ${DNA.composition}.`)
+  })
 })
 
 describe('los builders inyectan el bloque de referencia', () => {

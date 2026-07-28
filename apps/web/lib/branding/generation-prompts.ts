@@ -214,11 +214,47 @@ export function buildLabelPrompt(brief: BrandBrief, dna: BrandDna, layout: Extra
     `Build a fresh TYPOGRAPHIC WORDMARK for the product name "${wordmark}" — set it in the label's own typography and place it at: ${layout.logoPlacement}. It is the hero of the panel: give it prominence, balanced contrast, scale and spacing so it reads clearly and is NEVER lost in the artwork or clashing with what is behind it. Do NOT paste or reuse a separate logo mark — construct the wordmark from the product name as the style and this layout require.`,
     layoutToPrompt(layout),
     `Text hierarchy: the product name "${wordmark}"${brief.descriptor ? `, the descriptor "${brief.descriptor}"` : ""}${brief.tagline ? `, the tagline "${brief.tagline}"` : ""}, plus small realistic microtext of the kind a real ${brief.productType} package carries — legal notices, net weight or capacity, technical specs, materials or contents as appropriate for this product (the microtext MUST use the highest-contrast pairing).`,
-    `The FINAL attached image is a LAYOUT SKELETON, not a style reference. Follow its spatial arrangement of zones exactly; ignore its colors and treat it as structure only.`,
+    // Dos imágenes adjuntas hablan del layout del panel: la foto de referencia
+    // (arriba, vía referenceBlock — "front-panel layout"/"layout grammar") y
+    // este skeleton. No compiten: para una plantilla el skeleton se renderiza
+    // determinísticamente desde el MISMO layout extraído de esa foto (ver
+    // seed-branding-templates.ts `renderWireframePng(dna.layout, ...)`), así
+    // que son dos vistas de una sola fuente — pero sin una precedencia
+    // explícita el modelo no sabe cuál manda en caso de lectura ambigua. El
+    // skeleton gobierna la geometría/proporción de zonas; la referencia
+    // gobierna todo lo demás del panel (tratamiento tipográfico, grafismos,
+    // color, textura).
+    `The FINAL attached image is a LAYOUT SKELETON, not a style reference: it governs the panel's zone geometry and proportion only — follow its spatial arrangement of zones exactly, ignore its colors, treat it as structure only. The reference photograph governs everything else about the panel: typographic treatment, graphic devices, colour placement and texture.`,
     exactText("product name", wordmark).trim(),
     exactText("tagline", brief.tagline).trim(),
     `Avoid: ${[...dna.avoid, ...layout.avoidLayout].join(", ")}. High-resolution, sharp, no watermark, no stray or misspelled text.`,
   ].filter(Boolean).join(" ");
+}
+
+/**
+ * La línea `Scene:` para el mockup. `dna.composition` es la escena FOTOGRÁFICA
+ * del producto de la referencia (ver `style-extract.ts`: "ONLY the photographic
+ * scene — product placement, backdrop, surface"), no una propiedad de puesta
+ * en escena abstracta. En `sameProduct` describe al mismo producto que se está
+ * clonando — reproducirla es correcto y consistente con `referenceBlock`.
+ * En traspaso describiría el envase AJENO de la referencia (p.ej. "frosted
+ * glass dropper bottle centred on a pale surface" para una rodillera), lo que
+ * reafirmaría justo lo que `referenceBlock` acaba de prohibir tres frases
+ * antes ("Do not copy ... the physical form of the reference"). Ahí la
+ * composición de la referencia se pide como LENGUAJE de puesta en escena a
+ * imitar (superficie, fondo, ángulo, distancia, espacio negativo) — el modelo
+ * ve la foto adjunta y puede leer esas cualidades directo de ella sin que el
+ * texto necesite nombrar el objeto de la referencia.
+ */
+function sceneLine(brief: BrandBrief, dna: BrandDna, container: string): string {
+  if (brief.sameProduct) {
+    return `Scene: ${dna.composition}.`;
+  }
+  return (
+    `Scene: stage the real ${container} using the reference photograph's staging and framing language — ` +
+    `surface, backdrop, camera angle, distance and negative space — rather than reproducing the reference's ` +
+    `own product or its arrangement.`
+  );
 }
 
 // Mockup fotorrealista: recibe la ETIQUETA como primera imagen adjunta y la
@@ -231,7 +267,7 @@ export function buildMockupPrompt(brief: BrandBrief, dna: BrandDna): string {
     `The FIRST attached image is the finished FLAT LABEL artwork — apply it realistically onto the ${container} surface with correct label wrapping, material and finish (${dna.materials.join(", ")}), preserving the label's design, wordmark, colors and text EXACTLY.`,
     dna.styleBlock,
     referenceBlock(brief, 'mockup'),
-    `Studio product photography: ${dna.lighting}. Scene: ${dna.composition}. Mood: ${dna.mood.join(", ")}. Realistic reflections, soft contact shadow, believable depth of field.`,
+    `Studio product photography: ${dna.lighting}. ${sceneLine(brief, dna, container)} Mood: ${dna.mood.join(", ")}. Realistic reflections, soft contact shadow, believable depth of field.`,
     exactText("product name on the packaging", wordmark).trim(),
     `Avoid: ${dna.avoid.join(", ")}. High-resolution, professional commercial quality, sharp focus, no watermark, no stray or misspelled text.`,
   ].filter(Boolean).join(" ");
