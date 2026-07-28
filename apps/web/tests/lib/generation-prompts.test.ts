@@ -284,3 +284,82 @@ describe('fix round 2: el mockup exige WARPEAR el label como imagen, no re-tipog
     expect(p).toMatch(/out of view|fall out/i)
   })
 })
+
+// --- Fix round 3 (findings 1-2 del re-review de Task 9) --------------------
+//
+// Finding 1: `brandLine` citaba `layout.logoPlacement` textual dentro de una
+// frase que también dice "clearly smaller in scale" — falso en el catálogo
+// real (belleza/aceite-capilar: logoPlacement = "Centered prominently ...
+// moderate size", que se autocontradice con "smaller" en la misma oración).
+// Finding 2: en el caso degenerado (sin product name) el prompt describía el
+// MISMO string como hero ("give it prominence...") Y como "small, supporting"
+// a la vez, más dos exactText casi idénticos para ese string.
+
+describe('fix round 3: brandLine no cita layout.logoPlacement (finding 1)', () => {
+  it('con un logoPlacement que se autocontradice con "smaller" (caso real: belleza/aceite-capilar), la frase del brand no lo cita', () => {
+    // Texto real de belleza/aceite-capilar en template-dna.ts — "prominently"
+    // y "moderate size" contradicen "clearly smaller in scale" si se citan
+    // dentro de la misma oración del brand.
+    const contradictingLayout: ExtractedLayout = {
+      ...LAYOUT,
+      logoPlacement: 'Centered prominently on the front panel, occupying a moderate size relative to the overall design.',
+    }
+    const p = buildLabelPrompt(base, DNA, contradictingLayout)
+    // La geometría sigue llegando vía layoutToPrompt ("Logo placement: ...")
+    // — separamos el prompt en lo que viene ANTES de esa línea (la frase del
+    // brand y el resto de la composición previa) y confirmamos que "prominently"/
+    // "moderate" sólo aparecen DESPUÉS, dentro de esa línea de geometría.
+    const logoPlacementLineIdx = p.indexOf('Logo placement:')
+    expect(logoPlacementLineIdx).toBeGreaterThan(-1)
+    const beforeGeometryLine = p.slice(0, logoPlacementLineIdx)
+    expect(beforeGeometryLine).not.toMatch(/prominently/i)
+    expect(beforeGeometryLine).not.toMatch(/moderate/i)
+    // La geometría exacta se sigue entregando, sólo que no en la frase del brand.
+    expect(p).toContain('Logo placement: Centered prominently on the front panel, occupying a moderate size relative to the overall design.')
+  })
+
+  it('la relación brand/hero se describe sin depender del contenido de logoPlacement', () => {
+    const p = buildLabelPrompt(base, DNA, LAYOUT)
+    expect(p).toMatch(/brand name "Lavíca"/)
+    expect(p).toMatch(/smaller/i)
+    // No debe quedar ningún rastro literal del valor de logoPlacement de este
+    // fixture ("centrado arriba") dentro del prompt salvo en la línea de
+    // `layoutToPrompt` misma.
+    const occurrences = p.split('centrado arriba').length - 1
+    expect(occurrences).toBe(1) // sólo la línea "Logo placement: centrado arriba."
+  })
+})
+
+describe('fix round 3: caso degenerado sin contradicción hero vs. small/supporting (finding 2)', () => {
+  const degenerateBrief: BrandBrief = { ...base, productName: undefined }
+
+  it('no describe el brand como "small, supporting" cuando ES el hero', () => {
+    const p = buildLabelPrompt(degenerateBrief, DNA, LAYOUT)
+    expect(p).not.toMatch(/small, supporting/i)
+  })
+
+  it('sigue afirmando que ese string es el hero del panel', () => {
+    const p = buildLabelPrompt(degenerateBrief, DNA, LAYOUT)
+    expect(p).toMatch(/hero of the panel/i)
+  })
+
+  it('emite UNA sola instrucción de ortografía exacta para el string (no dos con etiquetas distintas)', () => {
+    const p = buildLabelPrompt(degenerateBrief, DNA, LAYOUT)
+    const spellingMatches = p.match(/Render the [a-z ]+ exactly as "Lavíca"/gi) ?? []
+    expect(spellingMatches.length).toBe(1)
+  })
+})
+
+describe('fix round 3: el caso NO degenerado sigue ubicando el brand como elemento distinto y más chico', () => {
+  it('mantiene dos instrucciones de ortografía separadas, una por nombre', () => {
+    const p = buildLabelPrompt(base, DNA, LAYOUT) // brandName 'Lavíca' !== productName 'Nama'
+    expect(p).toContain('Render the brand name exactly as "Lavíca", spelled correctly.')
+    expect(p).toContain('Render the product name exactly as "Nama", spelled correctly.')
+  })
+
+  it('el brand sigue descrito como elemento subordinado, más chico y separado del hero', () => {
+    const p = buildLabelPrompt(base, DNA, LAYOUT)
+    expect(p).toMatch(/smaller/i)
+    expect(p).toMatch(/subordinate|secondary/i)
+  })
+})
