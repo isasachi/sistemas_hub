@@ -177,6 +177,53 @@ describe('fix round 2: el mockup de traspaso no reafirma la escena de la referen
   })
 })
 
+// --- Fix round 1 (probe end-to-end, defecto real: "Aurelia" ausente) -------
+//
+// El probe de Task 9 generó belleza/serum-facial con brand_name="Aurelia",
+// product_name="Lúmina": la etiqueta puso "Lúmina" tanto en la banda de marca
+// chica de arriba como en el wordmark hero grande — "Aurelia" no apareció en
+// ningún punto del panel, sólo en el logo (asset aparte). La causa: el prompt
+// nunca mencionaba brief.brandName como elemento del panel.
+
+describe('fix round 1: el brand name es un elemento propio de la etiqueta, distinto del hero', () => {
+  const brandBrief: BrandBrief = { ...base, brandName: 'Aurelia', productName: 'Lúmina' }
+
+  it('declara el brand name como su propio elemento, con instrucción de escala menor que el hero', () => {
+    const p = buildLabelPrompt(brandBrief, DNA, LAYOUT)
+    // No basta con que "Aurelia" aparezca de rebote dentro del sello distintivo
+    // de referenceBlock ("derived from the brand ...") — tiene que tener su
+    // propia instrucción de texto, formulada como "brand name".
+    expect(p).toMatch(/brand name "Aurelia"/)
+    expect(p).toMatch(/smaller/i)
+  })
+
+  it('el hero sigue siendo el nombre de producto, no el de marca', () => {
+    const p = buildLabelPrompt(brandBrief, DNA, LAYOUT)
+    expect(p).toMatch(/product name "Lúmina"/)
+    expect(p).toMatch(/hero/i)
+  })
+
+  it('el brand name recibe la misma instrucción de ortografía exacta (exactText) que el producto', () => {
+    const p = buildLabelPrompt(brandBrief, DNA, LAYOUT)
+    expect(p).toContain('Render the brand name exactly as "Aurelia", spelled correctly.')
+  })
+
+  it('prohíbe pegar el logo aparte tanto para el hero como para el brand name (dos instancias)', () => {
+    const p = buildLabelPrompt(brandBrief, DNA, LAYOUT)
+    const matches = p.match(/logo mark/gi) ?? []
+    expect(matches.length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('guard de caso degenerado: sin product name, el wordmark hero ES el brand name y no se duplica', () => {
+    const noProductBrief: BrandBrief = { ...base, brandName: 'Aurelia', productName: undefined }
+    const p = buildLabelPrompt(noProductBrief, DNA, LAYOUT)
+    // El fallback preexistente sigue vigente: el hero cae al brand name.
+    expect(p).toMatch(/product name "Aurelia"/)
+    // Pero el prompt debe decir EXPLÍCITAMENTE que no se imprima dos veces.
+    expect(p).toMatch(/do not print the brand name a second time|one instance of the word is enough/i)
+  })
+})
+
 describe('los builders inyectan el bloque de referencia', () => {
   it('buildLabelPrompt lo incluye', () => {
     expect(buildLabelPrompt(base, DNA, LAYOUT)).toContain('ONE distinctive signature')

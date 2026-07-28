@@ -203,17 +203,38 @@ export function buildLogoPrompt(brief: BrandBrief, dna: BrandDna): string {
 // legal del estilo.
 export function buildLabelPrompt(brief: BrandBrief, dna: BrandDna, layout: ExtractedLayout): string {
   // El wordmark HERO de la etiqueta es el NOMBRE DE PRODUCTO (no el logo de marca,
-  // que es un asset aparte). Si no hay nombre de producto, cae al de marca.
+  // que es un asset aparte). Si no hay nombre de producto, cae al de marca — ahí
+  // el brand name Y el hero wordmark son el MISMO string (`brandIsHero` abajo):
+  // no hay dos elementos que ubicar en el panel, hay uno solo.
   const wordmark = brief.productName?.trim() || brief.brandName;
+  // Bug real de probe (Task 9, belleza/serum-facial, brand="Aurelia" product=
+  // "Lúmina"): el prompt nunca mencionaba brief.brandName como elemento del
+  // panel — sólo establecía el hero (nombre de producto) y prohibía pegar el
+  // logo aparte. El modelo, viendo una banda de marca chica en la referencia Y
+  // en el wireframe pero sin instrucción de qué poner ahí, la llenaba con el
+  // único nombre prominente que tenía — el de producto, duplicado — y la marca
+  // desaparecía del envase por completo (sólo sobrevivía en el logo, un asset
+  // aparte que nunca se inserta acá). `layout.logoPlacement` describe, en las
+  // seis plantillas del catálogo, siempre la MISMA franja chica de arriba que
+  // `anatomy[0]` ("banda de marca ~10-20%") — es la ubicación de la MARCA, no
+  // la del hero (que vive más abajo, en la zona de producto, mucho más grande
+  // per anatomy[1]). Por eso acá se reasigna: el hero ya no se ancla a esa
+  // franja (su escala/posición la gobierna `layoutToPrompt` vía la lista de
+  // anatomy completa), la marca sí.
+  const brandIsHero = wordmark === brief.brandName;
+  const brandLine = brandIsHero
+    ? `The brand name "${brief.brandName}" IS this hero wordmark — no separate product name was given, so do NOT print the brand name a second time anywhere else on the panel; one instance of the word is enough.`
+    : `Separately from the hero, set the brand name "${brief.brandName}" as its own smaller element, placed at: ${layout.logoPlacement} — this is the panel's brand band, distinct from and above the hero wordmark. Set it in the identity's supporting typography (not the hero's own), clearly smaller in scale, so it reads as a second, subordinate element rather than a repeat of the hero. Do NOT paste or reuse the separate logo mark image for this — build it as fresh TYPE, the same way the hero is built from the product name.`;
   return [
     `Design the FLAT front label / packaging panel artwork for the product "${wordmark}", a ${brief.productType}. This is flat 2D label artwork — front-on, NO 3D packaging, NO perspective, NO product body, NO background scene — print-ready, filling the frame.`,
     dna.styleBlock,
     paletteLine(dna, brief),
     contrastToPrompt(dna),
     referenceBlock(brief, 'label'),
-    `Build a fresh TYPOGRAPHIC WORDMARK for the product name "${wordmark}" — set it in the label's own typography and place it at: ${layout.logoPlacement}. It is the hero of the panel: give it prominence, balanced contrast, scale and spacing so it reads clearly and is NEVER lost in the artwork or clashing with what is behind it. Do NOT paste or reuse a separate logo mark — construct the wordmark from the product name as the style and this layout require.`,
+    `Build a fresh TYPOGRAPHIC WORDMARK for the product name "${wordmark}" — set it in the label's own typography. It is the hero of the panel: give it prominence, balanced contrast, scale and spacing so it reads clearly and is NEVER lost in the artwork or clashing with what is behind it. Do NOT paste or reuse a separate logo mark — construct the wordmark from the product name as the style and this layout require.`,
+    brandLine,
     layoutToPrompt(layout),
-    `Text hierarchy: the product name "${wordmark}"${brief.descriptor ? `, the descriptor "${brief.descriptor}"` : ""}${brief.tagline ? `, the tagline "${brief.tagline}"` : ""}, plus small realistic microtext of the kind a real ${brief.productType} package carries — legal notices, net weight or capacity, technical specs, materials or contents as appropriate for this product (the microtext MUST use the highest-contrast pairing).`,
+    `Text hierarchy: the brand name "${brief.brandName}" (small, supporting${brandIsHero ? ", same word as the hero — shown once" : ", above the hero"})${brandIsHero ? "" : `, the product name "${wordmark}" (hero)`}${brief.descriptor ? `, the descriptor "${brief.descriptor}"` : ""}${brief.tagline ? `, the tagline "${brief.tagline}"` : ""}, plus small realistic microtext of the kind a real ${brief.productType} package carries — legal notices, net weight or capacity, technical specs, materials or contents as appropriate for this product (the microtext MUST use the highest-contrast pairing).`,
     // Dos imágenes adjuntas hablan del layout del panel: la foto de referencia
     // (arriba, vía referenceBlock — "front-panel layout"/"layout grammar") y
     // este skeleton. No compiten: para una plantilla el skeleton se renderiza
@@ -225,6 +246,7 @@ export function buildLabelPrompt(brief: BrandBrief, dna: BrandDna, layout: Extra
     // gobierna todo lo demás del panel (tratamiento tipográfico, grafismos,
     // color, textura).
     `The FINAL attached image is a LAYOUT SKELETON, not a style reference: it governs the panel's zone geometry and proportion only — follow its spatial arrangement of zones exactly, ignore its colors, treat it as structure only. The reference photograph governs everything else about the panel: typographic treatment, graphic devices, colour placement and texture.`,
+    exactText("brand name", brief.brandName).trim(),
     exactText("product name", wordmark).trim(),
     exactText("tagline", brief.tagline).trim(),
     `Avoid: ${[...dna.avoid, ...layout.avoidLayout].join(", ")}. High-resolution, sharp, no watermark, no stray or misspelled text.`,
