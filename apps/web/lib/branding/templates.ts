@@ -178,23 +178,29 @@ const STOPWORDS = new Set([
   'una', 'uno', 'que', 'mi', 'tu', 'su', 'and', 'the',
 ])
 
-const VOWELS = new Set(['a', 'e', 'i', 'o', 'u'])
-
 /**
- * Recorta plurales sólo en palabras largas: "serum" no debe volverse "seru".
- * "-es" sólo es marca de plural en español cuando el singular termina en
- * consonante ("colores"→"color", "papeles"→"papel"); si la letra previa es
- * vocal, "-es" es un préstamo con "-e" propia y sólo la "s" final sobra
- * ("smoothies"→"smoothie", "series"→"serie").
+ * Produce una CLAVE DE MATCHING, no un singular. No existe una regla de
+ * superficie que recupere el singular real de un plural en "-es": "colores"
+ * (singular en consonante, "color") y "aceites" (singular en "-e", "aceite")
+ * tienen exactamente la misma forma y piden el recorte contrario — no hay
+ * letra que se pueda mirar para distinguirlos, así que ni lo intentamos.
+ *
+ * En cambio, converge ambos lados (el texto del usuario y las `keywords` del
+ * catálogo) al mismo string recortando primero una "s" final y luego una "e"
+ * final: "aceites"→"aceite"→"aceit" y la keyword "aceite"→"aceit" caen en la
+ * misma clave; "colores"→"colore"→"color" y la keyword "color"→"color"
+ * también. El resultado no es una palabra real ("aceit"), pero eso no
+ * importa: sólo tiene que ser igual en ambos lados, y como `stem()` se aplica
+ * simétricamente a texto libre y a keywords, lo es.
+ *
+ * Guard: ningún recorte deja el token por debajo de 3 caracteres (protege
+ * préstamos cortos como "uv"/"usb", que además no terminan en s/e).
  */
 function stem(t: string): string {
-  if (t.length > 5 && t.endsWith('es')) {
-    const beforeEs = t[t.length - 3]
-    if (beforeEs && !VOWELS.has(beforeEs)) return t.slice(0, -2)
-    return t.slice(0, -1)
-  }
-  if (t.length > 4 && t.endsWith('s')) return t.slice(0, -1)
-  return t
+  let s = t
+  if (s.length > 3 && s.endsWith('s')) s = s.slice(0, -1)
+  if (s.length > 3 && s.endsWith('e')) s = s.slice(0, -1)
+  return s
 }
 
 /** Minúsculas, sin acentos, sin puntuación, sin stopwords, desplurarizado. */
@@ -241,12 +247,13 @@ export function matchTemplates(
  *
  * No alcanza con compartir un token cualquiera: "crema facial" y "serum facial"
  * comparten "facial" y son productos distintos. Se exige que coincida el
- * SUSTANTIVO NÚCLEO — el primer token de contenido — en alguna de las dos
- * direcciones. Del lado del catálogo, ese núcleo sólo puede venir de
- * `productType` o de `synonyms` — nunca de `keywords`, que mezcla a propósito
- * atributos/síntomas ("vitamina", "facial") con sinónimos del sustantivo, y
- * esta función es precision-first (un falso positivo clona el producto
- * equivocado).
+ * SUSTANTIVO NÚCLEO — en cualquiera de los tokens del usuario (un token
+ * inicial como "10" o "unidades" no debe tapar un núcleo más adelante) — en
+ * alguna de las dos direcciones. Del lado del catálogo, ese núcleo sólo puede
+ * venir de `productType` o de `synonyms` — nunca de `keywords`, que mezcla a
+ * propósito atributos/síntomas ("vitamina", "facial") con sinónimos del
+ * sustantivo, y esta función es precision-first (un falso positivo clona el
+ * producto equivocado).
  */
 export function isSameProduct(t: TemplateMeta, userProductType: string): boolean {
   const userTokens = normalizeTokens(userProductType)
@@ -254,7 +261,7 @@ export function isSameProduct(t: TemplateMeta, userProductType: string): boolean
   const tplHead = normalizeTokens(t.productType)[0]
   if (tplHead && userTokens.includes(tplHead)) return true
   const synonymTokens = new Set((t.synonyms ?? []).flatMap(normalizeTokens))
-  return synonymTokens.has(userTokens[0])
+  return userTokens.some((tok) => synonymTokens.has(tok))
 }
 
 /* ── Storage ───────────────────────────────────────────────────────────────── */

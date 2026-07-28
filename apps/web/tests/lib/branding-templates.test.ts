@@ -16,6 +16,13 @@ describe('normalizeTokens', () => {
     // "serum" no termina en s: no se toca
     expect(normalizeTokens('serum')).toEqual(['serum'])
   })
+
+  it('produce una clave de matching, no una palabra real, y no toca préstamos cortos', () => {
+    // "cable"→"cabl" no es una palabra en español: es la clave con la que
+    // debe converger cualquier forma plural que el stemmer produzca para el
+    // mismo concepto. "usb" no termina en s/e: pasa intacto.
+    expect(normalizeTokens('cable usb')).toEqual(['cabl', 'usb'])
+  })
 })
 
 describe('catálogo', () => {
@@ -77,6 +84,22 @@ describe('matchTemplates', () => {
     const top = matchTemplates('uv')[0]
     expect(top?.template.id).toBe('belleza/protector-solar')
   })
+
+  it('matchea "aceites capilares" (plural en -es tras consonante) contra la keyword singular "aceite"', () => {
+    const top = matchTemplates('aceites capilares')[0]
+    expect(top?.template.id).toBe('belleza/aceite-capilar')
+    // score 2: "aceites"→aceite y "capilares"→capilar deben matchear las DOS keywords,
+    // no sólo "capilar" (que por sí sola ya desambigua y esconde el bug de "aceite").
+    expect(top?.score).toBe(2)
+  })
+
+  it('matchea "soportes para celular" (plural en -es tras consonante) contra la keyword singular "soporte"', () => {
+    const top = matchTemplates('soportes para celular')[0]
+    expect(top?.template.id).toBe('celulares/tripode-para-celular')
+    // score 2: "soportes"→soporte y "celular" deben matchear las DOS keywords,
+    // no sólo "celular" (que por sí sola ya desambigua y esconde el bug de "soporte").
+    expect(top?.score).toBe(2)
+  })
 })
 
 describe('isSameProduct', () => {
@@ -104,5 +127,9 @@ describe('isSameProduct', () => {
 
   it('es verdadero para "bloqueador", sinónimo de mercado peruano de protector solar', () => {
     expect(isSameProduct(getTemplate('belleza/protector-solar'), 'bloqueador solar FPS 50')).toBe(true)
+  })
+
+  it('es verdadero cuando el sinónimo aparece en un token que no es el primero', () => {
+    expect(isSameProduct(getTemplate('belleza/shampoo'), '10 unidades de champu')).toBe(true)
   })
 })
