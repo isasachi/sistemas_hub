@@ -43,9 +43,22 @@ export function hasLegalPair(palette: PaletteColor[]): boolean {
 const EXTRAS_SYSTEM = [
   'You are a packaging design analyst. You are shown ONE product image and told its current color palette.',
   '',
-  'containerType: name the physical container or support in Spanish, concretely and briefly — e.g.',
-  '"frasco de vidrio esmerilado con gotero", "caja de cartón impresa con colgador", "doypack con ventana",',
-  '"bolsa con cabecera de cartón", "tubo plástico". Describe what you SEE, not what would be typical.',
+  'containerType: describe, in Spanish, concretely and briefly, the SPECIFIC physical container or support you',
+  'can actually see in THIS photo — never the generic or typical container for this kind of product. Write it as',
+  'ONE natural, flowing Spanish noun phrase (never a list of parts, never joined with "+" or separated by',
+  'brackets) that folds in, in this order of priority: the material, the form, the closure or dispensing',
+  'mechanism (only if one is visible), and any other distinguishing feature actually visible. Name the closure or',
+  'dispensing mechanism ONLY IF the photo actually shows one: bomba/dispensador (pump), gotero (dropper), spray,',
+  'tapa flip (flip-cap), tapa rosca (screw-cap), cierre zip (zip). Many containers — a heat-sealed sachet, a flat',
+  'pouch, a tear-open single-use pack — have NO reclosure mechanism at all: if you cannot actually see a cap,',
+  'pump, zip or similar in the image, do not invent one — say so plainly (e.g. "sellado, sin cierre visible") or',
+  'simply omit that part of the description instead of guessing. Singular/plural MUST match what is actually in',
+  'frame — say plural only if the photo shows more than one unit of that container, and keep this consistent',
+  'with what you say elsewhere about how the product is arranged. Never reuse the wording of this instruction\'s',
+  'own examples verbatim — they illustrate the SHAPE of a good answer, not a menu to pick from. Before committing',
+  'to your answer, re-check it against the pixels: if it is a bare packaging noun with no material or closure',
+  'detail attached, that is a sign you defaulted to a generic label instead of describing the photo — look again',
+  'and be specific about what is actually there.',
   '',
   'variants: propose EXACTLY 2 ALTERNATIVE color palettes for this same product.',
   'Each variant MUST keep the STRUCTURE of the original palette: the same number of colors, the same set of',
@@ -56,6 +69,32 @@ const EXTRAS_SYSTEM = [
   'Each color needs a hex in #RRGGBB form and a short descriptive name in Spanish.',
   'The two variants must be clearly different from the original and from each other.',
 ].join(' ')
+
+/**
+ * Frases que una versión anterior de `EXTRAS_SYSTEM` ofrecía como ejemplos de
+ * `containerType`. Hallazgo 2026-07-27: el modelo copiaba estos ejemplos en vez
+ * de describir la foto — 3/6 fotos de `belleza` salieron con copias literales,
+ * una de ellas ("doypack con ventana" para un sachet plano sin ventana) fabricando
+ * un envase que la foto no tiene. Sirven de guard determinista (offline, gratis):
+ * si el modelo devuelve una de estas EXACTA, es señal de copia, no de descripción.
+ */
+export const CONTAINER_TYPE_EXAMPLE_PHRASES = [
+  'frasco de vidrio esmerilado con gotero',
+  'caja de cartón impresa con colgador',
+  'doypack con ventana',
+  'bolsa con cabecera de cartón',
+  'tubo plástico',
+]
+
+function normalizeContainerType(s: string): string {
+  return s.trim().toLowerCase()
+}
+
+/** ¿`containerType` es (probablemente) una copia literal de un ejemplo que el prompt ofreció alguna vez? */
+export function isSuspectedExampleCopy(containerType: string): boolean {
+  const norm = normalizeContainerType(containerType)
+  return CONTAINER_TYPE_EXAMPLE_PHRASES.some((ex) => normalizeContainerType(ex) === norm)
+}
 
 export async function extractTemplateExtras(
   base64: string,

@@ -29,7 +29,7 @@ const EXTRACT_SYSTEM = [
   'styleBlock: one ready-to-inject English paragraph describing this packaging design language for an image-generation prompt.',
   '',
   '(B) LAYOUT (composition of the front panel):',
-  'layout.anatomy: an ordered array (top to bottom) of the visible zones/bands of the front panel. EVERY entry MUST include its height as a percentage of the panel in the literal form "(~N%)" (e.g. "banda de marca (~22%): nombre centrado"), and the percentages across all banded entries should sum to roughly 100. Non-banded structural entries (like a frame/border note) do not need a percentage.',
+  'layout.anatomy: an ordered array (top to bottom) that TILES THE ENTIRE FRONT PANEL, top edge to bottom edge, with NO GAPS and NO overlaps — every vertical region of the panel counts as an entry, including product imagery/illustration zones and any deliberately empty or negative space, not just the text blocks. EVERY entry MUST include its height as a percentage of the panel in the literal form "(~N%)" (e.g. "banda de marca (~22%): nombre centrado"). The percentages across ALL banded entries MUST sum to 100 — before answering, add your own percentages and adjust them until they do. Non-banded structural entries (like a frame/border note that is not itself a vertical region) do not need a percentage.',
   'layout.logoPlacement: where the logo/wordmark sits and its approximate scale.',
   'layout.dataBlock: where ingredients/net-weight/legal microtext live.',
   'layout.margins: minimum breathing room, as % of panel width.',

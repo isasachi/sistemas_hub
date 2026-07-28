@@ -193,6 +193,7 @@ describe('buildPalettes', () => {
 })
 
 import { TEMPLATE_DNA } from '@/lib/branding/template-dna'
+import { anatomyBandSum } from '@/lib/branding/wireframe'
 
 describe('integridad del manifiesto de ADN', () => {
   const entries = Object.entries(TEMPLATE_DNA)
@@ -214,6 +215,18 @@ describe('integridad del manifiesto de ADN', () => {
       expect(t.containerType.trim().length, id).toBeGreaterThan(0)
       expect(t.dna.layout.anatomy.length, id).toBeGreaterThanOrEqual(3)
       expect(t.dna.layout.anatomy.some((a) => /\(~\d+%\)/.test(a)), id).toBe(true)
+    }
+  })
+
+  // El layout crudo (sin normalizar) se inyecta tal cual en el prompt real de
+  // generación (`layoutToPrompt`, types.ts) — a diferencia del wireframe interno,
+  // que SÍ normaliza. Un anatomy que suma muy por debajo de 100 le pide al modelo
+  // "seguir exactamente" una estructura que sólo cubre una fracción del panel.
+  it('el anatomy bandeado de cada plantilla suma entre 85% y 115%', () => {
+    for (const [id, t] of entries) {
+      const sum = anatomyBandSum(t.dna.layout.anatomy)
+      expect(sum, `${id} · suma ${sum}%`).toBeGreaterThanOrEqual(85)
+      expect(sum, `${id} · suma ${sum}%`).toBeLessThanOrEqual(115)
     }
   })
 })

@@ -33,6 +33,17 @@ function bandPercent(entry: string): number | null {
   return m ? Number(m[1]) : null
 }
 
+/**
+ * Suma de los "(~N%)" de las entradas bandeadas de `anatomy` — la misma extracción
+ * que usa `buildWireframeSvg` para normalizar el wireframe. `layoutToPrompt` (types.ts)
+ * NO normaliza: injecta `anatomy` crudo en el prompt real de generación, así que esta
+ * suma es la señal de si el layout extraído realmente cubre el panel de arriba a abajo.
+ * Usada por el gate del script de seed y por el test de integridad del manifiesto.
+ */
+export function anatomyBandSum(anatomy: string[]): number {
+  return anatomy.reduce((s, entry) => s + (bandPercent(entry) ?? 0), 0)
+}
+
 /** 2-4 primeras palabras legibles de la entrada, limpias del "(~N%)" y de puntuación suelta. */
 function zoneLabel(entry: string): string {
   const cleaned = entry.replace(/\(~\d+%\)/g, '')
