@@ -191,3 +191,29 @@ describe('buildPalettes', () => {
     expect(() => buildPalettes(bad, [good, good])).toThrow(/paleta original/)
   })
 })
+
+import { TEMPLATE_DNA } from '@/lib/branding/template-dna'
+
+describe('integridad del manifiesto de ADN', () => {
+  const entries = Object.entries(TEMPLATE_DNA)
+
+  it('no tiene entradas huérfanas: cada id existe en el catálogo', () => {
+    const ids = new Set(TEMPLATES.map((t) => t.id))
+    for (const [id] of entries) expect(ids.has(id)).toBe(true)
+  })
+
+  it('cada plantilla sembrada tiene 3 paletas y todas son legibles', () => {
+    for (const [id, t] of entries) {
+      expect(t.palettes, id).toHaveLength(3)
+      for (const p of t.palettes) expect(hasLegalPair(p), `${id} · ${p.map((c) => c.hex).join(',')}`).toBe(true)
+    }
+  })
+
+  it('cada plantilla sembrada tiene containerType y un layout con bandas', () => {
+    for (const [id, t] of entries) {
+      expect(t.containerType.trim().length, id).toBeGreaterThan(0)
+      expect(t.dna.layout.anatomy.length, id).toBeGreaterThanOrEqual(3)
+      expect(t.dna.layout.anatomy.some((a) => /\(~\d+%\)/.test(a)), id).toBe(true)
+    }
+  })
+})
