@@ -87,7 +87,13 @@ export interface BrandingSessionResponse {
   mockup_url: string | null
   mockup_options: string[] | null
   // ── flujo por estilo (refactor 2026-07) ──
-  source_mode: 'preset' | 'upload' | null
+  source_mode: 'preset' | 'template' | 'upload' | null
+  /** modo plantilla: id del catálogo (`templates.ts`) */
+  template_id: string | null
+  /** índice de la paleta elegida dentro de las 3 del ADN */
+  palette_variant: number | null
+  /** modo upload: las paletas derivadas de la imagen del usuario */
+  palette_options: PaletteColor[][] | null
   style_id: string | null
   product_type: string | null
   descriptor: string | null
