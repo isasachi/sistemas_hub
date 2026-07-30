@@ -46,6 +46,22 @@ export const tools: Tool[] = [
       { value: "5 países", label: "validación LATAM" },
     ],
   },
+  // TEMPORAL — tool de testeo del buscador (sin reglas de validación ni LLM).
+  // Borrar esta entrada, app/(app)/tools/buscador-test, app/api/buscador-test y
+  // las tablas ph_raw_* cuando termine la prueba.
+  {
+    name: "Buscador (Test)",
+    slug: "buscador-test",
+    description:
+      "Versión de prueba: productos físicos de Meta Ads Library agrupados por cantidad de anuncios, sin filtros de validación.",
+    longDescription:
+      "Escribe un nicho y te devuelve los anunciantes de productos físicos encontrados en Meta Ads Library, agrupados en tres rangos (0-50, 50-100 y 100 a más anuncios), con el enlace directo a la biblioteca.",
+    icon: "FlaskConical",
+    stage: "investigar",
+    tag: "Test",
+    tagStyle: "utility",
+    status: "live",
+  },
   {
     name: "Generador de Anuncios",
     slug: "generador-anuncios",

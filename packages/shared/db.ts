@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import type { ProductRow, NicheRow, PePoolRow, WatchlistRow, StoredAnalysis, UrlResearchRow, UrlResearchResult } from './types'
+import type { ProductRow, NicheRow, PePoolRow, WatchlistRow, StoredAnalysis, UrlResearchRow, UrlResearchResult, RawProductRow } from './types'
+import { bucketRange, type RawBucket } from './raw-buckets'
 import { prescore } from './prescore'
 import { sanitizeJsonDeep, cleanJsonText } from './json-clean'
 
@@ -617,4 +618,88 @@ export async function failUrlResearch(
     .update({ status, error: message, processed_at: new Date().toISOString() })
     .eq('id', id)
   if (error) throw new Error(error.message)
+}
+
+// ─── BUSCADOR SIMPLE (tool de TESTEO, temporal — tablas ph_raw_*) ─────────────
+// Capa aparte a propósito: no comparte tabla ni reglas con ph_products. Todo
+// esto se borra junto con la tool (drop de ph_raw_products / ph_raw_niches).
+
+export async function getRawNicheStatus(
+  niche: string,
+): Promise<{ id: string; status: string; last_scraped: string | null } | null> {
+  const { data } = await getDb().from('ph_raw_niches').select('*').eq('id', niche).maybeSingle()
+  return (data as { id: string; status: string; last_scraped: string | null }) ?? null
+}
+
+export async function upsertRawNiche(niche: string, status: 'pending' | 'active'): Promise<void> {
+  const { error } = await getDb().from('ph_raw_niches').upsert({ id: niche, status }, { onConflict: 'id' })
+  if (error) throw new Error(error.message)
+}
+
+// Cola del scraper simple: pendientes + vencidos (PH_RAW_REFRESH_DAYS, default 7).
+export async function getRawNichesToRefresh(): Promise<string[]> {
+  const days = Number(process.env.PH_RAW_REFRESH_DAYS ?? 7)
+  const staleBefore = new Date(Date.now() - days * 86_400_000).toISOString()
+  const { data, error } = await getDb()
+    .from('ph_raw_niches')
+    .select('id')
+    .or(`status.eq.pending,and(status.eq.active,last_scraped.lt.${staleBefore})`)
+    .order('last_scraped', { ascending: true, nullsFirst: true })
+    .order('id', { ascending: true })
+  if (error) throw new Error(error.message)
+  return ((data as { id: string }[]) ?? []).map((n) => n.id)
+}
+
+export async function updateRawNicheAfterScrape(niche: string): Promise<void> {
+  const { error } = await getDb()
+    .from('ph_raw_niches')
+    .upsert({ id: niche, status: 'active', last_scraped: new Date().toISOString() }, { onConflict: 'id' })
+  if (error) throw new Error(error.message)
+}
+
+// Una fila por (nicho, anunciante). onConflict compuesto: el re-scrape actualiza
+// la entrada en vez de duplicarla con otro ad_id.
+export async function upsertRawProducts(
+  rows: Array<{
+    niche: string
+    page_id: string
+    ad_id: string | null
+    name: string | null
+    ad_count: number
+    country: string | null
+    raw_data: Record<string, unknown>
+  }>,
+): Promise<void> {
+  if (!rows.length) return
+  const now = new Date().toISOString()
+  const clean = rows.map((r) => ({
+    ...r,
+    name: r.name ? cleanJsonText(r.name) : null,
+    raw_data: sanitizeJsonDeep(r.raw_data),
+    scraped_at: now,
+  }))
+  for (let i = 0; i < clean.length; i += 200) {
+    const { error } = await getDb()
+      .from('ph_raw_products')
+      .upsert(clean.slice(i, i + 200), { onConflict: 'niche,page_id' })
+    if (error) throw new Error(error.message)
+  }
+}
+
+// Página de un rango de anuncios. Trae limit+1 para que el caller sepa si hay más.
+export async function getRawProducts(
+  niche: string,
+  bucket: RawBucket,
+  limit = 30,
+  offset = 0,
+): Promise<RawProductRow[]> {
+  const { min, max } = bucketRange(bucket)
+  let q = getDb().from('ph_raw_products').select('*').eq('niche', niche).gte('ad_count', min)
+  if (max !== null) q = q.lt('ad_count', max)
+  const { data, error } = await q
+    .order('ad_count', { ascending: false })
+    .order('page_id', { ascending: true })
+    .range(offset, offset + limit)
+  if (error) throw new Error(error.message)
+  return (data as RawProductRow[]) ?? []
 }
