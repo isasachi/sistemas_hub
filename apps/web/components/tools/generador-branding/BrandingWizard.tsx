@@ -3,18 +3,18 @@
 import { useEffect, useRef } from 'react'
 import { useBrandingStore, SESSION_KEY } from '@/store/branding'
 import type { BrandingSessionResponse } from '@/lib/branding/types'
-import { STYLE_PRESETS } from '@/lib/branding/style-presets'
-import type { StylePreset } from '@/lib/branding/style-presets'
 import { fetchRegens } from '@/lib/gen-quota-client'
 import { SessionErrorRetry } from '@/components/tools/ui/SessionErrorRetry'
 import AccordionSection from '@/components/tools/generador-anuncios/AccordionSection'
-import Section1Style, { type AnalyzeResult } from './sections/Section1Style'
-import Section2Brief from './sections/Section2Brief'
+import Section1Brief from './sections/Section1Brief'
+import Section2Template, { type AnalyzeResult } from './sections/Section2Template'
 import Section4Marca from './sections/Section4Marca'
 import Section5Guide from './sections/Section5Guide'
+import { getTemplate } from '@/lib/branding/templates'
 
-// Wizard de branding, pipeline secuencial, identidad fija (migración jul 2026). 4 secciones,
-// `step` 0..3: 0 Estilo · 1 Tu marca · 2 Marca (logo→etiqueta→mockup, auto-orquestado) · 3 Guía (final)
+// Wizard de branding, pipeline secuencial, identidad fija (migración plantillas 2026-07 —
+// el brief va primero porque la galería necesita saber qué vende el usuario para resaltar).
+// `step` 0..3: 0 Tu marca (brief) · 1 Plantilla · 2 Marca (logo→etiqueta→mockup, auto-orquestado) · 3 Guía (final)
 // `maxStep` = paso más avanzado alcanzado; una sección ya visitada queda 'completed'
 // (reabrible) aunque retrocedas, para navegar adelante/atrás sin reenviar (re-quemar LLM).
 function getStatus(sectionStep: number, currentStep: number, maxStep: number): 'locked' | 'active' | 'completed' {
@@ -39,7 +39,7 @@ async function patchSession(sessionId: string, patch: Record<string, unknown>) {
 export default function BrandingWizard() {
   const {
     step, sessionId, sessionError, startNewSession, hydrateFromSession, setStep, setRegens,
-    sourceMode, styleId, setStyle, setUploaded,
+    sourceMode, templateId, setTemplate, setUploaded,
     brandName, productType,
     mockupUrl, goToGuide,
   } = useBrandingStore()
@@ -71,19 +71,34 @@ export default function BrandingWizard() {
   // usuario reabra una sección anterior y la reenvíe (ej. edita el brief tras ya
   // tener el mockup listo). Por eso cada PATCH que avanza de paso manda
   // Math.max(maxStep.current, N) — igual que hace `select-logo` server-side.
-  async function onStyleChosen(id: string) {
+  async function onTemplateChosen(id: string, paletteVariant: number) {
     if (!sessionId) return
     await patchSession(sessionId, {
-      source_mode: 'preset',
-      style_id: id,
-      step: Math.max(maxStep.current, 1),
+      source_mode: 'template',
+      template_id: id,
+      palette_variant: paletteVariant,
+      step: Math.max(maxStep.current, 2),
     })
-    setStyle({ sourceMode: 'preset', styleId: id })
+    setTemplate({ templateId: id, paletteVariant })
   }
 
-  async function onUploaded(r: AnalyzeResult) {
-    if (sessionId) await patchSession(sessionId, { step: Math.max(maxStep.current, 1) })
-    setUploaded({ styleId: r.styleId, uploadedImageUrl: r.uploadedImageUrl, imageAnalysis: r.analysis ?? null })
+  // `palette_variant` va SIEMPRE en el patch: sin él, venir de una plantilla y
+  // cambiar a referencia subida dejaba el índice viejo en la sesión, indexando
+  // las paletas nuevas con el número de las viejas.
+  async function onUploaded(r: AnalyzeResult, paletteVariant: number) {
+    if (sessionId) {
+      await patchSession(sessionId, {
+        source_mode: 'upload',
+        palette_variant: paletteVariant,
+        step: Math.max(maxStep.current, 2),
+      })
+    }
+    setUploaded({
+      uploadedImageUrl: r.uploadedImageUrl,
+      imageAnalysis: r.analysis,
+      paletteOptions: r.paletteOptions,
+      paletteVariant,
+    })
   }
 
   // "Continuar a la guía" (botón en Section4Marca, fase `done`): el pipeline
@@ -102,10 +117,10 @@ export default function BrandingWizard() {
     )
   }
 
-  const styleSummary = styleId
-    ? sourceMode === 'upload' ? 'Producto subido' : (STYLE_PRESETS as Record<string, StylePreset>)[styleId]?.name
-    : undefined
   const briefSummary = brandName && productType ? `${brandName} · ${productType}` : undefined
+  const templateSummary = sourceMode === 'upload'
+    ? 'Referencia subida'
+    : templateId ? getTemplate(templateId).productType : undefined
 
   return (
     <div className="flex flex-col min-h-screen bg-[#0a0a0a]">
@@ -120,26 +135,16 @@ export default function BrandingWizard() {
       {/* key por sesión: una sesión nueva remonta las secciones → su useState local
           (sembrado del store) se reinicia y no arrastra datos de la sesión anterior. */}
       <div key={sessionId ?? 'new'} className="flex-1 max-w-xl mx-auto w-full px-4 py-8 flex flex-col gap-3">
-        {/* 1 — Estilo */}
-        <AccordionSection
-          index={1}
-          title="Estilo"
-          status={getStatus(0, step, maxStep.current)}
-          summary={styleSummary}
-          onReopen={() => setStep(0)}
-        >
-          {sessionId && <Section1Style sessionId={sessionId} onStyleChosen={onStyleChosen} onUploaded={onUploaded} />}
+        {/* 1 — Tu marca (brief) */}
+        <AccordionSection index={1} title="Tu marca" status={getStatus(0, step, maxStep.current)}
+                          summary={briefSummary} onReopen={() => setStep(0)}>
+          <Section1Brief maxStep={maxStep.current} />
         </AccordionSection>
 
-        {/* 2 — Tu marca (brief) */}
-        <AccordionSection
-          index={2}
-          title="Tu marca"
-          status={getStatus(1, step, maxStep.current)}
-          summary={briefSummary}
-          onReopen={() => setStep(1)}
-        >
-          <Section2Brief maxStep={maxStep.current} />
+        {/* 2 — Plantilla o referencia */}
+        <AccordionSection index={2} title="Plantilla" status={getStatus(1, step, maxStep.current)}
+                          summary={templateSummary} onReopen={() => setStep(1)}>
+          {sessionId && <Section2Template sessionId={sessionId} onTemplateChosen={onTemplateChosen} onUploaded={onUploaded} />}
         </AccordionSection>
 
         {/* 3 — Marca (logo→etiqueta→mockup, auto-orquestado) */}

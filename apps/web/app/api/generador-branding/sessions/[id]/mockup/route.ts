@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getBrandingSession, updateBrandingSession } from '@/lib/branding/db'
 import { generateImage } from '@/lib/gemini'
 import { uploadToStorage } from '@/lib/storage'
-import { resolveEffectivePreset, sessionBrief, identityRefParts, imageRefParts } from '@/lib/branding/effective-preset'
+import { resolveBrandDna, sessionBrief, identityRefParts, imageRefParts } from '@/lib/branding/dna-source'
 import { buildMockupPrompt } from '@/lib/branding/generation-prompts'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
@@ -29,14 +29,16 @@ export async function POST(
 
   try {
     const session = await getBrandingSession(id)
-    if (!session || !session.style_id || !session.brand_name)
-      return NextResponse.json({ error: 'Falta el estilo o el nombre de marca' }, { status: 400 })
+    if (!session || !session.brand_name)
+      return NextResponse.json({ error: 'Falta el nombre de marca' }, { status: 400 })
+    if (session.source_mode !== 'upload' && !session.template_id)
+      return NextResponse.json({ error: 'Falta elegir una plantilla' }, { status: 400 })
     if (!session.label_url)
       return NextResponse.json({ error: 'Falta generar la etiqueta primero' }, { status: 400 })
 
-    const preset = resolveEffectivePreset(session)
+    const dna = resolveBrandDna(session)
     const brief = sessionBrief(session)
-    const prompt = buildMockupPrompt(brief, preset)
+    const prompt = buildMockupPrompt(brief, dna)
 
     const parts: Part[] = [
       ...(await imageRefParts(session.label_url)),

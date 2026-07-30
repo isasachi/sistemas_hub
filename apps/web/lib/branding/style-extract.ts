@@ -1,18 +1,17 @@
 import { callStructured } from '@/lib/gemini'
 import { ExtractedStyleSchema, type ExtractedStyle } from './types'
-import { STYLE_PRESETS } from './style-presets'
-import type { StylePreset } from './style-presets'
 import type { Part } from '@google/genai'
 
-// Modo B: analiza el producto/packaging que subió el usuario y lo convierte en
-// un EXTRACTOR de identidad completa (paleta, tipografía, materiales,
-// composición, lighting, mood, motifs, styleBlock) Y de composición (layout:
-// anatomy de zonas top-to-bottom, logoPlacement, dataBlock, margins,
-// alignment, avoidLayout) — no un clasificador. `bestFitStyleId` se conserva
-// solo como referencia/fallback (el más cercano de los 7 presets fijos).
-// gemini-2.5-flash (web, $0-rule OK).
-
-const STYLE_IDS = Object.keys(STYLE_PRESETS)
+// EXTRACTOR de identidad completa (paleta, tipografía, materiales, composición,
+// lighting, mood, motifs, styleBlock) Y de composición (layout: anatomy de zonas
+// top-to-bottom, logoPlacement, dataBlock, margins, alignment, avoidLayout) a
+// partir de UNA imagen de producto.
+//
+// Lo usan los dos caminos del sistema: el script de seed sobre las 30 fotos de
+// plantilla (offline, commiteado) y la ruta `analyze` sobre la referencia que
+// sube el usuario (en vivo). gemini-2.5-flash (web, regla de costo OK).
+//
+// Ya NO clasifica contra un catálogo cerrado de estilos: ese catálogo no existe.
 
 const EXTRACT_SYSTEM = [
   'You are a surgical brand-design analyst. You are shown ONE product/packaging image.',
@@ -30,16 +29,15 @@ const EXTRACT_SYSTEM = [
   'styleBlock: one ready-to-inject English paragraph describing this packaging design language for an image-generation prompt.',
   '',
   '(B) LAYOUT (composition of the front panel):',
-  'layout.anatomy: an ordered array (top to bottom) of the visible zones/bands of the front panel. EVERY entry MUST include its height as a percentage of the panel in the literal form "(~N%)" (e.g. "banda de marca (~22%): nombre centrado"), and the percentages across all banded entries should sum to roughly 100. Non-banded structural entries (like a frame/border note) do not need a percentage.',
+  'layout.anatomy: an ordered array (top to bottom) that TILES THE ENTIRE FRONT PANEL, top edge to bottom edge, with NO GAPS and NO overlaps — every vertical region of the panel counts as an entry, including product imagery/illustration zones and any deliberately empty or negative space, not just the text blocks. EVERY entry MUST include its height as a percentage of the panel in the literal form "(~N%)" (e.g. "banda de marca (~22%): nombre centrado"). The percentages across ALL banded entries MUST sum to 100 — before answering, add your own percentages and adjust them until they do. Non-banded structural entries (like a frame/border note that is not itself a vertical region) do not need a percentage.',
   'layout.logoPlacement: where the logo/wordmark sits and its approximate scale.',
   'layout.dataBlock: where ingredients/net-weight/legal microtext live.',
   'layout.margins: minimum breathing room, as % of panel width.',
   'layout.alignment: the dominant alignment axis — one of left, centered, justified.',
   'layout.avoidLayout: layout anti-patterns to avoid.',
   '',
-  `bestFitStyleId: additionally choose the ONE id from this closed catalog whose aesthetic is closest, purely as a fallback reference — [${STYLE_IDS.join(', ')}]. Never invent an id.`,
-  'essence: one line describing the visual soul of the UPLOADED image.',
-  'keywords: 3-8 short descriptors of the uploaded image aesthetic.',
+  'essence: one line describing the visual soul of the image.',
+  'keywords: 3-8 short descriptors of the image aesthetic.',
 ].join(' ')
 
 export async function analyzeUploadedStyle(
@@ -50,8 +48,5 @@ export async function analyzeUploadedStyle(
     { inlineData: { mimeType, data: base64 } },
     { text: 'Analyze this product image and extract its identity + layout per the schema.' },
   ]
-  const result = await callStructured('branding_extracted_style', ExtractedStyleSchema, parts, 3, EXTRACT_SYSTEM)
-  // Blindaje: si el modelo devolvió un id fuera del catálogo, caer al primero.
-  if (!(STYLE_PRESETS as Record<string, StylePreset>)[result.bestFitStyleId]) result.bestFitStyleId = STYLE_IDS[0]
-  return result
+  return callStructured('branding_extracted_style', ExtractedStyleSchema, parts, 3, EXTRACT_SYSTEM)
 }

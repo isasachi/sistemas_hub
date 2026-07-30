@@ -1,22 +1,26 @@
 'use client'
 
 import { create } from 'zustand'
-import type { BrandingSessionResponse, ExtractedStyle } from '@/lib/branding/types'
+import type { BrandingSessionResponse, ExtractedStyle, PaletteColor } from '@/lib/branding/types'
 
 export const SESSION_KEY = 'branding_session_id'
 
-// Máquina de pasos del wizard de branding (migración fase 10 — se elimina el
-// paso de paleta/tipografía, identidad fija: paleta/tipo SIEMPRE del preset).
+// Máquina de pasos del wizard de branding (migración plantillas 2026-07 — se
+// invierte el orden: el brief va primero porque la galería de plantillas
+// necesita saber qué vende el usuario para poder resaltar las que matchean).
 // `step` = nº de secciones completadas; la sección activa es `step`.
-//   0 Estilo · 1 Tu marca · 2 Marca (logo→etiqueta→mockup, auto-orquestado) · 3 Guía (final)
+//   0 Tu marca (brief) · 1 Plantilla · 2 Marca (logo→etiqueta→mockup, auto-orquestado) · 3 Guía (final)
 
 interface BrandingState {
   sessionId: string | null
   sessionError: boolean
   step: number
-  // estilo
-  sourceMode: 'preset' | 'upload' | null
-  styleId: string | null
+  // plantilla / referencia
+  sourceMode: 'preset' | 'template' | 'upload' | null
+  categoryId: string | null
+  templateId: string | null
+  paletteVariant: number
+  paletteOptions: PaletteColor[][] | null
   uploadedImageUrl: string | null
   imageAnalysis: ExtractedStyle | null
   // brief
@@ -36,9 +40,11 @@ interface BrandingState {
 
 interface BrandingActions {
   setStep: (step: number) => void
-  setStyle: (data: { sourceMode: 'preset' | 'upload'; styleId: string }) => void
-  setUploaded: (data: { styleId: string; uploadedImageUrl: string; imageAnalysis: ExtractedStyle | null }) => void
+  setCategory: (categoryId: string) => void
+  setTemplate: (data: { templateId: string; paletteVariant: number }) => void
+  setUploaded: (data: { uploadedImageUrl: string; imageAnalysis: ExtractedStyle | null; paletteOptions: PaletteColor[][] | null; paletteVariant: number }) => void
   setBrief: (data: {
+    categoryId: string
     brandName: string
     productName: string
     productType: string
@@ -61,9 +67,12 @@ const initialState: BrandingState = {
   sessionError: false,
   step: 0,
   sourceMode: null,
-  imageAnalysis: null,
-  styleId: null,
+  categoryId: null,
+  templateId: null,
+  paletteVariant: 0,
+  paletteOptions: null,
   uploadedImageUrl: null,
+  imageAnalysis: null,
   brandName: null,
   productName: null,
   productType: null,
@@ -81,15 +90,18 @@ export const useBrandingStore = create<BrandingState & BrandingActions>((set) =>
 
   setStep: (step) => set({ step }),
 
-  setStyle: ({ sourceMode, styleId }) => set({ sourceMode, styleId, step: 1 }),
+  setCategory: (categoryId) => set({ categoryId }),
 
-  // Modo B (upload): analyze ya devolvió el estilo asignado (bestFitStyleId,
-  // identidad fija — lo demás extraído de la imagen se descarta server-side).
-  setUploaded: ({ styleId, uploadedImageUrl, imageAnalysis }) =>
-    set({ sourceMode: 'upload', styleId, uploadedImageUrl, imageAnalysis, step: 1 }),
+  // El brief es el paso 0 y la plantilla el paso 1 (ver BrandingWizard).
+  setTemplate: ({ templateId, paletteVariant }) =>
+    set({ sourceMode: 'template', templateId, paletteVariant, step: 2 }),
 
-  setBrief: ({ brandName, productName, productType, descriptor, tagline, containerType }) =>
-    set({ brandName, productName, productType, descriptor, tagline, containerType, step: 2 }),
+  setUploaded: ({ uploadedImageUrl, imageAnalysis, paletteOptions, paletteVariant }) =>
+    set({ sourceMode: 'upload', uploadedImageUrl, imageAnalysis, paletteOptions, paletteVariant, step: 2 }),
+
+  // El brief es el paso 0: al completarlo se avanza a elegir plantilla (paso 1).
+  setBrief: ({ categoryId, brandName, productName, productType, descriptor, tagline, containerType }) =>
+    set({ categoryId, brandName, productName, productType, descriptor, tagline, containerType, step: 1 }),
 
   // Pipeline secuencial logo→etiqueta→mockup: cada paso persiste su propia URL
   // al terminar. El paso 2 "Marca" sigue activo (muestra los 3 con sus regens)
@@ -110,7 +122,10 @@ export const useBrandingStore = create<BrandingState & BrandingActions>((set) =>
       step: s.step,
       sourceMode: s.source_mode,
       imageAnalysis: s.image_analysis,
-      styleId: s.style_id,
+      categoryId: s.product_category,
+      templateId: s.template_id,
+      paletteVariant: s.palette_variant ?? 0,
+      paletteOptions: s.palette_options,
       uploadedImageUrl: s.uploaded_image_url,
       brandName: s.brand_name,
       productName: s.product_name,

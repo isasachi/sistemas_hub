@@ -3,12 +3,12 @@ import { getBrandingSession, updateBrandingSession } from '@/lib/branding/db'
 import { generateImage } from '@/lib/gemini'
 import { uploadToStorage } from '@/lib/storage'
 import {
-  resolveEffectivePreset,
-  resolveEffectiveLayout,
+  resolveBrandDna,
+  resolveLayout,
   sessionBrief,
   identityRefParts,
   wireframeRefParts,
-} from '@/lib/branding/effective-preset'
+} from '@/lib/branding/dna-source'
 import { buildLabelPrompt } from '@/lib/branding/generation-prompts'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
@@ -37,13 +37,15 @@ export async function POST(
 
   try {
     const session = await getBrandingSession(id)
-    if (!session || !session.style_id || !session.brand_name)
-      return NextResponse.json({ error: 'Falta el estilo o el nombre de marca' }, { status: 400 })
+    if (!session || !session.brand_name)
+      return NextResponse.json({ error: 'Falta el nombre de marca' }, { status: 400 })
+    if (session.source_mode !== 'upload' && !session.template_id)
+      return NextResponse.json({ error: 'Falta elegir una plantilla' }, { status: 400 })
 
-    const preset = resolveEffectivePreset(session)
-    const layout = resolveEffectiveLayout(session)
+    const dna = resolveBrandDna(session)
+    const layout = resolveLayout(session)
     const brief = sessionBrief(session)
-    const prompt = buildLabelPrompt(brief, preset, layout)
+    const prompt = buildLabelPrompt(brief, dna, layout)
 
     const parts: Part[] = [
       ...(await identityRefParts(session)),

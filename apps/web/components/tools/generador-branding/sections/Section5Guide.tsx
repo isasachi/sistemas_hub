@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useBrandingStore } from '@/store/branding'
-import { getPreset } from '@/lib/branding/style-presets'
+import { TEMPLATE_DNA } from '@/lib/branding/template-dna'
 
 async function downloadImage(url: string, filename: string) {
   try {
@@ -17,21 +17,29 @@ async function downloadImage(url: string, filename: string) {
 }
 
 // Guía de marca final: muestra logo/etiqueta/mockup + la paleta y tipografía.
-// Modo preset → identidad fija del preset. Modo upload → la identidad EXTRAÍDA de
-// la imagen (no la del bestFit, que es solo fallback) — espeja resolveEffectivePreset.
+// Modo plantilla → el ADN de la plantilla (`TEMPLATE_DNA`), con la paleta de la
+// variante elegida. Modo upload → la identidad EXTRAÍDA de la imagen, con sus
+// paletas alternativas. Sesiones legadas (`source_mode='preset'`, sin plantilla
+// ni imagen) no tienen de dónde sacar el ADN — `dna` queda undefined, pero SUS
+// IMÁGENES YA GENERADAS igual se muestran (regla de degradación, no de crash);
+// solo se omiten paleta y tipografía. Espeja el guard de la página de sesión.
 export default function Section5Guide() {
   const {
-    sessionId, brandName, tagline, styleId, sourceMode, imageAnalysis,
+    sessionId, brandName, tagline, templateId, sourceMode, imageAnalysis, paletteVariant, paletteOptions,
     logoUrl, labelUrl, mockupUrl, startNewSession,
   } = useBrandingStore()
   const router = useRouter()
   const [landingLoading, setLandingLoading] = useState(false)
 
-  if (!styleId) return null
-  const extracted = sourceMode === 'upload' && imageAnalysis?.palette?.length && imageAnalysis?.typography ? imageAnalysis : null
-  const palette = extracted ? extracted.palette : getPreset(styleId).palette
-  const typography = extracted ? extracted.typography : getPreset(styleId).typography
-  const essence = extracted ? extracted.essence : getPreset(styleId).essence
+  const upload = sourceMode === 'upload' && imageAnalysis?.palette?.length ? imageAnalysis : null
+  const tpl = templateId ? TEMPLATE_DNA[templateId] : null
+  const dna = upload ?? tpl?.dna
+  const options = dna
+    ? (upload ? (paletteOptions ?? [upload.palette]) : (tpl?.palettes ?? [dna.palette]))
+    : []
+  const palette = options[paletteVariant] ?? options[0]
+  const typography = dna?.typography
+  const essence = dna?.essence
   const slug = (brandName ?? 'marca').toLowerCase().replace(/\s+/g, '-')
 
   async function createLanding() {
@@ -82,36 +90,40 @@ export default function Section5Guide() {
       {logoUrl && <Asset url={logoUrl} label="Logo" file={`${slug}-logo.png`} />}
       {labelUrl && <Asset url={labelUrl} label="Etiqueta" file={`${slug}-etiqueta.png`} />}
 
-      {/* Paleta */}
-      <div>
-        <p className="text-[10px] font-bold uppercase tracking-widest text-[#8a8a8a] mb-2">Paleta de colores</p>
-        <div className="grid grid-cols-2 gap-2">
-          {palette.map((c) => (
-            <div key={c.hex} className="flex items-center gap-2.5 rounded-xl border border-white/[0.06] p-2">
-              <div className="w-8 h-8 rounded-lg border border-white/[0.12] shrink-0" style={{ backgroundColor: c.hex }} />
-              <div className="min-w-0">
-                <p className="text-[11px] font-semibold text-[#f5f5f5] truncate">{c.name}</p>
-                <button
-                  onClick={() => navigator.clipboard?.writeText(c.hex.toUpperCase())}
-                  className="text-[11px] text-[#8a8a8a] font-mono hover:text-[#ff9c4d] cursor-pointer transition-colors"
-                  title="Copiar"
-                >
-                  {c.hex.toUpperCase()}
-                </button>
+      {/* Paleta — ausente en sesiones legadas sin ADN (ver comentario arriba). */}
+      {palette?.length ? (
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-[#8a8a8a] mb-2">Paleta de colores</p>
+          <div className="grid grid-cols-2 gap-2">
+            {palette.map((c) => (
+              <div key={c.hex} className="flex items-center gap-2.5 rounded-xl border border-white/[0.06] p-2">
+                <div className="w-8 h-8 rounded-lg border border-white/[0.12] shrink-0" style={{ backgroundColor: c.hex }} />
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold text-[#f5f5f5] truncate">{c.name}</p>
+                  <button
+                    onClick={() => navigator.clipboard?.writeText(c.hex.toUpperCase())}
+                    className="text-[11px] text-[#8a8a8a] font-mono hover:text-[#ff9c4d] cursor-pointer transition-colors"
+                    title="Copiar"
+                  >
+                    {c.hex.toUpperCase()}
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
+      ) : null}
 
-      {/* Tipografía */}
-      <div>
-        <p className="text-[10px] font-bold uppercase tracking-widest text-[#8a8a8a] mb-2">Tipografía</p>
-        <div className="rounded-xl border border-white/[0.06] p-3 flex flex-col gap-1">
-          <p className="text-[13px] text-[#f5f5f5]"><span className="font-semibold">Titulares:</span> {typography.primary}</p>
-          <p className="text-[13px] text-[#f5f5f5]"><span className="font-semibold">Cuerpo:</span> {typography.secondary}</p>
+      {/* Tipografía — ídem. */}
+      {typography ? (
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-[#8a8a8a] mb-2">Tipografía</p>
+          <div className="rounded-xl border border-white/[0.06] p-3 flex flex-col gap-1">
+            <p className="text-[13px] text-[#f5f5f5]"><span className="font-semibold">Titulares:</span> {typography.primary}</p>
+            <p className="text-[13px] text-[#f5f5f5]"><span className="font-semibold">Cuerpo:</span> {typography.secondary}</p>
+          </div>
         </div>
-      </div>
+      ) : null}
 
       <div className="flex flex-wrap gap-3">
         {(mockupUrl || logoUrl) && (

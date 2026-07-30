@@ -17,7 +17,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 // elegir estilo y el brief. Sin LLM ni Playwright → respeta la regla de costo.
 // Un único PATCH whitelisted en vez de una ruta por campo.
 const WRITABLE = new Set([
-  'source_mode', 'style_id', 'brand_name', 'product_name', 'product_type',
+  'source_mode', 'template_id', 'palette_variant',
+  'brand_name', 'product_name', 'product_type', 'product_category',
   'descriptor', 'tagline', 'container_type', 'step',
 ])
 

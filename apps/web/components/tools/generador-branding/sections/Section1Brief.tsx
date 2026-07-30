@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useBrandingStore } from '@/store/branding'
 import { FieldGroup } from '@/components/tools/ui/FieldGroup'
+import { CATEGORIES } from '@/lib/branding/templates'
 
 const btnPrimary =
   'rounded-xl jr-cta text-[13px] font-bold disabled:opacity-40 transition-all duration-200 cursor-pointer border-0 font-sans flex items-center justify-center gap-2'
@@ -49,26 +50,32 @@ function Suggestions({ names, onPick }: { names: string[]; onPick: (n: string) =
   )
 }
 
-export default function Section2Brief({ maxStep }: { maxStep: number }) {
-  const { sessionId, setBrief } = useBrandingStore()
-  const [productType, setProductType] = useState('')
-  const [descriptor, setDescriptor] = useState('')
-  const [tagline, setTagline] = useState('')
-  const [containerType, setContainerType] = useState('')
+export default function Section1Brief({ maxStep }: { maxStep: number }) {
+  const s = useBrandingStore()
+  const { sessionId, setBrief, setCategory } = s
+  // Sembrado desde el store: AccordionSection remonta el paso al reabrirlo, así
+  // que sin esto el brief ya guardado vuelve en blanco — y como `categoryId` es
+  // obligatorio, el botón queda deshabilitado sobre datos que sí existen (mismo
+  // bug que task-11 arregló en Section2Template, ver template-selection.ts).
+  const [categoryId, setCategoryId] = useState(() => s.categoryId ?? '')
+  const [productType, setProductType] = useState(() => s.productType ?? '')
+  const [descriptor, setDescriptor] = useState(() => s.descriptor ?? '')
+  const [tagline, setTagline] = useState(() => s.tagline ?? '')
+  const [containerType, setContainerType] = useState(() => s.containerType ?? '')
 
   const [hasBrand, setHasBrand] = useState(true)
-  const [brandName, setBrandName] = useState('')
+  const [brandName, setBrandName] = useState(() => s.brandName ?? '')
   const [brandNames, setBrandNames] = useState<string[]>([])
 
   const [hasProductName, setHasProductName] = useState(true)
-  const [productName, setProductName] = useState('')
+  const [productName, setProductName] = useState(() => s.productName ?? '')
   const [productNames, setProductNames] = useState<string[]>([])
 
   const [suggesting, setSuggesting] = useState<'brand' | 'product' | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const canSubmit = brandName.trim() && productName.trim() && productType.trim() && !loading
+  const canSubmit = categoryId && brandName.trim() && productName.trim() && productType.trim() && !loading
 
   async function suggest(kind: 'brand' | 'product') {
     if (!sessionId || !productType.trim() || suggesting) return
@@ -101,6 +108,7 @@ export default function Section2Brief({ maxStep }: { maxStep: number }) {
     setError(null)
     try {
       const data = {
+        product_category: categoryId,
         brand_name: brandName.trim(),
         product_name: productName.trim(),
         product_type: productType.trim(),
@@ -112,11 +120,13 @@ export default function Section2Brief({ maxStep }: { maxStep: number }) {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         // El step persistido nunca regresa (high-water mark) — ver nota en BrandingWizard.
-        body: JSON.stringify({ ...data, step: Math.max(maxStep, 2) }),
+        body: JSON.stringify({ ...data, step: Math.max(maxStep, 1) }),
       })
       const resData = (await res.json()) as { error?: string }
       if (!res.ok) throw new Error(resData.error ?? 'Error al guardar el brief')
+      setCategory(categoryId)
       setBrief({
+        categoryId,
         brandName: data.brand_name,
         productName: data.product_name,
         productType: data.product_type,
@@ -136,6 +146,23 @@ export default function Section2Brief({ maxStep }: { maxStep: number }) {
       <p className="text-[13px] text-[#bdbdbd]">
         Cuéntanos lo básico de tu marca y tu producto. Con esto generamos el logo, la etiqueta y el mockup.
       </p>
+
+      <div className="flex flex-col gap-2">
+        <label htmlFor="categoryId" className="text-[13px] font-semibold text-[#f5f5f5]">
+          Categoría <span className="text-[#ff9c4d]">*</span>
+        </label>
+        <select
+          id="categoryId"
+          value={categoryId}
+          onChange={(e) => setCategoryId(e.target.value)}
+          className="h-11 rounded-xl bg-white/[0.04] border border-white/[0.08] px-3 text-[13px] text-[#f5f5f5] cursor-pointer"
+        >
+          <option value="">Elige una categoría</option>
+          {CATEGORIES.map((c) => (
+            <option key={c.id} value={c.id} className="bg-[#141414]">{c.name}</option>
+          ))}
+        </select>
+      </div>
 
       <FieldGroup
         type="input" id="productType" label="¿Qué producto vendes?" required

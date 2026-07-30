@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getBrandingSession } from '@/lib/branding/db'
-import { resolveEffectivePreset } from '@/lib/branding/effective-preset'
+import { resolveBrandDna } from '@/lib/branding/dna-source'
 import { createLandingSession, updateLandingSession } from '@/lib/landing/db'
 import { readUserId } from '@/lib/product-hunter/session'
 import type { SectionType } from '@/lib/landing/types'
@@ -43,7 +43,11 @@ export async function POST(req: NextRequest) {
   const personality = bs.personality ?? []
   const tone = [...new Set(personality.map((p) => TONE_MAP[p] ?? 'Profesional'))]
   const photo = bs.mockup_url || bs.logo_url
-  const eff = bs.style_id ? resolveEffectivePreset(bs) : null
+  // Las sesiones legadas (source_mode='preset') ya no tienen ADN resoluble: el
+  // resolver lanza y la landing se crea sin paleta ni estilo derivados, que es
+  // exactamente lo que hacía antes con style_id nulo.
+  let eff: ReturnType<typeof resolveBrandDna> | null = null
+  try { eff = resolveBrandDna(bs) } catch { eff = null }
   // Estilo gráfico para los devices/motivos de la landing.
   const brandStyle = eff
     ? [eff.essence, eff.styleBlock, bs.descriptor].filter(Boolean).join('. ')
