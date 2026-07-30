@@ -352,6 +352,15 @@ export function buildMockupPrompt(brief: BrandBrief, dna: BrandDna): string {
     // la curvatura del envase haría el texto ilegible (rotar o dejarlo fuera
     // de cuadro, nunca re-dibujarlo).
     `The label is finished artwork, not a draft to re-create: geometrically warp and wrap that exact image onto the surface — do not re-typeset, re-letter or re-flow any of its text. Every character must remain identical to the label, including the smallest legal and ingredient microtext. Text must never appear mirrored, reversed, upside-down or otherwise transformed beyond the natural perspective and curvature of the surface it sits on. Where curvature would make text illegible, rotate the package slightly or let that text fall out of view around the curve — never re-draw it.`,
+    // Defecto real de probe (Task 13, rama de clonado sobre cocina/picador-electrico):
+    // la cara SUPERIOR de la caja salió con glifos espejados e ilegibles que calcan
+    // el wordmark de la marca de la referencia ("AZZARO"). Las frases de arriba no
+    // lo cubren: todas gobiernan el texto DEL LABEL adjunto, y ahí no hay pixel de
+    // label que warpear — es superficie que el arte plano no toca, así que el
+    // "reproduce faithfully" del clonado la llena copiando el lettering de la foto.
+    // Las únicas dos salidas correctas son un dato que sí tenemos (el nombre de
+    // marca) o nada.
+    `Package surfaces the flat label does not cover — a box's top and side faces, a bottle's shoulder or cap, a spine — must carry either the brand name "${brief.brandName}" set cleanly in the label's own typography, or nothing at all: never lettering copied from the reference photograph, and never invented, degraded or mirrored glyph shapes.`,
     dna.styleBlock,
     referenceBlock(brief, 'mockup'),
     `Studio product photography: ${dna.lighting}. ${sceneLine(brief, dna, container)} Mood: ${dna.mood.join(", ")}. Realistic reflections, soft contact shadow, believable depth of field.`,

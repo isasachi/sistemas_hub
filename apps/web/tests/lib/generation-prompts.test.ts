@@ -363,3 +363,34 @@ describe('fix round 3: el caso NO degenerado sigue ubicando el brand como elemen
     expect(p).toMatch(/subordinate|secondary/i)
   })
 })
+
+// --- Fix round 4 (defecto real del probe de Task 13) -----------------------
+//
+// Probe A (clonado, cocina/picador-electrico → "Nordika"/"ChopPro"): la cara
+// SUPERIOR de la caja salió con glifos ilegibles y espejados que calcan el
+// wordmark de la marca de la REFERENCIA ("AZZARO" → "A ⅃ЯTAЯO"). La etiqueta
+// standalone estaba perfecta y el frente de la caja también: el defecto vive
+// SÓLO en las superficies que el arte de etiqueta NO cubre (cara superior,
+// laterales, canto, hombro/tapa de un frasco). Ahí el modelo no tiene pixel
+// que warpear, y `referenceBlock` en clonado le pide "reproduce faithfully" →
+// reproduce el lettering de la referencia, degradado. Las frases del fix round
+// 2 no lo cubren: todas hablan del texto DEL LABEL adjunto.
+describe('fix round 4: superficies del envase que la etiqueta no cubre', () => {
+  it('nombra esas superficies y da las dos únicas salidas: el nombre de marca limpio, o nada', () => {
+    const p = buildMockupPrompt(base, DNA)
+    expect(p).toMatch(/does not cover|not covered/i)
+    expect(p).toContain('"Lavíca"')
+    expect(p).toMatch(/or nothing at all|or left blank/i)
+  })
+
+  it('prohíbe copiar el lettering de la foto de referencia en esas superficies', () => {
+    const p = buildMockupPrompt(base, DNA)
+    expect(p).toMatch(/never (any )?lettering copied from the reference/i)
+  })
+
+  it('aplica en las dos ramas — una caja con cara superior existe igual en traspaso', () => {
+    const p = buildMockupPrompt({ ...base, sameProduct: false, referenceProductType: 'serum facial' }, DNA)
+    expect(p).toMatch(/does not cover|not covered/i)
+    expect(p).toContain('"Lavíca"')
+  })
+})
