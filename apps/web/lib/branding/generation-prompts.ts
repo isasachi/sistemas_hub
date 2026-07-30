@@ -298,6 +298,14 @@ export function buildLabelPrompt(brief: BrandBrief, dna: BrandDna, layout: Extra
     // omite la del brand name en ese caso; "product name" ya cubre el string
     // (es el que se usa en el resto del prompt: la línea del wordmark, el
     // título inicial).
+    // Hallazgo del probe de Task 13: el bloque de datos del anatomy se rellena
+    // INVENTANDO declaraciones regulatorias ("Hecho en China", "HECHO EN
+    // MÉXICO", "DERMATOLÓGICAMENTE PROBADO", términos de garantía). El brief
+    // nunca las provee y el usuario puede llevar el mockup a imprenta: una
+    // declaración de origen falsa es un problema legal, no cosmético. El copy
+    // de beneficio/ingredientes sí es relleno de diseño legítimo — el usuario
+    // lo edita —, así que la prohibición se acota a lo verificable.
+    `Never invent regulatory or compliance text: no country of origin, no certification marks or seals, no clinical, dermatological or "tested" claims, no warranty terms, unless that exact wording was given above. Where the layout has a slot for such data, fill it with neutral generic placeholder copy that asserts nothing verifiable, or leave the slot to the surrounding design.`,
     brandIsHero ? "" : exactText("brand name", brief.brandName).trim(),
     exactText("product name", wordmark).trim(),
     exactText("tagline", brief.tagline).trim(),

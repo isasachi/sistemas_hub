@@ -394,3 +394,27 @@ describe('fix round 4: superficies del envase que la etiqueta no cubre', () => {
     expect(p).toContain('"Lavíca"')
   })
 })
+
+// --- Fix round 5 (hallazgo del probe de Task 13) ---------------------------
+//
+// Los tres probes imprimieron declaraciones REGULATORIAS que nadie puso en el
+// brief: "Hecho en China" (probe A), "HECHO EN MÉXICO" y "DERMATOLÓGICAMENTE
+// PROBADO" (probe C), más términos de garantía. El anatomy de la plantilla trae
+// un bloque de datos y el modelo lo rellena inventando. Un usuario que lleva ese
+// mockup a imprenta publica una declaración de origen falsa — y el mercado de la
+// herramienta es Perú. El copy de beneficio/ingredientes sí es relleno de diseño
+// legítimo (el usuario lo edita); lo que no puede inventarse es origen, sellos y
+// claims clínicos.
+describe('fix round 5: el panel no inventa declaraciones regulatorias', () => {
+  it('prohíbe país de origen, certificaciones y claims clínicos no provistos', () => {
+    const p = buildLabelPrompt(base, DNA, LAYOUT)
+    expect(p).toMatch(/country of origin/i)
+    expect(p).toMatch(/certification|seal/i)
+    expect(p).toMatch(/clinical|dermatolog/i)
+  })
+
+  it('da la salida: texto neutro de relleno en esas zonas, sin afirmar nada verificable', () => {
+    const p = buildLabelPrompt(base, DNA, LAYOUT)
+    expect(p).toMatch(/neutral|generic/i)
+  })
+})
