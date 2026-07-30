@@ -1,11 +1,10 @@
 /**
  * wireframe.ts
  * ---------------------------------------------------------------------------
- * Renderer determinista de wireframes de layout — extraído de
- * `scripts/gen-wireframes.ts` (que generaba 1 PNG por cada uno de los 7 estilos
- * fijos, `LABEL_LAYOUTS[styleId]`) a una función reutilizable que recibe
- * cualquier `LabelLayout`, incluido el `layout` EXTRAÍDO de la imagen que sube
- * el usuario en modo upload (`analyzeUploadedStyle` → `extracted.layout`).
+ * Renderer determinista de wireframes de layout — reutilizable para cualquier
+ * `ExtractedLayout`: el de una plantilla de producto (`TEMPLATE_DNA`) o el
+ * `layout` EXTRAÍDO de la imagen que sube el usuario en modo upload
+ * (`analyzeUploadedStyle` → `extracted.layout`).
  *
  * Mismo algoritmo: de `anatomy`, cada entrada con "(~N%)" es una banda; se
  * apilan de arriba a abajo, normalizadas a que sumen 100. Las entradas SIN
@@ -13,7 +12,7 @@
  * borde rectangular interior; si mencionan "a sangre"/"sin marco" se omite.
  * ---------------------------------------------------------------------------
  */
-import type { LabelLayout } from './types'
+import type { ExtractedLayout } from './types'
 
 const W = 800
 const H = 1000
@@ -72,7 +71,7 @@ function frameOffsetPercent(anatomy: string[]): number | null {
 
 /** Construye el SVG determinista del wireframe de un layout. `footerLabel` es el texto al pie (styleId o nombre del producto). */
 export function buildWireframeSvg(
-  layout: LabelLayout,
+  layout: ExtractedLayout,
   footerLabel: string,
 ): { svg: string; bandCount: number; totalPercent: number } {
   const bands = layout.anatomy
@@ -136,7 +135,7 @@ export function buildWireframeSvg(
 }
 
 /** Renderiza el wireframe a PNG (sharp cargado dinámicamente: solo cuando se renderiza de verdad). */
-export async function renderWireframePng(layout: LabelLayout, footerLabel: string): Promise<Buffer> {
+export async function renderWireframePng(layout: ExtractedLayout, footerLabel: string): Promise<Buffer> {
   const { svg } = buildWireframeSvg(layout, footerLabel)
   const sharp = (await import('sharp')).default
   return sharp(Buffer.from(svg)).png().toBuffer()

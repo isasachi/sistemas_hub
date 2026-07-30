@@ -110,8 +110,8 @@ export interface BrandingSessionResponse {
 // ─── Modo B (upload): estilo + layout extraídos de la imagen del usuario ──────
 // Migración: modo upload es un EXTRACTOR de identidad completa (paleta,
 // tipografía, styleBlock...) Y composición (layout) — no un clasificador. El
-// `layout` tiene la MISMA forma que `LabelLayout` (alias de este mismo archivo,
-// ver más abajo) y se usa directo como tal (ver effective-preset.ts `resolveEffectiveLayout`).
+// `layout` es un `ExtractedLayout` y se usa directo como tal (ver `dna-source.ts`
+// `resolveLayout`).
 export const ExtractedLayoutSchema = z.object({
   anatomy: z.array(z.string()).min(3),
   logoPlacement: z.string(),
@@ -146,13 +146,6 @@ export const ExtractedStyleSchema = z.object({
   layout: ExtractedLayoutSchema,
 })
 export type ExtractedStyle = z.infer<typeof ExtractedStyleSchema>
-
-/**
- * `ExtractedLayout` y el viejo `LabelLayout` (label-layouts.ts) son campo por
- * campo el mismo objeto. Este alias existe para que los consumidores del viejo
- * nombre sigan compilando mientras dura la migración; se retira en la limpieza.
- */
-export type LabelLayout = ExtractedLayout
 
 /** Bloque de layout listo para inyectar en el prompt. */
 export function layoutToPrompt(l: ExtractedLayout): string {

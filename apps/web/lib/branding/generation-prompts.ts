@@ -2,11 +2,12 @@
  * generationPrompts.ts
  * ---------------------------------------------------------------------------
  * CORE del flujo del motor de generación de marca y producto (pipeline
- * SECUENCIAL, migración jul 2026: identidad fija de 7 estilos, sin overrides).
+ * SECUENCIAL sobre las 30 plantillas de producto, ADN extraído por foto — sin
+ * los 7 estilos abstractos fijos que este pipeline tenía antes de la limpieza).
  *
  * Fusiona BrandBrief (lo que aporta el usuario) + BrandDna (el ADN visual,
  * ya resuelto por `resolveBrandDna`, en `dna-source.ts`) + el esqueleto de layout
- * (`label-layouts.ts`) + los pares de contraste legal (`contrast.ts`) en un
+ * (`layoutToPrompt`, en `types.ts`) + los pares de contraste legal (`contrast.ts`) en un
  * PROMPT en lenguaje natural, uno por artefacto, en orden:
  *
  *   1. LOGO (`buildLogoPrompt`) — mark limpio, aislado, en la identidad del estilo.
@@ -37,8 +38,6 @@
 
 import type { BrandDna, ExtractedLayout } from "./types";
 import { paletteToText, layoutToPrompt } from "./types";
-import { StylePreset } from "./style-presets";
-import { REF_MANIFEST } from "./ref-manifest";
 import { contrastToPrompt } from "./contrast";
 
 /** Datos que aporta el usuario para una marca/producto concreto. */
@@ -68,12 +67,6 @@ export interface BrandBrief {
 /* --------------------------------------------------------------------------
  * Helpers de composición de prompt
  * ------------------------------------------------------------------------ */
-
-/** Rutas de las refs del estilo (para adjuntar a Gemini), leídas de REF_MANIFEST. */
-export function attachStyleRefs(preset: StylePreset): string[] {
-  const files = REF_MANIFEST[preset.referenceFolder] ?? [];
-  return files.map((f) => `${preset.referenceFolder}/${f}`);
-}
 
 /** Bloque de paleta legible para el prompt. */
 function paletteLine(dna: BrandDna, brief: BrandBrief): string {
