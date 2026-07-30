@@ -255,3 +255,43 @@ export interface NicheRow {
   // route `search` resuelve el canónico y muestra su pool. null = es canónico.
   canonical_id: string | null
 }
+
+// ─── Buscador SIMPLE (tool de testeo, temporal — tablas ph_raw_*) ─────────────
+// Sin reglas de oro, sin análisis LLM: una entrada por anunciante y nicho, con
+// lo básico de la card. `ad_count` solo sirve para agrupar por rango; no se
+// expone al front (ver RawProductEntry).
+
+export interface RawProductRow {
+  niche: string
+  page_id: string
+  ad_id: string | null
+  name: string | null
+  ad_count: number
+  country: string | null
+  raw_data: {
+    title?: string | null
+    body?: string | null
+    keyword?: string | null
+    categories?: string[]
+  }
+  scraped_at: string
+}
+
+// Lo que ve el front: datos básicos + enlace a Meta Ads Library. NINGÚN stat.
+export interface RawProductEntry {
+  id: string            // `${niche}:${page_id}`
+  advertiser: string
+  title: string | null
+  body: string | null
+  country: string | null
+  adsUrl: string
+}
+
+export interface RawSearchResponse {
+  niche: string
+  bucket: string
+  status: 'ready' | 'pending' | 'empty'
+  queued?: boolean
+  products: RawProductEntry[]
+  hasMore: boolean
+}

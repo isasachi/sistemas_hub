@@ -175,6 +175,14 @@ export function isPersistentlyBlocked(): boolean {
   return rateControl.isPersistentlyBlocked()
 }
 
+// Ms que falta esperar por un cool-down activo. Solo para callers que navegan
+// SIN pasar por navigateAndCapture (scrape-raw.ts, que lee el conteo del SSR
+// inline y no necesita la espera+scrolls): sin consultar esto martillarían la
+// IP justo mientras el resto del proceso está enfriando.
+export function rateGateMs(): number {
+  return rateControl.gateMs()
+}
+
 // Registra el resultado de UNA navegación para el cool-down. Se llama desde los
 // callers con el conteo de nodos POST-fallback (no desde navigateAndCapture con
 // el payload crudo): un soft-block puede devolver un payload no-vacío pero SIN
