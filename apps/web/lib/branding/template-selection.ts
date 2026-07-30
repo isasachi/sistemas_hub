@@ -12,10 +12,14 @@ export interface TemplateSelection {
 // Al montar (primera vez o al reabrir un paso ya completado), la selección
 // local arranca desde lo que ya hay en el store — si no, el usuario ve la
 // plantilla sin resaltar y los chips de paleta ocultos hasta que vuelva a
-// tocar la tarjeta. Sin plantilla elegida, la paleta no tiene contra qué
-// indexar: variant siempre 0.
-export function seedSelection(storeTemplateId: string | null, storePaletteVariant: number): TemplateSelection {
-  return { picked: storeTemplateId, variant: storeTemplateId ? storePaletteVariant : 0 }
+// tocar la tarjeta. Sin plantilla NI referencia subida la paleta no tiene
+// contra qué indexar: variant siempre 0.
+export function seedSelection(
+  storeTemplateId: string | null,
+  storePaletteVariant: number,
+  hasUpload = false,
+): TemplateSelection {
+  return { picked: storeTemplateId, variant: storeTemplateId || hasUpload ? storePaletteVariant : 0 }
 }
 
 // Elegir la MISMA plantilla que ya estaba elegida conserva la paleta (el

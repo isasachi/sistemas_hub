@@ -151,7 +151,12 @@ export type ExtractedStyle = z.infer<typeof ExtractedStyleSchema>
 export function layoutToPrompt(l: ExtractedLayout): string {
   return [
     `Front panel layout — follow this spatial structure exactly, top to bottom: ${l.anatomy.join('; ')}.`,
-    `Logo placement: ${l.logoPlacement}.`,
+    // Sólo geometría: `logoPlacement` es texto crudo del extractor y en varias
+    // plantillas trae juicios de escala ("centered PROMINENTLY, MODERATE size")
+    // que chocan de frente con la regla del panel — la marca es subordinada al
+    // hero (ver brandBandLine). Misma precedencia que ya rige al wireframe: el
+    // esqueleto manda en zona/proporción, el resto lo gobierna el texto de arriba.
+    `Brand/logo zone (position and room only — its scale and typographic treatment are governed above): ${l.logoPlacement}.`,
     `Product data block: ${l.dataBlock}.`,
     `Margins: ${l.margins}. Dominant alignment: ${l.alignment}.`,
   ].join(' ')

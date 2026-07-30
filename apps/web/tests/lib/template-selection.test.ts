@@ -31,3 +31,15 @@ describe('selectTemplate', () => {
     expect(selectTemplate(current, 'belleza/aceite-capilar')).toEqual({ picked: 'belleza/aceite-capilar', variant: 0 })
   })
 })
+
+describe('seedSelection con referencia subida', () => {
+  // Modo upload: no hay templateId, pero sí paletas (las 3 del análisis) y un
+  // índice elegido. Sin esto, reabrir el paso 2 y re-confirmar pisaba la paleta a 0.
+  it('sin plantilla pero con upload analizado: hidrata la paleta guardada', () => {
+    expect(seedSelection(null, 2, true)).toEqual({ picked: null, variant: 2 })
+  })
+
+  it('sin plantilla y sin upload: la paleta no tiene contra qué indexar, 0', () => {
+    expect(seedSelection(null, 2, false)).toEqual({ picked: null, variant: 0 })
+  })
+})

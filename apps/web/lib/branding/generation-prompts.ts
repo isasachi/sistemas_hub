@@ -221,7 +221,11 @@ function textHierarchyLine(brief: BrandBrief, wordmark: string, brandIsHero: boo
     `Text hierarchy: ${identity}` +
     `${brief.descriptor ? `, the descriptor "${brief.descriptor}"` : ""}` +
     `${brief.tagline ? `, the tagline "${brief.tagline}"` : ""}` +
-    `, plus small realistic microtext of the kind a real ${brief.productType} package carries — legal notices, ` +
+    // "legal notices" salió de esta lista (review de rama): el prompt lo pedía acá
+    // y tres frases después prohíbe inventar texto regulatorio. Lo que queda —
+    // peso, specs, contenidos — es relleno de diseño editable, no una afirmación
+    // verificable.
+    `, plus small realistic microtext of the kind a real ${brief.productType} package carries — ` +
     `net weight or capacity, technical specs, materials or contents as appropriate for this product (the ` +
     `microtext MUST use the highest-contrast pairing).`
   );
@@ -272,7 +276,12 @@ export function buildLabelPrompt(brief: BrandBrief, dna: BrandDna, layout: Extra
     ? `The brand name "${brief.brandName}" IS this hero wordmark — no separate product name was given, so do NOT print the brand name a second time anywhere else on the panel; one instance of the word is enough.`
     : brandBandLine(brief.brandName);
   return [
-    `Design the FLAT front label / packaging panel artwork for the product "${wordmark}", a ${brief.productType}. This is flat 2D label artwork — front-on, NO 3D packaging, NO perspective, NO product body, NO background scene — print-ready, filling the frame.`,
+    // "NO product body" era demasiado ancho (review de rama): la mitad del
+    // catálogo tiene bandas de anatomy del tipo "product imagery (~40%)" —
+    // tarjetas cabecera, cajas — donde una foto IMPRESA del producto es parte
+    // legítima del arte. Lo prohibido es renderizar el ENVASE en 3D, no que el
+    // panel contenga imagen. Se separan las dos cosas.
+    `Design the FLAT front label / packaging panel artwork for the product "${wordmark}", a ${brief.productType}. This is flat 2D artwork of the printed panel itself — front-on, print-ready, filling the frame: NO photograph of a three-dimensional package, NO perspective, no container edges, shape or shadow, NO environment or background scene around the panel. Printed imagery of the product INSIDE the panel is part of the artwork wherever the layout calls for it.`,
     dna.styleBlock,
     paletteLine(dna, brief),
     contrastToPrompt(dna),
@@ -346,7 +355,12 @@ export function buildMockupPrompt(brief: BrandBrief, dna: BrandDna): string {
   const wordmark = brief.productName?.trim() || brief.brandName;
   return [
     `Create a photorealistic product mockup: a ${container} for the product "${wordmark}", a ${brief.productType}.`,
-    `The FIRST attached image is the finished FLAT LABEL artwork — apply it realistically onto the ${container} surface with correct label wrapping, material and finish (${dna.materials.join(", ")}), preserving the label's design, wordmark, colors and text EXACTLY.`,
+    // `dna.materials` describe el envase DE LA REFERENCIA, igual que containerType
+    // — por eso viaja en la misma frase. En traspaso containerType ya se descarta
+    // (ver dna-source.ts), así que inyectar materials ahí pedía "un vidrio
+    // esmerilado con gotero" para una rodillera: la misma contradicción que esa
+    // omisión evita. Sólo se inyecta clonando.
+    `The FIRST attached image is the finished FLAT LABEL artwork — apply it realistically onto the ${container} surface with correct label wrapping,${brief.sameProduct ? ` material and finish (${dna.materials.join(", ")}),` : ""} preserving the label's design, wordmark, colors and text EXACTLY.`,
     // Bug real de probe (Task 9, dos de tres generaciones): con la frase de
     // arriba nomás ("preserving ... text EXACTLY" + el "no stray or misspelled
     // text" del cierre), el modelo re-TIPOGRAFIÓ el microtexto del panel al

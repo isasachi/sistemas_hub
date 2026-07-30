@@ -26,14 +26,25 @@ export default function Section2Template({
 }: {
   sessionId: string
   onTemplateChosen: (templateId: string, paletteVariant: number) => void
-  onUploaded: (r: AnalyzeResult) => void
+  onUploaded: (r: AnalyzeResult, paletteVariant: number) => void
 }) {
-  const { categoryId, productType, templateId: storedTemplateId, paletteVariant: storedPaletteVariant } = useBrandingStore()
-  const [tab, setTab] = useState<'template' | 'upload'>('template')
+  const {
+    categoryId, productType, sourceMode,
+    templateId: storedTemplateId, paletteVariant: storedPaletteVariant,
+    uploadedImageUrl, imageAnalysis, paletteOptions,
+  } = useBrandingStore()
+  // La referencia ya analizada de la sesión (si la hay): el análisis es caro y
+  // se cobra cuota, así que reabrir el paso NO debe obligar a re-subir.
+  const [uploaded, setUploaded] = useState<AnalyzeResult | null>(() =>
+    sourceMode === 'upload' && uploadedImageUrl && imageAnalysis && paletteOptions?.length
+      ? { uploadedImageUrl, analysis: imageAnalysis, paletteOptions }
+      : null,
+  )
+  const [tab, setTab] = useState<'template' | 'upload'>(uploaded ? 'upload' : 'template')
   // Sembrado desde el store: reabrir este paso remonta el componente (ver
   // AccordionSection), así que sin esto la plantilla/paleta ya elegidas se
   // pierden de vista — y re-tocar la misma tarjeta pisaría la paleta en 0.
-  const [selection, setSelection] = useState(() => seedSelection(storedTemplateId, storedPaletteVariant))
+  const [selection, setSelection] = useState(() => seedSelection(storedTemplateId, storedPaletteVariant, !!uploaded))
   const { picked, variant } = selection
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -55,7 +66,11 @@ export default function Section2Template({
       const res = await fetch(`/api/generador-branding/sessions/${sessionId}/analyze`, { method: 'POST', body: form })
       const data = (await res.json()) as AnalyzeResult & { error?: string }
       if (!res.ok) throw new Error(data.error ?? 'Error analizando la imagen')
-      onUploaded(data)
+      // No se avanza de paso todavía: primero el usuario elige paleta abajo y
+      // confirma. Una referencia nueva trae paletas nuevas → el índice viejo
+      // no significa nada, arranca en 0.
+      setUploaded(data)
+      setSelection((s) => ({ ...s, variant: 0 }))
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -70,7 +85,12 @@ export default function Section2Template({
         : 'bg-white/[0.04] border-white/[0.06] text-[#bdbdbd] hover:text-[#f5f5f5]'
     }`
 
+  // La pestaña activa decide de qué fuente salen las paletas: el usuario puede
+  // tener una plantilla elegida Y una referencia analizada a la vez, y la que
+  // confirme es la que está mirando.
   const pickedDna = picked ? TEMPLATE_DNA[picked] : null
+  const fromUpload = tab === 'upload' && uploaded !== null
+  const palettes = fromUpload ? uploaded!.paletteOptions : pickedDna?.palettes ?? null
 
   return (
     <div className="flex flex-col gap-4">
@@ -142,19 +162,23 @@ export default function Section2Template({
         <label className="flex flex-col items-center justify-center gap-3 border-2 border-dashed border-white/[0.1] rounded-2xl p-10 cursor-pointer hover:border-[rgba(255,156,77,0.5)] transition-colors bg-[#141414]">
           <Upload className="w-7 h-7 text-[#8a8a8a]" />
           <span className="text-[13px] text-[#8a8a8a] text-center">
-            {busy ? 'Analizando tu referencia...' : 'Sube una foto del producto en el que quieres basar tu marca'}
+            {busy
+              ? 'Analizando tu referencia...'
+              : uploaded
+                ? 'Referencia lista. Elige tu paleta abajo, o sube otra foto para reemplazarla.'
+                : 'Sube una foto del producto en el que quieres basar tu marca'}
           </span>
           <input type="file" accept="image/*" className="hidden" disabled={busy}
                  onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
         </label>
       )}
 
-      {/* Paletas de la plantilla elegida — dato, nunca render. */}
-      {pickedDna && (
+      {/* Paletas de la plantilla elegida o de la referencia subida — dato, nunca render. */}
+      {palettes && (
         <div className="flex flex-col gap-3 rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
           <p className="text-[11px] font-bold text-[#8a8a8a] tracking-[1px] uppercase">Elige tu paleta</p>
           <div className="flex flex-wrap gap-2">
-            {pickedDna.palettes.map((p, i) => (
+            {palettes.map((p, i) => (
               <button
                 key={i}
                 type="button"
@@ -173,10 +197,10 @@ export default function Section2Template({
           </div>
           <button
             type="button"
-            onClick={() => onTemplateChosen(picked!, variant)}
+            onClick={() => (fromUpload ? onUploaded(uploaded!, variant) : onTemplateChosen(picked!, variant))}
             className="h-11 w-full rounded-xl jr-cta text-[13px] font-bold cursor-pointer border-0 font-sans"
           >
-            Usar «{getTemplate(picked!).productType}» →
+            {fromUpload ? 'Usar mi referencia →' : `Usar «${getTemplate(picked!).productType}» →`}
           </button>
         </div>
       )}

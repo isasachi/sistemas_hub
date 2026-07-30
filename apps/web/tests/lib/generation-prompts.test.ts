@@ -309,13 +309,16 @@ describe('fix round 3: brandLine no cita layout.logoPlacement (finding 1)', () =
     // — separamos el prompt en lo que viene ANTES de esa línea (la frase del
     // brand y el resto de la composición previa) y confirmamos que "prominently"/
     // "moderate" sólo aparecen DESPUÉS, dentro de esa línea de geometría.
-    const logoPlacementLineIdx = p.indexOf('Logo placement:')
+    const logoPlacementLineIdx = p.indexOf('Brand/logo zone')
     expect(logoPlacementLineIdx).toBeGreaterThan(-1)
     const beforeGeometryLine = p.slice(0, logoPlacementLineIdx)
     expect(beforeGeometryLine).not.toMatch(/prominently/i)
     expect(beforeGeometryLine).not.toMatch(/moderate/i)
     // La geometría exacta se sigue entregando, sólo que no en la frase del brand.
-    expect(p).toContain('Logo placement: Centered prominently on the front panel, occupying a moderate size relative to the overall design.')
+    expect(p).toContain('Centered prominently on the front panel, occupying a moderate size relative to the overall design.')
+    // Y acotada a geometría: sin esto, "prominently"/"moderate size" se leen como
+    // instrucción de escala y vuelven a contradecir "clearly smaller" (review de rama).
+    expect(p).toMatch(/Brand\/logo zone \(position and room only[^)]*scale[^)]*governed above\)/)
   })
 
   it('la relación brand/hero se describe sin depender del contenido de logoPlacement', () => {
@@ -416,5 +419,40 @@ describe('fix round 5: el panel no inventa declaraciones regulatorias', () => {
   it('da la salida: texto neutro de relleno en esas zonas, sin afirmar nada verificable', () => {
     const p = buildLabelPrompt(base, DNA, LAYOUT)
     expect(p).toMatch(/neutral|generic/i)
+  })
+})
+
+// --- Review de rama (2026-07-30) ------------------------------------------
+
+describe('review de rama: el panel plano admite imagen impresa del producto', () => {
+  // La mitad del catálogo tiene bandas de anatomy tipo "product imagery (~40%)"
+  // (tarjetas cabecera, cajas). El prompt decía "NO product body", que contradice
+  // a `layoutToPrompt` — que ordena seguir ese anatomy "exactly".
+  it('prohíbe el envase 3D pero no la imagen dentro del panel', () => {
+    const p = buildLabelPrompt(base, DNA, LAYOUT)
+    expect(p).toMatch(/NO photograph of a three-dimensional package/i)
+    expect(p).toMatch(/Printed imagery of the product INSIDE the panel/i)
+    expect(p).not.toMatch(/NO product body/i)
+  })
+})
+
+describe('review de rama: materials de la referencia sólo al clonar', () => {
+  it('clonando, el mockup inyecta el material del envase de la referencia', () => {
+    expect(buildMockupPrompt({ ...base, sameProduct: true }, DNA)).toMatch(/material and finish \(vidrio\)/)
+  })
+
+  it('en traspaso NO lo inyecta — es el envase ajeno, igual que containerType', () => {
+    // dna-source ya descarta containerType en traspaso por esta misma razón;
+    // dejar materials pedía "vidrio" para una rodillera.
+    const p = buildMockupPrompt({ ...base, sameProduct: false, productType: 'rodillera', referenceProductType: 'serum facial' }, DNA)
+    expect(p).not.toMatch(/material and finish/i)
+  })
+})
+
+describe('review de rama: no se piden "legal notices" y se prohíben a la vez', () => {
+  it('el microtexto pedido ya no incluye avisos legales', () => {
+    const p = buildLabelPrompt(base, DNA, LAYOUT)
+    expect(p).not.toMatch(/legal notices/i)
+    expect(p).toMatch(/net weight or capacity/i)
   })
 })

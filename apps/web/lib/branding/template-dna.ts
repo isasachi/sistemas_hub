@@ -1,4 +1,7 @@
 // GENERADO por scripts/seed-branding-templates.ts — no editar a mano.
+// ⚠️ EXCEPCIÓN: hay 5 bloques marcados `// Corregido a mano (Task 10)` (busca ese
+// texto). Re-correr el seed los DESTRUYE — reaplícalos leyendo esos comentarios,
+// que explican qué dijo el extractor y por qué está mal.
 // ADN compositivo extraído de la foto de cada plantilla + su containerType +
 // sus 3 paletas (la [0] es la de la foto original).
 import type { TemplateDna } from './templates'

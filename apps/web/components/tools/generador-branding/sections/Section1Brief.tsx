@@ -51,19 +51,24 @@ function Suggestions({ names, onPick }: { names: string[]; onPick: (n: string) =
 }
 
 export default function Section1Brief({ maxStep }: { maxStep: number }) {
-  const { sessionId, setBrief, setCategory } = useBrandingStore()
-  const [categoryId, setCategoryId] = useState('')
-  const [productType, setProductType] = useState('')
-  const [descriptor, setDescriptor] = useState('')
-  const [tagline, setTagline] = useState('')
-  const [containerType, setContainerType] = useState('')
+  const s = useBrandingStore()
+  const { sessionId, setBrief, setCategory } = s
+  // Sembrado desde el store: AccordionSection remonta el paso al reabrirlo, así
+  // que sin esto el brief ya guardado vuelve en blanco — y como `categoryId` es
+  // obligatorio, el botón queda deshabilitado sobre datos que sí existen (mismo
+  // bug que task-11 arregló en Section2Template, ver template-selection.ts).
+  const [categoryId, setCategoryId] = useState(() => s.categoryId ?? '')
+  const [productType, setProductType] = useState(() => s.productType ?? '')
+  const [descriptor, setDescriptor] = useState(() => s.descriptor ?? '')
+  const [tagline, setTagline] = useState(() => s.tagline ?? '')
+  const [containerType, setContainerType] = useState(() => s.containerType ?? '')
 
   const [hasBrand, setHasBrand] = useState(true)
-  const [brandName, setBrandName] = useState('')
+  const [brandName, setBrandName] = useState(() => s.brandName ?? '')
   const [brandNames, setBrandNames] = useState<string[]>([])
 
   const [hasProductName, setHasProductName] = useState(true)
-  const [productName, setProductName] = useState('')
+  const [productName, setProductName] = useState(() => s.productName ?? '')
   const [productNames, setProductNames] = useState<string[]>([])
 
   const [suggesting, setSuggesting] = useState<'brand' | 'product' | null>(null)

@@ -42,7 +42,7 @@ interface BrandingActions {
   setStep: (step: number) => void
   setCategory: (categoryId: string) => void
   setTemplate: (data: { templateId: string; paletteVariant: number }) => void
-  setUploaded: (data: { uploadedImageUrl: string; imageAnalysis: ExtractedStyle | null; paletteOptions: PaletteColor[][] | null }) => void
+  setUploaded: (data: { uploadedImageUrl: string; imageAnalysis: ExtractedStyle | null; paletteOptions: PaletteColor[][] | null; paletteVariant: number }) => void
   setBrief: (data: {
     categoryId: string
     brandName: string
@@ -96,8 +96,8 @@ export const useBrandingStore = create<BrandingState & BrandingActions>((set) =>
   setTemplate: ({ templateId, paletteVariant }) =>
     set({ sourceMode: 'template', templateId, paletteVariant, step: 2 }),
 
-  setUploaded: ({ uploadedImageUrl, imageAnalysis, paletteOptions }) =>
-    set({ sourceMode: 'upload', uploadedImageUrl, imageAnalysis, paletteOptions, paletteVariant: 0, step: 2 }),
+  setUploaded: ({ uploadedImageUrl, imageAnalysis, paletteOptions, paletteVariant }) =>
+    set({ sourceMode: 'upload', uploadedImageUrl, imageAnalysis, paletteOptions, paletteVariant, step: 2 }),
 
   // El brief es el paso 0: al completarlo se avanza a elegir plantilla (paso 1).
   setBrief: ({ categoryId, brandName, productName, productType, descriptor, tagline, containerType }) =>

@@ -82,9 +82,23 @@ export default function BrandingWizard() {
     setTemplate({ templateId: id, paletteVariant })
   }
 
-  async function onUploaded(r: AnalyzeResult) {
-    if (sessionId) await patchSession(sessionId, { source_mode: 'upload', step: Math.max(maxStep.current, 2) })
-    setUploaded({ uploadedImageUrl: r.uploadedImageUrl, imageAnalysis: r.analysis, paletteOptions: r.paletteOptions })
+  // `palette_variant` va SIEMPRE en el patch: sin él, venir de una plantilla y
+  // cambiar a referencia subida dejaba el índice viejo en la sesión, indexando
+  // las paletas nuevas con el número de las viejas.
+  async function onUploaded(r: AnalyzeResult, paletteVariant: number) {
+    if (sessionId) {
+      await patchSession(sessionId, {
+        source_mode: 'upload',
+        palette_variant: paletteVariant,
+        step: Math.max(maxStep.current, 2),
+      })
+    }
+    setUploaded({
+      uploadedImageUrl: r.uploadedImageUrl,
+      imageAnalysis: r.analysis,
+      paletteOptions: r.paletteOptions,
+      paletteVariant,
+    })
   }
 
   // "Continuar a la guía" (botón en Section4Marca, fase `done`): el pipeline
