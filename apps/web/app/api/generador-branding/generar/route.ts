@@ -7,7 +7,7 @@ import { readUserId } from '@/lib/product-hunter/session'
 import { isFlagged } from '@/lib/branding/moderation'
 import { getPreset, isPresetId } from '@/lib/branding/presets'
 import { isComplete, type Brief, type PartialBrief } from '@/lib/branding/brief'
-import { buildPrompt, aspectFor, generationOrder, stageSequence, type Stage } from '@/lib/branding/generation'
+import { buildPrompt, aspectFor, generationOrder, stageSequence, type Ref, type Stage } from '@/lib/branding/generation'
 import type { Part } from '@google/genai'
 
 export const dynamic = 'force-dynamic'
@@ -106,6 +106,7 @@ export async function POST(req: NextRequest) {
         // En una regeneración suelta el logo ya existe: se reusa como referencia.
         const existing = await getBrandingSession(sessionId)
         let logoUrl: string | null = (existing?.logo_url as string) ?? null
+        let mockupUrl: string | null = (existing?.mockup_url as string) ?? null
         const urls: Partial<Record<Stage, string>> = {}
         const failed: Stage[] = []
 
@@ -120,10 +121,17 @@ export async function POST(req: NextRequest) {
 
           send({ status: 'stage', stage })
           try {
-            const useLogo = stage !== 'logo' && !!logoUrl
+            // La pieza ya generada manda: en logo_first el logo se propaga al mockup y
+            // a la etiqueta; en mockup_first el envase es la fuente y el logo se extrae
+            // de él. Sin esto las 3 piezas de una misma marca no se parecen entre sí.
+            const ref: Ref = stage === 'logo'
+              ? (mockupUrl ? 'mockup' : 'none')
+              : logoUrl ? 'logo' : mockupUrl && stage === 'label' ? 'mockup' : 'none'
+            const refUrl = ref === 'logo' ? logoUrl : ref === 'mockup' ? mockupUrl : null
+
             const parts: Part[] = []
-            if (useLogo) parts.push(...(await refParts([logoUrl!], origin)))
-            parts.push(...refs, { text: buildPrompt(stage, brief, preset, useLogo) })
+            if (refUrl) parts.push(...(await refParts([refUrl], origin)))
+            parts.push(...refs, { text: buildPrompt(stage, brief, preset, ref) })
 
             // generateImage ya reintenta internamente (3 intentos, OpenAI→Gemini).
             const b64 = await generateImage(parts, 3, { aspectRatio: aspectFor(stage) })
@@ -133,6 +141,7 @@ export async function POST(req: NextRequest) {
             await updateBrandingSession(sessionId, { [COLUMN[stage]]: url } as never)
             await recordGenQuota(sessionId, kind, userId)
             if (stage === 'logo') logoUrl = url
+            if (stage === 'mockup') mockupUrl = url
             urls[stage] = url
             send({ status: 'stage_done', stage, url })
           } catch (err) {

@@ -48,10 +48,20 @@ function exactName(b: Brief): string {
   return `Render the brand name EXACTLY as "${b.brandName}" — same spelling, same accents, no extra words.`
 }
 
-export function buildLogoPrompt(b: Brief, p: Preset): string {
+/** Qué pieza ya generada se adjunta como referencia (la primera de los adjuntos). */
+export type Ref = 'none' | 'logo' | 'mockup'
+
+export function buildLogoPrompt(b: Brief, p: Preset, ref: Ref): string {
   return [
     `Design a brand logo for a ${b.category} product: ${b.productDescription}.`,
     `It is a WORDMARK: the brand name as custom lettering, no slogan, no tagline, no product shot.`,
+    // mockup_first: el envase ya existe, así que el logo se EXTRAE de él en vez de
+    // inventarse — si no, las piezas de la misma marca no se parecen entre sí.
+    ref === 'mockup'
+      ? `The FIRST attached image is the finished packaging for this brand: lift its wordmark and`
+        + ` rebuild it isolated — same letterforms, same weight, same colours, same proportions.`
+        + ` Do not redesign it and do not include the container.`
+      : '',
     exactName(b),
     `Typography direction: letterforms in the spirit of ${p.typography.display}.`,
     `Style — ${p.promptStyle}`,
@@ -62,10 +72,10 @@ export function buildLogoPrompt(b: Brief, p: Preset): string {
   ].filter(Boolean).join(' ')
 }
 
-export function buildMockupPrompt(b: Brief, p: Preset, hasLogo: boolean): string {
+export function buildMockupPrompt(b: Brief, p: Preset, ref: Ref): string {
   return [
     `Photorealistic product shot of ${b.productDescription} for the brand "${b.brandName}".`,
-    hasLogo
+    ref === 'logo'
       ? `The FIRST attached image is the finished logo: place it on the packaging exactly as it is —`
         + ` same letterforms, same spelling, same proportions. Do not redraw it.`
       : exactName(b),
@@ -79,12 +89,15 @@ export function buildMockupPrompt(b: Brief, p: Preset, hasLogo: boolean): string
   ].filter(Boolean).join(' ')
 }
 
-export function buildLabelPrompt(b: Brief, p: Preset, hasLogo: boolean): string {
+export function buildLabelPrompt(b: Brief, p: Preset, ref: Ref): string {
   return [
     `Design the flat printable LABEL artwork for ${b.productDescription}, brand "${b.brandName}".`,
-    hasLogo
+    ref === 'logo'
       ? `The FIRST attached image is the finished logo: place it on the label exactly as it is, as the`
         + ` brand lockup. Do not redraw it.`
+      : ref === 'mockup'
+      ? `The FIRST attached image is the finished packaging: reuse its wordmark and its colour blocking`
+        + ` so the label matches it. Do not copy the container itself — the label is flat artwork.`
       : exactName(b),
     `Flat 2D artwork seen straight on, as it would go to print — NOT applied to a container, no bottle,`,
     `no jar, no 3D, no perspective, no mockup.`,
@@ -96,10 +109,10 @@ export function buildLabelPrompt(b: Brief, p: Preset, hasLogo: boolean): string 
   ].filter(Boolean).join(' ')
 }
 
-export function buildPrompt(stage: Stage, b: Brief, p: Preset, hasLogo: boolean): string {
-  if (stage === 'logo') return buildLogoPrompt(b, p)
-  if (stage === 'mockup') return buildMockupPrompt(b, p, hasLogo)
-  return buildLabelPrompt(b, p, hasLogo)
+export function buildPrompt(stage: Stage, b: Brief, p: Preset, ref: Ref): string {
+  if (stage === 'logo') return buildLogoPrompt(b, p, ref)
+  if (stage === 'mockup') return buildMockupPrompt(b, p, ref)
+  return buildLabelPrompt(b, p, ref)
 }
 
 /** gpt-image-2 solo tiene 3 tamaños; el logo cuadrado, los otros dos verticales. */

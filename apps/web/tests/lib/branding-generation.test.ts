@@ -29,22 +29,28 @@ describe('orden de generación', () => {
 describe('prompts', () => {
   it('todos llevan el nombre de marca, la dirección del preset y su paleta', () => {
     for (const stage of STAGES) {
-      const p = buildPrompt(stage, brief, preset, false)
+      const p = buildPrompt(stage, brief, preset, 'none')
       expect(p, stage).toContain('Miru')
       expect(p, stage).toContain(preset.promptStyle.slice(0, 40))
       expect(p, stage).toContain(preset.palette.primary)
     }
   })
 
+  it('en mockup_first el logo se extrae del envase, no se reinventa', () => {
+    const p = buildPrompt('logo', brief, preset, 'mockup')
+    expect(p).toContain('lift its wordmark')
+    expect(buildPrompt('logo', brief, preset, 'none')).not.toContain('lift its wordmark')
+  })
+
   it('con logo ya generado, mockup y etiqueta lo tratan como adjunto a respetar', () => {
     for (const stage of ['mockup', 'label'] as Stage[]) {
-      expect(buildPrompt(stage, brief, preset, true)).toContain('FIRST attached image is the finished logo')
-      expect(buildPrompt(stage, brief, preset, false)).not.toContain('finished logo')
+      expect(buildPrompt(stage, brief, preset, 'logo')).toContain('FIRST attached image is the finished logo')
+      expect(buildPrompt(stage, brief, preset, 'none')).not.toContain('finished logo')
     }
   })
 
   it('la etiqueta es arte plano, no un envase', () => {
-    const p = buildPrompt('label', brief, preset, true)
+    const p = buildPrompt('label', brief, preset, 'logo')
     expect(p).toContain('no mockup')
     expect(p).toContain('NOT applied to a container')
   })
