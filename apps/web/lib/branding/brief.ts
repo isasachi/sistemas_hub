@@ -16,6 +16,9 @@ export interface Brief {
   brandName: string
   audience: string[]
   presetId: PresetId
+  /** Envase del mockup. Opcional a propósito: NO es una quinta pregunta — se
+   *  ajusta en la confirmación y, si queda vacío, lo decide el estilo. */
+  containerType?: string
 }
 
 export const BRIEF_KEY = 'branding_brief'
@@ -58,6 +61,18 @@ export const AUDIENCE_TAGS = [
   'Veganos y naturales',
 ]
 export const AUDIENCE_MAX = 3
+
+/** Envases de la confirmación. Vacío = el que sugiera el estilo. */
+export const CONTAINERS = [
+  'Frasco con gotero',
+  'Pote',
+  'Doypack',
+  'Lata',
+  'Tubo',
+  'Botella',
+  'Caja',
+  'Sobre / sachet',
+]
 
 export type PartialBrief = Partial<Brief>
 

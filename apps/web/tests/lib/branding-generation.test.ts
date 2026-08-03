@@ -14,9 +14,8 @@ const preset = getPreset('soft_modern')
 const STAGES: Stage[] = ['logo', 'mockup', 'label']
 
 describe('orden de generación', () => {
-  it('el logo va primero y salen las 3 piezas', () => {
-    expect(STAGE_SEQUENCE[0]).toBe('logo')
-    expect(new Set(STAGE_SEQUENCE)).toEqual(new Set(STAGES))
+  it('va en cascada logo → etiqueta → mockup', () => {
+    expect(STAGE_SEQUENCE).toEqual(['logo', 'label', 'mockup'])
   })
 })
 
@@ -30,11 +29,22 @@ describe('prompts', () => {
     }
   })
 
-  it('con logo ya generado, mockup y etiqueta lo tratan como adjunto a respetar', () => {
-    for (const stage of ['mockup', 'label'] as Stage[]) {
-      expect(buildPrompt(stage, brief, preset, 'logo')).toContain('FIRST attached image is the finished logo')
-      expect(buildPrompt(stage, brief, preset, 'none')).not.toContain('finished logo')
-    }
+  it('la etiqueta trata al logo como adjunto a respetar', () => {
+    expect(buildPrompt('label', brief, preset, 'logo')).toContain('FIRST attached image is the finished logo')
+    expect(buildPrompt('label', brief, preset, 'none')).not.toContain('finished logo')
+  })
+
+  it('el mockup aplica la etiqueta ya generada, no la reinventa', () => {
+    const p = buildPrompt('mockup', brief, preset, 'label')
+    expect(p).toContain('finished label artwork')
+    expect(p).toContain('Do not redesign it')
+  })
+
+  it('el envase: el elegido manda; sin elegir, lo decide el motor', () => {
+    const conEnvase = buildPrompt('mockup', { ...brief, containerType: 'Doypack' }, preset, 'label')
+    expect(conEnvase).toContain('The container MUST be: Doypack')
+    expect(buildPrompt('mockup', brief, preset, 'label')).toContain('best fits')
+    expect(buildPrompt('label', { ...brief, containerType: 'Doypack' }, preset, 'logo')).toContain('Doypack')
   })
 
   it('la etiqueta es arte plano, no un envase', () => {

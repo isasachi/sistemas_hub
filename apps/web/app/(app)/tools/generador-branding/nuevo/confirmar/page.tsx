@@ -4,8 +4,9 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
-import { useBrief, btnPrimary } from '@/components/tools/generador-branding/nuevo/BriefShell'
-import { STEPS, resumePath, isComplete } from '@/lib/branding/brief'
+import { Input } from '@/components/ui/input'
+import { useBrief, btnPrimary, chipBase, chipOn, chipOff } from '@/components/tools/generador-branding/nuevo/BriefShell'
+import { STEPS, resumePath, isComplete, CONTAINERS } from '@/lib/branding/brief'
 import { getPreset } from '@/lib/branding/presets'
 
 const COLOR_LABELS: Record<string, string> = {
@@ -23,7 +24,20 @@ function MoodRef({ src, fallback, alt }: { src: string; fallback: string; alt: s
 
 export default function ConfirmarPage() {
   const router = useRouter()
-  const { brief } = useBrief()
+  const { brief, update } = useBrief()
+  const [custom, setCustom] = useState('')
+
+  // El envase elegido vive en el brief (localStorage) como el resto: volver atrás
+  // y regresar no lo pierde.
+  const container = brief?.containerType
+  useEffect(() => {
+    if (container && !CONTAINERS.includes(container)) setCustom(container)
+  }, [container])
+
+  function pickContainer(value: string | undefined) {
+    update({ containerType: value })
+    if (!value || CONTAINERS.includes(value)) setCustom('')
+  }
 
   // Llegar acá sin el brief entero (link directo, localStorage limpiado) manda al
   // primer paso que falte en vez de romper.
@@ -81,6 +95,35 @@ export default function ConfirmarPage() {
               </div>
             ))}
           </div>
+        </div>
+
+        {/* Envase — NO es una quinta pregunta: es un ajuste opcional acá, con
+            "el del estilo" como default. Solo afecta al mockup y a la etiqueta. */}
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-0.5">
+            <p className="text-[13px] font-bold text-[#f5f5f5]">Envase</p>
+            <p className="text-[12px] text-[#8a8a8a]">
+              Opcional. Si no eliges, usamos el que mejor le calce a tu producto.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => pickContainer(undefined)}
+                    className={`${chipBase} ${!container ? chipOn : chipOff}`}>
+              El que sugiera el estilo
+            </button>
+            {CONTAINERS.map((c) => (
+              <button key={c} type="button" onClick={() => pickContainer(c)}
+                      className={`${chipBase} ${container === c ? chipOn : chipOff}`}>
+                {c}
+              </button>
+            ))}
+          </div>
+          <Input
+            id="containerType" placeholder="U otro: describe tu envase (ej: frasco de vidrio ámbar con tapa de madera)"
+            value={custom} onChange={(e) => setCustom(e.target.value)}
+            onBlur={() => pickContainer(custom.trim() || undefined)}
+            className="h-11 rounded-xl bg-white/[0.04] border-white/[0.08] text-[13px] text-[#f5f5f5]"
+          />
         </div>
 
         {/* Moodboard (2 refs) */}

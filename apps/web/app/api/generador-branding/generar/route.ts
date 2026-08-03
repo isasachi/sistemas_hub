@@ -78,6 +78,7 @@ export async function POST(req: NextRequest) {
             product_type: b.productDescription,
             target_audience: b.audience.join(', '),
             style_id: b.presetId,
+            container_type: b.containerType ?? null,
             source_mode: 'preset',
             step: 1,
             generation_status: 'running',
@@ -96,6 +97,7 @@ export async function POST(req: NextRequest) {
         // En una regeneración suelta el logo ya existe: se reusa como referencia.
         const existing = await getBrandingSession(sessionId)
         let logoUrl: string | null = (existing?.logo_url as string) ?? null
+        let labelUrl: string | null = (existing?.label_url as string) ?? null
         const urls: Partial<Record<Stage, string>> = {}
         const failed: Stage[] = []
 
@@ -110,12 +112,16 @@ export async function POST(req: NextRequest) {
 
           send({ status: 'stage', stage })
           try {
-            // El logo manda: se adjunta primero al mockup y a la etiqueta para que las
-            // 3 piezas de la misma marca compartan el mismo wordmark.
-            const ref: Ref = stage !== 'logo' && logoUrl ? 'logo' : 'none'
+            // Cascada: la etiqueta monta sobre el logo y el mockup sobre la etiqueta
+            // (así el envase muestra la MISMA etiqueta que se entrega). Si la pieza
+            // previa falló, se cae al logo y en última instancia a ninguna.
+            const ref: Ref = stage === 'logo' ? 'none'
+              : stage === 'mockup' && labelUrl ? 'label'
+              : logoUrl ? 'logo' : 'none'
+            const refUrl = ref === 'label' ? labelUrl : ref === 'logo' ? logoUrl : null
 
             const parts: Part[] = []
-            if (ref === 'logo') parts.push(...(await refParts([logoUrl!], origin)))
+            if (refUrl) parts.push(...(await refParts([refUrl], origin)))
             parts.push(...refs, { text: buildPrompt(stage, brief, preset, ref) })
 
             // generateImage ya reintenta internamente (3 intentos, OpenAI→Gemini).
@@ -126,6 +132,7 @@ export async function POST(req: NextRequest) {
             await updateBrandingSession(sessionId, { [COLUMN[stage]]: url } as never)
             await recordGenQuota(sessionId, kind, userId)
             if (stage === 'logo') logoUrl = url
+            if (stage === 'label') labelUrl = url
             urls[stage] = url
             send({ status: 'stage_done', stage, url })
           } catch (err) {

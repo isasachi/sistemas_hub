@@ -13,12 +13,12 @@ import { STAGE_LABELS, type Stage } from '@/lib/branding/generation'
 // El brandboard es una etapa más de la pantalla aunque no sea una generación:
 // se arma siempre al final y el usuario lo ve completarse.
 type Step = Stage | 'brandboard'
-const STEPS_UI: Step[] = ['logo', 'mockup', 'label', 'brandboard']
+const STEPS_UI: Step[] = ['logo', 'label', 'mockup', 'brandboard']
 const LABELS: Record<Step, string> = { ...STAGE_LABELS, brandboard: 'Brandboard' }
 
 const TIPS = [
   'El estilo que elegiste ya trae su paleta y sus tipografías: no hay nada más que decidir.',
-  'El logo se genera primero y se usa como referencia para el mockup y la etiqueta.',
+  'Cada pieza monta sobre la anterior: el logo entra en la etiqueta y la etiqueta se aplica al envase.',
   'Si algo no te convence, puedes regenerar solo esa pieza sin rehacer el resto.',
   'La etiqueta sale plana y lista para imprenta, no montada sobre el envase.',
   'Al final te armamos el brandboard en PDF y el kit descargable, sin que tengas que pedirlo.',

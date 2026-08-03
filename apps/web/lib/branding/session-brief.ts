@@ -13,6 +13,7 @@ export function briefFromRow(row: Record<string, unknown>): Brief | null {
     brandName: (row.brand_name as string) ?? undefined,
     audience: row.target_audience ? String(row.target_audience).split(', ').filter(Boolean) : [],
     presetId: isPresetId(String(row.style_id ?? '')) ? (row.style_id as Brief['presetId']) : undefined,
+    containerType: (row.container_type as string) || undefined,
   }
   return isComplete(b) ? b : null
 }
