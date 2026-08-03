@@ -10,13 +10,18 @@ import { CONFIRM_PATH, isComplete, resumePath } from '@/lib/branding/brief'
 import { getPreset } from '@/lib/branding/presets'
 import { STAGE_LABELS, type Stage } from '@/lib/branding/generation'
 
-const STAGES: Stage[] = ['logo', 'mockup', 'label']
+// El brandboard es una etapa más de la pantalla aunque no sea una generación:
+// se arma siempre al final y el usuario lo ve completarse.
+type Step = Stage | 'brandboard'
+const STEPS_UI: Step[] = ['logo', 'mockup', 'label', 'brandboard']
+const LABELS: Record<Step, string> = { ...STAGE_LABELS, brandboard: 'Brandboard' }
 
 const TIPS = [
   'El estilo que elegiste ya trae su paleta y sus tipografías: no hay nada más que decidir.',
   'El logo se genera primero y se usa como referencia para el mockup y la etiqueta.',
   'Si algo no te convence, puedes regenerar solo esa pieza sin rehacer el resto.',
   'La etiqueta sale plana y lista para imprenta, no montada sobre el envase.',
+  'Al final te armamos el brandboard en PDF y el kit descargable, sin que tengas que pedirlo.',
 ]
 
 type State = 'pending' | 'running' | 'done' | 'failed'
@@ -24,7 +29,7 @@ type State = 'pending' | 'running' | 'done' | 'failed'
 export default function GenerandoPage() {
   const router = useRouter()
   const { brief } = useBrief()
-  const [state, setState] = useState<Record<Stage, State>>({ logo: 'pending', mockup: 'pending', label: 'pending' })
+  const [state, setState] = useState<Record<Step, State>>({ logo: 'pending', mockup: 'pending', label: 'pending', brandboard: 'pending' })
   const [error, setError] = useState<string | null>(null)
   const [tip, setTip] = useState(0)
   const [slow, setSlow] = useState(false)
@@ -57,7 +62,7 @@ export default function GenerandoPage() {
           body: JSON.stringify({ brief }),
         })
         await readSSEStream(res, (e) => {
-          const ev = e as unknown as { status: string; stage?: Stage; sessionId?: string; message?: string }
+          const ev = e as unknown as { status: string; stage?: Step; sessionId?: string; message?: string }
           if (ev.status === 'session' && ev.sessionId) setSessionId(ev.sessionId)
           if (ev.status === 'stage' && ev.stage) setState((s) => ({ ...s, [ev.stage!]: 'running' }))
           if (ev.status === 'stage_done' && ev.stage) setState((s) => ({ ...s, [ev.stage!]: 'done' }))
@@ -93,7 +98,7 @@ export default function GenerandoPage() {
         </div>
 
         <div className="flex flex-col gap-2">
-          {STAGES.map((s, i) => {
+          {STEPS_UI.map((s, i) => {
             const st = state[s]
             return (
               <div key={s} className={`flex items-center gap-3 rounded-xl border px-4 py-3 transition-colors ${
@@ -107,7 +112,7 @@ export default function GenerandoPage() {
                     : st === 'running' ? <span className="w-3 h-3 border-2 border-white/20 border-t-[#ff9c4d] rounded-full animate-spin" />
                     : i + 1}
                 </span>
-                <span className="text-[13px] text-[#f5f5f5] flex-1">{STAGE_LABELS[s]}</span>
+                <span className="text-[13px] text-[#f5f5f5] flex-1">{LABELS[s]}</span>
                 <span className="text-[11px] text-[#8a8a8a]">
                   {st === 'done' ? 'listo' : st === 'running' ? 'generando...' : st === 'failed' ? 'falló' : 'pendiente'}
                 </span>

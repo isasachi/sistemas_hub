@@ -3,7 +3,7 @@
 import { Suspense, useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ArrowLeft, RefreshCw } from 'lucide-react'
+import { ArrowLeft, Download, RefreshCw } from 'lucide-react'
 import { readSSEStream } from '@/components/tools/ui/SSEStatus'
 import { btnPrimary } from '@/components/tools/generador-branding/nuevo/BriefShell'
 import { STEPS } from '@/lib/branding/brief'
@@ -15,10 +15,6 @@ interface SessionRow {
   label_url: string | null
   brand_name: string | null
   generation_status: string | null
-}
-
-const URL_OF: Record<Stage, keyof SessionRow> = {
-  logo: 'logo_url', mockup: 'mockup_url', label: 'label_url',
 }
 
 function Artifact({ stage, url, busy, onRegen, big }: {
@@ -128,8 +124,15 @@ function Resultado() {
         )}
 
         <div className="flex flex-wrap gap-3">
-          {/* Descargar kit = bloque 7 (zip + brandboard), todavía no construido. */}
-          <button type="button" onClick={() => router.push(STEPS[3].path)} className={btnPrimary + ' h-12 px-6'}>
+          {/* Jerarquía del spec 6.4: descargar primero, regenerar en cada pieza,
+              cambiar estilo al final. La descarga es un <a>: deja que el browser
+              maneje el attachment sin pasar el zip por memoria del cliente. */}
+          <a href={`/api/generador-branding/sessions/${sessionId}/kit`}
+             className={btnPrimary + ' h-12 px-6 no-underline'}>
+            <Download className="w-4 h-4" /> Descargar kit
+          </a>
+          <button type="button" onClick={() => router.push(STEPS[3].path)}
+                  className="h-12 px-6 rounded-xl border border-white/[0.14] text-[13px] font-semibold text-[#f5f5f5] hover:bg-white/[0.05] transition-colors cursor-pointer bg-transparent">
             Cambiar estilo
           </button>
         </div>

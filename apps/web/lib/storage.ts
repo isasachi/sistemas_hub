@@ -13,6 +13,7 @@ const EXT: Record<string, string> = {
   'image/png': 'png',
   'image/webp': 'webp',
   'image/gif': 'gif',
+  'application/pdf': 'pdf',
 }
 
 function mimeToExt(mime: string): string {

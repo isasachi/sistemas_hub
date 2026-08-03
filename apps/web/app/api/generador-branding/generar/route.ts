@@ -7,6 +7,8 @@ import { readUserId } from '@/lib/product-hunter/session'
 import { isFlagged } from '@/lib/branding/moderation'
 import { getPreset, isPresetId } from '@/lib/branding/presets'
 import { isComplete, type Brief, type PartialBrief } from '@/lib/branding/brief'
+import { briefFromRow } from '@/lib/branding/session-brief'
+import { buildBrandboard } from '@/lib/branding/brandboard'
 import { buildPrompt, aspectFor, STAGE_SEQUENCE, type Ref, type Stage } from '@/lib/branding/generation'
 import type { Part } from '@google/genai'
 
@@ -32,17 +34,6 @@ async function refParts(paths: string[], origin: string): Promise<Part[]> {
     parts.push({ inlineData: { mimeType: res.headers.get('content-type') ?? 'image/jpeg', data: buf.toString('base64') } })
   }
   return parts
-}
-
-function briefFromRow(row: Record<string, unknown>): Brief | null {
-  const b: PartialBrief = {
-    category: (row.product_category as Brief['category']) ?? undefined,
-    productDescription: (row.product_type as string) ?? undefined,
-    brandName: (row.brand_name as string) ?? undefined,
-    audience: row.target_audience ? String(row.target_audience).split(', ').filter(Boolean) : [],
-    presetId: isPresetId(String(row.style_id ?? '')) ? (row.style_id as Brief['presetId']) : undefined,
-  }
-  return isComplete(b) ? b : null
 }
 
 export async function POST(req: NextRequest) {
@@ -150,6 +141,30 @@ export async function POST(req: NextRequest) {
           generation_error: failed.length ? `fallaron: ${failed.join(', ')}` : null,
           step: 2,
         } as never)
+        // Etapa 5: el brandboard se arma SIEMPRE al terminar, se pida o no, y sin
+        // tocar el modelo (pdf-lib sobre las piezas ya generadas).
+        if (!body.only) {
+          send({ status: 'stage', stage: 'brandboard' })
+          try {
+            const row = await getBrandingSession(sessionId)
+            const grab = async (u: string | null) =>
+              u ? Buffer.from(await (await fetch(u)).arrayBuffer()) : null
+            const pdf = await buildBrandboard({
+              brandName: brief.brandName,
+              productDescription: brief.productDescription,
+              audience: brief.audience,
+              preset,
+              logo: await grab((row?.logo_url as string) ?? null),
+              mockup: await grab((row?.mockup_url as string) ?? null),
+              label: await grab((row?.label_url as string) ?? null),
+            })
+            await uploadToStorage(sessionId, pdf, 'application/pdf', 'brandboard')
+            send({ status: 'stage_done', stage: 'brandboard' })
+          } catch (err) {
+            send({ status: 'stage_failed', stage: 'brandboard', message: String(err) })
+          }
+        }
+
         send({ status: 'done', sessionId, urls, failed })
       } catch (err) {
         send({ status: 'error', message: String(err), retryable: true })
