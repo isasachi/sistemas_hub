@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { Check, Lock, ChevronDown } from 'lucide-react'
+import { Check, ChevronDown } from 'lucide-react'
 
 type SectionStatus = 'locked' | 'active' | 'completed'
 
@@ -25,7 +25,7 @@ const statusStyles: Record<SectionStatus, {
   locked: {
     border: 'border border-dashed border-white/[0.06]',
     headerBg: '',
-    opacity: 'opacity-45',
+    opacity: 'opacity-70',
     iconBg: 'bg-white/[0.04]',
     iconBorder: 'border-white/[0.1]',
     iconColor: 'text-[#8a8a8a]',
@@ -58,7 +58,9 @@ export default function AccordionSection({
 }: AccordionSectionProps) {
   const s = statusStyles[status]
   const isOpen = status === 'active'
-  const canReopen = status === 'completed' && !!onReopen
+  // ponytail: sin gating — cualquier sección se abre con click (rama de pruebas de diseño).
+  // Para volver al flujo bloqueado: `status === 'completed' && !!onReopen`.
+  const canReopen = status !== 'active' && !!onReopen
 
   return (
     <div className={`rounded-2xl overflow-hidden transition-all duration-300 ${s.border} ${s.opacity}`}>
@@ -70,8 +72,6 @@ export default function AccordionSection({
         <div className={`w-[22px] h-[22px] rounded-full flex items-center justify-center shrink-0 border ${s.iconBg} ${s.iconBorder}`}>
           {status === 'completed' ? (
             <Check className={`w-3 h-3 ${s.iconColor}`} strokeWidth={3} />
-          ) : status === 'locked' ? (
-            <Lock className={`w-3 h-3 ${s.iconColor}`} strokeWidth={2.5} />
           ) : (
             <span className={`readout text-[11px] font-bold ${s.iconColor}`}>{index}</span>
           )}
@@ -86,7 +86,7 @@ export default function AccordionSection({
         </div>
         {canReopen && (
           <span className="flex items-center gap-1 text-[10px] text-[#8a8a8a] shrink-0">
-            <ChevronDown className="w-3 h-3" /> editar
+            <ChevronDown className="w-3 h-3" /> {status === 'completed' ? 'editar' : 'abrir'}
           </span>
         )}
       </div>

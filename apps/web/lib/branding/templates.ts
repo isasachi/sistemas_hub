@@ -15,7 +15,7 @@
  */
 import type { ExtractedStyle, PaletteColor } from './types'
 
-export const CATEGORIES = [
+const ALL_CATEGORIES = [
   { id: 'belleza', name: 'Belleza y cuidado personal' },
   { id: 'salud', name: 'Salud y bienestar' },
   { id: 'mascotas', name: 'Mascotas' },
@@ -23,7 +23,12 @@ export const CATEGORIES = [
   { id: 'celulares', name: 'Accesorios para celulares' },
 ] as const
 
-export type CategoryId = (typeof CATEGORIES)[number]['id']
+export type CategoryId = (typeof ALL_CATEGORIES)[number]['id']
+
+/** ponytail: las categorías que la UI ofrece. Las plantillas de las otras siguen
+ *  en TEMPLATES (sin usar); para volver a mostrarlas, exportar ALL_CATEGORIES. */
+const VISIBLE: CategoryId[] = ['belleza', 'salud', 'mascotas']
+export const CATEGORIES = ALL_CATEGORIES.filter((c) => VISIBLE.includes(c.id))
 
 export interface TemplateMeta {
   /** id estable, `<categoryId>/<producto>` */

@@ -1,9 +1,11 @@
 'use client'
 
+import { useEffect } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import { useBrief } from '@/components/tools/generador-branding/nuevo/BriefShell'
-import { CONFIRM_PATH, isComplete } from '@/lib/branding/brief'
+import { CONFIRM_PATH, isComplete, resumePath } from '@/lib/branding/brief'
 import { getPreset } from '@/lib/branding/presets'
 
 // Las 5 etapas reales del pipeline (spec 7.3). El motor todavía no está conectado
@@ -18,7 +20,14 @@ const STAGES = [
 ]
 
 export default function GenerandoPage() {
+  const router = useRouter()
   const { brief } = useBrief()
+
+  // Sin brief entero no hay nada que generar: al primer paso que falte.
+  useEffect(() => {
+    if (brief && !isComplete(brief)) router.replace(resumePath(brief))
+  }, [brief, router])
+
   if (!brief || !isComplete(brief)) return null
   const preset = getPreset(brief.presetId)
 

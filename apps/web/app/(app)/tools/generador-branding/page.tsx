@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import { useBrief, btnPrimary } from '@/components/tools/generador-branding/nuevo/BriefShell'
-import { STEPS, clearBrief, isResumable, resumePath, firstIncompleteStep } from '@/lib/branding/brief'
+import { STEPS, clearBrief, isResumable, isComplete, resumePath, firstIncompleteStep } from '@/lib/branding/brief'
 import { PRESETS } from '@/lib/branding/presets'
 
 // 6.0 — propuesta de valor, un ejemplo visual real (miniaturas de presets) y un CTA.
@@ -13,7 +13,9 @@ import { PRESETS } from '@/lib/branding/presets'
 export default function GeneradorBrandingEntrada() {
   const router = useRouter()
   const { brief } = useBrief()
-  const resumable = brief ? isResumable(brief) : false
+  // Un brief COMPLETO también se ofrece retomar: si cayera al CTA de abajo,
+  // 'Crear mi marca' lo borraría sin avisar.
+  const saved = brief && (isResumable(brief) || isComplete(brief)) ? brief : null
 
   function startFresh() {
     clearBrief()
@@ -47,14 +49,17 @@ export default function GeneradorBrandingEntrada() {
           ))}
         </div>
 
-        {resumable && brief ? (
+        {saved ? (
           <div className="rounded-2xl border border-[rgba(255,156,77,0.3)] bg-[rgba(255,156,77,0.06)] p-5 flex flex-col gap-3">
-            <p className="text-[14px] font-bold text-[#f5f5f5]">Tienes un brief a medias</p>
+            <p className="text-[14px] font-bold text-[#f5f5f5]">
+              {isComplete(saved) ? 'Tu brief está listo' : 'Tienes un brief a medias'}
+            </p>
             <p className="text-[13px] text-[#bdbdbd]">
-              {brief.brandName ? `${brief.brandName} · ` : ''}quedaste en la pregunta {firstIncompleteStep(brief) + 1} de 4.
+              {saved.brandName ? `${saved.brandName} · ` : ''}
+              {isComplete(saved) ? 'quedaste en la confirmación.' : `quedaste en la pregunta ${firstIncompleteStep(saved) + 1} de 4.`}
             </p>
             <div className="flex flex-wrap gap-3">
-              <button type="button" onClick={() => router.push(resumePath(brief))} className={btnPrimary + ' h-11 px-6'}>
+              <button type="button" onClick={() => router.push(resumePath(saved))} className={btnPrimary + ' h-11 px-6'}>
                 Retomar
               </button>
               <button type="button" onClick={startFresh}
