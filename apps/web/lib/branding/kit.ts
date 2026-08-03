@@ -1,6 +1,6 @@
 import JSZip from 'jszip'
 import { brandSlug } from './brief'
-import { logoVariant } from './variants'
+import { logoVariant, frontPanel } from './variants'
 import type { Preset } from './presets'
 
 /**
@@ -10,7 +10,7 @@ import type { Preset } from './presets'
  *   <brand-slug>/
  *     brandboard.pdf
  *     logo/logo.png · logo-negro.png · logo-blanco.png
- *     etiqueta/etiqueta.png
+ *     etiqueta/etiqueta-360.png · etiqueta-frontal.png
  *     mockups/mockup.png
  *     colores-y-tipografias.txt
  *
@@ -66,7 +66,13 @@ export async function buildKit(input: KitInput): Promise<{ zip: Buffer; filename
     logo.file('logo-negro.png', await logoVariant(input.logo, 'negro'))
     logo.file('logo-blanco.png', await logoVariant(input.logo, 'blanco'))
   }
-  if (input.label) root.folder('etiqueta')!.file('etiqueta.png', input.label)
+  if (input.label) {
+    // El 360 completo (lo que va a imprenta) y el frente recortado (lo que se ve
+    // en el envase). El recorte es sharp, no otra generación.
+    const etiqueta = root.folder('etiqueta')!
+    etiqueta.file('etiqueta-360.png', input.label)
+    etiqueta.file('etiqueta-frontal.png', await frontPanel(input.label))
+  }
   if (input.mockup) root.folder('mockups')!.file('mockup.png', input.mockup)
 
   root.file('colores-y-tipografias.txt', colorsAndTypeText(input))

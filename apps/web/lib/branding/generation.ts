@@ -77,9 +77,10 @@ export function buildMockupPrompt(b: Brief, p: Preset, ref: Ref): string {
     `Photorealistic product shot of ${b.productDescription} for the brand "${b.brandName}".`,
     containerLine(b),
     ref === 'label'
-      ? `The FIRST attached image is the finished label artwork: apply it to the container as the real`
-        + ` printed label — same text, same colours, same layout, wrapped and lit to follow the surface.`
-        + ` Do not redesign it and do not add text that is not on it.`
+      ? `The FIRST attached image is the FRONT panel of the finished label: apply it to the container`
+        + ` as the real printed label — same text, same colours, same layout, wrapped and lit to follow`
+        + ` the surface. Do not redesign it and do not add text that is not on it. Show the product`
+        + ` from the front: the back panel must NOT be visible.`
       : ref === 'logo'
       ? `The FIRST attached image is the finished logo: place it on the packaging exactly as it is —`
         + ` same letterforms, same spelling, same proportions. Do not redraw it.`
@@ -96,14 +97,28 @@ export function buildMockupPrompt(b: Brief, p: Preset, ref: Ref): string {
 
 export function buildLabelPrompt(b: Brief, p: Preset, ref: Ref): string {
   return [
-    `Design the flat printable LABEL artwork for ${b.productDescription}, brand "${b.brandName}".`,
+    `Design the flat printable 360° LABEL artwork (full wrap) for ${b.productDescription},`,
+    `brand "${b.brandName}".`,
+    // El reparto front/back es LEY: el mockup recorta la mitad izquierda y la aplica
+    // al envase. Sin este reparto el motor amontona la letra chica en el frente.
+    `Lay it out as TWO panels of equal width side by side, separated by a thin vertical`,
+    `fold line: the FRONT panel on the LEFT half, the BACK panel on the RIGHT half.`,
+    `FRONT panel — only the hero: brand lockup, product name, a short descriptor and the net`,
+    `content. Generous empty space; nothing else, no paragraphs, no lists, no icons rows.`,
+    `BACK panel — everything else, small and orderly: ingredients, directions of use,`,
+    `warnings, storage, net weight and a blank rectangle where a barcode would go.`,
+    `This is where the dense text belongs.`,
+    // El motor inventaba razón social y dirección (una fábrica mexicana para una
+    // marca peruana). Datos legales = del usuario, no del modelo.
+    `Do NOT invent legal or company data: no made-up company name, address, city,`,
+    `country, registration number, phone or website. Where the manufacturer line would`,
+    `go, leave the neutral placeholder "Fabricado por: ____________".`,
     ref === 'logo'
       ? `The FIRST attached image is the finished logo: place it on the label exactly as it is, as the`
         + ` brand lockup. Do not redraw it.`
       : exactName(b),
     `Flat 2D artwork seen straight on, as it would go to print — NOT applied to a container, no bottle,`,
-    `no jar, no 3D, no perspective, no mockup.`,
-    `Include a clear hierarchy: brand name, then the product descriptor "${b.productDescription}".`,
+    `no jar, no 3D, no perspective, no mockup, no shadow.`,
     b.containerType ? `It will be printed for this container: ${b.containerType} — use its proportions.` : '',
     `Body text in the spirit of ${p.typography.body}; display text in the spirit of ${p.typography.display}.`,
     `Style — ${p.promptStyle}`,
@@ -118,7 +133,11 @@ export function buildPrompt(stage: Stage, b: Brief, p: Preset, ref: Ref): string
   return buildLabelPrompt(b, p, ref)
 }
 
-/** gpt-image-2 solo tiene 3 tamaños; el logo cuadrado, los otros dos verticales. */
+/**
+ * gpt-image-2 solo tiene 3 tamaños. Logo cuadrado, mockup vertical (foto de
+ * producto) y etiqueta APAISADA: es un 360 de dos paneles, no cabe en vertical.
+ */
 export function aspectFor(stage: Stage): string {
-  return stage === 'logo' ? '1:1' : '4:5'
+  if (stage === 'logo') return '1:1'
+  return stage === 'label' ? '3:2' : '4:5'
 }

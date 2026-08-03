@@ -4,7 +4,7 @@ import path from 'node:path'
 import JSZip from 'jszip'
 import sharp from 'sharp'
 import { buildKit, colorsAndTypeText } from '@/lib/branding/kit'
-import { logoVariant } from '@/lib/branding/variants'
+import { logoVariant, frontPanel } from '@/lib/branding/variants'
 import { buildBrandboard } from '@/lib/branding/brandboard'
 import { getPreset } from '@/lib/branding/presets'
 
@@ -48,6 +48,30 @@ describe('variantes del logo (etapa 4, sin modelo)', () => {
   })
 })
 
+describe('frente de la etiqueta 360', () => {
+  it('es la mitad izquierda exacta, misma altura', async () => {
+    const label = await sharp({ create: { width: 300, height: 100, channels: 3, background: '#ffffff' } })
+      .composite([{
+        input: await sharp({ create: { width: 150, height: 100, channels: 3, background: '#ff0000' } }).png().toBuffer(),
+        left: 0, top: 0,
+      }])
+      .png().toBuffer()
+
+    const front = await frontPanel(label)
+    const meta = await sharp(front).metadata()
+    expect([meta.width, meta.height]).toEqual([150, 100])
+
+    // El frente es el panel rojo entero: si recortara del lado equivocado saldría blanco.
+    const { data, info } = await sharp(front).raw().toBuffer({ resolveWithObject: true })
+    const px = (x: number, y: number) => {
+      const i = (y * info.width + x) * info.channels
+      return [data[i], data[i + 1], data[i + 2]]
+    }
+    expect(px(5, 50)).toEqual([255, 0, 0])
+    expect(px(145, 50)).toEqual([255, 0, 0])
+  })
+})
+
 describe('brandboard', () => {
   it('sale un PDF de verdad con las piezas dentro', async () => {
     const pdf = await buildBrandboard(base(await fakeLogo()))
@@ -73,7 +97,8 @@ describe('zip del kit', () => {
       'penita-cafe/logo/logo.png',
       'penita-cafe/logo/logo-negro.png',
       'penita-cafe/logo/logo-blanco.png',
-      'penita-cafe/etiqueta/etiqueta.png',
+      'penita-cafe/etiqueta/etiqueta-360.png',
+      'penita-cafe/etiqueta/etiqueta-frontal.png',
       'penita-cafe/mockups/mockup.png',
       'penita-cafe/colores-y-tipografias.txt',
     ]))

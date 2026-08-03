@@ -5,6 +5,7 @@ import { uploadToStorage } from '@/lib/storage'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 import { isFlagged } from '@/lib/branding/moderation'
+import { frontPanel } from '@/lib/branding/variants'
 import { getPreset, isPresetId } from '@/lib/branding/presets'
 import { isComplete, type Brief, type PartialBrief } from '@/lib/branding/brief'
 import { briefFromRow } from '@/lib/branding/session-brief'
@@ -34,6 +35,14 @@ async function refParts(paths: string[], origin: string): Promise<Part[]> {
     parts.push({ inlineData: { mimeType: res.headers.get('content-type') ?? 'image/jpeg', data: buf.toString('base64') } })
   }
   return parts
+}
+
+/** El mockup recibe SOLO el frente del 360: recorte en memoria, sin subir nada. */
+async function frontPanelPart(labelUrl: string): Promise<Part[]> {
+  const res = await fetch(labelUrl)
+  if (!res.ok) return []
+  const front = await frontPanel(Buffer.from(await res.arrayBuffer()))
+  return [{ inlineData: { mimeType: 'image/png', data: front.toString('base64') } }]
 }
 
 export async function POST(req: NextRequest) {
@@ -118,10 +127,9 @@ export async function POST(req: NextRequest) {
             const ref: Ref = stage === 'logo' ? 'none'
               : stage === 'mockup' && labelUrl ? 'label'
               : logoUrl ? 'logo' : 'none'
-            const refUrl = ref === 'label' ? labelUrl : ref === 'logo' ? logoUrl : null
-
             const parts: Part[] = []
-            if (refUrl) parts.push(...(await refParts([refUrl], origin)))
+            if (ref === 'label') parts.push(...(await frontPanelPart(labelUrl!)))
+            else if (ref === 'logo') parts.push(...(await refParts([logoUrl!], origin)))
             parts.push(...refs, { text: buildPrompt(stage, brief, preset, ref) })
 
             // generateImage ya reintenta internamente (3 intentos, OpenAI→Gemini).

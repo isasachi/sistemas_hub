@@ -15,6 +15,19 @@ import sharp from 'sharp'
  */
 const THRESHOLD = 230
 
+/**
+ * La etiqueta se genera como 360 de dos paneles (frente a la IZQUIERDA, dorso a
+ * la derecha — lo fija `buildLabelPrompt`). El mockup y el kit necesitan el
+ * frente solo: es un recorte, no otra generación.
+ */
+export async function frontPanel(label: Buffer): Promise<Buffer> {
+  const meta = await sharp(label).metadata()
+  const width = meta.width ?? 0
+  const height = meta.height ?? 0
+  if (!width || !height) return label
+  return sharp(label).extract({ left: 0, top: 0, width: Math.floor(width / 2), height }).png().toBuffer()
+}
+
 export type VariantColor = 'negro' | 'blanco'
 
 export async function logoVariant(png: Buffer, color: VariantColor): Promise<Buffer> {

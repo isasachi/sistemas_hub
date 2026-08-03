@@ -34,12 +34,6 @@ describe('prompts', () => {
     expect(buildPrompt('label', brief, preset, 'none')).not.toContain('finished logo')
   })
 
-  it('el mockup aplica la etiqueta ya generada, no la reinventa', () => {
-    const p = buildPrompt('mockup', brief, preset, 'label')
-    expect(p).toContain('finished label artwork')
-    expect(p).toContain('Do not redesign it')
-  })
-
   it('el envase: el elegido manda; sin elegir, lo decide el motor', () => {
     const conEnvase = buildPrompt('mockup', { ...brief, containerType: 'Doypack' }, preset, 'label')
     expect(conEnvase).toContain('The container MUST be: Doypack')
@@ -53,9 +47,32 @@ describe('prompts', () => {
     expect(p).toContain('NOT applied to a container')
   })
 
-  it('el logo es cuadrado y las otras dos verticales', () => {
+  it('la etiqueta es un 360 con el frente a la izquierda y la letra chica atrás', () => {
+    const p = buildPrompt('label', brief, preset, 'logo')
+    expect(p).toContain('360')
+    expect(p).toContain('FRONT panel on the LEFT half')
+    expect(p).toContain('BACK panel on the RIGHT half')
+    // El reparto es lo que evita que se amontone todo adelante.
+    expect(p).toMatch(/BACK panel — everything else[\s\S]*ingredients/)
+    expect(p).toMatch(/FRONT panel — only the hero/)
+  })
+
+  it('la etiqueta no inventa razón social ni dirección', () => {
+    const p = buildPrompt('label', brief, preset, 'logo')
+    expect(p).toContain('Do NOT invent legal or company data')
+    expect(p).toContain('Fabricado por: ____________')
+  })
+
+  it('el mockup recibe el FRENTE y no muestra el dorso', () => {
+    const p = buildPrompt('mockup', brief, preset, 'label')
+    expect(p).toContain('FRONT panel of the finished label')
+    expect(p).toContain('Do not redesign it')
+    expect(p).toContain('back panel must NOT be visible')
+  })
+
+  it('logo cuadrado, mockup vertical, etiqueta apaisada (es un 360)', () => {
     expect(aspectFor('logo')).toBe('1:1')
     expect(aspectFor('mockup')).toBe('4:5')
-    expect(aspectFor('label')).toBe('4:5')
+    expect(aspectFor('label')).toBe('3:2')
   })
 })
