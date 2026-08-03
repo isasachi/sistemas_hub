@@ -16,16 +16,13 @@ import type { Preset } from './presets'
 
 export type Stage = 'logo' | 'mockup' | 'label'
 
-export type GenerationOrder = 'logo_first' | 'mockup_first'
-
-/** Orden de las etapas. `logo_first` es el default (spec 7.2). */
-export function generationOrder(): GenerationOrder {
-  return process.env.GENERATION_ORDER === 'mockup_first' ? 'mockup_first' : 'logo_first'
-}
-
-export function stageSequence(order: GenerationOrder): Stage[] {
-  return order === 'mockup_first' ? ['mockup', 'logo', 'label'] : ['logo', 'mockup', 'label']
-}
+/**
+ * Orden fijo. `mockup_first` se probó contra `logo_first` con el mismo brief
+ * (2026-08-03) y perdió: naciendo dentro de un envase, el wordmark sale aguado
+ * y sin la paleta del preset, y lo que se extrae después arrastra eso. El logo
+ * aislado primero impone identidad y se propaga limpio. Una ruta, sin flag.
+ */
+export const STAGE_SEQUENCE: Stage[] = ['logo', 'mockup', 'label']
 
 export const STAGE_LABELS: Record<Stage, string> = {
   logo: 'Logo',
@@ -49,19 +46,12 @@ function exactName(b: Brief): string {
 }
 
 /** Qué pieza ya generada se adjunta como referencia (la primera de los adjuntos). */
-export type Ref = 'none' | 'logo' | 'mockup'
+export type Ref = 'none' | 'logo'
 
-export function buildLogoPrompt(b: Brief, p: Preset, ref: Ref): string {
+export function buildLogoPrompt(b: Brief, p: Preset): string {
   return [
     `Design a brand logo for a ${b.category} product: ${b.productDescription}.`,
     `It is a WORDMARK: the brand name as custom lettering, no slogan, no tagline, no product shot.`,
-    // mockup_first: el envase ya existe, así que el logo se EXTRAE de él en vez de
-    // inventarse — si no, las piezas de la misma marca no se parecen entre sí.
-    ref === 'mockup'
-      ? `The FIRST attached image is the finished packaging for this brand: lift its wordmark and`
-        + ` rebuild it isolated — same letterforms, same weight, same colours, same proportions.`
-        + ` Do not redesign it and do not include the container.`
-      : '',
     exactName(b),
     `Typography direction: letterforms in the spirit of ${p.typography.display}.`,
     `Style — ${p.promptStyle}`,
@@ -95,9 +85,6 @@ export function buildLabelPrompt(b: Brief, p: Preset, ref: Ref): string {
     ref === 'logo'
       ? `The FIRST attached image is the finished logo: place it on the label exactly as it is, as the`
         + ` brand lockup. Do not redraw it.`
-      : ref === 'mockup'
-      ? `The FIRST attached image is the finished packaging: reuse its wordmark and its colour blocking`
-        + ` so the label matches it. Do not copy the container itself — the label is flat artwork.`
       : exactName(b),
     `Flat 2D artwork seen straight on, as it would go to print — NOT applied to a container, no bottle,`,
     `no jar, no 3D, no perspective, no mockup.`,
@@ -110,7 +97,7 @@ export function buildLabelPrompt(b: Brief, p: Preset, ref: Ref): string {
 }
 
 export function buildPrompt(stage: Stage, b: Brief, p: Preset, ref: Ref): string {
-  if (stage === 'logo') return buildLogoPrompt(b, p, ref)
+  if (stage === 'logo') return buildLogoPrompt(b, p)
   if (stage === 'mockup') return buildMockupPrompt(b, p, ref)
   return buildLabelPrompt(b, p, ref)
 }
