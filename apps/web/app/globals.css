@@ -15,7 +15,7 @@
   --color-foreground: var(--foreground);
   --font-sans: 'Inter', -apple-system, sans-serif;
   --font-display: 'Fraunces', Georgia, serif;
-  --font-heading: 'Fraunces', Georgia, serif;
+  --font-heading: 'Inter', -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', 'Menlo', monospace;
   --color-ring: var(--ring);
   --color-input: var(--input);
@@ -127,12 +127,13 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
-  /* Todos los headings en la serif de display (Fraunces) — el look premium
-     del sistema. El texto de UI (botones, labels, body) sigue en Inter. */
+  /* Headings en la sans del sistema (Inter). La serif de display (Fraunces)
+     sigue disponible en --font-display para lo que la pida explícitamente;
+     .lp-root mantiene su propio override (Poppins) y no se toca acá. */
   h1, h2, h3, h4, h5, h6 {
-    font-family: 'Fraunces', Georgia, serif;
-    letter-spacing: -0.01em;
-    font-weight: 500;
+    font-family: 'Inter', -apple-system, sans-serif;
+    letter-spacing: -0.02em;
+    font-weight: 700;
   }
 }
 
