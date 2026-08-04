@@ -1,0 +1,61 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { Input } from '@/components/ui/input'
+import BriefShell, { useBrief } from '@/components/tools/generador-branding/nuevo/BriefShell'
+import { STEPS, brandNameError, BRAND_NAME_MAX } from '@/lib/branding/brief'
+
+// Generador de nombres = v2. El enlace existe detrás de este flag apagado; no hay
+// panel ni endpoint todavía (no dejar código muerto: cuando se implemente, acá va).
+const NAME_GENERATOR_ENABLED = false
+
+export default function NombrePage() {
+  const router = useRouter()
+  const { brief, update } = useBrief()
+  const [brandName, setBrandName] = useState('')
+  const [touched, setTouched] = useState(false)
+
+  useEffect(() => { if (brief) setBrandName(brief.brandName ?? '') }, [brief])
+
+  const error = touched ? brandNameError(brandName) : null
+  const ready = !brandNameError(brandName)
+
+  function next() {
+    if (!ready) return
+    update({ brandName: brandName.trim() })
+    router.push(STEPS[2].path)
+  }
+
+  return (
+    <BriefShell
+      step={2}
+      title="¿Cómo se llama?"
+      hint="El nombre va a ser el logo. Puedes cambiarlo después."
+      onNext={next}
+      nextDisabled={!ready}
+    >
+      <div className="flex flex-col gap-2">
+        <Input
+          id="brandName"
+          placeholder="Ej: Kelvin"
+          maxLength={BRAND_NAME_MAX}
+          value={brandName}
+          onChange={(e) => setBrandName(e.target.value)}
+          onBlur={() => setTouched(true)}
+          onKeyDown={(e) => { if (e.key === 'Enter') next() }}
+          className="h-12 rounded-xl bg-white/[0.04] border-white/[0.08] text-[14px] text-[#f5f5f5]"
+        />
+        <div className="flex items-center justify-between">
+          {error ? <p className="text-[12px] text-red-400">{error}</p> : <span />}
+          <span className="text-[11px] text-[#8a8a8a]">{brandName.trim().length}/{BRAND_NAME_MAX}</span>
+        </div>
+        {NAME_GENERATOR_ENABLED && (
+          <button type="button" className="self-start text-[12px] text-[#ff9c4d] bg-transparent border-0 cursor-pointer">
+            generar opciones
+          </button>
+        )}
+      </div>
+    </BriefShell>
+  )
+}

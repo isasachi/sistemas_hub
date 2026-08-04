@@ -1,4 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&family=JetBrains+Mono:wght@400;500;600;700&family=Poppins:wght@400;500;600;700&family=Lato:wght@400;700&family=Playfair+Display:ital,wght@0,500;0,600;1,500&display=swap');
+/* Tipografías de los 7 presets de branding (lib/branding/presets.ts). Se cargan acá
+   porque la pantalla de confirmación las renderiza con el nombre real del usuario. */
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Cormorant+Garamond:wght@400;600&family=Libre+Baskerville:wght@400;700&family=Nunito:wght@400;700;800&family=Oswald:wght@500;700&family=Bitter:wght@500;700&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -12,7 +15,7 @@
   --color-foreground: var(--foreground);
   --font-sans: 'Inter', -apple-system, sans-serif;
   --font-display: 'Fraunces', Georgia, serif;
-  --font-heading: 'Fraunces', Georgia, serif;
+  --font-heading: 'Inter', -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', 'Menlo', monospace;
   --color-ring: var(--ring);
   --color-input: var(--input);
@@ -124,12 +127,13 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
-  /* Todos los headings en la serif de display (Fraunces) — el look premium
-     del sistema. El texto de UI (botones, labels, body) sigue en Inter. */
+  /* Headings en la sans del sistema (Inter). La serif de display (Fraunces)
+     sigue disponible en --font-display para lo que la pida explícitamente;
+     .lp-root mantiene su propio override (Poppins) y no se toca acá. */
   h1, h2, h3, h4, h5, h6 {
-    font-family: 'Fraunces', Georgia, serif;
-    letter-spacing: -0.01em;
-    font-weight: 500;
+    font-family: 'Inter', -apple-system, sans-serif;
+    letter-spacing: -0.02em;
+    font-weight: 700;
   }
 }
 
@@ -367,12 +371,14 @@
   color: var(--lp-head);
 }
 
-/* El momento serif: display de alto contraste (Replay Pro Headline →
-   Playfair Display in-set → Times). Dos clases ⇒ gana al h1..h6. */
+/* El display del sistema. Era serif de alto contraste (Replay Pro Headline →
+   Playfair Display → Times) y pasó a la sans (2026-08): el tema ya no tiene
+   momento serif. El nombre de la clase se conserva porque la usan 7 archivos y
+   renombrarla no cambiaría un pixel. Dos clases ⇒ gana al h1..h6. */
 .lp-root .lp-serif {
-  font-family: 'Replay Pro Headline', 'Playfair Display', 'Times New Roman', serif;
-  font-weight: 500;
-  letter-spacing: -0.005em;
+  font-family: 'Poppins', sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 /* Titular metálico plata (sheen lento in-token de 14s) */

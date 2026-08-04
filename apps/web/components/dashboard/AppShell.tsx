@@ -63,8 +63,8 @@ export function AppShell({ user, children }: AppShellProps) {
 
   const logo = (
     <Link href="/dashboard" onClick={() => setOpen(false)} className="no-underline">
-      {/* Playfair directo: la barra vive fuera de .lp-root, donde .lp-serif no aplica. */}
-      <span className="font-[Playfair_Display] text-[19px] tracking-[0.12em] text-[#ededed]">
+      {/* Poppins directo: la barra vive fuera de .lp-root, donde .lp-serif no aplica. */}
+      <span className="font-[Poppins] text-[19px] font-semibold tracking-[0.12em] text-[#ededed]">
         JR <span className="text-[#d6a860]">AI HUB</span>
       </span>
     </Link>
