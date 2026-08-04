@@ -371,12 +371,14 @@
   color: var(--lp-head);
 }
 
-/* El momento serif: display de alto contraste (Replay Pro Headline →
-   Playfair Display in-set → Times). Dos clases ⇒ gana al h1..h6. */
+/* El display del sistema. Era serif de alto contraste (Replay Pro Headline →
+   Playfair Display → Times) y pasó a la sans (2026-08): el tema ya no tiene
+   momento serif. El nombre de la clase se conserva porque la usan 7 archivos y
+   renombrarla no cambiaría un pixel. Dos clases ⇒ gana al h1..h6. */
 .lp-root .lp-serif {
-  font-family: 'Replay Pro Headline', 'Playfair Display', 'Times New Roman', serif;
-  font-weight: 500;
-  letter-spacing: -0.005em;
+  font-family: 'Poppins', sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 /* Titular metálico plata (sheen lento in-token de 14s) */

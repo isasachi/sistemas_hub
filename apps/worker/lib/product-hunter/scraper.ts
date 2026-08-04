@@ -327,7 +327,14 @@ async function gotoWithRetry(page: Page, url: string): Promise<void> {
 
 // Colectamos los Response síncronamente y leemos el body DESPUÉS de navegar
 // (evita race conditions; Playwright bufferea los bodies).
-export async function navigateAndCapture(page: Page, url: string): Promise<unknown[]> {
+// `opts.scrollPasses` sobreescribe SCROLL_PASSES solo para esta navegación
+// (segunda pasada de scrape-raw sobre los casos sin resolver: más scrolls = más
+// anuncios en las páginas que paginan). Omitirlo = comportamiento de siempre.
+export async function navigateAndCapture(
+  page: Page,
+  url: string,
+  opts: { scrollPasses?: number } = {},
+): Promise<unknown[]> {
   // Hard-abort: si el proceso ya se declaró persistentemente bloqueado, no
   // navegamos más — re-sondear sostiene el block. Fast-fail: cada tarea en vuelo
   // o pendiente lanza al instante, drenando el pool sin tocar la IP.
@@ -354,7 +361,8 @@ export async function navigateAndCapture(page: Page, url: string): Promise<unkno
   try {
     await gotoWithRetry(page, url)
     await page.waitForTimeout(WAIT_MS)
-    for (let i = 0; i < SCROLL_PASSES; i++) {
+    const passes = Math.max(1, opts.scrollPasses ?? SCROLL_PASSES)
+    for (let i = 0; i < passes; i++) {
       await page.keyboard.press('End')
       await page.waitForTimeout(SCROLL_WAIT)
     }
