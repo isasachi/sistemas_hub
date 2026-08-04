@@ -2,10 +2,11 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, ImageIcon } from 'lucide-react'
 import { useBrief, btnPrimary } from '@/components/tools/generador-branding/nuevo/BriefShell'
-import { STEPS, clearBrief, isResumable, isComplete, resumePath, firstIncompleteStep } from '@/lib/branding/brief'
+import { STEPS, clearBrief, isResumable, resumePath, firstIncompleteStep, loadLastSession } from '@/lib/branding/brief'
 import { PRESETS } from '@/lib/branding/presets'
 
 // 6.0 — propuesta de valor, un ejemplo visual real (miniaturas de presets) y un CTA.
@@ -15,7 +16,12 @@ export default function GeneradorBrandingEntrada() {
   const { brief } = useBrief()
   // Un brief COMPLETO también se ofrece retomar: si cayera al CTA de abajo,
   // 'Crear mi marca' lo borraría sin avisar.
-  const saved = brief && (isResumable(brief) || isComplete(brief)) ? brief : null
+  const saved = brief && isResumable(brief) ? brief : null
+
+  // La última marca generada se guarda aparte del brief: "crear otra" limpia el
+  // brief pero no borra el historial, así se puede volver al resultado anterior.
+  const [lastSession, setLastSession] = useState<string | null>(null)
+  useEffect(() => { setLastSession(loadLastSession()) }, [])
 
   function startFresh() {
     clearBrief()
@@ -49,14 +55,25 @@ export default function GeneradorBrandingEntrada() {
           ))}
         </div>
 
+        {lastSession && (
+          <div className="rounded-2xl border border-white/[0.08] bg-white/[0.02] p-5 flex flex-wrap items-center gap-3">
+            <p className="text-[13px] text-[#bdbdbd] flex-1 min-w-[220px]">
+              Tu última marca generada sigue disponible.
+            </p>
+            <button type="button"
+                    onClick={() => router.push(`/tools/generador-branding/nuevo/resultado?s=${lastSession}`)}
+                    className="h-11 px-5 rounded-xl border border-white/[0.14] text-[13px] font-semibold text-[#f5f5f5] hover:bg-white/[0.05] transition-colors cursor-pointer bg-transparent flex items-center gap-2">
+              <ImageIcon className="w-4 h-4" /> Ver mi última marca
+            </button>
+          </div>
+        )}
+
         {saved ? (
           <div className="rounded-2xl border border-[rgba(255,156,77,0.3)] bg-[rgba(255,156,77,0.06)] p-5 flex flex-col gap-3">
-            <p className="text-[14px] font-bold text-[#f5f5f5]">
-              {isComplete(saved) ? 'Tu brief está listo' : 'Tienes un brief a medias'}
-            </p>
+            <p className="text-[14px] font-bold text-[#f5f5f5]">Tienes un brief a medias</p>
             <p className="text-[13px] text-[#bdbdbd]">
               {saved.brandName ? `${saved.brandName} · ` : ''}
-              {isComplete(saved) ? 'quedaste en la confirmación.' : `quedaste en la pregunta ${firstIncompleteStep(saved) + 1} de 4.`}
+              quedaste en la pregunta {firstIncompleteStep(saved) + 1} de 4.
             </p>
             <div className="flex flex-wrap gap-3">
               <button type="button" onClick={() => router.push(resumePath(saved))} className={btnPrimary + ' h-11 px-6'}>
@@ -64,13 +81,13 @@ export default function GeneradorBrandingEntrada() {
               </button>
               <button type="button" onClick={startFresh}
                       className="h-11 px-5 rounded-xl border border-white/[0.14] text-[13px] font-semibold text-[#f5f5f5] hover:bg-white/[0.05] transition-colors cursor-pointer bg-transparent">
-                Empezar de nuevo
+                Empezar una marca nueva
               </button>
             </div>
           </div>
         ) : (
           <button type="button" onClick={startFresh} className={btnPrimary + ' h-13 px-8 self-start py-4'}>
-            Crear mi marca
+            {lastSession ? 'Crear otra marca' : 'Crear mi marca'}
           </button>
         )}
       </div>

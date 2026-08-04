@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { ArrowLeft, Check, X } from 'lucide-react'
 import { readSSEStream } from '@/components/tools/ui/SSEStatus'
 import { useBrief } from '@/components/tools/generador-branding/nuevo/BriefShell'
-import { CONFIRM_PATH, isComplete, resumePath } from '@/lib/branding/brief'
+import { CONFIRM_PATH, isComplete, resumePath, saveLastSession } from '@/lib/branding/brief'
 import { getPreset } from '@/lib/branding/presets'
 import { STAGE_LABELS, type Stage } from '@/lib/branding/generation'
 
@@ -42,6 +42,10 @@ export default function GenerandoPage() {
   }, [brief, router])
 
   useEffect(() => {
+    // `alive` se re-arma en cada montaje: sin esto, el doble efecto de StrictMode
+    // lo dejaba en false para siempre y el redirect automático al resultado NUNCA
+    // ocurría — había que apretar "seguir en segundo plano" a mano.
+    alive.current = true
     const t = setInterval(() => setTip((n) => (n + 1) % TIPS.length), 8000)
     const slowTimer = setTimeout(() => setSlow(true), 60_000)
     return () => { clearInterval(t); clearTimeout(slowTimer); alive.current = false }
@@ -63,7 +67,10 @@ export default function GenerandoPage() {
         })
         await readSSEStream(res, (e) => {
           const ev = e as unknown as { status: string; stage?: Step; sessionId?: string; message?: string }
-          if (ev.status === 'session' && ev.sessionId) setSessionId(ev.sessionId)
+          if (ev.status === 'session' && ev.sessionId) {
+            setSessionId(ev.sessionId)
+            saveLastSession(ev.sessionId)
+          }
           if (ev.status === 'stage' && ev.stage) setState((s) => ({ ...s, [ev.stage!]: 'running' }))
           if (ev.status === 'stage_done' && ev.stage) setState((s) => ({ ...s, [ev.stage!]: 'done' }))
           if (ev.status === 'stage_failed' && ev.stage) setState((s) => ({ ...s, [ev.stage!]: 'failed' }))

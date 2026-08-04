@@ -3,10 +3,11 @@
 import { Suspense, useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ArrowLeft, Download, RefreshCw } from 'lucide-react'
+import { ArrowLeft, Download, LayoutTemplate, RefreshCw, Sparkles } from 'lucide-react'
 import { readSSEStream } from '@/components/tools/ui/SSEStatus'
 import { btnPrimary } from '@/components/tools/generador-branding/nuevo/BriefShell'
-import { STEPS } from '@/lib/branding/brief'
+import { STEPS, clearBrief } from '@/lib/branding/brief'
+import { SESSION_KEY as LANDING_SESSION_KEY } from '@/store/landing'
 import { STAGE_LABELS, type Stage } from '@/lib/branding/generation'
 
 interface SessionRow {
@@ -54,6 +55,7 @@ function Resultado() {
   const [row, setRow] = useState<SessionRow | null>(null)
   const [busy, setBusy] = useState<Stage | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [landing, setLanding] = useState(false)
 
   const load = useCallback(async () => {
     if (!sessionId) return
@@ -88,6 +90,34 @@ function Resultado() {
     } finally {
       setBusy(null)
     }
+  }
+
+  // Handoff a landing: la ruta pre-llena una sesión con la marca y el wizard la
+  // levanta desde localStorage (mismo contrato que usaba la guía del flujo viejo).
+  async function crearLanding() {
+    if (!sessionId || landing) return
+    setLanding(true); setError(null)
+    try {
+      const res = await fetch('/api/generador-landing/from-branding', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ brandingSessionId: sessionId }),
+      })
+      const data = (await res.json()) as { id?: string; error?: string }
+      if (!res.ok || !data.id) throw new Error(data.error ?? 'No se pudo crear la landing')
+      localStorage.setItem(LANDING_SESSION_KEY, data.id)
+      router.push('/tools/generador-landing')
+    } catch (err) {
+      setError((err as Error).message)
+      setLanding(false)
+    }
+  }
+
+  // Culminar: el brief se borra (la marca ya está guardada en su sesión) y se
+  // arranca uno limpio. Sin esto, volver a la tool solo ofrecía retomar la misma.
+  function otraMarca() {
+    clearBrief()
+    router.push(STEPS[0].path)
   }
 
   if (!sessionId) return null
@@ -131,9 +161,18 @@ function Resultado() {
              className={btnPrimary + ' h-12 px-6 no-underline'}>
             <Download className="w-4 h-4" /> Descargar kit
           </a>
+          <button type="button" onClick={crearLanding} disabled={landing}
+                  className="h-12 px-6 rounded-xl border border-white/[0.14] text-[13px] font-semibold text-[#f5f5f5] hover:bg-white/[0.05] transition-colors cursor-pointer bg-transparent disabled:opacity-40 flex items-center gap-2">
+            <LayoutTemplate className="w-4 h-4" />
+            {landing ? 'Creando...' : 'Crear la landing con esta marca'}
+          </button>
           <button type="button" onClick={() => router.push(STEPS[3].path)}
                   className="h-12 px-6 rounded-xl border border-white/[0.14] text-[13px] font-semibold text-[#f5f5f5] hover:bg-white/[0.05] transition-colors cursor-pointer bg-transparent">
             Cambiar estilo
+          </button>
+          <button type="button" onClick={otraMarca}
+                  className="h-12 px-6 rounded-xl text-[13px] font-semibold text-[#bdbdbd] hover:text-[#f5f5f5] transition-colors cursor-pointer bg-transparent border-0 flex items-center gap-2">
+            <Sparkles className="w-4 h-4" /> Crear otra marca
           </button>
         </div>
       </div>

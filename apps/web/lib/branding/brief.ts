@@ -22,6 +22,8 @@ export interface Brief {
 }
 
 export const BRIEF_KEY = 'branding_brief'
+/** Última marca generada. Sobrevive a "crear otra": es el historial de la tool. */
+export const LAST_SESSION_KEY = 'branding_last_session'
 
 export const BRAND_NAME_MIN = 2
 export const BRAND_NAME_MAX = 30
@@ -93,6 +95,15 @@ export function saveBrief(patch: PartialBrief): PartialBrief {
   const next = { ...loadBrief(), ...patch }
   try { window.localStorage.setItem(BRIEF_KEY, JSON.stringify(next)) } catch { /* modo privado */ }
   return next
+}
+
+export function saveLastSession(id: string): void {
+  try { window.localStorage.setItem(LAST_SESSION_KEY, id) } catch { /* modo privado */ }
+}
+
+export function loadLastSession(): string | null {
+  if (typeof window === 'undefined') return null
+  try { return window.localStorage.getItem(LAST_SESSION_KEY) } catch { return null }
 }
 
 export function clearBrief(): void {
