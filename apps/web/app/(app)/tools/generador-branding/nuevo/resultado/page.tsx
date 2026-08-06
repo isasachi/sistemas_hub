@@ -18,8 +18,8 @@ interface SessionRow {
   generation_status: string | null
 }
 
-function Artifact({ stage, url, busy, onRegen, big }: {
-  stage: Stage; url: string | null; busy: boolean; onRegen: () => void; big?: boolean
+function Artifact({ stage, url, busy, onRegen, big, regenLabel }: {
+  stage: Stage; url: string | null; busy: boolean; onRegen: () => void; big?: boolean; regenLabel?: string
 }) {
   return (
     <div className="flex flex-col gap-2">
@@ -42,7 +42,7 @@ function Artifact({ stage, url, busy, onRegen, big }: {
         <span className="text-[12px] font-semibold text-[#f5f5f5]">{STAGE_LABELS[stage]}</span>
         <button type="button" onClick={onRegen} disabled={busy}
                 className="h-8 px-2.5 rounded-lg text-[11px] text-[#bdbdbd] hover:text-[#f5f5f5] bg-transparent border border-white/[0.1] cursor-pointer disabled:opacity-40 flex items-center gap-1.5">
-          <RefreshCw className="w-3 h-3" /> Regenerar
+          <RefreshCw className="w-3 h-3" /> {regenLabel ?? 'Regenerar'}
         </button>
       </div>
     </div>
@@ -53,7 +53,7 @@ function Resultado() {
   const router = useRouter()
   const sessionId = useSearchParams().get('s')
   const [row, setRow] = useState<SessionRow | null>(null)
-  const [busy, setBusy] = useState<Stage | null>(null)
+  const [busy, setBusy] = useState<Stage | 'todo' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [landing, setLanding] = useState(false)
 
@@ -73,14 +73,21 @@ function Resultado() {
     return () => clearInterval(t)
   }, [row?.generation_status, load])
 
+  /**
+   * Regenerar el BOARD regenera las tres piezas: el logo y el empaque se derivan
+   * de él, así que un board nuevo deja a los otros dos siendo otra marca. Es más
+   * caro (3 imágenes), pero entregar un kit con piezas de dos marcas distintas no
+   * es una opción.
+   */
   async function regen(stage: Stage) {
     if (!sessionId || busy) return
-    setBusy(stage); setError(null)
+    const todo = stage === 'brandbook'
+    setBusy(todo ? 'todo' : stage); setError(null)
     try {
       const res = await fetch('/api/generador-branding/generar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, only: stage }),
+        body: JSON.stringify(todo ? { sessionId } : { sessionId, only: stage }),
       })
       await readSSEStream(res, (e) => {
         const ev = e as unknown as { status: string; message?: string }
@@ -144,11 +151,12 @@ function Resultado() {
 
         {/* `mockup_url` guarda el BOARD y `label_url` el empaque: columnas legadas
             reusadas para no pedir migración (ver COLUMN en la ruta de generación). */}
-        <Artifact stage="brandbook" url={row?.mockup_url ?? null} busy={busy === 'brandbook'} onRegen={() => regen('brandbook')} big />
+        <Artifact stage="brandbook" url={row?.mockup_url ?? null} busy={busy === 'todo'}
+                  onRegen={() => regen('brandbook')} big regenLabel="Regenerar la marca entera" />
 
         <div className="grid sm:grid-cols-2 gap-4">
-          <Artifact stage="logo" url={row?.logo_url ?? null} busy={busy === 'logo'} onRegen={() => regen('logo')} />
-          <Artifact stage="empaque" url={row?.label_url ?? null} busy={busy === 'empaque'} onRegen={() => regen('empaque')} />
+          <Artifact stage="logo" url={row?.logo_url ?? null} busy={busy === 'logo' || busy === 'todo'} onRegen={() => regen('logo')} />
+          <Artifact stage="empaque" url={row?.label_url ?? null} busy={busy === 'empaque' || busy === 'todo'} onRegen={() => regen('empaque')} />
         </div>
 
         {error && (

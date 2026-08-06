@@ -120,26 +120,29 @@ export const DEFAULT_STYLE: Style = {
 }
 
 /**
- * Actitud (paso 4). Es TODA la dirección de arte que recibe el modelo de imagen —
- * reemplaza a los bloques de estilo fijos que hacían que todas las marcas salieran
- * iguales. Las palabras en inglés son deliberadamente pocas: material, luz y
- * composición quedan sin especificar para que el modelo los varíe por marca.
+ * Actitud (paso 4) — la casilla "Brand feel" del prompt maestro.
+ *
+ * UN adjetivo por chip, a propósito. Antes eran frases de 2-3 palabras porque la
+ * actitud era la única dirección de arte que recibía el modelo; ahora el prompt
+ * tiene casillas propias para inspiración y estilo gráfico, y esta pide
+ * personalidad de marca. Tres chips daban siete tokens comprimidos que se leían
+ * como una lista de keywords, no como el carácter de una marca.
  */
 export const FEEL_CHIPS: { label: string; prompt: string }[] = [
-  { label: 'Clínico', prompt: 'clinical, precise' },
-  { label: 'Lujoso', prompt: 'luxurious, refined' },
-  { label: 'Artesanal', prompt: 'handcrafted, artisanal' },
-  { label: 'Cálido', prompt: 'warm, inviting' },
-  { label: 'Potente', prompt: 'bold, high-impact' },
-  { label: 'Sereno', prompt: 'calm, quiet' },
-  { label: 'Juguetón', prompt: 'playful, cheerful' },
-  { label: 'Técnico', prompt: 'technical, engineered' },
-  { label: 'Natural', prompt: 'natural, botanical' },
-  { label: 'Nostálgico', prompt: 'nostalgic, vintage' },
-  { label: 'Minimalista', prompt: 'minimal, stripped back' },
-  { label: 'Juvenil', prompt: 'youthful, energetic' },
-  { label: 'Elegante', prompt: 'elegant, understated' },
-  { label: 'Honesto', prompt: 'honest, no-nonsense' },
+  { label: 'Clínico', prompt: 'clinical' },
+  { label: 'Lujoso', prompt: 'luxurious' },
+  { label: 'Artesanal', prompt: 'handcrafted' },
+  { label: 'Cálido', prompt: 'warm' },
+  { label: 'Potente', prompt: 'bold' },
+  { label: 'Sereno', prompt: 'calm' },
+  { label: 'Juguetón', prompt: 'playful' },
+  { label: 'Técnico', prompt: 'technical' },
+  { label: 'Natural', prompt: 'natural' },
+  { label: 'Nostálgico', prompt: 'nostalgic' },
+  { label: 'Minimalista', prompt: 'minimal' },
+  { label: 'Juvenil', prompt: 'youthful' },
+  { label: 'Elegante', prompt: 'elegant' },
+  { label: 'Honesto', prompt: 'honest' },
 ]
 export const FEEL_TAGS = FEEL_CHIPS.map((c) => c.label)
 export const FEEL_MAX = 3

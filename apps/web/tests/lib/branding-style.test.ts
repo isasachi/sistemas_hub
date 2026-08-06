@@ -38,16 +38,17 @@ describe('actitud', () => {
     for (const c of FEEL_CHIPS) {
       expect(c.label.trim()).not.toBe('')
       expect(c.prompt.trim()).not.toBe('')
-      // Corto a propósito: no es un bloque de estilo, es una traducción.
-      expect(c.prompt.split(/[\s,]+/).length).toBeLessThanOrEqual(4)
+      // UN adjetivo: la casilla "Brand feel" del prompt pide personalidad de
+      // marca, no una lista de keywords comprimidas.
+      expect(c.prompt.split(/[\s,]+/).length).toBe(1)
     }
     expect(new Set(FEEL_TAGS).size).toBe(FEEL_TAGS.length)
   })
 
   it('feelWords traduce los chips y deja pasar el texto libre', () => {
-    expect(feelWords(['Clínico', 'Sereno'])).toBe('clinical, precise, calm, quiet')
+    expect(feelWords(['Clínico', 'Sereno'])).toBe('clinical, calm')
     expect(feelWords(['Artesanal', 'como una botica de barrio']))
-      .toBe('handcrafted, artisanal, como una botica de barrio')
+      .toBe('handcrafted, como una botica de barrio')
     expect(feelWords([])).toBe('')
   })
 })

@@ -43,7 +43,7 @@ describe('el prompt maestro', () => {
     expect(p).toContain('**Tagline:** Fuerza que se nota')
     expect(p).toContain('**Brand description:** Creatina monohidratada')
     expect(p).toContain('**Target age group:** Hombres de 25 a 45, Deportistas')
-    expect(p).toContain('**Brand feel:** bold, high-impact, technical, engineered')
+    expect(p).toContain('**Brand feel:** bold, technical')
     expect(p).toContain('**Inspired from:** Swiss sports posters')
     expect(p).toContain('**Products and packaging:** Pote, Doypack, Shaker, Polo')
     expect(p).toContain('**Colors:** Naranja intenso #FF4D00, Lima eléctrico #C6FF00')

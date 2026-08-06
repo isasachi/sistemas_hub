@@ -31,9 +31,9 @@ export const tools: Tool[] = [
     name: "Buscador de Productos",
     slug: "buscador-productos",
     description:
-      "Encuentra productos ganadores validados en LATAM que aún no están saturados en Perú.",
+      "Encuentra productos físicos que se están pautando en LATAM, agrupados por volumen de anuncios.",
     longDescription:
-      "Escribe un nicho y la herramienta te muestra productos que ya están funcionando en México, Colombia, Chile, Argentina y Ecuador, con su situación de competencia real en Perú y señales de validación (anuncios activos, días corriendo).",
+      "Escribe un nicho y la herramienta te muestra productos físicos que se están pautando ahora mismo en LATAM, agrupados por cantidad de anuncios activos y verificados como el producto principal de su anunciante.",
     icon: "PackageSearch",
     stage: "investigar",
     tag: "Nuevo",
@@ -45,22 +45,6 @@ export const tools: Tool[] = [
       { value: "8,900+", label: "productos analizados" },
       { value: "5 países", label: "validación LATAM" },
     ],
-  },
-  // TEMPORAL — tool de testeo del buscador (sin reglas de validación ni LLM).
-  // Borrar esta entrada, app/(app)/tools/buscador-test, app/api/buscador-test y
-  // las tablas ph_raw_* cuando termine la prueba.
-  {
-    name: "Buscador (Test)",
-    slug: "buscador-test",
-    description:
-      "Versión de prueba: productos físicos de Meta Ads Library agrupados por cantidad de anuncios, sin filtros de validación.",
-    longDescription:
-      "Escribe un nicho y te devuelve los anunciantes de productos físicos encontrados en Meta Ads Library, agrupados en tres rangos (0-50, 50-100 y 100 a más anuncios), con el enlace directo a la biblioteca.",
-    icon: "FlaskConical",
-    stage: "investigar",
-    tag: "Test",
-    tagStyle: "utility",
-    status: "live",
   },
   {
     name: "Generador de Anuncios",

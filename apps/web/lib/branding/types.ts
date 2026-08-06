@@ -109,7 +109,7 @@ export interface BrandingSessionResponse {
   image_analysis: ExtractedStyle | null
   uploaded_wireframe_url: string | null
   preset_version: number | null
-  generation_status: 'pending' | 'logo' | 'label' | 'mockup' | 'done' | 'failed' | null
+  generation_status: 'pending' | 'running' | 'partial' | 'done' | 'failed' | null
   generation_error: string | null
 }
 
