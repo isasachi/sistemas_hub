@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Input } from '@/components/ui/input'
 import BriefShell, { useBrief } from '@/components/tools/generador-branding/nuevo/BriefShell'
@@ -13,10 +13,10 @@ const NAME_GENERATOR_ENABLED = false
 export default function NombrePage() {
   const router = useRouter()
   const { brief, update } = useBrief()
-  const [brandName, setBrandName] = useState('')
   const [touched, setTouched] = useState(false)
 
-  useEffect(() => { if (brief) setBrandName(brief.brandName ?? '') }, [brief])
+  // Write-through, como el resto del brief: cada tecla se guarda.
+  const brandName = brief?.brandName ?? ''
 
   const error = touched ? brandNameError(brandName) : null
   const ready = !brandNameError(brandName)
@@ -26,6 +26,8 @@ export default function NombrePage() {
     update({ brandName: brandName.trim() })
     router.push(STEPS[2].path)
   }
+
+  if (!brief) return null
 
   return (
     <BriefShell
@@ -41,8 +43,8 @@ export default function NombrePage() {
           placeholder="Ej: Kelvin"
           maxLength={BRAND_NAME_MAX}
           value={brandName}
-          onChange={(e) => setBrandName(e.target.value)}
-          onBlur={() => setTouched(true)}
+          onChange={(e) => update({ brandName: e.target.value })}
+          onBlur={() => { setTouched(true); update({ brandName: brandName.trim() }) }}
           onKeyDown={(e) => { if (e.key === 'Enter') next() }}
           className="h-12 rounded-xl bg-white/[0.04] border-white/[0.08] text-[14px] text-[#f5f5f5]"
         />
