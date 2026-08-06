@@ -1,4 +1,4 @@
-// Scraper del BUSCADOR SIMPLE (tool de TESTEO, temporal).
+// Scraper del buscador de productos — MOTOR PRINCIPAL desde 2026-08-05.
 //   npx tsx scripts/scrape-raw.ts --niche rodilla
 //   npx tsx scripts/scrape-raw.ts --all          (cola ph_raw_niches, bloque de N)
 //
@@ -23,9 +23,12 @@
 // Sin LLM en ninguna fase: keywords de cache/seed, cero análisis. Escribe SOLO
 // en ph_raw_products / ph_raw_niches.
 //
-// ⚠️ NO correrlo en paralelo con el daemon: cada proceso tiene su PROPIO
-// rate-control singleton, así que ambos sumarían volumen sobre la misma IP —
-// justo el gatillo del soft-block de Meta. Correr con el daemon detenido.
+// Se corre a mano (no hay daemon). Después de esto, verify-products.ts aplica
+// las tres reglas sobre lo que quedó 'pendiente'.
+//
+// ⚠️ NO correrlo en paralelo con el refresco de 48h ni con otra instancia: cada
+// proceso tiene su PROPIO rate-control singleton, así que sumarían volumen
+// sobre la misma IP — el gatillo del soft-block de Meta.
 import './bootstrap' // env + polyfill WebSocket — debe ir primero
 import type { Page } from 'playwright'
 import {
@@ -43,6 +46,7 @@ import {
 } from '../lib/product-hunter/scraper'
 import { extractFromDom } from '../lib/product-hunter/dom-fallback'
 import { isLikelyService } from '../lib/product-hunter/competitors'
+import { fetchAdCount } from '../lib/product-hunter/ad-count'
 import {
   COUNTRIES,
   seedKeywords,
@@ -85,36 +89,6 @@ async function keywordsFor(niche: string): Promise<string[]> {
   const row = await getNicheStatus(niche).catch(() => null)
   const all = row?.keywords?.length ? row.keywords : (seedKeywords(niche) ?? [niche])
   return KEYWORD_LIMIT ? all.slice(0, KEYWORD_LIMIT) : all
-}
-
-// Total de anuncios ACTIVOS del anunciante, del JSON inline del SSR. Devuelve
-// null si no apareció dentro de la ventana (página rara o navegación bloqueada).
-// No usa navigateAndCapture: no necesitamos creativos, así que nos ahorramos los
-// ~12s de espera+scrolls. Sí respeta el cool-down y el hard-abort compartidos.
-async function fetchAdCount(page: Page, pageId: string): Promise<number | null> {
-  if (isPersistentlyBlocked()) throw new PersistentBlockError()
-  const gate = rateGateMs()
-  if (gate > 0) await sleep(gate)
-  if (JITTER_MS) await sleep(Math.random() * JITTER_MS)
-
-  await page.goto(pageUrl(pageId), { timeout: 30_000, waitUntil: 'domcontentloaded' })
-  const deadline = Date.now() + COUNT_TIMEOUT_MS
-  while (Date.now() < deadline) {
-    const count = await page.evaluate(() => {
-      for (const s of Array.from(document.querySelectorAll('script[type="application/json"]'))) {
-        const t = s.textContent ?? ''
-        if (!t.includes('search_results_connection')) continue
-        const m = /"search_results_connection":\{[^{]*?"count":(\d+)/.exec(t)
-        if (m) return Number(m[1])
-      }
-      // Respaldo: el "~N resultados" que Meta renderiza en texto visible.
-      const dm = /~?\s*([\d.,]+)\s*(?:resultados?|results?)/i.exec(document.body?.innerText ?? '')
-      return dm ? Number(dm[1].replace(/[.,]/g, '')) : null
-    }).catch(() => null)
-    if (count !== null) return count
-    await page.waitForTimeout(250)
-  }
-  return null
 }
 
 async function scrapeRawNiche(niche: string): Promise<void> {

@@ -1,13 +1,16 @@
 /**
- * Cuota diaria de búsquedas (máx 3/usuario/día) + bloqueo de keyword repetida.
+ * Cuota diaria de búsquedas + bloqueo de keyword repetida.
+ *
+ * ⚠️ TEMPORAL (2026-08-05): checkAndRecordSearch ya NO se llama desde ninguna
+ * ruta — el usuario pidió quitar el límite de 3/día. El módulo se conserva
+ * entero (con su registro en ph_user_searches) para reponerlo con una línea;
+ * limaSearchDay lo sigue usando gen-quota.ts.
  * Zona horaria: America/Lima (día calendario peruano, UTC-5 fijo sin DST).
  *
  * Tabla: ph_user_searches — creada en supabase/migrations/20260615_ph_user_searches.sql
  */
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import type { ProductRow, ProductCard } from '@ph/shared'
-import { toCard } from './to-card'
 
 export const DAILY_LIMIT = 3
 
@@ -129,41 +132,3 @@ const PRIORITY_ORDER: Record<string, number> = { alta: 0, media: 1, baja: 2, des
  * prioridad alta→media→baja y luego por score descendente.
  * Reconstruye desde ph_user_seen (seen_at en ventana del día Lima) + ph_products.
  */
-export async function getTodaysResults(userId: string | null, day: string): Promise<ProductCard[]> {
-  if (!userId) return []
-
-  // Lima = UTC-5 (sin DST). Día Lima "YYYY-MM-DD" == ventana UTC [dayT05:00Z, nextDayT05:00Z)
-  const dayStart = `${day}T05:00:00.000Z`
-  const [yr, mo, d] = day.split('-').map(Number)
-  const nextDay = new Date(Date.UTC(yr, mo - 1, d + 1))
-  const dayEnd = `${nextDay.toISOString().split('T')[0]}T05:00:00.000Z`
-
-  const db = getDb()
-
-  const { data: seenRows, error: seenErr } = await db
-    .from('ph_user_seen')
-    .select('product_id')
-    .eq('user_id', userId)
-    .gte('seen_at', dayStart)
-    .lt('seen_at', dayEnd)
-
-  if (seenErr || !seenRows?.length) return []
-
-  const productIds = seenRows.map((r: { product_id: string }) => r.product_id)
-
-  const { data: rows, error: rowsErr } = await db
-    .from('ph_products')
-    .select('*')
-    .in('id', productIds)
-
-  if (rowsErr || !rows) return []
-
-  return (rows as ProductRow[])
-    .map(toCard)
-    .filter((c): c is ProductCard => c !== null)
-    .sort((a, b) => {
-      const pDiff = (PRIORITY_ORDER[a.priority] ?? 2) - (PRIORITY_ORDER[b.priority] ?? 2)
-      if (pDiff !== 0) return pDiff
-      return b.score - a.score
-    })
-}

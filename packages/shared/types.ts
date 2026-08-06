@@ -275,23 +275,40 @@ export interface RawProductRow {
     categories?: string[]
   }
   scraped_at: string
+  // Veredicto de las tres reglas (pipeline nuevo). 'pendiente' = aún sin verificar.
+  status?: 'pendiente' | 'monoproducto' | 'sin_verificar' | 'descartado' | 'inactivo'
+  kind?: string | null
+  share?: number | null
+  product_name?: string | null
+  verdict_note?: string | null
+  verified_at?: string | null
+  // Última vez que se comprobó que el anunciante sigue pautando (script de 48h).
+  checked_at?: string | null
 }
 
-// Lo que ve el front: datos básicos + enlace a Meta Ads Library. NINGÚN stat.
+// Lo que ve el front del buscador.
 export interface RawProductEntry {
   id: string            // `${niche}:${page_id}`
   advertiser: string
+  productName: string | null   // lo que identificó el verificador
   title: string | null
   body: string | null
   country: string | null
+  adCount: number
   adsUrl: string
+}
+
+// Respuesta del buscador: los tres rangos, 10 productos cada uno.
+export interface RawBucketGroup {
+  bucket: string
+  label: string
+  products: RawProductEntry[]
 }
 
 export interface RawSearchResponse {
   niche: string
-  bucket: string
   status: 'ready' | 'pending' | 'empty'
   queued?: boolean
-  products: RawProductEntry[]
-  hasMore: boolean
+  groups: RawBucketGroup[]
+  total: number
 }

@@ -686,6 +686,82 @@ export async function upsertRawProducts(
   }
 }
 
+// ─── Verificación (pipeline nuevo: físico → rango → mayoría) ─────────────────
+
+export interface RawVerdictInput {
+  niche: string
+  page_id: string
+  status: 'monoproducto' | 'sin_verificar' | 'descartado'
+  kind: string
+  share: number | null
+  product_name: string | null
+  verdict_note: string | null
+}
+
+// Cola de verificación: productos scrapeados a los que todavía no se les
+// aplicaron las tres reglas. Los más viejos primero.
+export async function getRawProductsToVerify(limit = 50): Promise<RawProductRow[]> {
+  const { data, error } = await getDb()
+    .from('ph_raw_products')
+    .select('*')
+    .eq('status', 'pendiente')
+    .order('scraped_at', { ascending: true })
+    .limit(limit)
+  if (error) throw new Error(error.message)
+  return (data as RawProductRow[]) ?? []
+}
+
+export async function countRawPending(): Promise<number> {
+  const { count, error } = await getDb()
+    .from('ph_raw_products')
+    .select('page_id', { count: 'exact', head: true })
+    .eq('status', 'pendiente')
+  if (error) throw new Error(error.message)
+  return count ?? 0
+}
+
+export async function saveRawVerdict(v: RawVerdictInput): Promise<void> {
+  const { error } = await getDb()
+    .from('ph_raw_products')
+    .update({
+      status: v.status, kind: v.kind, share: v.share,
+      product_name: v.product_name ? cleanJsonText(v.product_name) : null,
+      verdict_note: v.verdict_note ? cleanJsonText(v.verdict_note).slice(0, 400) : null,
+      verified_at: new Date().toISOString(),
+    })
+    .eq('niche', v.niche)
+    .eq('page_id', v.page_id)
+  if (error) throw new Error(error.message)
+}
+
+// Serving del buscador: aprobados del rango, con los no-vistos por este usuario
+// primero (ver ph_raw_unseen). Nunca vacío mientras haya inventario.
+export async function getApprovedByBucket(
+  niche: string,
+  bucket: RawBucket,
+  userId: string,
+  limit = 10,
+): Promise<RawProductRow[]> {
+  const { min, max } = bucketRange(bucket)
+  const { data, error } = await getDb().rpc('ph_raw_unseen', {
+    p_niche: niche, p_user: userId, p_min: min, p_max: max ?? -1, p_limit: limit,
+  })
+  if (error) throw new Error(error.message)
+  return (data as RawProductRow[]) ?? []
+}
+
+// Cuántos aprobados tiene el nicho (los tres rangos juntos) — para distinguir
+// "todavía verificando" de "sin resultados".
+export async function countApproved(niche: string): Promise<number> {
+  const { count, error } = await getDb()
+    .from('ph_raw_products')
+    .select('page_id', { count: 'exact', head: true })
+    .eq('niche', niche)
+    .eq('status', 'monoproducto')
+  if (error) throw new Error(error.message)
+  return count ?? 0
+}
+
 // Página de un rango de anuncios. Trae limit+1 para que el caller sepa si hay más.
 export async function getRawProducts(
   niche: string,
@@ -702,4 +778,50 @@ export async function getRawProducts(
     .range(offset, offset + limit)
   if (error) throw new Error(error.message)
   return (data as RawProductRow[]) ?? []
+}
+
+// ─── Refresco de vigencia (script de 48h) ────────────────────────────────────
+
+// Productos a re-chequear: los que se sirven y los dados de baja (para
+// resucitarlos si el anunciante volvió). Los descartados no se re-chequean —
+// su veredicto no depende de si siguen pautando.
+export async function getProductsToRefresh(limit = 400): Promise<RawProductRow[]> {
+  const { data, error } = await getDb()
+    .from('ph_raw_products')
+    .select('*')
+    .in('status', ['monoproducto', 'inactivo'])
+    .order('checked_at', { ascending: true, nullsFirst: true })
+    .limit(limit)
+  if (error) throw new Error(error.message)
+  return (data as RawProductRow[]) ?? []
+}
+
+// Resultado del re-chequeo. `adCount` null = no se pudo leer (no se da de baja
+// por eso: un fallo de red no es una baja). 0 = el anunciante dejó de pautar.
+export async function saveRefresh(
+  niche: string,
+  pageId: string,
+  adCount: number | null,
+  wasInactive: boolean,
+): Promise<'baja' | 'alta' | 'sigue' | 'sin_dato'> {
+  const now = new Date().toISOString()
+  const patch: Record<string, unknown> = { checked_at: now }
+  let outcome: 'baja' | 'alta' | 'sigue' | 'sin_dato' = 'sin_dato'
+
+  if (adCount === null) {
+    outcome = 'sin_dato'                       // solo se marca el chequeo
+  } else if (adCount <= 0) {
+    patch.status = 'inactivo'                  // deja de servirse, no se borra
+    patch.ad_count = 0
+    outcome = wasInactive ? 'sigue' : 'baja'
+  } else {
+    // El rango sale de ad_count, así que actualizarlo re-rangea solo.
+    patch.ad_count = adCount
+    patch.status = 'monoproducto'
+    outcome = wasInactive ? 'alta' : 'sigue'
+  }
+  const { error } = await getDb()
+    .from('ph_raw_products').update(patch).eq('niche', niche).eq('page_id', pageId)
+  if (error) throw new Error(error.message)
+  return outcome
 }

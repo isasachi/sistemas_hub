@@ -5,7 +5,6 @@ import {
   Sparkles,
   DollarSign,
   LayoutTemplate,
-  FlaskConical,
   type LucideIcon,
 } from "lucide-react";
 
@@ -18,7 +17,6 @@ const TOOL_ICONS: Record<string, LucideIcon> = {
   Sparkles,
   DollarSign,
   LayoutTemplate,
-  FlaskConical,
 };
 
 export function toolIcon(name: string): LucideIcon {

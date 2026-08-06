@@ -11,7 +11,7 @@ import './bootstrap'
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import { upsertNiche, updateNichePriority, getNicheStatus } from '@ph/shared'
+import { upsertNiche, updateNichePriority, getNicheStatus, upsertRawNiche, getRawNicheStatus } from '@ph/shared'
 
 export interface SeedNiche {
   niche: string
@@ -88,6 +88,9 @@ function parseArgs(argv: string[]): { niches: SeedNiche[]; dryRun: boolean } {
 
 async function main() {
   const { niches, dryRun } = parseArgs(process.argv.slice(2))
+  // --raw siembra la cola del pipeline nuevo (ph_raw_niches) en vez de ph_niches.
+  // La prioridad no aplica ahí: esa cola no tiene orden por partes del cuerpo.
+  const raw = process.argv.includes('--raw')
 
   if (!niches.length) {
     console.error('Uso: tsx scripts/seed-niches.ts --from <archivo> | --niches "a,b,c" | <nicho>...')
@@ -114,6 +117,13 @@ async function main() {
   let failed = 0
   for (const { niche, priority } of niches) {
     try {
+      if (raw) {
+        // Idempotente: no degradar un nicho ya scrapeado a 'pending'.
+        if (await getRawNicheStatus(niche)) { existing++; continue }
+        await upsertRawNiche(niche, 'pending')
+        added++
+        continue
+      }
       // No degradar nichos ya existentes (un active→pending forzaría re-scrape),
       // pero SÍ propagar la prioridad de niches.txt si cambió (fuente de verdad).
       const current = await getNicheStatus(niche)
@@ -136,7 +146,9 @@ async function main() {
     `\n✓ ${niches.length} nichos procesados: ${added} nuevos (pending) · ${existing} ya existían` +
     `${repriced ? ` · ${repriced} re-priorizados` : ''}${failed ? ` · ${failed} fallidos` : ''}.`
   )
-  console.log('Drena la cola con: PH_CONCURRENCY=3 npx tsx scripts/scrape.ts --all')
+  console.log(raw
+    ? 'Drena la cola con: npx tsx scripts/scrape-raw.ts --all'
+    : 'Drena la cola con: PH_CONCURRENCY=3 npx tsx scripts/scrape.ts --all')
 }
 
 // Solo corre al ejecutarse directamente (tsx scripts/seed-niches.ts …); al

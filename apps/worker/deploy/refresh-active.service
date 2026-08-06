@@ -1,0 +1,26 @@
+# Refresco de vigencia del buscador (scripts/refresh-active.ts).
+# Relee el conteo de anuncios de cada anunciante servido: da de baja a los que
+# dejaron de pautar, reactiva a los que volvieron y re-rangea a los que
+# crecieron. $0 de LLM — solo lee el conteo del SSR (~2s por anunciante).
+#
+# Instalar como user unit (misma máquina donde corres el populate):
+#   mkdir -p ~/.config/systemd/user
+#   cp apps/worker/deploy/refresh-active.{service,timer} ~/.config/systemd/user/
+#   loginctl enable-linger "$USER"
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now refresh-active.timer
+# Ver:      journalctl --user -u refresh-active -f
+# Probar:   systemctl --user start refresh-active
+#
+# Ajustar WorkingDirectory si el clon está en otra ruta.
+
+[Unit]
+Description=Buscador de productos — refresco de vigencia (48h)
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/isasachi/chamba/sistemas_hub/apps/worker
+Environment=PH_CONCURRENCY=3
+Environment=PH_REFRESH_LIMIT=400
+ExecStart=/usr/bin/env bash -lc 'npx tsx scripts/refresh-active.ts'
+SyslogIdentifier=refresh-active
