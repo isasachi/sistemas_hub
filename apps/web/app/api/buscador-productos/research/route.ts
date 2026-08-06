@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { parseAdsLibraryUrl, insertUrlResearch } from '@ph/shared'
 import { readUserId, newUserId, PH_USER_COOKIE } from '@/lib/product-hunter/session'
+import { checkAndRecordSearch } from '@/lib/product-hunter/quota'
 
 // ⚠️ Esta ruta SOLO parsea la URL y escribe una fila en Supabase. No scrapea ni
 // llama a Anthropic (Vercel no puede correr Playwright). El poller del VPS
@@ -31,10 +32,11 @@ export async function POST(req: NextRequest) {
   // Cuota diaria compartida con la búsqueda por nicho (3/día). Keyed por el target
   // (page_id o ad_id): re-pegar la MISMA URL el mismo día es recheck gratis, así el
   // polling no gasta cuota.
-  // ⚠️ TEMPORAL (2026-08-05, pedido del usuario): sin límite diario. El contador
-  // por usuario/día vivía en checkAndRecordSearch (lib/product-hunter/quota.ts,
-  // DAILY_LIMIT=3) y también gateaba esta ruta. Para reponerlo, volver a llamarlo
-  // acá y en la ruta de búsqueda.
+  const quotaKey = `url:${parsed.pageId ?? parsed.adId}`
+  const quota = await checkAndRecordSearch(userId, quotaKey)
+  if (!quota.ok) {
+    return NextResponse.json({ error: quota.message, code: quota.code }, { status: 429 })
+  }
 
   const requestId = await insertUrlResearch(userId, raw, parsed.pageId ?? null, parsed.adId ?? null)
 
