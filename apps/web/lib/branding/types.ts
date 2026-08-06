@@ -73,6 +73,8 @@ export interface BrandingSessionResponse {
   target_audience: string | null
   personality: string[] | null
   brief_notes: string | null
+  /** Casilla "Inspired from" del prompt maestro. Ver el bloque de `selected_palette`. */
+  direction: { inspiration?: string } | null
   // logo
   logo_options: string[] | null
   logo_url: string | null
@@ -94,6 +96,12 @@ export interface BrandingSessionResponse {
   palette_options: PaletteColor[][] | null
   style_id: string | null
   product_type: string | null
+  /** Las casillas del prompt maestro (refactor 2026-08-06), en columnas legadas
+   *  que estaban sin uso: `selected_palette` = los NOMBRES de color (no hex: el
+   *  modelo elige los valores), `direction` = la inspiración, `descriptor` = la actitud,
+   *  `tagline` = el eslogan. Tipos laxos a propósito: hay filas del style-picker
+   *  de 2026-07 con otro shape, y las guardas viven en `session-brief.ts`. */
+  selected_palette: string[] | null
   descriptor: string | null
   tagline: string | null
   container_type: string | null
@@ -101,7 +109,7 @@ export interface BrandingSessionResponse {
   image_analysis: ExtractedStyle | null
   uploaded_wireframe_url: string | null
   preset_version: number | null
-  generation_status: 'pending' | 'logo' | 'label' | 'mockup' | 'done' | 'failed' | null
+  generation_status: 'pending' | 'running' | 'partial' | 'done' | 'failed' | null
   generation_error: string | null
 }
 

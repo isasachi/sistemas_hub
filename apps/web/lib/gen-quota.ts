@@ -34,7 +34,7 @@ export const GEN_GLOBAL_DAILY_LIMIT = Number(process.env.GEN_GLOBAL_DAILY_LIMIT 
 export const GEN_PER_STEP_LIMIT = Number(process.env.GEN_PER_STEP_LIMIT ?? 4) // 1 libre + 3 regens
 
 // Steps de imagen (los caros). Match por prefijo: landing-section incluye `:${type}`.
-export const IMAGE_KINDS = ['branding-logo', 'branding-mockup', 'branding-label', 'anuncios-image', 'landing-section']
+export const IMAGE_KINDS = ['branding-identidad', 'branding-logo', 'branding-etiqueta', 'branding-mockup', 'anuncios-image', 'landing-section']
 export function isImageKind(kind: string): boolean {
   return IMAGE_KINDS.some((k) => kind === k || kind.startsWith(k + ':'))
 }

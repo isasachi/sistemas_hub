@@ -36,7 +36,7 @@ export default function BriefShell({
   nextDisabled,
   nextLabel = 'Continuar →',
   hideNext,
-  wide,
+  full,
 }: {
   step: number
   title: string
@@ -46,7 +46,8 @@ export default function BriefShell({
   nextDisabled?: boolean
   nextLabel?: string
   hideNext?: boolean
-  wide?: boolean
+  /** Sin caja centrada: el editor del paso 5 usa el ancho completo. */
+  full?: boolean
 }) {
   const back = step === 1 ? '/tools/generador-branding' : STEPS[step - 2].path
 
@@ -54,7 +55,7 @@ export default function BriefShell({
     <div className="min-h-screen flex flex-col bg-[#0a0a0a]">
       <div className="h-[2px] bg-white/[0.06]">
         <div className="h-full transition-all duration-500"
-             style={{ width: `${(step / 4) * 100}%`, background: 'linear-gradient(90deg,#ff9c4d,#ff7a2f)' }} />
+             style={{ width: `${(step / STEPS.length) * 100}%`, background: 'linear-gradient(90deg,#ff9c4d,#ff7a2f)' }} />
       </div>
 
       <div className="px-6 py-4">
@@ -63,9 +64,9 @@ export default function BriefShell({
         </Link>
       </div>
 
-      <div className={`flex-1 w-full mx-auto px-6 pb-10 flex flex-col gap-6 ${wide ? 'max-w-[1080px]' : 'max-w-[640px]'}`}>
-        <div className="flex flex-col gap-2">
-          <p className="readout text-[11px] font-bold tracking-[1.5px] uppercase text-[#8a8a8a]">Paso {step} de 4</p>
+      <div className={`flex-1 w-full mx-auto flex flex-col min-h-0 ${full ? '' : 'max-w-[640px] px-6 pb-10 gap-6'}`}>
+        <div className={`flex flex-col gap-2 ${full ? 'px-6 pb-5' : ''}`}>
+          <p className="readout text-[11px] font-bold tracking-[1.5px] uppercase text-[#8a8a8a]">Paso {step} de {STEPS.length}</p>
           <h1 className="text-[28px] font-bold text-[#f5f5f5] leading-tight">{title}</h1>
           {hint && <p className="text-[13px] text-[#bdbdbd]">{hint}</p>}
         </div>

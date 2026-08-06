@@ -1,17 +1,14 @@
 import { NextResponse } from 'next/server'
 import { getBrandingSession } from '@/lib/branding/db'
 import { briefFromRow } from '@/lib/branding/session-brief'
-import { getPreset } from '@/lib/branding/presets'
-import { buildBrandboard } from '@/lib/branding/brandboard'
 import { buildKit } from '@/lib/branding/kit'
-import { storagePublicUrl } from '@/lib/storage'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-// Zip + PDF sobre 3 PNG: es CPU, no red lenta, pero el margen no estorba.
+// Baja 4 PNG, deriva 2 variantes con sharp y comprime.
 export const maxDuration = 60
 
-/** Descarga del kit (spec 6.5). Cero llamadas al modelo: solo lee, compone y comprime. */
+/** Descarga del kit. Cero llamadas al modelo: solo lee, empaqueta y comprime. */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const row = await getBrandingSession(id)
@@ -26,22 +23,20 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     return res.ok ? Buffer.from(await res.arrayBuffer()) : null
   }
 
-  const preset = getPreset(brief.presetId)
-  const logo = await grab((row.logo_url as string) ?? null)
-  const mockup = await grab((row.mockup_url as string) ?? null)
-  const label = await grab((row.label_url as string) ?? null)
-
-  // El brandboard se subió al terminar la generación; si esa sesión es vieja o
-  // aquello falló, se arma acá al vuelo (sigue sin costar una llamada al modelo).
-  const common = {
+  const { zip, filename } = await buildKit({
     brandName: brief.brandName,
+    tagline: brief.tagline,
     productDescription: brief.productDescription,
     audience: brief.audience,
-    preset, logo, mockup, label,
-  }
-  const brandboard = (await grab(storagePublicUrl(`${id}/brandboard.pdf`))) ?? (await buildBrandboard(common))
-
-  const { zip, filename } = await buildKit({ ...common, brandboard })
+    feel: brief.feel,
+    style: brief.style,
+    // Columnas legadas reusadas para no pedir migración: `mockup_url` guarda la
+    // identidad y `container_url` la foto de producto (ver COLUMN en generar/).
+    identidad: await grab((row.mockup_url as string) ?? null),
+    logo: await grab((row.logo_url as string) ?? null),
+    etiqueta: await grab((row.label_url as string) ?? null),
+    mockup: await grab((row.container_url as string) ?? null),
+  })
 
   return new Response(new Uint8Array(zip), {
     headers: {

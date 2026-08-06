@@ -5,27 +5,26 @@ import { uploadToStorage } from '@/lib/storage'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 import { isFlagged } from '@/lib/branding/moderation'
-import { frontPanel } from '@/lib/branding/variants'
-import { getPreset, isPresetId } from '@/lib/branding/presets'
 import { isComplete, type Brief, type PartialBrief } from '@/lib/branding/brief'
 import { briefFromRow } from '@/lib/branding/session-brief'
-import { buildBrandboard } from '@/lib/branding/brandboard'
-import { buildPrompt, aspectFor, STAGE_SEQUENCE, type Ref, type Stage } from '@/lib/branding/generation'
+import { buildPrompt, aspectFor, STAGE_SEQUENCE, type Stage } from '@/lib/branding/generation'
 import type { Part } from '@google/genai'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-// 3 imágenes secuenciales con gpt-image-2 (~60-90s c/u). Fluid Compute da 300s.
+// Identidad + 3 piezas derivadas, secuenciales con gpt-image-2 (~60-90s c/u). Fluid Compute da 300s.
 export const maxDuration = 300
 
-const COLUMN: Record<Stage, 'logo_url' | 'mockup_url' | 'label_url'> = {
-  logo: 'logo_url', mockup: 'mockup_url', label: 'label_url',
+/**
+ * Dónde vive cada pieza. Columnas legadas reusadas para no pedir migración:
+ * `mockup_url` guarda la IDENTIDAD (es la imagen hero y la que el historial ya
+ * usa como miniatura) y `container_url` la foto de producto.
+ */
+const COLUMN: Record<Stage, 'logo_url' | 'mockup_url' | 'label_url' | 'container_url'> = {
+  identidad: 'mockup_url', logo: 'logo_url', etiqueta: 'label_url', mockup: 'container_url',
 }
 
-/** Cuántas referencias del moodboard se adjuntan por llamada (5 sería caro y ruidoso). */
-const REFS_PER_CALL = 2
-
-/** Las refs viven en /public: se leen por HTTP desde el mismo origen (en Vercel las sirve el CDN). */
+/** Trae una imagen por HTTP como parte inline. La usa el board como referencia. */
 async function refParts(paths: string[], origin: string): Promise<Part[]> {
   const parts: Part[] = []
   for (const p of paths) {
@@ -35,14 +34,6 @@ async function refParts(paths: string[], origin: string): Promise<Part[]> {
     parts.push({ inlineData: { mimeType: res.headers.get('content-type') ?? 'image/jpeg', data: buf.toString('base64') } })
   }
   return parts
-}
-
-/** El mockup recibe SOLO el frente del 360: recorte en memoria, sin subir nada. */
-async function frontPanelPart(labelUrl: string): Promise<Part[]> {
-  const res = await fetch(labelUrl)
-  if (!res.ok) return []
-  const front = await frontPanel(Buffer.from(await res.arrayBuffer()))
-  return [{ inlineData: { mimeType: 'image/png', data: front.toString('base64') } }]
 }
 
 export async function POST(req: NextRequest) {
@@ -75,7 +66,7 @@ export async function POST(req: NextRequest) {
 
           // Moderación ANTES de la primera generación: es gratis y evita pagar
           // imágenes que el motor va a rechazar igual.
-          if (await isFlagged(`${b.brandName}\n${b.productDescription}`)) {
+          if (await isFlagged([b.brandName, b.tagline, b.productDescription, b.feel.join(' ')].filter(Boolean).join('\n'))) {
             send({ status: 'error', message: 'El texto no pasó la moderación. Prueba con otro nombre o descripción.' })
             return controller.close()
           }
@@ -86,9 +77,11 @@ export async function POST(req: NextRequest) {
             product_category: b.category,
             product_type: b.productDescription,
             target_audience: b.audience.join(', '),
-            style_id: b.presetId,
-            container_type: b.containerType ?? null,
-            source_mode: 'preset',
+            // Las casillas del prompt maestro, en columnas que ya existían sin uso.
+            tagline: b.tagline ?? null,
+            descriptor: b.feel.join(', '),
+            selected_palette: b.style.palette,
+            direction: { inspiration: b.style.inspiration },
             step: 1,
             generation_status: 'running',
             generation_error: null,
@@ -98,20 +91,17 @@ export async function POST(req: NextRequest) {
         if (!brief) { send({ status: 'error', message: 'La sesión no tiene un brief válido' }); return controller.close() }
         send({ status: 'session', sessionId })
 
-        const preset = getPreset(brief.presetId)
         const stages = body.only ? [body.only] : STAGE_SEQUENCE
         const origin = req.nextUrl.origin
-        const refs = await refParts(preset.moodboard.slice(0, REFS_PER_CALL), origin)
 
-        // En una regeneración suelta el logo ya existe: se reusa como referencia.
+        // En una regeneración suelta el board ya existe: se reusa como referencia.
         const existing = await getBrandingSession(sessionId)
-        let logoUrl: string | null = (existing?.logo_url as string) ?? null
-        let labelUrl: string | null = (existing?.label_url as string) ?? null
+        let identityUrl: string | null = (existing?.mockup_url as string) ?? null
         const urls: Partial<Record<Stage, string>> = {}
         const failed: Stage[] = []
 
         for (const stage of stages) {
-          const kind = `branding-${stage === 'label' ? 'label' : stage}`
+          const kind = `branding-${stage}`
           const { blocked } = await checkGenQuota(sessionId, kind)
           if (blocked) {
             send({ status: 'stage_failed', stage, message: 'Llegaste al límite de regeneraciones de este paso' })
@@ -121,16 +111,14 @@ export async function POST(req: NextRequest) {
 
           send({ status: 'stage', stage })
           try {
-            // Cascada: la etiqueta monta sobre el logo y el mockup sobre la etiqueta
-            // (así el envase muestra la MISMA etiqueta que se entrega). Si la pieza
-            // previa falló, se cae al logo y en última instancia a ninguna.
-            const ref: Ref = stage === 'logo' ? 'none'
-              : stage === 'mockup' && labelUrl ? 'label'
-              : logoUrl ? 'logo' : 'none'
+            // La identidad es la fuente: las piezas sueltas la reciben adjunta
+            // para que sean LA MISMA marca y no tres lecturas distintas.
             const parts: Part[] = []
-            if (ref === 'label') parts.push(...(await frontPanelPart(labelUrl!)))
-            else if (ref === 'logo') parts.push(...(await refParts([logoUrl!], origin)))
-            parts.push(...refs, { text: buildPrompt(stage, brief, preset, ref) })
+            if (stage !== 'identidad') {
+              if (!identityUrl) throw new Error('no hay identidad de la que derivar esta pieza')
+              parts.push(...(await refParts([identityUrl], origin)))
+            }
+            parts.push({ text: buildPrompt(stage, brief) })
 
             // generateImage ya reintenta internamente (3 intentos, OpenAI→Gemini).
             const b64 = await generateImage(parts, 3, { aspectRatio: aspectFor(stage) })
@@ -139,13 +127,12 @@ export async function POST(req: NextRequest) {
             const url = await uploadToStorage(sessionId, Buffer.from(b64, 'base64'), 'image/png', stage)
             await updateBrandingSession(sessionId, { [COLUMN[stage]]: url } as never)
             await recordGenQuota(sessionId, kind, userId)
-            if (stage === 'logo') logoUrl = url
-            if (stage === 'label') labelUrl = url
+            if (stage === 'identidad') identityUrl = url
             urls[stage] = url
             send({ status: 'stage_done', stage, url })
           } catch (err) {
-            // Una etapa caída no tumba las demás: se entrega lo que sí salió y la
-            // UI ofrece reintentar solo esa (spec, criterios de errores).
+            // Una pieza caída no tumba las demás: se entrega lo que sí salió y la
+            // UI ofrece reintentar solo esa.
             failed.push(stage)
             send({ status: 'stage_failed', stage, message: String(err) })
           }
@@ -156,30 +143,6 @@ export async function POST(req: NextRequest) {
           generation_error: failed.length ? `fallaron: ${failed.join(', ')}` : null,
           step: 2,
         } as never)
-        // Etapa 5: el brandboard se arma SIEMPRE al terminar, se pida o no, y sin
-        // tocar el modelo (pdf-lib sobre las piezas ya generadas).
-        if (!body.only) {
-          send({ status: 'stage', stage: 'brandboard' })
-          try {
-            const row = await getBrandingSession(sessionId)
-            const grab = async (u: string | null) =>
-              u ? Buffer.from(await (await fetch(u)).arrayBuffer()) : null
-            const pdf = await buildBrandboard({
-              brandName: brief.brandName,
-              productDescription: brief.productDescription,
-              audience: brief.audience,
-              preset,
-              logo: await grab((row?.logo_url as string) ?? null),
-              mockup: await grab((row?.mockup_url as string) ?? null),
-              label: await grab((row?.label_url as string) ?? null),
-            })
-            await uploadToStorage(sessionId, pdf, 'application/pdf', 'brandboard')
-            send({ status: 'stage_done', stage: 'brandboard' })
-          } catch (err) {
-            send({ status: 'stage_failed', stage: 'brandboard', message: String(err) })
-          }
-        }
-
         send({ status: 'done', sessionId, urls, failed })
       } catch (err) {
         send({ status: 'error', message: String(err), retryable: true })

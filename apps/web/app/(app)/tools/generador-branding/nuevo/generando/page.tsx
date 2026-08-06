@@ -6,22 +6,20 @@ import { useRouter } from 'next/navigation'
 import { ArrowLeft, Check, X } from 'lucide-react'
 import { readSSEStream } from '@/components/tools/ui/SSEStatus'
 import { useBrief } from '@/components/tools/generador-branding/nuevo/BriefShell'
-import { CONFIRM_PATH, isComplete, resumePath, saveLastSession } from '@/lib/branding/brief'
-import { getPreset } from '@/lib/branding/presets'
+import { STEPS, isComplete, resumePath, saveLastSession } from '@/lib/branding/brief'
 import { STAGE_LABELS, type Stage } from '@/lib/branding/generation'
 
-// El brandboard es una etapa más de la pantalla aunque no sea una generación:
-// se arma siempre al final y el usuario lo ve completarse.
-type Step = Stage | 'brandboard'
-const STEPS_UI: Step[] = ['logo', 'label', 'mockup', 'brandboard']
-const LABELS: Record<Step, string> = { ...STAGE_LABELS, brandboard: 'Brandboard' }
+// La identidad primero; las tres piezas sueltas se derivan de ella.
+type Step = Stage
+const STEPS_UI: Step[] = ['identidad', 'logo', 'etiqueta', 'mockup']
+const LABELS: Record<Step, string> = STAGE_LABELS
 
 const TIPS = [
-  'El estilo que elegiste ya trae su paleta y sus tipografías: no hay nada más que decidir.',
-  'Cada pieza monta sobre la anterior: el logo entra en la etiqueta y la etiqueta se aplica al envase.',
+  'Las tipografías las elige el modelo: es parte de lo que hace única a cada marca.',
+  'Primero sale la identidad completa; de ahí se derivan el logo, la etiqueta y el mockup.',
   'Si algo no te convence, puedes regenerar solo esa pieza sin rehacer el resto.',
-  'La etiqueta sale plana y lista para imprenta, no montada sobre el envase.',
-  'Al final te armamos el brandboard en PDF y el kit descargable, sin que tengas que pedirlo.',
+  'El texto del empaque sale en español, con formato peruano.',
+  'El logo viene en tres versiones: la principal y las de negro y blanco para fondos.',
 ]
 
 type State = 'pending' | 'running' | 'done' | 'failed'
@@ -29,7 +27,7 @@ type State = 'pending' | 'running' | 'done' | 'failed'
 export default function GenerandoPage() {
   const router = useRouter()
   const { brief } = useBrief()
-  const [state, setState] = useState<Record<Step, State>>({ logo: 'pending', mockup: 'pending', label: 'pending', brandboard: 'pending' })
+  const [state, setState] = useState<Record<Step, State>>({ identidad: 'pending', logo: 'pending', etiqueta: 'pending', mockup: 'pending' })
   const [error, setError] = useState<string | null>(null)
   const [tip, setTip] = useState(0)
   const [slow, setSlow] = useState(false)
@@ -86,12 +84,11 @@ export default function GenerandoPage() {
   }, [brief, router])
 
   if (!brief || !isComplete(brief)) return null
-  const preset = getPreset(brief.presetId)
 
   return (
     <div className="min-h-screen flex flex-col bg-[#0a0a0a]">
       <div className="px-6 py-4">
-        <Link href={CONFIRM_PATH} className="inline-flex items-center gap-2 h-9 px-3 rounded-xl border border-white/[0.1] text-[13px] font-semibold text-[#f5f5f5] no-underline hover:bg-white/[0.05] transition-colors">
+        <Link href={STEPS[4].path} className="inline-flex items-center gap-2 h-9 px-3 rounded-xl border border-white/[0.1] text-[13px] font-semibold text-[#f5f5f5] no-underline hover:bg-white/[0.05] transition-colors">
           <ArrowLeft className="w-4 h-4" /> Atrás
         </Link>
       </div>
@@ -101,7 +98,7 @@ export default function GenerandoPage() {
           <h1 className="text-[24px] font-bold text-[#f5f5f5] leading-tight">
             Creando la marca de {brief.brandName}
           </h1>
-          <p className="text-[13px] text-[#bdbdbd]">Estilo {preset.label}. Toma alrededor de un minuto por pieza.</p>
+          <p className="text-[13px] text-[#bdbdbd]">Toma alrededor de un minuto por pieza.</p>
         </div>
 
         <div className="flex flex-col gap-2">
