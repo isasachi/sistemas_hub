@@ -1,4 +1,6 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&family=JetBrains+Mono:wght@400;500;600;700&family=Poppins:wght@400;500;600;700&family=Lato:wght@400;700&family=Playfair+Display:ital,wght@0,500;0,600;1,500&display=swap');
+/* Playfair Display NO es del sistema: la usa el estilo `premium-serif` del
+   catálogo del generador de landings (contenido generado, no el chrome). */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Poppins:wght@400;500;600;700&family=Lato:wght@400;700&family=Playfair+Display:ital,wght@0,500;0,600;1,500&display=swap');
 /* Familias extra del chrome. OJO: el catálogo del editor de branding NO se carga acá
    — son 34 familias y meterlas en la hoja global las volvería render-blocking para
    toda la app. El editor inyecta su propio <link> (ver `fontsHref` en branding/brief.ts). */
@@ -9,13 +11,13 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* ── JR AI Hub Design Tokens (sistema soft: cards anidadas, serif
-   de display, metadata mono; dark cálido + acento ámbar) ──────── */
+/* ── JR AI Hub Design Tokens (sistema soft: cards anidadas, sans en
+   todo el tema, metadata mono; dark cálido + acento ámbar) ─────── */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: 'Inter', -apple-system, sans-serif;
-  --font-display: 'Fraunces', Georgia, serif;
+  --font-display: 'Inter', -apple-system, sans-serif;
   --font-heading: 'Inter', -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', 'Menlo', monospace;
   --color-ring: var(--ring);
@@ -128,9 +130,9 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
-  /* Headings en la sans del sistema (Inter). La serif de display (Fraunces)
-     sigue disponible en --font-display para lo que la pida explícitamente;
-     .lp-root mantiene su propio override (Poppins) y no se toca acá. */
+  /* Headings en la sans del sistema (Inter). El tema ya no tiene ninguna
+     serif: --font-display también es sans. .lp-root mantiene su propio
+     override (Poppins) y no se toca acá. */
   h1, h2, h3, h4, h5, h6 {
     font-family: 'Inter', -apple-system, sans-serif;
     letter-spacing: -0.02em;
@@ -359,7 +361,7 @@
 }
 
 /* Headings en Poppins — regla directa por elemento (gana a la de
-   herencia y al @layer base h1..h6 de Fraunces que vive globalmente). */
+   herencia y al @layer base h1..h6 que vive globalmente). */
 .lp-root h1,
 .lp-root h2,
 .lp-root h3,
