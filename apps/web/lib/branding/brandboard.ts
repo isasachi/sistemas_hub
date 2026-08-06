@@ -19,9 +19,12 @@ function hexToRgb(hex: string) {
   return rgb(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255)
 }
 
-const COLOR_LABELS: Record<string, string> = {
-  primary: 'Primario', secondary: 'Secundario', accent: 'Acento', dark: 'Oscuro', light: 'Claro',
-}
+/** Orden fijo: Postgres reordena las claves del jsonb al releerlo, y sin esto las
+ *  5 muestras del PDF salen en un orden distinto en cada marca. */
+const COLOR_LABELS: [keyof Style['palette'], string][] = [
+  ['primary', 'Primario'], ['secondary', 'Secundario'], ['accent', 'Acento'],
+  ['dark', 'Oscuro'], ['light', 'Claro'],
+]
 
 /** Texto que no se sale de la caja: corta y pone puntos suspensivos. */
 function fit(text: string, font: PDFFont, size: number, maxWidth: number): string {
@@ -91,11 +94,12 @@ export async function buildBrandboard(input: BrandboardInput): Promise<Buffer> {
   section(page, bold, 'Paleta', y)
   y -= 62
   const swatch = (inner - 4 * 10) / 5
-  Object.entries(style.palette).forEach(([key, hex], i) => {
+  COLOR_LABELS.forEach(([key, label], i) => {
+    const hex = style.palette[key]
     const x = M + i * (swatch + 10)
     page.drawRectangle({ x, y, width: swatch, height: 44, color: hexToRgb(hex),
                          borderColor: rgb(0.85, 0.85, 0.85), borderWidth: 0.5 })
-    page.drawText(COLOR_LABELS[key] ?? key, { x, y: y - 12, size: 8, font: bold })
+    page.drawText(label, { x, y: y - 12, size: 8, font: bold })
     page.drawText(hex.toUpperCase(), { x, y: y - 22, size: 7, font: regular, color: rgb(0.45, 0.45, 0.45) })
   })
 

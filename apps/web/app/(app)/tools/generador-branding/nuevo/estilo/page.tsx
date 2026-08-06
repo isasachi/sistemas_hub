@@ -147,7 +147,7 @@ export default function EstiloPage() {
       <div className="flex flex-1 min-h-0 border-t border-white/[0.06]">
         {/* ── Configuración ─────────────────────────────────────────── */}
         <div className="flex-1 px-6 md:px-10 py-8 border-r border-white/[0.06] overflow-y-auto">
-          <div className="max-w-[560px] flex flex-col gap-8">
+          <div className="max-w-[640px] mx-auto flex flex-col gap-8">
 
             <div className="flex flex-col gap-3">
               <div className="flex items-center justify-between gap-3">
@@ -222,7 +222,7 @@ export default function EstiloPage() {
         </div>
 
         {/* ── Preview en vivo ───────────────────────────────────────── */}
-        <div className="w-[300px] lg:w-[380px] flex-shrink-0 sticky top-0 self-start max-h-screen overflow-y-auto px-6 py-8 flex flex-col gap-5">
+        <div className="w-[300px] lg:w-[420px] flex-shrink-0 sticky top-0 self-start max-h-screen overflow-y-auto px-6 py-8 flex flex-col gap-5">
           <p className={sectionLabel}>Cómo se ve</p>
 
           <div className="rounded-2xl p-6 flex flex-col gap-4 border border-white/[0.08]"
