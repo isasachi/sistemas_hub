@@ -831,7 +831,10 @@ export async function getProductsToRefresh(limit = 400): Promise<RawProductRow[]
   const { data, error } = await getDb()
     .from('ph_raw_products')
     .select('*')
-    .in('status', ['monoproducto', 'inactivo'])
+    // Todo lo que se sirve, no solo lo aprobado por el LLM: desde que el
+    // serving muestra el inventario completo, filtrar por 'monoproducto' dejaba
+    // la vigilancia sobre 122 de 28,730 productos. Los más viejos primero, así
+    // la cobertura rota sola entre corridas.
     .order('checked_at', { ascending: true, nullsFirst: true })
     .limit(limit)
   if (error) throw new Error(error.message)
