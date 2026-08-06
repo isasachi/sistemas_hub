@@ -1,0 +1,14 @@
+# Cada 48h. Persistent=true → si la máquina estaba apagada a esa hora, corre al
+# encender. RandomizedDelaySec evita que caiga siempre en el mismo minuto (y que
+# choque con un populate manual arrancado en punto).
+[Unit]
+Description=Refresco de vigencia del buscador cada 48h
+
+[Timer]
+OnBootSec=30min
+OnUnitActiveSec=48h
+Persistent=true
+RandomizedDelaySec=30min
+
+[Install]
+WantedBy=timers.target
