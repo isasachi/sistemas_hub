@@ -6,8 +6,7 @@ import { useRouter } from 'next/navigation'
 import { ArrowLeft, Check, X } from 'lucide-react'
 import { readSSEStream } from '@/components/tools/ui/SSEStatus'
 import { useBrief } from '@/components/tools/generador-branding/nuevo/BriefShell'
-import { CONFIRM_PATH, isComplete, resumePath, saveLastSession } from '@/lib/branding/brief'
-import { getPreset } from '@/lib/branding/presets'
+import { STEPS, isComplete, resumePath, saveLastSession } from '@/lib/branding/brief'
 import { STAGE_LABELS, type Stage } from '@/lib/branding/generation'
 
 // El brandboard es una etapa más de la pantalla aunque no sea una generación:
@@ -17,7 +16,7 @@ const STEPS_UI: Step[] = ['logo', 'label', 'mockup', 'brandboard']
 const LABELS: Record<Step, string> = { ...STAGE_LABELS, brandboard: 'Brandboard' }
 
 const TIPS = [
-  'El estilo que elegiste ya trae su paleta y sus tipografías: no hay nada más que decidir.',
+  'La paleta y las tipografías que ajustaste son las que va a usar cada pieza.',
   'Cada pieza monta sobre la anterior: el logo entra en la etiqueta y la etiqueta se aplica al envase.',
   'Si algo no te convence, puedes regenerar solo esa pieza sin rehacer el resto.',
   'La etiqueta sale plana y lista para imprenta, no montada sobre el envase.',
@@ -86,12 +85,11 @@ export default function GenerandoPage() {
   }, [brief, router])
 
   if (!brief || !isComplete(brief)) return null
-  const preset = getPreset(brief.presetId)
 
   return (
     <div className="min-h-screen flex flex-col bg-[#0a0a0a]">
       <div className="px-6 py-4">
-        <Link href={CONFIRM_PATH} className="inline-flex items-center gap-2 h-9 px-3 rounded-xl border border-white/[0.1] text-[13px] font-semibold text-[#f5f5f5] no-underline hover:bg-white/[0.05] transition-colors">
+        <Link href={STEPS[4].path} className="inline-flex items-center gap-2 h-9 px-3 rounded-xl border border-white/[0.1] text-[13px] font-semibold text-[#f5f5f5] no-underline hover:bg-white/[0.05] transition-colors">
           <ArrowLeft className="w-4 h-4" /> Atrás
         </Link>
       </div>
@@ -101,7 +99,7 @@ export default function GenerandoPage() {
           <h1 className="text-[24px] font-bold text-[#f5f5f5] leading-tight">
             Creando la marca de {brief.brandName}
           </h1>
-          <p className="text-[13px] text-[#bdbdbd]">Estilo {preset.label}. Toma alrededor de un minuto por pieza.</p>
+          <p className="text-[13px] text-[#bdbdbd]">Toma alrededor de un minuto por pieza.</p>
         </div>
 
         <div className="flex flex-col gap-2">

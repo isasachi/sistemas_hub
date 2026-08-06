@@ -1,7 +1,6 @@
 import JSZip from 'jszip'
-import { brandSlug } from './brief'
+import { brandSlug, type Style } from './brief'
 import { logoVariant, frontPanel } from './variants'
-import type { Preset } from './presets'
 
 /**
  * El .zip de entrega (spec 6.5), sin SVG ni isotipo: el motor es ráster y de un
@@ -21,7 +20,8 @@ export interface KitInput {
   brandName: string
   productDescription: string
   audience: string[]
-  preset: Preset
+  style: Style
+  feel: string[]
   logo: Buffer | null
   mockup: Buffer | null
   label: Buffer | null
@@ -29,23 +29,23 @@ export interface KitInput {
 }
 
 export function colorsAndTypeText(input: KitInput): string {
-  const p = input.preset
+  const { palette, typography } = input.style
   return [
     input.brandName,
     input.productDescription,
     '',
-    `Estilo: ${p.label} — ${p.signature}`,
+    input.feel.length ? `Estilo: ${input.feel.join(' · ')}` : '',
     '',
     'COLORES',
-    `Primario    ${p.palette.primary}`,
-    `Secundario  ${p.palette.secondary}`,
-    `Acento      ${p.palette.accent}`,
-    `Oscuro      ${p.palette.dark}`,
-    `Claro       ${p.palette.light}`,
+    `Primario    ${palette.primary}`,
+    `Secundario  ${palette.secondary}`,
+    `Acento      ${palette.accent}`,
+    `Oscuro      ${palette.dark}`,
+    `Claro       ${palette.light}`,
     '',
     'TIPOGRAFÍAS',
-    `Títulos: ${p.typography.display}`,
-    `Texto:   ${p.typography.body}`,
+    `Títulos: ${typography.display}`,
+    `Texto:   ${typography.body}`,
     '',
     input.audience.length ? `PÚBLICO\n${input.audience.join(' · ')}` : '',
     '',

@@ -6,7 +6,6 @@ import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 import { isFlagged } from '@/lib/branding/moderation'
 import { frontPanel } from '@/lib/branding/variants'
-import { getPreset, isPresetId } from '@/lib/branding/presets'
 import { isComplete, type Brief, type PartialBrief } from '@/lib/branding/brief'
 import { briefFromRow } from '@/lib/branding/session-brief'
 import { buildBrandboard } from '@/lib/branding/brandboard'
@@ -22,10 +21,7 @@ const COLUMN: Record<Stage, 'logo_url' | 'mockup_url' | 'label_url'> = {
   logo: 'logo_url', mockup: 'mockup_url', label: 'label_url',
 }
 
-/** Cuántas referencias del moodboard se adjuntan por llamada (5 sería caro y ruidoso). */
-const REFS_PER_CALL = 2
-
-/** Las refs viven en /public: se leen por HTTP desde el mismo origen (en Vercel las sirve el CDN). */
+/** Trae una imagen por HTTP como parte inline. La usa la ref del logo de la cascada. */
 async function refParts(paths: string[], origin: string): Promise<Part[]> {
   const parts: Part[] = []
   for (const p of paths) {
@@ -75,7 +71,7 @@ export async function POST(req: NextRequest) {
 
           // Moderación ANTES de la primera generación: es gratis y evita pagar
           // imágenes que el motor va a rechazar igual.
-          if (await isFlagged(`${b.brandName}\n${b.productDescription}`)) {
+          if (await isFlagged(`${b.brandName}\n${b.productDescription}\n${b.feel.join(' ')}`)) {
             send({ status: 'error', message: 'El texto no pasó la moderación. Prueba con otro nombre o descripción.' })
             return controller.close()
           }
@@ -86,9 +82,12 @@ export async function POST(req: NextRequest) {
             product_category: b.category,
             product_type: b.productDescription,
             target_audience: b.audience.join(', '),
-            style_id: b.presetId,
+            // El estilo compuesto en el editor. `descriptor` guarda la actitud y las
+            // dos jsonb la paleta y las tipografías: columnas que ya existían sin uso.
+            descriptor: b.feel.join(', '),
+            selected_palette: b.style.palette,
+            selected_typography: b.style.typography,
             container_type: b.containerType ?? null,
-            source_mode: 'preset',
             step: 1,
             generation_status: 'running',
             generation_error: null,
@@ -98,10 +97,8 @@ export async function POST(req: NextRequest) {
         if (!brief) { send({ status: 'error', message: 'La sesión no tiene un brief válido' }); return controller.close() }
         send({ status: 'session', sessionId })
 
-        const preset = getPreset(brief.presetId)
         const stages = body.only ? [body.only] : STAGE_SEQUENCE
         const origin = req.nextUrl.origin
-        const refs = await refParts(preset.moodboard.slice(0, REFS_PER_CALL), origin)
 
         // En una regeneración suelta el logo ya existe: se reusa como referencia.
         const existing = await getBrandingSession(sessionId)
@@ -130,7 +127,7 @@ export async function POST(req: NextRequest) {
             const parts: Part[] = []
             if (ref === 'label') parts.push(...(await frontPanelPart(labelUrl!)))
             else if (ref === 'logo') parts.push(...(await refParts([logoUrl!], origin)))
-            parts.push(...refs, { text: buildPrompt(stage, brief, preset, ref) })
+            parts.push({ text: buildPrompt(stage, brief, ref) })
 
             // generateImage ya reintenta internamente (3 intentos, OpenAI→Gemini).
             const b64 = await generateImage(parts, 3, { aspectRatio: aspectFor(stage) })
@@ -168,7 +165,8 @@ export async function POST(req: NextRequest) {
               brandName: brief.brandName,
               productDescription: brief.productDescription,
               audience: brief.audience,
-              preset,
+              style: brief.style,
+              feel: brief.feel,
               logo: await grab((row?.logo_url as string) ?? null),
               mockup: await grab((row?.mockup_url as string) ?? null),
               label: await grab((row?.label_url as string) ?? null),

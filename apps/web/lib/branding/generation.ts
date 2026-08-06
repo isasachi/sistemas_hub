@@ -1,18 +1,24 @@
 /**
- * generation.ts — brief + preset → los 3 prompts del pipeline.
+ * generation.ts — brief → los 3 prompts del pipeline.
  * ---------------------------------------------------------------------------
  * Motor: ráster PNG con gpt-image-2 (decisión cerrada 2026-08-03 — no hay motor
  * híbrido, ni vector, ni Recraft). Por eso NO hay interfaz `ImageEngine` con
  * varias implementaciones: hay una sola llamada, `generateImage` de lib/gemini.
  *
  * Los prompts van en inglés (el motor responde mejor) y son largos y específicos,
- * que es como rinde gpt-image-2. La dirección visual sale ENTERA del preset
- * (`promptStyle` + paleta + tipografías): el usuario no elige nada de eso.
+ * que es como rinde gpt-image-2.
+ *
+ * La dirección visual sale del BRIEF, no de una lista cerrada (refactor 2026-08-05).
+ * Antes eran 7 bloques `promptStyle` de 40 palabras que fijaban material, ornamento,
+ * luz y composición de una vez: toda marca del mismo preset salía igual. Ahora son
+ * las 1-3 palabras de actitud que eligió el usuario + su paleta y sus tipografías.
+ * Material, luz y composición quedan SIN especificar a propósito — que el modelo
+ * los varíe es lo que hace que dos marcas no se parezcan. Si algún resultado sale
+ * flojo, la palanca es enriquecer la actitud, no volver a fijar bloques de estilo.
  * ---------------------------------------------------------------------------
  */
 
-import type { Brief } from './brief'
-import type { Preset } from './presets'
+import { feelWords, type Brief, type Style } from './brief'
 
 export type Stage = 'logo' | 'mockup' | 'label'
 
@@ -33,10 +39,19 @@ export const STAGE_LABELS: Record<Stage, string> = {
   label: 'Etiqueta',
 }
 
-function paletteLine(p: Preset): string {
-  const { primary, secondary, accent, dark, light } = p.palette
+function paletteLine(s: Style): string {
+  const { primary, secondary, accent, dark, light } = s.palette
   return `Palette — primary ${primary}, secondary ${secondary}, accent ${accent}, dark ${dark}, light ${light}. `
     + `Use these exact colours and no others.`
+}
+
+/**
+ * La actitud, en inglés, más lo que el usuario haya escrito. Es TODA la dirección
+ * de arte: deliberadamente corta.
+ */
+export function feelPrompt(b: Brief): string {
+  const words = feelWords(b.feel)
+  return words ? `Art direction — the brand must feel ${words}.` : ''
 }
 
 function audienceLine(b: Brief): string {
@@ -58,21 +73,21 @@ function containerLine(b: Brief): string {
     : `Choose the packaging format that best fits ${b.productDescription}.`
 }
 
-export function buildLogoPrompt(b: Brief, p: Preset): string {
+export function buildLogoPrompt(b: Brief): string {
   return [
     `Design a brand logo for a ${b.category} product: ${b.productDescription}.`,
     `It is a WORDMARK: the brand name as custom lettering, no slogan, no tagline, no product shot.`,
     exactName(b),
-    `Typography direction: letterforms in the spirit of ${p.typography.display}.`,
-    `Style — ${p.promptStyle}`,
-    paletteLine(p),
+    `Typography direction: letterforms in the spirit of ${b.style.typography.display}.`,
+    feelPrompt(b),
+    paletteLine(b.style),
     audienceLine(b),
     `Flat vector-looking artwork, crisp edges, centred with generous margins, plain white background,`,
     `no mockup, no packaging, no shadow, no 3D, no frame, no watermark.`,
   ].filter(Boolean).join(' ')
 }
 
-export function buildMockupPrompt(b: Brief, p: Preset, ref: Ref): string {
+export function buildMockupPrompt(b: Brief, ref: Ref): string {
   return [
     `Photorealistic product shot of ${b.productDescription} for the brand "${b.brandName}".`,
     containerLine(b),
@@ -85,17 +100,17 @@ export function buildMockupPrompt(b: Brief, p: Preset, ref: Ref): string {
       ? `The FIRST attached image is the finished logo: place it on the packaging exactly as it is —`
         + ` same letterforms, same spelling, same proportions. Do not redraw it.`
       : exactName(b),
-    `The remaining attached images are style references for finish, packaging and lighting — copy their`
-      + ` mood, never their brand names or their text.`,
-    `Style — ${p.promptStyle}`,
-    paletteLine(p),
+    // Ya no hay moodboard: lo único adjunto es la pieza previa de la cascada. Una
+    // frase sobre "the remaining attached images" sería mentira.
+    feelPrompt(b),
+    paletteLine(b.style),
     audienceLine(b),
     `Single product, centred, studio lighting, soft realistic shadow, clean uncluttered background,`,
     `no people, no hands, no extra props, no text other than what belongs on the packaging.`,
   ].filter(Boolean).join(' ')
 }
 
-export function buildLabelPrompt(b: Brief, p: Preset, ref: Ref): string {
+export function buildLabelPrompt(b: Brief, ref: Ref): string {
   return [
     `Design the flat printable 360° LABEL artwork (full wrap) for ${b.productDescription},`,
     `brand "${b.brandName}".`,
@@ -120,17 +135,17 @@ export function buildLabelPrompt(b: Brief, p: Preset, ref: Ref): string {
     `Flat 2D artwork seen straight on, as it would go to print — NOT applied to a container, no bottle,`,
     `no jar, no 3D, no perspective, no mockup, no shadow.`,
     b.containerType ? `It will be printed for this container: ${b.containerType} — use its proportions.` : '',
-    `Body text in the spirit of ${p.typography.body}; display text in the spirit of ${p.typography.display}.`,
-    `Style — ${p.promptStyle}`,
-    paletteLine(p),
+    `Body text in the spirit of ${b.style.typography.body}; display text in the spirit of ${b.style.typography.display}.`,
+    feelPrompt(b),
+    paletteLine(b.style),
     `Sharp edges, print-ready, no watermark.`,
   ].filter(Boolean).join(' ')
 }
 
-export function buildPrompt(stage: Stage, b: Brief, p: Preset, ref: Ref): string {
-  if (stage === 'logo') return buildLogoPrompt(b, p)
-  if (stage === 'mockup') return buildMockupPrompt(b, p, ref)
-  return buildLabelPrompt(b, p, ref)
+export function buildPrompt(stage: Stage, b: Brief, ref: Ref): string {
+  if (stage === 'logo') return buildLogoPrompt(b)
+  if (stage === 'mockup') return buildMockupPrompt(b, ref)
+  return buildLabelPrompt(b, ref)
 }
 
 /**

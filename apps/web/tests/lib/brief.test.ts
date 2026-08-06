@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   firstIncompleteStep, isComplete, isResumable, resumePath, brandSlug,
-  brandNameError, descriptionError, STEPS, CONFIRM_PATH, CATEGORY_CHIPS,
+  brandNameError, descriptionError, STEPS, CATEGORY_CHIPS, DEFAULT_STYLE,
   type PartialBrief,
 } from '@/lib/branding/brief'
 
@@ -10,7 +10,8 @@ const full: PartialBrief = {
   productDescription: 'Snacks blandos de pollo para perros pequeños',
   brandName: 'Miru',
   audience: ['Dueños de perros'],
-  presetId: 'soft_modern',
+  feel: ['Artesanal'],
+  style: DEFAULT_STYLE,
 }
 
 describe('validación del brief', () => {
@@ -28,10 +29,10 @@ describe('validación del brief', () => {
 })
 
 describe('retomar donde se quedó', () => {
-  it('un brief entero está completo y va a la confirmación', () => {
+  it('un brief entero está completo y su ruta es el editor', () => {
     expect(isComplete(full)).toBe(true)
-    expect(firstIncompleteStep(full)).toBe(4)
-    expect(resumePath(full)).toBe(CONFIRM_PATH)
+    expect(firstIncompleteStep(full)).toBe(5)
+    expect(resumePath(full)).toBe(STEPS[4].path)
     expect(isResumable(full)).toBe(false)
   })
 
@@ -43,7 +44,8 @@ describe('retomar donde se quedó', () => {
       [{ ...full, brandName: undefined }, 1],
       [{ ...full, brandName: 'M' }, 1],
       [{ ...full, audience: [] }, 2],
-      [{ ...full, presetId: undefined }, 3],
+      [{ ...full, feel: undefined }, 3],
+      [{ ...full, style: undefined }, 4],
     ]
     for (const [b, step] of cases) {
       expect(firstIncompleteStep(b), JSON.stringify(b)).toBe(step)
@@ -51,8 +53,11 @@ describe('retomar donde se quedó', () => {
     }
   })
 
-  it('un preset inexistente no cuela como respuesta válida', () => {
-    expect(firstIncompleteStep({ ...full, presetId: 'retro_groovy' as never })).toBe(3)
+  // El candado de la compatibilidad: una sesión anterior al editor no tiene actitud
+  // guardada y llega con `feel: []`. Si eso no pasara el gate, su kit tiraría 400.
+  it('una actitud vacía cuenta como respondida; undefined no', () => {
+    expect(firstIncompleteStep({ ...full, feel: [] })).toBe(5)
+    expect(firstIncompleteStep({ ...full, feel: undefined })).toBe(3)
   })
 
   it('algo respondido pero incompleto es retomable; vacío no', () => {

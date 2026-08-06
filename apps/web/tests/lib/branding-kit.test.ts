@@ -6,9 +6,7 @@ import sharp from 'sharp'
 import { buildKit, colorsAndTypeText } from '@/lib/branding/kit'
 import { logoVariant, frontPanel } from '@/lib/branding/variants'
 import { buildBrandboard } from '@/lib/branding/brandboard'
-import { getPreset } from '@/lib/branding/presets'
-
-const preset = getPreset('heritage_craft')
+import { DEFAULT_STYLE } from '@/lib/branding/brief'
 
 /** Logo de juguete: cuadrado oscuro centrado sobre blanco. */
 async function fakeLogo(): Promise<Buffer> {
@@ -22,7 +20,8 @@ const base = (logo: Buffer) => ({
   brandName: 'Peñita Café',
   productDescription: 'Snacks blandos de pollo para perros pequeños',
   audience: ['Dueños de perros'],
-  preset,
+  style: DEFAULT_STYLE,
+  feel: ['Artesanal', 'Cálido'],
   logo,
   mockup: logo,
   label: logo,
@@ -104,11 +103,12 @@ describe('zip del kit', () => {
     ]))
   })
 
-  it('el txt lleva los 5 colores y las 2 tipografías', async () => {
+  it('el txt lleva los 5 colores, las 2 tipografías y la actitud', async () => {
     const txt = colorsAndTypeText({ ...base(await fakeLogo()), brandboard: null })
-    for (const hex of Object.values(preset.palette)) expect(txt).toContain(hex)
-    expect(txt).toContain(preset.typography.display)
-    expect(txt).toContain(preset.typography.body)
+    for (const hex of Object.values(DEFAULT_STYLE.palette)) expect(txt).toContain(hex)
+    expect(txt).toContain(DEFAULT_STYLE.typography.display)
+    expect(txt).toContain(DEFAULT_STYLE.typography.body)
+    expect(txt).toContain('Artesanal · Cálido')
   })
 })
 

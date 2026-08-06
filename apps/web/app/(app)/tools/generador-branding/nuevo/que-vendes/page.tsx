@@ -4,8 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Input } from '@/components/ui/input'
 import BriefShell, { useBrief, chipBase, chipOn, chipOff } from '@/components/tools/generador-branding/nuevo/BriefShell'
-import { CATEGORY_CHIPS, STEPS, descriptionError } from '@/lib/branding/brief'
-import type { Category } from '@/lib/branding/presets'
+import { CATEGORY_CHIPS, STEPS, descriptionError, type Category } from '@/lib/branding/brief'
 
 export default function QueVendesPage() {
   const router = useRouter()

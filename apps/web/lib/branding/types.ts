@@ -94,6 +94,11 @@ export interface BrandingSessionResponse {
   palette_options: PaletteColor[][] | null
   style_id: string | null
   product_type: string | null
+  /** El estilo compuesto en el editor (refactor 2026-08-05). Tipos laxos a
+   *  propósito: hay filas del style-picker de 2026-07 con otro shape, y las
+   *  guardas viven en `session-brief.ts`. `descriptor` guarda la actitud. */
+  selected_palette: Record<string, string> | null
+  selected_typography: { display: string; body: string } | null
   descriptor: string | null
   tagline: string | null
   container_type: string | null

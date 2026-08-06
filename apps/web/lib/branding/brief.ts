@@ -7,18 +7,21 @@
  * ---------------------------------------------------------------------------
  */
 
-import type { Category, PresetId } from './presets'
-import { isPresetId } from './presets'
+export type Category = 'suplementos' | 'skincare' | 'cabello' | 'mascotas' | 'bebida' | 'otro'
 
 export interface Brief {
   category: Category
   productDescription: string
   brandName: string
   audience: string[]
-  presetId: PresetId
-  /** Envase del mockup. Opcional a propósito: NO es una quinta pregunta — se
-   *  ajusta en la confirmación y, si queda vacío, lo decide el estilo. */
+  /** Actitud de la marca (paso 4): chips + lo que escriba el usuario. */
+  feel: string[]
+  /** Paleta y tipografías (paso 5). Editable, ya no sale de una lista cerrada. */
+  style: Style
+  /** Envase del mockup. Opcional: si queda vacío, lo elige el motor según el producto. */
   containerType?: string
+  /** Con qué actitud se pidió la sugerencia. Evita re-llamar al LLM al volver al editor. */
+  suggestedFor?: string
 }
 
 export const BRIEF_KEY = 'branding_brief'
@@ -29,15 +32,14 @@ export const BRAND_NAME_MIN = 2
 export const BRAND_NAME_MAX = 30
 export const DESCRIPTION_MIN = 10
 
-/** Las 4 pantallas del brief, en orden. `STEPS[n].path` es la ruta de la pregunta n+1. */
+/** Las 5 pantallas del brief, en orden. `STEPS[n].path` es la ruta del paso n+1. */
 export const STEPS = [
   { path: '/tools/generador-branding/nuevo/que-vendes', title: '¿Qué vendes?' },
   { path: '/tools/generador-branding/nuevo/nombre', title: '¿Cómo se llama?' },
   { path: '/tools/generador-branding/nuevo/publico', title: '¿Para quién es?' },
-  { path: '/tools/generador-branding/nuevo/estilo', title: 'Elige el estilo' },
+  { path: '/tools/generador-branding/nuevo/vibra', title: '¿Qué debe transmitir?' },
+  { path: '/tools/generador-branding/nuevo/estilo', title: 'Tu estilo' },
 ] as const
-
-export const CONFIRM_PATH = '/tools/generador-branding/nuevo/confirmar'
 
 /** Chips de 1.1: el chip fija `category` y siembra un ejemplo CONCRETO y editable. */
 export const CATEGORY_CHIPS: { category: Category; label: string; example: string }[] = [
@@ -222,17 +224,25 @@ export function descriptionError(v: string): string | null {
   return v.trim().length < DESCRIPTION_MIN ? `Descríbelo con al menos ${DESCRIPTION_MIN} caracteres.` : null
 }
 
-/** Índice del primer paso incompleto (0..3), o 4 si el brief está entero. */
+/**
+ * Índice del primer paso incompleto (0..4), o 5 si el brief está entero.
+ *
+ * `!b.feel` y no `!b.feel?.length` a propósito: un array VACÍO cuenta como
+ * respondido. Es lo que deja pasar a las sesiones anteriores al editor, que no
+ * tienen actitud guardada — si no, su kit tiraría 400 al releerlas. El wizard
+ * igual exige al menos un chip para dejar avanzar el paso 4.
+ */
 export function firstIncompleteStep(b: PartialBrief): number {
   if (!b.category || !b.productDescription || descriptionError(b.productDescription)) return 0
   if (!b.brandName || brandNameError(b.brandName)) return 1
   if (!b.audience?.length) return 2
-  if (!b.presetId || !isPresetId(b.presetId)) return 3
-  return 4
+  if (!b.feel) return 3
+  if (!b.style) return 4
+  return 5
 }
 
 export function isComplete(b: PartialBrief): b is Brief {
-  return firstIncompleteStep(b) === 4
+  return firstIncompleteStep(b) === 5
 }
 
 /** Hay algo respondido pero falta terminar → 6.0 ofrece retomar. */
@@ -240,10 +250,9 @@ export function isResumable(b: PartialBrief): boolean {
   return !isComplete(b) && Boolean(b.category || b.productDescription || b.brandName || b.audience?.length)
 }
 
-/** Dónde continuar: el primer paso incompleto, o la confirmación si ya está todo. */
+/** Dónde continuar: el primer paso incompleto, o el editor si ya está todo. */
 export function resumePath(b: PartialBrief): string {
-  const n = firstIncompleteStep(b)
-  return n === 4 ? CONFIRM_PATH : STEPS[n].path
+  return STEPS[Math.min(firstIncompleteStep(b), STEPS.length - 1)].path
 }
 
 /** Nombre de archivo seguro para el zip. Tildes y ñ se transliteran, no se pierden. */

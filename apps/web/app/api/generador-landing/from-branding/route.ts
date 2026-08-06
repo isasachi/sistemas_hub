@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getBrandingSession } from '@/lib/branding/db'
-import { getPreset, isPresetId, type PresetId } from '@/lib/branding/presets'
+import { paletteFromRow, typographyFromRow } from '@/lib/branding/session-brief'
 import { createLandingSession, updateLandingSession } from '@/lib/landing/db'
 import { readUserId } from '@/lib/product-hunter/session'
 import type { SectionType } from '@/lib/landing/types'
@@ -14,22 +14,10 @@ export const runtime = 'nodejs'
 // → preview). Sin LLM aquí → sin costo ni cuota. Las URLs de mockup/logo (Storage) se
 // escriben directo a product_photo_urls (la ruta de fotos solo acepta uploads binarios).
 //
-// La identidad sale del PRESET (refactor 2026-08): antes se resolvía un ADN por
-// plantilla o por imagen subida; ahora `style_id` es uno de los 7 presets y su paleta
-// y sus tipografías ya vienen decididas.
-
-// ponytail: lookup chico — cada preset cae en uno de los 6 tonos de landing. El
-// usuario lo edita en el wizard. Vive acá y no en el registro de presets porque es
-// vocabulario de landing, no de branding.
-const TONE_BY_PRESET: Record<PresetId, string> = {
-  clinical_premium: 'Profesional',
-  luxury_minimal: 'Lujoso',
-  botanical_apothecary: 'Cercano',
-  soft_modern: 'Cercano',
-  warm_editorial: 'Cercano',
-  performance_dark: 'Urgente',
-  heritage_craft: 'Confiable',
-}
+// La identidad sale del ESTILO que el usuario compuso en el editor de branding
+// (refactor 2026-08-05): paleta y tipografías salen de las columnas de la sesión, no
+// de una lista de presets. `tone` queda vacío a propósito — la actitud de branding no
+// mapea 1:1 con los 6 tonos de landing y el usuario lo elige en ese wizard.
 
 const PALETTE_NAMES: Record<string, string> = {
   primary: 'Primario', secondary: 'Secundario', accent: 'Acento', dark: 'Oscuro', light: 'Claro',
@@ -48,10 +36,11 @@ export async function POST(req: NextRequest) {
   const bs = await getBrandingSession(body.brandingSessionId)
   if (!bs) return NextResponse.json({ error: 'Sesión de branding no encontrada' }, { status: 404 })
 
-  // Una sesión legada (o con un style_id que ya no existe) pasa sin identidad
+  // Una sesión legada (anterior al editor, sin paleta guardada) pasa sin identidad
   // derivada, igual que antes: la landing se crea y el usuario la completa.
-  const styleId = String(bs.style_id ?? '')
-  const preset = isPresetId(styleId) ? getPreset(styleId) : null
+  const row = bs as unknown as Record<string, unknown>
+  const palette = paletteFromRow(row)
+  const typography = typographyFromRow(row)
   const photo = bs.mockup_url || bs.logo_url
 
   const id = await createLandingSession((await readUserId()) ?? undefined)
@@ -60,13 +49,14 @@ export async function POST(req: NextRequest) {
     audience: bs.target_audience || null,
     benefits: bs.product_type || null,
     price: '',
-    tone: preset ? [TONE_BY_PRESET[preset.id]] : [],
+    tone: [],
     product_photo_urls: photo ? [photo] : [],
-    palette: preset
-      ? Object.entries(preset.palette).map(([role, hex]) => ({ name: PALETTE_NAMES[role] ?? role, hex, usage: role }))
+    palette: palette
+      ? Object.entries(palette).map(([role, hex]) => ({ name: PALETTE_NAMES[role] ?? role, hex, usage: role }))
       : null,
-    typography: preset ? { headline: preset.typography.display, body: preset.typography.body } : null,
-    brand_style: preset ? `${preset.signature} ${preset.promptStyle}` : null,
+    typography: typography ? { headline: typography.display, body: typography.body } : null,
+    // La actitud que se eligió en branding, tal cual: es la dirección de arte.
+    brand_style: (bs.descriptor as string) || null,
     selected_sections: DEFAULT_SECTIONS,
     // Para en el paso de IDENTIDAD visual (step 2, F3): el usuario revisa la marca
     // derivada (su paleta de branding gana) y sigue el wizard.

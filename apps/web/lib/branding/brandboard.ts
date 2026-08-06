@@ -1,5 +1,5 @@
 import { PDFDocument, StandardFonts, rgb, type PDFPage, type PDFFont } from 'pdf-lib'
-import type { Preset } from './presets'
+import type { Style } from './brief'
 
 /**
  * Etapa 5: el brandboard en PDF. Sin llamadas al modelo — es una plantilla A4
@@ -7,7 +7,7 @@ import type { Preset } from './presets'
  * pedido (spec 6.5).
  *
  * ponytail: tipografía del PDF = Helvetica (las 14 estándar de PDF, cero
- * archivos que embeber). Las familias del preset van NOMBRADAS en la ficha; para
+ * archivos que embeber). Las familias elegidas van NOMBRADAS en la ficha; para
  * renderizarlas de verdad habría que empaquetar sus TTF, que es peso y licencias.
  */
 
@@ -39,14 +39,15 @@ export interface BrandboardInput {
   brandName: string
   productDescription: string
   audience: string[]
-  preset: Preset
+  style: Style
+  feel: string[]
   logo: Buffer | null
   mockup: Buffer | null
   label: Buffer | null
 }
 
 export async function buildBrandboard(input: BrandboardInput): Promise<Buffer> {
-  const { preset } = input
+  const { style } = input
   const pdf = await PDFDocument.create()
   const page = pdf.addPage([A4.w, A4.h])
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold)
@@ -58,9 +59,11 @@ export async function buildBrandboard(input: BrandboardInput): Promise<Buffer> {
   page.drawText(fit(input.productDescription, regular, 11, inner), {
     x: M, y: A4.h - M - 44, size: 11, font: regular, color: rgb(0.35, 0.35, 0.35),
   })
-  page.drawText(fit(`${preset.label} · ${preset.signature}`, regular, 9, inner), {
-    x: M, y: A4.h - M - 60, size: 9, font: regular, color: rgb(0.5, 0.5, 0.5),
-  })
+  if (input.feel.length) {
+    page.drawText(fit(input.feel.join(' · '), regular, 9, inner), {
+      x: M, y: A4.h - M - 60, size: 9, font: regular, color: rgb(0.5, 0.5, 0.5),
+    })
+  }
 
   // Piezas: mockup a la izquierda, logo y etiqueta a la derecha
   const top = A4.h - M - 84
@@ -88,7 +91,7 @@ export async function buildBrandboard(input: BrandboardInput): Promise<Buffer> {
   section(page, bold, 'Paleta', y)
   y -= 62
   const swatch = (inner - 4 * 10) / 5
-  Object.entries(preset.palette).forEach(([key, hex], i) => {
+  Object.entries(style.palette).forEach(([key, hex], i) => {
     const x = M + i * (swatch + 10)
     page.drawRectangle({ x, y, width: swatch, height: 44, color: hexToRgb(hex),
                          borderColor: rgb(0.85, 0.85, 0.85), borderWidth: 0.5 })
@@ -100,9 +103,9 @@ export async function buildBrandboard(input: BrandboardInput): Promise<Buffer> {
   y -= 52
   section(page, bold, 'Tipografías', y)
   y -= 16
-  page.drawText(`Títulos: ${preset.typography.display}`, { x: M, y, size: 10, font: regular })
+  page.drawText(`Títulos: ${style.typography.display}`, { x: M, y, size: 10, font: regular })
   y -= 14
-  page.drawText(`Texto: ${preset.typography.body}`, { x: M, y, size: 10, font: regular })
+  page.drawText(`Texto: ${style.typography.body}`, { x: M, y, size: 10, font: regular })
 
   if (input.audience.length) {
     y -= 26

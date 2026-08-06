@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getBrandingSession } from '@/lib/branding/db'
 import { briefFromRow } from '@/lib/branding/session-brief'
-import { getPreset } from '@/lib/branding/presets'
 import { buildBrandboard } from '@/lib/branding/brandboard'
 import { buildKit } from '@/lib/branding/kit'
 import { storagePublicUrl } from '@/lib/storage'
@@ -26,7 +25,6 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     return res.ok ? Buffer.from(await res.arrayBuffer()) : null
   }
 
-  const preset = getPreset(brief.presetId)
   const logo = await grab((row.logo_url as string) ?? null)
   const mockup = await grab((row.mockup_url as string) ?? null)
   const label = await grab((row.label_url as string) ?? null)
@@ -37,7 +35,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     brandName: brief.brandName,
     productDescription: brief.productDescription,
     audience: brief.audience,
-    preset, logo, mockup, label,
+    style: brief.style, feel: brief.feel, logo, mockup, label,
   }
   const brandboard = (await grab(storagePublicUrl(`${id}/brandboard.pdf`))) ?? (await buildBrandboard(common))
 
