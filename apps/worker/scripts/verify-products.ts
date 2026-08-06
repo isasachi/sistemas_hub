@@ -1,6 +1,6 @@
 // Cola de verificación del buscador: aplica las tres reglas a los productos
 // scrapeados que siguen en 'pendiente'.
-//   npx tsx scripts/verify-products.ts [--limit N]
+//   npx tsx scripts/verify-products.ts [--limit N] [--niche <nombre>]
 //
 // Reglas (en orden): producto físico → rango por nº de anuncios → mayoría de la
 // página del anunciante dedicada al mismo producto. Ver lib/verify-product.ts.
@@ -12,6 +12,14 @@ import { launchScraperContext, runPool, isPersistentlyBlocked, CONCURRENCY } fro
 import { verifyProduct } from '../lib/product-hunter/verify-product'
 import { getRawProductsToVerify, countRawPending, saveRawVerdict } from '@ph/shared'
 
+// Fallos de la API, no del dato: crédito agotado, rate limit, caída del
+// proveedor. Marcar la fila por esto sería mentir (el producto no incumple
+// nada) y seguir sería quemar navegaciones contra Meta para nada. El 2026-08-06
+// esto sacó 309 productos del aire por quedarnos sin saldo a mitad del lote.
+function esFalloDeApi(msg: string): boolean {
+  return /credit balance|rate_limit|overloaded|429|5\d\d \{|authentication_error|permission_error/i.test(msg)
+}
+
 const LIMIT = Math.max(1, Number(process.env.PH_VERIFY_LIMIT ?? 60))
 
 async function main() {
@@ -19,7 +27,9 @@ async function main() {
   const li = args.indexOf('--limit')
   const limit = li !== -1 ? Math.max(1, Number(args[li + 1])) : LIMIT
 
-  const rows = await getRawProductsToVerify(limit)
+  const ni = args.indexOf('--niche')
+  const niche = ni !== -1 ? args[ni + 1] : undefined
+  const rows = await getRawProductsToVerify(limit, niche)
   if (!rows.length) {
     console.log('PH_VERIFY_EMPTY')
     return
@@ -30,18 +40,28 @@ async function main() {
   const { browser, pages } = await launchScraperContext(CONCURRENCY)
   const ai = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
   const tally = { monoproducto: 0, sin_verificar: 0, descartado: 0, error: 0 }
+  let apiCaida = false
   try {
     const settled = await runPool(rows, pages, async (row, page) => {
       const r = await verifyProduct(page, row, ai)
       await saveRawVerdict({
         niche: row.niche, page_id: row.page_id, status: r.verdict.status, kind: r.kind,
         share: r.verdict.share, product_name: r.productName, verdict_note: r.note,
+        ad_count: r.liveAdCount,
       })
       return r
     })
     for (let i = 0; i < settled.length; i++) {
       const s = settled[i]
       if (s.status !== 'fulfilled') {
+        const raw = s.reason instanceof Error ? s.reason.message : String(s.reason)
+        if (esFalloDeApi(raw)) {
+          console.error(`\n🛑 fallo de API, no del producto: ${raw.split('\n')[0].slice(0, 160)}`)
+          console.error('   Las filas de esta tanda quedan PENDIENTES. Corregí el problema y volvé a correr.')
+          console.log('PH_VERIFY_API_DOWN')
+          apiCaida = true
+          break
+        }
         // Sin estado terminal la fila sigue 'pendiente' y, como la cola ordena
         // por antigüedad, vuelve a encabezar la tanda siguiente: una sola fila
         // que siempre falla congela la cola entera (2026-08-06: 45 tandas
@@ -74,6 +94,7 @@ async function main() {
     `\n═══ ${tally.monoproducto} aprobados · ${tally.sin_verificar} sin verificar · ` +
     `${tally.descartado} descartados · ${tally.error} errores ═══`,
   )
+  if (apiCaida) process.exitCode = 2
   if (isPersistentlyBlocked()) {
     console.error('🛑 block persistente durante la verificación')
     console.log('PH_PERSISTENT_BLOCK')

@@ -3,6 +3,7 @@ import type { ProductRow, NicheRow, PePoolRow, WatchlistRow, StoredAnalysis, Url
 import { bucketRange, type RawBucket } from './raw-buckets'
 import { prescore } from './prescore'
 import { sanitizeJsonDeep, cleanJsonText } from './json-clean'
+import { isPhysicalEnough } from './physical-filter'
 
 // Cliente Supabase con service role (bypassa RLS), igual que lib/db.ts del hub.
 // Se usa tanto desde rutas Next como desde los scripts de GitHub Actions.
@@ -691,6 +692,10 @@ export async function upsertRawProducts(
 export interface RawVerdictInput {
   niche: string
   page_id: string
+  // Conteo leído en vivo durante la verificación. Refresca el ad_count viejo
+  // (las filas importadas del pipeline anterior lo traen desactualizado) y con
+  // eso el rango, que sale de ese número.
+  ad_count?: number | null
   status: 'monoproducto' | 'sin_verificar' | 'descartado'
   kind: string
   share: number | null
@@ -700,11 +705,10 @@ export interface RawVerdictInput {
 
 // Cola de verificación: productos scrapeados a los que todavía no se les
 // aplicaron las tres reglas. Los más viejos primero.
-export async function getRawProductsToVerify(limit = 50): Promise<RawProductRow[]> {
-  const { data, error } = await getDb()
-    .from('ph_raw_products')
-    .select('*')
-    .eq('status', 'pendiente')
+export async function getRawProductsToVerify(limit = 50, niche?: string): Promise<RawProductRow[]> {
+  let q = getDb().from('ph_raw_products').select('*').eq('status', 'pendiente')
+  if (niche) q = q.eq('niche', niche)
+  const { data, error } = await q
     .order('scraped_at', { ascending: true })
     .limit(limit)
   if (error) throw new Error(error.message)
@@ -724,6 +728,7 @@ export async function saveRawVerdict(v: RawVerdictInput): Promise<void> {
   const { error } = await getDb()
     .from('ph_raw_products')
     .update({
+      ...(typeof v.ad_count === 'number' && v.ad_count > 0 ? { ad_count: v.ad_count } : {}),
       status: v.status, kind: v.kind, share: v.share,
       product_name: v.product_name ? cleanJsonText(v.product_name) : null,
       verdict_note: v.verdict_note ? cleanJsonText(v.verdict_note).slice(0, 400) : null,
@@ -734,30 +739,67 @@ export async function saveRawVerdict(v: RawVerdictInput): Promise<void> {
   if (error) throw new Error(error.message)
 }
 
-// Serving del buscador: aprobados del rango, con los no-vistos por este usuario
-// primero (ver ph_raw_unseen). Nunca vacío mientras haya inventario.
+// Serving del buscador: TODO el inventario del nicho clasificado solo por rango
+// de anuncios (regla 2). Las reglas 1 y 3 no filtran acá — `status` se sigue
+// escribiendo por la cola de verificación, pero no se consulta.
+//
+// La economía del visto vive en el código y no en el RPC ph_raw_unseen (que
+// filtra status='monoproducto' y quedó sin uso): mismo criterio — lo visto hace
+// menos de 7 días va al final, nunca se excluye, así el pool no se vacía.
+const VISTO_DIAS = 7
+const MAX_VISTOS = 500   // tope del filtro NOT IN: la URL de PostgREST tiene límite
+const SOBRE_PEDIDO = 4   // se piden 4× filas porque la lista negra recorta después
+
+function bucketQuery(niche: string, bucket: RawBucket) {
+  const { min, max } = bucketRange(bucket)
+  let q = getDb().from('ph_raw_products').select('*')
+    .eq('niche', niche)
+    .neq('status', 'inactivo')     // refresh-active marca así lo que dejó de pautar
+    .gte('ad_count', min)
+  if (max !== null) q = q.lt('ad_count', max)
+  return q.order('ad_count', { ascending: false }).order('page_id')
+}
+
 export async function getApprovedByBucket(
   niche: string,
   bucket: RawBucket,
   userId: string,
   limit = 10,
 ): Promise<RawProductRow[]> {
-  const { min, max } = bucketRange(bucket)
-  const { data, error } = await getDb().rpc('ph_raw_unseen', {
-    p_niche: niche, p_user: userId, p_min: min, p_max: max ?? -1, p_limit: limit,
-  })
+  const desde = new Date(Date.now() - VISTO_DIAS * 86_400_000).toISOString()
+  const { data: seen } = await getDb()
+    .from('ph_user_seen').select('product_id')
+    .eq('user_id', userId).gte('seen_at', desde).like('product_id', `${niche}:%`)
+    .limit(MAX_VISTOS)
+  const vistos = (seen ?? []).map((r) => (r.product_id as string).slice(niche.length + 1))
+
+  let q = bucketQuery(niche, bucket).limit(limit * SOBRE_PEDIDO)
+  if (vistos.length) q = q.not('page_id', 'in', `(${vistos.join(',')})`)
+  const { data, error } = await q
   if (error) throw new Error(error.message)
-  return (data as RawProductRow[]) ?? []
+  const frescos = fisicos(data as RawProductRow[]).slice(0, limit)
+  if (frescos.length >= limit || !vistos.length) return frescos
+
+  // Ya vio todo lo del rango: se le repiten los vistos en vez de devolver menos.
+  const { data: repetidos } = await bucketQuery(niche, bucket)
+    .in('page_id', vistos).limit(limit * SOBRE_PEDIDO)
+  return [...frescos, ...fisicos(repetidos as RawProductRow[]).slice(0, limit - frescos.length)]
 }
 
-// Cuántos aprobados tiene el nicho (los tres rangos juntos) — para distinguir
-// "todavía verificando" de "sin resultados".
+// Regla 1 sin LLM: la lista negra corre acá y no en la query porque es texto,
+// no columna. Por eso se piden SOBRE_PEDIDO× filas y se recortan después.
+const fisicos = (rows: RawProductRow[] | null) =>
+  (rows ?? []).filter((r) =>
+    isPhysicalEnough([r.raw_data?.title, r.raw_data?.body].filter(Boolean).join(' — '), r.name))
+
+// Cuánto inventario servible tiene el nicho — para distinguir "todavía
+// scrapeando" de "sin resultados".
 export async function countApproved(niche: string): Promise<number> {
   const { count, error } = await getDb()
     .from('ph_raw_products')
     .select('page_id', { count: 'exact', head: true })
     .eq('niche', niche)
-    .eq('status', 'monoproducto')
+    .neq('status', 'inactivo')
   if (error) throw new Error(error.message)
   return count ?? 0
 }

@@ -7,12 +7,15 @@ import {
 } from '@ph/shared'
 import { readUserId, newUserId, PH_USER_COOKIE } from '@/lib/product-hunter/session'
 
-// ⚠️ Esta ruta SOLO lee de Supabase: ni Anthropic ni Playwright. El scraping y
-// la verificación (las tres reglas) corren en el daemon del VPS.
+// ⚠️ Esta ruta SOLO lee de Supabase: ni Anthropic ni Playwright. El scraping
+// corre en el worker local.
 //
-// Devuelve los TRES rangos, 10 productos cada uno. El orden lo da ph_raw_unseen:
-// lo que este usuario no ha visto va primero, y lo visto reaparece a los 7 días
-// — así dos usuarios ven productos distintos sin que el pool se vacíe nunca.
+// Devuelve los TRES rangos, 10 productos cada uno. Por ahora se sirve TODO el
+// inventario clasificado solo por rango de anuncios (regla 2): las reglas de
+// producto físico y de anunciante monoproducto no filtran el serving.
+// El orden lo da getApprovedByBucket: lo que este usuario no ha visto va
+// primero, y lo visto reaparece a los 7 días — así dos usuarios ven productos
+// distintos sin que el pool se vacíe nunca.
 
 const POR_RANGO = 10
 
@@ -42,13 +45,6 @@ export async function POST(req: NextRequest) {
   // Términos bloqueados (typos / anatomía explícita): ni se crean ni se sirven.
   if (isBlocked(niche)) return responder(vacío({ status: 'empty' }))
 
-  const row = await getRawNicheStatus(niche)
-  if (!row) {
-    // Cold start: se encola y el daemon lo levanta. Vercel no corre Playwright.
-    await upsertRawNiche(niche, 'pending')
-    return responder(vacío({ queued: true }))
-  }
-
   const listas = await Promise.all(
     RAW_BUCKETS.map(async (bucket) => {
       const rows = await getApprovedByBucket(niche, bucket, userId!, POR_RANGO)
@@ -73,14 +69,22 @@ export async function POST(req: NextRequest) {
 
   const total = listas.reduce((a, g) => a + g.products.length, 0)
 
-  // Sin nada que mostrar: distinguir "todavía verificando" de "sin resultados".
-  // countRawPending es global (la cola del daemon), suficiente para no decirle
-  // al usuario "no hay" mientras el nicho aún se está procesando.
+  // Sin nada que mostrar. Se pregunta por el nicho DESPUÉS de buscar productos,
+  // no antes: hay nichos con inventario que nunca pasaron por la cola del
+  // scraper (los 24k importados del pipeline anterior traen 528 nichos), y
+  // preguntar primero los mandaba a "lo encolamos" teniendo productos listos.
   if (total === 0) {
-    const [aprobados, pendientes] = await Promise.all([
+    const [aprobados, pendientes, row] = await Promise.all([
       countApproved(niche),
       countRawPending().catch(() => 0),
+      getRawNicheStatus(niche),
     ])
+    if (!row) {
+      // Nicho desconocido: se encola para que el scraper lo levante. Vercel no
+      // corre Playwright, así que acá solo se registra.
+      await upsertRawNiche(niche, 'pending')
+      return responder(vacío({ queued: true }))
+    }
     return responder(vacío({ status: aprobados === 0 && pendientes > 0 ? 'pending' : 'empty' }))
   }
 

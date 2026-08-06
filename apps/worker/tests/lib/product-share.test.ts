@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   scanCollations, weighByText, wilson, classifyShare, passesPhysicalGate, DEFAULT_MARGIN,
+  matchByText, tokenize, distinctiveTokens,
 } from '../../lib/product-hunter/product-share'
 
 // Nodo como lo manda Meta: collation_count vive en el MISMO objeto que
@@ -163,5 +164,42 @@ describe('texto seguro para la API', () => {
     }
     const [g] = [...scanCollations({ n: node }, 'PG').values()]
     expect(solitario(g.text)).toBe(false)
+  })
+})
+
+describe('matching determinista', () => {
+  it('los tokens que están en TODOS los anuncios no distinguen nada', () => {
+    const docs = [tokenize('rodillera premium marca acme'), tokenize('faja lumbar marca acme'),
+                  tokenize('collar cervical marca acme')]
+    const d = distinctiveTokens(docs)
+    expect(d.has('acme')).toBe(false)   // la marca aparece en los tres
+    expect(d.has('marca')).toBe(false)
+    expect(d.has('rodillera')).toBe(true)
+  })
+
+  it('separa el producto de la referencia del resto del catálogo', () => {
+    const ref = 'Rodillera térmica con imanes para el dolor de rodilla'
+    const texts = [
+      'Rodillera termica con imanes, alivio del dolor de rodilla',   // mismo producto
+      'Rodillera con soporte magnetico para rodillas',                // mismo producto
+      'Faja lumbar de neopreno para la espalda baja',                 // otro
+      'Plantillas ortopedicas de gel para pies cansados',             // otro
+    ]
+    const { matched, weightMatched } = matchByText(ref, texts, [10, 5, 8, 4])
+    expect(matched).toEqual([true, true, false, false])
+    expect(weightMatched).toBe(15)
+  })
+
+  it('un texto idéntico a la referencia siempre coincide', () => {
+    const ref = 'Producto X'
+    const { matched } = matchByText(ref, [ref, 'algo completamente distinto aqui'], [3, 3])
+    expect(matched[0]).toBe(true)
+    expect(matched[1]).toBe(false)
+  })
+
+  it('es reproducible: misma entrada, misma salida', () => {
+    const ref = 'crema facial acido hialuronico'
+    const textos = ['crema facial con acido hialuronico', 'shampoo anticaida']
+    expect(matchByText(ref, textos, [4, 2])).toEqual(matchByText(ref, textos, [4, 2]))
   })
 })

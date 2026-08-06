@@ -15,7 +15,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { z } from 'zod'
 import type { Page } from 'playwright'
-import { navigateAndCapture, noteNavResult } from './scraper'
+import { navigateAndCapture, noteNavResult, findConnectionCount } from './scraper'
 import {
   scanCollations, weighByText, classifyShare, passesPhysicalGate,
   DEFAULT_MARGIN, type ProductKind, type ShareVerdict,
@@ -88,6 +88,10 @@ export function advertiserUrl(pageId: string): string {
 
 export interface VerifyResult {
   kind: ProductKind
+  // Total de anuncios leído EN VIVO del mismo payload de la verificación (0
+  // navegaciones extra). Importa para las filas importadas del pipeline viejo:
+  // su ad_count puede tener semanas y el rango sale de ese número.
+  liveAdCount: number | null
   verdict: ShareVerdict
   productName: string | null
   note: string
@@ -119,7 +123,7 @@ async function classifyKind(
 }
 
 const rechazado = (kind: ProductKind, note: string, extra: Partial<VerifyResult> = {}): VerifyResult => ({
-  kind, note, productName: null, texts: 0, weightTotal: 0, weightMatched: 0,
+  kind, note, productName: null, texts: 0, weightTotal: 0, weightMatched: 0, liveAdCount: null,
   verdict: { status: 'descartado', share: null, productAds: null, coverage: 0, ciLow: 0, ciHigh: 0 },
   ...extra,
 })
@@ -133,6 +137,8 @@ export async function verifyProduct(page: Page, row: RawProductRow, ai: Anthropi
   const payloads = await navigateAndCapture(page, advertiserUrl(row.page_id))
   const groups = [...scanCollations(payloads, row.page_id).values()]
   noteNavResult(groups.length)
+  const liveAdCount = payloads.map((p) => findConnectionCount(p)).find((n) => n !== null) ?? null
+  const adCount = liveAdCount ?? row.ad_count
   const { texts, weights, total } = weighByText(groups, MAX_TEXTS)
 
   // Regla 1, segunda oportunidad: el anuncio de referencia de un catálogo suele
@@ -144,15 +150,16 @@ export async function verifyProduct(page: Page, row: RawProductRow, ai: Anthropi
     kind = re.kind
     reason = re.reason
     if (!passesPhysicalGate(kind)) {
-      return rechazado(kind, `(reclasificado con la página) ${reason}`, { texts: texts.length, weightTotal: total })
+      return rechazado(kind, `(reclasificado con la página) ${reason}`,
+        { texts: texts.length, weightTotal: total, liveAdCount })
     }
   }
 
   if (texts.length === 0) {
     return {
       kind, productName: null, note: 'sin anuncios legibles en la página del anunciante',
-      texts: 0, weightTotal: 0, weightMatched: 0,
-      verdict: classifyShare({ weightMatched: 0, weightTotal: 0, adCount: row.ad_count, margin: MARGIN }),
+      texts: 0, weightTotal: 0, weightMatched: 0, liveAdCount,
+      verdict: classifyShare({ weightMatched: 0, weightTotal: 0, adCount, margin: MARGIN }),
     }
   }
 
@@ -176,7 +183,7 @@ export async function verifyProduct(page: Page, row: RawProductRow, ai: Anthropi
 
   if (!parsed.perteneceAlNicho) {
     return rechazado(kind, `fuera del nicho: ${parsed.nicheReason || 'el producto no corresponde a lo buscado'}`,
-      { texts: texts.length, weightTotal: total })
+      { texts: texts.length, weightTotal: total, liveAdCount })
   }
 
   // La lista se numera desde 1 y acá se vuelve a base 0. Antes se numeraba desde
@@ -187,13 +194,13 @@ export async function verifyProduct(page: Page, row: RawProductRow, ai: Anthropi
     parsed.matchedIndices.map((i) => i - 1).filter((i) => i >= 0 && i < texts.length),
   )
   const weightMatched = [...idx].reduce((a, i) => a + weights[i], 0)
-  const verdict = classifyShare({ weightMatched, weightTotal: total, adCount: row.ad_count, margin: MARGIN })
+  const verdict = classifyShare({ weightMatched, weightTotal: total, adCount, margin: MARGIN })
   // Regla 1 sin confirmar: se conserva pero NO se aprueba. "No pude negar que
   // sea físico" no es lo mismo que "es físico".
   if (kind === 'indeterminado' && verdict.status === 'monoproducto') verdict.status = 'sin_verificar'
 
   return {
     kind, verdict, productName: parsed.productName, note: parsed.reason,
-    texts: texts.length, weightTotal: total, weightMatched,
+    texts: texts.length, weightTotal: total, weightMatched, liveAdCount,
   }
 }
