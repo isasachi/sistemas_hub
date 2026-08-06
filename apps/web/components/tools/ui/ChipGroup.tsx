@@ -31,8 +31,8 @@ export function ChipGroup({ options, selected, multi = false, onChange }: ChipGr
             className={[
               "px-3.5 py-1.5 rounded-full border text-[13px] font-medium cursor-pointer transition-all duration-200 font-sans",
               active
-                ? "bg-[rgba(255,156,77,0.12)] border-[rgba(255,156,77,0.4)] text-[#ff9c4d] font-semibold"
-                : "bg-white/[0.04] border-white/[0.06] text-[#bdbdbd] hover:border-[rgba(255,156,77,0.3)] hover:text-[#f5f5f5]",
+                ? "bg-[rgba(255,155,74,0.12)] border-[rgba(255,155,74,0.4)] text-[#ff9b4a] font-semibold"
+                : "bg-white/[0.04] border-white/[0.06] text-[#cfcfcf] hover:border-[rgba(255,155,74,0.3)] hover:text-[#ededed]",
             ].join(" ")}
           >
             {opt}

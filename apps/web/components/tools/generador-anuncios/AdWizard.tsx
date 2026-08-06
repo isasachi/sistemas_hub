@@ -5,23 +5,23 @@ import { useWizardStore, SESSION_KEY } from '@/store/wizard'
 import type { SessionResponse } from '@/lib/types'
 import { fetchRegens } from '@/lib/gen-quota-client'
 import { SessionErrorRetry } from '@/components/tools/ui/SessionErrorRetry'
-import AccordionSection from './AccordionSection'
+import StepWizard from '@/components/tools/ui/StepWizard'
 import Section1Reference from './sections/Section1Reference'
 import Section2Product from './sections/Section2Product'
 import Section3Comments from './sections/Section3Comments'
 import Section4Copy from './sections/Section4Copy'
 import Section5Generate from './sections/Section5Generate'
 
-// `maxStep` = paso más avanzado alcanzado; una sección ya visitada queda 'completed'
-// (reabrible) aunque retrocedas, para navegar adelante/atrás sin reenviar (re-quemar LLM).
-function getStatus(sectionStep: number, currentStep: number, maxStep: number): 'locked' | 'active' | 'completed' {
-  if (currentStep === sectionStep) return 'active'
-  if (maxStep > sectionStep) return 'completed'
-  return 'locked'
-}
+// Una pantalla por paso. El shell NO trae "Siguiente": cada sección tiene su
+// propio botón de enviar-y-avanzar, y un Siguiente genérico volvería a disparar
+// la llamada al modelo cada vez que navegaras.
+const SECTIONS = [Section1Reference, Section2Product, Section3Comments, Section4Copy, Section5Generate]
 
 export default function AdWizard() {
-  const { step, imageUrl, sessionId, sessionError, startNewSession, hydrateFromSession, setStep, setRegens, referenceAnalysis, productName, targetAudience, confirmedCopy } = useWizardStore()
+  const {
+    step, imageUrl, sessionId, sessionError,
+    startNewSession, hydrateFromSession, setStep, setRegens,
+  } = useWizardStore()
 
   // Reanudar: si hay un id guardado y la sesión existe, rehidratar; si no, una nueva.
   useEffect(() => {
@@ -37,91 +37,69 @@ export default function AdWizard() {
     if (sessionId) fetchRegens(sessionId).then(setRegens)
   }, [sessionId, setRegens])
 
-  // Resetear el "paso más avanzado" al cambiar de sesión: sin esto el ref persiste y
-  // una sesión nueva (step 0) deja todas las secciones abiertas/'completed'.
+  // `maxStep` = paso más avanzado alcanzado; hasta ahí se puede volver por el
+  // riel sin reenviar nada. Se resetea al cambiar de sesión: sin esto el ref
+  // persiste y una sesión nueva (step 0) dejaría todo el riel abierto.
   const maxStep = useRef(0)
   const prevSession = useRef(sessionId)
   if (prevSession.current !== sessionId) { prevSession.current = sessionId; maxStep.current = 0 }
   maxStep.current = Math.max(maxStep.current, step)
 
-  const progressPct = Math.round((Math.min(step, 4) / 4) * 100)
-
   if (sessionError && !sessionId) {
     return (
-      <div className="flex flex-col min-h-screen bg-[#0a0a0a]">
+      <div className="flex min-h-screen flex-col bg-[#0c0c0d]">
         <SessionErrorRetry onRetry={startNewSession} />
       </div>
     )
   }
 
+  const steps = [
+    {
+      label: 'Referencia',
+      title: 'Empecemos por un anuncio que te guste',
+      hint: 'Sube el anuncio que quieres emular. Leemos su formato, su estilo y cómo está armado para construir el tuyo sobre esa base.',
+    },
+    {
+      label: 'Producto',
+      title: '¿Qué estás vendiendo?',
+      hint: 'El producto y a quién le hablas. De acá sale el ángulo del copy.',
+    },
+    {
+      label: 'Comentarios',
+      title: 'Lo que dice la gente',
+      hint: 'Pega comentarios reales de TikTok sobre productos como el tuyo. Las objeciones y los elogios textuales son la mejor materia prima para el copy.',
+    },
+    {
+      label: 'Copy',
+      title: 'Elige tu versión',
+      hint: 'Dos ángulos distintos sobre el mismo producto. Quédate con el que suene a tu marca.',
+    },
+    {
+      label: 'Anuncio',
+      title: imageUrl ? 'Tu anuncio está listo' : 'Generemos tu anuncio',
+      hint: imageUrl
+        ? 'Descárgalo, o pide una variación si quieres probar otro camino.'
+        : 'Juntamos la referencia, el producto y el copy elegido en la imagen final.',
+    },
+  ]
+
+  const current = Math.min(step, steps.length - 1)
+  const Section = SECTIONS[current]
+
   return (
-    <div className="flex flex-col min-h-screen bg-[#0a0a0a]">
-      {/* Progress bar */}
-      <div className="h-[2px] bg-white/[0.06]">
-        <div
-          className="h-full transition-all duration-700"
-          style={{ width: `${progressPct}%`, background: 'linear-gradient(90deg,#ff9c4d,#ff7a2f)' }}
-        />
+    <StepWizard
+      steps={steps}
+      current={current}
+      maxReached={maxStep.current}
+      onNavigate={setStep}
+      backHref="/tools/generador-anuncios"
+      onReset={startNewSession}
+    >
+      {/* key por sesión: una sesión nueva remonta la sección → su useState local
+          (sembrado del store) se reinicia y no arrastra datos de la anterior. */}
+      <div key={sessionId ?? 'new'}>
+        <Section />
       </div>
-
-      {/* key por sesión: una sesión nueva remonta las secciones → su useState local
-          (sembrado del store) se reinicia y no arrastra datos de la sesión anterior. */}
-      <div key={sessionId ?? 'new'} className="flex-1 max-w-xl mx-auto w-full px-4 py-8 flex flex-col gap-3">
-        {/* Section 1 */}
-        <AccordionSection
-          index={1}
-          title="Anuncio de referencia"
-          status={getStatus(0, step, maxStep.current)}
-          summary={referenceAnalysis ? `${referenceAnalysis.format.ratio} · ${referenceAnalysis.format.platform} · ${referenceAnalysis.style}` : undefined}
-          onReopen={() => setStep(0)}
-        >
-          <Section1Reference />
-        </AccordionSection>
-
-        {/* Section 2 */}
-        <AccordionSection
-          index={2}
-          title="Producto + información"
-          status={getStatus(1, step, maxStep.current)}
-          summary={productName && targetAudience ? `${productName} · ${targetAudience}` : undefined}
-          onReopen={() => setStep(1)}
-        >
-          <Section2Product />
-        </AccordionSection>
-
-        {/* Section 3 */}
-        <AccordionSection
-          index={3}
-          title="Comentarios de TikTok"
-          status={getStatus(2, step, maxStep.current)}
-          summary={step >= 3 ? 'Copy A/B generado' : undefined}
-          onReopen={() => setStep(2)}
-        >
-          <Section3Comments />
-        </AccordionSection>
-
-        {/* Section 4 */}
-        <AccordionSection
-          index={4}
-          title="Elegir versión de copy"
-          status={getStatus(3, step, maxStep.current)}
-          summary={confirmedCopy ? `Versión ${confirmedCopy.version} confirmada` : undefined}
-          onReopen={() => setStep(3)}
-        >
-          <Section4Copy />
-        </AccordionSection>
-
-        {/* Section 5 — terminal: reabrible una vez alcanzada (maxStep) */}
-        <AccordionSection
-          index={5}
-          title={imageUrl ? '¡Anuncio listo!' : 'Generar anuncio'}
-          status={step === 4 ? 'active' : maxStep.current >= 4 ? 'completed' : 'locked'}
-          summary={imageUrl ? 'Anuncio generado' : undefined}
-          onReopen={() => setStep(4)}
-        >
-          <Section5Generate />
-        </AccordionSection>
-      </div>
-    </div>
+    </StepWizard>
   )
 }

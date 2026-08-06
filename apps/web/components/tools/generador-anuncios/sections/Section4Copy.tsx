@@ -28,24 +28,24 @@ function CopyCard({
       onClick={onPick}
       className="w-full text-left rounded-2xl overflow-hidden transition-all duration-200"
       style={{
-        border: selected ? '2px solid rgba(255,156,77,0.6)' : '1px solid rgba(255,255,255,0.08)',
-        background: selected ? 'rgba(255,156,77,0.04)' : 'rgba(255,255,255,0.02)',
+        border: selected ? '2px solid rgba(255,155,74,0.6)' : '1px solid rgba(255,255,255,0.08)',
+        background: selected ? 'rgba(255,155,74,0.04)' : 'rgba(255,255,255,0.02)',
       }}
     >
       <div className="flex items-center gap-2 px-4 py-3 border-b border-white/[0.05]">
-        <span className="text-[10px] font-bold uppercase tracking-widest text-[#8a8a8a]">{label}</span>
+        <span className="text-[10px] font-bold uppercase tracking-widest text-[#bebebe]">{label}</span>
         {recommended && (
-          <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-[rgba(255,156,77,0.1)] text-[#ff9c4d] border border-[rgba(255,156,77,0.2)]">
+          <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-[rgba(255,155,74,0.1)] text-[#ff9b4a] border border-[rgba(255,155,74,0.2)]">
             ★ Recomendada
           </span>
         )}
-        {selected && <Check className="ml-auto w-3.5 h-3.5 text-[#ff9c4d]" strokeWidth={3} />}
+        {selected && <Check className="ml-auto w-3.5 h-3.5 text-[#ff9b4a]" strokeWidth={3} />}
       </div>
       <div className="px-4 divide-y divide-white/[0.04]">
         {elements.map((el) => (
           <div key={el.element} className="py-2.5 flex gap-3 items-start">
-            <span className="shrink-0 text-[9px] font-bold uppercase tracking-wider text-[#8a8a8a] w-16 mt-0.5">{el.element}</span>
-            <span className="text-[12px] text-[#f5f5f5] leading-relaxed">&ldquo;{el.text}&rdquo;</span>
+            <span className="shrink-0 text-[9px] font-bold uppercase tracking-wider text-[#bebebe] w-16 mt-0.5">{el.element}</span>
+            <span className="text-[12px] text-[#ededed] leading-relaxed">&ldquo;{el.text}&rdquo;</span>
           </div>
         ))}
       </div>
@@ -83,7 +83,7 @@ export default function Section4Copy() {
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-[13px] text-[#bdbdbd]">
+      <p className="text-[13px] text-[#cfcfcf]">
         Versión B usa las palabras exactas de tu audiencia. Ambas mantienen la estructura del anuncio original.
       </p>
       <CopyCard version="A" label="Versión A" elements={copyVersions.versionA} selected={selected === 'A'} onPick={() => setSelected('A')} />

@@ -32,13 +32,14 @@ export const BRAND_NAME_MIN = 2
 export const BRAND_NAME_MAX = 30
 export const DESCRIPTION_MIN = 10
 
-/** Las 5 pantallas del brief, en orden. `STEPS[n].path` es la ruta del paso n+1. */
+/** Las 5 pantallas del brief, en orden. `STEPS[n].path` es la ruta del paso n+1.
+ *  `label` es la etiqueta corta del riel del wizard (una o dos palabras). */
 export const STEPS = [
-  { path: '/tools/generador-branding/nuevo/que-vendes', title: '¿Qué vendes?' },
-  { path: '/tools/generador-branding/nuevo/nombre', title: '¿Cómo se llama?' },
-  { path: '/tools/generador-branding/nuevo/publico', title: '¿Para quién es?' },
-  { path: '/tools/generador-branding/nuevo/vibra', title: '¿Qué debe transmitir?' },
-  { path: '/tools/generador-branding/nuevo/estilo', title: 'Tu estilo' },
+  { path: '/tools/generador-branding/nuevo/que-vendes', title: '¿Qué vendes?', label: 'Producto' },
+  { path: '/tools/generador-branding/nuevo/nombre', title: '¿Cómo se llama?', label: 'Nombre' },
+  { path: '/tools/generador-branding/nuevo/publico', title: '¿Para quién es?', label: 'Público' },
+  { path: '/tools/generador-branding/nuevo/vibra', title: '¿Qué debe transmitir?', label: 'Actitud' },
+  { path: '/tools/generador-branding/nuevo/estilo', title: 'Tu estilo', label: 'Estilo' },
 ] as const
 
 /** Chips de 1.1: el chip fija `category` y siembra un ejemplo CONCRETO y editable. */

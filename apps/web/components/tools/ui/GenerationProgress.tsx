@@ -24,14 +24,14 @@ export function GenerationProgress({
   const cur = currentStep ?? 0
   return (
     <div>
-      <div className="flex justify-between text-[11px] text-[#bdbdbd] mb-1.5">
+      <div className="flex justify-between text-[11px] text-[#cfcfcf] mb-1.5">
         <span>{label}</span>
-        <span className="readout text-[#ff9c4d] font-bold">{Math.round(pct)}%</span>
+        <span className="readout text-[#ff9b4a] font-bold">{Math.round(pct)}%</span>
       </div>
       <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
         <div
           className="h-full rounded-full transition-all duration-700"
-          style={{ width: `${pct}%`, background: 'linear-gradient(90deg,#ff9c4d,#ff7a2f)' }}
+          style={{ width: `${pct}%`, background: 'linear-gradient(90deg,#ff9b4a,#ff6a00)' }}
         />
       </div>
       {steps && steps.length > 0 && (
@@ -44,18 +44,18 @@ export function GenerationProgress({
                 style={{
                   background:
                     idx < cur ? '#2ccf6f' :
-                    idx === cur ? 'linear-gradient(90deg,#ff9c4d,#ff7a2f)' :
+                    idx === cur ? 'linear-gradient(90deg,#ff9b4a,#ff6a00)' :
                     'rgba(255,255,255,0.08)',
                 }}
               />
             ))}
           </div>
-          <div className="flex justify-between text-[9px] text-[#8a8a8a] mt-1">
+          <div className="flex justify-between text-[9px] text-[#bebebe] mt-1">
             {steps.map((s) => <span key={s}>{s}</span>)}
           </div>
         </>
       )}
-      {hint && <p className="text-[11px] text-[#8a8a8a] mt-2 text-center">{hint}</p>}
+      {hint && <p className="text-[11px] text-[#bebebe] mt-2 text-center">{hint}</p>}
     </div>
   )
 }

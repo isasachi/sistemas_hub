@@ -1,9 +1,9 @@
 'use client'
 
-import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, ImageIcon } from 'lucide-react'
+import { ArrowRight, Clock, ImageIcon } from 'lucide-react'
+import ToolShell from '@/components/tools/ui/ToolShell'
 import { useBrief, btnPrimary } from '@/components/tools/generador-branding/nuevo/BriefShell'
 import { STEPS, clearBrief, isResumable, resumePath, firstIncompleteStep, loadLastSession } from '@/lib/branding/brief'
 
@@ -27,19 +27,13 @@ export default function GeneradorBrandingEntrada() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#0a0a0a]">
-      <div className="px-6 py-4">
-        <Link href="/dashboard" className="inline-flex items-center gap-2 h-9 px-3 rounded-xl border border-white/[0.1] text-[13px] font-semibold text-[#f5f5f5] no-underline hover:bg-white/[0.05] transition-colors">
-          <ArrowLeft className="w-4 h-4" /> Volver al dashboard
-        </Link>
-      </div>
-
-      <div className="flex-1 w-full max-w-[980px] mx-auto px-6 pb-12 flex flex-col gap-8">
-        <div className="flex flex-col gap-3 max-w-[620px]">
-          <h1 className="text-[34px] font-bold text-[#f5f5f5] leading-[1.15]">
+    <ToolShell name="Generador de Branding">
+      <div className="mx-auto flex w-full max-w-[860px] flex-1 flex-col gap-8 px-5 pb-16 pt-12 md:px-8">
+        <div className="jr-rise flex max-w-[640px] flex-col gap-4">
+          <h1 className="lp-serif text-[clamp(28px,3.8vw,38px)] leading-[1.15] text-[#ffffff]">
             Tu marca lista en cinco respuestas
           </h1>
-          <p className="text-[15px] text-[#bdbdbd]">
+          <p className="font-[Lato] text-[15px] leading-[1.65] text-[#cfcfcf]">
             Cuéntanos qué vendes, cómo se llama, para quién es y qué debe transmitir.
             Te proponemos una paleta y unas tipografías hechas para esa marca, las ajustas
             a tu gusto, y te devolvemos el mockup, el logo, la etiqueta y un brandboard en PDF.
@@ -47,41 +41,43 @@ export default function GeneradorBrandingEntrada() {
         </div>
 
         {lastSession && (
-          <div className="rounded-2xl border border-white/[0.08] bg-white/[0.02] p-5 flex flex-wrap items-center gap-3">
-            <p className="text-[13px] text-[#bdbdbd] flex-1 min-w-[220px]">
+          <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.02] p-5">
+            <p className="min-w-[220px] flex-1 text-[13px] text-[#cfcfcf]">
               Tu última marca generada sigue disponible.
             </p>
             <button type="button"
                     onClick={() => router.push(`/tools/generador-branding/nuevo/resultado?s=${lastSession}`)}
-                    className="h-11 px-5 rounded-xl border border-white/[0.14] text-[13px] font-semibold text-[#f5f5f5] hover:bg-white/[0.05] transition-colors cursor-pointer bg-transparent flex items-center gap-2">
+                    className="jr-btn-ghost h-11 rounded-xl px-5 text-[13px] cursor-pointer">
               <ImageIcon className="w-4 h-4" /> Ver mi última marca
             </button>
           </div>
         )}
 
         {saved ? (
-          <div className="rounded-2xl border border-[rgba(255,156,77,0.3)] bg-[rgba(255,156,77,0.06)] p-5 flex flex-col gap-3">
-            <p className="text-[14px] font-bold text-[#f5f5f5]">Tienes un brief a medias</p>
-            <p className="text-[13px] text-[#bdbdbd]">
+          <div className="jr-card lp-leak flex flex-col gap-3 rounded-2xl p-5">
+            <p className="relative font-sans text-[14px] font-semibold text-[#ffffff]">Tienes un brief a medias</p>
+            <p className="relative text-[13px] text-[#cfcfcf]">
               {saved.brandName ? `${saved.brandName} · ` : ''}
               quedaste en la pregunta {firstIncompleteStep(saved) + 1} de {STEPS.length}.
             </p>
-            <div className="flex flex-wrap gap-3">
-              <button type="button" onClick={() => router.push(resumePath(saved))} className={btnPrimary + ' h-11 px-6'}>
-                Retomar
+            <div className="relative flex flex-wrap gap-3">
+              <button type="button" onClick={() => router.push(resumePath(saved))}
+                      className="jr-btn-secondary h-11 rounded-xl px-5 text-[13px] cursor-pointer">
+                <Clock className="w-4 h-4" /> Retomar
               </button>
               <button type="button" onClick={startFresh}
-                      className="h-11 px-5 rounded-xl border border-white/[0.14] text-[13px] font-semibold text-[#f5f5f5] hover:bg-white/[0.05] transition-colors cursor-pointer bg-transparent">
+                      className="jr-btn-ghost h-11 rounded-xl px-5 text-[13px] cursor-pointer">
                 Empezar una marca nueva
               </button>
             </div>
           </div>
         ) : (
-          <button type="button" onClick={startFresh} className={btnPrimary + ' h-13 px-8 self-start py-4'}>
+          <button type="button" onClick={startFresh} className={btnPrimary + ' h-13 self-start rounded-xl px-8 py-4 text-[15px] cursor-pointer'}>
             {lastSession ? 'Crear otra marca' : 'Crear mi marca'}
+            <ArrowRight className="w-4 h-4" />
           </button>
         )}
       </div>
-    </div>
+    </ToolShell>
   )
 }

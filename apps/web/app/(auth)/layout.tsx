@@ -13,12 +13,14 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             "radial-gradient(60% 50% at 50% 0%, rgba(255,150,90,0.12) 0%, transparent 55%)",
         }}
       />
-      <Link href="/" className="relative z-10 flex items-center gap-2.5 no-underline mb-7">
-        <div className="w-[34px] h-[34px] rounded-lg flex items-center justify-center jr-cta">
-          <Zap className="w-[18px] h-[18px] text-[#1c0f03] fill-[#1c0f03]" />
+      {/* Marca en dorado, igual que en la barra del hub: el naranja queda para
+          el botón de entrar, que es la única acción de la pantalla. */}
+      <Link href="/" className="relative z-10 mb-7 flex items-center gap-2.5 no-underline">
+        <div className="flex h-[34px] w-[34px] items-center justify-center rounded-xl border border-[rgba(214,168,96,0.35)] bg-[rgba(214,168,96,0.1)] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+          <Zap className="h-[17px] w-[17px] text-[#d6a860]" />
         </div>
-        <span className="text-[16px] font-bold text-[#f5f5f5] tracking-[0.2px]">
-          JR <span className="text-[#ff9c4d]">AI Hub</span>
+        <span className="jr-wordmark text-[19px] text-[#ededed]">
+          JR <span className="text-[#d6a860]">AI HUB</span>
         </span>
       </Link>
       <div className="relative z-10 w-full flex justify-center">{children}</div>

@@ -1,5 +1,4 @@
 import { ProjectHistory } from "@/components/dashboard/ProjectHistory";
-import { Eyebrow } from "@/components/ui/Eyebrow";
 
 // Dashboard = tablero de proyectos a pantalla completa. Los tools viven en la
 // barra superior (AppShell); el cuerpo es el historial de todo lo que el usuario
@@ -7,10 +6,11 @@ import { Eyebrow } from "@/components/ui/Eyebrow";
 export default function DashboardPage() {
   return (
     <div className="lp-root px-4 py-9 md:px-8">
+      {/* Un solo titular. Antes había eyebrow + h1 ("Tus proyectos" arriba de
+          "Historial de proyectos") diciendo dos veces lo mismo. */}
       <header className="mb-8">
-        <Eyebrow label="Tus proyectos" className="mb-3" />
-        <h1 className="lp-serif lp-metal text-[clamp(26px,3.2vw,36px)] leading-[1.1]">
-          Historial de proyectos
+        <h1 className="text-[clamp(24px,3.2vw,34px)] font-semibold uppercase leading-[1.1] tracking-[0.16em] text-[#d6a860]">
+          Tus proyectos
         </h1>
       </header>
 

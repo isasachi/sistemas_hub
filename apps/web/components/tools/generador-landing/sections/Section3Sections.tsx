@@ -9,7 +9,7 @@ import { validateSet } from '@/lib/landing/validate-set'
 const btnPrimary =
   'rounded-xl jr-cta text-[13px] font-bold disabled:opacity-40 transition-all duration-200 cursor-pointer border-0 font-sans flex items-center justify-center gap-2 h-11 w-full'
 const btnGhost =
-  'h-10 px-4 rounded-xl border border-white/[0.14] text-[#f5f5f5] text-[13px] font-medium hover:bg-white/[0.05] transition-colors cursor-pointer bg-transparent'
+  'h-10 px-4 rounded-xl border border-white/[0.14] text-[#ededed] text-[13px] font-medium hover:bg-white/[0.05] transition-colors cursor-pointer bg-transparent'
 
 const TYPES = SectionType.options
 const LABEL_TO_TYPE = Object.fromEntries(TYPES.map((t) => [SECTION_LABELS[t], t])) as Record<string, SectionType>
@@ -17,19 +17,19 @@ const OPTIONS = TYPES.map((t) => SECTION_LABELS[t])
 
 function CopyCard({ c }: { c: SectionCopy }) {
   return (
-    <div className="rounded-xl border border-white/[0.08] bg-[#141414] px-4 py-3 flex flex-col gap-1">
-      <p className="text-[11px] uppercase tracking-wide text-[#8a8a8a]">{SECTION_LABELS[c.type]}</p>
-      <p className="text-[14px] font-bold text-[#f5f5f5]">{c.headline}</p>
-      {c.subheadline && <p className="text-[12px] text-[#bdbdbd]">{c.subheadline}</p>}
+    <div className="rounded-xl border border-white/[0.08] bg-[#121214] px-4 py-3 flex flex-col gap-1">
+      <p className="text-[11px] uppercase tracking-wide text-[#bebebe]">{SECTION_LABELS[c.type]}</p>
+      <p className="text-[14px] font-bold text-[#ededed]">{c.headline}</p>
+      {c.subheadline && <p className="text-[12px] text-[#cfcfcf]">{c.subheadline}</p>}
       {c.bullets?.length ? (
-        <ul className="text-[12px] text-[#bdbdbd] list-disc pl-4">{c.bullets.map((b, i) => <li key={i}>{b}</li>)}</ul>
+        <ul className="text-[12px] text-[#cfcfcf] list-disc pl-4">{c.bullets.map((b, i) => <li key={i}>{b}</li>)}</ul>
       ) : null}
       {c.cards?.length ? (
         <div className="flex flex-col gap-1 mt-1">{c.cards.map((card, i) => (
-          <p key={i} className="text-[12px] text-[#bdbdbd]"><span className="font-semibold text-[#f5f5f5]">{card.title}:</span> {card.body}</p>
+          <p key={i} className="text-[12px] text-[#cfcfcf]"><span className="font-semibold text-[#ededed]">{card.title}:</span> {card.body}</p>
         ))}</div>
       ) : null}
-      {c.cta && <p className="text-[12px] text-[#ff9c4d] font-semibold mt-1">[ {c.cta} ]</p>}
+      {c.cta && <p className="text-[12px] text-[#ff9b4a] font-semibold mt-1">[ {c.cta} ]</p>}
     </div>
   )
 }
@@ -73,7 +73,7 @@ export default function Section3Sections() {
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-[13px] text-[#bdbdbd]">Elige las secciones de tu landing (en el orden que las toques).</p>
+      <p className="text-[13px] text-[#bebebe]">Aparecerán en el orden en que las toques.</p>
       <ChipGroup options={OPTIONS} selected={picked} multi onChange={(v) => setPicked(v as string[])} />
 
       {copy.length === 0 ? (

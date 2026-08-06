@@ -28,14 +28,14 @@ export default function AnuncioDetalle() {
     <ToolShell name="Generador de Anuncios" slug="generador-anuncios" trail="Sesión">
 
       <div className="max-w-[900px] w-full mx-auto px-6 md:px-10 py-10">
-        {s === undefined && <p className="text-[13px] text-[#8a8a8a]">Cargando…</p>}
-        {s === null && <p className="text-[13px] text-[#8a8a8a]">No se encontró la sesión.</p>}
+        {s === undefined && <p className="text-[13px] text-[#bebebe]">Cargando…</p>}
+        {s === null && <p className="text-[13px] text-[#bebebe]">No se encontró la sesión.</p>}
         {s && (
           <>
             <div className="flex items-start justify-between gap-4 mb-6">
               <div>
-                <h1 className="text-[22px] font-bold text-[#f5f5f5]">{s.product_name || "Anuncio sin nombre"}</h1>
-                <p className="text-[12px] text-[#8a8a8a] mt-1">
+                <h1 className="text-[22px] font-bold text-[#ededed]">{s.product_name || "Anuncio sin nombre"}</h1>
+                <p className="text-[12px] text-[#bebebe] mt-1">
                   {new Date(s.created_at).toLocaleDateString("es-PE", { day: "numeric", month: "long", year: "numeric" })} · solo lectura
                 </p>
               </div>
@@ -50,19 +50,19 @@ export default function AnuncioDetalle() {
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={s.image_url} alt="Anuncio generado" className="w-full h-auto" />
                 ) : (
-                  <span className="text-[13px] text-[#8a8a8a] p-8">Sin imagen generada todavía</span>
+                  <span className="text-[13px] text-[#bebebe] p-8">Sin imagen generada todavía</span>
                 )}
               </div>
 
               <div className="flex flex-col gap-4">
                 {s.confirmed_copy?.breakdown?.length ? (
                   <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-4">
-                    <p className="text-[11px] font-bold text-[#8a8a8a] tracking-[1px] uppercase mb-3">Copy confirmado</p>
+                    <p className="text-[11px] font-bold text-[#bebebe] tracking-[1px] uppercase mb-3">Copy confirmado</p>
                     <div className="flex flex-col gap-3">
                       {s.confirmed_copy.breakdown.map((c, i) => (
                         <div key={i}>
-                          <p className="text-[11px] text-[#8a8a8a]">{c.element}</p>
-                          <p className="text-[14px] text-[#f5f5f5]">{c.text}</p>
+                          <p className="text-[11px] text-[#bebebe]">{c.element}</p>
+                          <p className="text-[14px] text-[#ededed]">{c.text}</p>
                         </div>
                       ))}
                     </div>
@@ -73,14 +73,14 @@ export default function AnuncioDetalle() {
                   <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-4 flex flex-col gap-3">
                     {s.what_it_does && (
                       <div>
-                        <p className="text-[11px] text-[#8a8a8a]">Qué hace</p>
-                        <p className="text-[14px] text-[#f5f5f5]">{s.what_it_does}</p>
+                        <p className="text-[11px] text-[#bebebe]">Qué hace</p>
+                        <p className="text-[14px] text-[#ededed]">{s.what_it_does}</p>
                       </div>
                     )}
                     {s.target_audience && (
                       <div>
-                        <p className="text-[11px] text-[#8a8a8a]">Público objetivo</p>
-                        <p className="text-[14px] text-[#f5f5f5]">{s.target_audience}</p>
+                        <p className="text-[11px] text-[#bebebe]">Público objetivo</p>
+                        <p className="text-[14px] text-[#ededed]">{s.target_audience}</p>
                       </div>
                     )}
                   </div>

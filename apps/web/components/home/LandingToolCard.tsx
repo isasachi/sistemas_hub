@@ -44,7 +44,7 @@ export function LandingToolCard({ tool, wide = false }: { tool: Tool; wide?: boo
           <h3 className="text-[17px] font-semibold text-[#ededed]">{tool.name}</h3>
         </div>
         {!isSoon && (
-          <ArrowUpRight className="mt-1 h-[18px] w-[18px] shrink-0 text-[#bdbdbd] transition-all duration-200 group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-[rgb(255,155,74)]" />
+          <ArrowUpRight className="mt-1 h-[18px] w-[18px] shrink-0 text-[#cfcfcf] transition-all duration-200 group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-[rgb(255,155,74)]" />
         )}
       </div>
 
@@ -60,7 +60,7 @@ export function LandingToolCard({ tool, wide = false }: { tool: Tool; wide?: boo
             className="inline-flex items-baseline gap-1 rounded-full border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.03)] px-2.5 py-1"
           >
             <span className="text-[12px] font-semibold text-[#ededed]">{s.value}</span>
-            <span className="font-[Lato] text-[11px] text-[#bdbdbd]">{s.label}</span>
+            <span className="font-[Lato] text-[11px] text-[#cfcfcf]">{s.label}</span>
           </span>
         ))}
         <span className="lp-label ml-auto rounded-full border border-[rgba(214,168,96,0.35)] bg-[rgba(214,168,96,0.08)] px-2.5 py-1 !text-[10px] !text-[#d6a860]">

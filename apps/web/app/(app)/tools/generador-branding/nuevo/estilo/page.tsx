@@ -19,7 +19,7 @@ import { colorFromName } from '@/lib/branding/color-names'
  * que el prompt no tiene.
  */
 
-const field = 'rounded-xl bg-white/[0.04] border-white/[0.08] text-[13px] text-[#f5f5f5]'
+const field = 'rounded-xl bg-white/[0.04] border-white/[0.08] text-[13px] text-[#ededed]'
 
 /**
  * Burbuja de color aproximada al nombre escrito. Es una AYUDA, no la verdad: el
@@ -40,7 +40,7 @@ function Bubble({ name, size = 'w-8 h-8' }: { name: string; size?: string }) {
   )
 }
 
-const sectionLabel = 'readout text-[11px] font-bold tracking-[1.5px] uppercase text-[#8a8a8a]'
+const sectionLabel = 'readout text-[11px] font-bold tracking-[1.5px] uppercase text-[#bebebe]'
 
 export default function EstiloPage() {
   const router = useRouter()
@@ -101,14 +101,14 @@ export default function EstiloPage() {
             <div className="flex items-center justify-between gap-3">
               <p className={sectionLabel}>Colores</p>
               <button type="button" onClick={() => suggest(true)} disabled={loading}
-                      className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-[#ff9c4d] bg-transparent border-0 cursor-pointer disabled:opacity-40">
+                      className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-[#ff9b4a] bg-transparent border-0 cursor-pointer disabled:opacity-40">
                 {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
                 Volver a proponer
               </button>
             </div>
 
             <div className="flex flex-col gap-2 -mt-5">
-              <p className="text-[12px] text-[#8a8a8a]">
+              <p className="text-[12px] text-[#bebebe]">
                 Descríbelos con palabras. El modelo elige los tonos exactos y los rotula en la
                 identidad — le salen mejor que imponiéndoselos.
               </p>
@@ -119,14 +119,14 @@ export default function EstiloPage() {
                          placeholder="Ej: naranja intenso" className={`${field} h-11`} />
                   <button type="button" aria-label="Quitar color"
                           onClick={() => set({ palette: style.palette.filter((_, j) => j !== i) })}
-                          className="w-9 h-9 shrink-0 rounded-lg border border-white/[0.1] text-[#8a8a8a] hover:text-[#f5f5f5] bg-transparent cursor-pointer flex items-center justify-center">
+                          className="w-9 h-9 shrink-0 rounded-lg border border-white/[0.1] text-[#bebebe] hover:text-[#ededed] bg-transparent cursor-pointer flex items-center justify-center">
                     <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
               ))}
               {style.palette.length < PALETTE_MAX && (
                 <button type="button" onClick={() => set({ palette: [...style.palette, ''] })}
-                        className="self-start inline-flex items-center gap-1.5 text-[12px] font-semibold text-[#bdbdbd] hover:text-[#f5f5f5] bg-transparent border-0 cursor-pointer">
+                        className="self-start inline-flex items-center gap-1.5 text-[12px] font-semibold text-[#cfcfcf] hover:text-[#ededed] bg-transparent border-0 cursor-pointer">
                   <Plus className="w-3.5 h-3.5" /> Agregar color
                 </button>
               )}
@@ -134,7 +134,7 @@ export default function EstiloPage() {
 
             <label className="flex flex-col gap-2">
               <span className={sectionLabel}>Inspiración</span>
-              <span className="text-[12px] text-[#8a8a8a] -mt-1">
+              <span className="text-[12px] text-[#bebebe] -mt-1">
                 De dónde sale el mundo visual, en una frase corta: un estilo de foto, una época, un material.
               </span>
               <Input value={style.inspiration} onChange={(e) => set({ inspiration: e.target.value })}
@@ -157,25 +157,25 @@ export default function EstiloPage() {
               ['Inspiración', style.inspiration],
             ] as const).filter(([, v]) => v).map(([k, v]) => (
               <div key={k} className="flex flex-col gap-0.5">
-                <span className="readout text-[10px] uppercase tracking-[1.2px] text-[#8a8a8a]">{k}</span>
-                <span className="text-[12px] text-[#e5e5e5] leading-snug">{v}</span>
+                <span className="readout text-[10px] uppercase tracking-[1.2px] text-[#bebebe]">{k}</span>
+                <span className="text-[12px] text-[#ededed] leading-snug">{v}</span>
               </div>
             ))}
 
             {style.palette.filter(Boolean).length > 0 && (
               <div className="flex flex-col gap-1.5">
-                <span className="readout text-[10px] uppercase tracking-[1.2px] text-[#8a8a8a]">Colores</span>
+                <span className="readout text-[10px] uppercase tracking-[1.2px] text-[#bebebe]">Colores</span>
                 {style.palette.filter(Boolean).map((c, i) => (
                   <div key={i} className="flex items-center gap-2">
                     <Bubble name={c} size="w-4 h-4" />
-                    <span className="text-[12px] text-[#e5e5e5] leading-snug">{c}</span>
+                    <span className="text-[12px] text-[#ededed] leading-snug">{c}</span>
                   </div>
                 ))}
               </div>
             )}
           </div>
 
-          <p className="text-[11px] text-[#8a8a8a] leading-snug">
+          <p className="text-[11px] text-[#bebebe] leading-snug">
             Recibirás la identidad completa más el logo (en tres versiones), la etiqueta 360
             lista para imprenta y el mockup del producto.
           </p>

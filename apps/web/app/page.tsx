@@ -72,7 +72,7 @@ export default function Home() {
         <section className="px-8 pb-24 pt-8">
           <div className="lp-hero-card relative mx-auto max-w-[1000px] px-8 py-20 text-center">
             <div className="mb-8 flex items-center justify-between">
-              <span className="lp-label !text-[10px]">JR AI Hub</span>
+              <span className="jr-wordmark text-[11px] text-[#bdbdbd]">JR AI HUB</span>
               <span className="lp-label !text-[10px]">© 2026</span>
             </div>
             <h2

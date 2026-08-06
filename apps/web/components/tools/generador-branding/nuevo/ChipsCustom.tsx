@@ -59,10 +59,10 @@ export default function ChipsCustom({
         // Las comas se van al vuelo: el array viaja a la DB como join(', ') y
         // vuelve con split(', ') — una coma en el texto libre partiría el valor.
         onChange={(e) => commit(chips, e.target.value.replace(/,/g, ''))}
-        className="h-11 rounded-xl bg-white/[0.04] border-white/[0.08] text-[13px] text-[#f5f5f5]"
+        className="h-11 rounded-xl bg-white/[0.04] border-white/[0.08] text-[13px] text-[#ededed]"
       />
 
-      <p className="text-[12px] text-[#8a8a8a]">
+      <p className="text-[12px] text-[#bebebe]">
         {chips.length} de {max} elegidos{custom.trim() ? ' · y el tuyo' : ''}
       </p>
     </>
