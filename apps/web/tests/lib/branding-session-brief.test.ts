@@ -11,7 +11,7 @@ const row = {
 }
 
 const palette = ['naranja intenso', 'lima eléctrico']
-const direction = { inspiration: 'Editorial product photography' }
+const direction = { inspiration: 'Fotografía editorial de producto' }
 
 describe('sesión → brief', () => {
   it('reconstruye las casillas del prompt', () => {

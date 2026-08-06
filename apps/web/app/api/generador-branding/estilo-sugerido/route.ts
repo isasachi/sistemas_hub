@@ -56,8 +56,11 @@ export async function POST(req: Request) {
       '  ("naranja intenso", "amarillo suave", "blanco puro", "lima eléctrico"). NEVER hex codes —',
       '  the image model picks better values than any it is handed. Do not reach for the generic',
       '  palette of the category: two brands with different attitudes must not share colours.',
-      '- inspiration: one short phrase in English naming where the visual world comes from.',
-      '  A photographic style, a design movement, an era or a material. Under ten words.',
+      '- inspiration: one short phrase IN SPANISH naming where the visual world comes from.',
+      '  A photographic style, a design movement, an era or a material ("fotografía editorial de',
+      '  producto", "botica de los años 50", "cerámica esmaltada japonesa"). Under ten words.',
+      '  In Spanish because the user reads and edits it; the image model understands it fine —',
+      '  the rest of the brief already reaches it in Spanish.',
     ].join('\n')
 
     const style = await callStructured('branding_style', SuggestedStyle, [{ text: prompt }], 2, BRANDING_SYSTEM_PROMPT)

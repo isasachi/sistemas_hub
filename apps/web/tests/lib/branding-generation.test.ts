@@ -10,7 +10,7 @@ const brief: Brief = {
   feel: ['Potente', 'Juvenil'],
   style: {
     palette: ['naranja intenso', 'amarillo suave', 'blanco puro', 'lima eléctrico'],
-    inspiration: 'Editorial product photography',
+    inspiration: 'Fotografía editorial de producto',
   },
 }
 
@@ -35,7 +35,7 @@ describe('el prompt maestro', () => {
     expect(p).toContain('**Brand description:** Una marca de creatina en polvo')
     expect(p).toContain('**Target audience:** Hombres de 25 a 45')
     expect(p).toContain('**Brand feel:** bold, youthful')
-    expect(p).toContain('**Inspired from:** Editorial product photography')
+    expect(p).toContain('**Inspired from:** Fotografía editorial de producto')
     expect(p).toContain('**Colors:** naranja intenso, amarillo suave, blanco puro, lima eléctrico')
   })
 

@@ -11,7 +11,7 @@ const full: PartialBrief = {
   brandName: 'Miru',
   audience: ['Dueños de perros'],
   feel: ['Artesanal'],
-  style: { palette: ['naranja intenso'], inspiration: 'Editorial product photography' },
+  style: { palette: ['naranja intenso'], inspiration: 'Fotografía editorial de producto' },
 }
 
 describe('validación del brief', () => {

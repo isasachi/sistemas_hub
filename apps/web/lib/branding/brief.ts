@@ -83,7 +83,8 @@ export interface Style {
    * contra el probe del 2026-08-06.
    */
   palette: string[]
-  /** "Inspired from". Corto: el input de referencia era "Editorial product photography". */
+  /** "Inspired from". Corto y en español: lo lee y lo edita el usuario, y el modelo
+   *  de imagen ya recibe el resto del brief en español sin problema. */
   inspiration: string
 }
 

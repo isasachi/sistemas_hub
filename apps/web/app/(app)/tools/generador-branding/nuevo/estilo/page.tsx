@@ -138,7 +138,7 @@ export default function EstiloPage() {
                 De dónde sale el mundo visual, en una frase corta: un estilo de foto, una época, un material.
               </span>
               <Input value={style.inspiration} onChange={(e) => set({ inspiration: e.target.value })}
-                     placeholder="Ej: Editorial product photography" className={`${field} h-11`} />
+                     placeholder="Ej: Fotografía editorial de producto" className={`${field} h-11`} />
             </label>
           </div>
         </div>
