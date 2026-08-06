@@ -2,10 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { CheckCircle2, Clock, ArrowUpDown, Trash2 } from 'lucide-react'
-import { tools, getToolBySlug } from '@/lib/tools'
+import { CheckCircle2, Clock, ArrowUpDown, Trash2, FolderOpen } from 'lucide-react'
+import { getToolBySlug } from '@/lib/tools'
 import { toolIcon } from '@/lib/tool-icons'
-import { LandingToolCard } from '@/components/home/LandingToolCard'
 
 // Tools con sesiones persistidas (GET /api/<slug>/sessions → shape uniforme).
 // El label corto alimenta los chips de filtro. buscador-productos NO produce
@@ -111,26 +110,9 @@ export function ProjectHistory() {
     )
   }
 
-  // Cuenta sin proyectos → empty state que surtidor de tools (arranca de cero).
-  if (items.length === 0) {
-    return (
-      <div>
-        <div className="mb-8 max-w-[560px]">
-          <h2 className="lp-serif text-[22px] text-[#ededed]">Aún no tienes proyectos</h2>
-          <p className="mt-2 font-[Lato] text-[14px] text-[#bebebe]">
-            Elige una herramienta para crear tu primer proyecto. Aparecerá aquí en cuanto empieces.
-          </p>
-        </div>
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {tools
-            .filter((t) => t.status === 'live')
-            .map((tool) => (
-              <LandingToolCard key={tool.slug} tool={tool} />
-            ))}
-        </div>
-      </div>
-    )
-  }
+  // Cuenta sin proyectos → placeholder centrado. El grid vacío no dice nada;
+  // esto sí dice qué va a aparecer acá y de dónde sale.
+  if (items.length === 0) return <EmptyState />
 
   return (
     <div>
@@ -159,9 +141,7 @@ export function ProjectHistory() {
       </div>
 
       {shown.length === 0 ? (
-        <p className="font-[Lato] text-[13px] text-[#bebebe]">
-          No tienes proyectos de esta herramienta todavía.
-        </p>
+        <EmptyState filtered />
       ) : (
         <div className="columns-2 gap-3.5 sm:columns-3 lg:columns-5 xl:columns-6">
           {shown.map((p) => (
@@ -174,6 +154,37 @@ export function ProjectHistory() {
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+/**
+ * Placeholder del grid: un ícono, una frase y nada más. Centrado en la zona
+ * donde irían las cards para que el vacío se lea como "todavía no", no como
+ * "algo falló".
+ */
+function EmptyState({ filtered = false }: { filtered?: boolean }) {
+  return (
+    <div className="flex min-h-[58vh] flex-col items-center justify-center px-6 py-16 text-center">
+      <div className="relative mb-6 flex h-20 w-20 items-center justify-center rounded-3xl border border-[rgba(214,168,96,0.25)] bg-[rgba(214,168,96,0.06)] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+        <FolderOpen className="h-9 w-9 text-[#d6a860]" strokeWidth={1.5} />
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-0 rounded-3xl"
+          style={{
+            background:
+              'radial-gradient(120% 100% at 50% 0%, rgba(214,168,96,0.18), rgba(0,0,0,0) 60%)',
+          }}
+        />
+      </div>
+      <h2 className="lp-serif text-[20px] text-[#ededed]">
+        {filtered ? 'Nada de esta herramienta todavía' : 'Acá vas a ver todo lo que crees'}
+      </h2>
+      <p className="mt-2.5 max-w-[420px] font-[Lato] text-[14px] leading-[1.6] text-[#bebebe]">
+        {filtered
+          ? 'Todavía no usaste esta herramienta. Ábrela desde la barra de arriba y tu primer proyecto aparecerá acá.'
+          : 'Cada anuncio, marca, landing y cálculo que generes queda guardado en este tablero. Elige una herramienta de la barra de arriba para empezar.'}
+      </p>
     </div>
   )
 }

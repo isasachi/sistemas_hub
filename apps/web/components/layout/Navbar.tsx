@@ -7,9 +7,8 @@ export function Navbar() {
   return (
     <div className="sticky top-0 z-40 border-b border-[rgba(255,255,255,0.06)] bg-[#0b0b0c]/80 backdrop-blur-xl">
       <nav className="relative mx-auto flex h-[68px] max-w-[1160px] items-center justify-between px-6">
-        {/* Logo tipográfico serif con tracking */}
         <Link href="/" className="no-underline">
-          <span className="lp-serif text-[19px] tracking-[0.14em] text-[#ededed]">
+          <span className="jr-wordmark text-[20px] text-[#ededed]">
             JR <span className="text-[#d6a860]">AI HUB</span>
           </span>
         </Link>

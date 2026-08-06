@@ -23,33 +23,80 @@ const NAV_LABEL: Record<string, string> = {
   "generador-landing": "Landing",
 };
 
+/**
+ * Menú de cuenta. Es un COMPONENTE, no un elemento compartido: la barra lo
+ * renderiza dos veces (desktop y móvil) y cada instancia necesita su propio
+ * `ref`. Cuando era un solo elemento con un `ref` compartido, el ref apuntaba
+ * al último nodo montado y el manejador de "click fuera" cerraba el menú en
+ * `mousedown` al pulsar sobre el otro — desmontando el <form> antes de que el
+ * click llegara a ser un submit. Cerrar sesión no hacía nada.
+ */
+function AccountMenu({ label }: { label: string }) {
+  const [menu, setMenu] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menu) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setMenu(false); };
+    const onDown = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenu(false);
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("mousedown", onDown);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("mousedown", onDown);
+    };
+  }, [menu]);
+
+  return (
+    <div ref={menuRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setMenu((m) => !m)}
+        aria-label="Cuenta"
+        aria-expanded={menu}
+        className="flex items-center gap-1.5 rounded-full border border-white/[0.08] py-1 pl-1 pr-2 transition-colors duration-200 hover:border-white/[0.2] cursor-pointer"
+      >
+        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[rgba(214,168,96,0.12)] font-[Poppins] text-[12px] font-bold text-[#d6a860]">
+          {label.charAt(0).toUpperCase()}
+        </span>
+        <ChevronDown className="h-3.5 w-3.5 text-[#bebebe]" />
+      </button>
+
+      {menu && (
+        <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-[240px] overflow-hidden rounded-2xl border border-white/[0.08] bg-[#101012] shadow-[0_16px_40px_rgba(0,0,0,0.5)]">
+          <div className="border-b border-white/[0.06] px-4 py-3">
+            <p className="font-[Poppins] text-[10px] font-semibold uppercase tracking-[0.12em] text-[#cfcfcf]">
+              Sesión
+            </p>
+            <p className="mt-0.5 truncate text-[13px] text-[#ededed]">{label}</p>
+          </div>
+          <form action={signOut}>
+            <button
+              type="submit"
+              className="flex w-full items-center gap-2.5 border-0 bg-transparent px-4 py-3 text-[13px] font-medium text-[#bebebe] transition-colors duration-200 hover:bg-white/[0.05] hover:text-[#ffffff] cursor-pointer"
+            >
+              <LogOut className="h-[18px] w-[18px]" />
+              Cerrar sesión
+            </button>
+          </form>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function AppShell({ user, children }: AppShellProps) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false); // drawer móvil
-  const [menu, setMenu] = useState(false); // dropdown de cuenta
-  const menuRef = useRef<HTMLDivElement>(null);
 
-  // Esc cierra drawer y menú de cuenta.
+  // Esc cierra el drawer de tools.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setOpen(false);
-        setMenu(false);
-      }
-    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
-
-  // Click fuera cierra el dropdown de cuenta.
-  useEffect(() => {
-    if (!menu) return;
-    const onClick = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenu(false);
-    };
-    window.addEventListener("mousedown", onClick);
-    return () => window.removeEventListener("mousedown", onClick);
-  }, [menu]);
 
   const toolLink = (href: string, active: boolean, soon: boolean) =>
     [
@@ -65,8 +112,7 @@ export function AppShell({ user, children }: AppShellProps) {
 
   const logo = (
     <Link href="/dashboard" onClick={() => setOpen(false)} className="no-underline">
-      {/* Poppins directo: la barra vive fuera de .lp-root, donde .lp-serif no aplica. */}
-      <span className="font-[Poppins] text-[19px] font-semibold tracking-[0.12em] text-[#ededed]">
+      <span className="jr-wordmark text-[20px] text-[#ededed]">
         JR <span className="text-[#d6a860]">AI HUB</span>
       </span>
     </Link>
@@ -76,43 +122,6 @@ export function AppShell({ user, children }: AppShellProps) {
     <span className="rounded-full bg-[rgba(255,255,255,0.05)] px-1.5 py-0.5 font-[Poppins] text-[9px] font-semibold uppercase tracking-[0.08em] text-[#cfcfcf]">
       Pronto
     </span>
-  );
-
-  const account = (
-    <div ref={menuRef} className="relative">
-      <button
-        type="button"
-        onClick={() => setMenu((m) => !m)}
-        aria-label="Cuenta"
-        aria-expanded={menu}
-        className="flex items-center gap-1.5 rounded-full border border-white/[0.08] py-1 pl-1 pr-2 transition-colors duration-200 hover:border-white/[0.2] cursor-pointer"
-      >
-        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[rgba(214,168,96,0.12)] font-[Poppins] text-[12px] font-bold text-[#d6a860]">
-          {user.label.charAt(0).toUpperCase()}
-        </span>
-        <ChevronDown className="h-3.5 w-3.5 text-[#bebebe]" />
-      </button>
-
-      {menu && (
-        <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-[240px] overflow-hidden rounded-2xl border border-white/[0.08] bg-[#101012] shadow-[0_16px_40px_rgba(0,0,0,0.5)]">
-          <div className="border-b border-white/[0.06] px-4 py-3">
-            <p className="font-[Poppins] text-[10px] font-semibold uppercase tracking-[0.12em] text-[#cfcfcf]">
-              Sesión
-            </p>
-            <p className="mt-0.5 truncate text-[13px] text-[#ededed]">{user.label}</p>
-          </div>
-          <form action={signOut}>
-            <button
-              type="submit"
-              className="flex w-full items-center gap-2.5 border-0 bg-transparent px-4 py-3 text-[13px] font-medium text-[#bebebe] transition-colors duration-200 hover:bg-white/[0.05] hover:text-[#ffffff] cursor-pointer"
-            >
-              <LogOut className="h-[18px] w-[18px]" />
-              Cerrar sesión
-            </button>
-          </form>
-        </div>
-      )}
-    </div>
   );
 
   return (
@@ -149,11 +158,13 @@ export function AppShell({ user, children }: AppShellProps) {
           </nav>
 
           {/* Espaciador + cuenta a la derecha (desktop) */}
-          <div className="ml-auto hidden items-center md:flex">{account}</div>
+          <div className="ml-auto hidden items-center md:flex">
+            <AccountMenu label={user.label} />
+          </div>
 
           {/* Móvil: hamburguesa + cuenta */}
           <div className="ml-auto flex items-center gap-2 md:hidden">
-            {account}
+            <AccountMenu label={user.label} />
             <button
               type="button"
               onClick={() => setOpen(true)}

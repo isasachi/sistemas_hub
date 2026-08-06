@@ -19,7 +19,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         <div className="flex h-[34px] w-[34px] items-center justify-center rounded-xl border border-[rgba(214,168,96,0.35)] bg-[rgba(214,168,96,0.1)] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
           <Zap className="h-[17px] w-[17px] text-[#d6a860]" />
         </div>
-        <span className="font-sans text-[17px] font-semibold tracking-[0.12em] text-[#ededed]">
+        <span className="jr-wordmark text-[19px] text-[#ededed]">
           JR <span className="text-[#d6a860]">AI HUB</span>
         </span>
       </Link>
