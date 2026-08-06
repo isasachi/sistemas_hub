@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { Tool } from "@/lib/tools";
 import { toolIcon } from "@/lib/tool-icons";
 
-const ACCENT = "#ff9c4d";
+const ACCENT = "#ff9b4a";
 
 const RATIO_CLASS: Record<string, string> = {
   "9/16": "aspect-[9/16]",
@@ -79,8 +79,8 @@ export function ToolPreview({ tool, ratio }: { tool: Tool; ratio?: string }) {
         }}
       />
       <div className="absolute inset-x-0 top-0 flex items-center justify-between px-3.5 pt-2.5">
-        <span className="spec-label !text-[#a8a094]">{metaLeft}</span>
-        <span className="spec-label !text-[#a8a094]">{metaRight}</span>
+        <span className="spec-label !text-[#bebebe]">{metaLeft}</span>
+        <span className="spec-label !text-[#bebebe]">{metaRight}</span>
       </div>
     </div>
   );

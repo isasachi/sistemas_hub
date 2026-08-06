@@ -31,14 +31,14 @@ export default function LandingDetalle() {
     <ToolShell name="Generador de Landing" slug="generador-landing" trail="Sesión">
 
       <div className="max-w-[720px] w-full mx-auto px-6 md:px-10 py-10">
-        {s === undefined && <p className="text-[13px] text-[#8a8a8a]">Cargando…</p>}
-        {s === null && <p className="text-[13px] text-[#8a8a8a]">No se encontró la sesión.</p>}
+        {s === undefined && <p className="text-[13px] text-[#bebebe]">Cargando…</p>}
+        {s === null && <p className="text-[13px] text-[#bebebe]">No se encontró la sesión.</p>}
         {s && (
           <>
             <div className="flex items-start justify-between gap-4 mb-6">
               <div>
-                <h1 className="text-[22px] font-bold text-[#f5f5f5]">{s.product_name || "Landing sin nombre"}</h1>
-                <p className="text-[12px] text-[#8a8a8a] mt-1">
+                <h1 className="text-[22px] font-bold text-[#ededed]">{s.product_name || "Landing sin nombre"}</h1>
+                <p className="text-[12px] text-[#bebebe] mt-1">
                   {new Date(s.created_at).toLocaleDateString("es-PE", { day: "numeric", month: "long", year: "numeric" })}
                   {s.price ? ` · ${s.price}` : ""} · solo lectura
                 </p>
@@ -56,14 +56,14 @@ export default function LandingDetalle() {
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={sec.imageUrl} alt={SECTION_LABELS[sec.type]} className="w-full h-auto" />
                     ) : (
-                      <div className="p-6 text-[13px] text-[#8a8a8a]">{SECTION_LABELS[sec.type]} — sin imagen aún</div>
+                      <div className="p-6 text-[13px] text-[#bebebe]">{SECTION_LABELS[sec.type]} — sin imagen aún</div>
                     )}
-                    <p className="text-[11px] text-[#8a8a8a] px-3 py-2">{SECTION_LABELS[sec.type]}</p>
+                    <p className="text-[11px] text-[#bebebe] px-3 py-2">{SECTION_LABELS[sec.type]}</p>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="text-[13px] text-[#8a8a8a]">Esta sesión todavía no tiene secciones generadas.</p>
+              <p className="text-[13px] text-[#bebebe]">Esta sesión todavía no tiene secciones generadas.</p>
             )}
           </>
         )}

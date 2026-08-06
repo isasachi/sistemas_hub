@@ -62,9 +62,11 @@ export default function Section2Photos() {
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-[13px] text-[#bdbdbd]">
-        Sube 1 a 3 fotos reales de tu producto. La IA construirá cada sección alrededor de ellas — el producto se mantiene fiel.
-        <span className="text-[#8a8a8a]"> Mejor una foto <strong className="text-[#bdbdbd] font-semibold">grande, nítida y de cerca</strong> del producto (lado corto ≥ 800px): de eso depende que el producto salga consistente entre secciones.</span>
+      {/* El encabezado del paso ya dice para qué son las fotos; acá va solo el
+          requisito técnico, que es lo que el usuario no puede adivinar. */}
+      <p className="text-[13px] text-[#bebebe]">
+        De 1 a 3 fotos. Mejor una <strong className="font-semibold text-[#cfcfcf]">grande, nítida y de cerca</strong>{' '}
+        (lado corto ≥ 800px): de eso depende que el producto salga consistente entre secciones.
       </p>
       <div className="flex gap-3">
         {[0, 1, 2].map((i) => (

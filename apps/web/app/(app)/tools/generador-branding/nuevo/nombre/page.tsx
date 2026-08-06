@@ -46,14 +46,14 @@ export default function NombrePage() {
           onChange={(e) => update({ brandName: e.target.value })}
           onBlur={() => { setTouched(true); update({ brandName: brandName.trim() }) }}
           onKeyDown={(e) => { if (e.key === 'Enter') next() }}
-          className="h-12 rounded-xl bg-white/[0.04] border-white/[0.08] text-[14px] text-[#f5f5f5]"
+          className="h-12 rounded-xl bg-white/[0.04] border-white/[0.08] text-[14px] text-[#ededed]"
         />
         <div className="flex items-center justify-between">
           {error ? <p className="text-[12px] text-red-400">{error}</p> : <span />}
-          <span className="text-[11px] text-[#8a8a8a]">{brandName.trim().length}/{BRAND_NAME_MAX}</span>
+          <span className="text-[11px] text-[#bebebe]">{brandName.trim().length}/{BRAND_NAME_MAX}</span>
         </div>
         {NAME_GENERATOR_ENABLED && (
-          <button type="button" className="self-start text-[12px] text-[#ff9c4d] bg-transparent border-0 cursor-pointer">
+          <button type="button" className="self-start text-[12px] text-[#ff9b4a] bg-transparent border-0 cursor-pointer">
             generar opciones
           </button>
         )}
@@ -62,8 +62,8 @@ export default function NombrePage() {
       {/* Eslogan: opcional a propósito. Vacío = lo inventa el modelo, como en el
           board de referencia ("FUEL YOUR EDGE" no salió de ninguna casilla). */}
       <div className="flex flex-col gap-2">
-        <label htmlFor="tagline" className="text-[13px] text-[#bdbdbd]">
-          Eslogan <span className="text-[#8a8a8a]">— opcional. Si lo dejas vacío, lo proponemos nosotros.</span>
+        <label htmlFor="tagline" className="text-[13px] text-[#cfcfcf]">
+          Eslogan <span className="text-[#bebebe]">— opcional. Si lo dejas vacío, lo proponemos nosotros.</span>
         </label>
         <Input
           id="tagline"
@@ -72,7 +72,7 @@ export default function NombrePage() {
           value={brief.tagline ?? ''}
           onChange={(e) => update({ tagline: e.target.value || undefined })}
           onBlur={() => update({ tagline: brief.tagline?.trim() || undefined })}
-          className="h-12 rounded-xl bg-white/[0.04] border-white/[0.08] text-[14px] text-[#f5f5f5]"
+          className="h-12 rounded-xl bg-white/[0.04] border-white/[0.08] text-[14px] text-[#ededed]"
         />
       </div>
     </BriefShell>

@@ -71,29 +71,29 @@ export function AuthForm({ mode, action, next, initialError }: AuthFormProps) {
   }
 
   return (
-    <div className="jr-card rounded-2xl p-7 w-full max-w-[400px]">
-      <h1 className="text-[22px] font-bold gradient-text mb-1">{c.title}</h1>
-      <p className="text-[13px] text-[#bdbdbd] mb-6 leading-[1.5]">{c.subtitle}</p>
+    <div className="jr-card lp-leak jr-rise w-full max-w-[400px] rounded-2xl p-7">
+      <h1 className="relative mb-1 text-[22px] text-[#ffffff]">{c.title}</h1>
+      <p className="relative mb-6 font-[Lato] text-[13px] leading-[1.5] text-[#cfcfcf]">{c.subtitle}</p>
 
       {/* Google OAuth */}
       <button
         type="button"
         onClick={signInWithGoogle}
         disabled={googleLoading || pending}
-        className="w-full flex items-center justify-center gap-2.5 bg-white/[0.04] border border-white/[0.12] hover:bg-white/[0.07] hover:border-white/[0.2] rounded-xl py-2.5 text-[14px] font-semibold text-[#f5f5f5] transition-all duration-200 cursor-pointer disabled:opacity-50"
+        className="relative w-full flex items-center justify-center gap-2.5 bg-white/[0.04] border border-white/[0.12] hover:bg-white/[0.07] hover:border-white/[0.2] rounded-xl py-2.5 text-[14px] font-semibold text-[#ededed] transition-all duration-200 cursor-pointer disabled:opacity-50"
       >
         {googleLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <GoogleIcon />}
         {c.google}
       </button>
 
       {/* Divisor */}
-      <div className="flex items-center gap-3 my-5">
+      <div className="relative flex items-center gap-3 my-5">
         <div className="flex-1 h-px bg-white/[0.08]" />
-        <span className="text-[11px] text-[#8a8a8a] uppercase tracking-[1px]">o con email</span>
+        <span className="text-[11px] text-[#bebebe] uppercase tracking-[1px]">o con email</span>
         <div className="flex-1 h-px bg-white/[0.08]" />
       </div>
 
-      <form action={formAction} className="flex flex-col gap-4">
+      <form action={formAction} className="relative flex flex-col gap-4">
         {next && <input type="hidden" name="next" value={next} />}
 
         {/* Email */}
@@ -108,7 +108,7 @@ export function AuthForm({ mode, action, next, initialError }: AuthFormProps) {
             inputMode="email"
             autoComplete="email"
             placeholder="tu@email.com"
-            className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-3.5 py-2.5 text-[14px] text-[#f5f5f5] placeholder:text-[#8a8a8a] outline-none focus:border-[rgba(255,156,77,0.5)] transition-colors"
+            className="jr-field w-full rounded-xl px-3.5 py-2.5 text-[14px]"
           />
           {state.fieldErrors?.email && (
             <p className="text-[12px] text-[#fca5a5] mt-1.5">{state.fieldErrors.email}</p>
@@ -127,13 +127,13 @@ export function AuthForm({ mode, action, next, initialError }: AuthFormProps) {
               type={showPw ? "text" : "password"}
               autoComplete={mode === "login" ? "current-password" : "new-password"}
               placeholder={mode === "signup" ? "Mínimo 8 caracteres" : "Tu contraseña"}
-              className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-3.5 py-2.5 pr-11 text-[14px] text-[#f5f5f5] placeholder:text-[#8a8a8a] outline-none focus:border-[rgba(255,156,77,0.5)] transition-colors"
+              className="jr-field w-full rounded-xl px-3.5 py-2.5 pr-11 text-[14px]"
             />
             <button
               type="button"
               onClick={() => setShowPw((s) => !s)}
               aria-label={showPw ? "Ocultar contraseña" : "Mostrar contraseña"}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8a8a8a] hover:text-[#f5f5f5] transition-colors cursor-pointer"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#bebebe] hover:text-[#ededed] transition-colors cursor-pointer"
             >
               {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
@@ -150,7 +150,7 @@ export function AuthForm({ mode, action, next, initialError }: AuthFormProps) {
           </div>
         )}
         {state.notice && (
-          <div role="status" className="bg-[rgba(255,156,77,0.08)] border border-[rgba(255,156,77,0.2)] rounded-xl px-3.5 py-2.5 text-[12px] text-[#ffb877] leading-[1.5]">
+          <div role="status" className="rounded-xl border border-[rgba(214,168,96,0.3)] bg-[rgba(214,168,96,0.08)] px-3.5 py-2.5 text-[12px] leading-[1.5] text-[#d6a860]">
             {state.notice}
           </div>
         )}
@@ -158,15 +158,15 @@ export function AuthForm({ mode, action, next, initialError }: AuthFormProps) {
         <button
           type="submit"
           disabled={pending || googleLoading}
-          className="jr-cta w-full rounded-xl py-3 text-[14px] font-bold disabled:opacity-50 cursor-pointer border-0 flex items-center justify-center gap-2 mt-1"
+          className="jr-cta mt-1 w-full rounded-xl py-3 text-[14px] cursor-pointer"
         >
           {pending ? <Loader2 className="w-4 h-4 animate-spin" /> : c.submit}
         </button>
       </form>
 
-      <p className="text-[13px] text-[#8a8a8a] text-center mt-5">
+      <p className="relative mt-5 text-center text-[13px] text-[#bebebe]">
         {c.altText}{" "}
-        <Link href={c.altLink} className="text-[#ff9c4d] font-semibold no-underline hover:underline">
+        <Link href={c.altLink} className="text-[#ff9b4a] font-semibold no-underline hover:underline">
           {c.altCta}
         </Link>
       </p>

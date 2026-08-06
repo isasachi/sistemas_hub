@@ -1,25 +1,41 @@
-/* Playfair Display NO es del sistema: la usa el estilo `premium-serif` del
-   catálogo del generador de landings (contenido generado, no el chrome). */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Poppins:wght@400;500;600;700&family=Lato:wght@400;700&family=Playfair+Display:ital,wght@0,500;0,600;1,500&display=swap');
-/* Familias extra del chrome. OJO: el catálogo del editor de branding NO se carga acá
-   — son 34 familias y meterlas en la hoja global las volvería render-blocking para
-   toda la app. El editor inyecta su propio <link> (ver `fontsHref` en branding/brief.ts). */
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Cormorant+Garamond:wght@400;600&family=Libre+Baskerville:wght@400;700&family=Nunito:wght@400;700;800&family=Oswald:wght@500;700&family=Bitter:wght@500;700&display=swap');
+/* ══════════════════════════════════════════════════════════════════
+   JR AI HUB — sistema de diseño (BRAND.md, jrconsulting.com.pe)
+   ------------------------------------------------------------------
+   Lienzo casi-negro neutro · tinta blanca · acento cálido en escala
+   naranja→dorado: naranja = acción (CTA, links, activo), dorado =
+   prestigio (fuga de luz de las cards, eyebrows, badges premium).
+   La profundidad sale de hairlines translúcidos, no de color.
+   Un solo momento cálido por pantalla: el resto es blanco/gris.
+
+   Dos voces tipográficas: Poppins (titulares, UI, números) y Lato
+   (cuerpo). El sistema no tiene serif ni mono — ambas se retiraron
+   (2026-08); `--font-display`/`--font-mono` se conservan como alias
+   para no tocar los archivos que los nombran.
+
+   Las familias del segundo @import NO son del chrome: las usa el
+   contenido generado (catálogo del generador de landings). El
+   catálogo del editor de branding inyecta su propio <link> — son 34
+   familias y meterlas acá volvería la hoja render-blocking.
+   ══════════════════════════════════════════════════════════════════ */
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Lato:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;1,500&family=Space+Grotesk:wght@500;700&family=Cormorant+Garamond:wght@400;600&family=Libre+Baskerville:wght@400;700&family=Nunito:wght@400;700;800&family=Oswald:wght@500;700&family=Bitter:wght@500;700&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
 @custom-variant dark (&:is(.dark *));
 
-/* ── JR AI Hub Design Tokens (sistema soft: cards anidadas, sans en
-   todo el tema, metadata mono; dark cálido + acento ámbar) ─────── */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: 'Inter', -apple-system, sans-serif;
-  --font-display: 'Inter', -apple-system, sans-serif;
-  --font-heading: 'Inter', -apple-system, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', 'Menlo', monospace;
+  /* Poppins es la voz de UI (botones, labels, chips): `font-sans` en el
+     código significa "texto de interfaz". El cuerpo va en Lato vía body. */
+  --font-sans: 'Poppins', 'Segoe UI', system-ui, sans-serif;
+  --font-display: 'Poppins', 'Segoe UI', system-ui, sans-serif;
+  --font-heading: 'Poppins', 'Segoe UI', system-ui, sans-serif;
+  --font-body: 'Lato', system-ui, Arial, sans-serif;
+  /* Sin voz mono: los números viven en Poppins con tabular-nums (.readout). */
+  --font-mono: 'Poppins', 'Segoe UI', system-ui, sans-serif;
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -41,351 +57,181 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) * 1.4);
 
-  /* JR brand tokens */
-  --color-brand-amber: #ff9c4d;
-  --color-brand-red: #ff7a2f;
-  --color-surface: rgba(255, 240, 220, 0.04);
-  --color-surface-hover: rgba(255, 240, 220, 0.07);
-  --color-border-brand: rgba(255, 156, 77, 0.28);
+  /* Acento de marca expuesto a Tailwind */
+  --color-brand: #ff6a00;
+  --color-brand-bright: #ff9b4a;
+  --color-gold: #d6a860;
+  --color-surface: rgba(255, 255, 255, 0.04);
+  --color-surface-hover: rgba(255, 255, 255, 0.07);
+  --color-border-brand: rgba(255, 155, 74, 0.35);
 }
 
-/* ── Dark cálido (carbón con temperatura, no negro frío) ──── */
 :root {
-  --background: #141210;
-  --foreground: #f3efe8;
-  --card: #1c1917;
-  --card-foreground: #f3efe8;
-  --popover: #211d1a;
-  --popover-foreground: #f3efe8;
-  --primary: #ff9c4d;
-  --primary-foreground: #221204;
-  --secondary: #211d1a;
-  --secondary-foreground: #f3efe8;
-  --muted: #1c1917;
-  --muted-foreground: #a8a094;
-  --accent: #211d1a;
-  --accent-foreground: #f3efe8;
-  --destructive: #e05252;
-  --border: rgba(255, 240, 220, 0.08);
-  --input: rgba(255, 240, 220, 0.08);
-  --ring: rgba(255, 156, 77, 0.5);
-  --radius: 1.25rem;
+  /* ── Superficies ─────────────────────────────────────────── */
+  --bg: #000000;
+  --surface: #0a0a0a;
+  --surface-2: #0c0c0d;
+  --surface-3: #121214;
 
-  /* JR brand */
-  --brand-amber: #ff9c4d;
-  --brand-red: #ff7a2f;
-  --brand-gradient: linear-gradient(90deg, #ff9c4d 0%, #ff7a2f 50%, #ff9c4d 100%);
-  --glow-amber: rgba(255, 142, 60, 0.25);
-  --positive: #4cd07d;
+  /* ── Texto ───────────────────────────────────────────────── */
+  --text: #ffffff;
+  --text-head: #ededed;
+  --text-muted: #cfcfcf;
+  --text-subtle: #bebebe;
+  --text-faint: #bdbdbd;
 
-  /* Text utilities */
-  --fg-subtle: #726b60;
-  --fg-muted: #a8a094;
+  /* ── Acento cálido: naranja (acción) → dorado (prestigio) ── */
+  --brand: #ff6a00;
+  --brand-bright: #ff9b4a;
+  --brand-mid: #ff8c46;
+  --gold: #d6a860;
 
-  /* Backgrounds */
-  --bg-deep: #141210;
-  --bg-base: #181512;
-  --bg-elevated: #1c1917;
-  --bg-inset: #232019;
-  --surface: rgba(255, 240, 220, 0.04);
-  --surface-hover: rgba(255, 240, 220, 0.07);
-  --border-brand: rgba(255, 156, 77, 0.28);
+  /* ── Estado (NO son acentos de marca) ────────────────────── */
+  --success: #2ccf6f;
+  --success-mint: #b9ffd0;
+  --success-deep: #163e26;
+  --info: #188bf6;
+  --danger: #e93d3d;
+  --warning: #f6ad55;
 
-  /* Motion */
-  --ease-smooth: cubic-bezier(0.16, 1, 0.3, 1);
-  --duration-fast: 200ms;
+  /* ── Hairlines translúcidos y vidrio ─────────────────────── */
+  --line-06: rgba(255, 255, 255, 0.06);
+  --line-08: rgba(255, 255, 255, 0.08);
+  --line-12: rgba(255, 255, 255, 0.12);
+  --line-25: rgba(255, 255, 255, 0.25);
+  --glass-hi: rgba(255, 255, 255, 0.05);
+  --glass-lo: rgba(255, 255, 255, 0.02);
+  --scrim: rgba(0, 0, 0, 0.5);
+
+  /* ── Elevación ───────────────────────────────────────────── */
+  --sh-card: rgba(0, 0, 0, 0.35) 0 4px 12px 0;
+  --sh-lift: rgba(0, 0, 0, 0.45) 0 8px 30px 0;
+  --sh-glass: rgba(255, 255, 255, 0.06) 0 1px 0 0 inset, rgba(0, 0, 0, 0.45) 0 8px 26px 0;
+  --sh-modal: rgba(255, 255, 255, 0.04) 0 1px 0 0 inset, rgba(0, 0, 0, 0.45) 0 20px 60px 0;
+  --sh-warm: rgba(255, 106, 0, 0.35) 0 8px 30px 0;
+
+  /* ── Movimiento ──────────────────────────────────────────── */
+  --ease: cubic-bezier(0.29, 0.63, 0.44, 1);
+  --t-micro: 0.18s;
+  --t-fast: 0.2s;
+  --t-base: 0.3s;
+  --t-medium: 0.45s;
+  --t-slow: 0.6s;
+
+  /* ── Shadcn / Base UI (`--accent` acá es la superficie de hover
+       neutra del sistema de componentes, NO el naranja de marca) ── */
+  --background: #0b0b0c;
+  --foreground: #ededed;
+  --card: #0c0c0f;
+  --card-foreground: #ededed;
+  --popover: #121214;
+  --popover-foreground: #ededed;
+  --primary: #ff9b4a;
+  --primary-foreground: #1a0d00;
+  --secondary: #121214;
+  --secondary-foreground: #ededed;
+  --muted: #121214;
+  --muted-foreground: #bebebe;
+  --accent: #121214;
+  --accent-foreground: #ffffff;
+  --destructive: #e93d3d;
+  --border: rgba(255, 255, 255, 0.08);
+  --input: rgba(255, 255, 255, 0.08);
+  --ring: rgba(255, 140, 70, 0.5);
+  --radius: 1rem;
+
+  /* ── Alias heredados (los nombran archivos .tsx; no renombrar) ── */
+  --lp-bg: var(--surface-2);
+  --lp-bg-2: var(--surface-2);
+  --lp-elev: var(--surface-3);
+  --lp-white: var(--text);
+  --lp-head: var(--text-head);
+  --lp-text: var(--text-muted);
+  --lp-muted: var(--text-subtle);
+  --lp-faint: var(--text-faint);
+  --lp-line: var(--line-08);
+  --lp-line-soft: var(--line-06);
+  --lp-line-strong: var(--line-12);
+  --lp-line-focus: var(--line-25);
+  --lp-orange-a: var(--brand-bright);
+  --lp-orange-b: var(--brand);
+  --lp-gold: var(--gold);
+  --lp-green: var(--success);
+  --lp-mint: var(--success-mint);
+  --lp-green-deep: var(--success-deep);
+  --lp-ease: var(--ease);
+  --ease-smooth: var(--ease);
+  --duration-fast: var(--t-fast);
+  --brand-gradient: linear-gradient(90deg, var(--brand-bright), var(--brand));
 }
 
-/* .dark kept for Shadcn components that need it */
+/* .dark: los componentes de Shadcn lo exigen. El tema es dark-first,
+   así que hereda los mismos valores. */
 .dark {
-  --background: #141210;
-  --foreground: #f3efe8;
-  --card: #1c1917;
-  --card-foreground: #f3efe8;
-  --popover: #211d1a;
-  --popover-foreground: #f3efe8;
-  --primary: #ff9c4d;
-  --primary-foreground: #221204;
-  --secondary: #211d1a;
-  --secondary-foreground: #f3efe8;
-  --muted: #1c1917;
-  --muted-foreground: #a8a094;
-  --accent: #211d1a;
-  --accent-foreground: #f3efe8;
-  --destructive: #e05252;
-  --border: rgba(255, 240, 220, 0.08);
-  --input: rgba(255, 240, 220, 0.08);
-  --ring: rgba(255, 156, 77, 0.5);
+  --background: #0b0b0c;
+  --foreground: #ededed;
+  --card: #0c0c0f;
+  --card-foreground: #ededed;
+  --popover: #121214;
+  --popover-foreground: #ededed;
+  --primary: #ff9b4a;
+  --primary-foreground: #1a0d00;
+  --secondary: #121214;
+  --secondary-foreground: #ededed;
+  --muted: #121214;
+  --muted-foreground: #bebebe;
+  --accent: #121214;
+  --accent-foreground: #ffffff;
+  --destructive: #e93d3d;
+  --border: rgba(255, 255, 255, 0.08);
+  --input: rgba(255, 255, 255, 0.08);
+  --ring: rgba(255, 140, 70, 0.5);
 }
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border;
     box-sizing: border-box;
   }
   body {
-    @apply bg-background text-foreground;
-    font-family: 'Inter', -apple-system, sans-serif;
-    letter-spacing: -0.006em;
+    background: var(--surface-2);
+    color: var(--text-muted);
+    font-family: 'Lato', system-ui, Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    letter-spacing: 0;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
-  /* Headings en la sans del sistema (Inter). El tema ya no tiene ninguna
-     serif: --font-display también es sans. .lp-root mantiene su propio
-     override (Poppins) y no se toca acá. */
   h1, h2, h3, h4, h5, h6 {
-    font-family: 'Inter', -apple-system, sans-serif;
-    letter-spacing: -0.02em;
-    font-weight: 700;
+    font-family: 'Poppins', 'Segoe UI', system-ui, sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--text-head);
   }
-}
-
-/* ── Titulares: blanco cálido sólido (la clase se conserva
-   redefinida para no tocar cada uso app-wide) ────────────── */
-.gradient-text {
-  background: none;
-  -webkit-text-fill-color: currentColor;
-  color: #f3efe8;
-}
-
-/* ── Texto ámbar de marca (plano) ────────────────────────── */
-.accent-text {
-  background: none;
-  -webkit-text-fill-color: currentColor;
-  color: #ff9c4d;
-}
-
-/* ── Fondo gradiente de marca ────────────────────────────── */
-.bg-brand-gradient {
-  background: var(--brand-gradient);
-}
-
-/* ── CTA pill ámbar con sombra difusa (el botón-objeto del
-   sistema de referencia, traducido a dark) ───────────────── */
-.jr-cta {
-  background: linear-gradient(180deg, #ffa95e 0%, #ff9c4d 100%);
-  color: #221204;
-  box-shadow: 0 14px 34px -10px rgba(255, 140, 60, 0.45);
-  transition: box-shadow var(--duration-fast) var(--ease-smooth),
-    transform var(--duration-fast) var(--ease-smooth),
-    filter var(--duration-fast) var(--ease-smooth);
-}
-.jr-cta:hover {
-  box-shadow: 0 18px 44px -10px rgba(255, 140, 60, 0.55);
-  transform: translateY(-1px);
-  filter: brightness(1.04);
-}
-.jr-cta:disabled {
-  opacity: 0.45;
-  pointer-events: none;
-}
-
-/* ── Botón secundario (superficie elevada) ───────────────── */
-.jr-btn-secondary {
-  background: #232019;
-  color: #f3efe8;
-  border: 1px solid rgba(255, 240, 220, 0.10);
-  transition: all var(--duration-fast) var(--ease-smooth);
-}
-.jr-btn-secondary:hover {
-  background: #2a2620;
-  border-color: rgba(255, 240, 220, 0.18);
-}
-.jr-btn-secondary:disabled {
-  opacity: 0.45;
-  pointer-events: none;
-}
-
-/* ── Botón fantasma (contorno, acción terciaria) ─────────── */
-.jr-btn-ghost {
-  background: transparent;
-  color: #a8a094;
-  border: 1px solid rgba(255, 240, 220, 0.12);
-  transition: all var(--duration-fast) var(--ease-smooth);
-}
-.jr-btn-ghost:hover {
-  background: rgba(255, 240, 220, 0.04);
-  border-color: rgba(255, 240, 220, 0.25);
-  color: #f3efe8;
-}
-.jr-btn-ghost:disabled {
-  opacity: 0.45;
-  pointer-events: none;
-}
-
-/* ── Readout mono: todo número/dato se ve como instrumento ─ */
-.readout {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum";
-  letter-spacing: -0.01em;
-}
-
-/* ── Metadata mono de esquina (spec-labels del sistema) ──── */
-.spec-label {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #726b60;
-}
-
-/* ── Campo de formulario canónico (mismo look que FieldGroup) ─
-   Solo color/borde/foco: el caller pone radius, padding, ancho, etc. */
-.jr-field {
-  background: #211d1a;
-  border: 1px solid rgba(255, 240, 220, 0.08);
-  color: #f3efe8;
-  transition: border-color var(--duration-fast) var(--ease-smooth),
-    box-shadow var(--duration-fast) var(--ease-smooth);
-}
-.jr-field::placeholder {
-  color: #726b60;
-}
-.jr-field:focus,
-.jr-field:focus-visible,
-.jr-field:focus-within {
-  outline: none;
-  border-color: rgba(255, 156, 77, 0.5);
-  box-shadow: 0 0 0 2px rgba(255, 156, 77, 0.12);
-}
-
-/* ── Card del sistema: superficie cálida, radio grande,
-   sombra difusa (elevación suave, no gloss) ──────────────── */
-.jr-card {
-  background: #1c1917;
-  border: 1px solid rgba(255, 240, 220, 0.07);
-  box-shadow:
-    0 24px 60px -30px rgba(0, 0, 0, 0.65),
-    inset 0 1px 0 rgba(255, 255, 255, 0.03);
-}
-
-/* ── Panel anidado (card-dentro-de-card, firma del sistema) ─ */
-.jr-inset {
-  background: linear-gradient(170deg, #262119 0%, #1f1c17 100%);
-  border: 1px solid rgba(255, 240, 220, 0.07);
-}
-
-/* ── Fondo del hero: lavado radial cálido sutil ──────────── */
-.jr-grid {
-  background: radial-gradient(70% 50% at 50% 0%, rgba(255, 170, 90, 0.05), transparent 65%);
-}
-
-/* ── Hairline divisor con desvanecido lateral ────────────── */
-.jr-hairline {
-  height: 1px;
-  background: linear-gradient(to right, rgba(255, 240, 220, 0), rgba(255, 240, 220, 0.14), rgba(255, 240, 220, 0));
-}
-
-/* ── Pared de outputs del hero (marquee auto-scroll) ─────── */
-/* La lista se renderiza 4× y se desplaza -50% (2 copias exactas) para el
-   loop sin costura; la duración compensa el recorrido más largo. */
-.jr-marquee {
-  animation: jr-marquee-scroll 110s linear infinite;
-}
-@keyframes jr-marquee-scroll {
-  from { transform: translateX(0); }
-  to { transform: translateX(-50%); }
-}
-
-/* ── Flotado suave (disponible para elementos ambientales) ─ */
-.jr-float {
-  animation: jr-float-drift 7s ease-in-out infinite;
-}
-@keyframes jr-float-drift {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8px); }
-}
-
-/* ── Shimmer del skeleton de imagen (fallback) ───────────── */
-.jr-shimmer {
-  background:
-    linear-gradient(100deg, rgba(255, 240, 220, 0.015) 30%, rgba(255, 240, 220, 0.06) 50%, rgba(255, 240, 220, 0.015) 70%),
-    #1a1714;
-  background-size: 220% 100%;
-  animation: jr-shimmer-move 2.2s ease-in-out infinite;
-}
-@keyframes jr-shimmer-move {
-  from { background-position: 180% 0; }
-  to { background-position: -80% 0; }
-}
-
-/* Respeta a quien pide menos movimiento: todo queda estático. */
-@media (prefers-reduced-motion: reduce) {
-  .jr-marquee,
-  .jr-shimmer,
-  .jr-float {
-    animation: none;
+  /* Foco visible siempre — anillo cálido de BRAND §9. */
+  :focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(255, 140, 70, 0.22);
+    border-radius: 6px;
   }
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   LANDING DNA — "JR Studio" (scoped a .lp-root, home page)
-   Refactor del ADN visual de jrconsulting.com.pe: lienzo casi-negro
-   neutro · titulares serif metálicos · naranja = energía (CTA/iconos/
-   glows) · fuga de luz dorada = firma de las cards · verde = SOLO
-   pills de delta · Poppins/Lato. Todo scopeado bajo .lp-root para NO
-   tocar el sistema cálido del dashboard.
+   TIPOGRAFÍA — tratamientos
    ══════════════════════════════════════════════════════════════════ */
-.lp-root {
-  /* Canvas neutro */
-  --lp-bg: #0b0b0c;
-  --lp-bg-2: #0c0c0d;
-  --lp-elev: #121214;
-  /* Texto */
-  --lp-white: #ffffff;
-  --lp-head: #ededed;
-  --lp-text: #cfcfcf;
-  --lp-muted: #bebebe;
-  --lp-faint: #bdbdbd;
-  /* Hairlines */
-  --lp-line: rgba(255, 255, 255, 0.08);
-  --lp-line-soft: rgba(255, 255, 255, 0.06);
-  --lp-line-strong: rgba(255, 255, 255, 0.12);
-  --lp-line-focus: rgba(255, 255, 255, 0.25);
-  /* Acentos: naranja (energía) · dorado (fuga de luz) · verde (delta) */
-  --lp-orange-a: rgb(255, 155, 74);
-  --lp-orange-b: rgb(255, 106, 0);
-  --lp-gold: #d6a860;
-  --lp-green: #2ccf6f;
-  --lp-mint: #b9ffd0;
-  --lp-green-deep: #163e26;
-  --lp-ease: cubic-bezier(0.29, 0.63, 0.44, 1);
 
-  background: var(--lp-bg);
-  color: var(--lp-text);
-  font-family: 'Lato', -apple-system, sans-serif;
-  letter-spacing: 0;
-  -webkit-font-smoothing: antialiased;
-}
-
-/* Headings en Poppins — regla directa por elemento (gana a la de
-   herencia y al @layer base h1..h6 que vive globalmente). */
-.lp-root h1,
-.lp-root h2,
-.lp-root h3,
-.lp-root h4,
-.lp-root h5,
-.lp-root h6 {
-  font-family: 'Poppins', sans-serif;
+/* El display del sistema. Era serif de alto contraste (Replay Pro Headline
+   → Playfair → Times) y pasó a la sans (2026-08). El nombre se conserva
+   porque lo usan 7 archivos y renombrarlo no cambiaría un pixel. */
+.lp-serif {
+  font-family: 'Poppins', 'Segoe UI', system-ui, sans-serif;
   font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--lp-head);
+  letter-spacing: -0.02em;
 }
 
-/* El display del sistema. Era serif de alto contraste (Replay Pro Headline →
-   Playfair Display → Times) y pasó a la sans (2026-08): el tema ya no tiene
-   momento serif. El nombre de la clase se conserva porque la usan 7 archivos y
-   renombrarla no cambiaría un pixel. Dos clases ⇒ gana al h1..h6. */
-.lp-root .lp-serif {
-  font-family: 'Poppins', sans-serif;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-
-/* Titular metálico plata (sheen lento in-token de 14s) */
-.lp-root .lp-metal {
+/* Titular metálico plata: el sheen recorre el texto una vez cada 14s. */
+.lp-metal {
   background: linear-gradient(90deg, #ffffff 0%, #cfcfcf 50%, #ffffff 100%);
   background-size: 220% auto;
   -webkit-background-clip: text;
@@ -399,190 +245,400 @@
   to { background-position: -20% center; }
 }
 
-/* Palabra de acento dorada dentro del display serif */
-.lp-root .lp-gold-word {
-  -webkit-text-fill-color: var(--lp-gold);
-  color: var(--lp-gold);
-  font-style: italic;
+/* Palabra de acento dorada dentro del display. */
+.lp-gold-word {
+  -webkit-text-fill-color: var(--gold);
+  color: var(--gold);
 }
 
-/* ── CTA naranja: pastilla suave con glow (el botón-objeto) ───────── */
-.lp-root .lp-cta {
-  display: inline-block;
-  background: linear-gradient(90deg, var(--lp-orange-a), var(--lp-orange-b));
-  color: #0a0a0a;
+/* Eyebrow dorado (sección) y label neutro (metadata). */
+.lp-eyebrow {
   font-family: 'Poppins', sans-serif;
   font-weight: 600;
-  border-radius: 14px;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06) inset,
-    0 8px 30px rgba(255, 106, 0, 0.28);
-  transition: transform 0.2s var(--lp-ease), box-shadow 0.2s var(--lp-ease),
-    filter 0.2s var(--lp-ease);
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--gold);
 }
-.lp-root .lp-cta:hover {
-  transform: translateY(-1px);
-  filter: brightness(1.05);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08) inset,
-    0 12px 40px rgba(255, 106, 0, 0.42);
+.lp-label,
+.spec-label {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-faint);
 }
 
-/* ── Pill blanca (CTA del navbar) ─────────────────────────────────── */
-.lp-root .lp-pill-white {
-  display: inline-block;
+/* Todo número/dato: Poppins con cifras de ancho fijo (no salta al cambiar). */
+.readout {
+  font-family: 'Poppins', sans-serif;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+  letter-spacing: -0.01em;
+}
+
+/* Titulares planos: se conservan redefinidas para no tocar cada uso. */
+.gradient-text {
+  background: none;
+  -webkit-text-fill-color: currentColor;
+  color: var(--text-head);
+}
+.accent-text {
+  background: none;
+  -webkit-text-fill-color: currentColor;
+  color: var(--brand-bright);
+}
+.bg-brand-gradient {
+  background: var(--brand-gradient);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   BOTONES
+   ══════════════════════════════════════════════════════════════════ */
+
+/* El objeto cálido del sistema: el único naranja pleno por pantalla. */
+.lp-cta,
+.jr-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: linear-gradient(90deg, var(--brand-bright), var(--brand));
+  color: #ffffff;
+  font-family: 'Poppins', sans-serif;
+  font-weight: 600;
+  border: 0;
+  border-radius: var(--r-sm, 8px);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06) inset, var(--sh-card);
+  transition: transform var(--t-fast) var(--ease),
+    box-shadow var(--t-fast) var(--ease), filter var(--t-fast) var(--ease);
+}
+.lp-cta:hover:not(:disabled),
+.jr-cta:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08) inset, var(--sh-warm);
+}
+.lp-cta:active:not(:disabled),
+.jr-cta:active:not(:disabled) {
+  transform: translateY(0);
+}
+/* Deshabilitado: superficie neutra, no naranja al 40%. Un CTA apagado con
+   opacidad se lee como una barra marrón embarrada; en gris se lee como lo que
+   es — un botón que todavía no se puede tocar. */
+.lp-cta:disabled,
+.jr-cta:disabled {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-subtle);
+  box-shadow: none;
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+/* Botón dorado — prestigio (descarga, exportar, publicar). */
+.jr-btn-gold {
+  background: var(--gold);
+  color: #1a1206;
+  font-family: 'Poppins', sans-serif;
+  font-weight: 600;
+  border: 0;
+  box-shadow: var(--sh-card);
+  transition: transform var(--t-fast) var(--ease), filter var(--t-fast) var(--ease);
+}
+.jr-btn-gold:hover:not(:disabled) {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+}
+.jr-btn-gold:disabled { opacity: 0.4; pointer-events: none; }
+
+/* Secundario de vidrio — el borde se entibia al hover. */
+.lp-btn,
+.jr-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: var(--glass-hi);
+  border: 1px solid var(--line-08);
+  color: var(--text-head);
+  font-family: 'Poppins', sans-serif;
+  font-weight: 500;
+  transition: background var(--t-fast) var(--ease),
+    border-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+.lp-btn:hover:not(:disabled),
+.jr-btn-secondary:hover:not(:disabled) {
+  background: rgba(255, 155, 74, 0.08);
+  border-color: rgba(255, 155, 74, 0.45);
+  color: var(--text);
+}
+.lp-btn:disabled,
+.jr-btn-secondary:disabled { opacity: 0.4; pointer-events: none; }
+
+/* Terciario: contorno sin relleno. */
+.jr-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: transparent;
+  color: var(--text-subtle);
+  border: 1px solid var(--line-08);
+  font-family: 'Poppins', sans-serif;
+  font-weight: 500;
+  transition: background var(--t-fast) var(--ease),
+    border-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+.jr-btn-ghost:hover:not(:disabled) {
+  background: var(--glass-lo);
+  border-color: var(--line-25);
+  color: var(--text);
+}
+.jr-btn-ghost:disabled { opacity: 0.4; pointer-events: none; }
+
+/* Pastilla blanca (CTA del navbar). */
+.lp-pill-white {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: #ffffff;
   color: #0a0a0a;
   font-family: 'Poppins', sans-serif;
   font-weight: 600;
   border-radius: 100px;
   box-shadow: 0 2px 14px rgba(0, 0, 0, 0.35);
-  transition: transform 0.2s var(--lp-ease), box-shadow 0.2s var(--lp-ease);
+  transition: transform var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
 }
-.lp-root .lp-pill-white:hover {
+.lp-pill-white:hover {
   transform: translateY(-1px);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
 }
 
-/* ── Botón fantasma (contorno hairline) ───────────────────────────── */
-.lp-root .lp-btn {
-  display: inline-block;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--lp-line-strong);
-  color: var(--lp-head);
-  font-family: 'Poppins', sans-serif;
-  font-weight: 500;
-  border-radius: 14px;
-  transition: background 0.2s var(--lp-ease), border-color 0.2s var(--lp-ease);
+/* ══════════════════════════════════════════════════════════════════
+   SUPERFICIES
+   ══════════════════════════════════════════════════════════════════ */
+
+/* Card de vidrio: hairline + realce interior arriba (luz desde arriba). */
+.lp-card,
+.jr-card {
+  position: relative;
+  background: linear-gradient(var(--glass-hi), var(--glass-lo)), var(--surface-2);
+  border: 1px solid var(--line-08);
+  border-radius: 16px;
+  box-shadow: var(--sh-glass);
+  transition: border-color var(--t-base) var(--ease), transform var(--t-base) var(--ease);
 }
-.lp-root .lp-btn:hover {
-  background: rgba(255, 255, 255, 0.07);
-  border-color: var(--lp-line-focus);
+.lp-card:hover,
+.jr-card:hover {
+  border-color: rgba(255, 155, 74, 0.35);
 }
 
-/* ── Card: superficie casi-negra con fuga de luz dorada al tope
-   (la firma del sistema de referencia) ────────────────────────────── */
-.lp-root .lp-card {
-  position: relative;
-  background: linear-gradient(0deg, #0c0c0f, #121215);
-  border: 1px solid var(--lp-line);
-  border-radius: 18px;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45),
-    inset 0 1px 0 rgba(255, 255, 255, 0.04);
-}
-/* Fuga de luz dorada: barra al borde superior, sesgada a la izquierda */
-.lp-root .lp-leak::before {
+/* LA FIRMA — fuga de luz dorada: una barra de 1px que se apaga al cruzar
+   el borde superior, más un halo difuso desde la esquina. Es lo que hace
+   que una card casi-negra se lea encendida en vez de apagada. */
+.lp-leak::before {
   content: "";
   position: absolute;
   inset: 0 0 auto 0;
   height: 1px;
-  border-radius: 18px 18px 0 0;
-  background: linear-gradient(90deg, rgba(214, 168, 96, 0.7),
-    rgba(214, 168, 96, 0) 55%);
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(214, 168, 96, 0.7), rgba(214, 168, 96, 0) 55%);
 }
-/* Halo dorado difuso desde la esquina superior (glow ambiental) */
-.lp-root .lp-leak::after {
+.lp-leak::after {
   content: "";
   position: absolute;
   inset: 0;
   border-radius: inherit;
   pointer-events: none;
-  background: radial-gradient(120% 90% at 8% 0%,
-    rgba(214, 168, 96, 0.14), rgba(0, 0, 0, 0) 45%);
+  background: radial-gradient(120% 90% at 8% 0%, rgba(214, 168, 96, 0.14), rgba(0, 0, 0, 0) 45%);
 }
 
-/* ── Card grande de cierre: vignette + glow naranja envolvente ────── */
-.lp-root .lp-hero-card {
+/* Panel grande de cierre: vignette + glow naranja envolvente. */
+.lp-hero-card {
   position: relative;
   overflow: hidden;
-  background: radial-gradient(120% 120% at 50% 120%,
-      rgba(255, 106, 0, 0.10), rgba(0, 0, 0, 0) 55%),
+  background: radial-gradient(120% 120% at 50% 120%, rgba(255, 106, 0, 0.10), rgba(0, 0, 0, 0) 55%),
     linear-gradient(0deg, #0c0c0f, #121215);
-  border: 1px solid var(--lp-line);
+  border: 1px solid var(--line-08);
   border-radius: 28px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    0 20px 60px rgba(0, 0, 0, 0.45);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 20px 60px rgba(0, 0, 0, 0.45);
 }
 
-/* ── Chip de icono naranja (rounded-square) ───────────────────────── */
-.lp-root .lp-icon-chip {
+/* Panel anidado (card dentro de card / marco de preview). */
+.jr-inset {
+  background: var(--surface);
+  border: 1px solid var(--line-06);
+  border-radius: 12px;
+}
+
+/* Chip de icono naranja (cuadrado redondeado). */
+.lp-icon-chip {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--lp-line);
-  color: var(--lp-orange-a);
+  background: var(--glass-lo);
+  border: 1px solid var(--line-08);
+  color: var(--brand-bright);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
-/* ── Pill de delta verde (mint sobre verde profundo) ──────────────── */
-.lp-root .lp-delta {
+/* Chip neutro de vidrio. */
+.jr-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--glass-hi);
+  border: 1px solid var(--line-06);
+  border-radius: 100px;
+  color: var(--text-muted);
+  font-family: 'Poppins', sans-serif;
+  font-size: 12px;
+  padding: 5px 12px;
+}
+
+/* Badge dorado — prestigio. */
+.jr-badge-gold {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--gold);
+  background: rgba(214, 168, 96, 0.12);
+  border: 1px solid rgba(214, 168, 96, 0.4);
+  border-radius: 100px;
+  font-family: 'Poppins', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 5px 12px;
+}
+
+/* Pastilla de delta verde — SOLO estado positivo. */
+.lp-delta {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  background: var(--lp-green-deep);
-  color: var(--lp-mint);
+  background: var(--success-deep);
+  color: var(--success-mint);
   font-family: 'Poppins', sans-serif;
   font-weight: 600;
   border-radius: 50px;
 }
 
-/* ── Eyebrow / label mono-menos (Poppins uppercase tracked) ───────── */
-.lp-root .lp-eyebrow {
-  font-family: 'Poppins', sans-serif;
-  font-weight: 600;
-  font-size: 11px;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--lp-gold);
-}
-.lp-root .lp-label {
-  font-family: 'Poppins', sans-serif;
-  font-weight: 600;
-  font-size: 11px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--lp-faint);
-}
-
-/* ── Punto "en vivo" verde ────────────────────────────────────────── */
-.lp-root .lp-live-dot {
+/* Punto "en vivo". */
+.lp-live-dot {
   width: 6px;
   height: 6px;
   border-radius: 50px;
-  background: var(--lp-green);
+  background: var(--success);
   box-shadow: 0 0 0 3px rgba(44, 207, 111, 0.15);
 }
 
-/* ── Hairline con desvanecido lateral (in-token) ──────────────────── */
-.lp-root .lp-hairline {
+/* ══════════════════════════════════════════════════════════════════
+   CAMPOS
+   ══════════════════════════════════════════════════════════════════ */
+.jr-field {
+  background: var(--surface);
+  border: 1px solid var(--line-08);
+  color: var(--text-head);
+  font-family: 'Lato', system-ui, sans-serif;
+  transition: border-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
+}
+.jr-field::placeholder { color: var(--text-subtle); opacity: 0.7; }
+.jr-field:focus,
+.jr-field:focus-visible,
+.jr-field:focus-within {
+  outline: none;
+  border-color: var(--brand-bright);
+  box-shadow: 0 0 0 3px rgba(255, 140, 70, 0.22);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   SEPARADORES Y FONDOS AMBIENTALES
+   ══════════════════════════════════════════════════════════════════ */
+
+/* Hairline que se desvanece a los lados (nunca una regla sólida). */
+.lp-hairline,
+.jr-hairline {
   height: 1px;
+  border: 0;
   background: linear-gradient(to right, rgba(255, 255, 255, 0),
     rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0));
 }
 
-/* ── Rejilla vertical tenue del hero ──────────────────────────────── */
-.lp-root .lp-grid {
-  background-image: linear-gradient(90deg,
-    rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+/* Rejilla vertical tenue, enmascarada hacia el centro superior. */
+.lp-grid {
+  background-image: linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
   background-size: 92px 100%;
   -webkit-mask-image: radial-gradient(120% 80% at 50% 0%, #000 30%, transparent 75%);
   mask-image: radial-gradient(120% 80% at 50% 0%, #000 30%, transparent 75%);
 }
 
-/* Reutiliza el marco de preview (jr-inset) en clave neutra dentro del
-   landing — alcanza a ToolPreview sin tocar el dashboard. */
-.lp-root .jr-inset {
-  background: #0c0c0d;
-  border: 1px solid var(--lp-line-soft);
+/* Lavado cálido detrás de un hero (la luz ambiental de la marca). */
+.jr-grid,
+.jr-glow {
+  background: radial-gradient(60% 80% at 30% 30%, rgba(255, 140, 70, 0.12), rgba(255, 140, 70, 0));
 }
-.lp-root .spec-label {
-  font-family: 'Poppins', sans-serif;
-  font-size: 10px;
-  letter-spacing: 0.12em;
+
+/* ══════════════════════════════════════════════════════════════════
+   MOVIMIENTO
+   ══════════════════════════════════════════════════════════════════ */
+
+/* Pared de outputs del hero: la lista se renderiza 4× y se desplaza -50%
+   (2 copias exactas) para el loop sin costura. */
+.jr-marquee { animation: jr-marquee-scroll 110s linear infinite; }
+@keyframes jr-marquee-scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+.jr-float { animation: jr-float-drift 7s ease-in-out infinite; }
+@keyframes jr-float-drift {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+/* Skeleton de imagen. */
+.jr-shimmer {
+  background:
+    linear-gradient(100deg, rgba(255, 255, 255, 0.02) 30%, rgba(255, 255, 255, 0.07) 50%, rgba(255, 255, 255, 0.02) 70%),
+    var(--surface-3);
+  background-size: 220% 100%;
+  animation: jr-shimmer-move 2.2s ease-in-out infinite;
+}
+@keyframes jr-shimmer-move {
+  from { background-position: 180% 0; }
+  to { background-position: -80% 0; }
+}
+
+/* Entrada por scroll/carga sin JS: fade + subida corta. */
+.jr-rise {
+  animation: jr-rise-in var(--t-slow) var(--ease) both;
+}
+@keyframes jr-rise-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .lp-root .lp-metal {
+  .jr-marquee,
+  .jr-shimmer,
+  .jr-float,
+  .jr-rise,
+  .lp-metal {
     animation: none;
   }
+  .lp-cta:hover, .jr-cta:hover, .lp-card:hover, .jr-card:hover,
+  .lp-pill-white:hover, .jr-btn-gold:hover {
+    transform: none;
+  }
+}
+
+/* `.lp-root` fue el scope del sistema del landing; ahora el sistema es
+   global y la clase sobrevive solo como marca del contenedor de página.
+   No define nada propio a propósito — si vuelve a hacerlo, el landing y
+   el dashboard se separan otra vez. */
+.lp-root {
+  background: var(--surface-2);
 }

@@ -139,7 +139,7 @@ export function ProjectHistory() {
       </div>
 
       {shown.length === 0 ? (
-        <p className="font-[Lato] text-[13px] text-[#8a8a8a]">
+        <p className="font-[Lato] text-[13px] text-[#bebebe]">
           No tienes proyectos de esta herramienta todavía.
         </p>
       ) : (
@@ -200,7 +200,7 @@ function ProjectCard({ p }: { p: Project }) {
           {p.toolName}
         </p>
         <h3 className="mt-0.5 truncate text-[12.5px] font-semibold text-[#ededed]">{p.title}</h3>
-        <div className="mt-1 flex items-center gap-1.5 font-[Lato] text-[10.5px] text-[#bdbdbd]">
+        <div className="mt-1 flex items-center gap-1.5 font-[Lato] text-[10.5px] text-[#cfcfcf]">
           {p.done ? (
             <CheckCircle2 className="h-3 w-3 text-[#2ccf6f]" />
           ) : (

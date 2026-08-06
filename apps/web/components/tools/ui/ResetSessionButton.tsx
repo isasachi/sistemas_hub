@@ -27,7 +27,7 @@ export function ResetSessionButton({
       type="button"
       onClick={handleClick}
       title="Reiniciar sesión"
-      className="flex items-center gap-1.5 text-[12px] font-medium text-[#94a3b8] hover:text-[#f1f5f9] transition-colors cursor-pointer bg-transparent border-0 px-2 py-1 rounded-lg hover:bg-white/[0.05]"
+      className="flex items-center gap-1.5 text-[12px] font-medium text-[#bebebe] hover:text-[#ffffff] transition-colors cursor-pointer bg-transparent border-0 px-2 py-1 rounded-lg hover:bg-white/[0.05]"
     >
       <RotateCcw className="w-3.5 h-3.5" />
       {label}

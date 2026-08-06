@@ -1,9 +1,9 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
-import ToolShell from "@/components/tools/ui/ToolShell";
+import StepWizard from "@/components/tools/ui/StepWizard";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
+import { ChevronRight, Sparkles } from "lucide-react";
 import {
   calcular,
   precioSugerido,
@@ -46,9 +46,10 @@ const DEFAULTS: Record<Funnel, CalcInputs> = {
 };
 
 type Kind = "money" | "pct" | "number";
-const accent = "#ff9c4d";
 
-// Campo numérico con leyenda (tooltip) y badge "estimado" mientras no lo edites.
+// Campo numérico con leyenda (tooltip) y marca "estimado" mientras no lo edites.
+// La marca es neutra a propósito: hay hasta 9 campos por pantalla y en cálido
+// competirían con el único botón de acción.
 function Field({
   label, kind, value, estimated, onChange, help,
 }: {
@@ -58,25 +59,25 @@ function Field({
   const display = kind === "pct" ? value * 100 : value;
   return (
     <label className="flex flex-col gap-1.5 justify-between">
-      <span className="flex items-center gap-1.5 text-[13px] text-[#bdbdbd]">
+      <span className="flex items-center gap-1.5 text-[13px] text-[#cfcfcf]">
         {label}
         <Help text={help} />
         {estimated && (
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-[#ff9c4d] bg-[rgba(255,156,77,0.12)] border border-[rgba(255,156,77,0.3)] rounded px-1.5 py-0.5">
+          <span className="rounded border border-white/[0.1] bg-white/[0.04] px-1.5 py-0.5 font-sans text-[10px] font-medium uppercase tracking-[0.06em] text-[#bebebe]">
             estimado
           </span>
         )}
       </span>
-      <div className="flex items-center gap-1.5 rounded-lg border border-white/[0.08] bg-white/[0.02] px-2.5 focus-within:border-[rgba(255,156,77,0.5)]">
-        {kind === "money" && <span className="text-[13px] text-[#8a8a8a]">S/</span>}
+      <div className="jr-field flex items-center gap-1.5 rounded-lg px-2.5">
+        {kind === "money" && <span className="text-[13px] text-[#bebebe]">S/</span>}
         <input
           type="number"
           step="any"
           value={Number.isFinite(display) ? +display.toFixed(4) : ""}
           onChange={(e) => onChange(kind === "pct" ? Number(e.target.value) / 100 : Number(e.target.value))}
-          className="h-10 w-full bg-transparent text-[15px] text-[#f5f5f5] outline-none"
+          className="h-10 w-full bg-transparent text-[15px] text-[#ededed] outline-none"
         />
-        {kind === "pct" && <span className="text-[13px] text-[#8a8a8a]">%</span>}
+        {kind === "pct" && <span className="text-[13px] text-[#bebebe]">%</span>}
       </div>
     </label>
   );
@@ -163,9 +164,9 @@ function CalculadoraWizard() {
   const pctOfertas = form.cantidad.reduce((s, t) => s + t.pctCompra, 0);
 
   // --- Definición de pasos (data-driven, uno por idea, lenguaje coloquial) ---
-  const steps: { title: string; intro: string; body: React.ReactNode }[] = [
+  const steps: { label: string; title: string; intro: string; body: React.ReactNode }[] = [
     {
-      title: "¿Cómo vendes?",
+      label: "Modelo", title: "¿Cómo vendes?",
       intro: "Lo primero: contanos cómo llega la venta. El resto del cálculo es igual para ambos.",
       body: (
         <div className="flex flex-col gap-3">
@@ -176,31 +177,31 @@ function CalculadoraWizard() {
             <button key={ff} type="button" onClick={() => switchFunnel(ff)}
               className={[
                 "text-left rounded-xl border p-4 transition-all",
-                form.funnel === ff ? "border-[rgba(255,156,77,0.5)] bg-[rgba(255,156,77,0.06)]" : "border-white/[0.08] hover:border-white/[0.2]",
+                form.funnel === ff ? "border-[rgba(255,155,74,0.5)] bg-[rgba(255,155,74,0.06)]" : "border-white/[0.08] hover:border-white/[0.2]",
               ].join(" ")}>
-              <div className="text-[15px] font-semibold text-[#f5f5f5]">{t}</div>
-              <div className="text-[13px] text-[#8a8a8a] mt-1 leading-relaxed">{d}</div>
+              <div className="text-[15px] font-semibold text-[#ededed]">{t}</div>
+              <div className="text-[13px] text-[#bebebe] mt-1 leading-relaxed">{d}</div>
             </button>
           ))}
         </div>
       ),
     },
     {
-      title: "Tu producto",
+      label: "Producto", title: "Tu producto",
       intro: "Empecemos por lo más simple: a cuánto lo vendes y cuánto te cuesta a ti.",
       body: (
         <div className="flex flex-col gap-4">
           {f("operacion.precioVenta", "Precio de venta", "money", "El precio al que le vendes una unidad a tu cliente final.")}
           <button type="button" onClick={() => set("operacion.precioVenta", precioSugerido(op, 0.35, result.embudo.cpaReal))}
-            className="self-start flex items-center gap-1.5 text-[12px] text-[#ff9c4d] hover:underline">
-            <Sparkles className="w-3.5 h-3.5" /> No sé qué precio poner — sugiérelo (cubre costos + ads, margen 35%)
+            className="self-start flex items-center gap-1.5 border-0 bg-transparent p-0 text-left font-sans text-[12px] text-[#cfcfcf] transition-colors hover:text-[#ffffff] cursor-pointer">
+            <Sparkles className="w-3.5 h-3.5 text-[#d6a860]" /> <span className="underline underline-offset-2 decoration-white/20">Sugerir un precio</span> — cubre costos + ads con 35% de margen
           </button>
           {f("operacion.costoProducto", "Costo del producto", "money", "Lo que te cuesta a ti comprar o producir una unidad.")}
         </div>
       ),
     },
     {
-      title: "Costo de cada entrega",
+      label: "Entrega", title: "Costo de cada entrega",
       intro: "Cada pedido que mandas tiene gastos de envío y de preparación.",
       body: (
         <div className="flex flex-col gap-4">
@@ -210,7 +211,7 @@ function CalculadoraWizard() {
       ),
     },
     {
-      title: "Cobros y gastos fijos",
+      label: "Fijos", title: "Cobros y gastos fijos",
       intro: "¿Cobras con pasarela de pago? ¿Cuánto gastas fijo cada mes pase lo que pase?",
       body: (
         <div className="flex flex-col gap-4">
@@ -221,7 +222,7 @@ function CalculadoraWizard() {
       ),
     },
     {
-      title: "Tu inversión en ads",
+      label: "Ads", title: "Tu inversión en ads",
       intro: "Ahora el embudo. ¿Cuánto vas a invertir y cuánto cuesta que te vean?",
       body: (
         <div className="flex flex-col gap-4">
@@ -234,7 +235,7 @@ function CalculadoraWizard() {
     },
     form.funnel === "leads"
       ? {
-          title: "¿Cómo convierte tu tráfico?",
+          label: "Conversión", title: "¿Cómo convierte tu tráfico?",
           intro: "De los que ven el anuncio hasta los que compran, la gente se va filtrando. No te preocupes si no sabes los números exactos: los estimados son realistas.",
           body: (
             <div className="flex flex-col gap-4">
@@ -245,7 +246,7 @@ function CalculadoraWizard() {
           ),
         }
       : {
-          title: "El cierre de la venta",
+          label: "Cierre", title: "El cierre de la venta",
           intro: "Del chat a la venta: cuánto cierra tu equipo y cuántos pedidos se pierden.",
           body: (
             <div className="flex flex-col gap-4">
@@ -256,7 +257,7 @@ function CalculadoraWizard() {
         },
     ...(form.funnel === "leads"
       ? [{
-          title: "Entregas (contra entrega)",
+          label: "Entregas", title: "Entregas (contra entrega)",
           intro: "En contra entrega no todos los pedidos llegan a buen puerto.",
           body: (
             <div className="flex flex-col gap-4">
@@ -267,18 +268,18 @@ function CalculadoraWizard() {
         }]
       : []),
     {
-      title: "Ofertas por cantidad",
+      label: "Ofertas", title: "Ofertas por cantidad",
       intro: "Muchos venden más de una unidad por pedido (lleva 2, lleva 3…). Repartí a tus compradores entre tus 3 ofertas. Si los % no suman 100%, los ajustamos solos.",
       body: (
         <div className="flex flex-col gap-3">
           {Math.abs(pctOfertas - 1) > 0.001 && (
-            <div className="text-[12px] text-[#ff9c4d] bg-[rgba(255,156,77,0.08)] border border-[rgba(255,156,77,0.25)] rounded-lg px-3 py-2">
+            <div className="rounded-lg border border-white/[0.1] bg-white/[0.03] px-3 py-2 text-[12px] text-[#cfcfcf]">
               Tus % suman {fmtPct(pctOfertas)} — los normalizamos a 100% automáticamente.
             </div>
           )}
           {form.cantidad.map((t, i) => (
             <div key={i} className="rounded-xl border border-white/[0.08] p-3.5">
-              <div className="text-[13px] font-semibold text-[#f5f5f5] mb-2.5">Oferta {i + 1}{i === 0 ? " (1 unidad)" : ""}</div>
+              <div className="text-[13px] font-semibold text-[#ededed] mb-2.5">Oferta {i + 1}{i === 0 ? " (1 unidad)" : ""}</div>
               <div className="grid grid-cols-3 gap-3">
                 {f(`cantidad.${i}.pctCompra`, "% de compradores", "pct", "De tus compradores, qué % elige esta oferta. Las 3 deben sumar 100%.")}
                 {f(`cantidad.${i}.precio`, "Precio", "money", "Precio de esta oferta (ej. 'llévate 2 por S/289').")}
@@ -290,13 +291,13 @@ function CalculadoraWizard() {
       ),
     },
     {
-      title: "Upsells (extras)",
+      label: "Upsells", title: "Upsells (extras)",
       intro: "Productos adicionales que el cliente agrega al pedido. No suman 100%: son un extra encima de la compra principal. Si no usas upsells, deja los % en 0.",
       body: (
         <div className="flex flex-col gap-3">
           {form.upsells.map((t, i) => (
             <div key={i} className="rounded-xl border border-white/[0.08] p-3.5">
-              <div className="text-[13px] font-semibold text-[#f5f5f5] mb-2.5">Upsell {i + 1}</div>
+              <div className="text-[13px] font-semibold text-[#ededed] mb-2.5">Upsell {i + 1}</div>
               <div className="grid grid-cols-3 gap-3">
                 {f(`upsells.${i}.pctCompra`, "% que lo agrega", "pct", "Qué % de tus compradores suma este extra al pedido.")}
                 {f(`upsells.${i}.precio`, "Precio", "money", "Precio del extra.")}
@@ -308,7 +309,7 @@ function CalculadoraWizard() {
       ),
     },
     {
-      title: "Tus resultados",
+      label: "Resultados", title: "Tus resultados",
       intro: "",
       body: (
         <ResultsDashboard result={result} funnel={form.funnel} exporting={exporting} exportError={exportError}
@@ -350,61 +351,60 @@ function CalculadoraWizard() {
   }, [isLast, ready]);
 
   return (
-    <ToolShell name="Calculadora de Costos" slug="calculadora-costos" trail="Sesión" onReset={resetSession}>
-      <div className="flex flex-1 min-h-0">
-        {/* Panel de preguntas */}
-        <div className="flex-1 px-12 py-10 border-r border-white/[0.06] overflow-y-auto">
-          {/* Progreso */}
-          <div className="max-w-[620px] mb-8">
-            <div className="flex items-center justify-between text-[12px] text-[#8a8a8a] mb-2">
-              <span className="readout">Paso {current + 1} de {total}</span>
-              <span className="readout">{Math.round(((current + 1) / total) * 100)}%</span>
-            </div>
-            <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
-              <div className="h-full jr-cta transition-all duration-300" style={{ width: `${((current + 1) / total) * 100}%` }} />
-            </div>
-          </div>
+    <StepWizard
+      steps={steps.map((s) => ({ label: s.label, title: s.title, hint: s.intro || undefined }))}
+      current={current}
+      // Sin LLM de por medio: todos los pasos quedan libres de recorrer.
+      maxReached={total - 1}
+      onNavigate={setStep}
+      backHref="/tools/calculadora-costos"
+      onBack={() => setStep((s) => Math.max(0, s - 1))}
+      onReset={resetSession}
+      full
+    >
+      <div className="mx-auto flex w-full max-w-[1160px] flex-1 flex-col gap-8 px-5 pb-16 md:px-8 lg:flex-row lg:items-start lg:gap-10">
+        {/* Preguntas */}
+        <div className="min-w-0 flex-1">
+          {cur.body}
 
-          <div className="max-w-[620px]">
-            <h2 className="text-[22px] font-bold text-[#f5f5f5]">{cur.title}</h2>
-            {cur.intro && <p className="text-[14px] text-[#8a8a8a] mt-2 mb-6 leading-relaxed">{cur.intro}</p>}
-            <div className={cur.intro ? "" : "mt-6"}>{cur.body}</div>
-          </div>
-
-          {/* Navegación */}
-          <div className="flex items-center justify-between mt-10 pt-6 border-t border-white/[0.06] max-w-[620px]">
-            <button type="button" onClick={() => setStep((s) => Math.max(0, s - 1))}
-              className={["flex items-center gap-1.5 border border-white/[0.06] rounded-xl px-5 py-2.5 text-[14px] font-medium", current === 0 ? "opacity-0 pointer-events-none" : "text-[#bdbdbd] hover:text-[#f5f5f5] hover:border-white/[0.18] cursor-pointer"].join(" ")}>
-              <ChevronLeft className="w-4 h-4" /> Atrás
-            </button>
-            {!isLast && (
-              <button type="button" onClick={() => setStep((s) => Math.min(total - 1, s + 1))}
-                className="flex items-center gap-2 jr-cta text-[14px] font-bold px-7 py-2.5 rounded-xl border-0 cursor-pointer">
-                {current === total - 2 ? "Ver resultados" : "Siguiente"} <ChevronRight className="w-4 h-4" />
+          {!isLast && (
+            <div className="mt-10 border-t border-white/[0.06] pt-6">
+              <button
+                type="button"
+                onClick={() => setStep((s) => Math.min(total - 1, s + 1))}
+                className="jr-cta h-12 rounded-xl px-7 text-[14px] cursor-pointer"
+              >
+                {current === total - 2 ? "Ver resultados" : "Siguiente"}
+                <ChevronRight className="h-4 w-4" />
               </button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
-        {/* Panel de proyección en vivo */}
-        <div className="w-[380px] flex-shrink-0 sticky top-0 h-screen overflow-y-auto bg-[#0a0a0a] px-7 py-9">
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-[#8a8a8a]">Proyección en vivo</div>
-          <p className="text-[11px] text-[#6a6a6a] mt-1 leading-snug">Se actualiza con tus datos y los estimados que falten.</p>
-          <div className="mt-4 rounded-2xl border border-white/[0.08] p-5">
-            <div className="text-[13px] text-[#8a8a8a]">Profit Neto / mes</div>
-            <div className="readout text-[30px] font-bold mt-1" style={{ color: result.pg.profitNeto >= 0 ? accent : "#f87171" }}>
+        {/* Proyección en vivo — el número se mueve con cada tecla */}
+        <aside className="w-full shrink-0 lg:sticky lg:top-[76px] lg:w-[340px]">
+          <div className="lp-card lp-leak p-5">
+            <p className="lp-label relative">Proyección en vivo</p>
+            <p className="relative mt-1 text-[12px] leading-snug text-[#bebebe]">
+              Se actualiza con tus datos y con los estimados que aún no tocaste.
+            </p>
+            <div className="relative mt-5 text-[13px] text-[#bebebe]">Profit neto / mes</div>
+            <div
+              className="readout relative mt-0.5 text-[32px] font-semibold"
+              style={{ color: result.pg.profitNeto >= 0 ? "#ffffff" : "#e93d3d" }}
+            >
               {fmtMoney(result.pg.profitNeto)}
             </div>
-            <div className="grid grid-cols-2 gap-3 mt-5">
+            <div className="relative mt-5 grid grid-cols-2 gap-3">
               <Kpi label="Ingresos" value={fmtMoney(result.pg.ingresosTotales)} />
-              <Kpi label="Margen Neto" value={fmtPct(result.pg.margenNeto)} />
+              <Kpi label="Margen neto" value={fmtPct(result.pg.margenNeto)} />
               <Kpi label="ROI Ads" value={fmtPct(result.pg.roiAds)} />
               <Kpi label="Entregas" value={fmtNum(result.embudo.entregas)} />
             </div>
           </div>
-        </div>
+        </aside>
       </div>
-    </ToolShell>
+    </StepWizard>
   );
 }
 

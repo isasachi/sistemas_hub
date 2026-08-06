@@ -1,14 +1,9 @@
 "use client";
 
 import AdWizard from "@/components/tools/generador-anuncios/AdWizard";
-import ToolShell from "@/components/tools/ui/ToolShell";
-import { useWizardStore } from "@/store/wizard";
 
+// El chrome (volver, riel de pasos, reiniciar) lo trae StepWizard desde adentro:
+// una sola barra, sin breadcrumb encima.
 export default function GeneradorAnunciosWizard() {
-  const startNewSession = useWizardStore((s) => s.startNewSession);
-  return (
-    <ToolShell name="Generador de Anuncios" slug="generador-anuncios" trail="Sesión" onReset={startNewSession}>
-      <AdWizard />
-    </ToolShell>
-  );
+  return <AdWizard />;
 }

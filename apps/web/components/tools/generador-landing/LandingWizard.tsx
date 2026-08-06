@@ -4,10 +4,8 @@ import { useEffect, useRef } from 'react'
 import { useLandingStore, SESSION_KEY } from '@/store/landing'
 import type { LandingSessionResponse } from '@/lib/landing/types'
 import { fetchRegens } from '@/lib/gen-quota-client'
-import { SECTION_LABELS } from '@/lib/landing/types'
 import { SessionErrorRetry } from '@/components/tools/ui/SessionErrorRetry'
-import AccordionSection from '@/components/tools/generador-anuncios/AccordionSection'
-import { NICHE_LABELS } from '@/lib/landing/niches'
+import StepWizard from '@/components/tools/ui/StepWizard'
 import Section1Product from './sections/Section1Product'
 import Section2Photos from './sections/Section2Photos'
 import SectionIdentity from './sections/SectionIdentity'
@@ -15,17 +13,22 @@ import SectionTrust from './sections/SectionTrust'
 import Section3Sections from './sections/Section3Sections'
 import Section4Preview from './sections/Section4Preview'
 
-// `maxStep` = paso más avanzado alcanzado; una sección ya visitada queda 'completed'
-// (reabrible) aunque retrocedas, para navegar adelante/atrás sin reenviar (re-quemar LLM).
-function getStatus(sectionStep: number, currentStep: number, maxStep: number): 'locked' | 'active' | 'completed' {
-  if (currentStep === sectionStep) return 'active'
-  if (maxStep > sectionStep) return 'completed'
-  return 'locked'
-}
+// Una pantalla por paso. Sin "Siguiente" del shell: cada sección trae su propia
+// acción de enviar-y-avanzar (varias llaman al modelo al hacerlo).
+const SECTIONS = [
+  Section1Product,
+  Section2Photos,
+  SectionIdentity,
+  SectionTrust,
+  Section3Sections,
+  Section4Preview,
+]
 
 export default function LandingWizard() {
-  const { step, sessionId, sessionError, startNewSession, hydrateFromSession, setStep, setRegens, productName, productPhotoUrls, nicheId, trustBlock, selectedSections, sections } =
-    useLandingStore()
+  const {
+    step, sessionId, sessionError,
+    startNewSession, hydrateFromSession, setStep, setRegens, sections,
+  } = useLandingStore()
 
   useEffect(() => {
     const saved = localStorage.getItem(SESSION_KEY)
@@ -40,95 +43,74 @@ export default function LandingWizard() {
     if (sessionId) fetchRegens(sessionId).then(setRegens)
   }, [sessionId, setRegens])
 
-  // Resetear el "paso más avanzado" al cambiar de sesión: sin esto el ref persiste y
-  // una sesión nueva (step 0) deja todas las secciones abiertas/'completed'.
+  // `maxStep` = paso más avanzado alcanzado; hasta ahí se puede volver por el
+  // riel sin reenviar nada. Se resetea al cambiar de sesión.
   const maxStep = useRef(0)
   const prevSession = useRef(sessionId)
   if (prevSession.current !== sessionId) { prevSession.current = sessionId; maxStep.current = 0 }
   maxStep.current = Math.max(maxStep.current, step)
 
-  const progressPct = Math.round((Math.min(step, 5) / 5) * 100)
-
   if (sessionError && !sessionId) {
     return (
-      <div className="flex flex-col min-h-screen bg-[#0a0a0a]">
+      <div className="flex min-h-screen flex-col bg-[#0c0c0d]">
         <SessionErrorRetry onRetry={startNewSession} />
       </div>
     )
   }
 
+  const steps = [
+    {
+      label: 'Producto',
+      title: '¿Qué vas a vender en esta página?',
+      hint: 'El nombre y la promesa. Todo lo demás se construye a partir de acá.',
+    },
+    {
+      label: 'Fotos',
+      title: 'Muéstranos tu producto',
+      hint: 'Sube las fotos que tengas. Las usamos como referencia real para que el producto salga igual en cada sección.',
+    },
+    {
+      label: 'Identidad',
+      title: 'El mundo visual de tu marca',
+      hint: 'Confirma el nicho y a quién le hablas: de ahí salen la paleta, los materiales y el talento de las 8 secciones.',
+    },
+    {
+      label: 'Confianza',
+      title: '¿Cómo te pagan y qué garantizas?',
+      hint: 'Medios de pago, contraentrega y garantía. Es lo que decide la compra en el último scroll.',
+    },
+    {
+      label: 'Secciones',
+      title: 'Arma tu página',
+      hint: 'Elige qué secciones quieres. Puedes empezar con pocas y sumar después.',
+    },
+    {
+      label: 'Landing',
+      title: sections.length ? 'Tu landing está lista' : 'Generemos tu landing',
+      hint: sections.length
+        ? 'Revisa sección por sección y regenera la que no te convenza.'
+        : 'Generamos cada sección con la identidad y las fotos que nos diste.',
+    },
+  ]
+
+  const current = Math.min(step, steps.length - 1)
+  const Section = SECTIONS[current]
+
   return (
-    <div className="flex flex-col min-h-screen bg-[#0a0a0a]">
-      <div className="h-[2px] bg-white/[0.06]">
-        <div
-          className="h-full transition-all duration-700"
-          style={{ width: `${progressPct}%`, background: 'linear-gradient(90deg,#ff9c4d,#ff7a2f)' }}
-        />
+    <StepWizard
+      steps={steps}
+      current={current}
+      maxReached={maxStep.current}
+      onNavigate={setStep}
+      backHref="/tools/generador-landing"
+      onReset={startNewSession}
+      full={current === 5}
+    >
+      {/* key por sesión: una sesión nueva remonta la sección → su useState local
+          (sembrado del store) se reinicia y no arrastra datos de la anterior. */}
+      <div key={sessionId ?? 'new'} className={current === 5 ? 'mx-auto w-full max-w-[1160px] px-5 pb-16 md:px-8' : ''}>
+        <Section />
       </div>
-
-      {/* key por sesión: una sesión nueva remonta las secciones → su useState local
-          (sembrado del store) se reinicia y no arrastra datos de la sesión anterior. */}
-      <div key={sessionId ?? 'new'} className="flex-1 max-w-xl mx-auto w-full px-4 py-8 flex flex-col gap-3">
-        <AccordionSection
-          index={1}
-          title="Tu producto"
-          status={getStatus(0, step, maxStep.current)}
-          summary={productName ?? undefined}
-          onReopen={() => setStep(0)}
-        >
-          <Section1Product />
-        </AccordionSection>
-
-        <AccordionSection
-          index={2}
-          title="Fotos del producto"
-          status={getStatus(1, step, maxStep.current)}
-          summary={productPhotoUrls.length ? `${productPhotoUrls.length} foto(s)` : undefined}
-          onReopen={() => setStep(1)}
-        >
-          <Section2Photos />
-        </AccordionSection>
-
-        <AccordionSection
-          index={3}
-          title="Identidad visual"
-          status={getStatus(2, step, maxStep.current)}
-          summary={nicheId ? NICHE_LABELS[nicheId] : undefined}
-          onReopen={() => setStep(2)}
-        >
-          <SectionIdentity />
-        </AccordionSection>
-
-        <AccordionSection
-          index={4}
-          title="Confianza y pagos"
-          status={getStatus(3, step, maxStep.current)}
-          summary={trustBlock ? `${trustBlock.paymentMethods.length} medios${trustBlock.codDelivery ? ' · contraentrega' : ''}${trustBlock.guaranteeDays ? ` · ${trustBlock.guaranteeDays}d garantía` : ''}` : undefined}
-          onReopen={() => setStep(3)}
-        >
-          <SectionTrust />
-        </AccordionSection>
-
-        <AccordionSection
-          index={5}
-          title="Secciones de tu landing"
-          status={getStatus(4, step, maxStep.current)}
-          summary={selectedSections.length ? selectedSections.map((s) => SECTION_LABELS[s]).join(' · ') : undefined}
-          onReopen={() => setStep(4)}
-        >
-          <Section3Sections />
-        </AccordionSection>
-
-        <AccordionSection
-          index={6}
-          title={sections.length ? '¡Tu landing está lista!' : 'Tu landing'}
-          status={step === 5 ? 'active' : maxStep.current >= 5 ? 'completed' : 'locked'}
-          summary={sections.length ? 'Landing lista' : undefined}
-          onReopen={() => setStep(5)}
-        >
-          <Section4Preview />
-        </AccordionSection>
-      </div>
-    </div>
+    </StepWizard>
   )
 }

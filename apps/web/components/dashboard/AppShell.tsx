@@ -54,10 +54,12 @@ export function AppShell({ user, children }: AppShellProps) {
   const toolLink = (href: string, active: boolean, soon: boolean) =>
     [
       "flex items-center gap-2 rounded-xl px-3.5 py-2 font-[Poppins] text-[14px] font-medium no-underline transition-all duration-200",
+      // Dorado = dónde estás (igual que el riel del asistente). El naranja queda
+      // libre para las acciones, que es lo que el usuario debe encontrar rápido.
       soon
         ? "text-[#6a6a6a] cursor-default"
         : active
-          ? "bg-[rgba(255,106,0,0.12)] text-[rgb(255,155,74)]"
+          ? "bg-[rgba(214,168,96,0.12)] text-[#d6a860]"
           : "text-[#bebebe] hover:text-[#ffffff] hover:bg-[rgba(255,255,255,0.05)]",
     ].join(" ");
 
@@ -71,7 +73,7 @@ export function AppShell({ user, children }: AppShellProps) {
   );
 
   const soonBadge = (
-    <span className="rounded-full bg-[rgba(255,255,255,0.05)] px-1.5 py-0.5 font-[Poppins] text-[9px] font-semibold uppercase tracking-[0.08em] text-[#bdbdbd]">
+    <span className="rounded-full bg-[rgba(255,255,255,0.05)] px-1.5 py-0.5 font-[Poppins] text-[9px] font-semibold uppercase tracking-[0.08em] text-[#cfcfcf]">
       Pronto
     </span>
   );
@@ -85,7 +87,7 @@ export function AppShell({ user, children }: AppShellProps) {
         aria-expanded={menu}
         className="flex items-center gap-1.5 rounded-full border border-white/[0.08] py-1 pl-1 pr-2 transition-colors duration-200 hover:border-white/[0.2] cursor-pointer"
       >
-        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[rgba(255,106,0,0.12)] font-[Poppins] text-[12px] font-bold text-[rgb(255,155,74)]">
+        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[rgba(214,168,96,0.12)] font-[Poppins] text-[12px] font-bold text-[#d6a860]">
           {user.label.charAt(0).toUpperCase()}
         </span>
         <ChevronDown className="h-3.5 w-3.5 text-[#bebebe]" />
@@ -94,7 +96,7 @@ export function AppShell({ user, children }: AppShellProps) {
       {menu && (
         <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-[240px] overflow-hidden rounded-2xl border border-white/[0.08] bg-[#101012] shadow-[0_16px_40px_rgba(0,0,0,0.5)]">
           <div className="border-b border-white/[0.06] px-4 py-3">
-            <p className="font-[Poppins] text-[10px] font-semibold uppercase tracking-[0.12em] text-[#bdbdbd]">
+            <p className="font-[Poppins] text-[10px] font-semibold uppercase tracking-[0.12em] text-[#cfcfcf]">
               Sesión
             </p>
             <p className="mt-0.5 truncate text-[13px] text-[#ededed]">{user.label}</p>
@@ -214,7 +216,7 @@ export function AppShell({ user, children }: AppShellProps) {
                     onClick={() => setOpen(false)}
                     className={`${cls} ${
                       active
-                        ? "bg-[rgba(255,106,0,0.12)] text-[rgb(255,155,74)]"
+                        ? "bg-[rgba(214,168,96,0.12)] text-[#d6a860]"
                         : "text-[#bebebe] hover:bg-[rgba(255,255,255,0.05)] hover:text-[#ffffff]"
                     }`}
                   >

@@ -12,7 +12,7 @@ import { PaymentMethod, type TrustBlock } from '@/lib/landing/types'
 const btnPrimary =
   'rounded-xl jr-cta text-[13px] font-bold disabled:opacity-40 transition-all duration-200 cursor-pointer border-0 font-sans flex items-center justify-center gap-2 h-11 w-full'
 const btnGhost =
-  'h-11 px-4 rounded-xl border border-white/[0.14] text-[#f5f5f5] text-[13px] font-medium hover:bg-white/[0.05] transition-colors cursor-pointer bg-transparent'
+  'h-11 px-4 rounded-xl border border-white/[0.14] text-[#ededed] text-[13px] font-medium hover:bg-white/[0.05] transition-colors cursor-pointer bg-transparent'
 
 const PAYMENT_LABELS: Record<PaymentMethod, string> = {
   yape: 'Yape', plin: 'Plin', mercadopago: 'Mercado Pago', visa: 'Visa',
@@ -41,10 +41,10 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
     <button
       type="button"
       onClick={() => onChange(!checked)}
-      className={`flex items-center justify-between w-full rounded-xl border px-4 py-3 text-[13px] transition-colors cursor-pointer ${checked ? 'border-[#ff9c4d]/40 bg-[#ff9c4d]/10 text-[#f5f5f5]' : 'border-white/[0.12] bg-transparent text-[#bdbdbd] hover:bg-white/[0.04]'}`}
+      className={`flex items-center justify-between w-full rounded-xl border px-4 py-3 text-[13px] transition-colors cursor-pointer ${checked ? 'border-[#ff9b4a]/40 bg-[#ff9b4a]/10 text-[#ededed]' : 'border-white/[0.12] bg-transparent text-[#cfcfcf] hover:bg-white/[0.04]'}`}
     >
       <span>{label}</span>
-      <span className={`w-4 h-4 rounded-md border flex items-center justify-center ${checked ? 'bg-[#ff9c4d] border-[#ff9c4d] text-black' : 'border-white/30'}`}>{checked ? '✓' : ''}</span>
+      <span className={`w-4 h-4 rounded-md border flex items-center justify-center ${checked ? 'bg-[#ff9b4a] border-[#ff9b4a] text-black' : 'border-white/30'}`}>{checked ? '✓' : ''}</span>
     </button>
   )
 }
@@ -105,8 +105,8 @@ export default function SectionTrust() {
     const t = trustBlock ?? DEFAULT
     return (
       <div className="flex flex-col gap-3">
-        <p className="text-[13px] text-[#bdbdbd]">Estos datos son tuyos, no los inventa la IA. Este es el default para negocios en Perú — edítalo si el tuyo es distinto.</p>
-        <div className="rounded-xl border border-white/[0.08] bg-[#141414] px-4 py-3 text-[13px] text-[#bdbdbd]">{summary(t)}</div>
+        <p className="text-[13px] text-[#cfcfcf]">Estos datos son tuyos, no los inventa la IA. Este es el default para negocios en Perú — edítalo si el tuyo es distinto.</p>
+        <div className="rounded-xl border border-white/[0.08] bg-[#121214] px-4 py-3 text-[13px] text-[#cfcfcf]">{summary(t)}</div>
         {error && <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-[12px] text-red-400">{error}</div>}
         <div className="flex gap-2">
           <button type="button" onClick={() => setEditing(true)} className={btnGhost}>Editar</button>
@@ -120,7 +120,7 @@ export default function SectionTrust() {
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-[13px] text-[#bdbdbd]">Estos datos son tuyos, no los inventa la IA. Aparecen en las secciones de garantía y cierre (logos de pago reales, sello de garantía) y mantienen coherente toda la landing.</p>
+      <p className="text-[13px] text-[#cfcfcf]">Estos datos son tuyos, no los inventa la IA. Aparecen en las secciones de garantía y cierre (logos de pago reales, sello de garantía) y mantienen coherente toda la landing.</p>
 
       <div className="flex flex-col gap-2">
         <Toggle label="Pago contraentrega (pagas al recibir)" checked={codDelivery} onChange={setCod} />
@@ -128,27 +128,27 @@ export default function SectionTrust() {
       </div>
 
       <label className="flex flex-col gap-1.5">
-        <span className="text-[12px] text-[#8a8a8a]">Plazo de entrega</span>
+        <span className="text-[12px] text-[#bebebe]">Plazo de entrega</span>
         <input value={deliveryTime} onChange={(e) => setDelivery(e.target.value)} placeholder="24/48 horas" className="jr-field rounded-xl px-3 py-2 text-[13px]" />
       </label>
 
       <div className="flex flex-col gap-1.5">
-        <span className="text-[12px] text-[#8a8a8a]">Cobertura</span>
+        <span className="text-[12px] text-[#bebebe]">Cobertura</span>
         <ChipGroup options={COVERAGE_OPTIONS} selected={coverage} multi onChange={(v) => setCoverage(v as string[])} />
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <span className="text-[12px] text-[#8a8a8a]">Medios de pago</span>
+        <span className="text-[12px] text-[#bebebe]">Medios de pago</span>
         <ChipGroup options={PAYMENT_OPTIONS} selected={payments} multi onChange={(v) => setPayments(v as string[])} />
       </div>
 
       <div className="flex gap-2">
         <label className="flex flex-col gap-1.5 w-28">
-          <span className="text-[12px] text-[#8a8a8a]">Garantía (días)</span>
+          <span className="text-[12px] text-[#bebebe]">Garantía (días)</span>
           <input value={guaranteeDays} onChange={(e) => setDays(e.target.value.replace(/[^0-9]/g, ''))} inputMode="numeric" placeholder="30" className="jr-field rounded-xl px-3 py-2 text-[13px]" />
         </label>
         <label className="flex flex-col gap-1.5 flex-1">
-          <span className="text-[12px] text-[#8a8a8a]">Texto de garantía (opcional)</span>
+          <span className="text-[12px] text-[#bebebe]">Texto de garantía (opcional)</span>
           <input value={guaranteeText} onChange={(e) => setGtext(e.target.value)} placeholder="Devolución garantizada" disabled={!parseInt(guaranteeDays, 10)} className="jr-field rounded-xl px-3 py-2 text-[13px] disabled:opacity-40" />
         </label>
       </div>

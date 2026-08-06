@@ -39,24 +39,25 @@ interface SelectFieldProps extends BaseFieldProps {
 
 type FieldGroupProps = InputFieldProps | TextareaFieldProps | SelectFieldProps;
 
-const fieldClass =
-  "bg-[#141414] border-white/[0.06] text-[#f5f5f5] placeholder:text-[#8a8a8a] focus:border-[rgba(255,156,77,0.5)] focus:ring-[rgba(255,156,77,0.12)] focus:ring-2 transition-all duration-200";
+// `jr-field` es el campo canónico del sistema (color, borde y anillo de foco):
+// así el foco se ve igual acá, en el brief de branding y en la calculadora.
+const fieldClass = "jr-field rounded-lg";
 
 export function FieldGroup(props: FieldGroupProps) {
   return (
     <div className="flex flex-col gap-2">
       <label
         htmlFor={props.id}
-        className="text-[13px] font-semibold text-[#f5f5f5]"
+        className="text-[13px] font-semibold text-[#ededed]"
       >
         {props.label}
         {props.required && (
-          <span className="text-[#ff9c4d] ml-0.5" aria-hidden>
+          <span className="text-[#ff9b4a] ml-0.5" aria-hidden>
             *
           </span>
         )}
         {props.helper && (
-          <span className="text-[#8a8a8a] font-normal ml-1.5">
+          <span className="text-[#bebebe] font-normal ml-1.5">
             {props.helper}
           </span>
         )}
@@ -88,12 +89,12 @@ export function FieldGroup(props: FieldGroupProps) {
           <SelectTrigger id={props.id} className={fieldClass}>
             <SelectValue />
           </SelectTrigger>
-          <SelectContent className="bg-[#0f0f0f] border-white/[0.06] text-[#f5f5f5]">
+          <SelectContent className="bg-[#0c0c0d] border-white/[0.06] text-[#ededed]">
             {props.options.map((opt) => (
               <SelectItem
                 key={opt.value}
                 value={opt.value}
-                className="focus:bg-white/[0.07] focus:text-[#f5f5f5] cursor-pointer"
+                className="focus:bg-white/[0.07] focus:text-[#ededed] cursor-pointer"
               >
                 {opt.label}
               </SelectItem>

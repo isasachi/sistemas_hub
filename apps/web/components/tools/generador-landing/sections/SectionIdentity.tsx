@@ -9,9 +9,9 @@ import { DEMOGRAPHIC_LABELS } from '@/lib/landing/demographics'
 const btnPrimary =
   'rounded-xl jr-cta text-[13px] font-bold disabled:opacity-40 transition-all duration-200 cursor-pointer border-0 font-sans flex items-center justify-center gap-2 h-11 w-full'
 const btnGhost =
-  'h-10 px-4 rounded-xl border border-white/[0.14] text-[#f5f5f5] text-[13px] font-medium hover:bg-white/[0.05] transition-colors cursor-pointer bg-transparent'
+  'h-10 px-4 rounded-xl border border-white/[0.14] text-[#ededed] text-[13px] font-medium hover:bg-white/[0.05] transition-colors cursor-pointer bg-transparent'
 const field = 'jr-field rounded-xl px-3 py-2 text-[13px] w-full'
-const lbl = 'text-[11px] uppercase tracking-wide text-[#8a8a8a]'
+const lbl = 'text-[11px] uppercase tracking-wide text-[#bebebe]'
 
 // Paso Identidad (spec 2026-07-23, 0.a): clasificación automática → preselección editable
 // (niche_id/demographic_id) → confirmación → extracción del ADN visual (0.b) → display
@@ -151,8 +151,8 @@ export default function SectionIdentity() {
 
   if (classifying && !classification && !nicheId) {
     return (
-      <div className="flex flex-col items-center gap-3 py-8 text-[#bdbdbd]">
-        <span className="w-6 h-6 border-2 border-white/20 border-t-[#ff9c4d] rounded-full animate-spin" />
+      <div className="flex flex-col items-center gap-3 py-8 text-[#cfcfcf]">
+        <span className="w-6 h-6 border-2 border-white/20 border-t-[#ff9b4a] rounded-full animate-spin" />
         <p className="text-[13px]">Clasificando tu producto…</p>
       </div>
     )
@@ -185,12 +185,12 @@ export default function SectionIdentity() {
 
   return (
     <div className="flex flex-col gap-5">
-      <p className="text-[13px] text-[#bdbdbd]">
-        Confirmá el nicho y la demografía de <strong className="text-[#f5f5f5]">{productName || 'tu producto'}</strong> — de ahí sale toda la identidad visual (paleta, partículas, props y el talento) para las 8 secciones.
+      <p className="text-[13px] text-[#cfcfcf]">
+        Confirmá el nicho y la demografía de <strong className="text-[#ededed]">{productName || 'tu producto'}</strong> — de ahí sale toda la identidad visual (paleta, partículas, props y el talento) para las 8 secciones.
       </p>
 
       {classification?.reasoning && nicheOpen && (
-        <p className="text-[12px] text-[#8a8a8a] italic">&ldquo;{classification.reasoning}&rdquo;</p>
+        <p className="text-[12px] text-[#bebebe] italic">&ldquo;{classification.reasoning}&rdquo;</p>
       )}
 
       {/* Nicho */}
@@ -198,16 +198,16 @@ export default function SectionIdentity() {
         <span className={lbl}>Nicho</span>
         {!nicheOpen ? (
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="rounded-lg border border-[#ff9c4d]/30 bg-[#ff9c4d]/10 px-3 py-1.5 text-[13px] text-[#f5f5f5]">
+            <span className="rounded-lg border border-[#ff9b4a]/30 bg-[#ff9b4a]/10 px-3 py-1.5 text-[13px] text-[#ededed]">
               {NICHE_LABELS[activeNiche]}
             </span>
             {classification && (
-              <span className="text-[11px] text-[#8a8a8a]">confianza {Math.round(classification.confidence * 100)}%</span>
+              <span className="text-[11px] text-[#bebebe]">confianza {Math.round(classification.confidence * 100)}%</span>
             )}
             <button
               type="button"
               onClick={() => setNicheOpen(true)}
-              className="text-[12px] text-[#ff9c4d] underline underline-offset-2 cursor-pointer bg-transparent border-0"
+              className="text-[12px] text-[#ff9b4a] underline underline-offset-2 cursor-pointer bg-transparent border-0"
             >cambiar</button>
           </div>
         ) : (
@@ -286,17 +286,17 @@ function DnaDisplay({
   return (
     <div className="flex flex-col gap-5">
       <div className="flex items-start justify-between gap-3">
-        <p className="text-[13px] text-[#bdbdbd]">Esta es la identidad visual derivada de tu producto. Se aplica igual en las 8 secciones.</p>
-        <button type="button" onClick={onChangeClick} className="text-[12px] text-[#ff9c4d] underline underline-offset-2 cursor-pointer bg-transparent border-0 shrink-0">cambiar</button>
+        <p className="text-[13px] text-[#cfcfcf]">Esta es la identidad visual derivada de tu producto. Se aplica igual en las 8 secciones.</p>
+        <button type="button" onClick={onChangeClick} className="text-[12px] text-[#ff9b4a] underline underline-offset-2 cursor-pointer bg-transparent border-0 shrink-0">cambiar</button>
       </div>
 
       <div className="flex flex-col gap-1.5">
         <span className={lbl}>Paleta</span>
         <div className="flex flex-wrap gap-2">
           {swatches.map((s) => (
-            <div key={s.label} className="flex items-center gap-1.5 rounded-lg border border-white/[0.08] bg-[#141414] px-2 py-1.5">
+            <div key={s.label} className="flex items-center gap-1.5 rounded-lg border border-white/[0.08] bg-[#121214] px-2 py-1.5">
               <span className="w-5 h-5 rounded-md border border-white/[0.14] shrink-0" style={{ background: s.hex }} />
-              <span className="text-[11px] text-[#bdbdbd]">{s.label}</span>
+              <span className="text-[11px] text-[#cfcfcf]">{s.label}</span>
             </div>
           ))}
         </div>
@@ -304,14 +304,14 @@ function DnaDisplay({
 
       <div className="flex flex-col gap-1.5">
         <span className={lbl}>Partículas</span>
-        <p className="text-[13px] text-[#f5f5f5]">{dna.particle_type} <span className="text-[11px] text-[#8a8a8a]">· densidad {dna.particle_density}</span></p>
+        <p className="text-[13px] text-[#ededed]">{dna.particle_type} <span className="text-[11px] text-[#bebebe]">· densidad {dna.particle_density}</span></p>
       </div>
 
       <div className="flex flex-col gap-1.5">
         <span className={lbl}>Props de escena</span>
         <div className="flex flex-wrap gap-1.5">
           {dna.props.map((p) => (
-            <span key={p} className="rounded-lg border border-white/[0.08] bg-[#141414] px-2.5 py-1 text-[12px] text-[#bdbdbd]">{p}</span>
+            <span key={p} className="rounded-lg border border-white/[0.08] bg-[#121214] px-2.5 py-1 text-[12px] text-[#cfcfcf]">{p}</span>
           ))}
         </div>
       </div>
@@ -319,18 +319,18 @@ function DnaDisplay({
       <div className="flex flex-col gap-1.5">
         <span className={lbl}>Persona / talento</span>
         {demographicId === 'no_talent' ? (
-          <p className="text-[13px] text-[#8a8a8a]">Sin persona — el producto sale solo / con sustituto.</p>
+          <p className="text-[13px] text-[#bebebe]">Sin persona — el producto sale solo / con sustituto.</p>
         ) : (
-          <div className="flex items-start gap-3 rounded-xl border border-white/[0.08] bg-[#141414] p-3">
-            <div className="w-24 h-32 rounded-lg overflow-hidden bg-[#0f0f0f] border border-white/[0.06] shrink-0 flex items-center justify-center">
+          <div className="flex items-start gap-3 rounded-xl border border-white/[0.08] bg-[#121214] p-3">
+            <div className="w-24 h-32 rounded-lg overflow-hidden bg-[#0c0c0d] border border-white/[0.06] shrink-0 flex items-center justify-center">
               {talentUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={talentUrl} alt="Talento de la campaña" className="w-full h-full object-cover" />
               ) : (
-                <span className="w-5 h-5 border-2 border-white/20 border-t-[#ff9c4d] rounded-full animate-spin" />
+                <span className="w-5 h-5 border-2 border-white/20 border-t-[#ff9b4a] rounded-full animate-spin" />
               )}
             </div>
-            <p className="text-[12px] text-[#bdbdbd] flex-1">{dna.model_persona}</p>
+            <p className="text-[12px] text-[#cfcfcf] flex-1">{dna.model_persona}</p>
           </div>
         )}
       </div>

@@ -30,7 +30,7 @@ export function FileUpload({ label, accept = 'image/*', onFile, preview, variant
         <button
           type="button"
           onClick={() => ref.current?.click()}
-          className="relative rounded-2xl overflow-hidden border border-[rgba(255,156,77,0.6)] group"
+          className="relative rounded-2xl overflow-hidden border border-[rgba(255,155,74,0.6)] group"
         >
           <img src={preview} alt="preview" className="w-full object-contain max-h-64" />
           <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
@@ -43,8 +43,8 @@ export function FileUpload({ label, accept = 'image/*', onFile, preview, variant
           onClick={() => ref.current?.click()}
           className={
             variant === 'primary'
-              ? 'h-28 rounded-2xl border-2 border-dashed border-white/[0.06] text-[#8a8a8a] text-sm hover:border-[rgba(255,156,77,0.6)] hover:text-[#ff9c4d] transition-colors flex flex-col items-center justify-center gap-2 bg-[#141414]'
-              : 'h-28 rounded-2xl border-2 border-dashed border-white/[0.06] text-[#8a8a8a] text-xs hover:border-white/20 hover:text-[#bdbdbd] transition-colors flex flex-col items-center justify-center gap-1 bg-[#141414]'
+              ? 'h-28 rounded-2xl border-2 border-dashed border-white/[0.06] text-[#bebebe] text-sm hover:border-[rgba(255,155,74,0.6)] hover:text-[#ff9b4a] transition-colors flex flex-col items-center justify-center gap-2 bg-[#121214]'
+              : 'h-28 rounded-2xl border-2 border-dashed border-white/[0.06] text-[#bebebe] text-xs hover:border-white/20 hover:text-[#cfcfcf] transition-colors flex flex-col items-center justify-center gap-1 bg-[#121214]'
           }
         >
           <svg className="w-6 h-6 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -60,7 +60,7 @@ export default function SessionHistory({ slug, sessionKey }: { slug: string; ses
     <div className="max-w-[1100px] mx-auto px-6 md:px-10 py-10">
       <div className="mb-6 flex items-center gap-2">
         <div className="h-px w-10 bg-white/[0.12]" />
-        <span className="text-[11px] font-bold text-[#8a8a8a] tracking-[2px] uppercase">
+        <span className="text-[11px] font-bold text-[#bebebe] tracking-[2px] uppercase">
           Historial
         </span>
       </div>
@@ -69,13 +69,13 @@ export default function SessionHistory({ slug, sessionKey }: { slug: string; ses
         {/* CTA Nueva sesión */}
         <button
           onClick={startNew}
-          className="group relative flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-[rgba(255,156,77,0.35)] bg-[rgba(255,156,77,0.05)] p-6 min-h-[190px] transition-all duration-200 hover:border-[rgba(255,156,77,0.6)] hover:bg-[rgba(255,156,77,0.08)]"
+          className="group relative flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-[rgba(255,155,74,0.35)] bg-[rgba(255,155,74,0.05)] p-6 min-h-[190px] transition-all duration-200 hover:border-[rgba(255,155,74,0.6)] hover:bg-[rgba(255,155,74,0.08)]"
         >
-          <div className="w-11 h-11 rounded-xl flex items-center justify-center bg-[rgba(255,156,77,0.12)] border border-[rgba(255,156,77,0.25)]">
-            <Plus className="w-[22px] h-[22px] text-[#ff9c4d]" />
+          <div className="w-11 h-11 rounded-xl flex items-center justify-center bg-[rgba(255,155,74,0.12)] border border-[rgba(255,155,74,0.25)]">
+            <Plus className="w-[22px] h-[22px] text-[#ff9b4a]" />
           </div>
-          <span className="text-[15px] font-bold text-[#ff9c4d]">Nueva sesión</span>
-          <span className="text-[12px] text-[#8a8a8a]">Empezar de cero</span>
+          <span className="text-[15px] font-bold text-[#ff9b4a]">Nueva sesión</span>
+          <span className="text-[12px] text-[#bebebe]">Empezar de cero</span>
         </button>
 
         {/* Loading */}
@@ -89,7 +89,7 @@ export default function SessionHistory({ slug, sessionKey }: { slug: string; ses
           <Link
             key={s.id}
             href={`/tools/${slug}/sesion/${s.id}`}
-            className="group relative flex flex-col rounded-2xl jr-card p-4 no-underline overflow-hidden transition-all duration-200 hover:border-[rgba(255,156,77,0.28)] hover:-translate-y-0.5"
+            className="group relative flex flex-col rounded-2xl jr-card p-4 no-underline overflow-hidden transition-all duration-200 hover:border-[rgba(255,155,74,0.28)] hover:-translate-y-0.5"
           >
             <button
               type="button"
@@ -97,7 +97,7 @@ export default function SessionHistory({ slug, sessionKey }: { slug: string; ses
               aria-label="Eliminar sesión"
               disabled={deletingId === s.id}
               onClick={(e) => handleDelete(e, s.id)}
-              className="absolute top-2.5 right-2.5 z-10 flex items-center justify-center w-8 h-8 rounded-full bg-black/40 backdrop-blur text-[#8a8a8a] opacity-0 group-hover:opacity-100 transition hover:text-[#ff6b6b] disabled:opacity-50"
+              className="absolute top-2.5 right-2.5 z-10 flex items-center justify-center w-8 h-8 rounded-full bg-black/40 backdrop-blur text-[#bebebe] opacity-0 group-hover:opacity-100 transition hover:text-[#e93d3d] disabled:opacity-50"
             >
               <Trash2 className="w-4 h-4" />
             </button>
@@ -110,16 +110,16 @@ export default function SessionHistory({ slug, sessionKey }: { slug: string; ses
               )}
             </div>
             <div className="flex items-center justify-between gap-2">
-              <h3 className="text-[14px] font-bold text-[#f5f5f5] truncate">{s.title}</h3>
+              <h3 className="text-[14px] font-bold text-[#ededed] truncate">{s.title}</h3>
               {s.done ? (
                 <CheckCircle2 className="w-4 h-4 text-[#2ccf6f] flex-shrink-0" />
               ) : (
-                <Clock className="w-4 h-4 text-[#ff9c4d] flex-shrink-0" />
+                <Clock className="w-4 h-4 text-[#ff9b4a] flex-shrink-0" />
               )}
             </div>
             <div className="mt-1 flex items-center justify-between text-[11px]">
-              <span className="text-[#8a8a8a]">{fmtDate(s.created_at)}</span>
-              <span className={s.done ? 'text-[#2ccf6f]' : 'text-[#ff9c4d]'}>
+              <span className="text-[#bebebe]">{fmtDate(s.created_at)}</span>
+              <span className={s.done ? 'text-[#2ccf6f]' : 'text-[#ff9b4a]'}>
                 {s.done ? 'Completada' : 'En progreso'}
               </span>
             </div>
@@ -128,7 +128,7 @@ export default function SessionHistory({ slug, sessionKey }: { slug: string; ses
       </div>
 
       {items?.length === 0 && (
-        <p className="text-[13px] text-[#8a8a8a] mt-6">
+        <p className="text-[13px] text-[#bebebe] mt-6">
           Aún no tienes sesiones guardadas. Crea una nueva para empezar.
         </p>
       )}

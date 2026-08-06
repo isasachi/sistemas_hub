@@ -85,7 +85,7 @@ export default function Section5Generate() {
             url={`/api/generador-anuncios/sessions/${sessionId}/generate-image`}
             onEvent={handleEvent}
           />
-          <p className="text-[13px] text-[#bdbdbd]">Esto puede tomar entre 15 y 40 segundos.</p>
+          <p className="text-[13px] text-[#cfcfcf]">Esto puede tomar entre 15 y 40 segundos.</p>
 
           {/* Momento de generación unificado (compartido con landing) */}
           <GenerationProgress
@@ -96,8 +96,8 @@ export default function Section5Generate() {
           />
 
           {/* Skeleton */}
-          <div className="aspect-[9/16] max-h-[300px] rounded-2xl bg-[#141414] animate-pulse border border-white/[0.06] flex items-center justify-center">
-            <span className="text-[#8a8a8a] text-[12px]">generando...</span>
+          <div className="aspect-[9/16] max-h-[300px] rounded-2xl bg-[#121214] animate-pulse border border-white/[0.06] flex items-center justify-center">
+            <span className="text-[#bebebe] text-[12px]">generando...</span>
           </div>
         </>
       )}
@@ -124,12 +124,12 @@ export default function Section5Generate() {
               </svg>
               Descargar
             </button>
-            <button onClick={startNewSession} className="h-11 px-4 rounded-xl border border-white/[0.14] text-[#f5f5f5] text-[13px] font-medium hover:bg-white/[0.05] transition-colors cursor-pointer bg-transparent">
+            <button onClick={startNewSession} className="h-11 px-4 rounded-xl border border-white/[0.14] text-[#ededed] text-[13px] font-medium hover:bg-white/[0.05] transition-colors cursor-pointer bg-transparent">
               Nuevo anuncio
             </button>
           </div>
           <div className="border-t border-white/[0.06] pt-4">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-[#8a8a8a] mb-2">¿Quieres ajustar algo?</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-[#bebebe] mb-2">¿Quieres ajustar algo?</p>
             {error && <div className="mb-2 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-[11px] text-red-400">{error}</div>}
             <RegenControls
               regensLeft={regens['anuncios-image'] ?? 3}

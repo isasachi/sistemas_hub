@@ -39,9 +39,7 @@ export default function Section1Reference() {
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-[13px] text-[#bdbdbd] leading-relaxed">
-        Sube el anuncio que quieres replicar. Analizaré su formato, composición, estilo y lógica persuasiva.
-      </p>
+      {/* Sin intro acá: el encabezado del paso ya explica qué hace esta pantalla. */}
       <FileUpload label="Seleccionar imagen de referencia" onFile={handleFile} preview={preview} />
       {error && (
         <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-[12px] text-red-400">
