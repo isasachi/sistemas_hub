@@ -76,6 +76,103 @@ export const CONTAINERS = [
   'Sobre / sachet',
 ]
 
+/* -------------------------------------------------------------------------
+ * El estilo — ya no se elige de una lista, se compone por marca.
+ * ---------------------------------------------------------------------- */
+
+/** Los 5 roles son fijos: el PDF del brandboard y el .txt del kit cuentan con ellos. */
+export interface Style {
+  palette: { primary: string; secondary: string; accent: string; dark: string; light: string }
+  typography: { display: string; body: string }
+}
+
+export interface FontGroup { label: string; fonts: readonly string[] }
+
+/**
+ * Catálogo CERRADO de tipografías. Cerrado por dos motivos: el editor tiene que
+ * poder cargarlas para previsualizarlas, y el schema de la sugerencia las usa como
+ * enum — una familia inventada por el modelo es una familia que no existe.
+ * Todas son Google Fonts; el editor inyecta el <link> con las que hagan falta.
+ */
+export const DISPLAY_GROUPS: readonly FontGroup[] = [
+  { label: 'Serif de alto contraste', fonts: ['Playfair Display', 'Cormorant Garamond', 'Prata', 'DM Serif Display', 'Abril Fatface'] },
+  { label: 'Serif con carácter', fonts: ['Fraunces', 'Bitter', 'Libre Baskerville', 'Lora', 'Crimson Pro'] },
+  { label: 'Sans geométrica', fonts: ['Poppins', 'Montserrat', 'Outfit', 'Sora', 'Jost'] },
+  { label: 'Sans técnica', fonts: ['Space Grotesk', 'Archivo', 'Manrope', 'Inter'] },
+  { label: 'Condensada e impacto', fonts: ['Oswald', 'Anton', 'Bebas Neue', 'Archivo Black'] },
+  { label: 'Redondeada', fonts: ['Nunito', 'Quicksand', 'Baloo 2'] },
+]
+
+/** Corto a propósito: una condensada o una serif de alto contraste a 13px no se lee. */
+export const BODY_GROUPS: readonly FontGroup[] = [
+  { label: 'Sans legible', fonts: ['Inter', 'Lato', 'Source Sans 3', 'Work Sans', 'Karla', 'Rubik', 'IBM Plex Sans', 'Nunito Sans', 'Mulish', 'Poppins'] },
+  { label: 'Serif legible', fonts: ['Lora', 'Crimson Pro', 'Libre Baskerville'] },
+]
+
+export const DISPLAY_FONTS: string[] = DISPLAY_GROUPS.flatMap((g) => [...g.fonts])
+export const BODY_FONTS: string[] = BODY_GROUPS.flatMap((g) => [...g.fonts])
+/** Sin repetir: es la lista que va al <link> de Google Fonts del editor. */
+export const ALL_FONTS: string[] = [...new Set([...DISPLAY_FONTS, ...BODY_FONTS])]
+
+/**
+ * La hoja de Google Fonts del catálogo. `wght@400;700` es seguro incluso para las
+ * 6 familias de un solo peso (Prata, DM Serif Display, Abril Fatface, Anton, Bebas
+ * Neue, Archivo Black): la API sirve los pesos que existan e ignora los que no, en
+ * vez de rechazar la hoja entera — verificado contra la API el 2026-08-05. NO
+ * "arreglar" esto quitando el 700 ni armando una tabla de pesos por familia.
+ */
+export function fontsHref(families: string[] = ALL_FONTS): string {
+  return 'https://fonts.googleapis.com/css2?'
+    + families.map((f) => `family=${encodeURIComponent(f)}:wght@400;700`).join('&')
+    + '&display=swap'
+}
+
+/**
+ * Punto de partida neutro. NO es un preset: es lo más aburrido posible, a propósito.
+ * Se usa mientras llega la sugerencia, si la sugerencia falla, y al releer sesiones
+ * anteriores al editor (que no tienen paleta guardada).
+ */
+export const DEFAULT_STYLE: Style = {
+  palette: { primary: '#F4F1EC', secondary: '#D6CFC4', accent: '#B4643C', dark: '#1C1917', light: '#FFFFFF' },
+  typography: { display: 'Fraunces', body: 'Inter' },
+}
+
+/**
+ * Actitud (paso 4). Es TODA la dirección de arte que recibe el modelo de imagen —
+ * reemplaza a los bloques de estilo fijos que hacían que todas las marcas salieran
+ * iguales. Las palabras en inglés son deliberadamente pocas: material, luz y
+ * composición quedan sin especificar para que el modelo los varíe por marca.
+ */
+export const FEEL_CHIPS: { label: string; prompt: string }[] = [
+  { label: 'Clínico', prompt: 'clinical, precise' },
+  { label: 'Lujoso', prompt: 'luxurious, refined' },
+  { label: 'Artesanal', prompt: 'handcrafted, artisanal' },
+  { label: 'Cálido', prompt: 'warm, inviting' },
+  { label: 'Potente', prompt: 'bold, high-impact' },
+  { label: 'Sereno', prompt: 'calm, quiet' },
+  { label: 'Juguetón', prompt: 'playful, cheerful' },
+  { label: 'Técnico', prompt: 'technical, engineered' },
+  { label: 'Natural', prompt: 'natural, botanical' },
+  { label: 'Nostálgico', prompt: 'nostalgic, vintage' },
+  { label: 'Minimalista', prompt: 'minimal, stripped back' },
+  { label: 'Juvenil', prompt: 'youthful, energetic' },
+  { label: 'Elegante', prompt: 'elegant, understated' },
+  { label: 'Honesto', prompt: 'honest, no-nonsense' },
+]
+export const FEEL_TAGS = FEEL_CHIPS.map((c) => c.label)
+export const FEEL_MAX = 3
+
+/**
+ * Las actitudes elegidas, en inglés, listas para un prompt. Lo que no es un chip
+ * conocido es texto del usuario y pasa tal cual (el modelo entiende español).
+ */
+export function feelWords(feel: string[]): string {
+  return feel
+    .map((f) => FEEL_CHIPS.find((c) => c.label === f)?.prompt ?? f)
+    .filter(Boolean)
+    .join(', ')
+}
+
 export type PartialBrief = Partial<Brief>
 
 /** Lee el brief guardado. Nunca lanza: un localStorage corrupto vale lo mismo que vacío. */
