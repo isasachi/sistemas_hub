@@ -13,13 +13,13 @@ export interface Brief {
   category: Category
   productDescription: string
   brandName: string
+  /** Eslogan. Opcional: vacío = lo inventa el modelo, como en el board de referencia. */
+  tagline?: string
   audience: string[]
   /** Actitud de la marca (paso 4): chips + lo que escriba el usuario. */
   feel: string[]
-  /** Paleta y tipografías (paso 5). Editable, ya no sale de una lista cerrada. */
+  /** Las 4 casillas del prompt maestro que propone el LLM y edita el usuario (paso 5). */
   style: Style
-  /** Envase del mockup. Opcional: si queda vacío, lo elige el motor según el producto. */
-  containerType?: string
   /** Con qué actitud se pidió la sugerencia. Evita re-llamar al LLM al volver al editor. */
   suggestedFor?: string
 }
@@ -66,77 +66,57 @@ export const AUDIENCE_TAGS = [
 ]
 export const AUDIENCE_MAX = 3
 
-/** Envases de la confirmación. Vacío = el que sugiera el estilo. */
-export const CONTAINERS = [
-  'Frasco con gotero',
-  'Pote',
-  'Doypack',
-  'Lata',
-  'Tubo',
-  'Botella',
-  'Caja',
-  'Sobre / sachet',
+/**
+ * Piezas que pueden aparecer en el board. Alimentan la casilla "Products and
+ * packaging" del prompt, que acepta varias a la vez — el board de referencia
+ * muestra pote, doypack, shaker y polo en la misma imagen.
+ */
+export const PACKAGING_CHIPS = [
+  'Pote', 'Doypack', 'Frasco con gotero', 'Botella', 'Lata', 'Tubo', 'Caja', 'Sobre / sachet',
+  'Shaker', 'Polo', 'Tote bag', 'Tarjeta de presentación', 'Caja de envío', 'Sticker',
 ]
 
 /* -------------------------------------------------------------------------
- * El estilo — ya no se elige de una lista, se compone por marca.
+ * El estilo — las casillas del prompt maestro que no son preguntas del wizard.
  * ---------------------------------------------------------------------- */
 
-/** Los 5 roles son fijos: el PDF del brandboard y el .txt del kit cuentan con ellos. */
+/** Un color del board: el modelo los rotula con su nombre, como en el ejemplo
+ *  ("BOLD ORANGE #FF4D00"), así que el nombre viaja junto al hex. */
+export interface Swatch { name: string; hex: string }
+
+/**
+ * Las 4 casillas que el LLM propone y el usuario edita. NO hay tipografía: el
+ * prompt maestro no tiene esa casilla y el modelo elige la suya (en el ejemplo
+ * eligió Neue Haas Grotesk, que ningún catálogo de Google Fonts puede dar).
+ * Fijarla le quitaría libertad y bajaría el techo de calidad.
+ */
 export interface Style {
-  palette: { primary: string; secondary: string; accent: string; dark: string; light: string }
-  typography: { display: string; body: string }
+  palette: Swatch[]
+  /** "Inspired from" — de dónde sale el mundo visual. */
+  inspiration: string
+  /** "Graphic style" — cómo se dibuja. Distinto del brand feel, que es cómo se siente. */
+  graphicStyle: string
+  /** "Products and packaging" — qué piezas aparecen en el board. */
+  products: string
 }
 
-export interface FontGroup { label: string; fonts: readonly string[] }
+export const PALETTE_MIN = 3
+export const PALETTE_MAX = 6
 
 /**
- * Catálogo CERRADO de tipografías. Cerrado por dos motivos: el editor tiene que
- * poder cargarlas para previsualizarlas, y el schema de la sugerencia las usa como
- * enum — una familia inventada por el modelo es una familia que no existe.
- * Todas son Google Fonts; el editor inyecta el <link> con las que hagan falta.
- */
-export const DISPLAY_GROUPS: readonly FontGroup[] = [
-  { label: 'Serif de alto contraste', fonts: ['Playfair Display', 'Cormorant Garamond', 'Prata', 'DM Serif Display', 'Abril Fatface'] },
-  { label: 'Serif con carácter', fonts: ['Fraunces', 'Bitter', 'Libre Baskerville', 'Lora', 'Crimson Pro'] },
-  { label: 'Sans geométrica', fonts: ['Poppins', 'Montserrat', 'Outfit', 'Sora', 'Jost'] },
-  { label: 'Sans técnica', fonts: ['Space Grotesk', 'Archivo', 'Manrope', 'Inter'] },
-  { label: 'Condensada e impacto', fonts: ['Oswald', 'Anton', 'Bebas Neue', 'Archivo Black'] },
-  { label: 'Redondeada', fonts: ['Nunito', 'Quicksand', 'Baloo 2'] },
-]
-
-/** Corto a propósito: una condensada o una serif de alto contraste a 13px no se lee. */
-export const BODY_GROUPS: readonly FontGroup[] = [
-  { label: 'Sans legible', fonts: ['Inter', 'Lato', 'Source Sans 3', 'Work Sans', 'Karla', 'Rubik', 'IBM Plex Sans', 'Nunito Sans', 'Mulish', 'Poppins'] },
-  { label: 'Serif legible', fonts: ['Lora', 'Crimson Pro', 'Libre Baskerville'] },
-]
-
-export const DISPLAY_FONTS: string[] = DISPLAY_GROUPS.flatMap((g) => [...g.fonts])
-export const BODY_FONTS: string[] = BODY_GROUPS.flatMap((g) => [...g.fonts])
-/** Sin repetir: es la lista que va al <link> de Google Fonts del editor. */
-export const ALL_FONTS: string[] = [...new Set([...DISPLAY_FONTS, ...BODY_FONTS])]
-
-/**
- * La hoja de Google Fonts del catálogo. `wght@400;700` es seguro incluso para las
- * 6 familias de un solo peso (Prata, DM Serif Display, Abril Fatface, Anton, Bebas
- * Neue, Archivo Black): la API sirve los pesos que existan e ignora los que no, en
- * vez de rechazar la hoja entera — verificado contra la API el 2026-08-05. NO
- * "arreglar" esto quitando el 700 ni armando una tabla de pesos por familia.
- */
-export function fontsHref(families: string[] = ALL_FONTS): string {
-  return 'https://fonts.googleapis.com/css2?'
-    + families.map((f) => `family=${encodeURIComponent(f)}:wght@400;700`).join('&')
-    + '&display=swap'
-}
-
-/**
- * Punto de partida neutro. NO es un preset: es lo más aburrido posible, a propósito.
- * Se usa mientras llega la sugerencia, si la sugerencia falla, y al releer sesiones
- * anteriores al editor (que no tienen paleta guardada).
+ * Punto de partida neutro mientras llega la sugerencia (y para sesiones viejas).
+ * A propósito lo más aburrido posible: no es un preset disfrazado.
  */
 export const DEFAULT_STYLE: Style = {
-  palette: { primary: '#F4F1EC', secondary: '#D6CFC4', accent: '#B4643C', dark: '#1C1917', light: '#FFFFFF' },
-  typography: { display: 'Fraunces', body: 'Inter' },
+  palette: [
+    { name: 'Crema', hex: '#F4F1EC' },
+    { name: 'Arena', hex: '#D6CFC4' },
+    { name: 'Terracota', hex: '#B4643C' },
+    { name: 'Tinta', hex: '#1C1917' },
+  ],
+  inspiration: '',
+  graphicStyle: '',
+  products: '',
 }
 
 /**

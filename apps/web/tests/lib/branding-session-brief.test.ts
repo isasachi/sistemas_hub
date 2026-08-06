@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { briefFromRow, paletteFromRow, typographyFromRow } from '@/lib/branding/session-brief'
+import { briefFromRow, paletteFromRow } from '@/lib/branding/session-brief'
 import { DEFAULT_STYLE } from '@/lib/branding/brief'
 
 /** Fila mínima que sí completa un brief. */
@@ -10,15 +10,20 @@ const row = {
   target_audience: 'Dueños de perros, Mamás primerizas',
 }
 
-const palette = { primary: '#101010', secondary: '#202020', accent: '#FF7A2F', dark: '#0A0A0A', light: '#FAFAFA' }
-const typography = { display: 'Oswald', body: 'Lato' }
+const palette = [
+  { name: 'Naranja intenso', hex: '#FF4D00' },
+  { name: 'Lima eléctrico', hex: '#C6FF00' },
+]
+const direction = { inspiration: 'Swiss sports posters', graphicStyle: 'Modular grid', products: 'Pote, Shaker' }
 
 describe('sesión → brief', () => {
-  it('reconstruye el estilo compuesto en el editor', () => {
-    const b = briefFromRow({ ...row, descriptor: 'Artesanal, Cálido', selected_palette: palette, selected_typography: typography })
+  it('reconstruye las casillas del prompt', () => {
+    const b = briefFromRow({ ...row, descriptor: 'Artesanal, Cálido', tagline: 'Sabor de casa',
+                             selected_palette: palette, direction })
     expect(b).not.toBeNull()
     expect(b!.feel).toEqual(['Artesanal', 'Cálido'])
-    expect(b!.style).toEqual({ palette, typography })
+    expect(b!.tagline).toBe('Sabor de casa')
+    expect(b!.style).toEqual({ palette, ...direction })
     expect(b!.audience).toEqual(['Dueños de perros', 'Mamás primerizas'])
   })
 
@@ -32,26 +37,28 @@ describe('sesión → brief', () => {
     expect(b!.style).toEqual(DEFAULT_STYLE)
   })
 
-  it('el shape muerto del style-picker de 2026-07 no se cuela como paleta', () => {
-    // Ese flujo guardaba PaletteColor[] y {primary,secondary,case,detail}: leerlos
-    // como los 5 roles dejaría `palette.primary` undefined y generaría una imagen
-    // PAGADA con basura en el prompt.
-    const b = briefFromRow({
-      ...row,
-      selected_palette: [{ hex: '#101010', name: 'Tinta', role: 'text' }],
-      selected_typography: { primary: 'Oswald', secondary: 'Lato', case: 'title', detail: 'none' },
-    })
-    expect(b!.style).toEqual(DEFAULT_STYLE)
+  it('descarta colores sin hex válido en vez de mandarlos al prompt', () => {
+    // Un hex roto llega literal al prompt de una imagen PAGADA.
+    const b = briefFromRow({ ...row, selected_palette: [
+      { name: 'Bueno', hex: '#FF4D00' }, { name: 'Roto', hex: 'naranja' }, { name: 'Nulo' },
+    ] })
+    expect(b!.style.palette).toEqual([{ name: 'Bueno', hex: '#FF4D00' }])
   })
 
-  it('paletteFromRow/typographyFromRow distinguen ausencia de fallback', () => {
-    // Las usa el handoff a landing: sin paleta guardada la landing va sin identidad
+  it('el shape del style-picker de 2026-07 se lee como paleta: es compatible', () => {
+    // Guardaba {hex,name,role}: los dos campos que importan están, así que se
+    // aprovecha en vez de tirarla al default.
+    const b = briefFromRow({ ...row, selected_palette: [{ hex: '#101010', name: 'Tinta', role: 'text' }] })
+    expect(b!.style.palette).toEqual([{ name: 'Tinta', hex: '#101010' }])
+  })
+
+  it('paletteFromRow distingue ausencia de fallback', () => {
+    // La usa el handoff a landing: sin paleta guardada la landing va sin identidad
     // derivada, en vez de heredar un default que la marca nunca eligió.
     expect(paletteFromRow({ selected_palette: null })).toBeNull()
-    expect(paletteFromRow({ selected_palette: [{ hex: '#fff' }] })).toBeNull()
+    expect(paletteFromRow({ selected_palette: [] })).toBeNull()
+    expect(paletteFromRow({ selected_palette: [{ hex: 'nope' }] })).toBeNull()
     expect(paletteFromRow({ selected_palette: palette })).toEqual(palette)
-    expect(typographyFromRow({ selected_typography: { primary: 'Oswald' } })).toBeNull()
-    expect(typographyFromRow({ selected_typography: typography })).toEqual(typography)
   })
 
   it('sin los datos básicos no hay brief', () => {

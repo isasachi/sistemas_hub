@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getBrandingSession } from '@/lib/branding/db'
-import { paletteFromRow, typographyFromRow } from '@/lib/branding/session-brief'
+import { paletteFromRow } from '@/lib/branding/session-brief'
 import { createLandingSession, updateLandingSession } from '@/lib/landing/db'
 import { readUserId } from '@/lib/product-hunter/session'
 import type { SectionType } from '@/lib/landing/types'
@@ -19,10 +19,6 @@ export const runtime = 'nodejs'
 // de una lista de presets. `tone` queda vacío a propósito — la actitud de branding no
 // mapea 1:1 con los 6 tonos de landing y el usuario lo elige en ese wizard.
 
-const PALETTE_NAMES: Record<string, string> = {
-  primary: 'Primario', secondary: 'Secundario', accent: 'Acento', dark: 'Oscuro', light: 'Claro',
-}
-
 const DEFAULT_SECTIONS: SectionType[] = ['hero', 'beneficios', 'oferta', 'testimonios', 'garantia', 'cta-final']
 
 export async function POST(req: NextRequest) {
@@ -40,8 +36,10 @@ export async function POST(req: NextRequest) {
   // derivada, igual que antes: la landing se crea y el usuario la completa.
   const row = bs as unknown as Record<string, unknown>
   const palette = paletteFromRow(row)
-  const typography = typographyFromRow(row)
-  const photo = bs.mockup_url || bs.logo_url
+  const direction = (bs.direction ?? null) as { inspiration?: string; graphicStyle?: string } | null
+  // `mockup_url` guarda el board del brandbook; el logo suelto es mejor foto de
+  // producto para la landing, así que va primero.
+  const photo = bs.logo_url || bs.mockup_url
 
   const id = await createLandingSession((await readUserId()) ?? undefined)
   await updateLandingSession(id, {
@@ -51,12 +49,11 @@ export async function POST(req: NextRequest) {
     price: '',
     tone: [],
     product_photo_urls: photo ? [photo] : [],
-    palette: palette
-      ? Object.entries(palette).map(([role, hex]) => ({ name: PALETTE_NAMES[role] ?? role, hex, usage: role }))
-      : null,
-    typography: typography ? { headline: typography.display, body: typography.body } : null,
-    // La actitud que se eligió en branding, tal cual: es la dirección de arte.
-    brand_style: (bs.descriptor as string) || null,
+    palette: palette ? palette.map((c) => ({ name: c.name, hex: c.hex, usage: c.name })) : null,
+    // La tipografía la eligió el modelo dentro del board: no hay un nombre que
+    // pasarle a la landing, así que el usuario la elige en ese wizard.
+    typography: null,
+    brand_style: [bs.descriptor, direction?.graphicStyle, direction?.inspiration].filter(Boolean).join('. ') || null,
     selected_sections: DEFAULT_SECTIONS,
     // Para en el paso de IDENTIDAD visual (step 2, F3): el usuario revisa la marca
     // derivada (su paleta de branding gana) y sigue el wizard.

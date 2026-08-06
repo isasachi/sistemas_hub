@@ -58,6 +58,23 @@ export default function NombrePage() {
           </button>
         )}
       </div>
+
+      {/* Eslogan: opcional a propósito. Vacío = lo inventa el modelo, como en el
+          board de referencia ("FUEL YOUR EDGE" no salió de ninguna casilla). */}
+      <div className="flex flex-col gap-2">
+        <label htmlFor="tagline" className="text-[13px] text-[#bdbdbd]">
+          Eslogan <span className="text-[#8a8a8a]">— opcional. Si lo dejas vacío, lo proponemos nosotros.</span>
+        </label>
+        <Input
+          id="tagline"
+          placeholder="Ej: Fuerza que se nota"
+          maxLength={40}
+          value={brief.tagline ?? ''}
+          onChange={(e) => update({ tagline: e.target.value || undefined })}
+          onBlur={() => update({ tagline: brief.tagline?.trim() || undefined })}
+          className="h-12 rounded-xl bg-white/[0.04] border-white/[0.08] text-[14px] text-[#f5f5f5]"
+        />
+      </div>
     </BriefShell>
   )
 }

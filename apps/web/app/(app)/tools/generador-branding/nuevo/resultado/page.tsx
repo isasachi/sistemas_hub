@@ -23,7 +23,7 @@ function Artifact({ stage, url, busy, onRegen, big }: {
 }) {
   return (
     <div className="flex flex-col gap-2">
-      <div className={`relative rounded-2xl border border-white/[0.08] overflow-hidden bg-white ${big ? 'aspect-[4/5]' : 'aspect-square'}`}>
+      <div className={`relative rounded-2xl border border-white/[0.08] overflow-hidden bg-white ${big ? 'aspect-[3/2]' : 'aspect-square'}`}>
         {url ? (
           // eslint-disable-next-line @next/next/no-img-element -- URL pública de Supabase con cache-bust
           <img src={url} alt={STAGE_LABELS[stage]} className="w-full h-full object-contain" />
@@ -142,11 +142,13 @@ function Resultado() {
           </p>
         </div>
 
-        <Artifact stage="mockup" url={row?.mockup_url ?? null} busy={busy === 'mockup'} onRegen={() => regen('mockup')} big />
+        {/* `mockup_url` guarda el BOARD y `label_url` el empaque: columnas legadas
+            reusadas para no pedir migración (ver COLUMN en la ruta de generación). */}
+        <Artifact stage="brandbook" url={row?.mockup_url ?? null} busy={busy === 'brandbook'} onRegen={() => regen('brandbook')} big />
 
         <div className="grid sm:grid-cols-2 gap-4">
           <Artifact stage="logo" url={row?.logo_url ?? null} busy={busy === 'logo'} onRegen={() => regen('logo')} />
-          <Artifact stage="label" url={row?.label_url ?? null} busy={busy === 'label'} onRegen={() => regen('label')} />
+          <Artifact stage="empaque" url={row?.label_url ?? null} busy={busy === 'empaque'} onRegen={() => regen('empaque')} />
         </div>
 
         {error && (

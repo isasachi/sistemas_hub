@@ -1,56 +1,58 @@
 import JSZip from 'jszip'
 import { brandSlug, type Style } from './brief'
-import { logoVariant, frontPanel } from './variants'
 
 /**
- * El .zip de entrega (spec 6.5), sin SVG ni isotipo: el motor es ráster y de un
- * wordmark no se extrae un isotipo por código (decisiones del 2026-08-03).
+ * El .zip de entrega.
  *
  *   <brand-slug>/
- *     brandboard.pdf
- *     logo/logo.png · logo-negro.png · logo-blanco.png
- *     etiqueta/etiqueta-360.png · etiqueta-frontal.png
- *     mockups/mockup.png
- *     colores-y-tipografias.txt
+ *     brandbook.png        el board completo (1536x1024)
+ *     logo.png             el logo aislado, derivado del board
+ *     empaque.png          la foto de producto, derivada del board
+ *     colores-y-estilo.txt
  *
- * Cero llamadas al modelo: las variantes son sharp y el PDF es pdf-lib.
+ * Cero llamadas al modelo y cero post-proceso: las tres imágenes ya vienen
+ * generadas. Se fue el brandboard en pdf-lib (el modelo genera un board mucho
+ * mejor) y se fueron las variantes negro/blanco por umbral (no hay un logo suelto
+ * que umbralizar: el logo del board es a color y con su forma propia).
  */
 
 export interface KitInput {
   brandName: string
+  tagline?: string
   productDescription: string
   audience: string[]
-  style: Style
   feel: string[]
+  style: Style
+  brandbook: Buffer | null
   logo: Buffer | null
-  mockup: Buffer | null
-  label: Buffer | null
-  brandboard: Buffer | null
+  empaque: Buffer | null
 }
 
-export function colorsAndTypeText(input: KitInput): string {
-  const { palette, typography } = input.style
+export function colorsAndStyleText(input: KitInput): string {
+  const s = input.style
   return [
     input.brandName,
+    input.tagline ?? '',
     input.productDescription,
     '',
-    input.feel.length ? `Estilo: ${input.feel.join(' · ')}` : '',
+    input.feel.length ? `ACTITUD\n${input.feel.join(' · ')}` : '',
     '',
     'COLORES',
-    `Primario    ${palette.primary}`,
-    `Secundario  ${palette.secondary}`,
-    `Acento      ${palette.accent}`,
-    `Oscuro      ${palette.dark}`,
-    `Claro       ${palette.light}`,
+    ...s.palette.map((c) => `${c.name.padEnd(20)} ${c.hex.toUpperCase()}`),
     '',
-    'TIPOGRAFÍAS',
-    `Títulos: ${typography.display}`,
-    `Texto:   ${typography.body}`,
+    s.inspiration ? `INSPIRACIÓN\n${s.inspiration}` : '',
+    '',
+    s.graphicStyle ? `ESTILO GRÁFICO\n${s.graphicStyle}` : '',
+    '',
+    s.products ? `PIEZAS\n${s.products}` : '',
     '',
     input.audience.length ? `PÚBLICO\n${input.audience.join(' · ')}` : '',
     '',
+    'Las tipografías del brandbook las eligió el modelo: mira la sección Typography',
+    'de brandbook.png para su nombre exacto.',
+    '',
     'Generado con JR AI Hub.',
-  ].join('\n')
+  ].join('\n').replace(/\n{3,}/g, '\n\n')
 }
 
 export async function buildKit(input: KitInput): Promise<{ zip: Buffer; filename: string }> {
@@ -58,24 +60,10 @@ export async function buildKit(input: KitInput): Promise<{ zip: Buffer; filename
   const zip = new JSZip()
   const root = zip.folder(slug)!
 
-  if (input.brandboard) root.file('brandboard.pdf', input.brandboard)
-
-  if (input.logo) {
-    const logo = root.folder('logo')!
-    logo.file('logo.png', input.logo)
-    logo.file('logo-negro.png', await logoVariant(input.logo, 'negro'))
-    logo.file('logo-blanco.png', await logoVariant(input.logo, 'blanco'))
-  }
-  if (input.label) {
-    // El 360 completo (lo que va a imprenta) y el frente recortado (lo que se ve
-    // en el envase). El recorte es sharp, no otra generación.
-    const etiqueta = root.folder('etiqueta')!
-    etiqueta.file('etiqueta-360.png', input.label)
-    etiqueta.file('etiqueta-frontal.png', await frontPanel(input.label))
-  }
-  if (input.mockup) root.folder('mockups')!.file('mockup.png', input.mockup)
-
-  root.file('colores-y-tipografias.txt', colorsAndTypeText(input))
+  if (input.brandbook) root.file('brandbook.png', input.brandbook)
+  if (input.logo) root.file('logo.png', input.logo)
+  if (input.empaque) root.file('empaque.png', input.empaque)
+  root.file('colores-y-estilo.txt', colorsAndStyleText(input))
 
   return { zip: await zip.generateAsync({ type: 'nodebuffer' }), filename: `${slug}.zip` }
 }

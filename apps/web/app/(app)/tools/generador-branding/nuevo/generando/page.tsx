@@ -9,18 +9,17 @@ import { useBrief } from '@/components/tools/generador-branding/nuevo/BriefShell
 import { STEPS, isComplete, resumePath, saveLastSession } from '@/lib/branding/brief'
 import { STAGE_LABELS, type Stage } from '@/lib/branding/generation'
 
-// El brandboard es una etapa más de la pantalla aunque no sea una generación:
-// se arma siempre al final y el usuario lo ve completarse.
-type Step = Stage | 'brandboard'
-const STEPS_UI: Step[] = ['logo', 'label', 'mockup', 'brandboard']
-const LABELS: Record<Step, string> = { ...STAGE_LABELS, brandboard: 'Brandboard' }
+// El board primero; las dos piezas sueltas se derivan de él.
+type Step = Stage
+const STEPS_UI: Step[] = ['brandbook', 'logo', 'empaque']
+const LABELS: Record<Step, string> = STAGE_LABELS
 
 const TIPS = [
-  'La paleta y las tipografías que ajustaste son las que va a usar cada pieza.',
-  'Cada pieza monta sobre la anterior: el logo entra en la etiqueta y la etiqueta se aplica al envase.',
+  'Las tipografías las elige el modelo: es parte de lo que hace única a cada marca.',
+  'Primero sale el brandbook completo; de ahí se derivan el logo y el empaque sueltos.',
   'Si algo no te convence, puedes regenerar solo esa pieza sin rehacer el resto.',
-  'La etiqueta sale plana y lista para imprenta, no montada sobre el envase.',
-  'Al final te armamos el brandboard en PDF y el kit descargable, sin que tengas que pedirlo.',
+  'El texto del empaque sale en español, con formato peruano.',
+  'El logo y el empaque sueltos se sacan del mismo board, así que son la misma marca.',
 ]
 
 type State = 'pending' | 'running' | 'done' | 'failed'
@@ -28,7 +27,7 @@ type State = 'pending' | 'running' | 'done' | 'failed'
 export default function GenerandoPage() {
   const router = useRouter()
   const { brief } = useBrief()
-  const [state, setState] = useState<Record<Step, State>>({ logo: 'pending', mockup: 'pending', label: 'pending', brandboard: 'pending' })
+  const [state, setState] = useState<Record<Step, State>>({ brandbook: 'pending', logo: 'pending', empaque: 'pending' })
   const [error, setError] = useState<string | null>(null)
   const [tip, setTip] = useState(0)
   const [slow, setSlow] = useState(false)

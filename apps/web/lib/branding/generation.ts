@@ -1,158 +1,162 @@
 /**
- * generation.ts — brief → los 3 prompts del pipeline.
+ * generation.ts — el brief → el prompt maestro del brandbook.
  * ---------------------------------------------------------------------------
- * Motor: ráster PNG con gpt-image-2 (decisión cerrada 2026-08-03 — no hay motor
- * híbrido, ni vector, ni Recraft). Por eso NO hay interfaz `ImageEngine` con
- * varias implementaciones: hay una sola llamada, `generateImage` de lib/gemini.
+ * ESTE PROMPT ES LA FUENTE DE VERDAD DE LA TOOL (decisión del usuario,
+ * 2026-08-06). No es una plantilla entre varias: es *el* prompt con el que se
+ * generan brandbooks con identidad firme, y el trabajo del sistema es
+ * automatizar el llenado de sus casillas, no reinterpretarlo.
  *
- * Los prompts van en inglés (el motor responde mejor) y son largos y específicos,
- * que es como rinde gpt-image-2.
+ * Reglas al tocarlo:
+ *  · Los bloques fijos (sistema de identidad, fotografía, avoid, board final)
+ *    se copian TAL CUAL. No se "mejoran" ni se resumen.
+ *  · Las 8 casillas se rellenan con el brief. Una casilla vacía se omite entera
+ *    en vez de mandar un placeholder: `[Visual Inspiration]` literal dentro del
+ *    prompt es ruido que el modelo dibuja.
+ *  · No hay casilla de tipografía a propósito. El modelo elige la suya (en el
+ *    board de referencia eligió Neue Haas Grotesk); fijarla desde un catálogo de
+ *    Google Fonts le quita libertad y baja el techo.
+ *  · Las dos únicas adiciones al prompt original son las decisiones del usuario:
+ *    el eslogan cuando lo escribe, y el idioma del empaque (español peruano, sin
+ *    inventar datos legales).
  *
- * La dirección visual sale del BRIEF, no de una lista cerrada (refactor 2026-08-05).
- * Antes eran 7 bloques `promptStyle` de 40 palabras que fijaban material, ornamento,
- * luz y composición de una vez: toda marca del mismo preset salía igual. Ahora son
- * las 1-3 palabras de actitud que eligió el usuario + su paleta y sus tipografías.
- * Material, luz y composición quedan SIN especificar a propósito — que el modelo
- * los varíe es lo que hace que dos marcas no se parezcan. Si algún resultado sale
- * flojo, la palanca es enriquecer la actitud, no volver a fijar bloques de estilo.
+ * Motor: ráster PNG con gpt-image-2. El board sale en 3:2 = 1536x1024, que es
+ * exactamente el tamaño del board de referencia.
  * ---------------------------------------------------------------------------
  */
 
-import { feelWords, type Brief, type Style } from './brief'
+import type { Brief, Style } from './brief'
+import { feelWords } from './brief'
 
-export type Stage = 'logo' | 'mockup' | 'label'
-
-/**
- * Orden fijo, en cascada: cada pieza MONTA sobre la anterior.
- *   logo → etiqueta (lleva el logo) → mockup (aplica la etiqueta al envase)
- *
- * `mockup_first` se probó y perdió (2026-08-03): naciendo dentro de un envase el
- * wordmark sale aguado y lo que se extrae después arrastra eso. Y con el mockup
- * al final, lo que se ve montado es la MISMA etiqueta que se entrega, no una
- * reinterpretación.
- */
-export const STAGE_SEQUENCE: Stage[] = ['logo', 'label', 'mockup']
+/** El board primero; las piezas sueltas se derivan de él. */
+export type Stage = 'brandbook' | 'logo' | 'empaque'
+export const STAGE_SEQUENCE: Stage[] = ['brandbook', 'logo', 'empaque']
 
 export const STAGE_LABELS: Record<Stage, string> = {
+  brandbook: 'Brandbook',
   logo: 'Logo',
-  mockup: 'Mockup del producto',
-  label: 'Etiqueta',
+  empaque: 'Empaque',
 }
 
-function paletteLine(s: Style): string {
-  const { primary, secondary, accent, dark, light } = s.palette
-  return `Palette — primary ${primary}, secondary ${secondary}, accent ${accent}, dark ${dark}, light ${light}. `
-    + `Use these exact colours and no others.`
-}
+/* ── Los bloques fijos del prompt maestro ─────────────────────────────────── */
+
+const IDENTITY_SYSTEM = [
+  '**The identity system should include:**',
+  '',
+  '* Primary logo',
+  '* Logo variations',
+  '* Color palette',
+  '* Typography',
+  '* Graphic elements',
+  '* Product and packaging mockups',
+  '* Any additional branded materials if specified',
+].join('\n')
+
+const PHOTOGRAPHY =
+  '**Photography style:** Editorial product photography, premium studio lighting, photorealistic, '
+  + 'clean composition, luxury branding presentation.'
+
+const AVOID =
+  '**Avoid:** Generic AI aesthetics, clipart, cartoon graphics, visual clutter, excessive gradients, '
+  + 'cheap mockups, poor typography, inconsistent branding, outdated design trends, stock-looking layouts, '
+  + 'low-resolution details, watermarks, fake UI elements, random decorative elements, overly busy '
+  + 'compositions, plastic-looking materials unless intentionally specified.'
+
+const FINAL_IMAGE =
+  'The final image should be a single premium brand identity board with a modern editorial layout, '
+  + 'strong visual hierarchy, generous white space, and the quality of a professional Behance branding case study.'
 
 /**
- * La actitud, en inglés, más lo que el usuario haya escrito. Es TODA la dirección
- * de arte: deliberadamente corta.
+ * Idioma del empaque. El prompt original no lo dice y el modelo escribe en inglés
+ * ("DIETARY SUPPLEMENT", "NET WT."); el mercado es peruano. De paso cierra el
+ * agujero de los datos legales: esta tool ya inventó una razón social mexicana
+ * para una marca peruana.
  */
-export function feelPrompt(b: Brief): string {
-  const words = feelWords(b.feel)
-  return words ? `Art direction — the brand must feel ${words}.` : ''
+const COPY_RULES =
+  '**Packaging copy:** All text printed on the packaging must be in Spanish as used in Peru '
+  + '(e.g. "SUPLEMENTO DIETARIO", "CONT. NETO 300 g", "60 porciones"). '
+  + 'Do NOT invent legal or company data: no made-up company name, address, city, country, '
+  + 'registration number, phone or website.'
+
+/* ── Las 8 casillas ───────────────────────────────────────────────────────── */
+
+function paletteText(palette: Style['palette']): string {
+  return palette.map((c) => `${c.name} ${c.hex}`).join(', ')
 }
 
-function audienceLine(b: Brief): string {
-  return b.audience.length ? `The buyer is: ${b.audience.join(', ')}.` : ''
+/** `**Etiqueta:** valor`, o nada si el valor está vacío. */
+function slot(label: string, value: string | undefined): string {
+  const v = (value ?? '').trim()
+  return v ? `**${label}:** ${v}` : ''
 }
 
-/** El nombre va entrecomillado y con instrucción de ortografía: el motor es fiel al lettering. */
-function exactName(b: Brief): string {
-  return `Render the brand name EXACTLY as "${b.brandName}" — same spelling, same accents, no extra words.`
-}
-
-/** Qué pieza ya generada se adjunta como referencia (la primera de los adjuntos). */
-export type Ref = 'none' | 'logo' | 'label'
-
-/** El envase pedido, o la fórmula para que lo elija el motor según el estilo. */
-function containerLine(b: Brief): string {
-  return b.containerType
-    ? `The container MUST be: ${b.containerType}.`
-    : `Choose the packaging format that best fits ${b.productDescription}.`
-}
-
-export function buildLogoPrompt(b: Brief): string {
+export function buildBrandbookPrompt(b: Brief): string {
   return [
-    `Design a brand logo for a ${b.category} product: ${b.productDescription}.`,
-    `It is a WORDMARK: the brand name as custom lettering, no slogan, no tagline, no product shot.`,
-    exactName(b),
-    `Typography direction: letterforms in the spirit of ${b.style.typography.display}.`,
-    feelPrompt(b),
-    paletteLine(b.style),
-    audienceLine(b),
-    `Flat vector-looking artwork, crisp edges, centred with generous margins, plain white background,`,
-    `no mockup, no packaging, no shadow, no 3D, no frame, no watermark.`,
-  ].filter(Boolean).join(' ')
-}
-
-export function buildMockupPrompt(b: Brief, ref: Ref): string {
-  return [
-    `Photorealistic product shot of ${b.productDescription} for the brand "${b.brandName}".`,
-    containerLine(b),
-    ref === 'label'
-      ? `The FIRST attached image is the FRONT panel of the finished label: apply it to the container`
-        + ` as the real printed label — same text, same colours, same layout, wrapped and lit to follow`
-        + ` the surface. Do not redesign it and do not add text that is not on it. Show the product`
-        + ` from the front: the back panel must NOT be visible.`
-      : ref === 'logo'
-      ? `The FIRST attached image is the finished logo: place it on the packaging exactly as it is —`
-        + ` same letterforms, same spelling, same proportions. Do not redraw it.`
-      : exactName(b),
-    // Ya no hay moodboard: lo único adjunto es la pieza previa de la cascada. Una
-    // frase sobre "the remaining attached images" sería mentira.
-    feelPrompt(b),
-    paletteLine(b.style),
-    audienceLine(b),
-    `Single product, centred, studio lighting, soft realistic shadow, clean uncluttered background,`,
-    `no people, no hands, no extra props, no text other than what belongs on the packaging.`,
-  ].filter(Boolean).join(' ')
-}
-
-export function buildLabelPrompt(b: Brief, ref: Ref): string {
-  return [
-    `Design the flat printable 360° LABEL artwork (full wrap) for ${b.productDescription},`,
-    `brand "${b.brandName}".`,
-    // El reparto front/back es LEY: el mockup recorta la mitad izquierda y la aplica
-    // al envase. Sin este reparto el motor amontona la letra chica en el frente.
-    `Lay it out as TWO panels of equal width side by side, separated by a thin vertical`,
-    `fold line: the FRONT panel on the LEFT half, the BACK panel on the RIGHT half.`,
-    `FRONT panel — only the hero: brand lockup, product name, a short descriptor and the net`,
-    `content. Generous empty space; nothing else, no paragraphs, no lists, no icons rows.`,
-    `BACK panel — everything else, small and orderly: ingredients, directions of use,`,
-    `warnings, storage, net weight and a blank rectangle where a barcode would go.`,
-    `This is where the dense text belongs.`,
-    // El motor inventaba razón social y dirección (una fábrica mexicana para una
-    // marca peruana). Datos legales = del usuario, no del modelo.
-    `Do NOT invent legal or company data: no made-up company name, address, city,`,
-    `country, registration number, phone or website. Where the manufacturer line would`,
-    `go, leave the neutral placeholder "Fabricado por: ____________".`,
-    ref === 'logo'
-      ? `The FIRST attached image is the finished logo: place it on the label exactly as it is, as the`
-        + ` brand lockup. Do not redraw it.`
-      : exactName(b),
-    `Flat 2D artwork seen straight on, as it would go to print — NOT applied to a container, no bottle,`,
-    `no jar, no 3D, no perspective, no mockup, no shadow.`,
-    b.containerType ? `It will be printed for this container: ${b.containerType} — use its proportions.` : '',
-    `Body text in the spirit of ${b.style.typography.body}; display text in the spirit of ${b.style.typography.display}.`,
-    feelPrompt(b),
-    paletteLine(b.style),
-    `Sharp edges, print-ready, no watermark.`,
-  ].filter(Boolean).join(' ')
-}
-
-export function buildPrompt(stage: Stage, b: Brief, ref: Ref): string {
-  if (stage === 'logo') return buildLogoPrompt(b)
-  if (stage === 'mockup') return buildMockupPrompt(b, ref)
-  return buildLabelPrompt(b, ref)
+    'Create a complete brand identity concept for a brand whose details are specified below.',
+    '',
+    slot('Brand name', b.brandName),
+    slot('Tagline', b.tagline),
+    slot('Brand description', b.productDescription),
+    slot('Target age group', b.audience.join(', ')),
+    slot('Brand feel', feelWords(b.feel)),
+    slot('Inspired from', b.style.inspiration),
+    slot('Products and packaging', b.style.products),
+    slot('Colors', paletteText(b.style.palette)),
+    slot('Graphic style', b.style.graphicStyle),
+    '',
+    IDENTITY_SYSTEM,
+    '',
+    PHOTOGRAPHY,
+    '',
+    COPY_RULES,
+    '',
+    AVOID,
+    '',
+    FINAL_IMAGE,
+    // Una casilla vacía deja una línea en blanco que este collapse se lleva; así
+    // el prompt nunca contiene un `**Inspired from:**` colgando sin valor.
+  ].join('\n').replace(/\n{3,}/g, '\n\n').trim()
 }
 
 /**
- * gpt-image-2 solo tiene 3 tamaños. Logo cuadrado, mockup vertical (foto de
- * producto) y etiqueta APAISADA: es un 360 de dos paneles, no cabe en vertical.
+ * Las piezas sueltas se sacan DEL BOARD ya generado, que va como primera imagen
+ * adjunta. Sin esa referencia cada llamada es una interpretación distinta y el
+ * logo del zip no sería el logo del board.
+ */
+export function buildPiecePrompt(stage: 'logo' | 'empaque', b: Brief): string {
+  const common = [
+    `The attached image is the finished brand identity board for "${b.brandName}".`,
+    'Reproduce its brand exactly: same logo, same letterforms, same colours, same graphic elements.',
+    'Do not redesign anything and do not invent new elements.',
+  ]
+  if (stage === 'logo') {
+    return [
+      ...common,
+      `Output ONLY the primary logo from that board, isolated and centred on a plain white background,`,
+      'at large size with generous margins.',
+      'No packaging, no mockup, no board layout, no swatches, no specimen text, no shadow, no frame.',
+    ].join(' ')
+  }
+  return [
+    ...common,
+    `Output ONE photorealistic product shot of the main packaging piece from that board`,
+    b.style.products.trim() ? `(${b.style.products.trim()})` : '',
+    '— the same packaging, with the same printed artwork and the same copy.',
+    PHOTOGRAPHY.replace('**Photography style:** ', 'Photography: '),
+    'Single product, centred, clean uncluttered background, no people, no hands, no board layout,',
+    'no swatches, no text other than what belongs on the packaging.',
+  ].filter(Boolean).join(' ')
+}
+
+export function buildPrompt(stage: Stage, b: Brief): string {
+  return stage === 'brandbook' ? buildBrandbookPrompt(b) : buildPiecePrompt(stage, b)
+}
+
+/**
+ * gpt-image-2 solo tiene 3 tamaños. El board es apaisado (1536x1024, el mismo del
+ * board de referencia); el logo cuadrado y el empaque vertical, que es como se
+ * fotografía un producto.
  */
 export function aspectFor(stage: Stage): string {
-  if (stage === 'logo') return '1:1'
-  return stage === 'label' ? '3:2' : '4:5'
+  if (stage === 'brandbook') return '3:2'
+  return stage === 'logo' ? '1:1' : '4:5'
 }
