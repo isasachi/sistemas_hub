@@ -66,58 +66,32 @@ export const AUDIENCE_TAGS = [
 ]
 export const AUDIENCE_MAX = 3
 
-/**
- * Piezas que pueden aparecer en el board. Alimentan la casilla "Products and
- * packaging" del prompt, que acepta varias a la vez — el board de referencia
- * muestra pote, doypack, shaker y polo en la misma imagen.
- */
-export const PACKAGING_CHIPS = [
-  'Pote', 'Doypack', 'Frasco con gotero', 'Botella', 'Lata', 'Tubo', 'Caja', 'Sobre / sachet',
-  'Shaker', 'Polo', 'Tote bag', 'Tarjeta de presentación', 'Caja de envío', 'Sticker',
-]
-
 /* -------------------------------------------------------------------------
  * El estilo — las casillas del prompt maestro que no son preguntas del wizard.
  * ---------------------------------------------------------------------- */
 
-/** Un color del board: el modelo los rotula con su nombre, como en el ejemplo
- *  ("BOLD ORANGE #FF4D00"), así que el nombre viaja junto al hex. */
-export interface Swatch { name: string; hex: string }
-
 /**
- * Las 4 casillas que el LLM propone y el usuario edita. NO hay tipografía: el
- * prompt maestro no tiene esa casilla y el modelo elige la suya (en el ejemplo
- * eligió Neue Haas Grotesk, que ningún catálogo de Google Fonts puede dar).
- * Fijarla le quitaría libertad y bajaría el techo de calidad.
+ * Las 2 casillas del prompt que el usuario no responde en el wizard. Es todo lo
+ * que queda del "editor de estilo": el prompt maestro tiene 6 casillas y 4 salen
+ * de las preguntas.
  */
 export interface Style {
-  palette: Swatch[]
-  /** "Inspired from" — de dónde sale el mundo visual. */
+  /**
+   * NOMBRES de color, no hex. El prompt que produjo los mejores boards decía
+   * "bold orange, soft yellow, pure white, electric lime" y el modelo eligió los
+   * valores; forzarle los hex lo obliga a acomodarlos y sale peor. Verificado
+   * contra el probe del 2026-08-06.
+   */
+  palette: string[]
+  /** "Inspired from". Corto: el input de referencia era "Editorial product photography". */
   inspiration: string
-  /** "Graphic style" — cómo se dibuja. Distinto del brand feel, que es cómo se siente. */
-  graphicStyle: string
-  /** "Products and packaging" — qué piezas aparecen en el board. */
-  products: string
 }
 
 export const PALETTE_MIN = 3
 export const PALETTE_MAX = 6
 
-/**
- * Punto de partida neutro mientras llega la sugerencia (y para sesiones viejas).
- * A propósito lo más aburrido posible: no es un preset disfrazado.
- */
-export const DEFAULT_STYLE: Style = {
-  palette: [
-    { name: 'Crema', hex: '#F4F1EC' },
-    { name: 'Arena', hex: '#D6CFC4' },
-    { name: 'Terracota', hex: '#B4643C' },
-    { name: 'Tinta', hex: '#1C1917' },
-  ],
-  inspiration: '',
-  graphicStyle: '',
-  products: '',
-}
+/** Punto de partida mientras llega la sugerencia. Vacío = el modelo decide todo. */
+export const DEFAULT_STYLE: Style = { palette: [], inspiration: '' }
 
 /**
  * Actitud (paso 4) — la casilla "Brand feel" del prompt maestro.

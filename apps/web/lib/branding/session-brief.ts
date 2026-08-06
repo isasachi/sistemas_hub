@@ -1,4 +1,4 @@
-import { isComplete, DEFAULT_STYLE, type Brief, type PartialBrief, type Style, type Swatch } from './brief'
+import { isComplete, DEFAULT_STYLE, type Brief, type PartialBrief, type Style } from './brief'
 
 /**
  * Fila de `branding_sessions` → Brief. La fila es la copia servidor del brief
@@ -12,32 +12,25 @@ import { isComplete, DEFAULT_STYLE, type Brief, type PartialBrief, type Style, t
  * imagen PAGADA con un prompt roto.
  */
 
-export function paletteFromRow(row: Record<string, unknown>): Swatch[] | null {
+/**
+ * Nombres de color. Tolera el shape viejo (`{name,hex}[]` del editor de hex, y
+ * `{hex,name,role}[]` del style-picker de 2026-07): se queda con el nombre, que
+ * es lo único que el prompt necesita.
+ */
+export function paletteFromRow(row: Record<string, unknown>): string[] | null {
   const p = row.selected_palette
   if (!Array.isArray(p) || !p.length) return null
   const out = p
-    .filter((c): c is Record<string, unknown> => !!c && typeof c === 'object')
-    .filter((c) => typeof c.hex === 'string' && /^#[0-9A-Fa-f]{6}$/.test(c.hex as string))
-    .map((c) => ({ name: typeof c.name === 'string' && c.name ? (c.name as string) : (c.hex as string), hex: c.hex as string }))
+    .map((c) => (typeof c === 'string' ? c : typeof (c as { name?: unknown })?.name === 'string' ? ((c as { name: string }).name) : ''))
+    .filter((n): n is string => !!n.trim())
   return out.length ? out : null
 }
 
-function directionFromRow(row: Record<string, unknown>): Pick<Style, 'inspiration' | 'graphicStyle' | 'products'> | null {
-  const d = row.direction as Record<string, unknown> | null
-  if (!d || typeof d !== 'object' || Array.isArray(d)) return null
-  const str = (v: unknown) => (typeof v === 'string' ? v : '')
-  const out = { inspiration: str(d.inspiration), graphicStyle: str(d.graphicStyle), products: str(d.products) }
-  return out.inspiration || out.graphicStyle || out.products ? out : null
-}
-
 export function styleFromRow(row: Record<string, unknown>): Style {
+  const d = row.direction as { inspiration?: unknown } | null
   return {
     palette: paletteFromRow(row) ?? DEFAULT_STYLE.palette,
-    ...(directionFromRow(row) ?? {
-      inspiration: DEFAULT_STYLE.inspiration,
-      graphicStyle: DEFAULT_STYLE.graphicStyle,
-      products: DEFAULT_STYLE.products,
-    }),
+    inspiration: typeof d?.inspiration === 'string' ? d.inspiration : DEFAULT_STYLE.inspiration,
   }
 }
 

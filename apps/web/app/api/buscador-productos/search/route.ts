@@ -1,133 +1,92 @@
 import { NextRequest, NextResponse } from 'next/server'
 import {
-  getUnseenProducts,
-  countUnseenProducts,
-  countPendingAnalysis,
-  getNicheStatus,
-  getAllNicheKeywords,
-  upsertNiche,
-  isBlocked,
+  getApprovedByBucket, countApproved, countRawPending,
+  getRawNicheStatus, upsertRawNiche, markSeen, isBlocked,
+  RAW_BUCKETS, RAW_BUCKET_LABEL,
+  type RawProductEntry, type RawBucketGroup, type RawSearchResponse,
 } from '@ph/shared'
-import { resolveSearchStatus } from '@/lib/product-hunter/search-status'
-import { matchNiche } from '@/lib/product-hunter/niche-match'
 import { readUserId, newUserId, PH_USER_COOKIE } from '@/lib/product-hunter/session'
-import { checkAndRecordSearch } from '@/lib/product-hunter/quota'
-import { composeWinnersView } from '@/lib/product-hunter/compose-view'
-import { toCard } from '@/lib/product-hunter/to-card'
-import type { ProductCard, SearchResponse } from '@ph/shared'
 
-// ⚠️ Esta ruta SOLO lee de Supabase. No llama a Anthropic ni corre Playwright,
-// así que responde en ~200ms y cabe sobrado en el timeout de Vercel Hobby (10s).
-// El análisis y el scraping ocurren en batch en el daemon del VPS, no aquí.
+// ⚠️ Esta ruta SOLO lee de Supabase: ni Anthropic ni Playwright. El scraping y
+// la verificación (las tres reglas) corren en el daemon del VPS.
+//
+// Devuelve los TRES rangos, 10 productos cada uno. El orden lo da ph_raw_unseen:
+// lo que este usuario no ha visto va primero, y lo visto reaparece a los 7 días
+// — así dos usuarios ven productos distintos sin que el pool se vacíe nunca.
+
+const POR_RANGO = 10
 
 export async function POST(req: NextRequest) {
   let body: { niche?: string }
   try { body = await req.json() } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
-  const query = body.niche?.trim().toLowerCase().replace(/\s+/g, ' ')
-  if (!query) return NextResponse.json({ error: 'Falta el nicho' }, { status: 400 })
+  const niche = body.niche?.trim().toLowerCase().replace(/\s+/g, ' ')
+  if (!niche) return NextResponse.json({ error: 'Falta el nicho' }, { status: 400 })
 
-  // Término bloqueado (typo/genérico o anatomía sexual/explícita — blocklist en
-  // @ph/shared): respuesta vacía, NO se crea ni se sirve. Cierra la ventana de
-  // 12h del cron clean-niches (un sensible no llega a scrapearse). Los nichos ya
-  // marcados 'blocked' cuyo id ≠ query los corta el guard de status más abajo.
-  if (isBlocked(query)) {
-    return NextResponse.json({ niche: query, status: 'pending', products: [], totalUnseen: 0 } as SearchResponse)
-  }
-
-  // Identidad del usuario
   let userId = await readUserId()
   let setCookie = false
   if (!userId) { userId = newUserId(); setCookie = true }
 
-  // Cuota diaria + bloqueo de keyword repetida
-  const quota = await checkAndRecordSearch(userId, query)
-  if (!quota.ok) {
-    return NextResponse.json(
-      { error: quota.message, code: quota.code },
-      { status: 429 },
-    )
-  }
-
-  // Resolución de nicho: match exacto, o la consulta contiene una keyword/id de
-  // un nicho existente ("rodillera", "dolor rodilla" → "rodilla" — esas
-  // variaciones SON keywords expandidas del nicho en ph_niches.keywords).
-  // Sin esto, cada variación crearía un nicho duplicado y un scrape redundante.
-  let niche = query
-  let nicheRow = await getNicheStatus(query)
-  if (!nicheRow) {
-    // Best-effort: si falla (ej. migración niche_keywords sin aplicar), se
-    // degrada al comportamiento anterior (cold start directo), nunca a un 500.
-    const matched = await getAllNicheKeywords()
-      .then((all) => matchNiche(query, all))
-      .catch(() => null)
-    if (matched) {
-      niche = matched
-      nicheRow = await getNicheStatus(matched)
-    }
-  }
-
-  // Dedup semántico: si el nicho resuelto es un ALIAS de otro mercado
-  // (canonical_id, seteado por el gate del worker), servimos el pool del
-  // canónico. Un solo salto — canonical_id apunta siempre a una raíz.
-  if (nicheRow?.canonical_id) {
-    niche = nicheRow.canonical_id
-    nicheRow = await getNicheStatus(nicheRow.canonical_id)
-  }
-
-  // Nicho ya marcado 'blocked' (el query resolvió a uno vía keyword/id): no se
-  // sirve ni se re-encola. Mismo cuerpo vacío que el término bloqueado directo.
-  if (nicheRow?.status === 'blocked') {
-    return NextResponse.json({ niche, status: 'pending', products: [], totalUnseen: 0 } as SearchResponse)
-  }
-
-  // Cold start: ni el nicho ni una variación conocida existen. Lo encolamos como
-  // pending (NO scrapeamos aquí, Vercel no puede correr Playwright). El daemon del
-  // VPS (systemd, 24/7) poll-ea getNichesToRefresh() — que devuelve los pending —
-  // y lo levanta en una vuelta del loop (minutos), sin necesitar dispatch externo.
-  if (!nicheRow) {
-    // Kill-switch temporal (PH_COLD_START_DISABLED=1): durante el seed/depuración
-    // NO aceptamos nichos nuevos para no ensuciar la cola — ni se crea el registro.
-    // La UX no cambia (sigue diciendo "en cola"); el nicho se capturará en el
-    // próximo seed manual. Quitar la flag al terminar.
-    if (process.env.PH_COLD_START_DISABLED !== '1') {
-      await upsertNiche(niche, 'pending')
-    }
-    // queued: true → nicho genuinamente NUEVO (la UI dice "lo encolamos").
-    const payload: SearchResponse = { niche, status: 'pending', products: [], totalUnseen: 0, queued: true }
+  const responder = (payload: RawSearchResponse) => {
     const res = NextResponse.json(payload)
-    if (setCookie) res.cookies.set(PH_USER_COOKIE, userId, { httpOnly: true, path: '/', maxAge: 60 * 60 * 24 * 365 })
+    if (setCookie) {
+      res.cookies.set(PH_USER_COOKIE, userId!, { httpOnly: true, path: '/', maxAge: 60 * 60 * 24 * 365 })
+    }
     return res
   }
+  const vacío = (extra: Partial<RawSearchResponse> = {}): RawSearchResponse => ({
+    niche, status: 'pending', groups: [], total: 0, ...extra,
+  })
 
-  // Pool profundo (40) para que la composición 1/7/2 tenga de dónde elegir cada
-  // tier; composeWinnersView recorta a 10 con el esquema 1 alta / 7 media / 2 baja.
-  const rows = await getUnseenProducts(niche, userId, 40)
-  const cards = rows.map(toCard).filter((c): c is ProductCard => c !== null)
-  // Ganadores frescos para el usuario (honesto: pasa reglas de oro + no visto en 7d)
-  const totalUnseen = await countUnseenProducts(niche, userId)
+  // Términos bloqueados (typos / anatomía explícita): ni se crean ni se sirven.
+  if (isBlocked(niche)) return responder(vacío({ status: 'empty' }))
 
-  // Vista de ganadores: SIEMPRE 10 con esquema 1/7/2 (flex si un tier no alcanza).
-  // bestEffort = no había ningún alta y se promovió el mejor del pool a esa slot.
-  const { products, bestEffort } = composeWinnersView(cards)
-  // El pool nunca se vacía (ph_unseen_products re-muestra lo visto): si hay
-  // productos en pantalla pero ninguno es fresco para el usuario, se lo decimos.
-  const allSeen = products.length > 0 && totalUnseen === 0
+  const row = await getRawNicheStatus(niche)
+  if (!row) {
+    // Cold start: se encola y el daemon lo levanta. Vercel no corre Playwright.
+    await upsertRawNiche(niche, 'pending')
+    return responder(vacío({ queued: true }))
+  }
 
-  // products vacío: distinguir "ya analizado, sin ganadores" de "aún analizando".
-  // updateNicheAfterScrape marca status='active' tras CADA scrape, pero el análisis
-  // LLM corre en un pase aparte; toCard descarta los productos sin score, así que
-  // 0 cards podría ser mitad-de-análisis. countPendingAnalysis (score=null) lo
-  // desambigua: solo 'empty' cuando NO queda nada por analizar. .catch → 'pending'
-  // (comportamiento previo, nunca 500 por esta línea). Antes: "analizando" eterno.
-  const pendingAnalysis = products.length || nicheRow.status !== 'active'
-    ? 0
-    : await countPendingAnalysis(niche).catch(() => 1)
-  const status = resolveSearchStatus(products.length, nicheRow.status, pendingAnalysis)
+  const listas = await Promise.all(
+    RAW_BUCKETS.map(async (bucket) => {
+      const rows = await getApprovedByBucket(niche, bucket, userId!, POR_RANGO)
+      const products: RawProductEntry[] = rows.map((r) => ({
+        id: `${r.niche}:${r.page_id}`,
+        advertiser: r.name ?? 'Anunciante',
+        productName: r.product_name ?? null,
+        title: r.raw_data?.title ?? null,
+        body: r.raw_data?.body ?? null,
+        country: r.country,
+        adCount: r.ad_count,
+        adsUrl: `https://www.facebook.com/ads/library/?${new URLSearchParams({
+          active_status: 'active', ad_type: 'all', country: 'ALL',
+          is_targeted_country: 'false', media_type: 'all', search_type: 'page',
+          'sort_data[mode]': 'total_impressions', 'sort_data[direction]': 'desc',
+          view_all_page_id: r.page_id,
+        })}`,
+      }))
+      return { bucket, label: RAW_BUCKET_LABEL[bucket], products } satisfies RawBucketGroup
+    }),
+  )
 
-  const payload: SearchResponse = { niche, status, products, totalUnseen, bestEffort, allSeen }
-  const res = NextResponse.json(payload)
-  if (setCookie) res.cookies.set(PH_USER_COOKIE, userId, { httpOnly: true, path: '/', maxAge: 60 * 60 * 24 * 365 })
-  return res
+  const total = listas.reduce((a, g) => a + g.products.length, 0)
+
+  // Sin nada que mostrar: distinguir "todavía verificando" de "sin resultados".
+  // countRawPending es global (la cola del daemon), suficiente para no decirle
+  // al usuario "no hay" mientras el nicho aún se está procesando.
+  if (total === 0) {
+    const [aprobados, pendientes] = await Promise.all([
+      countApproved(niche),
+      countRawPending().catch(() => 0),
+    ])
+    return responder(vacío({ status: aprobados === 0 && pendientes > 0 ? 'pending' : 'empty' }))
+  }
+
+  // Marcar como vistos los que se muestran: la próxima búsqueda de ESTE usuario
+  // trae otros, y lo visto vuelve recién a los 7 días.
+  markSeen(userId, listas.flatMap((g) => g.products.map((p) => p.id))).catch(() => {})
+
+  return responder({ niche, status: 'ready', groups: listas, total })
 }

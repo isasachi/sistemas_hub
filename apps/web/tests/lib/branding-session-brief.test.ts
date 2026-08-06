@@ -10,11 +10,8 @@ const row = {
   target_audience: 'Dueños de perros, Mamás primerizas',
 }
 
-const palette = [
-  { name: 'Naranja intenso', hex: '#FF4D00' },
-  { name: 'Lima eléctrico', hex: '#C6FF00' },
-]
-const direction = { inspiration: 'Swiss sports posters', graphicStyle: 'Modular grid', products: 'Pote, Shaker' }
+const palette = ['naranja intenso', 'lima eléctrico']
+const direction = { inspiration: 'Editorial product photography' }
 
 describe('sesión → brief', () => {
   it('reconstruye las casillas del prompt', () => {
@@ -37,19 +34,14 @@ describe('sesión → brief', () => {
     expect(b!.style).toEqual(DEFAULT_STYLE)
   })
 
-  it('descarta colores sin hex válido en vez de mandarlos al prompt', () => {
-    // Un hex roto llega literal al prompt de una imagen PAGADA.
+  it('los shapes viejos con hex se leen quedándose con el nombre', () => {
+    // Hubo dos flujos que guardaron objetos acá: el style-picker de 2026-07
+    // ({hex,name,role}) y el editor de hex ({name,hex}). El prompt solo quiere
+    // el nombre, así que se aprovechan en vez de tirarlos al default.
     const b = briefFromRow({ ...row, selected_palette: [
-      { name: 'Bueno', hex: '#FF4D00' }, { name: 'Roto', hex: 'naranja' }, { name: 'Nulo' },
+      { hex: '#101010', name: 'Tinta', role: 'text' }, { name: 'Lima', hex: '#C6FF00' },
     ] })
-    expect(b!.style.palette).toEqual([{ name: 'Bueno', hex: '#FF4D00' }])
-  })
-
-  it('el shape del style-picker de 2026-07 se lee como paleta: es compatible', () => {
-    // Guardaba {hex,name,role}: los dos campos que importan están, así que se
-    // aprovecha en vez de tirarla al default.
-    const b = briefFromRow({ ...row, selected_palette: [{ hex: '#101010', name: 'Tinta', role: 'text' }] })
-    expect(b!.style.palette).toEqual([{ name: 'Tinta', hex: '#101010' }])
+    expect(b!.style.palette).toEqual(['Tinta', 'Lima'])
   })
 
   it('paletteFromRow distingue ausencia de fallback', () => {
@@ -57,7 +49,7 @@ describe('sesión → brief', () => {
     // derivada, en vez de heredar un default que la marca nunca eligió.
     expect(paletteFromRow({ selected_palette: null })).toBeNull()
     expect(paletteFromRow({ selected_palette: [] })).toBeNull()
-    expect(paletteFromRow({ selected_palette: [{ hex: 'nope' }] })).toBeNull()
+    expect(paletteFromRow({ selected_palette: [{ hex: '#FF4D00' }] })).toBeNull()
     expect(paletteFromRow({ selected_palette: palette })).toEqual(palette)
   })
 

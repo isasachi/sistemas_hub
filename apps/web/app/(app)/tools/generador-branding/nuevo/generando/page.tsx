@@ -9,17 +9,17 @@ import { useBrief } from '@/components/tools/generador-branding/nuevo/BriefShell
 import { STEPS, isComplete, resumePath, saveLastSession } from '@/lib/branding/brief'
 import { STAGE_LABELS, type Stage } from '@/lib/branding/generation'
 
-// El board primero; las dos piezas sueltas se derivan de él.
+// La identidad primero; las tres piezas sueltas se derivan de ella.
 type Step = Stage
-const STEPS_UI: Step[] = ['brandbook', 'logo', 'empaque']
+const STEPS_UI: Step[] = ['identidad', 'logo', 'etiqueta', 'mockup']
 const LABELS: Record<Step, string> = STAGE_LABELS
 
 const TIPS = [
   'Las tipografías las elige el modelo: es parte de lo que hace única a cada marca.',
-  'Primero sale el brandbook completo; de ahí se derivan el logo y el empaque sueltos.',
+  'Primero sale la identidad completa; de ahí se derivan el logo, la etiqueta y el mockup.',
   'Si algo no te convence, puedes regenerar solo esa pieza sin rehacer el resto.',
   'El texto del empaque sale en español, con formato peruano.',
-  'El logo y el empaque sueltos se sacan del mismo board, así que son la misma marca.',
+  'El logo viene en tres versiones: la principal y las de negro y blanco para fondos.',
 ]
 
 type State = 'pending' | 'running' | 'done' | 'failed'
@@ -27,7 +27,7 @@ type State = 'pending' | 'running' | 'done' | 'failed'
 export default function GenerandoPage() {
   const router = useRouter()
   const { brief } = useBrief()
-  const [state, setState] = useState<Record<Step, State>>({ brandbook: 'pending', logo: 'pending', empaque: 'pending' })
+  const [state, setState] = useState<Record<Step, State>>({ identidad: 'pending', logo: 'pending', etiqueta: 'pending', mockup: 'pending' })
   const [error, setError] = useState<string | null>(null)
   const [tip, setTip] = useState(0)
   const [slow, setSlow] = useState(false)

@@ -1,34 +1,15 @@
 import { describe, it, expect } from 'vitest'
-import { DEFAULT_STYLE, PALETTE_MIN, PALETTE_MAX, PACKAGING_CHIPS, FEEL_CHIPS, FEEL_TAGS, feelWords } from '@/lib/branding/brief'
+import { DEFAULT_STYLE, FEEL_CHIPS, FEEL_TAGS, feelWords } from '@/lib/branding/brief'
 
 const HEX = /^#[0-9A-F]{6}$/i
 
 describe('DEFAULT_STYLE', () => {
-  it('es un punto de partida neutro, no un preset disfrazado', () => {
-    // Vacías a propósito: son las casillas creativas que propone el LLM. Si acá
-    // hubiera texto, toda marca cuya sugerencia falle saldría con la misma
-    // dirección de arte — que es justo lo que se eliminó al matar los presets.
+  it('está vacío a propósito: no es un preset disfrazado', () => {
+    // Si acá hubiera colores o inspiración, toda marca cuya sugerencia falle
+    // saldría con la misma dirección — que es lo que se eliminó al matar los
+    // presets. Vacío = el modelo decide, que es mejor que decidir por todos.
+    expect(DEFAULT_STYLE.palette).toEqual([])
     expect(DEFAULT_STYLE.inspiration).toBe('')
-    expect(DEFAULT_STYLE.graphicStyle).toBe('')
-    expect(DEFAULT_STYLE.products).toBe('')
-  })
-
-  it('trae una paleta dentro de los límites y en hex de 6 dígitos', () => {
-    expect(DEFAULT_STYLE.palette.length).toBeGreaterThanOrEqual(PALETTE_MIN)
-    expect(DEFAULT_STYLE.palette.length).toBeLessThanOrEqual(PALETTE_MAX)
-    for (const c of DEFAULT_STYLE.palette) {
-      expect(c.hex).toMatch(HEX)
-      expect(c.name.trim()).not.toBe('')
-    }
-  })
-})
-
-describe('piezas del board', () => {
-  it('van más allá del envase: el board de referencia lleva shaker y polo', () => {
-    expect(PACKAGING_CHIPS.length).toBeGreaterThanOrEqual(10)
-    expect(new Set(PACKAGING_CHIPS).size).toBe(PACKAGING_CHIPS.length)
-    expect(PACKAGING_CHIPS).toContain('Doypack')
-    expect(PACKAGING_CHIPS).toContain('Polo')
   })
 })
 

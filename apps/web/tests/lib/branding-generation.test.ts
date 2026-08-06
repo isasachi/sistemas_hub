@@ -1,105 +1,121 @@
 import { describe, it, expect } from 'vitest'
-import { buildPrompt, buildBrandbookPrompt, STAGE_SEQUENCE, aspectFor } from '@/lib/branding/generation'
+import { buildPrompt, buildIdentityPrompt, STAGE_SEQUENCE, aspectFor, type Stage } from '@/lib/branding/generation'
 import type { Brief } from '@/lib/branding/brief'
 
 const brief: Brief = {
   category: 'suplementos',
-  productDescription: 'Creatina monohidratada micronizada en polvo',
+  productDescription: 'Una marca de creatina en polvo',
   brandName: 'Creatim',
-  tagline: 'Fuerza que se nota',
-  audience: ['Hombres de 25 a 45', 'Deportistas'],
-  feel: ['Potente', 'Técnico'],
+  audience: ['Hombres de 25 a 45'],
+  feel: ['Potente', 'Juvenil'],
   style: {
-    palette: [
-      { name: 'Naranja intenso', hex: '#FF4D00' },
-      { name: 'Lima eléctrico', hex: '#C6FF00' },
-      { name: 'Blanco puro', hex: '#FFFFFF' },
-    ],
-    inspiration: 'Swiss sports posters of the 1970s, anodised aluminium, athletics track markings',
-    graphicStyle: 'Tight modular grid, oversized italic wordmark, flat two-colour iconography',
-    products: 'Pote, Doypack, Shaker, Polo',
+    palette: ['naranja intenso', 'amarillo suave', 'blanco puro', 'lima eléctrico'],
+    inspiration: 'Editorial product photography',
   },
 }
 
 describe('el prompt maestro', () => {
-  const p = buildBrandbookPrompt(brief)
+  const p = buildIdentityPrompt(brief)
 
-  it('arranca con la instrucción original y pide el board de un solo golpe', () => {
-    expect(p.startsWith('Create a complete brand identity concept')).toBe(true)
-    expect(p).toContain('single premium brand identity board')
-    expect(p).toContain('Behance branding case study')
+  it('arranca con la instrucción del usuario y pide las 3 piezas', () => {
+    expect(p.startsWith('Create a complete visual identity for the brand below.')).toBe(true)
+    expect(p).toContain('* Primary logo and logo variations')
+    expect(p).toContain('* Product label design')
+    expect(p).toContain('* Realistic product mockup')
   })
 
-  it('conserva los bloques fijos palabra por palabra', () => {
-    expect(p).toContain('* Primary logo')
-    expect(p).toContain('* Product and packaging mockups')
-    expect(p).toContain('Editorial product photography, premium studio lighting, photorealistic')
-    expect(p).toContain('Generic AI aesthetics, clipart, cartoon graphics')
-    expect(p).toContain('plastic-looking materials unless intentionally specified')
+  it('conserva Style y Avoid palabra por palabra', () => {
+    expect(p).toContain('Style: Premium, modern, minimalist, editorial product photography, clean layout, photorealistic.')
+    expect(p).toContain('Avoid: Generic AI aesthetics, clipart, cartoon graphics')
+    expect(p).toContain('watermarks, and inconsistent branding.')
   })
 
-  it('rellena las 8 casillas con el brief', () => {
+  it('rellena las 6 casillas', () => {
     expect(p).toContain('**Brand name:** Creatim')
-    expect(p).toContain('**Tagline:** Fuerza que se nota')
-    expect(p).toContain('**Brand description:** Creatina monohidratada')
-    expect(p).toContain('**Target age group:** Hombres de 25 a 45, Deportistas')
-    expect(p).toContain('**Brand feel:** bold, technical')
-    expect(p).toContain('**Inspired from:** Swiss sports posters')
-    expect(p).toContain('**Products and packaging:** Pote, Doypack, Shaker, Polo')
-    expect(p).toContain('**Colors:** Naranja intenso #FF4D00, Lima eléctrico #C6FF00')
-    expect(p).toContain('**Graphic style:** Tight modular grid')
+    expect(p).toContain('**Brand description:** Una marca de creatina en polvo')
+    expect(p).toContain('**Target audience:** Hombres de 25 a 45')
+    expect(p).toContain('**Brand feel:** bold, youthful')
+    expect(p).toContain('**Inspired from:** Editorial product photography')
+    expect(p).toContain('**Colors:** naranja intenso, amarillo suave, blanco puro, lima eléctrico')
   })
 
-  it('el empaque va en español peruano y sin datos legales inventados', () => {
-    expect(p).toContain('in Spanish as used in Peru')
-    expect(p).toContain('CONT. NETO')
-    expect(p).toContain('Do NOT invent legal or company data')
+  // El hallazgo que costó un rediseño: con hex el modelo tiene que acomodarlos y
+  // el board sale peor. Los nombres lo dejan elegir valores que funcionan juntos.
+  it('los colores van por NOMBRE, nunca por hex', () => {
+    expect(p).not.toMatch(/#[0-9A-Fa-f]{6}/)
   })
 
-  it('no fija tipografía: esa casilla no existe y el modelo elige', () => {
-    expect(p).not.toMatch(/\*\*Typograph\w*:\*\*/)
-    // La lista del sistema de identidad SÍ pide una sección de tipografía en el board.
-    expect(p).toContain('* Typography')
+  it('no inventa casillas que el prompt no tiene', () => {
+    for (const ausente of ['Graphic style', 'Products and packaging', 'Typography']) {
+      expect(p, ausente).not.toContain(`**${ausente}:**`)
+    }
   })
 
-  // Una casilla vacía dejaba `**Inspired from:**` colgando, y el modelo dibuja
-  // literalmente lo que no entiende.
-  it('omite las casillas vacías en vez de mandarlas huecas', () => {
-    const sin = buildBrandbookPrompt({ ...brief, tagline: undefined,
-      style: { ...brief.style, inspiration: '', graphicStyle: '' } })
-    expect(sin).not.toContain('Tagline')
+  it('mantiene idioma y datos legales en UNA línea', () => {
+    expect(p).toContain('Packaging copy in Spanish (Peru)')
+    expect(p).toContain('Do not invent company names, addresses or registration numbers')
+    // El bloque largo anterior era parte de lo que densificaba el board.
+    expect(p.split('\n').find((l) => l.startsWith('Packaging copy'))!.length).toBeLessThan(120)
+  })
+
+  // Un `**Inspired from:**` colgando sin valor es ruido que el modelo dibuja.
+  it('omite las casillas vacías', () => {
+    const sin = buildIdentityPrompt({ ...brief, style: { palette: [], inspiration: '' } })
     expect(sin).not.toContain('Inspired from')
-    expect(sin).not.toContain('Graphic style')
+    expect(sin).not.toContain('Colors')
     expect(sin).not.toMatch(/\n{3,}/)
     expect(sin).toContain('**Brand name:** Creatim')
+  })
+
+  it('sigue siendo corto: es la premisa del rediseño', () => {
+    expect(p.split(/\s+/).length).toBeLessThan(140)
   })
 })
 
 describe('las piezas sueltas', () => {
-  it('salen DEL board, no de una interpretación nueva', () => {
-    for (const stage of ['logo', 'empaque'] as const) {
+  const PIEZAS: Exclude<Stage, 'identidad'>[] = ['logo', 'etiqueta', 'mockup']
+
+  it('salen DE la identidad, no de una lectura nueva', () => {
+    for (const stage of PIEZAS) {
       const p = buildPrompt(stage, brief)
-      expect(p, stage).toContain('The attached image is the finished brand identity board')
+      expect(p, stage).toContain('The attached image is the finished visual identity')
       expect(p, stage).toContain('Do not redesign anything')
     }
   })
 
-  it('el logo sale aislado y el empaque como foto de producto', () => {
-    expect(buildPrompt('logo', brief)).toContain('isolated and centred on a plain white background')
-    expect(buildPrompt('logo', brief)).toContain('no board layout')
-    expect(buildPrompt('empaque', brief)).toContain('photorealistic product shot')
-    expect(buildPrompt('empaque', brief)).toContain('Pote, Doypack, Shaker, Polo')
+  it('el logo sale aislado sobre blanco', () => {
+    const p = buildPrompt('logo', brief)
+    expect(p).toContain('isolated and centred on a plain white background')
+    expect(p).toContain('no board layout')
+  })
+
+  it('la etiqueta es un 360 plano de dos paneles, no un envase', () => {
+    const p = buildPrompt('etiqueta', brief)
+    expect(p).toContain('360')
+    expect(p).toContain('FRONT panel on the LEFT half')
+    expect(p).toContain('BACK panel on the RIGHT half')
+    expect(p).toContain('NOT applied to a container')
+    // El reparto es lo que evita que la letra chica se amontone en el frente.
+    expect(p).toMatch(/BACK panel — everything else[\s\S]*ingredients/)
+    expect(p).toContain('Fabricado por: ____________')
+  })
+
+  it('el mockup es una foto de producto', () => {
+    const p = buildPrompt('mockup', brief)
+    expect(p).toContain('photorealistic product shot')
+    expect(p).toContain('no board layout')
   })
 })
 
 describe('formato', () => {
-  it('el board primero: las piezas lo necesitan generado', () => {
-    expect(STAGE_SEQUENCE).toEqual(['brandbook', 'logo', 'empaque'])
+  it('la identidad primero: las piezas la necesitan generada', () => {
+    expect(STAGE_SEQUENCE).toEqual(['identidad', 'logo', 'etiqueta', 'mockup'])
   })
 
-  it('board apaisado (el tamaño del board de referencia), logo cuadrado, empaque vertical', () => {
-    expect(aspectFor('brandbook')).toBe('3:2')   // → 1536x1024
+  it('identidad y etiqueta apaisadas, logo cuadrado, mockup vertical', () => {
+    expect(aspectFor('identidad')).toBe('3:2')   // → 1536x1024
+    expect(aspectFor('etiqueta')).toBe('3:2')    // el 360 no cabe en vertical
     expect(aspectFor('logo')).toBe('1:1')
-    expect(aspectFor('empaque')).toBe('4:5')
+    expect(aspectFor('mockup')).toBe('4:5')
   })
 })

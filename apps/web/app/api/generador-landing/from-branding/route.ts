@@ -36,10 +36,10 @@ export async function POST(req: NextRequest) {
   // derivada, igual que antes: la landing se crea y el usuario la completa.
   const row = bs as unknown as Record<string, unknown>
   const palette = paletteFromRow(row)
-  const direction = (bs.direction ?? null) as { inspiration?: string; graphicStyle?: string } | null
-  // `mockup_url` guarda el board del brandbook; el logo suelto es mejor foto de
-  // producto para la landing, así que va primero.
-  const photo = bs.logo_url || bs.mockup_url
+  const direction = (bs.direction ?? null) as { inspiration?: string } | null
+  // El mockup del producto es la mejor foto para una landing; la identidad es un
+  // tablero y no sirve como imagen de producto.
+  const photo = bs.container_url || bs.logo_url
 
   const id = await createLandingSession((await readUserId()) ?? undefined)
   await updateLandingSession(id, {
@@ -49,11 +49,12 @@ export async function POST(req: NextRequest) {
     price: '',
     tone: [],
     product_photo_urls: photo ? [photo] : [],
-    palette: palette ? palette.map((c) => ({ name: c.name, hex: c.hex, usage: c.name })) : null,
-    // La tipografía la eligió el modelo dentro del board: no hay un nombre que
-    // pasarle a la landing, así que el usuario la elige en ese wizard.
+    // La landing necesita hex y branding ya no los fija: los eligió el modelo
+    // dentro de la imagen y no hay de dónde leerlos. Los NOMBRES viajan en
+    // brand_style, que es texto libre, y el usuario define la paleta en su wizard.
+    palette: null,
     typography: null,
-    brand_style: [bs.descriptor, direction?.graphicStyle, direction?.inspiration].filter(Boolean).join('. ') || null,
+    brand_style: [bs.descriptor, direction?.inspiration, palette?.join(', ')].filter(Boolean).join('. ') || null,
     selected_sections: DEFAULT_SECTIONS,
     // Para en el paso de IDENTIDAD visual (step 2, F3): el usuario revisa la marca
     // derivada (su paleta de branding gana) y sigue el wizard.

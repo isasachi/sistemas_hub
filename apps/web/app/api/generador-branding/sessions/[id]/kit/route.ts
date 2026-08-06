@@ -5,7 +5,7 @@ import { buildKit } from '@/lib/branding/kit'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-// Solo baja 3 PNG y los comprime. El margen no estorba.
+// Baja 4 PNG, deriva 2 variantes con sharp y comprime.
 export const maxDuration = 60
 
 /** Descarga del kit. Cero llamadas al modelo: solo lee, empaqueta y comprime. */
@@ -30,11 +30,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     audience: brief.audience,
     feel: brief.feel,
     style: brief.style,
-    // `mockup_url` guarda el board y `label_url` el empaque (ver COLUMN en la
-    // ruta de generación): columnas legadas reusadas para no pedir migración.
-    brandbook: await grab((row.mockup_url as string) ?? null),
+    // Columnas legadas reusadas para no pedir migración: `mockup_url` guarda la
+    // identidad y `container_url` la foto de producto (ver COLUMN en generar/).
+    identidad: await grab((row.mockup_url as string) ?? null),
     logo: await grab((row.logo_url as string) ?? null),
-    empaque: await grab((row.label_url as string) ?? null),
+    etiqueta: await grab((row.label_url as string) ?? null),
+    mockup: await grab((row.container_url as string) ?? null),
   })
 
   return new Response(new Uint8Array(zip), {

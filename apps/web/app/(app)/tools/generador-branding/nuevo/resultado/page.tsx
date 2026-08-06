@@ -14,16 +14,19 @@ interface SessionRow {
   logo_url: string | null
   mockup_url: string | null
   label_url: string | null
+  container_url: string | null
   brand_name: string | null
   generation_status: string | null
 }
 
-function Artifact({ stage, url, busy, onRegen, big, regenLabel }: {
-  stage: Stage; url: string | null; busy: boolean; onRegen: () => void; big?: boolean; regenLabel?: string
+function Artifact({ stage, url, busy, onRegen, big, wide, tall, regenLabel }: {
+  stage: Stage; url: string | null; busy: boolean; onRegen: () => void
+  big?: boolean; wide?: boolean; tall?: boolean; regenLabel?: string
 }) {
+  const ratio = big || wide ? 'aspect-[3/2]' : tall ? 'aspect-[4/5]' : 'aspect-square'
   return (
     <div className="flex flex-col gap-2">
-      <div className={`relative rounded-2xl border border-white/[0.08] overflow-hidden bg-white ${big ? 'aspect-[3/2]' : 'aspect-square'}`}>
+      <div className={`relative rounded-2xl border border-white/[0.08] overflow-hidden bg-white ${ratio}`}>
         {url ? (
           // eslint-disable-next-line @next/next/no-img-element -- URL pública de Supabase con cache-bust
           <img src={url} alt={STAGE_LABELS[stage]} className="w-full h-full object-contain" />
@@ -74,14 +77,13 @@ function Resultado() {
   }, [row?.generation_status, load])
 
   /**
-   * Regenerar el BOARD regenera las tres piezas: el logo y el empaque se derivan
-   * de él, así que un board nuevo deja a los otros dos siendo otra marca. Es más
-   * caro (3 imágenes), pero entregar un kit con piezas de dos marcas distintas no
-   * es una opción.
+   * Regenerar la IDENTIDAD regenera las tres piezas: se derivan de ella, así que
+   * una identidad nueva deja a las otras siendo otra marca. Es más caro (4
+   * imágenes), pero entregar un kit con piezas de dos marcas no es una opción.
    */
   async function regen(stage: Stage) {
     if (!sessionId || busy) return
-    const todo = stage === 'brandbook'
+    const todo = stage === 'identidad'
     setBusy(todo ? 'todo' : stage); setError(null)
     try {
       const res = await fetch('/api/generador-branding/generar', {
@@ -149,15 +151,22 @@ function Resultado() {
           </p>
         </div>
 
-        {/* `mockup_url` guarda el BOARD y `label_url` el empaque: columnas legadas
-            reusadas para no pedir migración (ver COLUMN en la ruta de generación). */}
-        <Artifact stage="brandbook" url={row?.mockup_url ?? null} busy={busy === 'todo'}
-                  onRegen={() => regen('brandbook')} big regenLabel="Regenerar la marca entera" />
+        {/* Columnas legadas reusadas para no pedir migración: `mockup_url` guarda
+            la identidad y `container_url` la foto de producto (ver COLUMN). */}
+        <Artifact stage="identidad" url={row?.mockup_url ?? null} busy={busy === 'todo'}
+                  onRegen={() => regen('identidad')} big regenLabel="Regenerar la marca entera" />
+
+        <Artifact stage="etiqueta" url={row?.label_url ?? null} busy={busy === 'etiqueta' || busy === 'todo'}
+                  onRegen={() => regen('etiqueta')} wide />
 
         <div className="grid sm:grid-cols-2 gap-4">
           <Artifact stage="logo" url={row?.logo_url ?? null} busy={busy === 'logo' || busy === 'todo'} onRegen={() => regen('logo')} />
-          <Artifact stage="empaque" url={row?.label_url ?? null} busy={busy === 'empaque' || busy === 'todo'} onRegen={() => regen('empaque')} />
+          <Artifact stage="mockup" url={row?.container_url ?? null} busy={busy === 'mockup' || busy === 'todo'} onRegen={() => regen('mockup')} tall />
         </div>
+
+        <p className="text-[12px] text-[#8a8a8a]">
+          El kit incluye además el logo en negro y en blanco, derivados del principal.
+        </p>
 
         {error && (
           <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-[12px] text-red-400">{error}</div>

@@ -1,87 +1,64 @@
 /**
- * generation.ts — el brief → el prompt maestro del brandbook.
+ * generation.ts — el brief → el prompt maestro y las piezas sueltas.
  * ---------------------------------------------------------------------------
- * ESTE PROMPT ES LA FUENTE DE VERDAD DE LA TOOL (decisión del usuario,
- * 2026-08-06). No es una plantilla entre varias: es *el* prompt con el que se
- * generan brandbooks con identidad firme, y el trabajo del sistema es
- * automatizar el llenado de sus casillas, no reinterpretarlo.
+ * EL PROMPT MAESTRO ES LA FUENTE DE VERDAD DE LA TOOL (usuario, 2026-08-06).
+ * El trabajo del sistema es rellenar sus 6 casillas, no reinterpretarlo.
  *
- * Reglas al tocarlo:
- *  · Los bloques fijos (sistema de identidad, fotografía, avoid, board final)
- *    se copian TAL CUAL. No se "mejoran" ni se resumen.
- *  · Las 8 casillas se rellenan con el brief. Una casilla vacía se omite entera
- *    en vez de mandar un placeholder: `[Visual Inspiration]` literal dentro del
- *    prompt es ruido que el modelo dibuja.
- *  · No hay casilla de tipografía a propósito. El modelo elige la suya (en el
- *    board de referencia eligió Neue Haas Grotesk); fijarla desde un catálogo de
- *    Google Fonts le quita libertad y baja el techo.
- *  · Las dos únicas adiciones al prompt original son las decisiones del usuario:
- *    el eslogan cuando lo escribe, y el idioma del empaque (español peruano, sin
- *    inventar datos legales).
+ * ⚠️ LA LECCIÓN QUE COSTÓ UN REDISEÑO: menos instrucción = mejor board.
+ * La primera versión mandaba el doble de texto (casillas largas generadas por
+ * LLM, 8 slots, lista de 7 entregables, bloque de idioma de 44 palabras) y el
+ * modelo devolvía un tablero denso de infografía en vez de un caso editorial.
+ * Con el prompt corto el board sale limpio. Reglas al tocar esto:
+ *   · Los bloques fijos (Generate / Style / Avoid) se copian TAL CUAL.
+ *   · Los valores de las casillas se mantienen CORTOS. El input de referencia
+ *     que funcionó era "A creatine powder product brand", no un párrafo.
+ *   · Los colores van por NOMBRE, nunca por hex: el modelo elige mejores
+ *     valores que los que uno le impone, y rotula la paleta él mismo.
+ *   · No hay casilla de tipografía ni de estilo gráfico. El modelo decide.
  *
- * Motor: ráster PNG con gpt-image-2. El board sale en 3:2 = 1536x1024, que es
- * exactamente el tamaño del board de referencia.
+ * Motor: ráster PNG con gpt-image-2.
  * ---------------------------------------------------------------------------
  */
 
-import type { Brief, Style } from './brief'
+import type { Brief } from './brief'
 import { feelWords } from './brief'
 
-/** El board primero; las piezas sueltas se derivan de él. */
-export type Stage = 'brandbook' | 'logo' | 'empaque'
-export const STAGE_SEQUENCE: Stage[] = ['brandbook', 'logo', 'empaque']
+/** La identidad primero; las tres piezas sueltas se derivan de ella. */
+export type Stage = 'identidad' | 'logo' | 'etiqueta' | 'mockup'
+export const STAGE_SEQUENCE: Stage[] = ['identidad', 'logo', 'etiqueta', 'mockup']
 
 export const STAGE_LABELS: Record<Stage, string> = {
-  brandbook: 'Brandbook',
+  identidad: 'Identidad visual',
   logo: 'Logo',
-  empaque: 'Empaque',
+  etiqueta: 'Etiqueta 360',
+  mockup: 'Mockup',
 }
 
-/* ── Los bloques fijos del prompt maestro ─────────────────────────────────── */
+/* ── Bloques fijos del prompt maestro ─────────────────────────────────────── */
 
-const IDENTITY_SYSTEM = [
-  '**The identity system should include:**',
+const GENERATE = [
+  'Generate:',
   '',
-  '* Primary logo',
-  '* Logo variations',
-  '* Color palette',
-  '* Typography',
-  '* Graphic elements',
-  '* Product and packaging mockups',
-  '* Any additional branded materials if specified',
+  '* Primary logo and logo variations',
+  '* Product label design',
+  '* Realistic product mockup',
 ].join('\n')
 
-const PHOTOGRAPHY =
-  '**Photography style:** Editorial product photography, premium studio lighting, photorealistic, '
-  + 'clean composition, luxury branding presentation.'
+const STYLE =
+  'Style: Premium, modern, minimalist, editorial product photography, clean layout, photorealistic.'
 
 const AVOID =
-  '**Avoid:** Generic AI aesthetics, clipart, cartoon graphics, visual clutter, excessive gradients, '
-  + 'cheap mockups, poor typography, inconsistent branding, outdated design trends, stock-looking layouts, '
-  + 'low-resolution details, watermarks, fake UI elements, random decorative elements, overly busy '
-  + 'compositions, plastic-looking materials unless intentionally specified.'
-
-const FINAL_IMAGE =
-  'The final image should be a single premium brand identity board with a modern editorial layout, '
-  + 'strong visual hierarchy, generous white space, and the quality of a professional Behance branding case study.'
+  'Avoid: Generic AI aesthetics, clipart, cartoon graphics, visual clutter, excessive gradients, '
+  + 'cheap effects, poor typography, low-resolution details, watermarks, and inconsistent branding.'
 
 /**
- * Idioma del empaque. El prompt original no lo dice y el modelo escribe en inglés
- * ("DIETARY SUPPLEMENT", "NET WT."); el mercado es peruano. De paso cierra el
- * agujero de los datos legales: esta tool ya inventó una razón social mexicana
- * para una marca peruana.
+ * Idioma y datos legales. Deliberadamente en una línea: la versión larga era
+ * parte de lo que densificaba el board. El modelo suele escribir en español por
+ * su cuenta, pero "suele" no es "siempre" y el empaque tiene que servir en Perú.
  */
-const COPY_RULES =
-  '**Packaging copy:** All text printed on the packaging must be in Spanish as used in Peru '
-  + '(e.g. "SUPLEMENTO DIETARIO", "CONT. NETO 300 g", "60 porciones"). '
-  + 'Do NOT invent legal or company data: no made-up company name, address, city, country, '
-  + 'registration number, phone or website.'
+const COPY_RULES = 'Packaging copy in Spanish (Peru). Do not invent company names, addresses or registration numbers.'
 
-/* ── Las 8 casillas ───────────────────────────────────────────────────────── */
-
-function paletteText(palette: Style['palette']): string {
-  return palette.map((c) => `${c.name} ${c.hex}`).join(', ')
-}
+/* ── Las 6 casillas ───────────────────────────────────────────────────────── */
 
 /** `**Etiqueta:** valor`, o nada si el valor está vacío. */
 function slot(label: string, value: string | undefined): string {
@@ -89,74 +66,92 @@ function slot(label: string, value: string | undefined): string {
   return v ? `**${label}:** ${v}` : ''
 }
 
-export function buildBrandbookPrompt(b: Brief): string {
-  return [
-    'Create a complete brand identity concept for a brand whose details are specified below.',
-    '',
+export function buildIdentityPrompt(b: Brief): string {
+  // Las casillas vacías se caen del bloque enteras (`filter`), no se dejan como
+  // línea en blanco: ni `**Inspired from:**` colgando sin valor, ni un hueco en
+  // medio de la lista cuando falta el eslogan.
+  const slots = [
     slot('Brand name', b.brandName),
     slot('Tagline', b.tagline),
     slot('Brand description', b.productDescription),
-    slot('Target age group', b.audience.join(', ')),
+    slot('Target audience', b.audience.join(', ')),
     slot('Brand feel', feelWords(b.feel)),
     slot('Inspired from', b.style.inspiration),
-    slot('Products and packaging', b.style.products),
-    slot('Colors', paletteText(b.style.palette)),
-    slot('Graphic style', b.style.graphicStyle),
+    slot('Colors', b.style.palette.filter(Boolean).join(', ')),
+  ].filter(Boolean)
+
+  return [
+    'Create a complete visual identity for the brand below.',
     '',
-    IDENTITY_SYSTEM,
+    slots.join('\n'),
     '',
-    PHOTOGRAPHY,
+    GENERATE,
+    '',
+    STYLE,
     '',
     COPY_RULES,
     '',
     AVOID,
-    '',
-    FINAL_IMAGE,
-    // Una casilla vacía deja una línea en blanco que este collapse se lleva; así
-    // el prompt nunca contiene un `**Inspired from:**` colgando sin valor.
-  ].join('\n').replace(/\n{3,}/g, '\n\n').trim()
+  ].join('\n').trim()
 }
 
 /**
- * Las piezas sueltas se sacan DEL BOARD ya generado, que va como primera imagen
- * adjunta. Sin esa referencia cada llamada es una interpretación distinta y el
- * logo del zip no sería el logo del board.
+ * Las piezas sueltas salen DE la identidad ya generada, que va como primera
+ * imagen adjunta. Sin esa referencia cada llamada es una marca distinta.
  */
-export function buildPiecePrompt(stage: 'logo' | 'empaque', b: Brief): string {
-  const common = [
-    `The attached image is the finished brand identity board for "${b.brandName}".`,
+export function buildPiecePrompt(stage: Exclude<Stage, 'identidad'>, b: Brief): string {
+  const same = [
+    `The attached image is the finished visual identity for "${b.brandName}".`,
     'Reproduce its brand exactly: same logo, same letterforms, same colours, same graphic elements.',
     'Do not redesign anything and do not invent new elements.',
-  ]
+  ].join(' ')
+
   if (stage === 'logo') {
     return [
-      ...common,
-      `Output ONLY the primary logo from that board, isolated and centred on a plain white background,`,
-      'at large size with generous margins.',
-      'No packaging, no mockup, no board layout, no swatches, no specimen text, no shadow, no frame.',
+      same,
+      'Output ONLY the primary logo, isolated and centred on a plain white background, at large size',
+      'with generous margins. No packaging, no mockup, no board layout, no swatches, no specimen text,',
+      'no shadow, no frame.',
     ].join(' ')
   }
+
+  if (stage === 'etiqueta') {
+    return [
+      same,
+      // El reparto frente/dorso es LEY: sin él el modelo amontona toda la letra
+      // chica en el frente, que fue un bug reportado por el usuario.
+      'Output the flat printable 360° LABEL artwork (full wrap) for its packaging.',
+      'Lay it out as TWO panels of equal width side by side, separated by a thin vertical fold line:',
+      'the FRONT panel on the LEFT half, the BACK panel on the RIGHT half.',
+      'FRONT panel — only the hero: brand lockup, product name, a short descriptor and the net content.',
+      'Generous empty space; no paragraphs, no lists, no rows of icons.',
+      'BACK panel — everything else, small and orderly: ingredients, directions of use, warnings, storage,',
+      'net weight and a blank rectangle where a barcode would go. This is where the dense text belongs.',
+      COPY_RULES,
+      'Where the manufacturer line would go, leave the neutral placeholder "Fabricado por: ____________".',
+      'Flat 2D artwork seen straight on, as it would go to print — NOT applied to a container, no bottle,',
+      'no jar, no 3D, no perspective, no mockup, no shadow. Sharp edges, print-ready, no watermark.',
+    ].join(' ')
+  }
+
   return [
-    ...common,
-    `Output ONE photorealistic product shot of the main packaging piece from that board`,
-    b.style.products.trim() ? `(${b.style.products.trim()})` : '',
-    '— the same packaging, with the same printed artwork and the same copy.',
-    PHOTOGRAPHY.replace('**Photography style:** ', 'Photography: '),
-    'Single product, centred, clean uncluttered background, no people, no hands, no board layout,',
-    'no swatches, no text other than what belongs on the packaging.',
-  ].filter(Boolean).join(' ')
+    same,
+    'Output ONE photorealistic product shot of its packaging, with the same printed artwork and the same copy.',
+    'Premium, modern, minimalist, editorial product photography, clean layout, photorealistic.',
+    'Single product, centred, studio lighting, soft realistic shadow, clean uncluttered background,',
+    'no people, no hands, no board layout, no swatches, no text other than what belongs on the packaging.',
+  ].join(' ')
 }
 
 export function buildPrompt(stage: Stage, b: Brief): string {
-  return stage === 'brandbook' ? buildBrandbookPrompt(b) : buildPiecePrompt(stage, b)
+  return stage === 'identidad' ? buildIdentityPrompt(b) : buildPiecePrompt(stage, b)
 }
 
 /**
- * gpt-image-2 solo tiene 3 tamaños. El board es apaisado (1536x1024, el mismo del
- * board de referencia); el logo cuadrado y el empaque vertical, que es como se
- * fotografía un producto.
+ * gpt-image-2 solo tiene 3 tamaños. La identidad y la etiqueta 360 son
+ * apaisadas (1536x1024), el logo cuadrado y el mockup vertical.
  */
 export function aspectFor(stage: Stage): string {
-  if (stage === 'brandbook') return '3:2'
-  return stage === 'logo' ? '1:1' : '4:5'
+  if (stage === 'logo') return '1:1'
+  return stage === 'mockup' ? '4:5' : '3:2'
 }

@@ -19,15 +19,16 @@ import { DEFAULT_STYLE, PALETTE_MIN, PALETTE_MAX, feelWords } from '@/lib/brandi
  * paso 5 y pasar su id a checkGenQuota.
  */
 
+/**
+ * ⚠️ Los valores tienen que salir CORTOS. El prompt maestro rinde con inputs
+ * breves ("bold orange, soft yellow, pure white, electric lime"; "Editorial
+ * product photography"); textos largos densifican el board. Los `.max()` no son
+ * decoración: son el freno.
+ */
 const SuggestedStyle = z.object({
-  palette: z.array(z.object({
-    /** En español: se rotula así en el board. */
-    name: z.string().min(2).max(24),
-    hex: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
-  })).min(PALETTE_MIN).max(PALETTE_MAX),
-  inspiration: z.string().min(10).max(220),
-  graphicStyle: z.string().min(10).max(220),
-  products: z.string().min(5).max(220),
+  /** Nombres, nunca hex: el modelo de imagen elige mejores valores que los impuestos. */
+  palette: z.array(z.string().min(3).max(28)).min(PALETTE_MIN).max(PALETTE_MAX),
+  inspiration: z.string().min(5).max(80),
 })
 
 const Body = z.object({
@@ -43,28 +44,20 @@ export async function POST(req: Request) {
     const b = Body.parse(await req.json())
 
     const prompt = [
-      'A brand identity board is going to be generated for the product below. Fill in the four',
-      'creative-direction fields that the client did not answer.',
+      'Pick the two creative-direction fields for the brand below.',
       '',
       `Product: ${b.productDescription}`,
-      `Category: ${b.category}`,
       `Brand name: ${b.brandName}`,
       `Buyer: ${b.audience.join(', ')}`,
-      `Attitude the brand must convey: ${feelWords(b.feel)}`,
+      `Brand feel: ${feelWords(b.feel)}`,
       '',
-      'Rules:',
-      `- palette: ${PALETTE_MIN}-${PALETTE_MAX} colours that belong to THIS brand. Do not reach for the`,
-      '  generic palette of the category — two brands in the same category must not end up with the same',
-      '  colours, and the attitude is the strongest signal you have. Name each colour in Spanish, the way',
-      '  it will be printed on the board (e.g. "Naranja intenso", "Lima eléctrico"). Include one very light',
-      '  and one very dark colour so text stays legible on the packaging.',
-      '- inspiration: where the visual world comes from. Name concrete references — a design movement, an',
-      '  era, a material, a place, a discipline. Not adjectives.',
-      '- graphicStyle: how it is drawn — layout, shapes, iconography, use of the grid. This is different',
-      '  from the attitude: the attitude is how the brand FEELS, this is how it LOOKS.',
-      '- products: which pieces should appear in the board — the packaging that fits this product plus one',
-      '  or two branded extras that make sense for it.',
-      'Write inspiration, graphicStyle and products in English; they go straight into an image prompt.',
+      'Rules — keep both SHORT, they go into an image prompt where long values ruin the layout:',
+      `- palette: ${PALETTE_MIN}-${PALETTE_MAX} colour NAMES in Spanish, two or three words each`,
+      '  ("naranja intenso", "amarillo suave", "blanco puro", "lima eléctrico"). NEVER hex codes —',
+      '  the image model picks better values than any it is handed. Do not reach for the generic',
+      '  palette of the category: two brands with different attitudes must not share colours.',
+      '- inspiration: one short phrase in English naming where the visual world comes from.',
+      '  A photographic style, a design movement, an era or a material. Under ten words.',
     ].join('\n')
 
     const style = await callStructured('branding_style', SuggestedStyle, [{ text: prompt }], 2, BRANDING_SYSTEM_PROMPT)

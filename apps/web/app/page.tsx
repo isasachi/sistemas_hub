@@ -23,9 +23,8 @@ const bentoIndex = (slug: string) => {
 
 export default function Home() {
   // Solo tools en producción — sin cards "Próximamente" en la landing de ventas.
-  // buscador-test es interna (prueba temporal): vive solo en el dashboard.
   const liveTools = tools
-    .filter((t) => t.status === "live" && t.slug !== "buscador-test")
+    .filter((t) => t.status === "live")
     .sort((a, b) => bentoIndex(a.slug) - bentoIndex(b.slug));
   const ctaHref =
     process.env.AUTH_DISABLED === "true" ? "/dashboard" : "/signup";

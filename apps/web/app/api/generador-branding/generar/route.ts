@@ -12,16 +12,16 @@ import type { Part } from '@google/genai'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-// Board + 2 piezas derivadas, secuenciales con gpt-image-2 (~60-90s c/u). Fluid Compute da 300s.
+// Identidad + 3 piezas derivadas, secuenciales con gpt-image-2 (~60-90s c/u). Fluid Compute da 300s.
 export const maxDuration = 300
 
 /**
- * Dónde vive cada pieza. Se reusan las columnas que ya existen para no pedir una
- * migración: `mockup_url` guarda el BOARD (es la imagen hero de la marca, y es la
- * que el historial ya usa como miniatura) y `label_url` el empaque suelto.
+ * Dónde vive cada pieza. Columnas legadas reusadas para no pedir migración:
+ * `mockup_url` guarda la IDENTIDAD (es la imagen hero y la que el historial ya
+ * usa como miniatura) y `container_url` la foto de producto.
  */
-const COLUMN: Record<Stage, 'logo_url' | 'mockup_url' | 'label_url'> = {
-  brandbook: 'mockup_url', logo: 'logo_url', empaque: 'label_url',
+const COLUMN: Record<Stage, 'logo_url' | 'mockup_url' | 'label_url' | 'container_url'> = {
+  identidad: 'mockup_url', logo: 'logo_url', etiqueta: 'label_url', mockup: 'container_url',
 }
 
 /** Trae una imagen por HTTP como parte inline. La usa el board como referencia. */
@@ -81,9 +81,7 @@ export async function POST(req: NextRequest) {
             tagline: b.tagline ?? null,
             descriptor: b.feel.join(', '),
             selected_palette: b.style.palette,
-            // `direction` (jsonb, legado sin uso) guarda las 3 casillas de texto
-            // del prompt: inspiración, estilo gráfico y piezas del board.
-            direction: { inspiration: b.style.inspiration, graphicStyle: b.style.graphicStyle, products: b.style.products },
+            direction: { inspiration: b.style.inspiration },
             step: 1,
             generation_status: 'running',
             generation_error: null,
@@ -98,7 +96,7 @@ export async function POST(req: NextRequest) {
 
         // En una regeneración suelta el board ya existe: se reusa como referencia.
         const existing = await getBrandingSession(sessionId)
-        let boardUrl: string | null = (existing?.mockup_url as string) ?? null
+        let identityUrl: string | null = (existing?.mockup_url as string) ?? null
         const urls: Partial<Record<Stage, string>> = {}
         const failed: Stage[] = []
 
@@ -113,12 +111,12 @@ export async function POST(req: NextRequest) {
 
           send({ status: 'stage', stage })
           try {
-            // El board es la fuente: las piezas sueltas lo reciben adjunto para
-            // que el logo del zip sea EL MISMO logo del board y no otra lectura.
+            // La identidad es la fuente: las piezas sueltas la reciben adjunta
+            // para que sean LA MISMA marca y no tres lecturas distintas.
             const parts: Part[] = []
-            if (stage !== 'brandbook') {
-              if (!boardUrl) throw new Error('no hay brandbook del que derivar esta pieza')
-              parts.push(...(await refParts([boardUrl], origin)))
+            if (stage !== 'identidad') {
+              if (!identityUrl) throw new Error('no hay identidad de la que derivar esta pieza')
+              parts.push(...(await refParts([identityUrl], origin)))
             }
             parts.push({ text: buildPrompt(stage, brief) })
 
@@ -129,7 +127,7 @@ export async function POST(req: NextRequest) {
             const url = await uploadToStorage(sessionId, Buffer.from(b64, 'base64'), 'image/png', stage)
             await updateBrandingSession(sessionId, { [COLUMN[stage]]: url } as never)
             await recordGenQuota(sessionId, kind, userId)
-            if (stage === 'brandbook') boardUrl = url
+            if (stage === 'identidad') identityUrl = url
             urls[stage] = url
             send({ status: 'stage_done', stage, url })
           } catch (err) {
