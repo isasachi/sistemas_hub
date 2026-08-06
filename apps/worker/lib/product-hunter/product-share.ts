@@ -182,3 +182,132 @@ export type ProductKind = 'fisico' | 'digital' | 'servicio' | 'contenido' | 'ind
 export function passesPhysicalGate(kind: ProductKind): boolean {
   return kind === 'fisico' || kind === 'indeterminado'
 }
+
+// ─── Matching determinista (alternativa al modelo) ───────────────────────────
+// Mismo trabajo que la regla 3 pide al LLM — "cuáles de estos anuncios son el
+// mismo producto que la referencia" — resuelto con texto, sin API.
+//
+// La idea: dentro de UNA página, los tokens que aparecen en casi todos los
+// anuncios son la marca y el vocabulario de la casa ("envío", "oferta", el
+// nombre del anunciante). No distinguen nada. Los que aparecen en pocos son los
+// que nombran al producto. Es TF-IDF acotado a la propia página: se pesa cada
+// token por lo raro que es AHÍ, no en el idioma.
+//
+// No reemplaza al modelo en criterio (no sabe que "faja" y "cinturilla" son lo
+// mismo si no comparten palabras), pero no cuesta nada y es reproducible al
+// 100%: la misma entrada da siempre la misma salida.
+
+const STOP_ES = new Set([
+  'para','con','los','las','del','que','por','una','uno','unos','unas','este','esta','estos','estas',
+  'desde','hasta','sobre','como','todo','toda','todos','todas','more','your','the','and','you',
+  'envio','envío','gratis','oferta','ahora','solo','sólo','descuento','compra','comprar','precio',
+  'pedido','entrega','pago','contra','cuotas','stock','hoy','aqui','aquí','link','click','clic',
+  'whatsapp','tienda','oficial','original','calidad','mejor','nuevo','nueva','promocion','promoción',
+])
+
+export function tokenize(text: string): Set<string> {
+  const limpio = text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+  const out = new Set<string>()
+  for (const t of limpio.split(/[^a-z0-9ñ]+/)) {
+    if (t.length < 4 || STOP_ES.has(t) || /^\d+$/.test(t)) continue
+    // Colapso de plural (misma tolerancia que niche-match): sin esto "rodilla" y
+    // "rodillas" son tokens distintos y dos anuncios del mismo producto pueden
+    // no compartir ninguno.
+    out.add(t.length >= 6 && t.endsWith('es') ? t.slice(0, -2) : t.endsWith('s') && t.length >= 5 ? t.slice(0, -1) : t)
+  }
+  return out
+}
+
+// Tokens que NO aparecen en más de `maxDf` de los anuncios de la página: los que
+// separan un producto de otro dentro del mismo anunciante.
+export function distinctiveTokens(docs: Set<string>[], maxDf = 0.6): Set<string> {
+  const df = new Map<string, number>()
+  for (const d of docs) for (const t of d) df.set(t, (df.get(t) ?? 0) + 1)
+  const techo = Math.max(1, Math.floor(docs.length * maxDf))
+  const out = new Set<string>()
+  for (const [t, n] of df) if (n <= techo) out.add(t)
+  return out
+}
+
+export interface DeterministicMatch {
+  matched: boolean[]
+  weightMatched: number
+  scores: number[]
+}
+
+// Devuelve qué anuncios son del mismo producto que `reference`, por solapamiento
+// de tokens distintivos. `minScore` es la fracción de los tokens distintivos de
+// la referencia que el anuncio debe compartir.
+export function matchByText(
+  reference: string,
+  texts: string[],
+  weights: number[],
+  minScore = 0.3,
+): DeterministicMatch {
+  const docs = texts.map(tokenize)
+  const refDoc = tokenize(reference)
+  const distintivos = distinctiveTokens([refDoc, ...docs])
+  const refSignal = [...refDoc].filter((t) => distintivos.has(t))
+
+  const scores = docs.map((d, i) => {
+    // Texto idéntico al de la referencia: coincide sin más análisis.
+    if (texts[i].trim() && reference.trim() && texts[i].trim() === reference.trim()) return 1
+    if (refSignal.length === 0) return 0
+    const comunes = refSignal.filter((t) => d.has(t)).length
+    return comunes / refSignal.length
+  })
+  const matched = scores.map((s) => s >= minScore)
+  const weightMatched = matched.reduce((a, m, i) => a + (m ? weights[i] : 0), 0)
+  return { matched, weightMatched, scores }
+}
+
+// ─── Concentración: monoproducto sin identificar el producto ─────────────────
+// La regla es "la página se dedica a un producto", no "cuáles anuncios son el
+// producto X". Eso se mide sin resolver sinónimos: si un mismo término de
+// contenido aparece en casi todos los anuncios de la página, la página está
+// concentrada; si cada anuncio habla de algo distinto, es un catálogo.
+//
+// Es más robusto que el matching contra una referencia: dos anuncios del mismo
+// producto con ángulos de copy distintos igual comparten el sustantivo que lo
+// nombra, aunque no compartan el resto.
+
+export interface Concentration {
+  share: number         // peso de anuncios cubiertos por el término dominante
+  term: string | null   // el término que los une
+  covered: number       // cuántos anuncios lo contienen
+  docs: number
+}
+
+// `share` es la fracción de ANUNCIOS (ponderada por collation_count) que contiene
+// el término de contenido más extendido de la página. `minLen` evita que ganen
+// abreviaturas ruidosas.
+export function concentration(texts: string[], weights: number[]): Concentration {
+  const docs = texts.map(tokenize)
+  const total = weights.reduce((a, b) => a + b, 0)
+  if (!docs.length || total <= 0) return { share: 0, term: null, covered: 0, docs: docs.length }
+
+  // Peso acumulado por token. No se filtra por frecuencia alta: acá el token
+  // ubicuo es justamente la señal (al revés que en el matching por referencia).
+  const peso = new Map<string, number>()
+  const cuenta = new Map<string, number>()
+  for (let i = 0; i < docs.length; i++) {
+    for (const t of docs[i]) {
+      peso.set(t, (peso.get(t) ?? 0) + weights[i])
+      cuenta.set(t, (cuenta.get(t) ?? 0) + 1)
+    }
+  }
+  let term: string | null = null
+  let mejor = 0
+  for (const [t, w] of peso) {
+    if (w > mejor) { mejor = w; term = t }
+  }
+  return {
+    share: mejor / total,
+    term,
+    covered: term ? (cuenta.get(term) ?? 0) : 0,
+    docs: docs.length,
+  }
+}
