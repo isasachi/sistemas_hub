@@ -79,7 +79,9 @@ describe('las piezas sueltas', () => {
     for (const stage of PIEZAS) {
       const p = buildPrompt(stage, brief)
       expect(p, stage).toContain('The attached image is the finished visual identity')
-      expect(p, stage).toContain('Do not redesign anything')
+      // Cada pieza lo dice a su manera, pero ninguna puede quedar sin la orden de
+      // no reinventar: es lo único que las mantiene siendo la misma marca.
+      expect(p, stage).toMatch(/do not invent|Do not restyle/i)
     }
   })
 
@@ -92,12 +94,24 @@ describe('las piezas sueltas', () => {
   it('la etiqueta es un 360 plano de dos paneles, no un envase', () => {
     const p = buildPrompt('etiqueta', brief)
     expect(p).toContain('360')
-    expect(p).toContain('FRONT panel on the LEFT half')
-    expect(p).toContain('BACK panel on the RIGHT half')
+    expect(p).toContain('FRONT panel (LEFT half)')
+    expect(p).toContain('BACK panel (RIGHT half)')
     expect(p).toContain('NOT applied to a container')
     // El reparto es lo que evita que la letra chica se amontone en el frente.
-    expect(p).toMatch(/BACK panel — everything else[\s\S]*ingredients/)
+    expect(p).toMatch(/BACK panel \(RIGHT half\)[\s\S]*ingredients/)
     expect(p).toContain('Fabricado por: ____________')
+  })
+
+  // El bug: el frente salía como una etiqueta NUEVA. La causa era dictarle un
+  // layout que competía con el que ya está en la identidad adjunta.
+  it('el frente REPRODUCE la etiqueta de la identidad, no la rediseña', () => {
+    const p = buildPrompt('etiqueta', brief)
+    expect(p).toContain('It already contains the product label design')
+    expect(p).toContain('reproduce the label design from the attached image exactly as it is')
+    expect(p).toContain('Do not restyle it, do not rearrange its elements')
+    // Nada de prescribir contenido del frente: era lo que lo hacía rediseñar.
+    expect(p).not.toContain('only the hero')
+    expect(p).not.toContain('no rows of icons')
   })
 
   it('el mockup es una foto de producto', () => {

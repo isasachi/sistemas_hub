@@ -116,17 +116,23 @@ export function buildPiecePrompt(stage: Exclude<Stage, 'identidad'>, b: Brief): 
   }
 
   if (stage === 'etiqueta') {
+    // ⚠️ El frente es REPRODUCCIÓN, no diseño. La versión anterior le dictaba un
+    // layout completo ("solo el héroe, sin filas de iconos") que CONTRADECÍA la
+    // etiqueta que ya vive en la identidad — y ante la contradicción el modelo
+    // obedecía la spec y dibujaba una etiqueta nueva. El reparto frente/dorso sí
+    // se mantiene: sin él la letra chica se amontona adelante (bug reportado).
     return [
-      same,
-      // El reparto frente/dorso es LEY: sin él el modelo amontona toda la letra
-      // chica en el frente, que fue un bug reportado por el usuario.
-      'Output the flat printable 360° LABEL artwork (full wrap) for its packaging.',
-      'Lay it out as TWO panels of equal width side by side, separated by a thin vertical fold line:',
-      'the FRONT panel on the LEFT half, the BACK panel on the RIGHT half.',
-      'FRONT panel — only the hero: brand lockup, product name, a short descriptor and the net content.',
-      'Generous empty space; no paragraphs, no lists, no rows of icons.',
-      'BACK panel — everything else, small and orderly: ingredients, directions of use, warnings, storage,',
-      'net weight and a blank rectangle where a barcode would go. This is where the dense text belongs.',
+      `The attached image is the finished visual identity for "${b.brandName}".`,
+      'It already contains the product label design.',
+      'Output THAT SAME label as flat printable 360° artwork (full wrap): two panels of equal width',
+      'side by side, separated by a thin vertical fold line.',
+      'FRONT panel (LEFT half) — reproduce the label design from the attached image exactly as it is:',
+      'same layout, same composition, same colour blocks and graphic shapes, same brand lockup, same',
+      'product name, same icons, same typography. Adapt only its proportions to fill the panel.',
+      'Do not restyle it, do not rearrange its elements and do not invent new ones.',
+      'BACK panel (RIGHT half) — the regulatory text that does not fit on the front, set in the same',
+      'typography and the same colours: ingredients, directions of use, warnings, storage, net weight',
+      'and a blank rectangle where a barcode would go.',
       COPY_RULES,
       'Where the manufacturer line would go, leave the neutral placeholder "Fabricado por: ____________".',
       'Flat 2D artwork seen straight on, as it would go to print — NOT applied to a container, no bottle,',
