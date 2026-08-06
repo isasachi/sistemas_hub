@@ -21,6 +21,9 @@ Description=Buscador de productos — refresco de vigencia (48h)
 Type=oneshot
 WorkingDirectory=/home/isasachi/chamba/sistemas_hub/apps/worker
 Environment=PH_CONCURRENCY=3
-Environment=PH_REFRESH_LIMIT=400
-ExecStart=/usr/bin/env bash -lc 'npx tsx scripts/refresh-active.ts'
+Environment=PH_REFRESH_LIMIT=2000
+# Bajo systemd el PATH es mínimo y no trae node/npx (vía nvm): `bash -lc` no
+# alcanza (no es shell interactivo, no lee .bashrc), hay que cargar nvm a mano
+# — mismo patrón que clean-niches.service y worker-loop.sh.
+ExecStart=/usr/bin/env bash -c 'export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" >/dev/null 2>&1; exec npx tsx scripts/refresh-active.ts'
 SyslogIdentifier=refresh-active
