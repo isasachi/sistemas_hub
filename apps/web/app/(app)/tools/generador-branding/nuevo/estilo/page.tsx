@@ -6,18 +6,40 @@ import { Sparkles, Loader2, Plus, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import BriefShell, { useBrief, btnPrimary } from '@/components/tools/generador-branding/nuevo/BriefShell'
 import { DEFAULT_STYLE, PALETTE_MAX, feelWords, type Style } from '@/lib/branding/brief'
+import { colorFromName } from '@/lib/branding/color-names'
 
 /**
  * Paso 5 — las 2 casillas del prompt que el wizard no pregunta.
  * ---------------------------------------------------------------------------
  * Llegan propuestas por el LLM y se editan. Los colores van por NOMBRE, no por
  * hex: el prompt que produjo los mejores boards decía "bold orange, soft yellow,
- * pure white, electric lime" y el modelo eligió los valores. Por eso acá no hay
- * muestras de color — no existen hasta que el modelo los decide, y mostrar un
- * cuadrito inventado sería mentir sobre lo que va a salir.
+ * pure white, electric lime" y el modelo eligió los valores. Las burbujas son una
+ * aproximación al nombre escrito para no teclear a ciegas — no son el color
+ * final, y por eso no hay selector: elegir un hex acá sería fingir un control
+ * que el prompt no tiene.
  */
 
 const field = 'rounded-xl bg-white/[0.04] border-white/[0.08] text-[13px] text-[#f5f5f5]'
+
+/**
+ * Burbuja de color aproximada al nombre escrito. Es una AYUDA, no la verdad: el
+ * prompt manda el nombre y el modelo elige el tono final. Un nombre que no se
+ * reconoce deja la burbuja punteada y vacía en vez de inventar un color.
+ */
+function Bubble({ name, size = 'w-8 h-8' }: { name: string; size?: string }) {
+  const hex = colorFromName(name)
+  return (
+    <span
+      className={`${size} shrink-0 rounded-full border transition-colors ${
+        hex ? 'border-white/20' : 'border-dashed border-white/20'
+      }`}
+      style={hex ? { background: hex } : undefined}
+      title={hex ? `${name} — aprox. ${hex}` : 'Escribe un color para verlo'}
+      aria-hidden
+    />
+  )
+}
+
 const sectionLabel = 'readout text-[11px] font-bold tracking-[1.5px] uppercase text-[#8a8a8a]'
 
 export default function EstiloPage() {
@@ -92,6 +114,7 @@ export default function EstiloPage() {
               </p>
               {style.palette.map((c, i) => (
                 <div key={i} className="flex items-center gap-2">
+                  <Bubble name={c} />
                   <Input value={c} onChange={(e) => setColor(i, e.target.value)}
                          placeholder="Ej: naranja intenso" className={`${field} h-11`} />
                   <button type="button" aria-label="Quitar color"
@@ -132,13 +155,24 @@ export default function EstiloPage() {
               ['Público', (brief.audience ?? []).join(', ')],
               ['Actitud', feelWords(feel)],
               ['Inspiración', style.inspiration],
-              ['Colores', style.palette.filter(Boolean).join(', ')],
             ] as const).filter(([, v]) => v).map(([k, v]) => (
               <div key={k} className="flex flex-col gap-0.5">
                 <span className="readout text-[10px] uppercase tracking-[1.2px] text-[#8a8a8a]">{k}</span>
                 <span className="text-[12px] text-[#e5e5e5] leading-snug">{v}</span>
               </div>
             ))}
+
+            {style.palette.filter(Boolean).length > 0 && (
+              <div className="flex flex-col gap-1.5">
+                <span className="readout text-[10px] uppercase tracking-[1.2px] text-[#8a8a8a]">Colores</span>
+                {style.palette.filter(Boolean).map((c, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <Bubble name={c} size="w-4 h-4" />
+                    <span className="text-[12px] text-[#e5e5e5] leading-snug">{c}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <p className="text-[11px] text-[#8a8a8a] leading-snug">
