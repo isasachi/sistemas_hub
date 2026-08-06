@@ -166,7 +166,7 @@ function Resultado() {
             <LayoutTemplate className="w-4 h-4" />
             {landing ? 'Creando...' : 'Crear la landing con esta marca'}
           </button>
-          <button type="button" onClick={() => router.push(STEPS[3].path)}
+          <button type="button" onClick={() => router.push(STEPS[4].path)}
                   className="h-12 px-6 rounded-xl border border-white/[0.14] text-[13px] font-semibold text-[#f5f5f5] hover:bg-white/[0.05] transition-colors cursor-pointer bg-transparent">
             Cambiar estilo
           </button>
