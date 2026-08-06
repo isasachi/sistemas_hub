@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { CheckCircle2, Clock, ArrowUpDown } from 'lucide-react'
+import { CheckCircle2, Clock, ArrowUpDown, Trash2 } from 'lucide-react'
 import { tools, getToolBySlug } from '@/lib/tools'
 import { toolIcon } from '@/lib/tool-icons'
 import { LandingToolCard } from '@/components/home/LandingToolCard'
@@ -40,6 +40,26 @@ export function ProjectHistory() {
   const [items, setItems] = useState<Project[] | null>(null)
   const [sort, setSort] = useState<'recent' | 'old'>('recent')
   const [filter, setFilter] = useState<'all' | string>('all')
+  const [deleting, setDeleting] = useState<string | null>(null)
+
+  // El borrado vivía en el grid de sesiones de cada tool; al retirarse esa
+  // pantalla, el historial del dashboard pasó a ser el único lugar donde el
+  // usuario puede deshacerse de un proyecto.
+  async function remove(p: Project) {
+    const key = `${p.slug}-${p.id}`
+    if (deleting) return
+    if (!confirm(`¿Eliminar "${p.title}"? No se puede deshacer.`)) return
+    setDeleting(key)
+    try {
+      const res = await fetch(`/api/${p.slug}/sessions/${p.id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('delete failed')
+      setItems((prev) => prev?.filter((x) => !(x.slug === p.slug && x.id === p.id)) ?? null)
+    } catch {
+      alert('No se pudo eliminar el proyecto. Inténtalo de nuevo.')
+    } finally {
+      setDeleting(null)
+    }
+  }
 
   useEffect(() => {
     let alive = true
@@ -145,7 +165,12 @@ export function ProjectHistory() {
       ) : (
         <div className="columns-2 gap-3.5 sm:columns-3 lg:columns-5 xl:columns-6">
           {shown.map((p) => (
-            <ProjectCard key={`${p.slug}-${p.id}`} p={p} />
+            <ProjectCard
+              key={`${p.slug}-${p.id}`}
+              p={p}
+              onDelete={() => remove(p)}
+              deleting={deleting === `${p.slug}-${p.id}`}
+            />
           ))}
         </div>
       )}
@@ -178,13 +203,35 @@ function FilterChip({
   )
 }
 
-function ProjectCard({ p }: { p: Project }) {
+function ProjectCard({
+  p,
+  onDelete,
+  deleting,
+}: {
+  p: Project
+  onDelete: () => void
+  deleting: boolean
+}) {
   const Icon = toolIcon(getToolBySlug(p.slug)?.icon ?? '')
   return (
     <Link
       href={`/tools/${p.slug}/sesion/${p.id}`}
-      className="lp-card lp-leak group mb-3.5 block break-inside-avoid overflow-hidden no-underline transition-transform duration-200 hover:-translate-y-0.5 hover:border-[rgba(255,255,255,0.2)]"
+      className="lp-card lp-leak group relative mb-3.5 block break-inside-avoid overflow-hidden no-underline transition-transform duration-200 hover:-translate-y-0.5 hover:border-[rgba(255,255,255,0.2)]"
     >
+      <button
+        type="button"
+        title="Eliminar proyecto"
+        aria-label={`Eliminar ${p.title}`}
+        disabled={deleting}
+        onClick={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          onDelete()
+        }}
+        className="absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full border-0 bg-black/50 text-[#cfcfcf] opacity-0 backdrop-blur transition-opacity duration-200 hover:text-[#e93d3d] focus-visible:opacity-100 group-hover:opacity-100 disabled:opacity-40 cursor-pointer"
+      >
+        <Trash2 className="h-4 w-4" />
+      </button>
       {p.thumb ? (
         // Miniatura completa a altura natural (sin recorte) para la estética masonry.
         // eslint-disable-next-line @next/next/no-img-element
