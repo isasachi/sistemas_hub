@@ -5,6 +5,7 @@ import { useWizardStore } from '@/store/wizard'
 import { SSEStatus } from '@/components/tools/ui/SSEStatus'
 import { RegenControls } from '@/components/tools/ui/RegenControls'
 import { GenerationProgress } from '@/components/tools/ui/GenerationProgress'
+import BackToDashboard from '@/components/tools/ui/BackToDashboard'
 
 const STATUS_LABELS: Record<string, { text: string; pct: number }> = {
   building_prompt: { text: 'Preparando instrucciones...', pct: 15 },
@@ -140,6 +141,7 @@ export default function Section5Generate() {
               label="↻ Regenerar anuncio"
             />
           </div>
+          <BackToDashboard className="self-start" />
         </div>
       )}
     </div>
