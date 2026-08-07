@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { ArrowLeft, Download, LayoutTemplate, RefreshCw, Sparkles } from 'lucide-react'
 import { readSSEStream } from '@/components/tools/ui/SSEStatus'
+import BackToDashboard from '@/components/tools/ui/BackToDashboard'
 import { btnPrimary } from '@/components/tools/generador-branding/nuevo/BriefShell'
 import { STEPS, clearBrief } from '@/lib/branding/brief'
 import { SESSION_KEY as LANDING_SESSION_KEY } from '@/store/landing'
@@ -193,6 +194,7 @@ function Resultado() {
                   className="h-12 px-6 rounded-xl text-[13px] font-semibold text-[#cfcfcf] hover:text-[#ededed] transition-colors cursor-pointer bg-transparent border-0 flex items-center gap-2">
             <Sparkles className="w-4 h-4" /> Crear otra marca
           </button>
+          <BackToDashboard className="h-12 px-6" />
         </div>
       </div>
     </div>

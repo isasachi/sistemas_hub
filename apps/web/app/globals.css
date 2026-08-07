@@ -607,6 +607,10 @@
   to { transform: translateX(-50%); }
 }
 
+/* Cinta que se puede leer: el cursor encima la congela. Va en el contenedor y
+   no en `.jr-marquee:hover` para no frenar también la pared del hero. */
+.jr-marquee-hover:hover .jr-marquee { animation-play-state: paused; }
+
 .jr-float { animation: jr-float-drift 7s ease-in-out infinite; }
 @keyframes jr-float-drift {
   0%, 100% { transform: translateY(0); }

@@ -12,6 +12,7 @@ import {
 } from "@/lib/calculadora-costos/model";
 import { exportarXlsx } from "@/lib/calculadora-costos/export-xlsx";
 import ResultsDashboard, { Help, Kpi, fmtMoney, fmtPct, fmtNum } from "@/components/tools/calculadora-costos/ResultsDashboard";
+import BackToDashboard from "@/components/tools/ui/BackToDashboard";
 
 // Estimados por defecto (valores muestra validados de cada hoja). El usuario los pisa si los sabe.
 const DEFAULTS: Record<Funnel, CalcInputs> = {
@@ -312,13 +313,18 @@ function CalculadoraWizard() {
       label: "Resultados", title: "Tus resultados",
       intro: "",
       body: (
-        <ResultsDashboard result={result} funnel={form.funnel} exporting={exporting} exportError={exportError}
-          onExport={async () => {
-            setExporting(true); setExportError(null);
-            try { await exportarXlsx(form); }
-            catch { setExportError("No se pudo generar el Excel. Inténtalo de nuevo."); }
-            finally { setExporting(false); }
-          }} />
+        // El botón va acá y no dentro de ResultsDashboard: ese componente también
+        // lo renderiza la vista de solo lectura de una sesión, que no es un final.
+        <div className="flex flex-col gap-6">
+          <ResultsDashboard result={result} funnel={form.funnel} exporting={exporting} exportError={exportError}
+            onExport={async () => {
+              setExporting(true); setExportError(null);
+              try { await exportarXlsx(form); }
+              catch { setExportError("No se pudo generar el Excel. Inténtalo de nuevo."); }
+              finally { setExporting(false); }
+            }} />
+          <BackToDashboard className="self-start" />
+        </div>
       ),
     },
   ];
