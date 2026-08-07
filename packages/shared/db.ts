@@ -862,7 +862,14 @@ export async function saveRefresh(
   } else {
     // El rango sale de ad_count, así que actualizarlo re-rangea solo.
     patch.ad_count = adCount
-    patch.status = 'monoproducto'
+    // ⚠️ NO se escribe `status` cuando el producto sigue pautando. Antes se
+    // ponía 'monoproducto' porque el refresco solo veía filas que YA lo eran;
+    // desde que recorre las 28,730 eso reescribiría el veredicto de toda la
+    // tabla — los 24,238 'pendiente' saldrían de la cola de verificación sin
+    // haberse verificado y los 2,972 'descartado' volverían aprobados.
+    // Un anunciante que vuelve a pautar sí cambia: reentra a la cola, porque
+    // tras la baja no sabemos si sigue vendiendo lo mismo.
+    if (wasInactive) patch.status = 'pendiente'
     outcome = wasInactive ? 'alta' : 'sigue'
   }
   const { error } = await getDb()
