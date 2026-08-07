@@ -47,3 +47,6 @@ docs/
 
 # Supabase CLI local state
 supabase/.temp/
+
+# graphify knowledge graph artifacts
+graphify-out/
