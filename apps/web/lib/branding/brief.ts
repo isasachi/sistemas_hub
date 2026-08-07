@@ -179,6 +179,26 @@ export function brandNameError(v: string): string | null {
   return null
 }
 
+/**
+ * Limpia los nombres propuestos por el LLM antes de mostrarlos como opciones.
+ * Un chip que no pasa `brandNameError` metería al usuario en un error que no
+ * tecleó, así que el filtro es el mismo validador del input. Quita comillas,
+ * deduplica sin distinguir mayúsculas y corta la lista.
+ */
+export function cleanNameSuggestions(names: string[], max = 6): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const raw of names) {
+    const n = String(raw ?? '').replace(/["'“”‘’]/g, '').trim()
+    const key = n.toLowerCase()
+    if (!n || seen.has(key) || brandNameError(n)) continue
+    seen.add(key)
+    out.push(n)
+    if (out.length >= max) break
+  }
+  return out
+}
+
 export function descriptionError(v: string): string | null {
   return v.trim().length < DESCRIPTION_MIN ? `Descríbelo con al menos ${DESCRIPTION_MIN} caracteres.` : null
 }
