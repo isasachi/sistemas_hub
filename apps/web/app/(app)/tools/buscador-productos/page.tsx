@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { Search, ExternalLink, Loader2, PackageSearch } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Search, ExternalLink, Loader2, PackageSearch, Flame } from "lucide-react";
 import ToolShell from "@/components/tools/ui/ToolShell";
 import type { RawProductEntry, RawSearchResponse } from "@ph/shared";
 
@@ -13,7 +13,7 @@ const ACCENT = "#ff9b4a";
 
 function ProductCard({ p }: { p: RawProductEntry }) {
   return (
-    <div className="bg-white/[0.04] border border-white/[0.06] rounded-2xl p-4 flex flex-col gap-3">
+    <div className="h-full bg-white/[0.04] border border-white/[0.06] rounded-2xl p-4 flex flex-col gap-3">
       <div>
         <h3 className="text-[15px] font-extrabold text-[#ededed] tracking-[-0.2px] leading-tight">
           {p.productName || p.title || p.advertiser}
@@ -48,6 +48,16 @@ export default function BuscadorProductosPage() {
   const [result, setResult] = useState<RawSearchResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [topPicks, setTopPicks] = useState<RawProductEntry[]>([]);
+
+  // Lo más pautado del rango más alto, de todos los nichos. Se refresca solo:
+  // la ruta lee en vivo lo que el daemon de vigencia acaba de escribir.
+  useEffect(() => {
+    fetch("/api/buscador-productos/top-picks")
+      .then((r) => r.json())
+      .then((d: { products?: RawProductEntry[] }) => setTopPicks(d.products ?? []))
+      .catch(() => {});
+  }, []);
 
   const search = useCallback(async () => {
     const q = niche.trim();
@@ -104,6 +114,37 @@ export default function BuscadorProductosPage() {
         </div>
 
         {error && <p className="text-[13px] text-[#fca5a5] mb-4">{error}</p>}
+
+        {/* Portada: mientras no haya búsqueda, lo más pautado de todo el inventario.
+            Con resultados en pantalla desaparece — no compite con lo que se buscó. */}
+        {!result && !loading && topPicks.length > 0 && (
+          <section className="mb-10">
+            <div className="flex items-baseline gap-2.5 mb-1">
+              <h2 className="flex items-center gap-2 text-[15px] font-extrabold text-[#ededed]">
+                <Flame className="w-4 h-4" style={{ color: ACCENT }} /> Top picks
+              </h2>
+              <span className="text-[12px] text-[#bebebe]">{topPicks.length} productos</span>
+            </div>
+            <p className="text-[12px] text-[#bebebe] mb-3">
+              Los de más anuncios activos del rango más alto (100+), de todos los nichos.
+              <span className="text-[#6b6b6b]"> · pasa el cursor para detener la cinta</span>
+            </p>
+            {/* La lista va DOS veces: la animación desplaza -50%, o sea justo una
+                copia, y el salto al reiniciar cae en un punto idéntico. */}
+            {/* mask-x-*: laterales difuminados con las utilidades de máscara de
+                Tailwind 4. Escrita a mano en globals.css, lightningcss se comía la
+                regla entera. */}
+            <div className="jr-marquee-hover overflow-hidden -mx-8 px-8 mask-x-from-92% mask-x-to-100%">
+              <div className="jr-marquee flex w-max gap-3" style={{ animationDuration: "70s" }}>
+                {[...topPicks, ...topPicks].map((p, i) => (
+                  <div key={`${p.id}-${i}`} className="w-[300px] shrink-0" aria-hidden={i >= topPicks.length}>
+                    <ProductCard p={p} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
 
         {result?.status === "pending" && (
           <div className="flex items-start gap-3 bg-white/[0.03] border border-white/[0.06] rounded-2xl p-5">

@@ -6,6 +6,7 @@ import {
   type RawProductEntry, type RawBucketGroup, type RawSearchResponse,
 } from '@ph/shared'
 import { readUserId, newUserId, PH_USER_COOKIE } from '@/lib/product-hunter/session'
+import { toEntry } from '@/lib/product-hunter/entry'
 
 // ⚠️ Esta ruta SOLO lee de Supabase: ni Anthropic ni Playwright. El scraping
 // corre en el worker local.
@@ -48,21 +49,7 @@ export async function POST(req: NextRequest) {
   const listas = await Promise.all(
     RAW_BUCKETS.map(async (bucket) => {
       const rows = await getApprovedByBucket(niche, bucket, userId!, POR_RANGO)
-      const products: RawProductEntry[] = rows.map((r) => ({
-        id: `${r.niche}:${r.page_id}`,
-        advertiser: r.name ?? 'Anunciante',
-        productName: r.product_name ?? null,
-        title: r.raw_data?.title ?? null,
-        body: r.raw_data?.body ?? null,
-        country: r.country,
-        adCount: r.ad_count,
-        adsUrl: `https://www.facebook.com/ads/library/?${new URLSearchParams({
-          active_status: 'active', ad_type: 'all', country: 'ALL',
-          is_targeted_country: 'false', media_type: 'all', search_type: 'page',
-          'sort_data[mode]': 'total_impressions', 'sort_data[direction]': 'desc',
-          view_all_page_id: r.page_id,
-        })}`,
-      }))
+      const products: RawProductEntry[] = rows.map(toEntry)
       return { bucket, label: RAW_BUCKET_LABEL[bucket], products } satisfies RawBucketGroup
     }),
   )

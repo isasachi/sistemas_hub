@@ -353,28 +353,6 @@ export async function saveProductAnalysisIfUnscored(
   return (data?.length ?? 0) > 0
 }
 
-// Top ganadores frescos de TODOS los nichos (showcase "top picks de la semana").
-// Primera lectura cross-niche: espeja getProductsToValidatePe sin filtrar por
-// nicho. Sobre-trae (limit×5) para sobrevivir el filtro de toCard + dedupe por
-// nicho que hace el caller. Reglas de oro pre-filtradas en SQL (el dedupe final
-// y las nulls de toCard las resuelve la ruta).
-export async function getTopPicks(limit = 6): Promise<ProductRow[]> {
-  const since = new Date(Date.now() - 7 * 864e5).toISOString()
-  const { data, error } = await getDb()
-    .from('ph_products')
-    .select('*')
-    .not('score', 'is', null)
-    .eq('analysis->>priority', 'alta')
-    .neq('raw_data->>found_country', 'PE')
-    .gte('scraped_at', since)
-    .gte('raw_data->ad_count', 40)   // -> numérico, como getStrongDiscardsToValidate
-    .gte('raw_data->days_running', 10)
-    .order('score', { ascending: false })
-    .limit(limit * 5)
-  if (error) throw new Error(error.message)
-  return (data as ProductRow[]) ?? []
-}
-
 // Candidatos alta/media ya analizados pero aún sin validación PE en vivo (Fase 4).
 export async function getProductsToValidatePe(niche: string, limit = 15): Promise<ProductRow[]> {
   const { data, error } = await getDb()
@@ -791,6 +769,89 @@ export async function getApprovedByBucket(
 const fisicos = (rows: RawProductRow[] | null) =>
   (rows ?? []).filter((r) =>
     isPhysicalEnough([r.raw_data?.title, r.raw_data?.body].filter(Boolean).join(' — '), r.name))
+
+/**
+ * Top picks: la vitrina de la portada. Del rango MÁS ALTO (100+) y de todos los
+ * nichos, en dos pasadas:
+ *
+ *   1. los verificados `monoproducto` (el anunciante dedica su página a ese
+ *      producto) ordenados por anuncios — el pool curado;
+ *   2. relleno con el resto por anuncios, sin lo que el verificador ya rechazó.
+ *
+ * ⚠️ La segunda pasada es un relleno, no el criterio. Medido 2026-08-07: la
+ * cabeza del ranking global por anuncios son marketplaces y apps (Shoptemu 50k,
+ * Uber, Airbnb, TikTok, Temu) repetidas en decenas de nichos, no productos. Los
+ * 30 `monoproducto` del rango son justo lo contrario (Aurelys Drenante, Aqualo
+ * Shampoo, PawCore) y alcanzan de sobra para las 12 casillas — por eso van
+ * primero. Si la lista se ve rara, mirar primero cuántos verificados quedan.
+ *
+ * Query en vivo, sin tabla snapshot: usa el ad_count que escribe el refresco de
+ * vigencia, así que la lista se mueve con el daemon (que rota ~400 filas por
+ * corrida sobre las 12k del rango: la renovación es gradual, no de golpe) y un
+ * producto dado de baja sale solo.
+ *
+ * Se deduplica por page_id: la PK es (niche, page_id), así que un anunciante
+ * descubierto en tres nichos son tres filas y sin esto saldría tres veces.
+ */
+// Ventana del relleno. Grande a propósito: de las 48 primeras filas del ranking
+// crudo sobrevivía UN anunciante al filtro de físico + dedupe (todo lo demás era
+// el mismo Shoptemu repetido). Con 1000 hay 244 anunciantes distintos.
+const TOP_PICKS_WINDOW = 1000
+
+// Tope por nicho: sin él, 12 de los 28 verificados son de `celulitis` y la
+// vitrina se ve monotemática. Con 2 entran los 8 nichos que hay hoy y las 12
+// casillas quedan llenas igual.
+const MAX_POR_NICHO = 2
+
+export async function getTopPicks(limit = 12): Promise<RawProductRow[]> {
+  const { min } = bucketRange('100+')
+  // Sin `*`: la segunda pasada trae 1000 filas y las columnas del veredicto no se usan acá.
+  const base = () => getDb().from('ph_raw_products')
+    .select('niche,page_id,name,product_name,country,ad_count,raw_data')
+    .gte('ad_count', min)
+    .order('ad_count', { ascending: false })
+    .order('page_id')
+
+  const vistos = new Set<string>()
+  const out: RawProductRow[] = []
+  const porNicho = new Map<string, number>()
+  const relegados: RawProductRow[] = []   // los que solo el tope dejó fuera
+  const agregar = (rows: RawProductRow[] | null) => {
+    for (const r of fisicos(rows)) {
+      if (out.length >= limit) return
+      if (vistos.has(r.page_id)) continue
+      vistos.add(r.page_id)
+      const n = porNicho.get(r.niche) ?? 0
+      if (n >= MAX_POR_NICHO) { relegados.push(r); continue }
+      porNicho.set(r.niche, n + 1)
+      out.push(r)
+    }
+  }
+
+  const { data: verificados, error } = await base()
+    .eq('status', 'monoproducto')
+    .limit(limit * SOBRE_PEDIDO)
+  if (error) throw new Error(error.message)
+  agregar(verificados as RawProductRow[])
+  if (out.length >= limit) return out
+
+  // Relleno. Fuera los dados de baja y los que el verificador ya descartó: en la
+  // vitrina no van, aunque el serving por nicho sí los muestre (ver bucketQuery).
+  const { data: resto, error: e2 } = await base()
+    .not('status', 'in', '(inactivo,descartado,monoproducto)')
+    .limit(TOP_PICKS_WINDOW)
+  if (e2) throw new Error(e2.message)
+  agregar(resto as RawProductRow[])
+
+  // El tope es para variar la vitrina, no para dejarla corta: si el inventario
+  // vive en pocos nichos, se completa con lo que el tope había relegado (siguen
+  // en orden de anuncios).
+  for (const r of relegados) {
+    if (out.length >= limit) break
+    out.push(r)
+  }
+  return out
+}
 
 // Cuánto inventario servible tiene el nicho — para distinguir "todavía
 // scrapeando" de "sin resultados".
