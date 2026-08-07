@@ -2,12 +2,13 @@
 //   npx tsx scripts/refresh-active.ts [--limit N]
 //
 // Relee el conteo de anuncios EN VIVO de cada anunciante servido y con eso:
-//   · 0 anuncios       → status='inactivo'. Deja de servirse (la RPC solo
-//     devuelve 'monoproducto'), pero la fila NO se borra: si el anunciante
-//     vuelve, se reactiva sin re-descubrir ni re-verificar.
-//   · sigue pautando   → actualiza ad_count. Como el rango sale de ese número,
-//     un producto que creció de 40 a 120 anuncios cambia de rango solo.
-//   · inactivo que volvió → vuelve a 'monoproducto'.
+//   · 0 anuncios       → status='inactivo'. Deja de servirse (el serving
+//     excluye ese estado), pero la fila NO se borra: si el anunciante vuelve,
+//     se reactiva sin re-descubrir.
+//   · sigue pautando   → actualiza ad_count y NADA MÁS. Como el rango sale de
+//     ese número, un producto que creció de 40 a 120 cambia de rango solo.
+//   · inactivo que volvió → vuelve a 'pendiente' (reentra a la cola: tras la
+//     baja no sabemos si el anunciante sigue vendiendo lo mismo).
 //   · no se pudo leer  → no se toca el estado. Un fallo de red no es una baja.
 //
 // $0 de LLM: solo el conteo del SSR (~2s por anunciante). No re-verifica las
