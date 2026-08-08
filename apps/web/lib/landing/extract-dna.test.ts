@@ -31,6 +31,7 @@ describe('extractDna', () => {
   it('ensambla el DNA con la paleta DERIVADA (no el color crudo), tipografía del nicho y poses asignadas', async () => {
     const extraction = {
       brand_base: { hex: '#1E6FE8', h: 215, s: 82, l: 51 },
+      polarity: 'light' as const,
       particle_type: 'burbujas translúcidas y destellos de luz sobre agua',
       particle_density: 'medium' as const,
       props: ['raíz de cúrcuma cortada', 'hojas verdes frescas'],
@@ -76,6 +77,7 @@ describe('extractDna', () => {
 
     const extraction = {
       brand_base: { hex: '#1E6FE8', h: 215, s: 82, l: 51 },
+      polarity: 'light' as const,
       particle_type: 'gotas de sérum en suspensión',
       particle_density: 'high' as const,
       props: ['pétalos', 'gotero de vidrio'],
@@ -126,9 +128,44 @@ describe('extractDna', () => {
     })
   })
 
+  // ── Polaridad sin marca (ampliación 2026-08-07) ──
+  describe('polaridad del producto suelto', () => {
+    it('una visión `dark` da una paleta oscura sin necesidad de branding', async () => {
+      vi.mocked(callStructured).mockResolvedValueOnce({
+        brand_base: { hex: '#1E6FE8', h: 215, s: 82, l: 51 },
+        polarity: 'dark' as const,
+        particle_type: 'brasas', particle_density: 'low' as const, props: ['raíz de maca'],
+      })
+      const dna = await extractDna(baseSession(), 'supplement_male_performance', 'male_35_55', ['hero'])
+      expect(dna.palette.polarity).toBe('dark')
+    })
+
+    // ESTA es la razón de que la polaridad viaje SEPARADA del color: un frasco negro mate tiene
+    // s<12, así que su hue se descarta y cae al del nicho. Si la polaridad se hubiera inferido del
+    // color, se habría perdido en ese mismo fallback y la pieza saldría clara.
+    it('un envase negro mate cae al hue del nicho pero SIGUE siendo oscuro', async () => {
+      vi.mocked(callStructured).mockResolvedValueOnce({
+        brand_base: { hex: '#0A0A0A', h: 0, s: 3, l: 4 },
+        polarity: 'dark' as const,
+        particle_type: 'humo tenue', particle_density: 'low' as const, props: ['cápsulas oscuras'],
+      })
+      const niche = 'tech_gadgets' as const
+      const dna = await extractDna(baseSession(), niche, 'no_talent', ['hero'])
+      expect(dna.brand_base.h).toBe(NICHE_FALLBACK[niche].hue)   // el color sí cayó
+      expect(dna.palette.polarity).toBe('dark')                   // la polaridad sobrevivió
+    })
+
+    it('sin visión (fallo) queda clara, como siempre', async () => {
+      vi.mocked(callStructured).mockRejectedValueOnce(new Error('vision down'))
+      const dna = await extractDna(baseSession(), 'pets', 'no_talent', ['hero'])
+      expect(dna.palette.polarity).toBe('light')
+    })
+  })
+
   it('usa NO_TALENT_SUBSTITUTE como model_persona cuando demographic_id es no_talent', async () => {
     const extraction = {
       brand_base: { hex: '#1E6FE8', h: 215, s: 82, l: 51 },
+      polarity: 'light' as const,
       particle_type: 'partículas geométricas',
       particle_density: 'low' as const,
       props: ['cable', 'superficie mate'],
@@ -147,6 +184,7 @@ describe('extractDna', () => {
   it('brand_base.s < 12 dispara el fallback de hue del Anexo C (envase blanco/negro/plateado)', async () => {
     const extraction = {
       brand_base: { hex: '#FDFDFD', h: 0, s: 4, l: 98 },
+      polarity: 'light' as const,
       particle_type: 'motas suaves',
       particle_density: 'low' as const,
       props: ['algo real'],
@@ -166,6 +204,7 @@ describe('extractDna', () => {
   it('particle_type/props vacíos caen al fallback del Anexo C aunque el color sea válido', async () => {
     const extraction = {
       brand_base: { hex: '#1E6FE8', h: 215, s: 82, l: 51 },
+      polarity: 'light' as const,
       particle_type: '',
       particle_density: 'medium' as const,
       props: [],

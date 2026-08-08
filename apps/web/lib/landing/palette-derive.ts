@@ -1,6 +1,7 @@
 import { contrastRatio } from '@/lib/branding/contrast'
 import type { BrandSystem } from '@/lib/branding/brand-system'
 import type { PaletteTokens, Polarity } from './types'
+export type { Polarity }
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 
@@ -64,22 +65,35 @@ const ICON_OFFSETS = [0, 40, 130, 220]
 const GRADIENT_DELTA = 8
 
 // ─── Camino SIN marca (producto suelto) ──────────────────────────────────────
-// Un solo hue extraído del envase por visión; todo lo demás se sintetiza. Es la ruta histórica y
-// sigue siendo la de las sesiones sin branding (decisión #7). Siempre polaridad clara: sin sistema
-// de marca no hay quién declare lo contrario.
-export function derivePalette(base: { h: number; s: number; l: number }): PaletteTokens {
+// Un solo hue extraído del envase por visión; todo lo demás se sintetiza. Es la ruta de las
+// sesiones sin branding (decisión #7).
+//
+// La POLARIDAD también sale de la visión (2026-08-07, ampliación): el hue solo no la implica —
+// un envase negro mate da un hue oscuro, pero además cae al fallback del nicho por baja saturación
+// (s<12), así que sin un campo aparte la señal "esta marca es oscura" se perdía dos veces. Por eso
+// viaja separada del color y sobrevive a ese fallback. Default 'light' = comportamiento histórico.
+//
+// Los extremos son SIMÉTRICOS (claro L90→L98, oscuro L12→L4): 8 puntos de separación en ambos,
+// y el L12 del arranque oscuro deja lugar para bajar sin chocar contra el piso.
+export function derivePalette(
+  base: { h: number; s: number; l: number },
+  polarity: Polarity = 'light',
+): PaletteTokens {
   const H = base.h
-  const bg_start = hslToHex(H, clamp(base.s, 25, 45), 90)
-  const color_headline = fitHeadline(H, clamp(base.s, 45, 70), 20, bg_start, 'light')
+  const dark = polarity === 'dark'
+  const bg_start = hslToHex(H, clamp(base.s, 25, 45), dark ? 12 : 90)
+  const color_headline = fitHeadline(H, clamp(base.s, 45, 70), dark ? 80 : 20, bg_start, polarity)
   return {
     color_headline,
     color_accent: hslToHex(H, clamp(base.s, 70, 95), 50),
     color_body: hexToRgba(color_headline, 0.7),
     bg_start,
-    bg_end: hslToHex(H, 15, 98),
-    color_surface: '#FFFFFF',
+    bg_end: hslToHex(H, 15, dark ? 4 : 98),
+    // Misma razón que en el camino de marca: sobre fondo oscuro el titular es CLARO, y una
+    // superficie blanca al 80% dejaría texto claro sobre blanco.
+    color_surface: dark ? hslToHex(H, 20, 14) : '#FFFFFF',
     color_icon: ICON_OFFSETS.map((o) => hslToHex(H + o, 58, 80)),
-    polarity: 'light',
+    polarity,
   }
 }
 

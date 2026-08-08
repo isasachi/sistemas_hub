@@ -52,8 +52,29 @@ describe('derivePalette (spec 0.b B)', () => {
   it('color_surface siempre blanco', () => {
     expect(derivePalette({ h: 10, s: 50, l: 50 }).color_surface).toBe('#FFFFFF')
   })
-  it('sin marca la polaridad es clara (comportamiento histórico)', () => {
+  it('sin polaridad explícita es clara (comportamiento histórico)', () => {
     expect(derivePalette({ h: 215, s: 82, l: 51 }).polarity).toBe('light')
+  })
+
+  // Ampliación 2026-08-07: el camino sin branding también puede ser oscuro.
+  describe('polaridad oscura sin marca', () => {
+    const p = derivePalette({ h: 215, s: 82, l: 51 }, 'dark')
+
+    it('invierte fondo y superficie', () => {
+      expect(p.polarity).toBe('dark')
+      expect(hexToHsl(p.bg_start).l).toBeLessThan(20)
+      expect(hexToHsl(p.color_surface).l).toBeLessThan(30)
+    })
+    it('cumple 7:1 con titular claro (mismo bug de signo que en el camino de marca)', () => {
+      expect(contrastRatio(p.color_headline, p.bg_start)).toBeGreaterThanOrEqual(7)
+      expect(hexToHsl(p.color_headline).l).toBeGreaterThan(50)
+    })
+    it('mantiene la misma separación de degradado que el camino claro', () => {
+      const claro = derivePalette({ h: 215, s: 82, l: 51 }, 'light')
+      const delta = (t: typeof p) => Math.abs(hexToHsl(t.bg_end).l - hexToHsl(t.bg_start).l)
+      expect(delta(p)).toBeCloseTo(delta(claro), 0)
+      expect(delta(p)).toBeGreaterThanOrEqual(7.5)
+    })
   })
 })
 

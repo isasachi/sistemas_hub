@@ -6,6 +6,7 @@ import { hslToHex, derivePalette, paletteFromBrand } from './palette-derive'
 import { NICHE_TYPOGRAPHY, NICHE_FALLBACK } from './niches'
 import { DEMOGRAPHIC_PERSONA, NO_TALENT_SUBSTITUTE, assignPoses } from './demographics'
 import {
+  Polarity,
   LandingDnaSchema,
   ParticleDensity,
   type LandingDna,
@@ -21,6 +22,10 @@ import {
 // (ver derivePalette, NICHE_TYPOGRAPHY, DEMOGRAPHIC_PERSONA/NO_TALENT_SUBSTITUTE/assignPoses).
 const DnaExtractSchema = z.object({
   brand_base: z.object({ hex: z.string(), h: z.number(), s: z.number(), l: z.number() }),
+  // Polaridad del producto suelto (2026-08-07): viaja SEPARADA del color a propósito. El hue no la
+  // implica, y un envase negro/blanco cae además al fallback de nicho por baja saturación (s<12),
+  // así que sin este campo la señal se perdería dos veces.
+  polarity: Polarity,
   particle_type: z.string(),
   particle_density: ParticleDensity,
   props: z.array(z.string()).min(1).max(5),
@@ -32,6 +37,12 @@ const PROMPT = [
   'dominante de la etiqueta, la tapa o el material del envase. Ignora blancos, grises, negros y',
   'cualquier color que provenga del fondo, la superficie o la iluminación. Devuelve ese color en',
   'HEX y en HSL (brand_base).',
+  '',
+  'Decide además si el producto se lee OSCURO o CLARO (polarity): `dark` si su envase y su etiqueta',
+  'son de tonos oscuros y el texto impreso encima va claro (frasco negro mate, ámbar oscuro, lata',
+  'negra); `light` si el envase y la etiqueta son claros con texto oscuro encima. Juzgá el ENVASE,',
+  'nunca el fondo de la foto ni la iluminación del estudio: un frasco negro fotografiado sobre fondo',
+  'blanco es `dark`.',
   '',
   'A partir del producto y su categoría, describe qué partículas flotarían de forma físicamente',
   'creíble en su entorno. Deben pertenecer al registro sensorial del producto: su estado de la',
@@ -103,7 +114,9 @@ export async function extractDna(
 
   // B: paleta por MAPEO DE ROLES si hay marca; si no, por fórmula sobre el único hue de la visión.
   // En ninguno de los dos caminos se le pide al modelo que elija colores.
-  const palette = brand ? paletteFromBrand(brand) : derivePalette(brand_base)
+  // La polaridad del producto suelto sobrevive al fallback de color: un envase negro mate cae al
+  // hue del nicho por s<12, pero sigue siendo una pieza oscura. Sin visión → 'light' (histórico).
+  const palette = brand ? paletteFromBrand(brand) : derivePalette(brand_base, extraction?.polarity ?? 'light')
 
   // E: tipografía/halo — de la marca si la hay, si no por lookup de nicho.
   const { font_family, font_accent } = brand
