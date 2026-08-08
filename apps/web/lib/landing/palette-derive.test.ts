@@ -257,6 +257,25 @@ describe('moneyRamp (decisión #6)', () => {
     expect(moneyRamp(tokens('#8C8574'))).toBe(GOLD)
   })
 
+  // La banda de confianza lleva texto ENCIMA del metal y cruza todo el degradado, así que el peor
+  // extremo es el que manda. El cobre viejo (#7A3B12→#C87137) daba 2.17:1 sobre su extremo oscuro.
+  it('el texto sobre cualquiera de los dos metales es legible en sus DOS extremos', () => {
+    for (const m of [GOLD, COPPER]) {
+      expect(contrastRatio(m.on, m.dark), `${m.name} oscuro`).toBeGreaterThanOrEqual(4.5)
+      expect(contrastRatio(m.on, m.light), `${m.name} claro`).toBeGreaterThanOrEqual(4.5)
+    }
+  })
+
+  // Si el cobre cayera dentro de la banda que dispara el cambio, el reemplazo colisionaría con la
+  // misma marca dorada que lo motivó.
+  it('el cobre queda fuera de la banda de tono que se considera dorada', () => {
+    for (const hex of [COPPER.dark, COPPER.light]) {
+      const { h } = hexToHsl(hex)
+      expect(h < 35 || h > 55, `${hex} hue=${Math.round(h)}`).toBe(true)
+    }
+    expect(moneyRamp({ color_accent: COPPER.light, color_headline: COPPER.dark })).toBe(GOLD)
+  })
+
   // Caso REAL del probe 2026-08-07: la marca "Protin" tiene primary dorado #BD9E4D y accent rojo.
   // Mirando solo el acento el oro no se corría y quedaba idéntico al color dominante de la marca.
   it('dispara aunque el dorado esté en el titular y no en el acento (caso Protin)', () => {

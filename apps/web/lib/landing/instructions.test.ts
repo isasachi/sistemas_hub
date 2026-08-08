@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { buildDiffusionInstruction, MULTI_UNIT_SECTIONS, PAYMENT_SECTIONS, NO_TALENT_SECTIONS } from './instructions'
 import type { SectionCopy, SectionType, LandingDna, Offer, TrustBlock } from './types'
+import { COPPER } from './palette-derive'
 
 const ALL: SectionType[] = [
   'hero', 'oferta', 'antes-despues', 'beneficios',
@@ -187,6 +188,51 @@ describe('buildDiffusionInstruction — DNA-driven (spec 2026-07-23)', () => {
     // oferta (payment_row) y antes-despues (closing_strip) NO llevan la barra
     expect(build('oferta', { trust: TRUST })).not.toContain('TRUST BAR')
     expect(build('antes-despues', { trust: TRUST })).not.toContain('TRUST BAR')
+  })
+
+  // Pedido del usuario 2026-08-07: la banda de confianza deja de re-tintarse por sección y pasa a
+  // ser SIEMPRE el mismo metal. Antes su color de fondo era explícitamente "lo único que varía".
+  describe('color de la banda de confianza', () => {
+    it('es el mismo metal dorado en las 6 secciones, y ya no se re-tinta', () => {
+      const salidas = (['hero', 'beneficios', 'testimonios', 'faq', 'garantia', 'cta-final'] as SectionType[])
+        .map((t) => build(t, { trust: TRUST }))
+      for (const out of salidas) {
+        expect(out).toContain('#B8860B')
+        expect(out).toContain('#F5D372')
+        expect(out).toContain('NO se re-tinta')
+      }
+      // La franja de color de la banda tiene que ser literalmente idéntica entre secciones.
+      const franja = salidas.map((o) => o.match(/COLOR DE LA BANDA[^\n]*/)![0])
+      expect(new Set(franja).size).toBe(1)
+      // Y la vieja regla de "lo único que varía es el color de fondo" no puede seguir viva.
+      for (const out of salidas) expect(out).not.toContain('re-tintado a la marca')
+    })
+
+    it('con marca dorada la banda usa cobre, no oro (si no, marca y banda se confunden)', () => {
+      const dorada = { ...DNA, palette: { ...DNA.palette, color_accent: '#D4A017' } }
+      const out = build('hero', { trust: TRUST, dna: dorada })
+      expect(out).toContain(COPPER.dark)
+      expect(out).toContain(COPPER.light)
+      expect(out).not.toContain('#F5D372')
+    })
+
+    it('el DESIGN_SYSTEM y la banda nombran el MISMO metal', () => {
+      for (const accent of ['#E85D2E', '#D4A017']) {
+        const out = build('hero', { trust: TRUST, dna: { ...DNA, palette: { ...DNA.palette, color_accent: accent } } })
+        // Un solo nombre de metal en toda la instrucción.
+        const metales = new Set([...out.matchAll(/metálico (\w+)|degradado metálico (\w+)/g)].map((m) => m[1] ?? m[2]))
+        expect(metales.size).toBeLessThanOrEqual(1)
+      }
+    })
+
+    // `garantia` lleva banda de confianza Y banda de pagos: las dos hablan del pie. La de pagos ya
+    // no describe el aspecto (decía "franja limpia y calma") o contradiría al metal.
+    it('en garantia la nota de pagos no le discute el aspecto a la banda', () => {
+      const out = build('garantia', { trust: TRUST })
+      expect(out).toContain('do NOT draw')
+      expect(out).not.toContain('CLEAN, calm horizontal band')
+      expect(out).toContain('governed by the TRUST BAR instruction')
+    })
   })
 
   it('testimonios restringe las caras a la demografía objetivo cuando se pasa demographicLabel', () => {

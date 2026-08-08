@@ -185,8 +185,20 @@ function brandIcons(brand: BrandSystem, accent: string): string[] {
 // la regla de significado (marca = confianza, oro = dinero/urgencia). La distinción ya cabalga sobre
 // el TRATAMIENTO (degradado metálico + corona/cinta/sello), no solo sobre el tono, así que en ese
 // caso la rampa se corre a cobre/bronce profundo y el tratamiento metálico se mantiene.
-export const GOLD = { dark: '#B8860B', light: '#F5D372', name: 'dorado' }
-export const COPPER = { dark: '#7A3B12', light: '#C87137', name: 'cobre' }
+// `on` = el color del texto y los iconos QUE VAN ENCIMA del metal (lo usa la banda de confianza,
+// que desde 2026-08-07 es siempre metálica). Se elige por el PEOR de los dos extremos de la rampa,
+// no por el claro: el texto cruza todo el degradado, así que sirve el que aguanta el extremo malo.
+const worstOn = (candidate: string, dark: string, light: string) =>
+  Math.min(contrastRatio(candidate, dark), contrastRatio(candidate, light))
+const onMetal = (dark: string, light: string) =>
+  worstOn('#1A1206', dark, light) >= worstOn('#FFFFFF', dark, light) ? '#1A1206' : '#FFFFFF'
+
+// El cobre era #7A3B12→#C87137 y quedaba MUCHO más oscuro que el oro: el texto daba 2.17:1 sobre
+// su extremo oscuro, ilegible. Se subió a la misma franja de luminosidad que el oro (L≈50→80) y se
+// mantuvo el tono en 22° — bien lejos de la banda 35-55 que `isGolden` considera dorada, así que
+// el reemplazo nunca puede colisionar con la marca que lo disparó.
+export const GOLD = { dark: '#B8860B', light: '#F5D372', name: 'dorado', on: onMetal('#B8860B', '#F5D372') }
+export const COPPER = { dark: '#BF6F40', light: '#F1C2A7', name: 'cobre', on: onMetal('#BF6F40', '#F1C2A7') }
 
 // Mira TODA la identidad, no solo el acento: la marca real "Protin" (probe 2026-08-07) tiene
 // primary dorado #BD9E4D y accent rojo — con el acento solo, el oro no se corría y quedaba
@@ -198,6 +210,8 @@ const isGolden = (hex: string) => {
   return h >= 35 && h <= 55 && s > 40
 }
 
-export function moneyRamp(p: Pick<PaletteTokens, 'color_accent' | 'color_headline'>): { dark: string; light: string; name: string } {
+export type MoneyRamp = typeof GOLD
+
+export function moneyRamp(p: Pick<PaletteTokens, 'color_accent' | 'color_headline'>): MoneyRamp {
   return isGolden(p.color_accent) || isGolden(p.color_headline) ? COPPER : GOLD
 }

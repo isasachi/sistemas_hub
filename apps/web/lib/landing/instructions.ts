@@ -1,7 +1,7 @@
 import type { SectionCopy, SectionType, LandingDna, PaletteTokens, Offer, TrustBlock, NicheId, PaymentMethod } from './types'
 import { NICHE_LABELS } from './niches'
 import { SECTION_DNA } from './section-dna'
-import { moneyRamp } from './palette-derive'
+import { moneyRamp, type MoneyRamp } from './palette-derive'
 
 // Builders puros ($0) para el prompt de imagen de cada sección de la landing (motor de DIFUSIÓN).
 // FUENTE DE VERDAD: docs/superpowers/specs/2026-07-23-generador-landing-spec.md §1-§5 + Anexos.
@@ -71,18 +71,19 @@ function brandBlock(productLabels: string | null): string {
 
 // ─── Capa 3 — DESIGN_SYSTEM (spec §2) ────────────────────────────────────────
 // Paleta aplicada POR ROL (nunca "elige un color bonito"): cada token del ADN tiene un uso fijo.
-// El oro (#B8860B→#F5D372) y el precio tachado (#D93025) son invariantes, no salen de `dna`.
+// El precio tachado (#D93025) es invariante. La rampa de metal (oro, o cobre si la marca es
+// dorada — ver `moneyRamp`) llega como parámetro para que ESTA capa y la banda de confianza
+// nombren siempre el mismo color: si cada una lo calculara, podrían contradecirse.
 // NOTA (motor plantilla-como-scaffold, desviación deliberada del brief): la línea de partículas
 // que vivía acá se retiró — `masterLayoutBlock` es ahora el ÚNICO emisor de la instrucción de
 // partículas (on/off vía `dna.particles_on`). Dejarla acá duplicada contradecía el caso OFF: el
 // prompt decía "Siempre presentes" (esta capa) Y "SIN partículas" (masterLayoutBlock) a la vez.
-function designSystemBlock(dna: LandingDna): string {
+function designSystemBlock(dna: LandingDna, money: MoneyRamp): string {
   const p: PaletteTokens = dna.palette
   // `undefined` = paleta LEGADA (guardada antes de que existiera el campo; `getLandingSession`
   // castea sin `.parse()`, así que el `.default('light')` del schema no corre al leer). 'light' es
   // el comportamiento histórico → una sesión vieja sale idéntica a como salía.
   const dark = p.polarity === 'dark'
-  const money = moneyRamp(p)
   return [
     'DESIGN_SYSTEM —',
     `Fondo: degradado vertical/diagonal suave de ${p.bg_start} (superior) a ${p.bg_end} (inferior). Nunca fondo plano, ${dark ? 'nunca negro puro — el fondo es OSCURO y conserva el tinte de la marca, con profundidad atmosférica, no un negro plano de estudio' : 'nunca blanco puro'}.`,
@@ -94,7 +95,7 @@ function designSystemBlock(dna: LandingDna): string {
     // El oro es invariante salvo que la marca sea dorada (decisión #6): ahí marca y oro se
     // confundirían y muere la regla de significado. El TRATAMIENTO metálico se mantiene siempre —
     // es sobre él, no sobre el tono, que cabalga la distinción.
-    `Oferta/premium/sellos: degradado metálico ${money.name} ${money.dark}→${money.light}, y ÚNICAMENTE ahí — oferta, sellos de garantía, cinta "RECOMENDADO" y la etiqueta "DESPUÉS". En ningún otro lugar. Precio ancla tachado en #D93025. Regla de significado (invariante): el color de marca comunica confianza; el metal ${money.name} comunica dinero y urgencia — por eso NUNCA deben ser el mismo color.`,
+    `Oferta/premium/sellos: degradado metálico ${money.name} ${money.dark}→${money.light}, y ÚNICAMENTE ahí — oferta, sellos de garantía, cinta "RECOMENDADO", la etiqueta "DESPUÉS" y la BANDA DE CONFIANZA del pie. En ningún otro lugar. Precio ancla tachado en #D93025. Regla de significado (invariante): el color de marca comunica confianza; el metal ${money.name} comunica dinero y urgencia — por eso NUNCA deben ser el mismo color.`,
     `Tipografía: una sola familia, ${dna.font_family}. Toda la expresividad viene de peso + color + tamaño, jamás de una segunda fuente.${dna.font_accent ? ` ${dna.font_accent} se usa SOLO en el titular de hero/oferta, nunca en cuerpo ni cards.` : ''}`,
     'Titular (invariante): 3-4 líneas, alineado a la izquierda, ragged right; conviven líneas neutras en el color de titular semibold y 1-2 palabras clave en el color de acento extrabold, a mayor tamaño. Subtítulo: 1 línea, ~40% del tamaño del titular, con una palabra en el color de acento.',
     'Card title (invariante): bold en el color de titular. Card body: regular en el color de cuerpo, máximo 2 líneas. Microcopy: uppercase bold + descriptor regular debajo, a menor tamaño.',
@@ -263,20 +264,33 @@ function offerText(offer: Offer): string {
 // describe "frosted pill" ni forma alguna (eso hacía que hero saliera con pills y beneficios con
 // banda sólida). La barra es IDÉNTICA en todas las secciones que la tienen; lo único que cambia
 // entre secciones es el color de fondo de la banda (re-tinte).
-function trustText(trust: TrustBlock): string {
+function trustText(trust: TrustBlock, money: MoneyRamp): string {
   const rows: string[] = []
   if (trust.coverage?.length) rows.push(`Envío a domicilio en ${trust.coverage.join(' y ')}${trust.freeShipping ? ' (envío gratis)' : ''}`)
   if (trust.deliveryTime) rows.push(`Entrega en ${trust.deliveryTime}`)
   if (trust.codDelivery) rows.push('Pago contraentrega — pagas en efectivo cuando llega')
   if (trust.guaranteeDays) rows.push(`Compra 100% segura${trust.guaranteeText ? ` — ${trust.guaranteeText}` : ` — garantía de ${trust.guaranteeDays} días`}`)
   if (!rows.length) return ''
-  return `TRUST BAR — reproduce EXACTAMENTE la banda de confianza de la plantilla, IDÉNTICA en composición a la de las demás secciones (una sola franja horizontal al pie, con estos ítems en una fila pareja: ícono + título bold + línea más ligera). NO cambies su disposición, orden, cantidad de ítems ni forma entre secciones — lo ÚNICO que varía de una sección a otra es el COLOR DE FONDO de la franja (re-tintado a la marca). Usa EXACTAMENTE estos hechos, no inventes ninguno:\n${rows.map((r) => `  - ${r}`).join('\n')}`
+  // La banda ya NO se re-tinta por sección (pedido del usuario, 2026-08-07): es metálica y
+  // ABSOLUTAMENTE la misma en las 6 secciones que la llevan. Antes el color de fondo era "lo único
+  // que variaba" entre secciones, y esa variación era justo lo que rompía la sensación de que la
+  // barra es un elemento fijo del funnel. Ojo: esto AGREGA la banda a la lista de usos del metal
+  // del DESIGN_SYSTEM — las dos líneas tienen que decir lo mismo o el prompt se contradice.
+  return `TRUST BAR — reproduce EXACTAMENTE la banda de confianza de la plantilla, IDÉNTICA en composición a la de las demás secciones (una sola franja horizontal al pie, con estos ítems en una fila pareja: ícono + título bold + línea más ligera). NO cambies su disposición, orden, cantidad de ítems ni forma entre secciones.
+COLOR DE LA BANDA (invariante, NO se re-tinta): la franja es SIEMPRE un degradado metálico ${money.name} de ${money.dark} a ${money.light}, con acabado de lámina pulida y un brillo suave que la recorre. EXACTAMENTE el mismo color y acabado en TODAS las secciones — no lo adaptes a la marca, al fondo ni a la sección. El texto y los iconos sobre la banda van en ${money.on} para que se lean sobre el metal.
+Usa EXACTAMENTE estos hechos, no inventes ninguno:\n${rows.map((r) => `  - ${r}`).join('\n')}`
 }
 
 // Reserva la banda inferior de métodos de pago. Garantía deja la banda limpia y puede rotular
 // "Paga como prefieras". (El overlay de logos reales se retiró post-smoke.)
+//
+// ⚠️ `garantia` está en PAYMENT_SECTIONS **y** en TRUST_BAND_SECTIONS, así que las dos
+// instrucciones hablan del pie a la vez. Desde que la banda de confianza es metálica invariante
+// (2026-08-07) eso se volvió una contradicción abierta ("franja metálica dorada" vs "franja limpia
+// y calma"), así que esta nota ya NO describe el aspecto del pie: solo prohíbe los logos y le cede
+// el tratamiento visual a la banda de confianza.
 const PAYMENT_BAND =
-  'PAYMENT LOGOS (do NOT draw): leave the BOTTOM ~12% of the image as a CLEAN, calm horizontal band (a subtle strip in the piece\'s own tonality is fine) with NO payment logos, card icons, brand marks, wallet logos, country flags or the words "yape/visa/mastercard/mercado pago" anywhere. You MAY render a short heading like "Paga como prefieras" just ABOVE the band, but no logos.'
+  'PAYMENT LOGOS (do NOT draw): the BOTTOM ~12% of the image must contain NO payment logos, card icons, brand marks, wallet logos, country flags or the words "yape/visa/mastercard/mercado pago" anywhere. This rule is only about logos — the look of that bottom strip is governed by the TRUST BAR instruction if this section has one, and is otherwise a calm strip in the piece\'s own tonality. You MAY render a short heading like "Paga como prefieras" just ABOVE it, but no logos.'
 
 const PAYMENT_BRAND: Record<PaymentMethod, string> = {
   yape: 'Yape', plin: 'Plin', mercadopago: 'Mercado Pago', visa: 'Visa',
@@ -315,10 +329,15 @@ export function buildDiffusionInstruction(args: {
   // (nota de plantilla).
   const talentImageAttached = hasTalent && !NO_TALENT_SECTIONS.has(section)
 
+  // Una sola rampa de metal para toda la instrucción: la comparten el DESIGN_SYSTEM y la banda de
+  // confianza. Si cada uno la calculara por su cuenta, un cambio en `moneyRamp` podría dejarlas
+  // diciendo colores distintos y el prompt se contradiría solo.
+  const money = moneyRamp(dna.palette)
+
   const base = [
     'Diseña UNA sección de landing 9:16 full-bleed, calidad de anuncio comercial premium, mobile-first. La ÚLTIMA imagen adjunta es la PLANTILLA DE COMPOSICIÓN — reproduce EXACTAMENTE su composición y estructura; esta instrucción solo cambia producto, talento, copy, colores y props del nicho.',
     brandBlock(productLabels),
-    designSystemBlock(dna),
+    designSystemBlock(dna, money),
     masterLayoutBlock(dna, section, hasTalent, talentSubstitute, demographicLabel),
     compositionReinforcementBlock(section),
     '',
@@ -336,7 +355,7 @@ export function buildDiffusionInstruction(args: {
   // línea del copy (oferta ya trae ambos en offerText). Sin esto, hero/cta inventan precio y moneda.
   if (offer && (section === 'hero' || section === 'cta-final')) extra.push(featuredPriceText(offer))
   if (offer?.urgency && (section === 'hero' || section === 'cta-final')) extra.push(urgencyText(offer))
-  if (trust && TRUST_BAND_SECTIONS.has(section)) extra.push(trustText(trust))
+  if (trust && TRUST_BAND_SECTIONS.has(section)) extra.push(trustText(trust, money))
   if (packUnits && packUnits > 1) extra.push(packNote(packUnits))
   if (reserveLockup) extra.push(LOCKUP_BAND)
   if (section === 'oferta' && trust?.paymentMethods?.length) extra.push(paymentLogosText(trust.paymentMethods))
