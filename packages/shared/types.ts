@@ -298,7 +298,8 @@ export interface RawProductEntry {
   adsUrl: string
 }
 
-// Respuesta del buscador: los tres rangos, 10 productos cada uno.
+// Respuesta del buscador: UN rango a la vez, 10 productos. `groups` sigue
+// siendo lista (llega con un elemento) por si vuelve a servirse más de uno.
 export interface RawBucketGroup {
   bucket: string
   label: string

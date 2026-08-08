@@ -853,6 +853,21 @@ export async function getTopPicks(limit = 12): Promise<RawProductRow[]> {
   return out
 }
 
+/**
+ * Chips de sugerencia de la portada: los nichos con más inventario servible.
+ *
+ * Vía RPC (`ph_raw_top_niches`) porque PostgREST rechaza los agregados y corta
+ * en 1000 filas — contar 28k nichos desde el cliente serían 29 páginas.
+ *
+ * El conteo NO pasa por el filtro de físico (`fisicos`, que es texto y corre en
+ * JS), así que es aproximado. Por eso el número no se muestra: solo ordena.
+ */
+export async function getTopNiches(limit = 12): Promise<string[]> {
+  const { data, error } = await getDb().rpc('ph_raw_top_niches', { p_limit: limit })
+  if (error) throw new Error(error.message)
+  return ((data ?? []) as { niche: string }[]).map((r) => r.niche)
+}
+
 // Cuánto inventario servible tiene el nicho — para distinguir "todavía
 // scrapeando" de "sin resultados".
 export async function countApproved(niche: string): Promise<number> {

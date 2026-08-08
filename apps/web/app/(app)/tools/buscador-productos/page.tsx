@@ -3,9 +3,27 @@
 import { useCallback, useEffect, useState } from "react";
 import { Search, ExternalLink, Loader2, PackageSearch, Flame } from "lucide-react";
 import ToolShell from "@/components/tools/ui/ToolShell";
-import type { RawProductEntry, RawSearchResponse } from "@ph/shared";
+import { RAW_BUCKETS, RAW_BUCKET_LABEL, type RawBucket, type RawProductEntry, type RawSearchResponse } from "@ph/shared";
 
 const ACCENT = "#ff9b4a";
+
+// Chip: mismo botón para las sugerencias de nicho y para el filtro de rango.
+function Chip({ label, active, onClick }: { label: string; active?: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-pressed={active}
+      className="text-[12px] font-bold rounded-full px-3 py-1.5 border transition-colors"
+      style={
+        active
+          ? { borderColor: ACCENT, color: ACCENT, background: `${ACCENT}1a` }
+          : { borderColor: "rgba(255,255,255,0.12)", color: "#cfcfcf" }
+      }
+    >
+      {label}
+    </button>
+  );
+}
 
 // Los productos llegan verificados por las tres reglas del daemon: producto
 // físico vendible, agrupado por cantidad de anuncios, y con la mayoría de la
@@ -49,6 +67,7 @@ export default function BuscadorProductosPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [topPicks, setTopPicks] = useState<RawProductEntry[]>([]);
+  const [sugerencias, setSugerencias] = useState<string[]>([]);
 
   // Lo más pautado del rango más alto, de todos los nichos. Se refresca solo:
   // la ruta lee en vivo lo que el daemon de vigencia acaba de escribir.
@@ -57,19 +76,28 @@ export default function BuscadorProductosPage() {
       .then((r) => r.json())
       .then((d: { products?: RawProductEntry[] }) => setTopPicks(d.products ?? []))
       .catch(() => {});
+    fetch("/api/buscador-productos/top-niches")
+      .then((r) => r.json())
+      .then((d: { niches?: string[] }) => setSugerencias(d.niches ?? []))
+      .catch(() => {});
   }, []);
 
-  const search = useCallback(async () => {
-    const q = niche.trim();
+  // `q` y `bucket` van por parámetro y no desde el estado: los chips buscan en
+  // el mismo click que actualizan el input, y el estado todavía no llegó.
+  // bucket null = que el servidor elija el primer rango con stock.
+  const search = useCallback(async (q: string, bucket: RawBucket | null) => {
     if (!q || loading) return;
     setLoading(true);
     setError(null);
-    setResult(null);
+    // Cambiar de RANGO no borra lo que hay en pantalla: si se limpiara, el filtro
+    // desaparecería a media transición y no habría dónde volver a hacer click.
+    // Cambiar de NICHO sí limpia. (`q` ya viene normalizado en el refetch de rango.)
+    setResult((prev) => (prev?.niche === q ? prev : null));
     try {
       const res = await fetch("/api/buscador-productos/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ niche: q }),
+        body: JSON.stringify({ niche: q, bucket }),
       });
       const data = (await res.json()) as RawSearchResponse & { error?: string };
       if (!res.ok) throw new Error(data.error ?? "Error en la búsqueda");
@@ -79,7 +107,16 @@ export default function BuscadorProductosPage() {
     } finally {
       setLoading(false);
     }
-  }, [niche, loading]);
+  }, [loading]);
+
+  const buscarNicho = useCallback((q: string) => {
+    setNiche(q);
+    search(q, null);
+  }, [search]);
+
+  // El rango activo lo dicta la respuesta, no el click: sin filtro explícito el
+  // servidor autoelige, y el chip encendido tiene que ser el que de verdad salió.
+  const grupo = result?.status === "ready" ? result.groups[0] : undefined;
 
   return (
     <ToolShell name="Buscador de Productos" slug="buscador-productos">
@@ -92,26 +129,39 @@ export default function BuscadorProductosPage() {
             Escribe un nicho (ej: <span className="text-[#ededed]">rodilla</span>,{" "}
             <span className="text-[#ededed]">acne</span>,{" "}
             <span className="text-[#ededed]">collar antipulgas</span>) y te mostramos productos
-            físicos que se están pautando, agrupados por cantidad de anuncios activos.
+            físicos que se están pautando. Se ve un rango de anuncios a la vez — el filtro lo cambia.
           </p>
         </div>
 
-        <div className="flex gap-2 mb-8">
+        <div className="flex gap-2 mb-4">
           <div className="flex-1 flex items-center gap-2 bg-white/[0.04] border border-white/[0.08] rounded-xl px-3">
             <Search className="w-4 h-4 text-[#bebebe]" />
             <input
               value={niche}
               onChange={(e) => setNiche(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") search(); }}
+              onKeyDown={(e) => { if (e.key === "Enter") search(niche.trim(), null); }}
               placeholder="Escribe un nicho"
               className="flex-1 bg-transparent py-3 text-[14px] text-[#ededed] placeholder:text-[#6b6b6b] outline-none"
             />
           </div>
-          <button onClick={search} disabled={loading}
+          <button onClick={() => search(niche.trim(), null)} disabled={loading}
             className="jr-cta text-[14px] font-bold rounded-xl px-6 disabled:opacity-50">
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Buscar"}
           </button>
         </div>
+
+        {/* Categorías sugeridas: los nichos con más productos en la base. Un
+            click y hay resultados garantizados — no hay que adivinar qué escribir. */}
+        {sugerencias.length > 0 && (
+          <div className="mb-8">
+            <p className="text-[12px] text-[#bebebe] mb-2">Categorías con más productos</p>
+            <div className="flex flex-wrap gap-2">
+              {sugerencias.map((n) => (
+                <Chip key={n} label={n} active={result?.niche === n} onClick={() => buscarNicho(n)} />
+              ))}
+            </div>
+          </div>
+        )}
 
         {error && <p className="text-[13px] text-[#fca5a5] mb-4">{error}</p>}
 
@@ -163,19 +213,40 @@ export default function BuscadorProductosPage() {
           </p>
         )}
 
-        {result?.status === "ready" && result.groups.map((g) => (
-          g.products.length > 0 && (
-            <section key={g.bucket} className="mb-10">
-              <div className="flex items-baseline gap-2.5 mb-3">
-                <h2 className="text-[15px] font-extrabold text-[#ededed]">{g.label}</h2>
-                <span className="text-[12px] text-[#bebebe]">{g.products.length} productos</span>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {g.products.map((p) => <ProductCard key={p.id} p={p} />)}
-              </div>
-            </section>
-          )
-        ))}
+        {/* Un rango a la vez. El filtro se muestra siempre que la búsqueda haya
+            salido bien — también con el rango vacío, sino no habría cómo cambiarlo. */}
+        {grupo && (
+          <section className="mb-10">
+            <div className="flex flex-wrap items-center gap-2 mb-4">
+              <span className="text-[12px] text-[#bebebe] mr-1">Rango de anuncios</span>
+              {RAW_BUCKETS.map((b) => (
+                <Chip
+                  key={b}
+                  label={RAW_BUCKET_LABEL[b]}
+                  active={grupo.bucket === b}
+                  onClick={() => search(result!.niche, b)}
+                />
+              ))}
+            </div>
+
+            {grupo.products.length > 0 ? (
+              <>
+                <div className="flex items-baseline gap-2.5 mb-3">
+                  <h2 className="text-[15px] font-extrabold text-[#ededed]">{grupo.label}</h2>
+                  <span className="text-[12px] text-[#bebebe]">{grupo.products.length} productos</span>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {grupo.products.map((p) => <ProductCard key={p.id} p={p} />)}
+                </div>
+              </>
+            ) : (
+              <p className="text-[13px] text-[#cfcfcf]">
+                Este nicho no tiene productos en el rango <span className="text-[#ededed]">{grupo.label}</span>.
+                Prueba otro rango.
+              </p>
+            )}
+          </section>
+        )}
       </main>
     </ToolShell>
   );

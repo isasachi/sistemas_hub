@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import {
   getApprovedByBucket, countApproved, countRawPending,
   getRawNicheStatus, upsertRawNiche, markSeen, isBlocked,
-  RAW_BUCKETS, RAW_BUCKET_LABEL,
-  type RawProductEntry, type RawBucketGroup, type RawSearchResponse,
+  RAW_BUCKETS, RAW_BUCKET_LABEL, isRawBucket,
+  type RawBucket, type RawProductEntry, type RawBucketGroup, type RawSearchResponse,
 } from '@ph/shared'
 import { readUserId, newUserId, PH_USER_COOKIE } from '@/lib/product-hunter/session'
 import { toEntry } from '@/lib/product-hunter/entry'
@@ -11,22 +11,33 @@ import { toEntry } from '@/lib/product-hunter/entry'
 // ⚠️ Esta ruta SOLO lee de Supabase: ni Anthropic ni Playwright. El scraping
 // corre en el worker local.
 //
-// Devuelve los TRES rangos, 10 productos cada uno. Por ahora se sirve TODO el
-// inventario clasificado solo por rango de anuncios (regla 2): las reglas de
-// producto físico y de anunciante monoproducto no filtran el serving.
-// El orden lo da getApprovedByBucket: lo que este usuario no ha visto va
-// primero, y lo visto reaparece a los 7 días — así dos usuarios ven productos
-// distintos sin que el pool se vacíe nunca.
+// Devuelve UN rango a la vez (10 productos), el que pida `bucket`. Antes salían
+// los tres de golpe: mucha pared de cards, y marcaba como vistos 30 productos
+// que el usuario nunca miró. Ahora el filtro de la UI manda y `markSeen` solo
+// toca lo que se muestra. Sin `bucket` se autoelige el primer rango con stock
+// (del más pautado al menos), para que la primera búsqueda nunca caiga vacía.
+//
+// Por lo demás se sirve TODO el inventario clasificado solo por rango de
+// anuncios (regla 2): las reglas de producto físico y de anunciante
+// monoproducto no filtran el serving. El orden lo da getApprovedByBucket: lo
+// que este usuario no ha visto va primero, y lo visto reaparece a los 7 días —
+// así dos usuarios ven productos distintos sin que el pool se vacíe nunca.
 
 const POR_RANGO = 10
 
+// Autoelección: del rango más pautado al menos. RAW_BUCKETS va al revés (es el
+// orden de lectura del filtro), así que acá se invierte.
+const ORDEN_AUTO = [...RAW_BUCKETS].reverse() as RawBucket[]
+
 export async function POST(req: NextRequest) {
-  let body: { niche?: string }
+  let body: { niche?: string; bucket?: string }
   try { body = await req.json() } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
   const niche = body.niche?.trim().toLowerCase().replace(/\s+/g, ' ')
   if (!niche) return NextResponse.json({ error: 'Falta el nicho' }, { status: 400 })
+  // Rango pedido por el filtro. Sin él (o inválido) se autoelige.
+  const pedido = isRawBucket(body.bucket) ? body.bucket : null
 
   let userId = await readUserId()
   let setCookie = false
@@ -46,15 +57,19 @@ export async function POST(req: NextRequest) {
   // Términos bloqueados (typos / anatomía explícita): ni se crean ni se sirven.
   if (isBlocked(niche)) return responder(vacío({ status: 'empty' }))
 
-  const listas = await Promise.all(
-    RAW_BUCKETS.map(async (bucket) => {
-      const rows = await getApprovedByBucket(niche, bucket, userId!, POR_RANGO)
-      const products: RawProductEntry[] = rows.map(toEntry)
-      return { bucket, label: RAW_BUCKET_LABEL[bucket], products } satisfies RawBucketGroup
-    }),
-  )
+  // Un solo rango. Con `pedido` es ese y nada más; sin él se prueban los tres
+  // en orden hasta que uno traiga algo (secuencial a propósito: en el caso
+  // común el primero ya tiene stock y es UNA consulta, no tres).
+  let servido: RawBucket = pedido ?? ORDEN_AUTO[0]
+  let products: RawProductEntry[] = []
+  for (const bucket of pedido ? [pedido] : ORDEN_AUTO) {
+    servido = bucket
+    products = (await getApprovedByBucket(niche, bucket, userId!, POR_RANGO)).map(toEntry)
+    if (products.length) break
+  }
+  const grupo: RawBucketGroup = { bucket: servido, label: RAW_BUCKET_LABEL[servido], products }
 
-  const total = listas.reduce((a, g) => a + g.products.length, 0)
+  const total = grupo.products.length
 
   // Sin nada que mostrar. Se pregunta por el nicho DESPUÉS de buscar productos,
   // no antes: hay nichos con inventario que nunca pasaron por la cola del
@@ -66,6 +81,12 @@ export async function POST(req: NextRequest) {
       countRawPending().catch(() => 0),
       getRawNicheStatus(niche),
     ])
+    // Rango explícito vacío pero el nicho SÍ tiene inventario: no es "no hay
+    // resultados", es "prueba otro rango". Se responde `ready` con el grupo
+    // vacío para que la UI deje el filtro a la vista.
+    if (pedido && aprobados > 0) {
+      return responder({ niche, status: 'ready', groups: [grupo], total: 0 })
+    }
     if (!row) {
       // Nicho desconocido: se encola para que el scraper lo levante. Vercel no
       // corre Playwright, así que acá solo se registra.
@@ -77,7 +98,7 @@ export async function POST(req: NextRequest) {
 
   // Marcar como vistos los que se muestran: la próxima búsqueda de ESTE usuario
   // trae otros, y lo visto vuelve recién a los 7 días.
-  markSeen(userId, listas.flatMap((g) => g.products.map((p) => p.id))).catch(() => {})
+  markSeen(userId, grupo.products.map((p) => p.id)).catch(() => {})
 
-  return responder({ niche, status: 'ready', groups: listas, total })
+  return responder({ niche, status: 'ready', groups: [grupo], total })
 }
