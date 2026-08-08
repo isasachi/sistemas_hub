@@ -57,8 +57,11 @@ function fitHeadline(h: number, s: number, startL: number, bg: string, polarity:
   return hex
 }
 
-// Los 4 iconos son el tono base rotado: siempre distinguibles entre sí y siempre de la familia.
+// Camino SIN marca: con un solo hue disponible no hay paleta de la que sacar los iconos, así que
+// siguen siendo rotaciones. Ver `brandIcons` para el camino con marca.
 const ICON_OFFSETS = [0, 40, 130, 220]
+// Luminosidad común de los 4 iconos: es lo que los hace leer como un juego.
+const ICON_L = 80
 
 // Separación mínima de L entre los dos extremos del degradado. Menos que esto se lee como fondo
 // plano, que el DESIGN_SYSTEM prohíbe explícitamente.
@@ -92,7 +95,7 @@ export function derivePalette(
     // Misma razón que en el camino de marca: sobre fondo oscuro el titular es CLARO, y una
     // superficie blanca al 80% dejaría texto claro sobre blanco.
     color_surface: dark ? hslToHex(H, 20, 14) : '#FFFFFF',
-    color_icon: ICON_OFFSETS.map((o) => hslToHex(H + o, 58, 80)),
+    color_icon: ICON_OFFSETS.map((o) => hslToHex(H + o, 58, ICON_L)),
     polarity,
   }
 }
@@ -144,9 +147,33 @@ export function paletteFromBrand(brand: BrandSystem): PaletteTokens {
     // Sobre marca oscura el titular es CLARO, así que una superficie blanca al 80% dejaría texto
     // claro sobre blanco. La superficie sigue a la polaridad para que la card siga siendo legible.
     color_surface: polarity === 'dark' ? hslToHex(bgHsl.h, 20, 14) : '#FFFFFF',
-    color_icon: ICON_OFFSETS.map((o) => hslToHex(hexToHsl(accent).h + o, 58, 80)),
+    color_icon: brandIcons(brand, accent),
     polarity,
   }
+}
+
+// Iconos de card a partir de los colores REALES de la marca (pedido del usuario, 2026-08-07).
+//
+// Antes eran el hue del acento rotado por ICON_OFFSETS [0,40,130,220] con S/L fijos: los saltos de
+// 130° y 220° caen en el otro lado de la rueda, así que dos de los cuatro iconos NO eran colores de
+// la marca — eran pasteles ajenos que aparecían igual en toda landing.
+//
+// Ahora cada icono toma tono y saturación de un color de la paleta de marca. Se descarta el rol
+// `background` (es el fondo, no un color de acento) y los casi-grises (s<15, no dan un icono
+// legible). La LUMINOSIDAD sí se uniforma: los cuatro tienen que leerse como un juego, y un hex de
+// marca casi negro junto a otro casi blanco no lo hace.
+function brandIcons(brand: BrandSystem, accent: string): string[] {
+  const seeds = brand.palette
+    .filter((c) => c.role !== 'background' && hexToHsl(c.hex).s >= 15)
+    .map((c) => c.hex)
+  const pool = seeds.length ? seeds : [accent]
+  return Array.from({ length: 4 }, (_, i) => {
+    const seed = hexToHsl(pool[i % pool.length])
+    // Con menos de 4 colores hay que repetir. El giro de relleno es CORTO (25° por vuelta) para
+    // que las repeticiones sigan siendo de la familia — que es justo lo que los ±130/220 rompían.
+    const turn = Math.floor(i / pool.length) * 25
+    return hslToHex(seed.h + turn, clamp(seed.s, 45, 75), ICON_L)
+  })
 }
 
 // ─── Oro (decisión #6) ───────────────────────────────────────────────────────

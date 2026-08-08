@@ -164,6 +164,62 @@ describe('paletteFromBrand (decisión #2 opción A: mapeo por roles)', () => {
     expect(hexToHsl(p.color_accent).h).not.toBeCloseTo(hexToHsl('#2E7D5B').h, 0)
   })
 
+  // Pedido del usuario 2026-08-07: los iconos pasteles deben salir de la marca. Antes eran el hue
+  // del acento rotado 130° y 220°, o sea dos de los cuatro caían del otro lado de la rueda y no
+  // eran colores de la marca.
+  describe('iconos de card', () => {
+    const hues = (p: ReturnType<typeof paletteFromBrand>) => p.color_icon.map((h) => hexToHsl(h).h)
+
+    it('cada icono toma el tono de un color real de la paleta de marca', () => {
+      const p = paletteFromBrand(brand())   // primary verde (h≈150) + accent naranja (h≈18)
+      const marca = [hexToHsl('#2E7D5B').h, hexToHsl('#E85D2E').h]
+      expect(hues(p).slice(0, 2).map(Math.round)).toEqual(marca.map(Math.round))
+      expect(p.color_icon).toHaveLength(4)
+    })
+
+    it('NO usa el rol background como icono (es el fondo, no un acento)', () => {
+      const p = paletteFromBrand(brand())
+      const fondo = Math.round(hexToHsl('#1E1E2A').h)
+      expect(hues(p).map(Math.round)).not.toContain(fondo)
+    })
+
+    it('las repeticiones se quedan en familia, no saltan al otro lado de la rueda', () => {
+      // Marca de un solo color cromático: los 4 iconos salen de él, separados de a 25°.
+      const unoSolo = brand({
+        palette: [
+          { hex: '#1E1E2A', name: 'Carbón', role: 'background' },
+          { hex: '#2E7D5B', name: 'Verde', role: 'primary' },
+        ],
+      })
+      const base = hexToHsl('#2E7D5B').h
+      // Distancia sobre la rueda: el camino más corto entre dos tonos.
+      const dist = (a: number, b: number) => {
+        const d = Math.abs(((a - b) % 360 + 360) % 360)
+        return Math.min(d, 360 - d)
+      }
+      // Todos a ≤90° del tono de marca. Los viejos offsets 130/220 daban 130° y 140°.
+      for (const h of hues(paletteFromBrand(unoSolo))) expect(dist(h, base)).toBeLessThanOrEqual(90)
+      expect(dist(base + 130, base)).toBeGreaterThan(90)   // el comportamiento viejo NO pasaría
+    })
+
+    it('descarta los casi-grises de la paleta (no dan un icono legible)', () => {
+      const conGris = brand({
+        palette: [
+          { hex: '#1E1E2A', name: 'Carbón', role: 'background' },
+          { hex: '#2E7D5B', name: 'Verde', role: 'primary' },
+          { hex: '#E6E6E6', name: 'Gris', role: 'neutral' },
+        ],
+      })
+      const gris = Math.round(hexToHsl('#E6E6E6').h)
+      expect(hues(paletteFromBrand(conGris)).map(Math.round)).not.toContain(gris)
+    })
+
+    it('los 4 comparten luminosidad para leerse como un juego', () => {
+      const ls = paletteFromBrand(brand()).color_icon.map((h) => hexToHsl(h).l)
+      for (const l of ls) expect(l).toBeCloseTo(ls[0], 0)
+    })
+  })
+
   it('sin rol primary cae al accent y sigue cumpliendo contraste', () => {
     const sinPrimary = brand({
       palette: [
