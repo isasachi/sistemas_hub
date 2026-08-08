@@ -150,11 +150,12 @@ export default function BuscadorProductosPage() {
           </button>
         </div>
 
-        {/* Categorías sugeridas: los nichos con más productos en la base. Un
-            click y hay resultados garantizados — no hay que adivinar qué escribir. */}
+        {/* Sugerencias: los NICHOS con más productos en la base (no categorías —
+            el ranking es por cantidad de entradas, y así salen "cuello" o "cama
+            para perros"). Un click y hay resultados garantizados. */}
         {sugerencias.length > 0 && (
           <div className="mb-8">
-            <p className="text-[12px] text-[#bebebe] mb-2">Categorías con más productos</p>
+            <p className="text-[12px] text-[#bebebe] mb-2">Nichos con más productos</p>
             <div className="flex flex-wrap gap-2">
               {sugerencias.map((n) => (
                 <Chip key={n} label={n} active={result?.niche === n} onClick={() => buscarNicho(n)} />
