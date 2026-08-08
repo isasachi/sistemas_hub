@@ -116,7 +116,11 @@ function Resultado() {
       const data = (await res.json()) as { id?: string; error?: string }
       if (!res.ok || !data.id) throw new Error(data.error ?? 'No se pudo crear la landing')
       localStorage.setItem(LANDING_SESSION_KEY, data.id)
-      router.push('/tools/generador-landing')
+      // DERECHO al wizard, no a la vista inicial de la tool. Hasta la vista inicial única (PR #49)
+      // `/tools/generador-landing` ERA el wizard; desde entonces es un ToolIntro, así que el
+      // handoff dejaba al usuario en una pantalla de "continuar sesión" en vez de seguir el flujo.
+      // Mismo gesto que hace ToolIntro al retomar: id en localStorage + push a /wizard.
+      router.push('/tools/generador-landing/wizard')
     } catch (err) {
       setError((err as Error).message)
       setLanding(false)

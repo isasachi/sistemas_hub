@@ -1,5 +1,7 @@
 import { contrastRatio } from '@/lib/branding/contrast'
-import type { PaletteTokens } from './types'
+import type { BrandSystem } from '@/lib/branding/brand-system'
+import type { PaletteTokens, Polarity } from './types'
+export type { Polarity }
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 
@@ -16,29 +18,200 @@ export function hslToHex(h: number, s: number, l: number): string {
   return `#${to(r1)}${to(g1)}${to(b1)}`.toUpperCase()
 }
 
+// #RRGGBB → HSL. Inversa de `hslToHex`: la necesita el camino de MARCA, que recibe hex literales
+// y tiene que moverles la luminosidad (degradado, ajuste de contraste) conservando tono y saturación.
+export function hexToHsl(hex: string): { h: number; s: number; l: number } {
+  const n = parseInt(hex.slice(1), 16)
+  const r = ((n >> 16) & 255) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255
+  const max = Math.max(r, g, b), min = Math.min(r, g, b)
+  const l = (max + min) / 2
+  const d = max - min
+  if (!d) return { h: 0, s: 0, l: l * 100 }
+  const s = d / (1 - Math.abs(2 * l - 1))
+  const h = max === r ? ((g - b) / d + (g < b ? 6 : 0)) : max === g ? (b - r) / d + 2 : (r - g) / d + 4
+  return { h: h * 60, s: s * 100, l: l * 100 }
+}
+
 function hexToRgba(hex: string, a: number): string {
   const n = parseInt(hex.slice(1), 16)
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`
 }
 
-export function derivePalette(base: { h: number; s: number; l: number }): PaletteTokens {
-  const H = base.h
-  const bg_start = hslToHex(H, clamp(base.s, 25, 45), 90)
-  // headline: arranca en L=20, baja de 3 en 3 hasta contraste ≥7:1 sobre bg_start (QA#8).
-  let hl = 20
-  let color_headline = hslToHex(H, clamp(base.s, 45, 70), hl)
-  while (hl > 2 && contrastRatio(color_headline, bg_start) < 7) {
-    hl -= 3
-    color_headline = hslToHex(H, clamp(base.s, 45, 70), hl)
+// Ajusta la LUMINOSIDAD del titular hasta llegar a 7:1 sobre el fondo (QA#8), conservando tono y
+// saturación.
+//
+// ⚠️ EL SIGNO DEPENDE DE LA POLARIDAD. La versión vieja siempre RESTABA (arrancaba en L=20 y bajaba
+// de 3 en 3), lo cual solo funciona sobre fondo claro. Sobre fondo oscuro cada iteración empeoraba
+// el contraste, el loop se agotaba contra su guard y devolvía un titular a ~1.5:1 SIN error — la
+// garantía se evaporaba en silencio justo en el caso que la decisión #9 existe para servir.
+function fitHeadline(h: number, s: number, startL: number, bg: string, polarity: Polarity): string {
+  const step = polarity === 'dark' ? 3 : -3
+  let l = startL
+  let hex = hslToHex(h, s, l)
+  // El guard corta en ambos extremos: sobre fondos de contraste imposible (un gris medio) devuelve
+  // lo mejor alcanzable en vez de colgarse.
+  while (l > 2 && l < 98 && contrastRatio(hex, bg) < 7) {
+    l += step
+    hex = hslToHex(h, s, l)
   }
-  const iconOffsets = [0, 40, 130, 220]
+  return hex
+}
+
+// Camino SIN marca: con un solo hue disponible no hay paleta de la que sacar los iconos, así que
+// son rotaciones de ese hue. Ver `brandIcons` para el camino con marca.
+//
+// Los offsets viejos eran [0, 40, 130, 220]: 130° y 220° caen del otro lado de la rueda, así que
+// dos de los cuatro iconos no tenían NADA que ver con el producto. Acotados al mismo giro de 25°
+// por paso que usa `brandIcons`, los cuatro se quedan en familia y siguen siendo distinguibles.
+const ICON_OFFSETS = [0, 25, 50, 75]
+// Luminosidad común de los 4 iconos: es lo que los hace leer como un juego.
+const ICON_L = 80
+
+// Separación mínima de L entre los dos extremos del degradado. Menos que esto se lee como fondo
+// plano, que el DESIGN_SYSTEM prohíbe explícitamente.
+const GRADIENT_DELTA = 8
+
+// ─── Camino SIN marca (producto suelto) ──────────────────────────────────────
+// Un solo hue extraído del envase por visión; todo lo demás se sintetiza. Es la ruta de las
+// sesiones sin branding (decisión #7).
+//
+// La POLARIDAD también sale de la visión (2026-08-07, ampliación): el hue solo no la implica —
+// un envase negro mate da un hue oscuro, pero además cae al fallback del nicho por baja saturación
+// (s<12), así que sin un campo aparte la señal "esta marca es oscura" se perdía dos veces. Por eso
+// viaja separada del color y sobrevive a ese fallback. Default 'light' = comportamiento histórico.
+//
+// Los extremos son SIMÉTRICOS (claro L90→L98, oscuro L12→L4): 8 puntos de separación en ambos,
+// y el L12 del arranque oscuro deja lugar para bajar sin chocar contra el piso.
+export function derivePalette(
+  base: { h: number; s: number; l: number },
+  polarity: Polarity = 'light',
+): PaletteTokens {
+  const H = base.h
+  const dark = polarity === 'dark'
+  const bg_start = hslToHex(H, clamp(base.s, 25, 45), dark ? 12 : 90)
+  const color_headline = fitHeadline(H, clamp(base.s, 45, 70), dark ? 80 : 20, bg_start, polarity)
   return {
     color_headline,
     color_accent: hslToHex(H, clamp(base.s, 70, 95), 50),
     color_body: hexToRgba(color_headline, 0.7),
     bg_start,
-    bg_end: hslToHex(H, 15, 98),
-    color_surface: '#FFFFFF',
-    color_icon: iconOffsets.map((o) => hslToHex(H + o, 58, 80)),
+    bg_end: hslToHex(H, 15, dark ? 4 : 98),
+    // Misma razón que en el camino de marca: sobre fondo oscuro el titular es CLARO, y una
+    // superficie blanca al 80% dejaría texto claro sobre blanco.
+    color_surface: dark ? hslToHex(H, 20, 14) : '#FFFFFF',
+    color_icon: ICON_OFFSETS.map((o) => hslToHex(H + o, 58, ICON_L)),
+    polarity,
   }
+}
+
+// ─── Camino CON marca (decisión #2 opción A: mapeo por roles) ────────────────
+// Los hex de la marca se usan LITERALES donde se notan (fondo, acento) y solo se les mueve la
+// luminosidad donde hay una garantía que respetar (titular ≥7:1) o donde hace falta un compañero de
+// degradado. El tono de marca nunca se reemplaza.
+function roleHex(brand: BrandSystem, role: string): string | undefined {
+  return brand.palette.find((c) => c.role === role)?.hex
+}
+
+export function paletteFromBrand(brand: BrandSystem): PaletteTokens {
+  const polarity = brand.polarity
+  // `background` está garantizado por el schema (refine); los demás caen en cascada.
+  const bg_start = roleHex(brand, 'background')!
+  const primary = roleHex(brand, 'primary') ?? roleHex(brand, 'accent') ?? bg_start
+  // Sin rol `accent` (el schema admite una paleta de 2) no se puede caer al primary: el titular
+  // sale del primary, así que la palabra-acento quedaría del MISMO color que el resto del titular
+  // y el énfasis desaparecería sin que nada avise. Se sintetiza rotando el tono y saturando.
+  const accent = roleHex(brand, 'accent') ?? (() => {
+    const p = hexToHsl(primary)
+    return hslToHex(p.h + 30, Math.max(p.s, 70), 50)
+  })()
+
+  const bgHsl = hexToHsl(bg_start)
+  // El compañero del degradado se separa 8 puntos de L y baja la saturación — misma RELACIÓN que
+  // tenía el camino sintético (L90→L98 en claro), ahora anclada al color real de la marca.
+  //
+  // ⚠️ Se aleja del centro SI HAY LUGAR, y si no se acerca. Un `Math.max(4, l-8)` colapsaba: una
+  // marca casi negra (#0B0B0F, L≈5) daba L5→L4, un punto de diferencia = el "negro plano de
+  // estudio" que el propio prompt prohíbe. Con el rebote, esa marca da L5→L13: profundidad
+  // atmosférica en vez de una plancha.
+  const away = polarity === 'dark' ? bgHsl.l - GRADIENT_DELTA : bgHsl.l + GRADIENT_DELTA
+  const endL = away >= 4 && away <= 98 ? away : polarity === 'dark' ? bgHsl.l + GRADIENT_DELTA : bgHsl.l - GRADIENT_DELTA
+  const bg_end = hslToHex(bgHsl.h, Math.min(bgHsl.s, 15), clamp(endL, 4, 98))
+
+  // El titular arranca del PRIMARY de la marca y solo se le mueve L hasta cumplir 7:1.
+  const pHsl = hexToHsl(primary)
+  const startL = polarity === 'dark' ? Math.max(pHsl.l, 80) : Math.min(pHsl.l, 20)
+  const color_headline = fitHeadline(pHsl.h, pHsl.s, startL, bg_start, polarity)
+
+  return {
+    color_headline,
+    color_accent: accent,
+    color_body: hexToRgba(color_headline, 0.7),
+    bg_start,
+    bg_end,
+    // Sobre marca oscura el titular es CLARO, así que una superficie blanca al 80% dejaría texto
+    // claro sobre blanco. La superficie sigue a la polaridad para que la card siga siendo legible.
+    color_surface: polarity === 'dark' ? hslToHex(bgHsl.h, 20, 14) : '#FFFFFF',
+    color_icon: brandIcons(brand, accent),
+    polarity,
+  }
+}
+
+// Iconos de card a partir de los colores REALES de la marca (pedido del usuario, 2026-08-07).
+//
+// Antes eran el hue del acento rotado por ICON_OFFSETS [0,40,130,220] con S/L fijos: los saltos de
+// 130° y 220° caen en el otro lado de la rueda, así que dos de los cuatro iconos NO eran colores de
+// la marca — eran pasteles ajenos que aparecían igual en toda landing.
+//
+// Ahora cada icono toma tono y saturación de un color de la paleta de marca. Se descarta el rol
+// `background` (es el fondo, no un color de acento) y los casi-grises (s<15, no dan un icono
+// legible). La LUMINOSIDAD sí se uniforma: los cuatro tienen que leerse como un juego, y un hex de
+// marca casi negro junto a otro casi blanco no lo hace.
+function brandIcons(brand: BrandSystem, accent: string): string[] {
+  const seeds = brand.palette
+    .filter((c) => c.role !== 'background' && hexToHsl(c.hex).s >= 15)
+    .map((c) => c.hex)
+  const pool = seeds.length ? seeds : [accent]
+  return Array.from({ length: 4 }, (_, i) => {
+    const seed = hexToHsl(pool[i % pool.length])
+    // Con menos de 4 colores hay que repetir. El giro de relleno es CORTO (25° por vuelta) para
+    // que las repeticiones sigan siendo de la familia — que es justo lo que los ±130/220 rompían.
+    const turn = Math.floor(i / pool.length) * 25
+    return hslToHex(seed.h + turn, clamp(seed.s, 45, 75), ICON_L)
+  })
+}
+
+// ─── Oro (decisión #6) ───────────────────────────────────────────────────────
+// El oro es invariante SALVO que la marca sea dorada: ahí marca y oro se confundirían y se pierde
+// la regla de significado (marca = confianza, oro = dinero/urgencia). La distinción ya cabalga sobre
+// el TRATAMIENTO (degradado metálico + corona/cinta/sello), no solo sobre el tono, así que en ese
+// caso la rampa se corre a cobre/bronce profundo y el tratamiento metálico se mantiene.
+// `on` = el color del texto y los iconos QUE VAN ENCIMA del metal (lo usa la banda de confianza,
+// que desde 2026-08-07 es siempre metálica). Se elige por el PEOR de los dos extremos de la rampa,
+// no por el claro: el texto cruza todo el degradado, así que sirve el que aguanta el extremo malo.
+const worstOn = (candidate: string, dark: string, light: string) =>
+  Math.min(contrastRatio(candidate, dark), contrastRatio(candidate, light))
+const onMetal = (dark: string, light: string) =>
+  worstOn('#1A1206', dark, light) >= worstOn('#FFFFFF', dark, light) ? '#1A1206' : '#FFFFFF'
+
+// El cobre era #7A3B12→#C87137 y quedaba MUCHO más oscuro que el oro: el texto daba 2.17:1 sobre
+// su extremo oscuro, ilegible. Se subió a la misma franja de luminosidad que el oro (L≈50→80) y se
+// mantuvo el tono en 22° — bien lejos de la banda 35-55 que `isGolden` considera dorada, así que
+// el reemplazo nunca puede colisionar con la marca que lo disparó.
+export const GOLD = { dark: '#B8860B', light: '#F5D372', name: 'dorado', on: onMetal('#B8860B', '#F5D372') }
+export const COPPER = { dark: '#BF6F40', light: '#F1C2A7', name: 'cobre', on: onMetal('#BF6F40', '#F1C2A7') }
+
+// Mira TODA la identidad, no solo el acento: la marca real "Protin" (probe 2026-08-07) tiene
+// primary dorado #BD9E4D y accent rojo — con el acento solo, el oro no se corría y quedaba
+// indistinguible del color dominante de la marca, que es exactamente lo que la regla evita.
+// El umbral de saturación es 40 (no 50) porque ese dorado real da s≈46; un beige apagado
+// (s<15) sigue sin disparar.
+const isGolden = (hex: string) => {
+  const { h, s } = hexToHsl(hex)
+  return h >= 35 && h <= 55 && s > 40
+}
+
+export type MoneyRamp = typeof GOLD
+
+export function moneyRamp(p: Pick<PaletteTokens, 'color_accent' | 'color_headline'>): MoneyRamp {
+  return isGolden(p.color_accent) || isGolden(p.color_headline) ? COPPER : GOLD
 }
