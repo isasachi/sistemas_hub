@@ -1,14 +1,27 @@
 import type { RawProductRow, RawProductEntry } from '@ph/shared'
 
+// Los anuncios dinámicos de catálogo de Meta llegan con los placeholders sin
+// resolver ("{{product.name}}", "{{product.brand}}"): sin esto la card muestra
+// la plantilla como si fuera el nombre del producto. Si al sacarlos no queda
+// texto real, devuelve null y la card cae al siguiente campo.
+export function stripAdVars(t?: string | null): string | null {
+  const s = (t ?? '')
+    .replace(/\{\{[^}]*\}\}/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/^[\s\-–—·:,|]+/, '')
+    .trim()
+  return s.length >= 3 ? s : null
+}
+
 // Fila de ph_raw_products → lo que ve el front. Lo comparten `search` y
 // `top-picks` para que una card sea idéntica en los dos lados.
 export function toEntry(r: RawProductRow): RawProductEntry {
   return {
     id: `${r.niche}:${r.page_id}`,
     advertiser: r.name ?? 'Anunciante',
-    productName: r.product_name ?? null,
-    title: r.raw_data?.title ?? null,
-    body: r.raw_data?.body ?? null,
+    productName: stripAdVars(r.product_name),
+    title: stripAdVars(r.raw_data?.title),
+    body: stripAdVars(r.raw_data?.body),
     country: r.country,
     adCount: r.ad_count,
     adsUrl: `https://www.facebook.com/ads/library/?${new URLSearchParams({

@@ -30,14 +30,18 @@ function Chip({ label, active, onClick }: { label: string; active?: boolean; onC
 // página del anunciante dedicada a ese mismo producto.
 
 function ProductCard({ p }: { p: RawProductEntry }) {
+  // Sin nombre ni titular (los anuncios de catálogo llegan con la plantilla sin
+  // resolver y `stripAdVars` los deja en null) el título ES el anunciante: ahí
+  // el subtítulo solo lleva el país, para no imprimirlo dos veces.
+  const titulo = p.productName || p.title;
   return (
     <div className="h-full bg-white/[0.04] border border-white/[0.06] rounded-2xl p-4 flex flex-col gap-3">
       <div>
         <h3 className="text-[15px] font-extrabold text-[#ededed] tracking-[-0.2px] leading-tight">
-          {p.productName || p.title || p.advertiser}
+          {titulo || p.advertiser}
         </h3>
         <p className="text-[12px] text-[#bebebe] mt-0.5">
-          {p.advertiser}{p.country ? ` · ${p.country}` : ""}
+          {[titulo ? p.advertiser : null, p.country].filter(Boolean).join(" · ")}
         </p>
       </div>
 
