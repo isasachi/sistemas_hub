@@ -8,6 +8,7 @@ import { isFlagged } from '@/lib/branding/moderation'
 import { isComplete, type Brief, type PartialBrief } from '@/lib/branding/brief'
 import { briefFromRow } from '@/lib/branding/session-brief'
 import { buildPrompt, aspectFor, STAGE_SEQUENCE, type Stage } from '@/lib/branding/generation'
+import { extractBrandSystem } from '@/lib/branding/brand-system'
 import type { Part } from '@google/genai'
 
 export const dynamic = 'force-dynamic'
@@ -130,6 +131,27 @@ export async function POST(req: NextRequest) {
             if (stage === 'identidad') identityUrl = url
             urls[stage] = url
             send({ status: 'stage_done', stage, url })
+
+            // ADN de marca (2026-08-07): el board de identidad es la fuente del sistema de diseño
+            // de la landing. Se lee DESPUÉS del `stage_done` para no demorar la imagen en pantalla,
+            // y siempre que la identidad se (re)genera — un board nuevo es una marca nueva.
+            // Sin gen-quota propia: es 1 llamada de visión flash ($0) y ya va acotada por la cuota
+            // de la etapa `identidad` que la produjo.
+            if (stage === 'identidad') {
+              try {
+                await updateBrandingSession(sessionId, { brand_system: await extractBrandSystem(url) } as never)
+              } catch (err) {
+                // Nunca tumba la generación: sin sistema de marca, la landing cae a visión + nicho.
+                // El mensaje separa los dos motivos porque fallan igual de callados: si la
+                // migración 20260807000001 no está aplicada, el update tira "column does not
+                // exist" y se lo confundiría con una visión caída.
+                const msg = String(err)
+                const causa = /column .* does not exist/i.test(msg)
+                  ? 'falta aplicar la migración 20260807000001_branding_system.sql'
+                  : 'falló la extracción'
+                console.error(`[brand-system] ${causa}:`, err)
+              }
+            }
           } catch (err) {
             // Una pieza caída no tumba las demás: se entrega lo que sí salió y la
             // UI ofrece reintentar solo esa.

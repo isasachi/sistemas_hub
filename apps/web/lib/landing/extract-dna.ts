@@ -2,7 +2,7 @@ import { z } from 'zod'
 import type { Part } from '@google/genai'
 import { callStructured } from '@/lib/gemini'
 import { fetchAsBase64 } from '@/lib/storage'
-import { hslToHex, derivePalette } from './palette-derive'
+import { hslToHex, derivePalette, paletteFromBrand } from './palette-derive'
 import { NICHE_TYPOGRAPHY, NICHE_FALLBACK } from './niches'
 import { DEMOGRAPHIC_PERSONA, NO_TALENT_SUBSTITUTE, assignPoses } from './demographics'
 import {
@@ -74,7 +74,14 @@ export async function extractDna(
   order: SectionType[],
 ): Promise<LandingDna> {
   const fallback = NICHE_FALLBACK[niche]
+  const brand = session.brand_system
   const extraction = await runVision(session, niche)
+
+  // PRECEDENCIA (decisión #4, 2026-08-07): la MARCA gana sobre el nicho. Cuando hay sistema de
+  // marca, él manda paleta, polaridad, tipografía, halo y densidad de partículas; el nicho pasa a
+  // ser el fallback del producto suelto. Lo que la marca NO manda es lo FÁCTICO — `particle_type` y
+  // `props` salen de los ingredientes y el material del envase (visión), porque pisarlos
+  // contradiría las reglas de fidelidad de producto.
 
   // A + fallback cascada de color: envase blanco/negro/plateado/transparente (s<12) o visión
   // fallida → hue por defecto del nicho con s/l sintéticos (Anexo C).
@@ -83,19 +90,26 @@ export async function extractDna(
       ? extraction.brand_base
       : { h: fallback.hue, s: 70, l: 50, hex: hslToHex(fallback.hue, 70, 50) }
 
-  // C: partículas vagas/genéricas o visión fallida → fallback del nicho.
+  // C: partículas vagas/genéricas o visión fallida → fallback del nicho. El TIPO es fáctico (sale
+  // del producto), pero la DENSIDAD es estilística → la marca la manda, y su `none` apaga.
   const particle_type = extraction?.particle_type?.trim() ? extraction.particle_type : fallback.particles
-  const particle_density = extraction?.particle_density ?? fallback.particle_density
+  const particle_density = brand && brand.particles !== 'none'
+    ? brand.particles
+    : extraction?.particle_density ?? fallback.particle_density
+  const particles_on = brand ? brand.particles !== 'none' : fallback.particles_on
 
   // D: props vacíos o visión fallida → familia de props del nicho (un solo elemento, mínimo 1).
   const props = extraction?.props?.length ? extraction.props : [fallback.propsFamily]
 
-  // B: paleta SIEMPRE por fórmula — nunca se le pide al modelo que elija colores.
-  const palette = derivePalette(brand_base)
+  // B: paleta por MAPEO DE ROLES si hay marca; si no, por fórmula sobre el único hue de la visión.
+  // En ninguno de los dos caminos se le pide al modelo que elija colores.
+  const palette = brand ? paletteFromBrand(brand) : derivePalette(brand_base)
 
-  // E: tipografía/halo/persona/poses — por lookup, no por extracción.
-  const { font_family, font_accent } = NICHE_TYPOGRAPHY[niche]
-  const halo = fallback.halo
+  // E: tipografía/halo — de la marca si la hay, si no por lookup de nicho.
+  const { font_family, font_accent } = brand
+    ? { font_family: brand.font_family, font_accent: brand.font_accent }
+    : NICHE_TYPOGRAPHY[niche]
+  const halo = brand ? brand.halo : fallback.halo
   const model_persona = demographic === 'no_talent' ? NO_TALENT_SUBSTITUTE[niche] : DEMOGRAPHIC_PERSONA[demographic]
   const poses = assignPoses(order, demographic)
 
@@ -104,7 +118,7 @@ export async function extractDna(
     palette,
     particle_type,
     particle_density,
-    particles_on: fallback.particles_on,
+    particles_on,
     props,
     font_family,
     font_accent,

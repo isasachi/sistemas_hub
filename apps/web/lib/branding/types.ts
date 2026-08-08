@@ -1,4 +1,6 @@
 import { z } from 'zod'
+// Solo tipo: `brand-system.ts` arrastra gemini/storage y este módulo lo consume el cliente.
+import type { BrandSystem } from './brand-system'
 
 // ─── ADN de marca ───────────────────────────────────────────────────────────
 // El subconjunto estructural que consumen contrast.ts y generation-prompts.ts.
@@ -107,6 +109,10 @@ export interface BrandingSessionResponse {
   container_type: string | null
   uploaded_image_url: string | null
   image_analysis: ExtractedStyle | null
+  /** Sistema de diseño de la marca, leído del board de identidad (2026-08-07): paleta con roles
+   *  + tipografía. Es la fuente del sistema de diseño de la landing. Ver `brand-system.ts`.
+   *  Distinto de `BrandDna` (arriba), que es el ADN descriptivo que consume `contrast.ts`. */
+  brand_system: BrandSystem | null
   uploaded_wireframe_url: string | null
   preset_version: number | null
   generation_status: 'pending' | 'running' | 'partial' | 'done' | 'failed' | null

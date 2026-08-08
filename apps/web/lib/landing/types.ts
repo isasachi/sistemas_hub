@@ -1,4 +1,6 @@
 import { z } from 'zod'
+// Solo tipo: `brand-system.ts` arrastra gemini/storage y este módulo lo consume el cliente.
+import type { BrandSystem } from '@/lib/branding/brand-system'
 
 // ─── Catálogo de secciones ───────────────────────────────────────────────────
 // El orden del enum NO es el orden de la landing — ese lo define `order` por sesión.
@@ -55,6 +57,12 @@ export type NicheClassification = z.infer<typeof NicheClassification>
 export const ParticleDensity = z.enum(['low', 'medium', 'high'])
 export const Halo = z.enum(['radial_soft', 'rays', 'backlight', 'rim', 'none'])
 
+// Polaridad del sistema (decisión #9, 2026-08-07): una marca oscura da una landing oscura. La
+// declara el sistema de marca (`BrandSystem.polarity`); sin marca es siempre 'light', que es como
+// se comportó la tool desde siempre.
+export const Polarity = z.enum(['light', 'dark'])
+export type Polarity = z.infer<typeof Polarity>
+
 // Paleta derivada por fórmula (spec 0.b B). color_body es rgba (opacidad 70%).
 export const PaletteTokensSchema = z.object({
   color_headline: z.string(),
@@ -64,6 +72,11 @@ export const PaletteTokensSchema = z.object({
   bg_end: z.string(),
   color_surface: z.string(),
   color_icon: z.array(z.string()).length(4),
+  // ⚠️ Las filas LEGADAS no la traen: `getLandingSession` castea sin `.parse()`, así que este
+  // `.default()` NO corre al leer. Hay que defaultear en el SITIO DE USO (ver `designSystemBlock`),
+  // igual que se hizo con `particles_on`. El default de intención es 'light' = el comportamiento
+  // histórico, así que una sesión vieja se sigue viendo idéntica.
+  polarity: Polarity.default('light'),
 })
 export type PaletteTokens = z.infer<typeof PaletteTokensSchema>
 
@@ -218,21 +231,6 @@ export const TrustBlockSchema = z.object({
 })
 export type TrustBlock = z.infer<typeof TrustBlockSchema>
 
-// ─── Estilo de marca (paleta + tipografía) ───────────────────────────────────
-// Predomina sobre la plantilla en la generación de imagen. Mismo shape que
-// `direction.palette`/`direction.typography` del branding → el handoff mapea directo.
-export const LandingStyleSchema = z.object({
-  palette: z.array(z.object({
-    name: z.string(),
-    hex: z.string(),
-    usage: z.string().optional(),
-  })).min(1).max(6),
-  typography: z.object({ headline: z.string(), body: z.string() }),
-})
-export type LandingStyle = z.infer<typeof LandingStyleSchema>
-export type LandingPalette = LandingStyle['palette']
-export type LandingTypography = LandingStyle['typography']
-
 // Sección renderizada: copy + imagen.
 export interface LandingSection {
   type: SectionType
@@ -257,11 +255,6 @@ export interface LandingSessionResponse {
   selected_sections: SectionType[] | null
   copy: SectionCopy[] | null
   sections: LandingSection[] | null
-  palette: LandingPalette | null
-  typography: LandingTypography | null
-  // Estilo gráfico de marca (concept + logoDirection del branding en el handoff tool-to-tool):
-  // guía los devices/motivos que el modelo genera. Null en el flujo de producto suelto.
-  brand_style: string | null
   // Ancla de producto: render limpio de la 1ª sección generada, reusado como Imagen 1 en las
   // demás secciones para que el producto salga IDÉNTICO (consistencia) con todos sus labels
   // reales (fidelidad). Se cachea una vez; null hasta que se genera la primera sección.
@@ -297,4 +290,9 @@ export interface LandingSessionResponse {
   // ADN visual (paso 0.b): paleta por fórmula, partículas, props, tipografía, halo, persona y
   // poses. Fuente única para las 8 secciones. Null en sesiones legadas → el wizard re-extrae.
   landing_dna: LandingDna | null
+  // Sistema de diseño de la marca, COPIADO desde la sesión de branding en el handoff (2026-08-07).
+  // Se copia y no se lee al vuelo a propósito: regenerar el board de branding después mutaría en
+  // silencio el sistema de una landing ya generada, y nada tendría cómo enterarse. Null = producto
+  // suelto → la extracción cae a visión + nicho (decisión #7).
+  brand_system: BrandSystem | null
 }

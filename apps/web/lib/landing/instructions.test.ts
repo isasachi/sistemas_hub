@@ -21,6 +21,7 @@ const DNA: LandingDna = {
     bg_end: '#F7FBFF',
     color_surface: '#FFFFFF',
     color_icon: ['#9FC8F0', '#C2B2F0', '#F5B7C8', '#EFE09A'],
+    polarity: 'light',
   },
   particle_type: 'burbujas translúcidas y destellos de luz sobre agua',
   particle_density: 'medium',

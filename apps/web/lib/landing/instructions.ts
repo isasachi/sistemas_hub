@@ -1,6 +1,7 @@
 import type { SectionCopy, SectionType, LandingDna, PaletteTokens, Offer, TrustBlock, NicheId, PaymentMethod } from './types'
 import { NICHE_LABELS } from './niches'
 import { SECTION_DNA } from './section-dna'
+import { moneyRamp } from './palette-derive'
 
 // Builders puros ($0) para el prompt de imagen de cada sección de la landing (motor de DIFUSIÓN).
 // FUENTE DE VERDAD: docs/superpowers/specs/2026-07-23-generador-landing-spec.md §1-§5 + Anexos.
@@ -77,15 +78,23 @@ function brandBlock(productLabels: string | null): string {
 // prompt decía "Siempre presentes" (esta capa) Y "SIN partículas" (masterLayoutBlock) a la vez.
 function designSystemBlock(dna: LandingDna): string {
   const p: PaletteTokens = dna.palette
+  // `undefined` = paleta LEGADA (guardada antes de que existiera el campo; `getLandingSession`
+  // castea sin `.parse()`, así que el `.default('light')` del schema no corre al leer). 'light' es
+  // el comportamiento histórico → una sesión vieja sale idéntica a como salía.
+  const dark = p.polarity === 'dark'
+  const money = moneyRamp(p)
   return [
     'DESIGN_SYSTEM —',
-    `Fondo: degradado vertical/diagonal suave de ${p.bg_start} (superior) a ${p.bg_end} (inferior). Nunca fondo plano, nunca blanco puro.`,
+    `Fondo: degradado vertical/diagonal suave de ${p.bg_start} (superior) a ${p.bg_end} (inferior). Nunca fondo plano, ${dark ? 'nunca negro puro — el fondo es OSCURO y conserva el tinte de la marca, con profundidad atmosférica, no un negro plano de estudio' : 'nunca blanco puro'}.`,
     `Halo: ${dna.halo}, detrás del talento (o de su sustituto).${dna.halo === 'none' ? ' La separación figura-fondo se resuelve solo con el degradado y la profundidad.' : ''} Constante en todo el funnel.`,
     'Base (invariante): superficie reflectante en el borde inferior donde el envase proyecta reflejo vertical difuso.',
     'Profundidad (invariante): tres planos — fondo atmosférico, talento, producto + props en primer plano. Ligera profundidad de campo en el fondo.',
-    `Paleta aplicada por ROL: titular base en ${p.color_headline}; palabra destacada del titular en ${p.color_accent}; cuerpo de texto en ${p.color_body}; superficie de card en ${p.color_surface} al 75-85% de opacidad; iconos en ${p.color_icon.join(', ')} (uno por atributo).`,
+    `Paleta aplicada por ROL: titular base en ${p.color_headline}; palabra destacada del titular en ${p.color_accent}; cuerpo de texto en ${p.color_body}; superficie de card en ${p.color_surface} al 75-85% de opacidad; iconos en ${p.color_icon.join(', ')} (uno por atributo).${dark ? ' Pieza de MODO OSCURO: el fondo, las superficies de card y las bandas son oscuros, y el texto encima va claro. El glassmorphism sigue siendo el mismo (borde blanco fino, glow), solo que sobre superficie oscura.' : ''}`,
     `CONSISTENCIA DE COLOR (crítico): estos hex son los MISMOS exactos en las 8 secciones del funnel — el acento ${p.color_accent}, el titular ${p.color_headline} y los íconos NO deben variar de tono, saturación ni brillo de una sección a otra. Son el color EXACTO de la marca, no una sugerencia aproximada.`,
-    'Oferta/premium/sellos: degradado dorado #B8860B→#F5D372, y ÚNICAMENTE ahí — oferta, sellos de garantía, cinta "RECOMENDADO" y la etiqueta "DESPUÉS". En ningún otro lugar. Precio ancla tachado en #D93025. Regla de significado (invariante): el color de marca comunica confianza; el oro comunica dinero y urgencia.',
+    // El oro es invariante salvo que la marca sea dorada (decisión #6): ahí marca y oro se
+    // confundirían y muere la regla de significado. El TRATAMIENTO metálico se mantiene siempre —
+    // es sobre él, no sobre el tono, que cabalga la distinción.
+    `Oferta/premium/sellos: degradado metálico ${money.name} ${money.dark}→${money.light}, y ÚNICAMENTE ahí — oferta, sellos de garantía, cinta "RECOMENDADO" y la etiqueta "DESPUÉS". En ningún otro lugar. Precio ancla tachado en #D93025. Regla de significado (invariante): el color de marca comunica confianza; el metal ${money.name} comunica dinero y urgencia — por eso NUNCA deben ser el mismo color.`,
     `Tipografía: una sola familia, ${dna.font_family}. Toda la expresividad viene de peso + color + tamaño, jamás de una segunda fuente.${dna.font_accent ? ` ${dna.font_accent} se usa SOLO en el titular de hero/oferta, nunca en cuerpo ni cards.` : ''}`,
     'Titular (invariante): 3-4 líneas, alineado a la izquierda, ragged right; conviven líneas neutras en el color de titular semibold y 1-2 palabras clave en el color de acento extrabold, a mayor tamaño. Subtítulo: 1 línea, ~40% del tamaño del titular, con una palabra en el color de acento.',
     'Card title (invariante): bold en el color de titular. Card body: regular en el color de cuerpo, máximo 2 líneas. Microcopy: uppercase bold + descriptor regular debajo, a menor tamaño.',
@@ -159,7 +168,7 @@ const TEXT_RULES = [
 // la plantilla es ahora la FUENTE DE VERDAD de estructura (no un "apoyo mutable"): manda zonas,
 // anatomía de cards, encuadre y tratamiento. Lo que cambia respecto a ella lo dice el resto de la
 // instrucción (producto, cara del talento, copy, re-tinte de color, props/partículas del nicho).
-function templateNote(talentImageAttached: boolean): string {
+function templateNote(talentImageAttached: boolean, dark: boolean): string {
   const persona = talentImageAttached
     ? 'Penúltima = retrato del talento (misma persona: cara, pelo, ropa idénticos).'
     : 'No hay imagen de talento adjunta; NO reintroduzcas ninguna persona que la instrucción no pida.'
@@ -168,6 +177,13 @@ function templateNote(talentImageAttached: boolean): string {
     'Imagen 1 = envase canónico (fidelidad EXACTA de forma y labels). Siguientes = fotos reales del producto.',
     persona,
     'ÚLTIMA = PLANTILLA DE COMPOSICIÓN (fuente de verdad de estructura): reproduce EXACTAMENTE su composición, distribución de zonas, anatomía de tarjetas, encuadre y tratamiento. La ESTRUCTURA manda la plantilla. Cambia SOLO lo que esta instrucción indica: producto, cara del talento, copy, re-tinte de color, props/partículas del nicho. NO copies de la plantilla su producto, marca, textos, ni props/persona de otro nicho.',
+    // Las 8 plantillas curadas están armadas sobre fondo CLARO. Sin esta línea, una pieza de modo
+    // oscuro sale clara igual: la difusión sigue la tonalidad de la referencia por encima de los
+    // hex de la instrucción. Separa explícitamente ESTRUCTURA (de la plantilla) de TONALIDAD (del
+    // DESIGN_SYSTEM). Es la mitigación del riesgo conocido de la decisión #9.
+    ...(dark
+      ? ['⚠️ TONALIDAD ≠ ESTRUCTURA: la plantilla adjunta tiene fondo CLARO, pero esta pieza es de MODO OSCURO. De la plantilla tomá SOLO la estructura (zonas, encuadre, anatomía, proporciones); la tonalidad la manda el DESIGN_SYSTEM de arriba. NO aclares el fondo para parecerte a la plantilla — el fondo, las cards y las bandas van OSCUROS con texto claro encima.']
+      : []),
   ].join('\n')
 }
 
@@ -260,7 +276,7 @@ function trustText(trust: TrustBlock): string {
 // Reserva la banda inferior de métodos de pago. Garantía deja la banda limpia y puede rotular
 // "Paga como prefieras". (El overlay de logos reales se retiró post-smoke.)
 const PAYMENT_BAND =
-  'PAYMENT LOGOS (do NOT draw): leave the BOTTOM ~12% of the image as a CLEAN, calm horizontal band (a subtle light strip is fine) with NO payment logos, card icons, brand marks, wallet logos, country flags or the words "yape/visa/mastercard/mercado pago" anywhere. You MAY render a short heading like "Paga como prefieras" just ABOVE the band, but no logos.'
+  'PAYMENT LOGOS (do NOT draw): leave the BOTTOM ~12% of the image as a CLEAN, calm horizontal band (a subtle strip in the piece\'s own tonality is fine) with NO payment logos, card icons, brand marks, wallet logos, country flags or the words "yape/visa/mastercard/mercado pago" anywhere. You MAY render a short heading like "Paga como prefieras" just ABOVE the band, but no logos.'
 
 const PAYMENT_BRAND: Record<PaymentMethod, string> = {
   yape: 'Yape', plin: 'Plin', mercadopago: 'Mercado Pago', visa: 'Visa',
@@ -310,7 +326,7 @@ export function buildDiffusionInstruction(args: {
     copyBlock(copy),
     '',
     TEXT_RULES,
-    templateNote(talentImageAttached),
+    templateNote(talentImageAttached, dna.palette.polarity === 'dark'),
   ]
 
   const extra: string[] = []
