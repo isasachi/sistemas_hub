@@ -36,9 +36,19 @@ describe('derivePalette (spec 0.b B)', () => {
     expect(hslToHex(0, 0, 100).toUpperCase()).toBe('#FFFFFF')
     expect(hslToHex(0, 0, 0)).toBe('#000000')
   })
-  it('color_icon usa los offsets [0,40,130,220] y son 4', () => {
-    const p = derivePalette({ h: 215, s: 82, l: 51 })
+  it('son 4 iconos y todos se quedan en la familia del hue del producto', () => {
+    const H = 215
+    const p = derivePalette({ h: H, s: 82, l: 51 })
     expect(p.color_icon).toHaveLength(4)
+    // Antes los offsets eran [0,40,130,220]: dos iconos caían del otro lado de la rueda y no
+    // tenían relación con el producto. Ahora ninguno pasa de 90°.
+    const dist = (a: number, b: number) => {
+      const d = Math.abs(((a - b) % 360 + 360) % 360)
+      return Math.min(d, 360 - d)
+    }
+    for (const hex of p.color_icon) expect(dist(hexToHsl(hex).h, H)).toBeLessThanOrEqual(90)
+    // Y siguen siendo 4 tonos distintos entre sí.
+    expect(new Set(p.color_icon).size).toBe(4)
   })
   it('garantiza contraste headline/bg_start ≥ 7:1 (QA#8) incluso con hue claro', () => {
     for (const base of [{ h: 55, s: 90, l: 60 }, { h: 215, s: 82, l: 51 }, { h: 140, s: 30, l: 40 }]) {

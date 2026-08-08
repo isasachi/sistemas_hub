@@ -58,8 +58,12 @@ function fitHeadline(h: number, s: number, startL: number, bg: string, polarity:
 }
 
 // Camino SIN marca: con un solo hue disponible no hay paleta de la que sacar los iconos, así que
-// siguen siendo rotaciones. Ver `brandIcons` para el camino con marca.
-const ICON_OFFSETS = [0, 40, 130, 220]
+// son rotaciones de ese hue. Ver `brandIcons` para el camino con marca.
+//
+// Los offsets viejos eran [0, 40, 130, 220]: 130° y 220° caen del otro lado de la rueda, así que
+// dos de los cuatro iconos no tenían NADA que ver con el producto. Acotados al mismo giro de 25°
+// por paso que usa `brandIcons`, los cuatro se quedan en familia y siguen siendo distinguibles.
+const ICON_OFFSETS = [0, 25, 50, 75]
 // Luminosidad común de los 4 iconos: es lo que los hace leer como un juego.
 const ICON_L = 80
 
