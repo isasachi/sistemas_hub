@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import type { TomaFinal } from './adapt'
+import type { VoiceProfile } from './character'
 
 /**
  * FASE 5 del prompt maestro — agrupación de tomas en lotes de generación.
@@ -158,4 +159,76 @@ export function groupIntoLotes(tomas: TomaFinal[]): Lote[] {
   cerrar()
 
   return lotes
+}
+
+export interface LoteImage {
+  url: string
+  role: string
+}
+
+/**
+ * Prompt de un lote. Es autosuficiente por obligación: el generador no recuerda el
+ * lote anterior, así que personaje, producto, escenario, iluminación y cámara se
+ * repiten completos en cada uno. Escribir "el mismo personaje" produciría otra
+ * persona, que es exactamente el fallo que este diseño evita.
+ */
+export function buildLotePrompt(args: {
+  lote: Lote
+  consistencyBlock: string
+  productDesc: string
+  escenario: string
+  camara: string
+  voz: VoiceProfile
+  images: LoteImage[]
+}): string {
+  const { lote, consistencyBlock, productDesc, escenario, camara, voz, images } = args
+
+  const legend = images.map((img, i) => `@image(${i + 1}) = ${img.role}`).join('\n')
+
+  const acciones = lote.tomas
+    .map((t) => [
+      `### Toma ${t.n} — ${t.duracionSeg} s`,
+      t.accionVisual,
+      t.locucion ? `Locución: “${t.locucion}”` : '',
+      'Texto / Overlay: NINGUNO.',
+    ].filter(Boolean).join('\n'))
+    .join('\n\n')
+
+  const locucionFinal = lote.tomas.map((t) => t.locucion).filter(Boolean).join(' ')
+
+  return [
+    `Video UGC vertical 9:16. Duración total del clip: ${lote.duracionSeg} segundos.`,
+    '',
+    legend,
+    '',
+    'PERSONAJE (descripción completa, sin referencias externas):',
+    consistencyBlock,
+    '',
+    'PRODUCTO (debe verse idéntico a su imagen de referencia — misma forma, etiqueta,',
+    'colores y texto; nunca lo rediseñes):',
+    productDesc,
+    '',
+    `ESCENARIO: ${escenario}`,
+    `CÁMARA: ${camara}. Formato vertical 9:16, estable, enfoque en el personaje y el producto.`,
+    '',
+    'PERFIL DE VOZ Y ACENTO:',
+    `  Idioma: ${voz.idioma} · Variante: ${voz.varianteRegional} · Acento: ${voz.acento}`,
+    `  Pronunciación: ${voz.pronunciacion} · Ritmo: ${voz.ritmo} · Velocidad: ${voz.velocidad}`,
+    `  Entonación: ${voz.entonacion} · Energía: ${voz.energia} · Pausas: ${voz.pausas}`,
+    `  Tono: ${voz.tono} · Timbre: ${voz.timbre} · Edad vocal: ${voz.edadVocal} · Estilo: ${voz.estilo}`,
+    '',
+    'SECUENCIA DE ACCIONES VISUALES:',
+    acciones,
+    '',
+    'GUION DE LOCUCIÓN FINAL (exacto, no resumir, no extender, no añadir frases):',
+    `“${locucionFinal}”`,
+    '',
+    'TEXTO / OVERLAY: NINGUNO.',
+    'No generes captions, subtítulos, texto en pantalla, títulos, lower thirds, banners,',
+    'stickers, emojis, flechas, callouts, gráficos, watermarks, interfaces ni elementos',
+    'de UI. El plano queda visualmente limpio, centrado en el personaje y el producto.',
+    'Solo puede aparecer el texto físicamente impreso en el producto o en objetos reales',
+    'del escenario, como parte de su apariencia.',
+    'No inventes diálogo para rellenar: el clip termina cuando termina la locución.',
+  ].join('\n')
 }

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { groupIntoLotes, LOTE_MAX_SEC, LoteSchema } from './lotes'
+import { groupIntoLotes, LOTE_MAX_SEC, LoteSchema, buildLotePrompt } from './lotes'
 import type { TomaFinal } from './adapt'
+import { KIE_PROMPT_MAX } from './kie'
 
 const toma = (n: number, duracionSeg: number, locucion = `linea ${n}`): TomaFinal => ({
   n, duracionSeg, locucion,
@@ -180,5 +181,73 @@ describe('groupIntoLotes', () => {
       const ocurrencias = textoSalida.split(`token${i}end`).length - 1
       expect(ocurrencias).toBe(1)
     }
+  })
+})
+
+const BLOQUE = 'Mujer de 25 años, latina peruana, cabello negro liso recogido en moño bajo, piel clara, ojos marrón claro, complexión delgada, polo blanco de algodón sin estampado.'
+const VOZ = {
+  idioma: 'Español', varianteRegional: 'Perú - Lima', acento: 'Limeño', pronunciacion: 'Clara',
+  ritmo: 'Conversacional', velocidad: 'Media', entonacion: 'Natural', energia: 'Media',
+  pausas: 'Naturales', tono: 'Cálido', timbre: 'Claro', edadVocal: '25', estilo: 'Amiga',
+}
+const ARGS = {
+  consistencyBlock: BLOQUE,
+  productDesc: 'Frasco de vidrio celeste de 30 ml con gotero blanco y etiqueta "EUNOIA".',
+  escenario: 'Dormitorio con pared clara y repisas blancas',
+  camara: 'Primer plano, altura de ojos, cámara en mano',
+  voz: VOZ,
+  images: [
+    { url: 'https://x/character.png', role: 'la persona' },
+    { url: 'https://x/product.png', role: 'el producto' },
+  ],
+}
+
+describe('buildLotePrompt', () => {
+  const lote = groupIntoLotes([toma(1, 5, 'Hola, te cuento algo.'), toma(2, 5, 'Este suero me cambió la piel.')])[0]
+  const p = buildLotePrompt({ lote, ...ARGS })
+
+  it('repite el bloque de consistencia íntegro (contexto absoluto)', () => {
+    expect(p).toContain(BLOQUE)
+  })
+
+  it('repite la descripción del producto íntegra', () => {
+    expect(p).toContain(ARGS.productDesc)
+  })
+
+  it('nunca usa referencias a lotes anteriores', () => {
+    for (const prohibido of ['el mismo personaje', 'el producto anterior', 'la misma habitación', 'igual que en el Lote', 'mantener lo anterior']) {
+      expect(p.toLowerCase()).not.toContain(prohibido.toLowerCase())
+    }
+  })
+
+  it('lleva la locución exacta de sus tomas y nada más', () => {
+    expect(p).toContain('Hola, te cuento algo.')
+    expect(p).toContain('Este suero me cambió la piel.')
+  })
+
+  it('prohíbe todo overlay', () => {
+    expect(p).toMatch(/TEXTO \/ OVERLAY: NINGUNO/)
+    expect(p).toMatch(/watermark/i)
+    expect(p).toMatch(/subt[ií]tulos|captions/i)
+  })
+
+  it('numera las imágenes en el orden del array', () => {
+    expect(p).toContain('@image(1) = la persona')
+    expect(p).toContain('@image(2) = el producto')
+  })
+
+  it('incluye el perfil de voz completo', () => {
+    expect(p).toContain('Limeño')
+    expect(p).toContain('Perú - Lima')
+  })
+
+  it('entra en el tope de prompt de KIE', () => {
+    expect(p.length).toBeLessThanOrEqual(KIE_PROMPT_MAX)
+  })
+
+  it('un lote de muchas tomas también entra en el tope', () => {
+    const largo = groupIntoLotes(Array.from({ length: 8 }, (_, i) =>
+      toma(i + 1, 1.8, `Frase número ${i + 1} del guión adaptado que dice bastante.`)))[0]
+    expect(buildLotePrompt({ lote: largo, ...ARGS }).length).toBeLessThanOrEqual(KIE_PROMPT_MAX)
   })
 })
