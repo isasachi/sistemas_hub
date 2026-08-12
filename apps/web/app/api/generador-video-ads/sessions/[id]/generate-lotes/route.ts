@@ -106,8 +106,14 @@ export async function POST(
   // doble submit (doble clic, StrictMode) o un reintento tras un fallo parcial pasan
   // AMBOS por acá, recalculan `base` desde cero y crean tareas NUEVAS para lotes que
   // ya tienen `taskId`: el taskId viejo, ya pagado, queda huérfano sin forma de verlo.
-  // Body vacío o no-JSON (la UI todavía no llama con `resume`) se trata como "no es
-  // un reintento explícito", no como error.
+  // La UI (Section6Lotes) manda `resume: true` tanto para "reintentar" un render que
+  // quedó a medias como para "generar otra versión" después de volver al paso
+  // anterior y re-adaptar el guión — en los dos casos la sesión YA tiene `lotes`
+  // guardados. Solo el primer render de una sesión nueva (`lotes` en null) va sin el
+  // flag. Esta rama no decide sola si eso cuenta como reanudación real o como
+  // generación nueva que cobra: `resume` es la INTENCIÓN del cliente, `isPaidResume`
+  // más abajo compara la huella del contenido para decidir el HECHO. Body vacío o
+  // no-JSON se trata como "no es un reintento explícito", no como error.
   let resume = false
   try {
     const body: unknown = await req.json()

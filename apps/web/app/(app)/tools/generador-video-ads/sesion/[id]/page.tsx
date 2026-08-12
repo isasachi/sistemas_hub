@@ -43,49 +43,54 @@ export default function VideoDetalle() {
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="rounded-xl overflow-hidden bg-white/[0.03] border border-white/[0.06] flex items-center justify-center">
-                {s.video_url ? (
-                  <video src={s.video_url} controls playsInline className="w-full h-auto bg-black" />
-                ) : (
-                  <span className="text-[13px] text-[#bebebe] p-8">Sin video generado todavía</span>
-                )}
-              </div>
+            {/* Vista de solo lectura: el resumen del análisis forense, el guión final
+                adaptado y los lotes ya renderizados, en ese orden — cada bloque solo
+                aparece si existe. Reutiliza el estilo de tarjeta de las secciones del
+                wizard (borde sutil + título en mayúsculas dorado) para que la sesión
+                terminada se sienta parte de la misma tool, no una pantalla aparte. */}
+            <div className="flex flex-col gap-4">
+              {s.forensic_analysis?.resumenParaUsuario && (
+                <div className="rounded-2xl border border-white/[0.06] bg-[#121214] px-4 py-4">
+                  <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#c9a227]">
+                    Análisis del video original
+                  </div>
+                  <p className="text-[12.5px] leading-relaxed text-[#cfcfcf]">
+                    {s.forensic_analysis.resumenParaUsuario}
+                  </p>
+                </div>
+              )}
 
-              <div className="flex flex-col gap-4">
-                {s.confirmed_script?.beats?.length ? (
-                  <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-4">
-                    <p className="text-[11px] font-bold text-[#bebebe] tracking-[1px] uppercase mb-3">
-                      Guión confirmado — versión {s.confirmed_script.version}
-                    </p>
-                    <div className="flex flex-col gap-3">
-                      {s.confirmed_script.beats.map((b, i) => (
-                        <div key={i}>
-                          <p className="text-[11px] text-[#bebebe]">{b.t}</p>
-                          <p className="text-[14px] text-[#ededed]">{b.dialogue || b.action}</p>
-                        </div>
-                      ))}
+              {s.adapted?.guionFinal && (
+                <div className="rounded-2xl border border-white/[0.06] bg-[#121214] px-4 py-4">
+                  <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#c9a227]">
+                    Guión final adaptado
+                  </div>
+                  <p className="whitespace-pre-wrap text-[12.5px] leading-relaxed text-[#cfcfcf]">
+                    {s.adapted.guionFinal}
+                  </p>
+                </div>
+              )}
+
+              {!!s.lotes?.length && (
+                <div className="flex flex-col gap-3">
+                  {s.lotes.map((l) => (
+                    <div key={l.n} className="rounded-2xl border border-white/[0.06] bg-[#121214] p-3">
+                      <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#c9a227]">
+                        Lote {l.n} · {l.duracionSeg}s
+                      </div>
+                      {l.videoUrl ? (
+                        <video src={l.videoUrl} controls playsInline className="w-full rounded-xl bg-black" />
+                      ) : (
+                        <p className="text-[12px] text-[#8b8b8b]">Todavía sin video.</p>
+                      )}
                     </div>
-                  </div>
-                ) : null}
+                  ))}
+                </div>
+              )}
 
-                {(s.target_audience || s.what_it_does) && (
-                  <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-4 flex flex-col gap-3">
-                    {s.what_it_does && (
-                      <div>
-                        <p className="text-[11px] text-[#bebebe]">Qué hace</p>
-                        <p className="text-[14px] text-[#ededed]">{s.what_it_does}</p>
-                      </div>
-                    )}
-                    {s.target_audience && (
-                      <div>
-                        <p className="text-[11px] text-[#bebebe]">Público objetivo</p>
-                        <p className="text-[14px] text-[#ededed]">{s.target_audience}</p>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
+              {!s.forensic_analysis?.resumenParaUsuario && !s.adapted?.guionFinal && !s.lotes?.length && (
+                <p className="text-[13px] text-[#bebebe]">Esta sesión todavía no tiene resultados.</p>
+              )}
             </div>
           </>
         )}

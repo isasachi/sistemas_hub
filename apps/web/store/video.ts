@@ -4,6 +4,9 @@ import { create } from 'zustand'
 import type {
   ForensicReport, ProductScan, UserInputs, ValidationMatrix, ScriptTemplate, VideoSessionResponse,
 } from '@/lib/video-ads/types'
+import type { AdaptedScript } from '@/lib/video-ads/adapt'
+import type { VoiceProfile } from '@/lib/video-ads/character'
+import type { Lote } from '@/lib/video-ads/lotes'
 import { STEP } from '@/lib/video-ads/steps'
 
 export const SESSION_KEY = 'video_ads_session_id'
@@ -24,6 +27,13 @@ interface VideoState {
   // FASE 2
   template: ScriptTemplate | null
   regens: Record<string, number>
+  // FASE 3
+  adapted: AdaptedScript | null
+  // FASE 4 / 4.5
+  consistencyBlock: string | null
+  voiceProfile: VoiceProfile | null
+  // FASE 5
+  lotes: Lote[] | null
 }
 
 export const EMPTY_INPUTS: UserInputs = {
@@ -37,6 +47,7 @@ const initialState: VideoState = {
   referenceVideoUrl: null, forensicAnalysis: null,
   productUrl: null, productScan: null, characterUrl: null,
   inputs: EMPTY_INPUTS, validation: null, template: null, regens: {},
+  adapted: null, consistencyBlock: null, voiceProfile: null, lotes: null,
 }
 
 interface VideoActions {
@@ -85,6 +96,10 @@ export const useVideoStore = create<VideoState & VideoActions>((set) => ({
       },
       validation: s.validation,
       template: s.template,
+      adapted: s.adapted,
+      consistencyBlock: s.consistency_block,
+      voiceProfile: s.voice_profile,
+      lotes: s.lotes,
       sessionError: false,
     })
   },
