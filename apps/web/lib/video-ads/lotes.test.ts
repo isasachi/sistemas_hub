@@ -250,4 +250,42 @@ describe('buildLotePrompt', () => {
       toma(i + 1, 1.8, `Frase número ${i + 1} del guión adaptado que dice bastante.`)))[0]
     expect(buildLotePrompt({ lote: largo, ...ARGS }).length).toBeLessThanOrEqual(KIE_PROMPT_MAX)
   })
+
+  // Fix round 1 — el test anterior usa `accionVisual` sintético de ~9 caracteres
+  // (`accion ${n}`), muy por debajo del detalle forense real (AGENTS.md: ~6300 chars
+  // con ~11 beats). Este caso fuerza la degradación de verdad: bloque de consistencia
+  // y descripción de producto verbosos, y 8 tomas con `accionVisual` largo (secuencial:
+  // posición inicial, movimiento, manos, mirada, expresión, posición final).
+  it('con contenido de tamaño realista, degrada la sección de acciones pero conserva la cámara y entra en el tope', () => {
+    const bloqueLargo = 'Mujer de 25 años, latina peruana, cabello negro liso recogido en moño bajo, piel clara, ojos marrón claro, complexión delgada, cejas pobladas naturales, nariz recta, labios medianos, polo blanco de algodón sin estampado ni logo, pantalón deportivo gris, sin joyas visibles, manicura natural, uñas cortas. '.repeat(2)
+    const productoLargo = 'Frasco de vidrio celeste translúcido de 30 ml con gotero de plástico blanco, tapa rosca plateada, etiqueta blanca centrada con el texto "EUNOIA" en tipografía serif dorada, borde dorado fino alrededor de la etiqueta, sin otros textos ni logos adicionales. '.repeat(2)
+    const accionLarga = 'La modelo empieza de pie frente al espejo del baño con las manos a los costados, gira lentamente el torso hacia la cámara, levanta la mano derecha y toma el frasco del producto desde la repisa con dos dedos, lo sostiene a la altura del pecho, lo inclina levemente para mostrar la etiqueta, mira directo a cámara con expresión cálida y sonríe, termina con el frasco cerca del rostro y la mirada fija en el lente. '
+
+    const argsLargos = { ...ARGS, consistencyBlock: bloqueLargo, productDesc: productoLargo }
+    const muchasTomas = groupIntoLotes(Array.from({ length: 8 }, (_, i) =>
+      ({ ...toma(i + 1, 1.8, `Frase número ${i + 1} del guión adaptado, bastante larga también, para sumar presión de caracteres sobre el presupuesto del prompt.`), accionVisual: accionLarga })))[0]
+
+    const p = buildLotePrompt({ lote: muchasTomas, ...argsLargos })
+    expect(p.length).toBeLessThanOrEqual(KIE_PROMPT_MAX)
+    // La cámara nunca se recorta (regla de AGENTS.md: es corta y sostiene el encuadre).
+    expect(p).toContain(argsLargos.camara)
+    // El bloque de consistencia y la descripción de producto tampoco se recortan bajo
+    // presión de presupuesto — solo la sección de acciones se degrada.
+    expect(p).toContain(bloqueLargo)
+    expect(p).toContain(productoLargo)
+    // Prueba que SÍ llegó a degradar, no que por casualidad entró en el nivel completo:
+    // sin locución por toma (nivel 2) y con `accionVisual` truncada (piso, con "…").
+    expect(p).not.toMatch(/Locución: /)
+    expect(p).toContain('…')
+    // La locución sigue siendo exacta pese a la degradación: sobrevive en el bloque
+    // GUION DE LOCUCIÓN FINAL aunque las líneas por-toma se hayan soltado.
+    expect(p).toContain('Frase número 8')
+  })
+
+  it('si ni el bloque de consistencia por sí solo entra en el tope, lanza un error explicando el exceso', () => {
+    const bloqueImposible = 'x'.repeat(KIE_PROMPT_MAX * 2)
+    expect(() => buildLotePrompt({ lote, ...ARGS, consistencyBlock: bloqueImposible })).toThrow()
+    expect(() => buildLotePrompt({ lote, ...ARGS, consistencyBlock: bloqueImposible }))
+      .toThrow(new RegExp(String(KIE_PROMPT_MAX)))
+  })
 })
