@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Download } from 'lucide-react'
 import { useVideoStore } from '@/store/video'
 import { groupIntoLotes, type Lote } from '@/lib/video-ads/lotes'
+import { isInFlight, isStuck } from '@/lib/video-ads/lote-ui'
 import BackToDashboard from '@/components/tools/ui/BackToDashboard'
 import { btnPrimary, btnGhost, errorBox, warnBox, spinner } from './shared'
 
@@ -12,28 +13,26 @@ const LABEL: Record<string, string> = {
   generating: 'Generando', success: 'Listo', fail: 'Falló',
 }
 
-// Un lote con `taskId` y sin `videoUrl` (y sin `status: 'fail'`) todavía puede
-// cambiar de estado en el próximo sondeo — es el único caso que justifica seguir
-// llamando a `lote-status`.
-function isInFlight(l: Lote): boolean {
-  return !!l.taskId && !l.videoUrl && l.status !== 'fail'
-}
-
-// Un lote SIN `taskId` nunca arrancó una tarea en KIE: quedó así porque el loop de
-// `generate-lotes` se cortó a mitad de camino (prompt que no entró en el tope, o un
-// fallo de red/API) — ver el rescate parcial documentado en esa ruta. No tiene
-// identificador que consultar, así que jamás va a resolverse por sí solo con
-// `lote-status`; `done` tampoco lo cuenta como terminado. Es el único caso que un
-// reintento explícito (`resume: true`) puede arreglar.
-function isStuck(l: Lote): boolean {
-  return !l.taskId && !l.videoUrl
-}
-
 export default function Section6Lotes() {
   const { sessionId, adapted, lotes, patch } = useVideoStore()
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [running, setRunning] = useState(!!lotes?.some(isInFlight))
+  // Fix round 1: un fetch que falla (red caída, tab dormido y despierto, DNS) NO
+  // significa que el render terminó — el proveedor lo sigue procesando del otro
+  // lado. Antes esto apagaba `running`, y como `stuck` exige que el lote NO tenga
+  // `taskId` (uno en curso SÍ lo tiene), la pantalla caía en `finished` — un render
+  // vivo se mostraba como terminado, con el botón de "generar otra versión" encima.
+  // La solución elegida es NO cortar el polling ante un error transitorio: seguimos
+  // reintentando cada 5s (un GET liviano, sin costo de LLM ni de KIE) y mostramos un
+  // aviso no bloqueante y explícito ("se perdió la conexión, el render sigue") que no
+  // se puede confundir con "terminado" ni con "a medias" (ese último sigue siendo
+  // solo para lotes sin `taskId`, el caso real que un reintento manual puede
+  // arreglar). La alternativa —un cuarto estado que bloquee la pantalla— añadía una
+  // máquina de estados más sin resolver nada que el auto-reintento no resuelva ya:
+  // si la caída fue transitoria, el próximo tick se recupera solo; si es persistente,
+  // el aviso se queda visible hasta que se recupere o el usuario recargue.
+  const [connectionLost, setConnectionLost] = useState(false)
   const timer = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Preview local: cuántos renders va a costar, ANTES de gastarlos.
@@ -46,6 +45,7 @@ export default function Section6Lotes() {
         const res = await fetch(`/api/generador-video-ads/sessions/${sessionId}/lote-status`)
         const data = (await res.json()) as { lotes?: Lote[]; done?: boolean; error?: string }
         if (!res.ok) throw new Error(data.error ?? 'No se pudo consultar el render')
+        setConnectionLost(false)
         if (data.lotes) patch({ lotes: data.lotes })
         // `data.done` cubre el caso feliz (todo resuelto, con éxito o con un `fail`
         // explícito de KIE), pero un lote "quedó a medias" (`isStuck`) nunca lo pone
@@ -53,8 +53,11 @@ export default function Section6Lotes() {
         // también cuando ya no queda ningún lote que pueda seguir avanzando solo.
         if (data.done || !data.lotes?.some(isInFlight)) setRunning(false)
       } catch (err) {
+        // A propósito: NO se llama `setRunning(false)` acá — ver el comentario sobre
+        // `connectionLost` más arriba. El `setInterval` de abajo sigue vivo y el
+        // próximo tick reintenta solo.
         setError((err as Error).message)
-        setRunning(false)
+        setConnectionLost(true)
       }
     }
     tick()
@@ -140,6 +143,15 @@ export default function Section6Lotes() {
           ya se generaron.
         </div>
       )}
+      {running && connectionLost && (
+        // Distinto del warnBox de "a medias": el render SIGUE vivo del lado del
+        // proveedor, solo se cayó el sondeo. No es un estado terminal — desaparece
+        // solo apenas un tick logra conectar.
+        <div className={warnBox}>
+          Se perdió la conexión al consultar el render — el video sigue procesándose
+          del otro lado. Reintentando automáticamente cada 5 segundos…
+        </div>
+      )}
       {lotes.map((l) => (
         <div key={l.n} className="rounded-2xl border border-white/[0.06] bg-[#121214] p-3">
           <div className="mb-2 flex items-center justify-between">
@@ -169,7 +181,10 @@ export default function Section6Lotes() {
           )}
         </div>
       ))}
-      {error && <div className={errorBox}>{error}</div>}
+      {/* Mientras sigue corriendo el polling, el error ya se explica arriba con el
+          aviso de conexión perdida (no bloqueante) — repetirlo acá abajo en rojo
+          confundiría "seguimos reintentando solos" con "algo requiere tu acción". */}
+      {error && !running && <div className={errorBox}>{error}</div>}
       {stuck && (
         <button onClick={() => submit(true)} disabled={submitting} className={btnPrimary}>
           {submitting ? <><span className={spinner} />Reintentando...</> : 'Reintentar el render →'}
