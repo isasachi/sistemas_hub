@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { Part } from '@google/genai'
 import type { UserInputs } from './types'
 import type { ForensicReport } from './forensic'
 
@@ -70,6 +71,11 @@ export function buildIdentityInstruction(
           'estructura del rostro, cabello (corte y color), complexión, rasgos distintivos',
           'visibles y edad aparente. No mezcles rasgos con otros personajes. Si un rasgo',
           'no puede observarse con certeza, no inventes ese rasgo.',
+          'De la foto SOLO se leen rasgos observables (edad aparente, tono de piel,',
+          'cabello, facciones, complexión). NUNCA infieras de la foto la etnia, el',
+          'origen cultural ni el acento del personaje: esos dos datos vienen',
+          'exclusivamente del usuario, en la sección de arriba, y de nadie más — ni de',
+          'la imagen ni del video original.',
         ].join('\n')
       : [
           'NO hay imagen de referencia: construye el personaje desde la descripción del',
@@ -82,16 +88,18 @@ export function buildIdentityInstruction(
     'presentación, rasgos faciales visibles, forma del rostro, ojos, cejas, nariz,',
     'labios, piel, cabello (corte, color, textura), complexión, proporciones corporales',
     'observables, vestuario, accesorios, postura neutra, expresión neutra, iluminación',
-    'neutra, fondo neutro, encuadre de referencia, relación de aspecto vertical 9:16 y',
-    'nivel de realismo fotográfico.',
+    'neutra, fondo neutro, encuadre de referencia, relación de aspecto retrato 2:3 y',
+    'nivel de realismo fotográfico. (El generador de imagen solo produce retrato 2:3;',
+    'el ratio vertical final del video lo impone después el modelo de video, porque',
+    'el personaje nunca va solo en el render.)',
     'Sin texto, sin logos, sin watermarks y sin el producto en el encuadre.',
     '',
     '`bloqueConsistencia`: la descripción EXACTA y reutilizable del personaje, pensada',
     'para copiarse íntegra dentro de cada lote de video. Trátala como una identidad',
-    'bloqueada: no la reemplaces nunca ni la resumas con "el mismo personaje", "igual',
-    'al anterior", "idéntica persona" ni "as before" — el generador de video no',
-    'recuerda nada entre lotes, así que una referencia a algo anterior produce otra',
-    'persona.',
+    'bloqueada: no la reemplaces nunca ni la resumas con ninguno de estos atajos —',
+    '"el mismo personaje", "igual al anterior", "idéntica persona", "as before" — el',
+    'generador de video no recuerda nada entre lotes, así que una referencia a algo',
+    'anterior produce otra persona.',
     'Debe ser autosuficiente y describir edad, etnia (la del usuario), rostro, cabello,',
     'piel, ojos, complexión, vestuario y accesorios.',
     '',
@@ -105,4 +113,22 @@ export function buildIdentityInstruction(
     '',
     'Todo el output va en español.',
   ].filter(Boolean).join('\n')
+}
+
+/**
+ * Arma los parts para `callStructured`: la foto del personaje (si el usuario ya
+ * subió una) va ANTES del texto, mismo orden que `analyze-reference/route.ts` y
+ * `analyze-product/route.ts`. Sin esto, el modelo recibe solo texto y fabrica el
+ * bloque de consistencia a ciegas — probablemente copiando al `sujeto` del forense,
+ * que es la persona del video de referencia, justo lo que este prompt prohíbe.
+ * Pura y testeable por separado del route handler (que hace I/O de red y DB).
+ */
+export function buildCharacterParts(
+  instruction: string,
+  image?: { data: string; mimeType: string },
+): Part[] {
+  const parts: Part[] = []
+  if (image) parts.push({ inlineData: { mimeType: image.mimeType, data: image.data } })
+  parts.push({ text: instruction })
+  return parts
 }

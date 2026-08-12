@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getVideoSession, updateVideoSession } from '@/lib/video-ads/db'
 import { callStructured } from '@/lib/gemini'
 import { openaiGenerateImage } from '@/lib/llm-openai'
-import { uploadToStorage } from '@/lib/storage'
+import { uploadToStorage, fetchAsBase64 } from '@/lib/storage'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
-import { CharacterIdentitySchema, buildIdentityInstruction } from '@/lib/video-ads/character'
+import { CharacterIdentitySchema, buildIdentityInstruction, buildCharacterParts } from '@/lib/video-ads/character'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -31,21 +31,32 @@ export async function POST(
     return NextResponse.json({ error: 'Analiza el video de referencia primero' }, { status: 409 })
 
   try {
-    const identity = await callStructured('character_identity', CharacterIdentitySchema, [
+    // Si el usuario ya subió foto de personaje, ES la fuente de verdad — se manda
+    // como part de imagen ANTES del texto (mismo orden que analyze-reference y
+    // analyze-product) para que el modelo la observe en vez de fabricar el bloque
+    // de consistencia a ciegas. `fetchAsBase64` valida que el host sea el del
+    // bucket, que es lo que queremos acá porque la URL viene de la fila.
+    const image = session.character_url
+      ? await fetchAsBase64(session.character_url)
+      : undefined
+
+    const instruction = buildIdentityInstruction(
       {
-        text: buildIdentityInstruction(
-          {
-            productName: session.product_name ?? '', productDescription: session.what_it_does ?? '',
-            angle: session.angle ?? '', targetAudience: session.target_audience ?? '',
-            problem: session.problem ?? '', characterDesc: session.character_desc ?? '',
-            characterEthnicity: session.character_ethnicity ?? '', accent: session.accent ?? '',
-            voice: session.voice ?? '', constraints: session.constraints ?? '',
-          },
-          session.forensic_analysis,
-          !!session.character_url,
-        ),
+        productName: session.product_name ?? '', productDescription: session.what_it_does ?? '',
+        angle: session.angle ?? '', targetAudience: session.target_audience ?? '',
+        problem: session.problem ?? '', characterDesc: session.character_desc ?? '',
+        characterEthnicity: session.character_ethnicity ?? '', accent: session.accent ?? '',
+        voice: session.voice ?? '', constraints: session.constraints ?? '',
       },
-    ])
+      session.forensic_analysis,
+      !!session.character_url,
+    )
+
+    const identity = await callStructured(
+      'character_identity',
+      CharacterIdentitySchema,
+      buildCharacterParts(instruction, image),
+    )
 
     // Con imagen de referencia del usuario no se regenera nada: ES la fuente de verdad.
     let characterUrl = session.character_url
