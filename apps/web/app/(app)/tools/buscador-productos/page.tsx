@@ -17,7 +17,9 @@ function Chip({ label, active, busy, disabled, onClick }: {
   return (
     <button
       onClick={onClick}
-      disabled={disabled}
+      // El chip elegido nunca se atenúa: es el que tiene que leerse encendido
+      // justo mientras carga.
+      disabled={disabled && !active}
       aria-pressed={active}
       className="flex items-center gap-1.5 text-[12px] font-bold rounded-full px-3 py-1.5 border transition-colors disabled:opacity-40"
       style={
@@ -163,13 +165,15 @@ export default function BuscadorProductosPage() {
         {sugerencias.length > 0 && (
           <div className="flex items-start gap-3 mb-8">
             <span className="text-[12px] text-[#bebebe] shrink-0 py-1.5">Nichos</span>
-            {/* ponytail: colapsado = dos filas por altura fija (chip 30px + gap
-                8px). Es una heurística de píxeles, no de conteo: si algún día
-                cambia el tamaño del chip o la tipografía, este número se ajusta
-                acá y nada más. */}
+            {/* ponytail: colapsado = dos filas por altura fija. El chip mide
+                33.2px renderizado (12px de texto + line-height del navegador +
+                py-1.5 + borde) y el gap es 8 → dos filas = 74.4, la tercera
+                arranca en 82.6. 75 corta limpio. Es una heurística de píxeles,
+                no de conteo: si cambia el tamaño del chip o la tipografía, se
+                remide y se ajusta este número, nada más. */}
             <div
               className="flex-1 flex flex-wrap gap-2 overflow-hidden"
-              style={expandido ? undefined : { maxHeight: 68 }}
+              style={expandido ? undefined : { maxHeight: 75 }}
             >
               <Chip label="Todos" active={sel === null} disabled={loading} onClick={verTodos} />
               {sugerencias.map((n) => (
@@ -189,6 +193,7 @@ export default function BuscadorProductosPage() {
             {sugerencias.length > 12 && (
               <button
                 onClick={() => setExpandido((v) => !v)}
+                aria-expanded={expandido}
                 className="shrink-0 flex items-center gap-1 text-[12px] font-bold py-1.5"
                 style={{ color: ACCENT }}
               >
@@ -264,6 +269,7 @@ export default function BuscadorProductosPage() {
                   key={b}
                   label={RAW_BUCKET_LABEL[b]}
                   active={grupo.bucket === b}
+                  disabled={loading}
                   onClick={() => search(result!.niche, b)}
                 />
               ))}
