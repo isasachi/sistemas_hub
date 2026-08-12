@@ -16,7 +16,11 @@ const TEMPLATE: ScriptTemplate = {
   resumenParaUsuario: 'Testimonio.',
 }
 
-const FORENSIC = { caracteresGuion: 58, guionOriginal: 'Si estás cansado de las marcas, necesitas probar este suero.' } as ForensicReport
+const FORENSIC = {
+  caracteresGuion: 58,
+  guionOriginal: 'Si estás cansado de las marcas, necesitas probar este suero.',
+  cortes: [{ n: 1, tiempo: '00:00 - 00:06', duracionSeg: 6, accion: '', camara: '', dialogo: '', textoOverlay: '', transicion: '' }],
+} as ForensicReport
 
 const INPUTS: UserInputs = {
   productName: 'Serum Eunoia', productDescription: 'Suero de niacinamida',
@@ -34,14 +38,16 @@ describe('buildAdaptInstruction', () => {
     expect(p).toMatch(/no introduzcas frameworks/i)
   })
 
-  it('trae el ejemplo de adaptación literal del spec', () => {
-    expect(p).toContain('Si estás cansado de')
-    expect(p).toMatch(/PROHIBIDO/)
+  it('muestra ejemplo concreto de adaptación literal, no plantilla', () => {
+    expect(p).toContain('Si estás cansado de las marcas de acné, necesitas probar Serum Eunoia.')
+    expect(p).toContain('PROHIBIDO:  "¿Sabías que miles de personas')
   })
 
   it('exige [VARIABLE PENDIENTE] en vez de inventar', () => {
     expect(p).toContain('[VARIABLE PENDIENTE]')
     expect(p).toMatch(/no inventes/i)
+    expect(p).toContain('Este es el ÚNICO')
+    expect(p).toContain('corchete permitido')
   })
 
   it('fija TEXTO EN PANTALLA: NINGUNO', () => {
@@ -56,6 +62,22 @@ describe('buildAdaptInstruction', () => {
     expect(p).toContain('Serum Eunoia')
     expect(p).toContain('Marcas de acné')
     expect(p).toContain('Testimonio de 4 semanas')
+  })
+
+  it('incluye las marcas de tiempo de la referencia', () => {
+    expect(p).toContain('MARCAS DE TIEMPO DE LA REFERENCIA')
+    expect(p).toContain('00:00 - 00:06')
+  })
+
+  it('incluye el acento regional en los INPUTS', () => {
+    expect(p).toContain('ACENTO REGIONAL: Español peruano de Lima')
+    expect(p).toContain('VARIANTE REGIONAL')
+    expect(p).toMatch(/variante regional del español/i)
+  })
+
+  it('instruye a copiar tiempoOriginal de las marcas, no inventarlo', () => {
+    expect(p).toContain('tiempoOriginal` se copia del bloque "MARCAS DE TIEMPO DE LA REFERENCIA"')
+    expect(p).toMatch(/NO inventes marcas de tiempo/i)
   })
 })
 
