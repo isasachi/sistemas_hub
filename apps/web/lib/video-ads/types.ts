@@ -1,11 +1,27 @@
 import { z } from 'zod'
 import { ProductScanSchema, type ProductScan } from '@/lib/types'
 
-// Las tres líneas de entrada del wizard. `character-gen` es `character-ref` con un
-// paso previo que fabrica el personaje — no es una rama aparte del pipeline.
-export const VIDEO_MODES = ['video-ref', 'character-ref', 'character-gen'] as const
-export const VideoModeSchema = z.enum(VIDEO_MODES)
-export type VideoMode = z.infer<typeof VideoModeSchema>
+// ─── INPUTS DEL USUARIO (spec: "INPUTS DEL USUARIO") ─────────────────────────
+//
+// Son la fuente de verdad para producto, ángulo, público, problema y personaje.
+// El VIDEO ORIGINAL es la fuente de verdad para estructura, ritmo y cámara.
+//
+// `characterEthnicity` y `accent` son los dos campos que el spec PROHÍBE inferir:
+// "nunca infieras raza/etnia, origen cultural o acento únicamente a partir de la
+// apariencia visual". Vacío = PENDIENTE, nunca "lo que se ve en el video".
+export const UserInputsSchema = z.object({
+  productName: z.string(),
+  productDescription: z.string(),
+  angle: z.string(),
+  targetAudience: z.string(),
+  problem: z.string(),
+  characterDesc: z.string(),
+  characterEthnicity: z.string(),
+  accent: z.string(),
+  voice: z.string(),
+  constraints: z.string(),
+})
+export type UserInputs = z.infer<typeof UserInputsSchema>
 
 // ─── Línea 1: análisis forense del video de referencia ───────────────────────
 
@@ -75,22 +91,6 @@ export const ConfirmedScriptSchema = z.object({
 })
 export type ConfirmedScript = z.infer<typeof ConfirmedScriptSchema>
 
-// ─── Personaje (líneas 2 y 3) ────────────────────────────────────────────────
-
-// Espeja el formato de brief que usa el equipo para pedir un UGC influencer.
-// El builder (kie.ts) lo aplana al prompt de imagen; el wizard lo pinta como chips.
-export const CharacterBriefSchema = z.object({
-  gender: z.string(),
-  age: z.string(),
-  ethnicity: z.string(),
-  background: z.string(),
-  style: z.string(),
-  cameraPlacement: z.string(),
-  coverage: z.string(),
-  additionalDetails: z.string(),
-})
-export type CharacterBrief = z.infer<typeof CharacterBriefSchema>
-
 // Dirección del video (acento, vibe, cámara). En la línea 1 la deduce el análisis
 // forense; en las líneas 2 y 3 la propone el modelo junto con el guión.
 export const VideoDirectionSchema = z.object({
@@ -114,16 +114,21 @@ export interface VideoSessionResponse {
   id: string
   created_at: string
   step: number
-  mode: VideoMode | null
   reference_video_url: string | null
   forensic_analysis: ForensicAnalysis | null
-  character_brief: CharacterBrief | null
   character_url: string | null
   product_url: string | null
   product_scan: ProductScan | null
   product_name: string | null
   what_it_does: string | null
   target_audience: string | null
+  angle: string | null
+  problem: string | null
+  character_desc: string | null
+  character_ethnicity: string | null
+  accent: string | null
+  voice: string | null
+  constraints: string | null
   script_template: ScriptTemplate | null
   script_versions: ScriptVersions | null
   direction: VideoDirection | null
