@@ -1,25 +1,32 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Search, ExternalLink, Loader2, PackageSearch, Flame } from "lucide-react";
+import { ExternalLink, Loader2, PackageSearch, Flame, ChevronDown } from "lucide-react";
 import ToolShell from "@/components/tools/ui/ToolShell";
 import { RAW_BUCKETS, RAW_BUCKET_LABEL, type RawBucket, type RawProductEntry, type RawSearchResponse } from "@ph/shared";
 
 const ACCENT = "#ff9b4a";
 
 // Chip: mismo botón para las sugerencias de nicho y para el filtro de rango.
-function Chip({ label, active, onClick }: { label: string; active?: boolean; onClick: () => void }) {
+// `busy` pinta el spinner del chip que se acaba de clickear; `disabled` apaga
+// al resto mientras carga — sin barra de búsqueda, un click ignorado en
+// silencio sería la única señal de que la app hace algo.
+function Chip({ label, active, busy, disabled, onClick }: {
+  label: string; active?: boolean; busy?: boolean; disabled?: boolean; onClick: () => void;
+}) {
   return (
     <button
       onClick={onClick}
+      disabled={disabled}
       aria-pressed={active}
-      className="text-[12px] font-bold rounded-full px-3 py-1.5 border transition-colors"
+      className="flex items-center gap-1.5 text-[12px] font-bold rounded-full px-3 py-1.5 border transition-colors disabled:opacity-40"
       style={
         active
           ? { borderColor: ACCENT, color: ACCENT, background: `${ACCENT}1a` }
           : { borderColor: "rgba(255,255,255,0.12)", color: "#cfcfcf" }
       }
     >
+      {busy && <Loader2 className="w-3 h-3 animate-spin" />}
       {label}
     </button>
   );
@@ -66,12 +73,17 @@ function ProductCard({ p }: { p: RawProductEntry }) {
 }
 
 export default function BuscadorProductosPage() {
-  const [niche, setNiche] = useState("");
   const [result, setResult] = useState<RawSearchResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [topPicks, setTopPicks] = useState<RawProductEntry[]>([]);
   const [sugerencias, setSugerencias] = useState<string[]>([]);
+  // El chip elegido, no el nicho de la respuesta: así se enciende en el click
+  // (antes de que llegue el fetch) y no depende de que la etiqueta del chip
+  // coincida carácter a carácter con el nicho normalizado que devuelve el
+  // servidor. null = "Todos" (la portada).
+  const [sel, setSel] = useState<string | null>(null);
+  const [expandido, setExpandido] = useState(false);
 
   // Lo más pautado del rango más alto, de todos los nichos. Se refresca solo:
   // la ruta lee en vivo lo que el daemon de vigencia acaba de escribir.
@@ -86,8 +98,8 @@ export default function BuscadorProductosPage() {
       .catch(() => {});
   }, []);
 
-  // `q` y `bucket` van por parámetro y no desde el estado: los chips buscan en
-  // el mismo click que actualizan el input, y el estado todavía no llegó.
+  // `q` y `bucket` van por parámetro y no desde el estado: el chip busca en el
+  // mismo click en que se marca seleccionado, y el estado todavía no llegó.
   // bucket null = que el servidor elija el primer rango con stock.
   const search = useCallback(async (q: string, bucket: RawBucket | null) => {
     if (!q || loading) return;
@@ -113,10 +125,18 @@ export default function BuscadorProductosPage() {
     }
   }, [loading]);
 
-  const buscarNicho = useCallback((q: string) => {
-    setNiche(q);
+  const elegirNicho = useCallback((q: string) => {
+    setSel(q);
     search(q, null);
   }, [search]);
+
+  // "Todos": vuelve a la portada (top picks de todos los nichos). No pega a la
+  // API — el marquee ya está cargado desde el mount.
+  const verTodos = useCallback(() => {
+    setSel(null);
+    setResult(null);
+    setError(null);
+  }, []);
 
   // El rango activo lo dicta la respuesta, no el click: sin filtro explícito el
   // servidor autoelige, y el chip encendido tiene que ser el que de verdad salió.
@@ -130,45 +150,60 @@ export default function BuscadorProductosPage() {
             Buscador de Productos
           </h1>
           <p className="text-[14px] text-[#cfcfcf] leading-[1.6]">
-            Escribe un nicho (ej: <span className="text-[#ededed]">rodilla</span>,{" "}
-            <span className="text-[#ededed]">acne</span>,{" "}
-            <span className="text-[#ededed]">collar antipulgas</span>) y te mostramos productos
-            físicos que se están pautando. Se ve un rango de anuncios a la vez — el filtro lo cambia.
+            Elige un nicho y te mostramos productos físicos que se están pautando.
+            Se ve un rango de anuncios a la vez — el filtro lo cambia.
           </p>
         </div>
 
-        <div className="flex gap-2 mb-4">
-          <div className="flex-1 flex items-center gap-2 bg-white/[0.04] border border-white/[0.08] rounded-xl px-3">
-            <Search className="w-4 h-4 text-[#bebebe]" />
-            <input
-              value={niche}
-              onChange={(e) => setNiche(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") search(niche.trim(), null); }}
-              placeholder="Escribe un nicho"
-              className="flex-1 bg-transparent py-3 text-[14px] text-[#ededed] placeholder:text-[#6b6b6b] outline-none"
-            />
-          </div>
-          <button onClick={() => search(niche.trim(), null)} disabled={loading}
-            className="jr-cta text-[14px] font-bold rounded-xl px-6 disabled:opacity-50">
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Buscar"}
-          </button>
-        </div>
-
-        {/* Sugerencias: los NICHOS con más productos en la base (no categorías —
-            el ranking es por cantidad de entradas, y así salen "cuello" o "cama
-            para perros"). Un click y hay resultados garantizados. */}
+        {/* Los chips SON la navegación: sin barra de búsqueda, esta lista es la
+            única entrada a la herramienta. Son los NICHOS con más productos en la
+            base (no categorías — el ranking es por cantidad de entradas, y así
+            salen "cuello" o "cama para perros"), así que cualquier click trae
+            resultados garantizados. */}
         {sugerencias.length > 0 && (
-          <div className="mb-8">
-            <p className="text-[12px] text-[#bebebe] mb-2">Nichos con más productos</p>
-            <div className="flex flex-wrap gap-2">
+          <div className="flex items-start gap-3 mb-8">
+            <span className="text-[12px] text-[#bebebe] shrink-0 py-1.5">Nichos</span>
+            {/* ponytail: colapsado = dos filas por altura fija (chip 30px + gap
+                8px). Es una heurística de píxeles, no de conteo: si algún día
+                cambia el tamaño del chip o la tipografía, este número se ajusta
+                acá y nada más. */}
+            <div
+              className="flex-1 flex flex-wrap gap-2 overflow-hidden"
+              style={expandido ? undefined : { maxHeight: 68 }}
+            >
+              <Chip label="Todos" active={sel === null} disabled={loading} onClick={verTodos} />
               {sugerencias.map((n) => (
-                <Chip key={n} label={n} active={result?.niche === n} onClick={() => buscarNicho(n)} />
+                <Chip
+                  key={n}
+                  label={n}
+                  active={sel === n}
+                  busy={loading && sel === n}
+                  disabled={loading}
+                  onClick={() => elegirNicho(n)}
+                />
               ))}
             </div>
+            {/* ponytail: el toggle aparece por conteo de chips, no midiendo el
+                DOM. Con etiquetas muy largas puede sobrar/faltar por uno; si
+                molesta, un ResizeObserver sobre el contenedor lo resuelve. */}
+            {sugerencias.length > 12 && (
+              <button
+                onClick={() => setExpandido((v) => !v)}
+                className="shrink-0 flex items-center gap-1 text-[12px] font-bold py-1.5"
+                style={{ color: ACCENT }}
+              >
+                {expandido ? "Contraer" : "Expandir"}
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${expandido ? "rotate-180" : ""}`} />
+              </button>
+            )}
           </div>
         )}
 
         {error && <p className="text-[13px] text-[#fca5a5] mb-4">{error}</p>}
+
+        {/* Cambiar de nicho vacía el cuerpo (y esconde el marquee): sin esta
+            línea la pantalla queda en blanco hasta que responde la API. */}
+        {loading && !result && <p className="text-[13px] text-[#bebebe] mb-4">Buscando…</p>}
 
         {/* Portada: mientras no haya búsqueda, lo más pautado de todo el inventario.
             Con resultados en pantalla desaparece — no compite con lo que se buscó. */}
