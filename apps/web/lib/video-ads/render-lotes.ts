@@ -28,7 +28,8 @@ export function totalDuration(lotes: Lote[]): number {
 
 /**
  * Empareja `base` (recién recalculado por `groupIntoLotes`, siempre determinista
- * mientras `adapted.tomas` no cambie) con lo que ya estaba guardado en la sesión,
+ * mientras `adapted.tomas` no cambie — que ya no es un supuesto: `isPaidResume` lo
+ * EXIGE vía la huella antes de dejar llamar acá) con lo que ya estaba guardado,
  * por ÍNDICE: si la posición `i` ya tiene un `taskId`, esa tarea ya está pagada y se
  * conserva tal cual — no se crea una nueva. Si no, se usa el lote fresco de `base`
  * (idle, sin taskId), que sí va a intentar crear tarea.
