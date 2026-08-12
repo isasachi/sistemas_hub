@@ -14,6 +14,9 @@ const EXT: Record<string, string> = {
   'image/webp': 'webp',
   'image/gif': 'gif',
   'application/pdf': 'pdf',
+  'video/mp4': 'mp4',
+  'video/quicktime': 'mov',
+  'video/webm': 'webm',
 }
 
 function mimeToExt(mime: string): string {
@@ -52,6 +55,42 @@ function allowedHosts(): Set<string> {
     )
   }
   return _allowedHosts
+}
+
+/**
+ * URL firmada para que el BROWSER suba directo al bucket, sin pasar por la ruta.
+ * Necesario para el video de referencia del generador de video ads: el body de una
+ * función serverless de Vercel está topado en 4.5 MB y un video pesa mucho más.
+ * El cliente hace `PUT signedUrl` con el archivo como body; después manda solo la
+ * publicUrl a la ruta de análisis.
+ */
+export async function createSignedUpload(
+  sessionId: string,
+  name: string,
+  mimeType: string
+): Promise<{ signedUrl: string; publicUrl: string }> {
+  const path = `${sessionId}/${name}.${mimeToExt(mimeType)}`
+  const storage = getStorage()
+  const { data, error } = await storage.createSignedUploadUrl(path, { upsert: true })
+  if (error || !data) throw new Error(`Signed upload failed: ${error?.message ?? 'sin datos'}`)
+  return {
+    signedUrl: data.signedUrl,
+    // Mismo cache-bust que uploadToStorage: el path es determinista + upsert.
+    publicUrl: `${storage.getPublicUrl(path).data.publicUrl}?v=${Date.now()}`,
+  }
+}
+
+/** Descarga un objeto del bucket como Buffer (video para el análisis forense). */
+export async function fetchAsBuffer(url: string): Promise<{ buffer: Buffer; mimeType: string }> {
+  let host: string
+  try { host = new URL(url).host } catch { throw new Error('Invalid URL') }
+  if (!allowedHosts().has(host)) throw new Error(`Refused to fetch non-storage URL: ${host}`)
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`Failed to fetch file: ${res.status}`)
+  return {
+    buffer: Buffer.from(await res.arrayBuffer()),
+    mimeType: res.headers.get('content-type') ?? 'video/mp4',
+  }
 }
 
 // URL pública de un path YA existente en el bucket (sin subir nada) — usado para leer refs

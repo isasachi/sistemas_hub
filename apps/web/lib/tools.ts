@@ -69,15 +69,21 @@ export const tools: Tool[] = [
     name: "Generador de Video Ads",
     slug: "generador-video-ads",
     description:
-      "Scripts y estructura para video ads que convierten en redes sociales.",
+      "Convierte un video que ya funciona —o un personaje generado— en tu propio video ad vertical.",
     longDescription:
-      "Crea scripts profesionales para videos publicitarios con gancho, desarrollo y llamada a la acción optimizados para cada plataforma.",
+      "Empieza con un video de referencia, con la foto de tu creador o dejando que lo inventemos. Desglosamos la referencia segundo a segundo, sacamos el esqueleto de su guión, lo rellenamos con tu producto y generamos el video vertical con voz en español.",
     icon: "Video",
     stage: "crear",
-    tag: "Pronto",
-    tagStyle: "neutral",
-    status: "soon",
-    pitch: "Scripts con gancho, desarrollo y CTA para tus video ads.",
+    tag: "IA Real",
+    tagStyle: "new",
+    status: "live",
+    pitch: "Un video que ya vende, rehecho con tu producto.",
+    // Sin `preview`: falta el asset /public/showcase/generador-video-ads.jpg. Al
+    // sembrarlo, añadir `preview: { kind: "image", ratio: "9/16" }`.
+    stats: [
+      { value: "3 caminos", label: "referencia, foto o IA" },
+      { value: "9:16", label: "listo para pautar" },
+    ],
   },
   {
     name: "Generador de Branding",
