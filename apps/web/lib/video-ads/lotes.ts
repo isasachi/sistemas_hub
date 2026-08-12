@@ -41,6 +41,9 @@ export const LoteSchema = z.object({
   taskId: z.string().nullable(),
   status: z.enum(['idle', 'waiting', 'queuing', 'generating', 'success', 'fail']),
   videoUrl: z.string().nullable(),
+  // Motivo de un `status: 'fail'` (viene de `TaskDetail.failMsg` en kie.ts). Sin esto
+  // la UI podía decir "el lote 2 falló" pero nunca por qué (fix round 1, Task 6).
+  failMsg: z.string().nullable(),
 })
 export type Lote = z.infer<typeof LoteSchema>
 
@@ -141,7 +144,7 @@ export function groupIntoLotes(tomas: TomaFinal[]): Lote[] {
       // pasó por `excedeTope` sobre el acumulado SIN redondear, así que este r1 no
       // puede esconder un exceso real — como mucho, es cosmético.
       duracionSeg: r1(acumulado),
-      prompt: '', taskId: null, status: 'idle', videoUrl: null,
+      prompt: '', taskId: null, status: 'idle', videoUrl: null, failMsg: null,
     })
     actual = []
     acumulado = 0

@@ -21,8 +21,24 @@ async function mirror(sessionId: string, name: string, kieUrl: string): Promise<
   }
 }
 
+// Host de nuestro proyecto Supabase — distingue una URL YA copiada al bucket de una
+// que se quedó apuntando al host de KIE porque el mirror de la vez anterior falló
+// (fix round 1: ese fallback era permanente y silencioso; el video moría a los 14
+// días sin que nadie lo reintentara).
+function ourStorageHost(): string | null {
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL
+  if (!base) return null
+  try { return new URL(base).host } catch { return null }
+}
+
+function isMirrored(url: string): boolean {
+  const host = ourStorageHost()
+  if (!host) return false
+  try { return new URL(url).host === host } catch { return false }
+}
+
 // Los taskId salen SIEMPRE de la fila, nunca del cliente: aceptarlos por query
-// convertiría la ruta en un proxy abierto a la cuenta de KIE.
+// convertiría la ruta en un proxy abierto a nuestra cuenta de la API externa.
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -36,12 +52,24 @@ export async function GET(
   let changed = false
 
   for (const l of session.lotes) {
-    if (l.videoUrl || !l.taskId) { lotes.push(l); continue }
+    if (l.videoUrl && isMirrored(l.videoUrl)) { lotes.push(l); continue }
+
+    if (l.videoUrl) {
+      // El mirror de la vez anterior falló y quedó apuntando al host de KIE: el video
+      // ya está listo, solo falta copiarlo — se reintenta sin volver a pedir recordInfo.
+      const videoUrl = await mirror(id, `lote-${l.n}`, l.videoUrl)
+      if (videoUrl !== l.videoUrl) changed = true
+      lotes.push({ ...l, videoUrl })
+      continue
+    }
+
+    if (!l.taskId) { lotes.push(l); continue }
+
     try {
       const d = await getTaskDetail(l.taskId)
       const videoUrl = d.videoUrl ? await mirror(id, `lote-${l.n}`, d.videoUrl) : null
-      if (d.state !== l.status || videoUrl) changed = true
-      lotes.push({ ...l, status: d.state, videoUrl })
+      if (d.state !== l.status || videoUrl || d.failMsg !== l.failMsg) changed = true
+      lotes.push({ ...l, status: d.state, videoUrl, failMsg: d.failMsg })
     } catch (err) {
       console.error('[video-ads/lote-status]', err)
       lotes.push(l)
