@@ -142,3 +142,5 @@ export interface VideoSessionResponse {
 
 export { ProductScanSchema }
 export type { ProductScan }
+
+export { ValidationMatrixSchema, type ValidationMatrix, type ValidationRow } from './validation'
