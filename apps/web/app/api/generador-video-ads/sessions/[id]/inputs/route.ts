@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getVideoSession, updateVideoSession } from '@/lib/video-ads/db'
 import { UserInputsSchema } from '@/lib/video-ads/types'
 import { buildValidationMatrix, canProceed } from '@/lib/video-ads/validation'
+import { STEP } from '@/lib/video-ads/steps'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -45,7 +46,7 @@ export async function POST(
     constraints: i.constraints,
     character_url: characterUrl,
     validation,
-    step: Math.max(session.step, 3),
+    step: Math.max(session.step, STEP.VALIDATION),
   })
 
   return NextResponse.json({ validation, canProceed: canProceed(validation) })

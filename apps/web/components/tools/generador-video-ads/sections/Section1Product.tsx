@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useVideoStore } from '@/store/video'
 import { FileUpload } from '@/components/tools/ui/FileUpload'
+import { STEP } from '@/lib/video-ads/steps'
 import type { ProductScan } from '@/lib/video-ads/types'
 import { btnPrimary, errorBox, spinner } from './shared'
 
@@ -28,10 +29,15 @@ export default function Section1Product() {
       fd.append('productName', inputs.productName)
       fd.append('whatItDoes', inputs.productDescription)
       fd.append('targetAudience', inputs.targetAudience)
+      // `angle` y `problem` viajan acá también (no solo al POST de /inputs del paso
+      // siguiente): sin esto se perdían al recargar entre pasos, y recuperarlos
+      // obligaba a re-subir la foto y pagar de nuevo el análisis de Gemini.
+      fd.append('angle', inputs.angle)
+      fd.append('problem', inputs.problem)
       const res = await fetch(`/api/generador-video-ads/sessions/${sessionId}/analyze-product`, { method: 'POST', body: fd })
       const data = (await res.json()) as { scan?: ProductScan; productUrl?: string; error?: string }
       if (!res.ok) throw new Error(data.error ?? 'No se pudo analizar el producto')
-      patch({ productUrl: data.productUrl!, productScan: data.scan!, step: 2 })
+      patch({ productUrl: data.productUrl!, productScan: data.scan!, step: STEP.CHARACTER })
     } catch (err) {
       setError((err as Error).message)
     } finally {

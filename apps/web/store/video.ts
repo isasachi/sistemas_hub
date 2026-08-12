@@ -4,6 +4,7 @@ import { create } from 'zustand'
 import type {
   ForensicReport, ProductScan, UserInputs, ValidationMatrix, ScriptTemplate, VideoSessionResponse,
 } from '@/lib/video-ads/types'
+import { STEP } from '@/lib/video-ads/steps'
 
 export const SESSION_KEY = 'video_ads_session_id'
 
@@ -32,7 +33,7 @@ export const EMPTY_INPUTS: UserInputs = {
 }
 
 const initialState: VideoState = {
-  sessionId: null, sessionError: false, step: 0, isLoading: false,
+  sessionId: null, sessionError: false, step: STEP.REFERENCE, isLoading: false,
   referenceVideoUrl: null, forensicAnalysis: null,
   productUrl: null, productScan: null, characterUrl: null,
   inputs: EMPTY_INPUTS, validation: null, template: null, regens: {},

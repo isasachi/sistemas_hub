@@ -6,6 +6,7 @@ import { readUserId } from '@/lib/product-hunter/session'
 import { ScriptTemplateSchema } from '@/lib/video-ads/types'
 import { buildTemplateInstruction } from '@/lib/video-ads/template'
 import { canProceed } from '@/lib/video-ads/validation'
+import { STEP } from '@/lib/video-ads/steps'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -41,7 +42,7 @@ export async function POST(
     const template = await callStructured('script_template', ScriptTemplateSchema, [
       { text: buildTemplateInstruction(session.forensic_analysis) },
     ])
-    await updateVideoSession(id, { step: 4, template })
+    await updateVideoSession(id, { step: STEP.TEMPLATE, template })
     await recordGenQuota(id, 'video-template', userId)
     return NextResponse.json({ template })
   } catch (err) {

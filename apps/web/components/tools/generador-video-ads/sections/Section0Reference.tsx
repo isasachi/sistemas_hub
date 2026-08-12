@@ -4,6 +4,7 @@ import { useRef, useState } from 'react'
 import { useVideoStore } from '@/store/video'
 import { FileUpload } from '@/components/tools/ui/FileUpload'
 import { uploadDirect, measureAsset, isPortrait, MAX_VIDEO_MB } from '@/lib/video-ads/upload-client'
+import { STEP } from '@/lib/video-ads/steps'
 import type { ForensicReport } from '@/lib/video-ads/types'
 import { btnPrimary, errorBox, warnBox, spinner } from './shared'
 
@@ -47,7 +48,7 @@ export default function Section0Reference() {
       })
       const data = (await res.json()) as { analysis?: ForensicReport; error?: string }
       if (!res.ok) throw new Error(data.error ?? 'No se pudo analizar el video')
-      patch({ referenceVideoUrl: videoUrl, forensicAnalysis: data.analysis!, step: 1 })
+      patch({ referenceVideoUrl: videoUrl, forensicAnalysis: data.analysis!, step: STEP.PRODUCT })
     } catch (err) {
       setError((err as Error).message)
     } finally {

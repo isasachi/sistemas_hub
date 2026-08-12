@@ -5,6 +5,7 @@ import { useVideoStore, SESSION_KEY } from '@/store/video'
 import type { VideoSessionResponse } from '@/lib/video-ads/types'
 import { capMaxReached } from '@/lib/video-ads/validation'
 import { fetchRegens } from '@/lib/gen-quota-client'
+import { STEP } from '@/lib/video-ads/steps'
 import { SessionErrorRetry } from '@/components/tools/ui/SessionErrorRetry'
 import StepWizard from '@/components/tools/ui/StepWizard'
 import Section0Reference from './sections/Section0Reference'
@@ -13,11 +14,14 @@ import Section2Character from './sections/Section2Character'
 import Section3Validation from './sections/Section3Validation'
 import Section4Template from './sections/Section4Template'
 
+// Array posicional: el orden es el orden real del riel. Cada posición corresponde
+// al índice del mismo nombre en `STEP` (lib/video-ads/steps.ts) — esa es la fuente
+// de verdad de a qué paso corresponde cada número, no este array.
 const SECTIONS = [Section0Reference, Section1Product, Section2Character, Section3Validation, Section4Template]
 
 // Índice de "Validación" en `SECTIONS`/`steps`: el riel no debe dejar saltar más
 // allá de acá mientras la FASE 0 tenga una crítica PENDIENTE.
-const VALIDATION_STEP = 3
+const VALIDATION_STEP = STEP.VALIDATION
 
 export default function VideoWizard() {
   const {
@@ -64,7 +68,7 @@ export default function VideoWizard() {
     {
       label: 'Producto',
       title: '¿Qué estás vendiendo y con qué ángulo?',
-      hint: 'La foto del producto entra tal cual al video. El ángulo reemplaza al del original, conservando su estructura.',
+      hint: 'La foto del producto es la fuente de verdad visual para el guión. El ángulo reemplaza al del original, conservando su estructura.',
     },
     {
       label: 'Personaje',

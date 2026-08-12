@@ -2,6 +2,7 @@
 
 import { useVideoStore } from '@/store/video'
 import { canProceed } from '@/lib/video-ads/validation'
+import { STEP } from '@/lib/video-ads/steps'
 import { btnPrimary, btnGhost, warnBox } from './shared'
 
 // FASE 0 en pantalla. El spec: "No avances a la adaptación final ni a la generación
@@ -49,8 +50,8 @@ export default function Section3Validation() {
         </div>
       )}
 
-      {!ok && <button onClick={() => setStep(2)} className={btnGhost}>← Volver a completar</button>}
-      <button onClick={() => patch({ step: 4 })} disabled={!ok} className={btnPrimary}>
+      {!ok && <button onClick={() => setStep(STEP.CHARACTER)} className={btnGhost}>← Volver a completar</button>}
+      <button onClick={() => patch({ step: STEP.TEMPLATE })} disabled={!ok} className={btnPrimary}>
         Extraer la plantilla →
       </button>
     </div>

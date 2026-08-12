@@ -4,6 +4,7 @@ import { useRef, useState } from 'react'
 import { useVideoStore } from '@/store/video'
 import { FileUpload } from '@/components/tools/ui/FileUpload'
 import { uploadDirect, measureAsset, isPortrait } from '@/lib/video-ads/upload-client'
+import { STEP } from '@/lib/video-ads/steps'
 import { btnPrimary, errorBox, warnBox, spinner } from './shared'
 
 // Paso 2: personaje y voz. Etnia y acento son campos LIBRES y obligatorios: el spec
@@ -67,7 +68,7 @@ export default function Section2Character() {
       })
       const data = (await res.json()) as { validation?: unknown; error?: string }
       if (!res.ok) throw new Error(data.error ?? 'No se pudieron guardar los datos')
-      patch({ validation: data.validation as never, step: 3 })
+      patch({ validation: data.validation as never, step: STEP.VALIDATION })
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -89,7 +90,8 @@ export default function Section2Character() {
       <FileUpload label="Foto del personaje (opcional)" accept="image/*" preview={preview} onFile={pickCharacter} />
       <p className="text-[12px] leading-relaxed text-[#8b8b8b]">
         Si la subes, es la fuente de verdad de la cara: edad, piel, cabello, facciones y
-        complexión salen de ahí. Si no, se genera a partir de tu descripción. Vertical.
+        complexión salen de ahí. Si no la subes, hoy no se genera ninguna foto — tu
+        descripción queda como referencia para el guión. Vertical.
       </p>
       {notVertical && <div className={warnBox}>{notVertical}</div>}
 
