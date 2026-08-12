@@ -1,16 +1,19 @@
 import type { Lote } from './lotes'
 
 /**
- * Lógica pura de orquestación del render por lotes (Task 6, fix round 1).
+ * Lógica pura de orquestación del render por lotes (Task 6, fix rounds 1 y 2).
  * ---------------------------------------------------------------------------
  * Separada de la ruta para poder probarla sin red: `generate-lotes/route.ts` pega
- * contra KIE, Supabase y `gen-quota`, pero la aritmética de cuánto cuesta reanudar
- * y qué se guarda cuando algo falla a mitad de camino no necesita nada de eso.
+ * contra KIE, Supabase y `gen-quota`, pero la aritmética de qué se guarda cuando
+ * algo falla a mitad de camino, quién puede reanudar y si eso cuenta como una
+ * generación nueva no necesita nada de eso.
  *
- * Estas tres funciones existen por un mismo motivo: un lote ya creado en KIE está
+ * Estas funciones existen por un mismo motivo: un lote ya creado en KIE está
  * PAGADO. Perder su `taskId` (recreándolo, o simplemente no guardándolo cuando algo
  * más adelante en el loop falla) es dinero gastado en un video que el usuario nunca
- * podrá ver ni recuperar.
+ * podrá ver ni recuperar. `isPaidResume` cubre el caso simétrico: dejar de cobrar
+ * una generación que SÍ se pagó, o cobrarla de más porque un cliente pidió
+ * "reanudar" sin que hubiera nada real que reanudar.
  */
 
 /** Suma la duración real de un array de lotes, placeholders incluidos: `duracionSeg`
@@ -36,6 +39,20 @@ export function resumeSeed(base: Lote[], existentes: Lote[]): Lote[] {
 }
 
 /**
+ * `true` solo si `resume` es una reanudación REAL — es decir, si ya existe al menos
+ * un `taskId` pagado en la sesión (fix round 2). Sin esta verificación, un cliente
+ * que mande `{ resume: true }` sobre una sesión que nunca llegó a gastar un centavo
+ * (por ejemplo, la primera llamada falló armando el prompt del lote 1 y nunca tocó
+ * KIE) se trataría como "ya pagó su generación" y se saltaría el cobro de
+ * `video-generation` — un hueco para no pagar nunca por la generación. El flag del
+ * cliente es una intención, no un hecho: el hecho es si `existentes` tiene algo
+ * pagado.
+ */
+export function isPaidResume(resume: boolean, existentes: Lote[]): boolean {
+  return resume && existentes.some((l) => l.taskId != null)
+}
+
+/**
  * Arma el array a persistir cuando el loop de creación no llega al final: los
  * primeros `completados.length` lotes son los que sí arrancaron (con `taskId` real,
  * ya pagados), y el resto sale de `seed` tal cual — placeholders `idle` sin tocar.
@@ -50,16 +67,4 @@ export function resumeSeed(base: Lote[], existentes: Lote[]): Lote[] {
  */
 export function mergeRescue(seed: Lote[], completados: Lote[]): Lote[] {
   return [...completados, ...seed.slice(completados.length)]
-}
-
-/**
- * `null` si la cuota alcanza para los `pendientes` lotes que faltan crear; si no,
- * el mensaje en español que ya arma la ruta (extraído para poder probar el cálculo
- * —el error real está en el signo de la desigualdad o en el redondeo del resto, no
- * en la redacción— sin mockear Supabase).
- */
-export function renderQuotaError(pendientes: number, usados: number, limit: number): string | null {
-  if (usados + pendientes <= limit) return null
-  const restantes = limit - usados
-  return `Este guión necesita ${pendientes} ${pendientes === 1 ? 'render' : 'renders'} y te ${restantes === 1 ? 'queda 1' : `quedan ${restantes}`}. Acorta el guión o empieza otra sesión.`
 }

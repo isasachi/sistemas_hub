@@ -2,6 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // Mock supabase: una tabla en memoria de filas { session_id, kind, gen_day }.
 const rows: Array<{ session_id: string | null; kind: string; gen_day: string }> = []
+// Sentinel para simular un error de DB específicamente en la query del backstop
+// GLOBAL (single `.eq('gen_day', day)`, sin `session_id`/`kind`) — distingue esa
+// query de la per-step (`.eq('session_id',...).eq('kind',...)`), que sigue
+// resolviendo normal aunque este flag esté en true.
+let forceGlobalError = false
 vi.mock('@supabase/supabase-js', () => ({
   createClient: () => ({
     from: () => ({
@@ -10,7 +15,11 @@ vi.mock('@supabase/supabase-js', () => ({
         const filters: Array<[string, unknown]> = []
         const chain = {
           eq(col: string, val: unknown) { filters.push([col, val]); return chain },
-          then(res: (v: { count: number; error: null }) => void) {
+          then(res: (v: { count: number; error: { message: string } | null }) => void) {
+            if (forceGlobalError && filters.length === 1 && filters[0][0] === 'gen_day') {
+              res({ count: 0, error: { message: 'simulated global backstop error' } })
+              return
+            }
             const n = rows.filter((r) => filters.every(([c, v]) => (r as Record<string, unknown>)[c] === v)).length
             res({ count: n, error: null })
           },
@@ -28,7 +37,9 @@ vi.mock('@supabase/supabase-js', () => ({
 vi.mock('../../lib/product-hunter/quota', () => ({ limaSearchDay: () => '2026-06-26' }))
 vi.mock('../../lib/product-hunter/session', () => ({ readUserId: async () => 'u1' }))
 
-import { checkGenQuota, recordGenQuota, GEN_PER_STEP_LIMIT, isImageKind } from '../../lib/gen-quota'
+import {
+  checkGenQuota, checkGlobalBackstop, recordGenQuota, GEN_PER_STEP_LIMIT, isImageKind, VIDEO_GENERATION_LIMIT,
+} from '../../lib/gen-quota'
 
 beforeEach(() => { rows.length = 0 })
 
@@ -93,6 +104,68 @@ describe('texto', () => {
   it('igual escribe fila (cuenta al backstop global)', async () => {
     await gen('s1', 'branding-names')
     expect(rows.length).toBe(1)
+  })
+})
+
+// Fix round 2 (Task 6): la cuota del render de video se mueve de "por lote"
+// (`video-render`) a "por video" (`video-generation`) — un guión de 2 lotes no debe
+// quedarse sin regeneraciones, ni uno de 4 quedar imposible de completar, cuando el
+// tope real es cuántas veces se intentó generar EL video, no cuántas llamadas a KIE
+// hizo ese intento.
+describe('video-generation: cuota por VIDEO, no por lote', () => {
+  it('video-generation entra al cap per-step; video-render queda AFUERA (ya no topa)', () => {
+    expect(isImageKind('video-generation')).toBe(true)
+    expect(isImageKind('video-render')).toBe(false)
+  })
+
+  it('permite VIDEO_GENERATION_LIMIT generaciones y bloquea la siguiente', async () => {
+    const out = []
+    for (let i = 0; i < VIDEO_GENERATION_LIMIT + 1; i++) out.push(await gen('s1', 'video-generation'))
+    expect(out.map((o) => o.blocked)).toEqual([...Array(VIDEO_GENERATION_LIMIT).fill(false), true])
+  })
+
+  it('video-render sigue escribiendo fila (backstop global) pero nunca bloquea per-step', async () => {
+    const out = []
+    for (let i = 0; i < 10; i++) out.push(await gen('s1', 'video-render'))
+    expect(out.every((o) => !o.blocked)).toBe(true)
+    expect(rows.filter((r) => r.kind === 'video-render').length).toBe(10)
+  })
+})
+
+describe('checkGlobalBackstop', () => {
+  it('no bloquea con pocas filas — misma capa que el paso 1 de checkGenQuota, sin el gate per-step', async () => {
+    await gen('s1', 'branding-logo') // 1 fila, lejos del backstop diario
+    expect((await checkGlobalBackstop()).blocked).toBeNull()
+  })
+
+  // Reanudar un render de video sigue gastando en KIE (crea tarea para los lotes
+  // pendientes), así que el backstop anti-abuso tiene que seguir aplicando aunque el
+  // gate per-step de `video-generation` no se vuelva a cobrar.
+  it('no toca el contador per-step de ningún kind (no inserta, solo lee)', async () => {
+    await checkGlobalBackstop()
+    expect(rows.length).toBe(0)
+  })
+})
+
+// Regresión del fix round 2: extraer el backstop global a `globalBackstop()`
+// (compartido por `checkGenQuota` y `checkGlobalBackstop`) no puede colapsar "la
+// query falló" y "dio bajo el límite" en el mismo `blocked: null` — si lo hiciera,
+// `checkGenQuota` seguiría de largo hacia el gate per-step en vez de fail-abrir de
+// una, cambiando el comportamiento de TODOS los kinds de imagen del hub (no solo
+// video) ante un error de DB.
+describe('checkGenQuota — un error en el backstop global fail-abre ANTES del gate per-step', () => {
+  it('con el per-step ya en su límite, un error de backstop igual devuelve blocked: null (no llega al paso 3)', async () => {
+    for (let i = 0; i < GEN_PER_STEP_LIMIT; i++) await gen('s-err', 'branding-logo')
+    expect((await checkGenQuota('s-err', 'branding-logo')).blocked).not.toBeNull() // control: sin el error, SÍ bloquea
+
+    forceGlobalError = true
+    try {
+      const { blocked, regensLeft } = await checkGenQuota('s-err', 'branding-logo')
+      expect(blocked).toBeNull()
+      expect(regensLeft).toBeNull()
+    } finally {
+      forceGlobalError = false
+    }
   })
 })
 

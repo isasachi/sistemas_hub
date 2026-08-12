@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getVideoSession, updateVideoSession } from '@/lib/video-ads/db'
+import { getVideoSession, updateVideoSession, claimFreshLotes } from '@/lib/video-ads/db'
 import { createVideoTask, clampDuration, KIE_PROMPT_MAX, type VideoImage } from '@/lib/video-ads/kie'
 import { groupIntoLotes, buildLotePrompt, type Lote } from '@/lib/video-ads/lotes'
-import { totalDuration, resumeSeed, mergeRescue, renderQuotaError } from '@/lib/video-ads/render-lotes'
+import { totalDuration, resumeSeed, mergeRescue, isPaidResume } from '@/lib/video-ads/render-lotes'
 import { AdaptedScriptSchema, type AdaptedScript } from '@/lib/video-ads/adapt'
-import { checkGenQuota, recordGenQuota, countGenUsage, VIDEO_RENDER_LIMIT } from '@/lib/gen-quota'
+import { checkGenQuota, checkGlobalBackstop, recordGenQuota, VIDEO_GENERATION_LIMIT } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 import { STEP } from '@/lib/video-ads/steps'
 
@@ -30,9 +30,13 @@ async function saveRescue(id: string, lotes: Lote[]) {
   }
 }
 
-// Un render por lote. La cuota se cobra por lote porque ese es el costo real: un
-// guión de 28 s son dos llamadas a KIE, no una. La UI avisa cuántos renders va a
-// consumir ANTES de arrancar (Section6Lotes).
+// Un render por lote sigue siendo una llamada pagada, pero la CUOTA (fix round 2) se
+// mide por VIDEO, no por lote: 1 generación + 2 regens sin importar cuántos lotes
+// tenga el guión. Un guión de 2 lotes no se queda sin regeneraciones y uno de 4 no
+// se topa antes de arrancar — el tope real es "¿cuántas veces intentaste generar ESTE
+// video?", no "¿cuántas llamadas a KIE hiciste?". Se sigue registrando una fila por
+// lote (kind 'video-render', ver gen-quota.ts) para conservar la visibilidad del
+// costo real y el backstop global diario, pero esa fila ya no topa nada por sí sola.
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -81,8 +85,8 @@ export async function POST(
   // doble submit (doble clic, StrictMode) o un reintento tras un fallo parcial pasan
   // AMBOS por acá, recalculan `base` desde cero y crean tareas NUEVAS para lotes que
   // ya tienen `taskId`: el taskId viejo, ya pagado, queda huérfano sin forma de verlo.
-  // Body vacío o no-JSON (la UI todavía no llama con `resume`, ver duda del round
-  // anterior) se trata como "no es un reintento explícito", no como error.
+  // Body vacío o no-JSON (la UI todavía no llama con `resume`) se trata como "no es
+  // un reintento explícito", no como error.
   let resume = false
   try {
     const body: unknown = await req.json()
@@ -102,34 +106,72 @@ export async function POST(
     )
   }
 
-  // Al reanudar, cada índice de `base` (determinista mientras `adapted.tomas` no
-  // cambie) se empareja con lo que ya estaba guardado en la misma posición: si ese
-  // lote ya tiene `taskId`, se conserva tal cual — esa tarea ya está pagada y no se
-  // recrea. Ver `resumeSeed` (render-lotes.ts).
-  const seed: Lote[] = resume ? resumeSeed(base, existentes) : base
+  // `resume` es la INTENCIÓN del cliente; `reanuda` es el HECHO — solo es una
+  // reanudación real si de verdad hay algo pagado (fix round 2). Un cliente que
+  // mande `resume: true` sobre una sesión que nunca gastó un centavo (el primer
+  // intento falló antes de crear ninguna tarea) NO se libra de pagar la generación:
+  // se lo trata como el primer intento real que es.
+  const reanuda = isPaidResume(resume, existentes)
+
+  // `wasVirgin`: la fila nunca fue tocada por esta ruta (`lotes` sigue en `null` en
+  // la DB, no `[]` ni un array de placeholders de un intento fallido). Es la única
+  // situación en la que el claim atómico de abajo puede aplicar sin rechazar de
+  // rebote un reintento legítimo (ver `claimFreshLotes` en db.ts).
+  const wasVirgin = session.lotes == null
+
+  const seed: Lote[] = reanuda ? resumeSeed(base, existentes) : base
   const pendientes = seed.filter((l) => !l.taskId)
   // Nada por crear: o reanuda una sesión ya completa, o es un doble submit sobre una
   // que terminó justo antes — de cualquier modo, no hay nada pagado de más que hacer.
   if (!pendientes.length) return NextResponse.json({ lotes: seed })
 
-  // La cuota se verifica para TODOS los lotes que van a crear tarea (no el total del
-  // guión: al reanudar, los ya pagados no cuentan otra vez) de una sola vez: medio
-  // video renderizado es dinero gastado en algo inservible.
-  //
-  // ⚠️ NO sirve llamar `checkGenQuota` N veces en un loop: solo LEE, no inserta, así
-  // que N llamadas devuelven la misma respuesta N veces — verifica N veces que
-  // alcanza para UNO, no que alcance para N.
-  const { blocked } = await checkGenQuota(id, 'video-render')
-  if (blocked) return blocked
-  const usados = await countGenUsage(id, 'video-render')
-  const quotaError = renderQuotaError(pendientes.length, usados, VIDEO_RENDER_LIMIT)
-  if (quotaError) return NextResponse.json({ error: quotaError }, { status: 429 })
+  // El backstop global diario aplica SIEMPRE que se vaya a llamar a KIE — reanudar
+  // también gasta (crea tarea para los lotes que quedaron pendientes). El gate
+  // per-video (`video-generation`, la cuota real ahora) NO aplica al reanudar: esa
+  // generación ya se cobró la primera vez, y cobrarla de nuevo dejaría al usuario sin
+  // forma de terminar un video que ya pagó.
+  if (reanuda) {
+    const { blocked } = await checkGlobalBackstop()
+    if (blocked) return blocked
+  } else {
+    const { blocked } = await checkGenQuota(id, 'video-generation')
+    if (blocked) {
+      return NextResponse.json(
+        {
+          error: `Ya generaste el máximo de videos para esta sesión (${VIDEO_GENERATION_LIMIT}). Empieza otra sesión para seguir.`,
+        },
+        { status: 429 },
+      )
+    }
+  }
+
+  // Claim atómico (fix round 2): SOLO para el primer intento real sobre una sesión
+  // nunca tocada. Cierra el race de un doble POST concurrente reclamando la fila
+  // ANTES de gastar en KIE — si dos requests llegan casi juntos, solo uno gana la
+  // escritura condicional y el otro corta acá, sin haber creado ninguna tarea
+  // pagada. Ver el comentario largo en `claimFreshLotes` (db.ts) para el porqué del
+  // alcance angosto (no cubre reintentos sobre una sesión ya tocada, aunque haya
+  // fallado por completo la primera vez).
+  if (!reanuda && wasVirgin) {
+    const claimed = await claimFreshLotes(id, { step: STEP.LOTES, lotes: seed, duration: totalDuration(seed) })
+    if (!claimed) {
+      return NextResponse.json(
+        { error: 'Esta sesión ya tiene un render en curso o parcialmente completado. Reanúdalo en vez de reiniciar.' },
+        { status: 409 },
+      )
+    }
+  }
 
   const lotes: Lote[] = []
   // Distinto de un fallo de red/KIE (500): un prompt que no entra ni al piso es un
   // problema del guión, no del servicio — se reporta 400 con el mensaje de
   // `buildLotePrompt` (ya en español, ya dice qué acortar) en vez del 500 genérico.
   let promptError: string | null = null
+  let apiError: unknown = null
+  // Cuántas tareas se crearon REALMENTE en esta llamada (no las reanudadas, que ya
+  // estaban pagadas de antes) — es lo único que decide si esta llamada cobra una
+  // `video-generation` nueva.
+  let creados = 0
 
   try {
     for (const lote of seed) {
@@ -174,29 +216,44 @@ export async function POST(
       }
 
       const taskId = await createVideoTask({ images, prompt, durationSec })
+      creados++
       lotes.push({ ...lote, duracionSeg: durationSec, prompt, taskId, status: 'waiting', videoUrl: null, failMsg: null })
+      // Fila por lote: visibilidad del costo real y backstop global diario. Ya NO topa
+      // per-step (kind fuera de IMAGE_KINDS) — el tope vive en 'video-generation'.
       await recordGenQuota(id, 'video-render', userId)
     }
-
-    if (promptError) {
-      // Los lotes que no llegaron a procesarse quedan como placeholder `idle` (no
-      // como si nunca hubieran existido): sin esto, un render de 3 lotes que corta en
-      // el 2 se guardaba con un array de largo 1, `lote-status` lo veía "completo"
-      // (`done = lotes.every(...)` sobre un array corto) y la sesión quedaba marcada
-      // terminada con dos tercios del video sin renderizar, sin salida para terminarla.
-      const rescatados = mergeRescue(seed, lotes)
-      await saveRescue(id, rescatados)
-      return NextResponse.json({ error: promptError, lotes: rescatados }, { status: 400 })
-    }
-
-    await updateVideoSession(id, { step: STEP.LOTES, lotes, duration: totalDuration(lotes) })
-    return NextResponse.json({ lotes })
   } catch (err) {
-    console.error('[video-ads/generate-lotes]', err)
+    apiError = err
+  }
+
+  // Una sola fila de `video-generation` por llamada que efectivamente gastó dinero,
+  // sin importar cuántos lotes creó ni si terminó en error — reanudar (`reanuda`)
+  // nunca cobra de nuevo, y un intento que no llegó a crear ninguna tarea (falló
+  // armando el prompt del primer lote) tampoco cobra: no se gastó nada.
+  if (!reanuda && creados > 0) {
+    await recordGenQuota(id, 'video-generation', userId)
+  }
+
+  if (promptError) {
+    // Los lotes que no llegaron a procesarse quedan como placeholder `idle` (no
+    // como si nunca hubieran existido): sin esto, un render de 3 lotes que corta en
+    // el 2 se guardaba con un array de largo 1, `lote-status` lo veía "completo"
+    // (`done = lotes.every(...)` sobre un array corto) y la sesión quedaba marcada
+    // terminada con dos tercios del video sin renderizar, sin salida para terminarla.
+    const rescatados = mergeRescue(seed, lotes)
+    await saveRescue(id, rescatados)
+    return NextResponse.json({ error: promptError, lotes: rescatados }, { status: 400 })
+  }
+
+  if (apiError) {
+    console.error('[video-ads/generate-lotes]', apiError)
     // Mismo rescate que en la rama de arriba: lo que sí arrancó (con taskId real) más
     // lo que queda como placeholder idle, para que la sesión sea reanudable.
     const rescatados = mergeRescue(seed, lotes)
     await saveRescue(id, rescatados)
     return NextResponse.json({ error: 'No se pudo iniciar el render de todos los lotes.' }, { status: 500 })
   }
+
+  await updateVideoSession(id, { step: STEP.LOTES, lotes, duration: totalDuration(lotes) })
+  return NextResponse.json({ lotes })
 }

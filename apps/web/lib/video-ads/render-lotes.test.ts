@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { totalDuration, resumeSeed, mergeRescue, renderQuotaError } from './render-lotes'
+import { totalDuration, resumeSeed, mergeRescue, isPaidResume } from './render-lotes'
 import type { Lote } from './lotes'
 
 const lote = (n: number, over: Partial<Lote> = {}): Lote => ({
@@ -85,25 +85,28 @@ describe('mergeRescue', () => {
   })
 })
 
-describe('renderQuotaError', () => {
-  it('null cuando lo usado más lo pendiente entra en el límite', () => {
-    expect(renderQuotaError(2, 0, 3)).toBeNull()
-    expect(renderQuotaError(1, 2, 3)).toBeNull()
+describe('isPaidResume', () => {
+  // El caso central del fix round 2: la cuota ahora se cobra por VIDEO, no por lote,
+  // y reanudar no debe volver a cobrar — pero SOLO si hay algo real que reanudar.
+  it('resume:true con al menos un taskId pagado es una reanudación real', () => {
+    const existentes = [lote(1, { taskId: 't1', status: 'waiting' }), lote(2)]
+    expect(isPaidResume(true, existentes)).toBe(true)
   })
 
-  it('mensaje cuando se pasa del límite, singular/plural correcto', () => {
-    // pendientes singular (1 render) contra una cuota ya agotada (0 restantes: plural).
-    expect(renderQuotaError(1, 3, 3)).toMatch(/necesita 1 render y te quedan 0\./)
-    // pendientes plural (2 renders) contra 1 restante (singular: "queda 1").
-    expect(renderQuotaError(2, 2, 3)).toMatch(/necesita 2 renders y te queda 1\./)
-    // pendientes plural contra 2 restantes (plural: "quedan 2").
-    expect(renderQuotaError(3, 0, 2)).toMatch(/necesita 3 renders y te quedan 2\./)
+  it('resume:true SIN ningún taskId pagado NO es una reanudación real (nada que reanudar)', () => {
+    // El disparador que motivó esta función: la primera llamada falló armando el
+    // prompt del lote 1 y nunca llegó a tocar KIE (0 gastado). Un cliente que mande
+    // `resume: true` de todos modos no puede colarse sin pagar la generación.
+    const existentes = [lote(1), lote(2)]
+    expect(isPaidResume(true, existentes)).toBe(false)
   })
 
-  it('reanudar reduce lo pendiente: 2 lotes ya pagados no cuentan contra el límite otra vez', () => {
-    // Guión de 3 lotes, 2 ya renderizados y pagados (usados=2), falta 1 por crear.
-    // Sin la distinción pendientes vs. total, esto se leería como "3 más" y bloquearía
-    // un reintento que en realidad solo necesita 1.
-    expect(renderQuotaError(1, 2, 3)).toBeNull()
+  it('resume:false nunca es reanudación real, tenga o no taskId pagados', () => {
+    const existentes = [lote(1, { taskId: 't1' })]
+    expect(isPaidResume(false, existentes)).toBe(false)
+  })
+
+  it('sin lotes existentes, nunca es reanudación real', () => {
+    expect(isPaidResume(true, [])).toBe(false)
   })
 })

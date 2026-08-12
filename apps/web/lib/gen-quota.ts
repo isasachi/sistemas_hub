@@ -14,6 +14,12 @@
  * checkGenQuota lee y decide ANTES de generar; recordGenQuota inserta DESPUÉS de un
  * éxito (un fallo no quema una regen). Tabla: ph_gen_usage —
  * migraciones 20260622000001_ph_gen_usage.sql + 20260626000002_ph_gen_usage_session.sql.
+ *
+ * `checkGlobalBackstop` expone SOLO la capa global (sin el gate per-step) para un
+ * caso puntual: el render de video por lotes (generate-lotes/route.ts) necesita
+ * seguir respetando el backstop anti-abuso cuando REANUDA un render pagado (sigue
+ * llamando a KIE, sigue costando), pero reanudar no debe chocar contra el gate
+ * per-step de `video-generation` — esa cuota ya se cobró la primera vez.
  */
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
@@ -40,29 +46,82 @@ export const GEN_PER_STEP_LIMIT = Number(process.env.GEN_PER_STEP_LIMIT ?? 4) //
 // `video-forensic` (análisis forense del video de referencia del generador de
 // video ads) es texto, no imagen — pero manda hasta 14 MB de video a Gemini, así
 // que es la llamada más cara de esa tool hoy. El tope vivía en `video-render`
-// (1 gen + 2 regens, ver VIDEO_RENDER_LIMIT) porque ese era el paso caro; el
-// render se eliminó de esta rama (lo reconstruye un plan posterior) y con él se
-// fue su cap, dejando el paso caro que SÍ sigue corriendo (`video-forensic`) sin
-// ningún tope per-step — solo el backstop global de 500/día, y "Extraer otra vez"
-// en Section4Template no vuelve a llamar Gemini sobre el video (usa el análisis ya
-// guardado), así que no necesita su propio cap. Se agrega acá con el límite
+// (1 gen + 2 regens) porque ese era el paso caro; el render se eliminó de esta
+// rama en su momento (lo reconstruyó un plan posterior) y con él se fue su cap,
+// dejando el paso caro que SÍ seguía corriendo (`video-forensic`) sin ningún tope
+// per-step — solo el backstop global de 500/día, y "Extraer otra vez" en
+// Section4Template no vuelve a llamar Gemini sobre el video (usa el análisis ya
+// guardado), así que no necesita su propio cap. Se agregó acá con el límite
 // genérico (GEN_PER_STEP_LIMIT) en vez de crear un tercer branch en `limitFor`:
 // es "razonable" sin tocar el comportamiento de ningún otro kind del hub.
-export const IMAGE_KINDS = ['branding-identidad', 'branding-logo', 'branding-etiqueta', 'branding-mockup', 'anuncios-image', 'landing-section', 'video-character', 'video-render', 'video-forensic']
+//
+// `video-render` YA NO está acá (fix round 2, Task 6): el render por lotes reveló
+// que topar por LOTE no tiene sentido — un guión de 2 lotes se quedaba sin
+// regeneraciones y uno de 4 nunca lograba renderizar, cuando 30 s (lo que suben los
+// usuarios) da 3-4 lotes según cómo caigan los cortes. El tope real es POR VIDEO
+// (`video-generation`, ver VIDEO_GENERATION_LIMIT más abajo): 1 fila por llamada a
+// `generate-lotes` que efectivamente arranca tareas, sin importar cuántos lotes
+// tenga ese guión. `video-render` se sigue registrando —una fila por lote, para
+// conservar la visibilidad del costo real y seguir contando al backstop global—
+// pero deja de tener tope per-step: por eso sale de este array.
+export const IMAGE_KINDS = ['branding-identidad', 'branding-logo', 'branding-etiqueta', 'branding-mockup', 'anuncios-image', 'landing-section', 'video-character', 'video-generation', 'video-forensic']
 export function isImageKind(kind: string): boolean {
   return IMAGE_KINDS.some((k) => kind === k || kind.startsWith(k + ':'))
 }
 
 // El render de video (Grok vía KIE) cuesta un orden de magnitud más que una imagen,
-// así que tiene su propio tope: 1 generación + 2 regens, en vez del 1+3 general.
-export const VIDEO_RENDER_LIMIT = Number(process.env.GEN_VIDEO_LIMIT ?? 3)
+// así que tiene su propio tope — pero por VIDEO, no por lote: 1 generación + 2
+// regens para TODO el video, sin importar en cuántas llamadas a KIE se reparta su
+// guión (`groupIntoLotes` puede partirlo en 1, 2, 3... lotes de hasta 15 s cada uno).
+export const VIDEO_GENERATION_LIMIT = Number(process.env.GEN_VIDEO_LIMIT ?? 3)
 function limitFor(kind: string): number {
-  return kind === 'video-render' ? VIDEO_RENDER_LIMIT : GEN_PER_STEP_LIMIT
+  return kind === 'video-generation' ? VIDEO_GENERATION_LIMIT : GEN_PER_STEP_LIMIT
 }
 
 // regens restantes DESPUÉS de la gen nº `count+1` para un step con `count` filas previas.
 export function regensLeftFor(count: number, kind = ''): number {
   return Math.max(0, limitFor(kind) - Math.max(1, count))
+}
+
+/**
+ * Backstop global diario puro (cuenta imagen + texto, cualquier kind). Extraído para
+ * que `checkGlobalBackstop` (solo esta capa) y `checkGenQuota` (esta capa + el gate
+ * per-step) compartan la misma lectura en vez de tener el número 500/día en dos
+ * lugares que se puedan desincronizar.
+ *
+ * `failed` es DISTINTO de "no bloqueado" — importa que el caller no los confunda:
+ * `checkGenQuota` fail-abre ante un error de DB (con la DB caída no bloqueamos), pero
+ * fail-abrir significa devolver `blocked: null` DIRECTO, saltándose el paso 2/3 (el
+ * gate per-step). Colapsar "la query de backstop falló" y "la query dio bajo el
+ * límite" en el mismo `null` haría que `checkGenQuota` siguiera de largo hacia el
+ * gate per-step en vez de fail-abrir — cambiaría su comportamiento para TODOS los
+ * kinds de imagen del hub (branding/anuncios/landing), no solo para el video nuevo.
+ */
+async function globalBackstop(): Promise<{ blocked: Response | null; failed: boolean }> {
+  const db = getDb()
+  const day = limaSearchDay()
+  const { count: globalCount, error: gErr } = await db
+    .from('ph_gen_usage').select('*', { count: 'exact', head: true }).eq('gen_day', day)
+  if (gErr) { console.error('[gen-quota] global:', gErr.message); return { blocked: null, failed: true } }
+  if ((globalCount ?? 0) >= GEN_GLOBAL_DAILY_LIMIT) {
+    return { blocked: Response.json({ error: 'El servicio alcanzó su límite diario de generaciones. Vuelve mañana.' }, { status: 429 }), failed: false }
+  }
+  return { blocked: null, failed: false }
+}
+
+/**
+ * Solo el backstop global, SIN el gate per-step — para una llamada que sí va a
+ * gastar (crea tarea real en un proveedor) pero no debe chocar contra un tope
+ * per-step pensado para otra cosa. Hoy el único caller es "reanudar" un render de
+ * video: ya pagó su `video-generation`, pero seguir creando tareas para los lotes
+ * que quedaron pendientes sigue costando y tiene que respetar el backstop anti-abuso
+ * igual que cualquier otra llamada cara del hub.
+ *
+ * Fail-open ante error de DB, igual que el resto del módulo (`failed` se descarta a
+ * propósito: acá no hay un paso 2/3 del que fail-abrir tenga que saltarse).
+ */
+export async function checkGlobalBackstop(): Promise<{ blocked: Response | null }> {
+  return { blocked: (await globalBackstop()).blocked }
 }
 
 /**
@@ -78,19 +137,18 @@ export async function checkGenQuota(
   sessionId: string | null,
   kind: string,
 ): Promise<{ blocked: Response | null; regensLeft: number | null }> {
-  const db = getDb()
-  const day = limaSearchDay()
-
-  // 1. Backstop global diario (cuenta imagen + texto).
-  const { count: globalCount, error: gErr } = await db
-    .from('ph_gen_usage').select('*', { count: 'exact', head: true }).eq('gen_day', day)
-  if (gErr) { console.error('[gen-quota] global:', gErr.message); return { blocked: null, regensLeft: null } }
-  if ((globalCount ?? 0) >= GEN_GLOBAL_DAILY_LIMIT) {
-    return { blocked: Response.json({ error: 'El servicio alcanzó su límite diario de generaciones. Vuelve mañana.' }, { status: 429 }), regensLeft: null }
-  }
+  // 1. Backstop global diario (cuenta imagen + texto). `failed` fail-abre ACÁ
+  // (return inmediato, nunca llega al paso 2/3) — si se colapsara con "no bloqueado"
+  // sin distinguir, un error de DB en este conteo dejaría seguir de largo hacia el
+  // gate per-step en vez de fail-abrir de una, cambiando el comportamiento de fondo
+  // para TODOS los kinds de imagen (branding/anuncios/landing), no solo video.
+  const global = await globalBackstop()
+  if (global.failed || global.blocked) return { blocked: global.blocked, regensLeft: null }
 
   // 2. Texto: sin tope per-step.
   if (!isImageKind(kind) || !sessionId) return { blocked: null, regensLeft: null }
+
+  const db = getDb()
 
   // 3. Per-step (imagen): count(session_id, kind).
   const { count: stepCount, error: sErr } = await db
@@ -117,12 +175,11 @@ export async function recordGenQuota(sessionId: string | null, kind: string, use
 }
 
 /**
- * Cuenta las generaciones ya registradas de un (sesión, kind).
- *
- * `checkGenQuota` responde "¿alcanza para UNA más?", que es lo que necesita cualquier
- * paso normal. El render por lotes necesita otra pregunta: "¿alcanza para N más?" —
- * llamar N veces a checkGenQuota NO la responde, porque no inserta nada y devolvería
- * la misma respuesta N veces.
+ * Cuenta las generaciones ya registradas de un (sesión, kind). Utilidad genérica de
+ * solo lectura (por ejemplo, para mostrarle al usuario "usaste X de Y") — el render
+ * por lotes usó esto en su primera versión para una cuota "por lote" que se abandonó
+ * (fix round 2: la cuota real es por VIDEO, un simple `checkGenQuota` por llamada
+ * alcanza) pero se deja la utilidad porque sigue siendo válida en general.
  *
  * Fail-open ante error de DB, igual que el resto del módulo: con la DB caída no
  * bloqueamos (el backstop global sigue siendo la red de seguridad).
