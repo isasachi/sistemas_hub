@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { groupIntoLotes, LOTE_MAX_SEC } from './lotes'
+import { groupIntoLotes, LOTE_MAX_SEC, LoteSchema } from './lotes'
 import type { TomaFinal } from './adapt'
 
 const toma = (n: number, duracionSeg: number, locucion = `linea ${n}`): TomaFinal => ({
@@ -63,5 +63,95 @@ describe('groupIntoLotes', () => {
 
   it('sin tomas devuelve lista vacía', () => {
     expect(groupIntoLotes([])).toEqual([])
+  })
+
+  // CRITICAL (fix round 1) — caso reproducido por el revisor: una frase corta ("Ok.")
+  // seguida de una larga hace que el reparto proporcional por caracteres deje casi toda
+  // la duración en el fragmento largo, que solo se pasaba del tope. La v1 no lo
+  // re-verificaba tras dividir; ahora `splitLongToma` recurre sobre cada fragmento hasta
+  // que quepa, así que el invariante (ningún lote > 15 s) se sostiene también acá.
+  it('una frase corta seguida de una larga no produce un lote sobre el tope', () => {
+    const larga = toma(1, 16, 'Ok. ' + 'palabra '.repeat(150) + '.')
+    const l = groupIntoLotes([larga])
+    for (const x of l) expect(x.duracionSeg).toBeLessThanOrEqual(LOTE_MAX_SEC)
+  })
+
+  // IMPORTANT (fix round 1) — los fragmentos de una toma dividida ya no comparten `n`:
+  // colisionarían al rotular "Toma N" en el prompt de Task 5 (dos "Toma 1" distintas).
+  it('los fragmentos de una toma dividida tienen n únicos y sin huecos', () => {
+    const larga = toma(1, 40, 'Primera frase. Segunda frase. Tercera frase. Cuarta frase.')
+    const l = groupIntoLotes([larga])
+    const ns = l.flatMap((x) => x.tomas.map((t) => t.n))
+    expect(new Set(ns).size).toBe(ns.length)
+    expect(ns).toEqual(Array.from({ length: ns.length }, (_, i) => i + 1))
+  })
+
+  // IMPORTANT (fix round 1) — una duración NaN nunca hacía `> LOTE_MAX_SEC` (toda
+  // comparación con NaN es falsa), así que el lote nunca cerraba y fusionaba TODO el
+  // resto del guión. Caso exacto reproducido por el revisor.
+  it('una duración NaN no fusiona el resto del guión en un solo lote', () => {
+    const tomas = [toma(1, 5), { ...toma(2, 0), duracionSeg: NaN }, toma(3, 14), toma(4, 14)]
+    const l = groupIntoLotes(tomas)
+    expect(l.length).toBeGreaterThan(1)
+    for (const x of l) {
+      expect(Number.isFinite(x.duracionSeg)).toBe(true)
+      expect(x.duracionSeg).toBeLessThanOrEqual(LOTE_MAX_SEC)
+    }
+  })
+
+  // IMPORTANT (fix round 1) — con duración Infinity, `Math.ceil(Infinity / 15)` es
+  // Infinity y `Array.from({ length: Infinity })` lanzaba RangeError: una sola toma
+  // malformada tiraba abajo toda la función.
+  it('una duración Infinity no revienta la función', () => {
+    expect(() => groupIntoLotes([{ ...toma(1, 0), duracionSeg: Infinity }])).not.toThrow()
+    const l = groupIntoLotes([{ ...toma(1, 0), duracionSeg: Infinity }])
+    for (const x of l) expect(x.duracionSeg).toBeLessThanOrEqual(LOTE_MAX_SEC)
+  })
+
+  // MINOR (fix round 1) — duración cero o negativa se saneaba a 0 implícitamente (no
+  // se dividía), lo que podía desplazar la acumulación sin que nadie lo notara.
+  it('duración cero o negativa no rompe el agrupado', () => {
+    const l = groupIntoLotes([toma(1, 5), { ...toma(2, 0), duracionSeg: 0 }, { ...toma(3, 0), duracionSeg: -3 }])
+    for (const x of l) {
+      expect(x.duracionSeg).toBeGreaterThan(0)
+      expect(x.duracionSeg).toBeLessThanOrEqual(LOTE_MAX_SEC)
+    }
+  })
+
+  // MINOR (fix round 1) — `status` ahora es un enum, no un string libre.
+  it('LoteSchema rechaza un status fuera del enum', () => {
+    const [lote] = groupIntoLotes([toma(1, 5)])
+    expect(() => LoteSchema.parse({ ...lote, status: 'bogus' })).toThrow()
+    expect(() => LoteSchema.parse(lote)).not.toThrow()
+  })
+
+  // Property test: entrada generada con muchas tomas de duración variada (incluida una
+  // larga que fuerza split) — el invariante debe sostenerse sobre TODOS los lotes:
+  // ninguno vacío, ninguno sobre el tope, numeración sin huecos, texto completo y sin
+  // duplicar.
+  it('invariante sobre una entrada generada: sin vacíos, sin exceso, numeración sin huecos, texto íntegro', () => {
+    const duraciones = [3, 7, 1, 9.5, 2, 30, 4.4, 12, 0.5, 6, 15, 8, 22, 1.1, 9]
+    // Sufijo no-numérico ("end") tras el índice: evita que "token1end" sea substring
+    // de "token14end" al contar ocurrencias más abajo.
+    const tomas = duraciones.map((d, i) => toma(i + 1, d, `token${i}end`))
+    const l = groupIntoLotes(tomas)
+
+    expect(l.length).toBeGreaterThan(0)
+    for (const lote of l) {
+      expect(lote.tomas.length).toBeGreaterThan(0)
+      expect(lote.duracionSeg).toBeGreaterThan(0)
+      expect(lote.duracionSeg).toBeLessThanOrEqual(LOTE_MAX_SEC)
+      for (const t of lote.tomas) expect(t.duracionSeg).toBeLessThanOrEqual(LOTE_MAX_SEC)
+    }
+
+    const todasLasN = l.flatMap((x) => x.tomas.map((t) => t.n))
+    expect(todasLasN).toEqual(Array.from({ length: todasLasN.length }, (_, i) => i + 1))
+
+    // Cada token único del guión original aparece exactamente una vez en la salida.
+    const textoSalida = l.flatMap((x) => x.tomas.map((t) => t.locucion)).join(' ')
+    for (let i = 0; i < duraciones.length; i++) {
+      const ocurrencias = textoSalida.split(`token${i}end`).length - 1
+      expect(ocurrencias).toBe(1)
+    }
   })
 })

@@ -19,7 +19,12 @@ import type { ProductScan } from '@/lib/types'
 export const TomaFinalSchema = z.object({
   n: z.number(),
   tiempoOriginal: z.string(),
-  duracionSeg: z.number(),
+  // .finite().positive(): esta duración la produce un LLM y de acá sale directo a
+  // groupIntoLotes (lotes.ts), que suma duraciones para decidir dónde cortar cada
+  // lote de generación (llamada PAGADA a KIE). Un NaN/Infinity/0 aquí es más barato
+  // de atajar en el parse (falla ruidoso, se reintenta) que en el algoritmo de
+  // agrupación (lotes.ts igual se defiende, pero esa es la última línea, no la primera).
+  duracionSeg: z.number().finite().positive(),
   accionVisual: z.string(),
   personaje: z.string(),
   producto: z.string(),
