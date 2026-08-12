@@ -24,7 +24,13 @@ export async function POST(
   if (!parsed.success) return NextResponse.json({ error: 'Datos incompletos' }, { status: 400 })
   const i = parsed.data
 
-  const validation = buildValidationMatrix(i, !!session.character_url)
+  // El personaje sube DIRECTO al bucket (uploadDirect) antes de este POST, así que
+  // esta es la única ruta que persiste `character_url` en la sesión. `i.characterUrl`
+  // manda si llega (foto recién subida en este mismo paso); si no, conservamos lo
+  // que la fila ya tenía. Sin este merge la matriz nunca podía confirmar "Personaje"
+  // por imagen: `session.character_url` se quedaba en null para siempre.
+  const characterUrl = i.characterUrl ?? session.character_url ?? null
+  const validation = buildValidationMatrix(i, !!characterUrl)
 
   await updateVideoSession(id, {
     product_name: i.productName,
@@ -37,6 +43,7 @@ export async function POST(
     accent: i.accent,
     voice: i.voice,
     constraints: i.constraints,
+    character_url: characterUrl,
     validation,
     step: Math.max(session.step, 3),
   })

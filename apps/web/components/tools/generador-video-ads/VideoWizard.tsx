@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react'
 import { useVideoStore, SESSION_KEY } from '@/store/video'
 import type { VideoSessionResponse } from '@/lib/video-ads/types'
+import { capMaxReached } from '@/lib/video-ads/validation'
 import { fetchRegens } from '@/lib/gen-quota-client'
 import { SessionErrorRetry } from '@/components/tools/ui/SessionErrorRetry'
 import StepWizard from '@/components/tools/ui/StepWizard'
@@ -14,9 +15,13 @@ import Section4Template from './sections/Section4Template'
 
 const SECTIONS = [Section0Reference, Section1Product, Section2Character, Section3Validation, Section4Template]
 
+// Índice de "Validación" en `SECTIONS`/`steps`: el riel no debe dejar saltar más
+// allá de acá mientras la FASE 0 tenga una crítica PENDIENTE.
+const VALIDATION_STEP = 3
+
 export default function VideoWizard() {
   const {
-    step, sessionId, sessionError,
+    step, sessionId, sessionError, validation,
     startNewSession, hydrateFromSession, setStep, setRegens,
   } = useVideoStore()
 
@@ -39,6 +44,8 @@ export default function VideoWizard() {
   const prevSession = useRef(sessionId)
   if (prevSession.current !== sessionId) { prevSession.current = sessionId; maxStep.current = 0 }
   maxStep.current = Math.max(maxStep.current, step)
+
+  const gatedMaxReached = capMaxReached(maxStep.current, validation, VALIDATION_STEP)
 
   if (sessionError && !sessionId) {
     return (
@@ -76,14 +83,20 @@ export default function VideoWizard() {
     },
   ]
 
-  const current = Math.min(step, steps.length - 1)
+  // Capado también acá, no solo en `maxReached`: `patch({ step: 4 })` (el botón de
+  // Section3Validation) y `hydrateFromSession` (el `step` de la DB, monótono) son
+  // dos formas de aterrizar en "Plantilla" que NO pasan por el riel. Sin este tope,
+  // invalidar la matriz después de haber llegado a "Plantilla" una vez dejaba esa
+  // pantalla visible en el siguiente hidratado de sesión, aunque el riel ya no
+  // dejara hacer clic ahí.
+  const current = Math.min(step, gatedMaxReached, steps.length - 1)
   const Section = SECTIONS[current]
 
   return (
     <StepWizard
       steps={steps}
       current={current}
-      maxReached={maxStep.current}
+      maxReached={gatedMaxReached}
       onNavigate={setStep}
       backHref="/tools/generador-video-ads"
       onReset={startNewSession}

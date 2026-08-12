@@ -80,3 +80,16 @@ export function buildValidationMatrix(
 export function canProceed(matrix: ValidationMatrix): boolean {
   return !matrix.rows.some((r) => r.critica && r.estado === 'PENDIENTE')
 }
+
+/**
+ * Tope del riel del wizard (conveniencia de UI, no el guard real — ver
+ * `extract-template/route.ts`). `maxReached` es monótono creciente por diseño (el
+ * riel no debe "olvidar" pasos ya vistos), pero eso solo, sin este tope, deja el
+ * paso más allá de la validación clickeable aunque la matriz haya vuelto a
+ * PENDIENTE: completar la FASE 0, volver a "Personaje", vaciar un campo crítico y
+ * reenviar no debe reabrir "Plantilla" en el riel.
+ */
+export function capMaxReached(maxReached: number, matrix: ValidationMatrix | null, gateStep: number): number {
+  const ok = !!matrix && canProceed(matrix)
+  return ok ? maxReached : Math.min(maxReached, gateStep)
+}

@@ -5,6 +5,7 @@ import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 import { ScriptTemplateSchema } from '@/lib/video-ads/types'
 import { buildTemplateInstruction } from '@/lib/video-ads/template'
+import { canProceed } from '@/lib/video-ads/validation'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -26,6 +27,15 @@ export async function POST(
   if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (!session.forensic_analysis)
     return NextResponse.json({ error: 'Analiza el video de referencia primero' }, { status: 409 })
+  // Guard real de la FASE 0: el cliente deshabilita el botón mientras haya una
+  // crítica PENDIENTE, pero eso es conveniencia — es evitable navegando el riel o
+  // pegándole directo a la ruta. Esto es lo que de verdad impide extraer la
+  // plantilla con datos sin confirmar.
+  if (!session.validation || !canProceed(session.validation))
+    return NextResponse.json(
+      { error: 'Completa la validación de datos antes de extraer la plantilla' },
+      { status: 409 },
+    )
 
   try {
     const template = await callStructured('script_template', ScriptTemplateSchema, [

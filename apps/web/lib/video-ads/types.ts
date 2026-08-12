@@ -23,6 +23,11 @@ export const UserInputsSchema = z.object({
   accent: z.string(),
   voice: z.string(),
   constraints: z.string(),
+  // Opcional: el personaje sube DIRECTO al bucket (uploadDirect), así que esta es
+  // la única forma en que la URL llega a la ruta de `inputs` para persistirse en
+  // la sesión. Sin esto `character_url` se quedaba en null para siempre y la
+  // fila "Personaje" de la matriz nunca podía confirmarse por imagen.
+  characterUrl: z.string().url().optional(),
 })
 export type UserInputs = z.infer<typeof UserInputsSchema>
 

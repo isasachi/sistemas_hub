@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildValidationMatrix, canProceed, CONFIRMACION_REQUERIDA } from './validation'
+import { buildValidationMatrix, canProceed, capMaxReached, CONFIRMACION_REQUERIDA } from './validation'
 import type { UserInputs } from './types'
 
 const FULL: UserInputs = {
@@ -75,5 +75,31 @@ describe('canProceed', () => {
   it('lista las pendientes para mostrarlas en el wizard', () => {
     const m = buildValidationMatrix({ ...FULL, accent: '', problem: '' }, false)
     expect(m.pending.sort()).toEqual(['Acento', 'Problema / deseo'])
+  })
+})
+
+// Repro de la revisión (Task 7, fix round 1): `maxReached` del riel es monótono
+// creciente, así que completar la matriz una vez, volver a "Personaje", vaciar un
+// campo crítico y reenviar dejaba "Plantilla" clickeable en el riel aunque la
+// matriz hubiera vuelto a PENDIENTE. `capMaxReached` es el tope que cierra ese hueco.
+describe('capMaxReached', () => {
+  const OK = buildValidationMatrix(FULL, false)
+  const PENDING = buildValidationMatrix({ ...FULL, accent: '' }, false)
+  const VALIDATION_STEP = 3
+
+  it('con la matriz OK, no topa nada: se puede llegar hasta donde ya se llegó', () => {
+    expect(capMaxReached(4, OK, VALIDATION_STEP)).toBe(4)
+  })
+
+  it('sin validation todavía (nunca se completó el paso), topa en el gate', () => {
+    expect(capMaxReached(4, null, VALIDATION_STEP)).toBe(VALIDATION_STEP)
+  })
+
+  it('con una crítica PENDIENTE, topa en el gate aunque ya se hubiera llegado más lejos', () => {
+    expect(capMaxReached(4, PENDING, VALIDATION_STEP)).toBe(VALIDATION_STEP)
+  })
+
+  it('si nunca se pasó del gate, el tope no cambia nada (Math.min no sube el valor)', () => {
+    expect(capMaxReached(1, PENDING, VALIDATION_STEP)).toBe(1)
   })
 })

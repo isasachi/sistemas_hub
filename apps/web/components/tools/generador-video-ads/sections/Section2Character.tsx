@@ -35,7 +35,12 @@ export default function Section2Character() {
     setLoading(true)
     try {
       const url = await uploadDirect(sessionId, 'character', f)
-      patch({ characterUrl: url })
+      // `uploadDirect` solo sube al bucket, no toca la sesión: el propio `submit`
+      // manda `characterUrl` junto con el resto de `inputs` a la ruta `/inputs`,
+      // que recién ahí lo persiste en `video_sessions.character_url`. Sin este
+      // segundo patch a `inputs`, la matriz de validación nunca confirmaba
+      // "Personaje" por imagen aunque la foto ya estuviera en el bucket.
+      patch({ characterUrl: url, inputs: { ...inputs, characterUrl: url } })
     } catch (err) {
       setError((err as Error).message)
     } finally {

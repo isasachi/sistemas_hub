@@ -28,7 +28,7 @@ interface VideoState {
 export const EMPTY_INPUTS: UserInputs = {
   productName: '', productDescription: '', angle: '', targetAudience: '',
   problem: '', characterDesc: '', characterEthnicity: '', accent: '',
-  voice: '', constraints: '',
+  voice: '', constraints: '', characterUrl: undefined,
 }
 
 const initialState: VideoState = {
@@ -77,6 +77,10 @@ export const useVideoStore = create<VideoState & VideoActions>((set) => ({
         accent: s.accent ?? '',
         voice: s.voice ?? '',
         constraints: s.constraints ?? '',
+        // Solo para que `inputs` refleje lo persistido; el submit real de
+        // Section2Character lo toma del `characterUrl` de nivel superior (recién
+        // subido puede ir más adelantado que lo que ya hidrató la sesión).
+        characterUrl: s.character_url ?? undefined,
       },
       validation: s.validation,
       template: s.template,
