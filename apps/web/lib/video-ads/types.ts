@@ -1,5 +1,8 @@
 import { z } from 'zod'
 import { ProductScanSchema, type ProductScan } from '@/lib/types'
+import type { ForensicReport } from './forensic'
+import type { ScriptTemplate } from './template'
+import type { ValidationMatrix } from './validation'
 
 // ─── INPUTS DEL USUARIO (spec: "INPUTS DEL USUARIO") ─────────────────────────
 //
@@ -32,21 +35,10 @@ export {
 
 // ─── Plantilla del guión (fill in the blank) ─────────────────────────────────
 
-// El esqueleto conserva la estructura literal de la referencia y marca con
-// [corchetes] SOLO las palabras de contenido intercambiables:
-//   "5 razones por las cuales los [producto común] generan [padecimiento] y no lo sabías"
-export const ScriptSlotSchema = z.object({
-  t: z.string(),
-  pattern: z.string(),
-  blanks: z.array(z.string()), // los nombres de los blancos que aparecen en pattern
-})
-export type ScriptSlot = z.infer<typeof ScriptSlotSchema>
-
-export const ScriptTemplateSchema = z.object({
-  slots: z.array(ScriptSlotSchema).min(1),
-  summaryForUser: z.string(),
-})
-export type ScriptTemplate = z.infer<typeof ScriptTemplateSchema>
+export {
+  ScriptTemplateSchema, TomaTemplateSchema,
+  type ScriptTemplate, type TomaTemplate,
+} from './template'
 
 // ─── Guión final ─────────────────────────────────────────────────────────────
 
@@ -94,7 +86,7 @@ export interface VideoSessionResponse {
   created_at: string
   step: number
   reference_video_url: string | null
-  forensic_analysis: ForensicAnalysis | null
+  forensic_analysis: ForensicReport | null
   character_url: string | null
   product_url: string | null
   product_scan: ProductScan | null
@@ -108,9 +100,8 @@ export interface VideoSessionResponse {
   accent: string | null
   voice: string | null
   constraints: string | null
-  script_template: ScriptTemplate | null
-  script_versions: ScriptVersions | null
-  direction: VideoDirection | null
+  validation: ValidationMatrix | null
+  template: ScriptTemplate | null
   confirmed_script: ConfirmedScript | null
   video_prompt: string | null
   duration: number | null
