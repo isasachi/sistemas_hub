@@ -25,31 +25,10 @@ export type UserInputs = z.infer<typeof UserInputsSchema>
 
 // ─── Línea 1: análisis forense del video de referencia ───────────────────────
 
-// Un beat = un tramo del video. El análisis es segundo a segundo: el modelo debe
-// emitir un beat por cada cambio visual o de discurso, con su marca de tiempo.
-export const ForensicBeatSchema = z.object({
-  t: z.string(),            // "0:00–0:03"
-  visual: z.string(),       // qué se ve
-  dialogue: z.string(),     // lo que se dice (vacío si no hay)
-  onScreenText: z.string(), // texto sobreimpreso (vacío si no hay)
-  camera: z.string(),       // encuadre + movimiento
-  emotion: z.string(),      // tono/energía del talento
-})
-export type ForensicBeat = z.infer<typeof ForensicBeatSchema>
-
-export const ForensicAnalysisSchema = z.object({
-  durationSec: z.number(),
-  aspectRatio: z.string(),
-  subject: z.string(),         // quién aparece y cómo va vestido
-  setting: z.string(),         // dónde
-  productHandling: z.string(), // cómo se muestra/manipula el producto
-  audio: z.string(),           // voz, música, ambiente
-  hookType: z.string(),        // qué tipo de gancho usa los primeros segundos
-  persuasiveLogic: z.string(), // por qué convence, en una frase
-  beats: z.array(ForensicBeatSchema).min(1),
-  summaryForUser: z.string(),  // resumen en español para mostrar en el wizard
-})
-export type ForensicAnalysis = z.infer<typeof ForensicAnalysisSchema>
+export {
+  ForensicReportSchema, CorteSchema, TomaSchema,
+  type ForensicReport, type Corte, type Toma,
+} from './forensic'
 
 // ─── Plantilla del guión (fill in the blank) ─────────────────────────────────
 
