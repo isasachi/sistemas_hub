@@ -44,6 +44,16 @@ export const LoteSchema = z.object({
   // Motivo de un `status: 'fail'` (viene de `TaskDetail.failMsg` en kie.ts). Sin esto
   // la UI podía decir "el lote 2 falló" pero nunca por qué (fix round 1, Task 6).
   failMsg: z.string().nullable(),
+  // Huella del contenido con el que se renderizó ESTE lote (`scriptFingerprint`,
+  // render-lotes.ts). `groupIntoLotes` no la conoce —depende de la sesión entera, no
+  // de las tomas— así que nace en `null` y la estampa `generate-lotes/route.ts` sobre
+  // todos los lotes de una misma llamada. Al reanudar se compara contra la huella
+  // recalculada: si el guión (o el personaje, o la voz) cambió, reanudar mezclaría un
+  // lote ya renderizado del contenido VIEJO con lotes nuevos del contenido ACTUAL, y
+  // el video sale incoherente (fix round 4, Task 6). Va acá adentro y no en una
+  // columna nueva a propósito: `lotes` ya es jsonb y un string hexadecimal cruza ese
+  // ida y vuelta sin transformarse, así que no hace falta migración.
+  scriptHash: z.string().nullable(),
 })
 export type Lote = z.infer<typeof LoteSchema>
 
@@ -145,6 +155,9 @@ export function groupIntoLotes(tomas: TomaFinal[]): Lote[] {
       // puede esconder un exceso real — como mucho, es cosmético.
       duracionSeg: r1(acumulado),
       prompt: '', taskId: null, status: 'idle', videoUrl: null, failMsg: null,
+      // Nace en null: la huella depende de la sesión completa (personaje, voz,
+      // producto, escenario), no solo de las tomas — la estampa el caller.
+      scriptHash: null,
     })
     actual = []
     acumulado = 0

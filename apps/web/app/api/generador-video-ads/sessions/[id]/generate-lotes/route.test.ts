@@ -64,6 +64,18 @@ const ADAPTED_2_LOTES = {
   variablesPendientes: [] as string[],
 }
 
+// Un guión COMPLETAMENTE distinto que igual produce 2 lotes: mismas duraciones, otro
+// texto. Es el caso del fix round 4 y no es exótico — los lotes se arman empaquetando
+// tomas en buckets de hasta 15 s, así que dos adaptaciones de duración parecida caen en
+// la misma cantidad de lotes de forma rutinaria.
+const ADAPTED_2_LOTES_OTRO_TEXTO = {
+  ...ADAPTED_2_LOTES,
+  tomas: [
+    { ...toma(1, 10), accionVisual: 'otra acción distinta', locucion: 'otro guión completamente distinto' },
+    { ...toma(2, 10), accionVisual: 'segunda acción distinta', locucion: 'segunda línea distinta' },
+  ],
+}
+
 function session(overrides: Partial<VideoSessionResponse> = {}): VideoSessionResponse {
   return {
     id: 's1',
@@ -77,6 +89,33 @@ function session(overrides: Partial<VideoSessionResponse> = {}): VideoSessionRes
     lotes: null,
     ...overrides,
   } as unknown as VideoSessionResponse
+}
+
+/**
+ * Corre un primer render completo sobre una sesión virgen y devuelve los lotes tal
+ * como quedarían GUARDADOS en la fila: pasados por `JSON.parse(JSON.stringify(...))`,
+ * que es el ida y vuelta que sufre un jsonb.
+ *
+ * Los fixtures de reanudación se arman con esto y no a mano a propósito: la huella
+ * (`scriptHash`) la calcula la ruta, y un fixture con un hash escrito a mano pasaría
+ * el test mientras el camino real falla. Este helper es la única forma de verificar
+ * que la huella sobrevive el viaje por la DB.
+ */
+async function renderInicial(over: Partial<VideoSessionResponse> = {}): Promise<Lote[]> {
+  vi.mocked(getVideoSession).mockResolvedValue(session(over))
+  const res = await POST(req(), ctx())
+  expect(res.status).toBe(200)
+  const body = await res.json()
+  vi.clearAllMocks() // se limpian las llamadas del primer render; las implementaciones siguen
+  return JSON.parse(JSON.stringify(body.lotes)) as Lote[]
+}
+
+/** Simula el estado "el lote 1 se pagó, el 2 quedó pendiente" a partir de un render
+ *  completo — el fallo parcial que hace que reanudar tenga sentido. */
+function conPendiente(guardados: Lote[]): Lote[] {
+  return guardados.map((l, i) =>
+    i === 0 ? l : { ...l, taskId: null, prompt: '', status: 'idle' as const, videoUrl: null },
+  )
 }
 
 describe('POST generate-lotes — fix round 2: cuota por video, no por lote', () => {
@@ -105,19 +144,18 @@ describe('POST generate-lotes — fix round 2: cuota por video, no por lote', ()
   })
 
   it('reanudar (resume:true) con un lote ya pagado NO vuelve a cobrar video-generation', async () => {
-    const yaPagado: Lote = {
-      n: 1, tomas: [], duracionSeg: 10, prompt: 'ya armado', taskId: 't1',
-      status: 'waiting', videoUrl: null, failMsg: null,
-    }
-    const pendiente: Lote = { n: 2, tomas: [], duracionSeg: 10, prompt: '', taskId: null, status: 'idle', videoUrl: null, failMsg: null }
-    // 2 lotes existentes (mismo largo que ADAPTED_2_LOTES, el default de `session()`)
-    // — el guión NO cambió de forma, solo falta terminar de renderizar el lote 2.
+    // Fixture desde el camino real (render completo → jsonb → reanudación): el guión
+    // NO cambió, solo falta terminar de renderizar el lote 2.
+    const guardados = await renderInicial()
     vi.mocked(getVideoSession).mockResolvedValue(
-      session({ lotes: [yaPagado, pendiente] as unknown as VideoSessionResponse['lotes'] }),
+      session({ lotes: conPendiente(guardados) as unknown as VideoSessionResponse['lotes'] }),
     )
 
     const res = await POST(req({ resume: true }), ctx())
     expect(res.status).toBe(200)
+    // El lote ya pagado sobrevive intacto: la huella cruzó el ida y vuelta por jsonb.
+    const reanudado = await res.json()
+    expect(reanudado.lotes[0].taskId).toBe(guardados[0].taskId)
 
     // Solo el lote 2 (pendiente) crea tarea nueva; el lote 1 se conserva tal cual.
     expect(createVideoTask).toHaveBeenCalledTimes(1)
@@ -132,7 +170,7 @@ describe('POST generate-lotes — fix round 2: cuota por video, no por lote', ()
   it('resume:true SIN ningún taskId pagado se trata como intento nuevo: SÍ cobra', async () => {
     // Placeholders de un intento anterior que falló por completo (0 gastado) — un
     // cliente que mande resume:true igual no se libra de pagar la generación.
-    const idle: Lote = { n: 1, tomas: [], duracionSeg: 10, prompt: '', taskId: null, status: 'idle', videoUrl: null, failMsg: null }
+    const idle: Lote = { n: 1, tomas: [], duracionSeg: 10, prompt: '', taskId: null, status: 'idle', videoUrl: null, failMsg: null, scriptHash: null }
     vi.mocked(getVideoSession).mockResolvedValue(
       session({ lotes: [idle, { ...idle, n: 2 }] as unknown as VideoSessionResponse['lotes'] }),
     )
@@ -237,7 +275,7 @@ describe('POST generate-lotes — fix round 3', () => {
   it('el guión se re-adaptó a más lotes: resume:true NO evita el cobro ni reusa el taskId viejo', async () => {
     const viejo: Lote = {
       n: 1, tomas: [], duracionSeg: 10, prompt: 'guión viejo', taskId: 't-old',
-      status: 'waiting', videoUrl: null, failMsg: null,
+      status: 'waiting', videoUrl: null, failMsg: null, scriptHash: 'huella-vieja',
     }
     // `session()` trae ADAPTED_2_LOTES (2 lotes) por defecto; `existentes` solo tiene
     // 1 → el guión "creció" respecto de lo que se pagó la última vez.
@@ -261,8 +299,8 @@ describe('POST generate-lotes — fix round 3', () => {
   })
 
   it('el guión se re-adaptó a menos lotes: resume:true tampoco lo trata como reanudación, y loguea los taskId abandonados', async () => {
-    const viejo1: Lote = { n: 1, tomas: [], duracionSeg: 10, prompt: 'v1', taskId: 't-old-1', status: 'waiting', videoUrl: null, failMsg: null }
-    const viejo2: Lote = { n: 2, tomas: [], duracionSeg: 10, prompt: 'v2', taskId: 't-old-2', status: 'waiting', videoUrl: null, failMsg: null }
+    const viejo1: Lote = { n: 1, tomas: [], duracionSeg: 10, prompt: 'v1', taskId: 't-old-1', status: 'waiting', videoUrl: null, failMsg: null, scriptHash: 'huella-vieja' }
+    const viejo2: Lote = { n: 2, tomas: [], duracionSeg: 10, prompt: 'v2', taskId: 't-old-2', status: 'waiting', videoUrl: null, failMsg: null, scriptHash: 'huella-vieja' }
     // 2 lotes pagados de antes; ADAPTED_2_LOTES (el default de `session()`) también
     // produce 2 — para forzar el encogido, uso un guión de 1 sola toma corta.
     vi.mocked(getVideoSession).mockResolvedValue(session({
@@ -284,9 +322,109 @@ describe('POST generate-lotes — fix round 3', () => {
     // Pero abandonarlos deja rastro: no es lo mismo "se perdió" que "se perdió y
     // quedó quién preguntó por qué" (mismo criterio que `saveRescue` desde el round 1).
     expect(errSpy).toHaveBeenCalledWith(
-      expect.stringContaining('el guión cambió de forma'),
+      expect.stringContaining('el guión cambió'),
       expect.arrayContaining(['t-old-1', 't-old-2']),
     )
+    errSpy.mockRestore()
+  })
+})
+
+describe('POST generate-lotes — fix round 4: huella de contenido', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(claimFreshLotes).mockResolvedValue(true)
+    vi.mocked(checkGenQuota).mockResolvedValue({ blocked: null, regensLeft: null })
+    vi.mocked(checkGlobalBackstop).mockResolvedValue({ blocked: null })
+    vi.mocked(createVideoTask).mockImplementation(async () => `task-${Math.random()}`)
+  })
+
+  // EL HUECO QUE FALTABA: mismo largo, distinto contenido. El guard de la cantidad de
+  // lotes (round 3) no lo veía, y la revisión lo reprodujo ejecutándolo — `lote1.prompt`
+  // con el texto del guión VIEJO y su taskId intacto, `lote2` con el del guión NUEVO:
+  // un video que mezcla dos guiones. Con la huella, esto ya no es una reanudación.
+  it('el guión se re-adaptó a otro texto con la MISMA cantidad de lotes: no reanuda, cobra y no mezcla', async () => {
+    const guardados = await renderInicial() // render del guión original (2 lotes)
+    const promptViejo = guardados[0].prompt
+    const taskIdViejo = guardados[0].taskId
+
+    // Mismo estado que una reanudación legítima (lote 1 pagado, lote 2 pendiente),
+    // pero el guión guardado en la sesión ya es OTRO — misma cantidad de lotes.
+    vi.mocked(getVideoSession).mockResolvedValue(session({
+      lotes: conPendiente(guardados) as unknown as VideoSessionResponse['lotes'],
+      adapted: ADAPTED_2_LOTES_OTRO_TEXTO,
+    }))
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    const res = await POST(req({ resume: true }), ctx())
+    expect(res.status).toBe(200)
+    const body = await res.json()
+
+    // El síntoma medido por la revisión: NINGÚN lote conserva el render viejo.
+    expect(body.lotes).toHaveLength(2)
+    expect(body.lotes.some((l: Lote) => l.taskId === taskIdViejo)).toBe(false)
+    expect(body.lotes.some((l: Lote) => l.prompt === promptViejo)).toBe(false)
+    expect(createVideoTask).toHaveBeenCalledTimes(2) // los 2 lotes se rehacen de cero
+
+    // Y es una generación nueva a todos los efectos: pasa por el gate per-video (no
+    // por el backstop-only de reanudar) y cobra.
+    expect(checkGenQuota).toHaveBeenCalledWith('s1', 'video-generation')
+    expect(checkGlobalBackstop).not.toHaveBeenCalled()
+    const generationCalls = vi.mocked(recordGenQuota).mock.calls.filter((c) => c[1] === 'video-generation')
+    expect(generationCalls).toHaveLength(1)
+
+    // El taskId abandonado queda logueado CON el id de sesión (sin él, atar un mp4
+    // rescatado a mano en KIE con su dueño depende del contexto del request).
+    expect(errSpy).toHaveBeenCalledWith(
+      expect.stringContaining('sesión s1'),
+      expect.arrayContaining([taskIdViejo]),
+    )
+    errSpy.mockRestore()
+  })
+
+  // Decisión para las filas escritas antes de que existiera la huella: no se reanudan.
+  it('sesión legada sin huella (scriptHash ausente): se trata como generación nueva', async () => {
+    const guardados = await renderInicial()
+    const legado = conPendiente(guardados).map((l) => {
+      const { scriptHash: _sinHuella, ...resto } = l
+      return resto as Lote
+    })
+    vi.mocked(getVideoSession).mockResolvedValue(
+      session({ lotes: legado as unknown as VideoSessionResponse['lotes'] }),
+    )
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    const res = await POST(req({ resume: true }), ctx())
+    expect(res.status).toBe(200)
+
+    expect(checkGenQuota).toHaveBeenCalledWith('s1', 'video-generation')
+    const generationCalls = vi.mocked(recordGenQuota).mock.calls.filter((c) => c[1] === 'video-generation')
+    expect(generationCalls).toHaveLength(1)
+    const body = await res.json()
+    expect(body.lotes.some((l: Lote) => l.taskId === guardados[0].taskId)).toBe(false)
+    errSpy.mockRestore()
+  })
+
+  // El falso positivo del round 3: el log de abandono estaba ARRIBA del gate de cuota,
+  // así que se disparaba incluso cuando el 429 cortaba sin escribir nada — mandando a
+  // perseguir una pérdida que nunca ocurrió.
+  it('si el gate de cuota corta con 429, NO se loguea ningún taskId abandonado', async () => {
+    const guardados = await renderInicial()
+    vi.mocked(getVideoSession).mockResolvedValue(session({
+      lotes: conPendiente(guardados) as unknown as VideoSessionResponse['lotes'],
+      adapted: ADAPTED_2_LOTES_OTRO_TEXTO, // huella distinta → no es reanudación
+    }))
+    vi.mocked(checkGenQuota).mockResolvedValue({
+      blocked: Response.json({ error: 'generic' }, { status: 429 }),
+      regensLeft: 0,
+    })
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    const res = await POST(req({ resume: true }), ctx())
+    expect(res.status).toBe(429)
+
+    expect(createVideoTask).not.toHaveBeenCalled()
+    expect(updateVideoSession).not.toHaveBeenCalled() // nada se pisó: nada se abandonó
+    expect(errSpy).not.toHaveBeenCalled()
     errSpy.mockRestore()
   })
 })

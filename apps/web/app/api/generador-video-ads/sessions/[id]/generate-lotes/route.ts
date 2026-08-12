@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getVideoSession, updateVideoSession, claimFreshLotes } from '@/lib/video-ads/db'
 import { createVideoTask, clampDuration, KIE_PROMPT_MAX, type VideoImage } from '@/lib/video-ads/kie'
 import { groupIntoLotes, buildLotePrompt, type Lote } from '@/lib/video-ads/lotes'
-import { totalDuration, resumeSeed, mergeRescue, isPaidResume } from '@/lib/video-ads/render-lotes'
+import { totalDuration, resumeSeed, mergeRescue, isPaidResume, scriptFingerprint } from '@/lib/video-ads/render-lotes'
 import { AdaptedScriptSchema, type AdaptedScript } from '@/lib/video-ads/adapt'
 import { checkGenQuota, checkGlobalBackstop, recordGenQuota, VIDEO_GENERATION_LIMIT } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
@@ -23,7 +23,9 @@ async function saveRescue(id: string, lotes: Lote[]) {
     await updateVideoSession(id, { step: STEP.LOTES, lotes, duration: totalDuration(lotes) })
   } catch (err) {
     console.error(
-      '[video-ads/generate-lotes] no se pudo guardar el rescate; taskId ya pagados:',
+      // Con el id de sesión: un mp4 recuperado a mano desde KIE hay que devolvérselo a
+      // ALGUIEN, y sin el id eso depende de encontrar el request que lo generó.
+      `[video-ads/generate-lotes] sesión ${id}: no se pudo guardar el rescate; taskId ya pagados:`,
       lotes.filter((l) => l.taskId).map((l) => l.taskId),
       err,
     )
@@ -78,8 +80,27 @@ export async function POST(
     { url: session.product_url, role: 'el producto' },
   ]
 
-  const base = groupIntoLotes(adapted.tomas)
-  if (!base.length) return NextResponse.json({ error: 'El guión no tiene tomas' }, { status: 409 })
+  // Se resuelven una sola vez, acá: son parte del prompt de CADA lote y también de la
+  // huella de contenido, así que calcularlos dos veces (una para hashear y otra para
+  // renderizar) sería la forma más fácil de que la huella deje de describir lo que
+  // realmente se renderizó.
+  const productDesc = session.product_scan?.productDescription ?? adapted.tomas[0]?.producto ?? 'el producto'
+  const escenario = session.forensic_analysis?.fondo ?? 'interior con luz natural'
+  const camara = session.forensic_analysis?.cortes[0]?.camara ?? 'primer plano, cámara en mano'
+
+  const agrupados = groupIntoLotes(adapted.tomas)
+  if (!agrupados.length) return NextResponse.json({ error: 'El guión no tiene tomas' }, { status: 409 })
+
+  // Huella del contenido de ESTE intento (guión + personaje + voz + producto +
+  // escenario + cámara + imágenes). Se estampa en todos los lotes que se persistan
+  // —incluidos los placeholders `idle` de un rescate parcial— para que la próxima
+  // llamada pueda comprobar, sin adivinar, si está reanudando el MISMO video o
+  // empezando otro distinto (ver `isPaidResume`).
+  const huella = scriptFingerprint({
+    lotes: agrupados, consistencyBlock: session.consistency_block, productDesc,
+    escenario, camara, voz: session.voice_profile, images,
+  })
+  const base: Lote[] = agrupados.map((l) => ({ ...l, scriptHash: huella }))
 
   // Reanudar es explícito (`{ resume: true }` en el body), no automático — si no, un
   // doble submit (doble clic, StrictMode) o un reintento tras un fallo parcial pasan
@@ -95,12 +116,15 @@ export async function POST(
     /* sin body o no-JSON */
   }
 
-  // ⚠️ Este guard es también la razón por la que las "+2 regens" de
-  // VIDEO_GENERATION_LIMIT son inalcanzables hoy dentro de una sesión (nota de
+  // ⚠️ Este guard es la razón por la que, MIENTRAS EL CONTENIDO NO CAMBIE, las "+2
+  // regens" de VIDEO_GENERATION_LIMIT son inalcanzables dentro de una sesión (nota de
   // diseño completa en gen-quota.ts, junto a esa constante): en cuanto la primera
-  // llamada crea una tarea, todo POST sin `resume` cae acá (409) y todo `resume`
-  // entra por `isPaidResume` sin volver a cobrar. No hay ningún camino que registre
-  // una segunda `video-generation` para la misma sesión.
+  // llamada crea una tarea, todo POST sin `resume` cae acá (409) y todo `resume` de
+  // ese mismo contenido entra por `isPaidResume` sin volver a cobrar. El camino que SÍ
+  // registra una segunda `video-generation` es re-hacer el guión (o el personaje o la
+  // voz) y volver a llamar: ahí la huella deja de coincidir, no es reanudación, y se
+  // cobra como lo que es — un video nuevo. Ese camino está topado por el límite, que
+  // es exactamente para lo que existe.
   const existentes = session.lotes ?? []
   if (existentes.some((l) => l.taskId) && !resume) {
     return NextResponse.json(
@@ -113,24 +137,11 @@ export async function POST(
   }
 
   // `resume` es la INTENCIÓN del cliente; `reanuda` es el HECHO — solo es una
-  // reanudación real si de verdad hay algo pagado Y el guión sigue teniendo la misma
-  // forma que cuando se pagó (fix rounds 2 y 3; ver el comentario largo en
-  // `isPaidResume`, render-lotes.ts, para el porqué del chequeo de longitud).
-  const reanuda = isPaidResume(resume, existentes, base)
-
-  // El guión cambió de forma (`existentes.length !== base.length`) mientras había
-  // taskId pagados de antes: `reanuda` da `false` a propósito (no hay forma segura
-  // de reusarlos, ver `isPaidResume`) y esos taskId NO viajan a `seed` — se
-  // abandonan. Abandonarlos es correcto (el render viejo ya no corresponde a este
-  // guión), pero abandonarlos EN SILENCIO es la misma clase de fallo que el rescate
-  // del round 1 existe para evitar: un log es la diferencia entre "se perdió" y "se
-  // perdió, pero queda quién preguntó por qué".
-  if (!reanuda && existentes.some((l) => l.taskId)) {
-    console.error(
-      `[video-ads/generate-lotes] el guión cambió de forma (existentes: ${existentes.length} lotes → base: ${base.length}) — se abandonan taskId ya pagados:`,
-      existentes.filter((l) => l.taskId).map((l) => l.taskId),
-    )
-  }
+  // reanudación real si de verdad hay algo pagado Y lo guardado lleva la huella del
+  // contenido que se va a renderizar ahora (fix rounds 2, 3 y 4; el porqué completo,
+  // incluido qué entra en la huella, está en `isPaidResume`/`scriptFingerprint`,
+  // render-lotes.ts).
+  const reanuda = isPaidResume(resume, existentes, base, huella)
 
   // `wasVirgin`: la fila nunca fue tocada por esta ruta (`lotes` sigue en `null` en
   // la DB, no `[]` ni un array de placeholders de un intento fallido). Es la única
@@ -162,6 +173,31 @@ export async function POST(
         { status: 429 },
       )
     }
+  }
+
+  // Había taskId pagados pero esta llamada NO es una reanudación (huella distinta, o
+  // distinta cantidad de lotes): `reanuda` da `false` a propósito —el render viejo ya
+  // no corresponde a este contenido— y esos taskId no viajan a `seed`, se abandonan.
+  // Abandonarlos es correcto; abandonarlos EN SILENCIO es la misma clase de fallo que
+  // el rescate del round 1 existe para evitar, así que quedan logueados con el id de
+  // sesión (el mp4 se puede rescatar a mano desde KIE y hay que saber de quién es).
+  //
+  // El log va DEBAJO del gate de cuota, no arriba (fix round 4): arriba se disparaba
+  // igual cuando el gate cortaba con 429 y no se escribía nada — un falso positivo que
+  // manda a perseguir una pérdida que nunca ocurrió. Acá abajo ya está decidido que
+  // esta llamada sigue y va a pisar lo guardado. No hace falta bajarlo aún más (debajo
+  // del claim): `existentes.some(taskId)` implica `session.lotes != null`, o sea
+  // `wasVirgin === false`, así que este caso nunca llega a intentar el claim.
+  if (!reanuda && existentes.some((l) => l.taskId)) {
+    // El motivo exacto importa para diagnosticar: "otra cantidad de lotes" y "misma
+    // cantidad, otro contenido" se ven idénticos en la fila y se investigan distinto.
+    const motivo = existentes.length !== base.length
+      ? `otra cantidad de lotes (${existentes.length} → ${base.length})`
+      : 'misma cantidad de lotes pero otro contenido (huella distinta)'
+    console.error(
+      `[video-ads/generate-lotes] sesión ${id}: el guión cambió — ${motivo}; se abandonan taskId ya pagados:`,
+      existentes.filter((l) => l.taskId).map((l) => l.taskId),
+    )
   }
 
   // Claim atómico (fix round 2): SOLO para el primer intento real sobre una sesión
@@ -210,9 +246,9 @@ export async function POST(
         prompt = buildLotePrompt({
           lote: loteParaPrompt,
           consistencyBlock: session.consistency_block,
-          productDesc: session.product_scan?.productDescription ?? adapted.tomas[0]?.producto ?? 'el producto',
-          escenario: session.forensic_analysis?.fondo ?? 'interior con luz natural',
-          camara: session.forensic_analysis?.cortes[0]?.camara ?? 'primer plano, cámara en mano',
+          productDesc,
+          escenario,
+          camara,
           voz: session.voice_profile,
           images,
         })

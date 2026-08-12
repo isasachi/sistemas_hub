@@ -1,7 +1,9 @@
-import type { Lote } from './lotes'
+import { createHash } from 'crypto'
+import type { Lote, LoteImage } from './lotes'
+import type { VoiceProfile } from './character'
 
 /**
- * Lógica pura de orquestación del render por lotes (Task 6, fix rounds 1 y 2).
+ * Lógica pura de orquestación del render por lotes (Task 6, fix rounds 1 a 4).
  * ---------------------------------------------------------------------------
  * Separada de la ruta para poder probarla sin red: `generate-lotes/route.ts` pega
  * contra KIE, Supabase y `gen-quota`, pero la aritmética de qué se guarda cuando
@@ -38,9 +40,82 @@ export function resumeSeed(base: Lote[], existentes: Lote[]): Lote[] {
   return base.map((lote, i) => (existentes[i]?.taskId ? existentes[i] : lote))
 }
 
+/** Separador de campos del texto canónico de `scriptFingerprint`. Un carácter de
+ *  control que no aparece en texto escrito por humanos ni en URLs; además cada lista
+ *  va precedida por su largo, así que dos contenidos distintos no pueden producir el
+ *  mismo texto canónico "corriendo" el separador de lugar. */
+const SEP = '\u0001'
+
+/** Normaliza un número para el texto canónico. Redondea a milésimas (las duraciones
+ *  vienen con 1-2 decimales reales; el resto es ruido de suma de floats) y colapsa
+ *  `-0`/no-finitos, para que la huella no cambie por un dígito que nadie ve. */
+const num = (n: number) => (Number.isFinite(n) ? String(Math.round(n * 1000) / 1000 + 0) : 'NaN')
+
+/**
+ * Huella determinista del CONTENIDO con el que se renderiza un video: si dos llamadas
+ * producen la misma huella, renderizar lote por lote en cualquier orden (o en dos
+ * tandas separadas por una reanudación) da un video coherente; si difiere, no.
+ *
+ * Qué entra, y por qué es más que "el guión adaptado" — ensanchamiento deliberado:
+ * todo lo que `generate-lotes` le pasa a `buildLotePrompt`/`createVideoTask`. No solo
+ * las tomas, también el bloque de consistencia, la descripción del producto, el
+ * escenario, la cámara, el perfil de voz y las URLs de las imágenes. Motivo: volver a
+ * correr la FASE 4/4.5 (identidad y voz) cambia la PERSONA que el modelo genera. Un
+ * "resume" a través de ese cambio pegaría un lote con la señora del intento anterior
+ * y otro con la del intento nuevo — exactamente la misma incoherencia que re-adaptar
+ * el guión, por otra puerta. El precio de incluirlos: re-hacer el personaje también
+ * invalida la reanudación (se cobra una generación nueva). Es el lado correcto del
+ * intercambio: un video mezclado es basura, una generación de más es recuperable.
+ *
+ * Qué NO entra: nada de estado mutable del lote (`prompt`, `taskId`, `status`,
+ * `videoUrl`, `failMsg` ni el propio `scriptHash`). Meter cualquiera de esos la
+ * volvería auto-referencial o dependiente del intento, y entonces la huella de la
+ * segunda llamada nunca podría coincidir con la guardada.
+ *
+ * Los campos se extraen UNO POR UNO en orden fijo en vez de `JSON.stringify(obj)`:
+ * Postgres reordena las claves de un jsonb al guardarlo, así que el texto de un
+ * stringify no es estable a través del ida y vuelta por la DB. Hoy ambos lados leen
+ * de jsonb y coincidirían igual, pero un caller futuro que compare contra un objeto
+ * recién construido en memoria se comería un falso negativo silencioso.
+ */
+export function scriptFingerprint(input: {
+  lotes: Lote[]
+  consistencyBlock: string
+  productDesc: string
+  escenario: string
+  camara: string
+  voz: VoiceProfile
+  images: LoteImage[]
+}): string {
+  const { lotes, consistencyBlock, productDesc, escenario, camara, voz, images } = input
+  const campos: string[] = [
+    // Versión del formato canónico: si algún día cambia qué entra en la huella, este
+    // prefijo hace que las huellas viejas no coincidan (que es lo correcto: dejan de
+    // ser comparables) en vez de coincidir por casualidad.
+    'v1',
+    consistencyBlock, productDesc, escenario, camara,
+    voz.idioma, voz.varianteRegional, voz.acento, voz.pronunciacion, voz.ritmo,
+    voz.velocidad, voz.entonacion, voz.energia, voz.pausas, voz.tono, voz.timbre,
+    voz.edadVocal, voz.estilo,
+    String(images.length),
+  ]
+  for (const img of images) campos.push(img.url, img.role)
+  campos.push(String(lotes.length))
+  for (const l of lotes) {
+    campos.push(String(l.n), num(l.duracionSeg), String(l.tomas.length))
+    for (const t of l.tomas) {
+      campos.push(
+        String(t.n), num(t.duracionSeg), t.accionVisual, t.personaje, t.producto,
+        t.locucion, t.tiempoOriginal,
+      )
+    }
+  }
+  return createHash('sha256').update(campos.join(SEP)).digest('hex')
+}
+
 /**
  * `true` solo si `resume` es una reanudación REAL y SEGURA de reanudar por índice.
- * Dos condiciones, ninguna opcional:
+ * Tres condiciones, ninguna opcional:
  *
  * 1. Que ya exista al menos un `taskId` pagado en la sesión (fix round 2). Sin esto,
  *    un cliente que mande `{ resume: true }` sobre una sesión que nunca llegó a
@@ -49,38 +124,55 @@ export function resumeSeed(base: Lote[], existentes: Lote[]): Lote[] {
  *    de `video-generation` — un hueco para no pagar nunca. El flag del cliente es
  *    una intención, no un hecho: el hecho es si `existentes` tiene algo pagado.
  *
- * 2. Que `base` (el guión recalculado por `groupIntoLotes` EN ESTA llamada) tenga el
- *    mismo número de lotes que `existentes` (fix round 3). `resumeSeed` empareja por
- *    ÍNDICE: si el guión se re-adaptó (`video-adapt` no tiene tope per-step, así que
- *    nada impide re-adaptarlo a más o menos tomas y volver a llamar acá con
- *    `resume: true`), ese emparejamiento deja de tener sentido y el hueco es doble —
- *    de costo (`reanuda` seguía dando `true`, así que el gate de `video-generation`
- *    se saltaba entero: tareas nuevas gratis, repetible cada vez que se re-adapta) y
- *    de correctitud, peor: si el guión CRECIÓ, `resumeSeed` mezcla en el mismo array
- *    lotes ya renderizados del guión VIEJO con lotes nuevos del guión ACTUAL (video
- *    incoherente); si el guión se ENCOGIÓ, `base.map(...)` devuelve menos entradas y
- *    los lotes pagados que quedaban más allá del nuevo final se descartan EN
- *    SILENCIO — el mismo dinero huérfano que el rescate del round 1 existe para
- *    evitar, ahora por la puerta de reanudar.
+ * 2. Que TODOS los lotes guardados lleven la huella `huella` — la del contenido con
+ *    el que se va a renderizar AHORA (fix round 4). Este es el chequeo operativo: lo
+ *    que hace que "reanudar" signifique "terminar ESTE video" y no "pegar tramos de
+ *    dos videos distintos". `resumeSeed` empareja por ÍNDICE sin mirar el contenido
+ *    de `base[i]`, así que un lote ya renderizado se conserva tal cual esté; si el
+ *    guión (o el personaje, o la voz) se re-hizo en el medio —nada lo impide:
+ *    `video-adapt` y la FASE 4 no tienen tope per-step— ese lote quedó renderizado
+ *    con el contenido VIEJO y los pendientes se renderizarían con el ACTUAL. La
+ *    revisión lo reprodujo ejecutándolo: `lote1.prompt` con el texto del guión viejo
+ *    y su `taskId` original intacto, `lote2` con el texto del guión nuevo. No es un
+ *    caso exótico — los lotes se arman empaquetando tomas en buckets de hasta 15 s,
+ *    así que dos adaptaciones de duración parecida caen en la misma cantidad de lotes
+ *    de forma rutinaria.
  *
- * Por qué la longitud alcanza y no hace falta comparar contenido: el bug que este
- * chequeo cierra es de EMPAREJAMIENTO POR ÍNDICE, no de contenido — `resumeSeed` no
- * lee qué dice `base[i]` para decidir si reusar `existentes[i]`, solo compara
- * posiciones. Un guión editado que conserva el mismo número de lotes no rompe ese
- * emparejamiento: los índices ya pagados se conservan intactos (`resumeSeed` los
- * prefiere sin mirar `base` ahí) y los pendientes simplemente renderizan el texto
- * editado — que es el comportamiento correcto de "edité una línea que todavía no se
- * pagó y reanudo". Exigir además contenido idéntico bloquearía ese flujo legítimo
- * (cualquier corrección de typo en un lote sin pagar forzaría a re-pagar toda la
- * generación). Queda un hueco angosto sin cerrar, documentado y no arreglado acá:
- * editar repetidamente el contenido de los lotes pendientes SIN cambiar la cantidad
- * de lotes, forzando un fallo parcial en cada ronda para mantener siempre algo
- * "pendiente" gratis — mucho más estrecho que el exploit que este chequeo cierra,
- * porque un `resume` exitoso llena TODOS los pendientes de una sola vez y no deja
- * nada gratis para la siguiente ronda.
+ * 3. Que `base` tenga la misma cantidad de lotes que `existentes`. La huella ya lo
+ *    implica (la cantidad de lotes entra en el texto canónico), pero `resumeSeed`
+ *    empareja por índice y su precondición merece estar escrita donde se usa: si
+ *    alguien angostara la huella en el futuro, este chequeo sigue impidiendo que
+ *    `base.map(...)` descarte en silencio los `taskId` pagados que quedan más allá
+ *    del nuevo final.
+ *
+ * Sesiones SIN huella (`scriptHash` en `null`/ausente: filas escritas antes de este
+ * fix) NO se pueden reanudar — la condición 2 no se cumple y se tratan como una
+ * generación nueva. Es fail-closed a propósito: la huella es lo único que hace
+ * verificable "es el mismo contenido", y sin ella la afirmación no se puede sostener.
+ *
+ * Residuales conocidos, nombrados como residuales y no como comportamiento correcto:
+ *
+ * - Editar el guión (o rehacer personaje/voz) durante un render a medias cuesta una
+ *   generación nueva y ABANDONA los `taskId` ya pagados (la ruta los loguea con el id
+ *   de sesión antes de seguir). No hay forma de que sea gratis: el lote viejo ya no
+ *   pertenece a este video. El tope de `VIDEO_GENERATION_LIMIT` deja margen para eso.
+ * - Las dos ventanas de concurrencia de los rounds 1 y 2 siguen abiertas igual: dos
+ *   `resume` simultáneos, y dos reintentos simultáneos sobre una sesión cuyo primer
+ *   intento falló por completo. `isPaidResume` es una función pura sobre una lectura
+ *   ya hecha; cerrarlas pide atomicidad en la DB, no un chequeo más acá.
  */
-export function isPaidResume(resume: boolean, existentes: Lote[], base: Lote[]): boolean {
-  return resume && existentes.some((l) => l.taskId != null) && base.length === existentes.length
+export function isPaidResume(
+  resume: boolean,
+  existentes: Lote[],
+  base: Lote[],
+  huella: string,
+): boolean {
+  return (
+    resume &&
+    existentes.some((l) => l.taskId != null) &&
+    base.length === existentes.length &&
+    existentes.every((l) => l.scriptHash === huella)
+  )
 }
 
 /**

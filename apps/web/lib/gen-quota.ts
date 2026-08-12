@@ -74,17 +74,22 @@ export function isImageKind(kind: string): boolean {
 // regens para TODO el video, sin importar en cuántas llamadas a KIE se reparta su
 // guión (`groupIntoLotes` puede partirlo en 1, 2, 3... lotes de hasta 15 s cada uno).
 //
-// ⚠️ NOTA DE DISEÑO (fix round 3, sin arreglar a propósito): con el guard secuencial
-// de `generate-lotes/route.ts` tal como está hoy, las "+2 regens" de este tope son
-// INALCANZABLES dentro de una sesión. En cuanto la primera llamada crea aunque sea
+// ⚠️ NOTA DE DISEÑO (fix round 4 — corrige lo que decía el round 3, que ya era falso
+// cuando se escribió): mientras el CONTENIDO no cambie, las "+2 regens" de este tope
+// son inalcanzables dentro de una sesión. En cuanto la primera llamada crea aunque sea
 // una tarea, `session.lotes` deja de tener todo en `idle`: todo POST sin `resume`
 // recibe 409 (`existentes.some(taskId) && !resume`), y todo POST con `resume: true`
-// entra por `isPaidResume` → `reanuda: true` → nunca vuelve a llamar
-// `recordGenQuota(id, 'video-generation', …)`. No hay ningún camino en el código
-// actual que registre una SEGUNDA fila de `video-generation` para la misma sesión —
-// el tope de 3 se comporta, en la práctica, como un tope de 1. Esto es intencional
-// por ahora (no hay botón de "generar de nuevo desde cero" todavía) y NO se arregla
-// acá. Cuando la Task 7 conecte un botón de regenerar, ese botón va a necesitar
+// sobre el mismo contenido entra por `isPaidResume` → `reanuda: true` → nunca vuelve a
+// llamar `recordGenQuota(id, 'video-generation', …)`. Para ese usuario el tope de 3 se
+// comporta como un tope de 1.
+//
+// Lo que SÍ registra una segunda (y tercera) fila de `video-generation` para la misma
+// sesión: re-hacer el guión (`video-adapt`), el personaje o la voz y volver a llamar.
+// Ahí la huella de contenido guardada en los lotes deja de coincidir, `isPaidResume`
+// da `false` y la llamada se cobra como el video nuevo que es — que es precisamente
+// para lo que este tope existe, y por eso hay que dejarlo en 3 y no bajarlo a 1.
+// Cuando la Task 7 conecte un botón de "generar de nuevo desde cero" (regenerar el
+// MISMO contenido, que es el caso que hoy no tiene camino), ese botón va a necesitar
 // limpiar `video_sessions.lotes` de vuelta a `null` (NO a `[]`) SIN tocar las filas
 // ya insertadas en `ph_gen_usage` — son las que hacen que la 2ª y 3ª regeneración sí
 // choquen contra el tope cuando corresponda. Si en cambio se resetean o se borran
