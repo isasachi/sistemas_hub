@@ -2,8 +2,7 @@
 
 import { create } from 'zustand'
 import type {
-  VideoMode, ForensicAnalysis, CharacterBrief, ProductScan,
-  ScriptTemplate, ScriptVersions, VideoDirection, ConfirmedScript, VideoSessionResponse,
+  ForensicReport, ProductScan, UserInputs, ValidationMatrix, ScriptTemplate, VideoSessionResponse,
 } from '@/lib/video-ads/types'
 
 export const SESSION_KEY = 'video_ads_session_id'
@@ -13,49 +12,30 @@ interface VideoState {
   sessionError: boolean
   step: number
   isLoading: boolean
-  mode: VideoMode | null
   referenceVideoUrl: string | null
-  forensicAnalysis: ForensicAnalysis | null
-  characterBrief: CharacterBrief | null
-  characterUrl: string | null
+  forensicAnalysis: ForensicReport | null
   productUrl: string | null
   productScan: ProductScan | null
-  productName: string | null
-  whatItDoes: string | null
-  targetAudience: string | null
-  scriptTemplate: ScriptTemplate | null
-  scriptVersions: ScriptVersions | null
-  direction: VideoDirection | null
-  confirmedScript: ConfirmedScript | null
-  duration: number | null
-  videoUrl: string | null
-  videoStatus: string | null
+  characterUrl: string | null
+  // INPUTS
+  inputs: UserInputs
+  validation: ValidationMatrix | null
+  // FASE 2
+  template: ScriptTemplate | null
   regens: Record<string, number>
 }
 
+export const EMPTY_INPUTS: UserInputs = {
+  productName: '', productDescription: '', angle: '', targetAudience: '',
+  problem: '', characterDesc: '', characterEthnicity: '', accent: '',
+  voice: '', constraints: '',
+}
+
 const initialState: VideoState = {
-  sessionId: null,
-  sessionError: false,
-  step: 0,
-  isLoading: false,
-  mode: null,
-  referenceVideoUrl: null,
-  forensicAnalysis: null,
-  characterBrief: null,
-  characterUrl: null,
-  productUrl: null,
-  productScan: null,
-  productName: null,
-  whatItDoes: null,
-  targetAudience: null,
-  scriptTemplate: null,
-  scriptVersions: null,
-  direction: null,
-  confirmedScript: null,
-  duration: null,
-  videoUrl: null,
-  videoStatus: null,
-  regens: {},
+  sessionId: null, sessionError: false, step: 0, isLoading: false,
+  referenceVideoUrl: null, forensicAnalysis: null,
+  productUrl: null, productScan: null, characterUrl: null,
+  inputs: EMPTY_INPUTS, validation: null, template: null, regens: {},
 }
 
 interface VideoActions {
@@ -81,23 +61,26 @@ export const useVideoStore = create<VideoState & VideoActions>((set) => ({
     set({
       sessionId: s.id,
       step: s.step,
-      mode: s.mode,
       referenceVideoUrl: s.reference_video_url,
       forensicAnalysis: s.forensic_analysis,
-      characterBrief: s.character_brief,
-      characterUrl: s.character_url,
       productUrl: s.product_url,
       productScan: s.product_scan,
-      productName: s.product_name,
-      whatItDoes: s.what_it_does,
-      targetAudience: s.target_audience,
-      scriptTemplate: s.script_template,
-      scriptVersions: s.script_versions,
-      direction: s.direction,
-      confirmedScript: s.confirmed_script,
-      duration: s.duration,
-      videoUrl: s.video_url,
-      videoStatus: s.video_status,
+      characterUrl: s.character_url,
+      inputs: {
+        productName: s.product_name ?? '',
+        productDescription: s.what_it_does ?? '',
+        angle: s.angle ?? '',
+        targetAudience: s.target_audience ?? '',
+        problem: s.problem ?? '',
+        characterDesc: s.character_desc ?? '',
+        characterEthnicity: s.character_ethnicity ?? '',
+        accent: s.accent ?? '',
+        voice: s.voice ?? '',
+        constraints: s.constraints ?? '',
+      },
+      validation: s.validation,
+      template: s.template,
+      sessionError: false,
     })
   },
 

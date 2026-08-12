@@ -6,38 +6,17 @@ import type { VideoSessionResponse } from '@/lib/video-ads/types'
 import { fetchRegens } from '@/lib/gen-quota-client'
 import { SessionErrorRetry } from '@/components/tools/ui/SessionErrorRetry'
 import StepWizard from '@/components/tools/ui/StepWizard'
-import Section0Mode from './sections/Section0Mode'
-import Section1Source from './sections/Section1Source'
-import Section2Product from './sections/Section2Product'
-import Section3Script from './sections/Section3Script'
-import Section4Video from './sections/Section4Video'
+import Section0Reference from './sections/Section0Reference'
+import Section1Product from './sections/Section1Product'
+import Section2Character from './sections/Section2Character'
+import Section3Validation from './sections/Section3Validation'
+import Section4Template from './sections/Section4Template'
 
-const SECTIONS = [Section0Mode, Section1Source, Section2Product, Section3Script, Section4Video]
-
-// Copia del riel según la línea elegida. El esqueleto de 5 pasos no cambia: solo
-// cambia qué pide el paso 1 (video de referencia · foto de personaje · brief).
-const SOURCE_STEP = {
-  'video-ref': {
-    label: 'Referencia',
-    title: 'Sube el video que quieres emular',
-    hint: 'Lo desglosamos segundo a segundo: qué se ve, qué se dice y cómo está armado. De ahí sale la plantilla de tu guión. Tiene que ser vertical.',
-  },
-  'character-ref': {
-    label: 'Personaje',
-    title: '¿Quién habla a cámara?',
-    hint: 'Sube la foto de la persona que aparecerá en el video. Tiene que ser vertical, y con buena luz funciona mejor.',
-  },
-  'character-gen': {
-    label: 'Personaje',
-    title: 'Diseñemos a tu creador',
-    hint: 'Describe a la persona que quieres ver en cámara y la generamos.',
-  },
-  null: { label: 'Fuente', title: 'Elige una línea primero', hint: '' },
-} as const
+const SECTIONS = [Section0Reference, Section1Product, Section2Character, Section3Validation, Section4Template]
 
 export default function VideoWizard() {
   const {
-    step, mode, videoUrl, sessionId, sessionError,
+    step, sessionId, sessionError,
     startNewSession, hydrateFromSession, setStep, setRegens,
   } = useVideoStore()
 
@@ -71,27 +50,29 @@ export default function VideoWizard() {
 
   const steps = [
     {
-      label: 'Formato',
-      title: '¿Con qué vas a arrancar?',
-      hint: 'Tres caminos al mismo video. Elige el que tengas a mano.',
+      label: 'Referencia',
+      title: 'Sube el video que quieres emular',
+      hint: 'Lo desglosamos corte por corte: qué se ve, qué se dice, cómo está encuadrado y cuánto dura cada toma. Tiene que ser vertical.',
     },
-    SOURCE_STEP[mode ?? 'null'],
     {
       label: 'Producto',
-      title: '¿Qué estás vendiendo?',
-      hint: 'La foto del producto entra tal cual al video, así que sube la mejor que tengas. Esta no hace falta que sea vertical.',
+      title: '¿Qué estás vendiendo y con qué ángulo?',
+      hint: 'La foto del producto entra tal cual al video. El ángulo reemplaza al del original, conservando su estructura.',
     },
     {
-      label: 'Guión',
-      title: 'Elige tu versión',
-      hint: 'Dos formas de decir lo mismo. Quédate con la que suene a tu marca.',
+      label: 'Personaje',
+      title: '¿Quién habla a cámara?',
+      hint: 'Etnia y acento los defines tú: no los deducimos de una foto ni del video de referencia.',
     },
     {
-      label: 'Video',
-      title: videoUrl ? 'Tu video está listo' : 'Generemos tu video',
-      hint: videoUrl
-        ? 'Descárgalo, o pide una variación si quieres probar otro camino.'
-        : 'Toma unos minutos. Puedes dejar la pestaña abierta.',
+      label: 'Validación',
+      title: 'Antes de seguir, confirmemos los datos',
+      hint: 'Nada se rellena por suposición. Si algo falta, el proceso se detiene acá.',
+    },
+    {
+      label: 'Plantilla',
+      title: 'El ADN del original',
+      hint: 'El guión literal, los cortes reales y la plantilla Fill in the Blank que se rellenará con tu producto.',
     },
   ]
 

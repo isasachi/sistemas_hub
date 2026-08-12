@@ -1,8 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import {
-  buildTaskBody, buildVideoPrompt, clampDuration, resolutionFor, parseTaskDetail,
-  isCaptionEcho, stripPlatformFurniture,
-} from './kie'
+import { buildTaskBody, clampDuration, resolutionFor, parseTaskDetail } from './kie'
 
 // Sin API key no se puede probar el render en vivo, así que lo que se verifica acá es
 // el CONTRATO con KIE (modelo grok-imagine-video-1-5-preview): las reglas que, si se
@@ -56,31 +53,6 @@ describe('buildTaskBody', () => {
   })
 })
 
-describe('buildVideoPrompt', () => {
-  const prompt = buildVideoPrompt({
-    images: IMAGES,
-    direction: { accent: 'peruano', vibe: 'minimal', cameraMotion: 'stationary', eyeDirection: 'center' },
-    beats: [{ t: '0:00–0:03', dialogue: 'Esto me cambió el pelo', action: 'muestra el frasco', onScreenText: '3 meses' }],
-    productName: 'Serum X',
-  })
-
-  it('numera las imágenes en el mismo orden que image_urls', () => {
-    expect(prompt).toContain('@image(1) = la persona')
-    expect(prompt).toContain('@image(2) = el producto')
-    expect(prompt.indexOf('@image(1)')).toBeLessThan(prompt.indexOf('@image(2)'))
-  })
-
-  it('incluye diálogo, acción y texto en pantalla del beat', () => {
-    expect(prompt).toContain('Esto me cambió el pelo')
-    expect(prompt).toContain('muestra el frasco')
-    expect(prompt).toContain('3 meses')
-  })
-
-  it('exige español neutro en el audio', () => {
-    expect(prompt).toContain('neutral Latin-American Spanish')
-  })
-})
-
 describe('parseTaskDetail', () => {
   it('saca la url del resultJson (que viene como string)', () => {
     const d = parseTaskDetail({
@@ -100,70 +72,5 @@ describe('parseTaskDetail', () => {
 
   it('propaga el mensaje de error de una tarea fallida', () => {
     expect(parseTaskDetail({ state: 'fail', failMsg: 'content rejected' }).failMsg).toBe('content rejected')
-  })
-})
-
-// Las dos defensas contra lo que se replicó en el render reportado. Los casos salen
-// literales del análisis forense de esa sesión (Supabase), no son inventados.
-describe('limpieza de la referencia', () => {
-  it('detecta el texto en pantalla que solo repite el diálogo (= subtítulos)', () => {
-    expect(isCaptionEcho('este suero de Eunoia y tengo que contarte.', 'este suero de Eunoia y tengo que contarte.')).toBe(true)
-    expect(isCaptionEcho('Se siente tan ligero y se absorbe', 'se siente tan ligero y se absorbe.')).toBe(true)
-    expect(isCaptionEcho('rápido y no queda pegajoso.', 'rápido y no queda pegajoso')).toBe(true)
-  })
-
-  it('conserva un gráfico real, que dice algo que la voz no dice', () => {
-    expect(isCaptionEcho('Está a mitad de precio', 'S/ 49')).toBe(false)
-    expect(isCaptionEcho('mira cómo quedó', 'ANTES / DESPUÉS')).toBe(false)
-    expect(isCaptionEcho('', 'ANTES')).toBe(false)
-  })
-
-  it('borra la interfaz de la plataforma de una descripción visual', () => {
-    const real = "The woman looks down at the serum bottle. The TikTok logo and '@serumanuaperu' are visible in the top left."
-    expect(stripPlatformFurniture(real)).toBe('The woman looks down at the serum bottle.')
-  })
-
-  it('deja intacto lo que no menciona la plataforma', () => {
-    const clean = 'She smiles broadly at the camera, touching her chin and jawline.'
-    expect(stripPlatformFurniture(clean)).toBe(clean)
-  })
-})
-
-describe('buildVideoPrompt — lo que NO debe replicar de la referencia', () => {
-  const DIRECTION = { accent: 'neutro', vibe: 'natural', cameraMotion: 'stationary', eyeDirection: 'center' }
-  const BEATS = [{ t: '0:00-0:03', dialogue: 'hola', action: 'saluda', onScreenText: 'hola' }]
-
-  it('no dicta subtítulos: el eco del diálogo no llega como gráfico', () => {
-    const p = buildVideoPrompt({ images: IMAGES, direction: DIRECTION, beats: BEATS, productName: 'X' })
-    expect(p).not.toContain('On-screen graphic: "hola"')
-    expect(p).toContain('Keep the frame completely clean of text')
-  })
-
-  it('prohíbe marca de agua, placa de cierre y relleno inventado', () => {
-    const p = buildVideoPrompt({ images: IMAGES, direction: DIRECTION, beats: BEATS, productName: 'X' })
-    expect(p).toMatch(/watermark/i)
-    expect(p).toMatch(/end card/i)
-    expect(p).toMatch(/Do not invent extra dialogue/i)
-  })
-
-  it('sin forense (líneas 2 y 3) no inventa bloque de casting', () => {
-    const p = buildVideoPrompt({ images: IMAGES, direction: DIRECTION, beats: BEATS, productName: 'X' })
-    expect(p).not.toContain('CASTING')
-  })
-
-  it('con forense manda el casting y la cámara de cada beat', () => {
-    const p = buildVideoPrompt({
-      images: IMAGES, direction: DIRECTION, beats: BEATS, productName: 'X',
-      forensic: {
-        durationSec: 20, aspectRatio: '9:16',
-        subject: 'Mujer de 20s, cabello negro recogido, piel clara, ojos claros',
-        setting: 'dormitorio', productHandling: 'sostiene el frasco', audio: 'voz directa',
-        hookType: 'pregunta', persuasiveLogic: 'prueba personal', summaryForUser: 'x',
-        beats: [{ t: '0:00-0:03', visual: 'primer plano', dialogue: 'hola', onScreenText: '', camera: 'close-up fijo', emotion: 'amable' }],
-      },
-    })
-    expect(p).toContain('CASTING')
-    expect(p).toContain('cabello negro recogido')
-    expect(p).toContain('Camera: close-up fijo')
   })
 })
