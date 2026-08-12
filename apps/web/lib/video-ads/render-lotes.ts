@@ -39,17 +39,48 @@ export function resumeSeed(base: Lote[], existentes: Lote[]): Lote[] {
 }
 
 /**
- * `true` solo si `resume` es una reanudación REAL — es decir, si ya existe al menos
- * un `taskId` pagado en la sesión (fix round 2). Sin esta verificación, un cliente
- * que mande `{ resume: true }` sobre una sesión que nunca llegó a gastar un centavo
- * (por ejemplo, la primera llamada falló armando el prompt del lote 1 y nunca tocó
- * KIE) se trataría como "ya pagó su generación" y se saltaría el cobro de
- * `video-generation` — un hueco para no pagar nunca por la generación. El flag del
- * cliente es una intención, no un hecho: el hecho es si `existentes` tiene algo
- * pagado.
+ * `true` solo si `resume` es una reanudación REAL y SEGURA de reanudar por índice.
+ * Dos condiciones, ninguna opcional:
+ *
+ * 1. Que ya exista al menos un `taskId` pagado en la sesión (fix round 2). Sin esto,
+ *    un cliente que mande `{ resume: true }` sobre una sesión que nunca llegó a
+ *    gastar un centavo (la primera llamada falló armando el prompt del lote 1 y
+ *    nunca tocó KIE) se trataría como "ya pagó su generación" y se saltaría el cobro
+ *    de `video-generation` — un hueco para no pagar nunca. El flag del cliente es
+ *    una intención, no un hecho: el hecho es si `existentes` tiene algo pagado.
+ *
+ * 2. Que `base` (el guión recalculado por `groupIntoLotes` EN ESTA llamada) tenga el
+ *    mismo número de lotes que `existentes` (fix round 3). `resumeSeed` empareja por
+ *    ÍNDICE: si el guión se re-adaptó (`video-adapt` no tiene tope per-step, así que
+ *    nada impide re-adaptarlo a más o menos tomas y volver a llamar acá con
+ *    `resume: true`), ese emparejamiento deja de tener sentido y el hueco es doble —
+ *    de costo (`reanuda` seguía dando `true`, así que el gate de `video-generation`
+ *    se saltaba entero: tareas nuevas gratis, repetible cada vez que se re-adapta) y
+ *    de correctitud, peor: si el guión CRECIÓ, `resumeSeed` mezcla en el mismo array
+ *    lotes ya renderizados del guión VIEJO con lotes nuevos del guión ACTUAL (video
+ *    incoherente); si el guión se ENCOGIÓ, `base.map(...)` devuelve menos entradas y
+ *    los lotes pagados que quedaban más allá del nuevo final se descartan EN
+ *    SILENCIO — el mismo dinero huérfano que el rescate del round 1 existe para
+ *    evitar, ahora por la puerta de reanudar.
+ *
+ * Por qué la longitud alcanza y no hace falta comparar contenido: el bug que este
+ * chequeo cierra es de EMPAREJAMIENTO POR ÍNDICE, no de contenido — `resumeSeed` no
+ * lee qué dice `base[i]` para decidir si reusar `existentes[i]`, solo compara
+ * posiciones. Un guión editado que conserva el mismo número de lotes no rompe ese
+ * emparejamiento: los índices ya pagados se conservan intactos (`resumeSeed` los
+ * prefiere sin mirar `base` ahí) y los pendientes simplemente renderizan el texto
+ * editado — que es el comportamiento correcto de "edité una línea que todavía no se
+ * pagó y reanudo". Exigir además contenido idéntico bloquearía ese flujo legítimo
+ * (cualquier corrección de typo en un lote sin pagar forzaría a re-pagar toda la
+ * generación). Queda un hueco angosto sin cerrar, documentado y no arreglado acá:
+ * editar repetidamente el contenido de los lotes pendientes SIN cambiar la cantidad
+ * de lotes, forzando un fallo parcial en cada ronda para mantener siempre algo
+ * "pendiente" gratis — mucho más estrecho que el exploit que este chequeo cierra,
+ * porque un `resume` exitoso llena TODOS los pendientes de una sola vez y no deja
+ * nada gratis para la siguiente ronda.
  */
-export function isPaidResume(resume: boolean, existentes: Lote[]): boolean {
-  return resume && existentes.some((l) => l.taskId != null)
+export function isPaidResume(resume: boolean, existentes: Lote[], base: Lote[]): boolean {
+  return resume && existentes.some((l) => l.taskId != null) && base.length === existentes.length
 }
 
 /**

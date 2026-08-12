@@ -3,18 +3,19 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // Solo se prueba `claimFreshLotes` (fix round 2): es la única pieza de este módulo
 // con semántica no trivial (escritura CONDICIONAL) — el resto son pass-through
 // directos a Supabase sin lógica propia que valga la pena mockear.
-const { mockSelect, mockFrom } = vi.hoisted(() => {
+//
+// Cada paso de la cadena es su propio mock hoisted (no una función inline nueva por
+// llamada) para poder afirmar CON QUÉ argumentos se llamó cada uno — no solo que la
+// cadena tenga la forma correcta, sino que la condición sea específicamente sobre
+// la columna `lotes` y el valor `null` (fix round 3: un filtro sobre otra columna
+// pasaría igual con una aserción que solo mira la forma de la cadena).
+const { mockSelect, mockIs, mockEq, mockUpdate, mockFrom } = vi.hoisted(() => {
   const mockSelect = vi.fn()
-  const mockFrom = vi.fn(() => ({
-    update: vi.fn(() => ({
-      eq: vi.fn(() => ({
-        is: vi.fn(() => ({
-          select: mockSelect,
-        })),
-      })),
-    })),
-  }))
-  return { mockSelect, mockFrom }
+  const mockIs = vi.fn(() => ({ select: mockSelect }))
+  const mockEq = vi.fn(() => ({ is: mockIs }))
+  const mockUpdate = vi.fn(() => ({ eq: mockEq }))
+  const mockFrom = vi.fn(() => ({ update: mockUpdate }))
+  return { mockSelect, mockIs, mockEq, mockUpdate, mockFrom }
 })
 
 vi.mock('@supabase/supabase-js', () => ({
@@ -54,5 +55,15 @@ describe('claimFreshLotes', () => {
     mockSelect.mockResolvedValue({ data: null, error: { message: 'boom' } })
     const { claimFreshLotes } = await import('./db')
     await expect(claimFreshLotes('s1', patch)).rejects.toThrow('boom')
+  })
+
+  it('la condición es específicamente `lotes IS NULL` sobre la fila del id dado, no cualquier filtro', async () => {
+    mockSelect.mockResolvedValue({ data: [{ id: 's1' }], error: null })
+    const { claimFreshLotes } = await import('./db')
+    await claimFreshLotes('s1', patch)
+
+    expect(mockUpdate).toHaveBeenCalledWith(patch)
+    expect(mockEq).toHaveBeenCalledWith('id', 's1')
+    expect(mockIs).toHaveBeenCalledWith('lotes', null)
   })
 })

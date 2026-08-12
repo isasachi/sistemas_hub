@@ -109,7 +109,12 @@ describe('POST generate-lotes — fix round 2: cuota por video, no por lote', ()
       n: 1, tomas: [], duracionSeg: 10, prompt: 'ya armado', taskId: 't1',
       status: 'waiting', videoUrl: null, failMsg: null,
     }
-    vi.mocked(getVideoSession).mockResolvedValue(session({ lotes: [yaPagado] as unknown as VideoSessionResponse['lotes'] }))
+    const pendiente: Lote = { n: 2, tomas: [], duracionSeg: 10, prompt: '', taskId: null, status: 'idle', videoUrl: null, failMsg: null }
+    // 2 lotes existentes (mismo largo que ADAPTED_2_LOTES, el default de `session()`)
+    // — el guión NO cambió de forma, solo falta terminar de renderizar el lote 2.
+    vi.mocked(getVideoSession).mockResolvedValue(
+      session({ lotes: [yaPagado, pendiente] as unknown as VideoSessionResponse['lotes'] }),
+    )
 
     const res = await POST(req({ resume: true }), ctx())
     expect(res.status).toBe(200)
@@ -187,5 +192,101 @@ describe('POST generate-lotes — fix round 2: cuota por video, no por lote', ()
         expect.objectContaining({ taskId: null, status: 'idle' }),
       ]),
     }))
+  })
+})
+
+describe('POST generate-lotes — fix round 3', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(claimFreshLotes).mockResolvedValue(true)
+    vi.mocked(checkGenQuota).mockResolvedValue({ blocked: null, regensLeft: null })
+    vi.mocked(checkGlobalBackstop).mockResolvedValue({ blocked: null })
+    vi.mocked(createVideoTask).mockImplementation(async () => `task-${Math.random()}`)
+  })
+
+  // Regresión A: antes del fix, el `updateVideoSession` de la rama de éxito estaba
+  // FUERA de todo try/catch — si fallaba, el throw escapaba el handler (500 opaco,
+  // sin log) dejando la fila con los placeholders `idle` que escribió el claim: las
+  // tareas recién creadas en KIE (ya pagadas) quedaban sin forma de encontrarlas.
+  it('si falla la escritura final, se loguea (no crashea) y el response sigue reflejando lo creado en KIE', async () => {
+    vi.mocked(getVideoSession).mockResolvedValue(session())
+    vi.mocked(updateVideoSession).mockRejectedValueOnce(new Error('db down'))
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    const res = await POST(req(), ctx())
+    expect(res.status).toBe(200) // el render en KIE sí funcionó — eso es lo que refleja el status
+    const body = await res.json()
+    expect(body.lotes).toHaveLength(2)
+    expect(body.lotes.every((l: Lote) => l.taskId)).toBe(true)
+
+    // El taskId pagado queda en el log, no perdido en un throw sin manejar.
+    expect(errSpy).toHaveBeenCalledWith(
+      expect.stringContaining('no se pudo guardar el rescate'),
+      expect.arrayContaining([expect.any(String)]),
+      expect.any(Error),
+    )
+    errSpy.mockRestore()
+  })
+
+  // Regresión B: el exploit que la revisión encontró. `video-adapt` no tiene tope
+  // per-step, así que re-adaptar el guión a más tomas y mandar `resume: true` hacía
+  // que `reanuda` siguiera dando `true` (había un taskId pagado de ANTES) — el gate
+  // de `video-generation` se saltaba entero y `resumeSeed` emparejaba por índice
+  // contra un guión que ya no correspondía. Con el fix, un cambio en la cantidad de
+  // lotes hace que NO sea reanudación real: cobra de nuevo y no reusa ningún índice.
+  it('el guión se re-adaptó a más lotes: resume:true NO evita el cobro ni reusa el taskId viejo', async () => {
+    const viejo: Lote = {
+      n: 1, tomas: [], duracionSeg: 10, prompt: 'guión viejo', taskId: 't-old',
+      status: 'waiting', videoUrl: null, failMsg: null,
+    }
+    // `session()` trae ADAPTED_2_LOTES (2 lotes) por defecto; `existentes` solo tiene
+    // 1 → el guión "creció" respecto de lo que se pagó la última vez.
+    vi.mocked(getVideoSession).mockResolvedValue(session({ lotes: [viejo] as unknown as VideoSessionResponse['lotes'] }))
+
+    const res = await POST(req({ resume: true }), ctx())
+    expect(res.status).toBe(200)
+
+    // Se trató como intento nuevo: pasó por el gate per-video, no por el backstop-only.
+    expect(checkGenQuota).toHaveBeenCalledWith('s1', 'video-generation')
+    expect(checkGlobalBackstop).not.toHaveBeenCalled()
+
+    // Ningún lote reusa el taskId viejo — los 2 lotes del guión nuevo se crean de cero.
+    expect(createVideoTask).toHaveBeenCalledTimes(2)
+    const body = await res.json()
+    expect(body.lotes.some((l: Lote) => l.taskId === 't-old')).toBe(false)
+
+    // Y SÍ cobra — el hueco que permitía renders gratis re-adaptando el guión queda cerrado.
+    const generationCalls = vi.mocked(recordGenQuota).mock.calls.filter((c) => c[1] === 'video-generation')
+    expect(generationCalls).toHaveLength(1)
+  })
+
+  it('el guión se re-adaptó a menos lotes: resume:true tampoco lo trata como reanudación, y loguea los taskId abandonados', async () => {
+    const viejo1: Lote = { n: 1, tomas: [], duracionSeg: 10, prompt: 'v1', taskId: 't-old-1', status: 'waiting', videoUrl: null, failMsg: null }
+    const viejo2: Lote = { n: 2, tomas: [], duracionSeg: 10, prompt: 'v2', taskId: 't-old-2', status: 'waiting', videoUrl: null, failMsg: null }
+    // 2 lotes pagados de antes; ADAPTED_2_LOTES (el default de `session()`) también
+    // produce 2 — para forzar el encogido, uso un guión de 1 sola toma corta.
+    vi.mocked(getVideoSession).mockResolvedValue(session({
+      lotes: [viejo1, viejo2] as unknown as VideoSessionResponse['lotes'],
+      adapted: { guionFinal: 'x', caracteresAdaptado: 1, diferenciaCaracteres: 0, tomas: [toma(1, 5)], variablesPendientes: [] },
+    }))
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    const res = await POST(req({ resume: true }), ctx())
+    expect(res.status).toBe(200)
+
+    expect(checkGenQuota).toHaveBeenCalledWith('s1', 'video-generation')
+    const body = await res.json()
+    // Ninguno de los 2 taskId viejos sobrevive: no se descartan en silencio dentro de
+    // un array que igual se guarda como si todo estuviera bien — el intento entero
+    // se trata como nuevo.
+    expect(body.lotes.some((l: Lote) => l.taskId === 't-old-1' || l.taskId === 't-old-2')).toBe(false)
+
+    // Pero abandonarlos deja rastro: no es lo mismo "se perdió" que "se perdió y
+    // quedó quién preguntó por qué" (mismo criterio que `saveRescue` desde el round 1).
+    expect(errSpy).toHaveBeenCalledWith(
+      expect.stringContaining('el guión cambió de forma'),
+      expect.arrayContaining(['t-old-1', 't-old-2']),
+    )
+    errSpy.mockRestore()
   })
 })

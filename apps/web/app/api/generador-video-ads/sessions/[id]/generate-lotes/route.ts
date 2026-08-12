@@ -95,6 +95,12 @@ export async function POST(
     /* sin body o no-JSON */
   }
 
+  // ⚠️ Este guard es también la razón por la que las "+2 regens" de
+  // VIDEO_GENERATION_LIMIT son inalcanzables hoy dentro de una sesión (nota de
+  // diseño completa en gen-quota.ts, junto a esa constante): en cuanto la primera
+  // llamada crea una tarea, todo POST sin `resume` cae acá (409) y todo `resume`
+  // entra por `isPaidResume` sin volver a cobrar. No hay ningún camino que registre
+  // una segunda `video-generation` para la misma sesión.
   const existentes = session.lotes ?? []
   if (existentes.some((l) => l.taskId) && !resume) {
     return NextResponse.json(
@@ -107,11 +113,24 @@ export async function POST(
   }
 
   // `resume` es la INTENCIÓN del cliente; `reanuda` es el HECHO — solo es una
-  // reanudación real si de verdad hay algo pagado (fix round 2). Un cliente que
-  // mande `resume: true` sobre una sesión que nunca gastó un centavo (el primer
-  // intento falló antes de crear ninguna tarea) NO se libra de pagar la generación:
-  // se lo trata como el primer intento real que es.
-  const reanuda = isPaidResume(resume, existentes)
+  // reanudación real si de verdad hay algo pagado Y el guión sigue teniendo la misma
+  // forma que cuando se pagó (fix rounds 2 y 3; ver el comentario largo en
+  // `isPaidResume`, render-lotes.ts, para el porqué del chequeo de longitud).
+  const reanuda = isPaidResume(resume, existentes, base)
+
+  // El guión cambió de forma (`existentes.length !== base.length`) mientras había
+  // taskId pagados de antes: `reanuda` da `false` a propósito (no hay forma segura
+  // de reusarlos, ver `isPaidResume`) y esos taskId NO viajan a `seed` — se
+  // abandonan. Abandonarlos es correcto (el render viejo ya no corresponde a este
+  // guión), pero abandonarlos EN SILENCIO es la misma clase de fallo que el rescate
+  // del round 1 existe para evitar: un log es la diferencia entre "se perdió" y "se
+  // perdió, pero queda quién preguntó por qué".
+  if (!reanuda && existentes.some((l) => l.taskId)) {
+    console.error(
+      `[video-ads/generate-lotes] el guión cambió de forma (existentes: ${existentes.length} lotes → base: ${base.length}) — se abandonan taskId ya pagados:`,
+      existentes.filter((l) => l.taskId).map((l) => l.taskId),
+    )
+  }
 
   // `wasVirgin`: la fila nunca fue tocada por esta ruta (`lotes` sigue en `null` en
   // la DB, no `[]` ni un array de placeholders de un intento fallido). Es la única
@@ -254,6 +273,13 @@ export async function POST(
     return NextResponse.json({ error: 'No se pudo iniciar el render de todos los lotes.' }, { status: 500 })
   }
 
-  await updateVideoSession(id, { step: STEP.LOTES, lotes, duration: totalDuration(lotes) })
+  // `saveRescue`, no `updateVideoSession` directo (fix round 3): el camino feliz
+  // también puede fallar al escribir, y sin el try/catch de `saveRescue` ese throw
+  // escapaba el handler (500 opaco de Next, sin log) dejando la fila con los
+  // placeholders `idle` del claim — las tareas recién creadas en KIE quedaban
+  // pagadas y huérfanas, sin que `lote-status` supiera que existen. El patch es
+  // idéntico al que escribía acá (`step`, `lotes`, `duration`), así que el camino
+  // feliz no cambia; sólo se suma el log si la escritura falla.
+  await saveRescue(id, lotes)
   return NextResponse.json({ lotes })
 }

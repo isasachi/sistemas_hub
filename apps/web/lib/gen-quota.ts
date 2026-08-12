@@ -73,6 +73,28 @@ export function isImageKind(kind: string): boolean {
 // así que tiene su propio tope — pero por VIDEO, no por lote: 1 generación + 2
 // regens para TODO el video, sin importar en cuántas llamadas a KIE se reparta su
 // guión (`groupIntoLotes` puede partirlo en 1, 2, 3... lotes de hasta 15 s cada uno).
+//
+// ⚠️ NOTA DE DISEÑO (fix round 3, sin arreglar a propósito): con el guard secuencial
+// de `generate-lotes/route.ts` tal como está hoy, las "+2 regens" de este tope son
+// INALCANZABLES dentro de una sesión. En cuanto la primera llamada crea aunque sea
+// una tarea, `session.lotes` deja de tener todo en `idle`: todo POST sin `resume`
+// recibe 409 (`existentes.some(taskId) && !resume`), y todo POST con `resume: true`
+// entra por `isPaidResume` → `reanuda: true` → nunca vuelve a llamar
+// `recordGenQuota(id, 'video-generation', …)`. No hay ningún camino en el código
+// actual que registre una SEGUNDA fila de `video-generation` para la misma sesión —
+// el tope de 3 se comporta, en la práctica, como un tope de 1. Esto es intencional
+// por ahora (no hay botón de "generar de nuevo desde cero" todavía) y NO se arregla
+// acá. Cuando la Task 7 conecte un botón de regenerar, ese botón va a necesitar
+// limpiar `video_sessions.lotes` de vuelta a `null` (NO a `[]`) SIN tocar las filas
+// ya insertadas en `ph_gen_usage` — son las que hacen que la 2ª y 3ª regeneración sí
+// choquen contra el tope cuando corresponda. Si en cambio se resetean o se borran
+// esas filas, esta cuota deja de significar nada. Tiene que ser `null` y no `[]`
+// por DOS motivos, no uno: (a) es la única condición que `claimFreshLotes` acepta
+// (`lotes IS NULL`) para volver a reclamar la fila atómicamente; (b) con `lotes:
+// null`, `existentes` vuelve a ser `[]` en la siguiente llamada — nada que abandonar,
+// ninguna ambigüedad de si un `resume` es real. Limpiar a `[]` en vez de `null`
+// dejaría la fila para siempre fuera del alcance de `claimFreshLotes` (esa condición
+// nunca volvería a cumplirse) sin ganar nada a cambio.
 export const VIDEO_GENERATION_LIMIT = Number(process.env.GEN_VIDEO_LIMIT ?? 3)
 function limitFor(kind: string): number {
   return kind === 'video-generation' ? VIDEO_GENERATION_LIMIT : GEN_PER_STEP_LIMIT

@@ -87,10 +87,13 @@ describe('mergeRescue', () => {
 
 describe('isPaidResume', () => {
   // El caso central del fix round 2: la cuota ahora se cobra por VIDEO, no por lote,
-  // y reanudar no debe volver a cobrar — pero SOLO si hay algo real que reanudar.
-  it('resume:true con al menos un taskId pagado es una reanudación real', () => {
+  // y reanudar no debe volver a cobrar — pero SOLO si hay algo real que reanudar. En
+  // estos casos `base` y `existentes` tienen la misma longitud (el guión no cambió),
+  // así que el chequeo de longitud del fix round 3 no interfiere.
+  it('resume:true con al menos un taskId pagado y el guión sin cambiar es una reanudación real', () => {
     const existentes = [lote(1, { taskId: 't1', status: 'waiting' }), lote(2)]
-    expect(isPaidResume(true, existentes)).toBe(true)
+    const base = [lote(1), lote(2)]
+    expect(isPaidResume(true, existentes, base)).toBe(true)
   })
 
   it('resume:true SIN ningún taskId pagado NO es una reanudación real (nada que reanudar)', () => {
@@ -98,15 +101,33 @@ describe('isPaidResume', () => {
     // prompt del lote 1 y nunca llegó a tocar KIE (0 gastado). Un cliente que mande
     // `resume: true` de todos modos no puede colarse sin pagar la generación.
     const existentes = [lote(1), lote(2)]
-    expect(isPaidResume(true, existentes)).toBe(false)
+    const base = [lote(1), lote(2)]
+    expect(isPaidResume(true, existentes, base)).toBe(false)
   })
 
   it('resume:false nunca es reanudación real, tenga o no taskId pagados', () => {
     const existentes = [lote(1, { taskId: 't1' })]
-    expect(isPaidResume(false, existentes)).toBe(false)
+    expect(isPaidResume(false, existentes, existentes)).toBe(false)
   })
 
   it('sin lotes existentes, nunca es reanudación real', () => {
-    expect(isPaidResume(true, [])).toBe(false)
+    expect(isPaidResume(true, [], [])).toBe(false)
+  })
+
+  // El caso central del fix round 3: re-adaptar el guión (`video-adapt`, sin tope
+  // per-step) y llamar de nuevo con `resume: true` no puede colarse como reanudación
+  // real solo porque hay un `taskId` pagado de ANTES — si `base` (el guión recién
+  // recalculado) ya no tiene la misma cantidad de lotes que `existentes`, el
+  // emparejamiento por índice de `resumeSeed` ya no es seguro.
+  it('el guión creció (más lotes en `base` que en `existentes`): NO es reanudación real', () => {
+    const existentes = [lote(1, { taskId: 't1', status: 'waiting' }), lote(2)]
+    const base = [lote(1), lote(2), lote(3)] // se re-adaptó a un guión más largo
+    expect(isPaidResume(true, existentes, base)).toBe(false)
+  })
+
+  it('el guión se encogió (menos lotes en `base` que en `existentes`): NO es reanudación real', () => {
+    const existentes = [lote(1, { taskId: 't1', status: 'waiting' }), lote(2, { taskId: 't2', status: 'waiting' }), lote(3)]
+    const base = [lote(1), lote(2)] // se re-adaptó a un guión más corto
+    expect(isPaidResume(true, existentes, base)).toBe(false)
   })
 })

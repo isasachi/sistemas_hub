@@ -38,7 +38,8 @@ vi.mock('../../lib/product-hunter/quota', () => ({ limaSearchDay: () => '2026-06
 vi.mock('../../lib/product-hunter/session', () => ({ readUserId: async () => 'u1' }))
 
 import {
-  checkGenQuota, checkGlobalBackstop, recordGenQuota, GEN_PER_STEP_LIMIT, isImageKind, VIDEO_GENERATION_LIMIT,
+  checkGenQuota, checkGlobalBackstop, recordGenQuota, GEN_PER_STEP_LIMIT, GEN_GLOBAL_DAILY_LIMIT, isImageKind,
+  VIDEO_GENERATION_LIMIT,
 } from '../../lib/gen-quota'
 
 beforeEach(() => { rows.length = 0 })
@@ -144,6 +145,20 @@ describe('checkGlobalBackstop', () => {
   it('no toca el contador per-step de ningún kind (no inserta, solo lee)', async () => {
     await checkGlobalBackstop()
     expect(rows.length).toBe(0)
+  })
+
+  it('bloquea al llegar al límite diario global, igual que el paso 1 de checkGenQuota', async () => {
+    for (let i = 0; i < GEN_GLOBAL_DAILY_LIMIT; i++) rows.push({ session_id: null, kind: 'anuncios-copy', gen_day: '2026-06-26' })
+    expect((await checkGlobalBackstop()).blocked).not.toBeNull()
+  })
+
+  it('fail-open: un error en la query global no bloquea', async () => {
+    forceGlobalError = true
+    try {
+      expect((await checkGlobalBackstop()).blocked).toBeNull()
+    } finally {
+      forceGlobalError = false
+    }
   })
 })
 
