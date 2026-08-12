@@ -115,3 +115,28 @@ export async function recordGenQuota(sessionId: string | null, kind: string, use
     console.error('[gen-quota] registrando:', err instanceof Error ? err.message : String(err))
   }
 }
+
+/**
+ * Cuenta las generaciones ya registradas de un (sesión, kind).
+ *
+ * `checkGenQuota` responde "¿alcanza para UNA más?", que es lo que necesita cualquier
+ * paso normal. El render por lotes necesita otra pregunta: "¿alcanza para N más?" —
+ * llamar N veces a checkGenQuota NO la responde, porque no inserta nada y devolvería
+ * la misma respuesta N veces.
+ *
+ * Fail-open ante error de DB, igual que el resto del módulo: con la DB caída no
+ * bloqueamos (el backstop global sigue siendo la red de seguridad).
+ */
+export async function countGenUsage(sessionId: string | null, kind: string): Promise<number> {
+  if (!sessionId) return 0
+  try {
+    const { count, error } = await getDb()
+      .from('ph_gen_usage').select('*', { count: 'exact', head: true })
+      .eq('session_id', sessionId).eq('kind', kind)
+    if (error) { console.error('[gen-quota] count:', error.message); return 0 }
+    return count ?? 0
+  } catch (err) {
+    console.error('[gen-quota] count:', err instanceof Error ? err.message : String(err))
+    return 0
+  }
+}

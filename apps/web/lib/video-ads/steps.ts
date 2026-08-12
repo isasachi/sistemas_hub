@@ -22,4 +22,6 @@ export const STEP = {
   CHARACTER: 2,
   VALIDATION: 3,
   TEMPLATE: 4,
+  SCRIPT: 5,
+  LOTES: 6,
 } as const

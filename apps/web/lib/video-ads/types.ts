@@ -3,6 +3,14 @@ import { ProductScanSchema, type ProductScan } from '@/lib/types'
 import type { ForensicReport } from './forensic'
 import type { ScriptTemplate } from './template'
 import type { ValidationMatrix } from './validation'
+// Los tres tipos de abajo todavía no existen como módulos — los crean las Tasks 2-4
+// del PLAN B (adapt.ts, character.ts, lotes.ts). `import type` se borra en runtime
+// (esbuild/vitest no lo resuelve), así que la sesión de tests sigue verde hasta que
+// esos archivos aparezcan; tsc SÍ marcará estos tres imports como error mientras tanto
+// — es la rotura esperada de esta tarea, documentada en el reporte.
+import type { AdaptedScript } from './adapt'
+import type { VoiceProfile } from './character'
+import type { Lote } from './lotes'
 
 // ─── INPUTS DEL USUARIO (spec: "INPUTS DEL USUARIO") ─────────────────────────
 //
@@ -45,45 +53,6 @@ export {
   type ScriptTemplate, type TomaTemplate,
 } from './template'
 
-// ─── Guión final ─────────────────────────────────────────────────────────────
-
-export const ScriptBeatSchema = z.object({
-  t: z.string(),
-  dialogue: z.string(),
-  action: z.string(),
-  onScreenText: z.string(),
-})
-export type ScriptBeat = z.infer<typeof ScriptBeatSchema>
-
-export const ScriptVersionsSchema = z.object({
-  versionA: z.array(ScriptBeatSchema).min(1),
-  versionB: z.array(ScriptBeatSchema).min(1),
-})
-export type ScriptVersions = z.infer<typeof ScriptVersionsSchema>
-
-export const ConfirmedScriptSchema = z.object({
-  version: z.enum(['A', 'B']),
-  beats: z.array(ScriptBeatSchema).min(1),
-})
-export type ConfirmedScript = z.infer<typeof ConfirmedScriptSchema>
-
-// Dirección del video (acento, vibe, cámara). En la línea 1 la deduce el análisis
-// forense; en las líneas 2 y 3 la propone el modelo junto con el guión.
-export const VideoDirectionSchema = z.object({
-  accent: z.string(),
-  vibe: z.string(),
-  cameraMotion: z.string(),
-  eyeDirection: z.string(),
-})
-export type VideoDirection = z.infer<typeof VideoDirectionSchema>
-
-// El paso de guión devuelve dirección + dos versiones en una sola llamada.
-export const ScriptResultSchema = z.object({
-  direction: VideoDirectionSchema,
-  versions: ScriptVersionsSchema,
-})
-export type ScriptResult = z.infer<typeof ScriptResultSchema>
-
 // ─── Sesión (forma de la respuesta del API) ──────────────────────────────────
 
 export interface VideoSessionResponse {
@@ -107,12 +76,16 @@ export interface VideoSessionResponse {
   constraints: string | null
   validation: ValidationMatrix | null
   template: ScriptTemplate | null
-  confirmed_script: ConfirmedScript | null
-  video_prompt: string | null
+  // FASE 3
+  adapted: AdaptedScript | null
+  // FASE 4 / 4.5
+  character_prompt: string | null
+  consistency_block: string | null
+  voice_profile: VoiceProfile | null
+  // FASE 5
+  lotes: Lote[] | null
+  video_url: string | null   // primer lote listo: sirve de miniatura en el dashboard
   duration: number | null
-  kie_task_id: string | null
-  video_status: string | null
-  video_url: string | null
 }
 
 export { ProductScanSchema }
