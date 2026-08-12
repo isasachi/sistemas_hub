@@ -46,6 +46,23 @@ describe('isImageKind', () => {
     expect(isImageKind('branding-logo')).toBe(true)
     expect(isImageKind('branding-names')).toBe(false)
   })
+
+  // Hallazgo 5 (revisión final): con el render eliminado de esta rama, la llamada
+  // más cara que sigue corriendo en el generador de video ads es el análisis
+  // forense (hasta 14 MB de video a Gemini) — se movió el cap del paso eliminado
+  // (video-render) al paso caro que quedó vivo.
+  it('video-forensic entra al cap per-step; video-template (reprocesa texto ya guardado) no', () => {
+    expect(isImageKind('video-forensic')).toBe(true)
+    expect(isImageKind('video-template')).toBe(false)
+  })
+})
+
+describe('cuota per-step de video-forensic', () => {
+  it('usa el cap genérico (1 gen + 3 regens), igual que las otras tools', async () => {
+    const out = []
+    for (let i = 0; i < 5; i++) out.push(await gen('s1', 'video-forensic'))
+    expect(out.map((o) => o.blocked)).toEqual([false, false, false, false, true])
+  })
 })
 
 describe('cuota per-step (imagen)', () => {

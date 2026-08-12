@@ -4,7 +4,8 @@
  * imágenes/texto eran world-callable sin tope → un curl en loop = gasto LLM ilimitado.
  *
  * Dos capas (1 fila en ph_gen_usage por generación, keyed por session_id + kind):
- *   PER-STEP (solo imagen) — 1 gen libre + 3 regens por (sesión, step). UX visible
+ *   PER-STEP (imagen + los pocos kinds de texto/video tan caros como una imagen,
+ *     ver IMAGE_KINDS) — 1 gen libre + 3 regens por (sesión, step). UX visible
  *     vía regensLeft; el step es `kind`, la instancia de tool es `session_id`.
  *   GLOBAL diario (día America/Lima, reusa limaSearchDay) — backstop de costo
  *     anti-abuso: cuenta imagen + texto; un atacante con sesiones infinitas choca aquí.
@@ -33,8 +34,21 @@ function getDb(): SupabaseClient {
 export const GEN_GLOBAL_DAILY_LIMIT = Number(process.env.GEN_GLOBAL_DAILY_LIMIT ?? 500)
 export const GEN_PER_STEP_LIMIT = Number(process.env.GEN_PER_STEP_LIMIT ?? 4) // 1 libre + 3 regens
 
-// Steps de imagen (los caros). Match por prefijo: landing-section incluye `:${type}`.
-export const IMAGE_KINDS = ['branding-identidad', 'branding-logo', 'branding-etiqueta', 'branding-mockup', 'anuncios-image', 'landing-section', 'video-character', 'video-render']
+// Steps de imagen (los caros) + kinds NO-imagen que igual necesitan el mismo cap
+// per-step por costo. Match por prefijo: landing-section incluye `:${type}`.
+//
+// `video-forensic` (análisis forense del video de referencia del generador de
+// video ads) es texto, no imagen — pero manda hasta 14 MB de video a Gemini, así
+// que es la llamada más cara de esa tool hoy. El tope vivía en `video-render`
+// (1 gen + 2 regens, ver VIDEO_RENDER_LIMIT) porque ese era el paso caro; el
+// render se eliminó de esta rama (lo reconstruye un plan posterior) y con él se
+// fue su cap, dejando el paso caro que SÍ sigue corriendo (`video-forensic`) sin
+// ningún tope per-step — solo el backstop global de 500/día, y "Extraer otra vez"
+// en Section4Template no vuelve a llamar Gemini sobre el video (usa el análisis ya
+// guardado), así que no necesita su propio cap. Se agrega acá con el límite
+// genérico (GEN_PER_STEP_LIMIT) en vez de crear un tercer branch en `limitFor`:
+// es "razonable" sin tocar el comportamiento de ningún otro kind del hub.
+export const IMAGE_KINDS = ['branding-identidad', 'branding-logo', 'branding-etiqueta', 'branding-mockup', 'anuncios-image', 'landing-section', 'video-character', 'video-render', 'video-forensic']
 export function isImageKind(kind: string): boolean {
   return IMAGE_KINDS.some((k) => kind === k || kind.startsWith(k + ':'))
 }

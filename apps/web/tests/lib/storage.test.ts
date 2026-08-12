@@ -81,4 +81,61 @@ describe('fetchAsBase64', () => {
     await expect(fetchAsBase64('https://evil.example.com/internal')).rejects.toThrow('non-storage URL')
     expect(mockFetch).not.toHaveBeenCalled()
   })
+
+  // Hallazgo 4 (revisión final): guard de tamaño del lado servidor para el video de
+  // referencia del generador de video ads — el chequeo del browser es solo UX.
+  describe('guard de tamaño (maxBytes)', () => {
+    it('lanza PayloadTooLargeError si content-length excede maxBytes', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        headers: { get: vi.fn((k: string) => (k === 'content-length' ? String(20 * 1024 * 1024) : 'video/mp4')) },
+        arrayBuffer: vi.fn(),
+      })
+      const { fetchAsBase64, PayloadTooLargeError } = await import('@/lib/storage')
+      await expect(
+        fetchAsBase64('https://test.supabase.co/storage/v1/object/public/ad-uploads/s1/ref.mp4', 14 * 1024 * 1024),
+      ).rejects.toThrow(PayloadTooLargeError)
+    })
+
+    it('deja pasar si content-length está dentro de maxBytes', async () => {
+      const src = Buffer.from('small-video')
+      const ab = new ArrayBuffer(src.length)
+      new Uint8Array(ab).set(src)
+      mockFetch.mockResolvedValue({
+        ok: true,
+        headers: { get: vi.fn((k: string) => (k === 'content-length' ? String(1024) : 'video/mp4')) },
+        arrayBuffer: vi.fn().mockResolvedValue(ab),
+      })
+      const { fetchAsBase64 } = await import('@/lib/storage')
+      await expect(
+        fetchAsBase64('https://test.supabase.co/storage/v1/object/public/ad-uploads/s1/ref.mp4', 14 * 1024 * 1024),
+      ).resolves.toMatchObject({ mimeType: 'video/mp4' })
+    })
+
+    it('fail-open: sin content-length (chunked) no bloquea aunque se pida maxBytes', async () => {
+      const ab = new ArrayBuffer(4)
+      mockFetch.mockResolvedValue({
+        ok: true,
+        headers: { get: vi.fn((k: string) => (k === 'content-length' ? null : 'video/mp4')) },
+        arrayBuffer: vi.fn().mockResolvedValue(ab),
+      })
+      const { fetchAsBase64 } = await import('@/lib/storage')
+      await expect(
+        fetchAsBase64('https://test.supabase.co/storage/v1/object/public/ad-uploads/s1/ref.mp4', 14 * 1024 * 1024),
+      ).resolves.toMatchObject({ mimeType: 'video/mp4' })
+    })
+
+    it('sin maxBytes, el comportamiento es idéntico al de antes (no revisa tamaño)', async () => {
+      const ab = new ArrayBuffer(4)
+      mockFetch.mockResolvedValue({
+        ok: true,
+        headers: { get: vi.fn((k: string) => (k === 'content-length' ? String(999 * 1024 * 1024) : 'video/mp4')) },
+        arrayBuffer: vi.fn().mockResolvedValue(ab),
+      })
+      const { fetchAsBase64 } = await import('@/lib/storage')
+      await expect(
+        fetchAsBase64('https://test.supabase.co/storage/v1/object/public/ad-uploads/s1/ref.mp4'),
+      ).resolves.toMatchObject({ mimeType: 'video/mp4' })
+    })
+  })
 })

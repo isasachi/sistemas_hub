@@ -69,20 +69,20 @@ export const tools: Tool[] = [
     name: "Generador de Video Ads",
     slug: "generador-video-ads",
     description:
-      "Convierte un video que ya funciona —o un personaje generado— en tu propio video ad vertical.",
+      "Sube un video que ya funciona y te devolvemos su ADN de guión, listo para rellenar con tu producto.",
     longDescription:
-      "Empieza con un video de referencia, con la foto de tu creador o dejando que lo inventemos. Desglosamos la referencia segundo a segundo, sacamos el esqueleto de su guión, lo rellenamos con tu producto y generamos el video vertical con voz en español.",
+      "Empieza con un video de referencia vertical. Lo desglosamos corte por corte —qué se ve, qué se dice, cómo está encuadrado, cuánto dura cada toma— y sacamos el esqueleto de su guión: la plantilla Fill in the Blank que rellenas con tu producto, tu ángulo y tu público.",
     icon: "Video",
     stage: "crear",
     tag: "IA Real",
     tagStyle: "new",
     status: "live",
-    pitch: "Un video que ya vende, rehecho con tu producto.",
+    pitch: "El guión de un video que ya vende, listo para tu producto.",
     // Sin `preview`: falta el asset /public/showcase/generador-video-ads.jpg. Al
     // sembrarlo, añadir `preview: { kind: "image", ratio: "9/16" }`.
     stats: [
-      { value: "3 caminos", label: "referencia, foto o IA" },
-      { value: "9:16", label: "listo para pautar" },
+      { value: "1 referencia", label: "video vertical obligatorio" },
+      { value: "corte a corte", label: "análisis del original" },
     ],
   },
   {

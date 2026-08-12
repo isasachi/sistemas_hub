@@ -99,12 +99,40 @@ export function storagePublicUrl(path: string): string {
   return getStorage().getPublicUrl(path).data.publicUrl
 }
 
-export async function fetchAsBase64(url: string): Promise<{ data: string; mimeType: string }> {
+/** Lanzada por `fetchAsBase64` cuando `maxBytes` se pasa y el `content-length` de
+ * la respuesta lo excede. Clase dedicada (en vez de un Error genérico) para que
+ * el caller pueda distinguir "archivo muy grande" de cualquier otro fallo de red
+ * y devolver un 413 con mensaje propio en vez de un 500 genérico. */
+export class PayloadTooLargeError extends Error {}
+
+/**
+ * @param maxBytes Opcional. Si se pasa, valida `content-length` ANTES de bufferear
+ *   el archivo entero en memoria (`arrayBuffer()` + base64 lo infla 4/3). Lo usa
+ *   el análisis forense del video de referencia: el tope de 14 MB
+ *   (`MAX_VIDEO_MB`) hoy solo se valida en el browser (`Section0Reference`), que
+ *   es puro UX — un request armado a mano se lo salta y revienta el runtime de
+ *   Node por memoria o timeout al bufferear un video sin tope real.
+ *   ponytail: si `content-length` falta (respuesta chunked) o el header no es un
+ *   número, deja pasar — mismo criterio fail-open que el resto de los guards del
+ *   hub (ver `gen-quota.ts`): bloquear por un chequeo que en sí no respondió es
+ *   peor que dejar pasar un archivo que probablemente sí mide lo que dice.
+ */
+export async function fetchAsBase64(
+  url: string,
+  maxBytes?: number,
+): Promise<{ data: string; mimeType: string }> {
   let host: string
   try { host = new URL(url).host } catch { throw new Error('Invalid image URL') }
   if (!allowedHosts().has(host)) throw new Error(`Refused to fetch non-storage URL: ${host}`)
   const res = await fetch(url)
   if (!res.ok) throw new Error(`Failed to fetch image: ${res.status}`)
+  if (maxBytes) {
+    const len = Number(res.headers.get('content-length'))
+    if (len > 0 && len > maxBytes) {
+      const mb = Math.round(maxBytes / (1024 * 1024))
+      throw new PayloadTooLargeError(`El archivo pesa más de ${mb} MB.`)
+    }
+  }
   const mimeType = res.headers.get('content-type') ?? 'image/jpeg'
   const buf = await res.arrayBuffer()
   return { data: Buffer.from(buf).toString('base64'), mimeType }

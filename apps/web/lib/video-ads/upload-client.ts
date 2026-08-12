@@ -1,5 +1,7 @@
 'use client'
 
+import { MAX_VIDEO_MB } from './limits'
+
 /**
  * Subida directa del browser al bucket. El body de una función serverless de Vercel
  * está topado en 4.5 MB, así que el video de referencia NO puede pasar por una ruta:
@@ -30,8 +32,9 @@ export async function uploadDirect(
   return signed.publicUrl
 }
 
-/** Tope del video de referencia: por encima, Gemini no lo acepta inline. */
-export const MAX_VIDEO_MB = 14
+/** Reexport: el límite vive en `limits.ts` (módulo sin 'use client') para que el
+ * guard del servidor pueda importarlo sin arrastrar código de browser. */
+export { MAX_VIDEO_MB }
 
 /**
  * Mide el asset en el browser para exigir que sea vertical.

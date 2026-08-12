@@ -9,9 +9,9 @@ export default function GeneradorVideoAds() {
       name="Generador de Video Ads"
       slug="generador-video-ads"
       sessionKey={SESSION_KEY}
-      title="Tu video ad, con guión y actor incluidos"
-      description="Empieza con un video que ya funciona, con la foto de tu creador, o déjanos inventarlo. Desglosamos la referencia segundo a segundo, escribimos el guión con tu producto y te devolvemos el video vertical listo para pautar."
-      cta="Crear mi video"
+      title="El guión de un video que ya funciona, listo para tu producto"
+      description="Sube un video de referencia vertical. Lo desglosamos corte por corte —qué se ve, qué se dice, cómo está encuadrado y cuánto dura cada toma— y sacamos el esqueleto de su guión: la plantilla que rellenas con tu producto, tu ángulo y tu público."
+      cta="Analizar mi video"
     />
   );
 }
