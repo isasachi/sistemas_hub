@@ -125,12 +125,39 @@ describe('groupIntoLotes', () => {
     expect(() => LoteSchema.parse(lote)).not.toThrow()
   })
 
+  // CRITICAL (fix round 2) — regresión introducida por el fix round 1: redondear a 1
+  // decimal en el leaf de `splitLongToma` (`r1(dur)`) aplastaba la duración ANTES de
+  // sumarla, así que `excedeTope` sumaba cifras que ya habían perdido las centésimas.
+  // Dos tomas de 7.51 s (15.02 s reales) llegaban a la suma como 7.5 + 7.5 = 15.0 exacto
+  // y el guard nunca disparaba: 1 lote en vez de 2. El disparador no es exótico — el
+  // análisis forense deriva duraciones de marcas de tiempo de video, así que dos
+  // decimales son lo normal, no el caso raro.
+  it('dos tomas de 7.51 s (15.02 reales) SÍ se parten en dos lotes', () => {
+    const l = groupIntoLotes([toma(1, 7.51), toma(2, 7.51)])
+    expect(l).toHaveLength(2)
+    for (const x of l) expect(x.duracionSeg).toBeLessThanOrEqual(LOTE_MAX_SEC)
+  })
+
+  it('cinco tomas de 3.04 s (15.20 reales) no caben en un solo lote', () => {
+    const l = groupIntoLotes(Array.from({ length: 5 }, (_, i) => toma(i + 1, 3.04)))
+    expect(l.length).toBeGreaterThan(1)
+    for (const x of l) expect(x.duracionSeg).toBeLessThanOrEqual(LOTE_MAX_SEC)
+  })
+
+  it('quince tomas de 1.04 s (15.60 reales) no caben en un solo lote', () => {
+    const l = groupIntoLotes(Array.from({ length: 15 }, (_, i) => toma(i + 1, 1.04)))
+    expect(l.length).toBeGreaterThan(1)
+    for (const x of l) expect(x.duracionSeg).toBeLessThanOrEqual(LOTE_MAX_SEC)
+  })
+
   // Property test: entrada generada con muchas tomas de duración variada (incluida una
-  // larga que fuerza split) — el invariante debe sostenerse sobre TODOS los lotes:
-  // ninguno vacío, ninguno sobre el tope, numeración sin huecos, texto completo y sin
-  // duplicar.
+  // larga que fuerza split, y algunas de dos decimales — el análisis forense deriva
+  // duraciones de marcas de tiempo de video, así que 2 decimales son el caso normal, no
+  // el exótico; un array de un solo decimal no puede observar el bug del fix round 2)
+  // — el invariante debe sostenerse sobre TODOS los lotes: ninguno vacío, ninguno sobre
+  // el tope, numeración sin huecos, texto completo y sin duplicar.
   it('invariante sobre una entrada generada: sin vacíos, sin exceso, numeración sin huecos, texto íntegro', () => {
-    const duraciones = [3, 7, 1, 9.5, 2, 30, 4.4, 12, 0.5, 6, 15, 8, 22, 1.1, 9]
+    const duraciones = [3, 7.51, 1, 9.51, 2, 30, 4.43, 12, 0.5, 6, 15, 8, 22, 1.13, 9]
     // Sufijo no-numérico ("end") tras el índice: evita que "token1end" sea substring
     // de "token14end" al contar ocurrencias más abajo.
     const tomas = duraciones.map((d, i) => toma(i + 1, d, `token${i}end`))

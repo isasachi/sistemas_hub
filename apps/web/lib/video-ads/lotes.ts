@@ -56,16 +56,18 @@ const r1 = (n: number) => Math.round(n * 10) / 10
 const EPS = 1e-9
 const excedeTope = (segundos: number) => segundos - LOTE_MAX_SEC > EPS
 
-/** Piso de duración para una toma con `duracionSeg` inválido (no finito o ≤0). Es
- *  defensa de última línea: `TomaFinalSchema.duracionSeg` (adapt.ts) ya exige
- *  `.finite().positive()`, así que este caso debería morir mucho antes, en el parse
- *  del LLM. Pero `groupIntoLotes` no controla quién construye un `TomaFinal` — un test,
- *  o código futuro que no pase por ese schema — y el invariante de arriba tiene que
- *  sostenerse igual: sin este piso, un NaN nunca hace `> LOTE_MAX_SEC` (comparación con
- *  NaN es siempre falsa) y el lote nunca cierra, fusionando TODO el resto del guión en
- *  un solo lote; un Infinity revienta `Array.from({ length: Infinity })` con RangeError.
- *  0.1s es arbitrario — el valor correcto no existe sin re-preguntarle al LLM — pero
- *  garantiza que la función no crashee ni rompa el invariante. */
+/** Piso de duración para una toma con `duracionSeg` inválido (no finito, cero o
+ *  negativo). Esta es LA ÚNICA defensa contra duraciones degeneradas — a propósito:
+ *  `TomaFinalSchema.duracionSeg` (adapt.ts) es un `z.number()` sin refinar. Un `.positive()`
+ *  ahí se probó y se revirtió (fix round 2): el forense puede reportar legítimamente un
+ *  corte de 0s, y esa misma plantilla se relee en cada reintento de `AdaptedScriptSchema`
+ *  — un 0 la tumba de forma determinista en los 6 intentos (3 OpenAI + 3 Gemini) y deja
+ *  la sesión trabada sin salida sin re-correr el análisis forense (el paso caro). Sin
+ *  este piso, un NaN nunca hace `> LOTE_MAX_SEC` (comparación con NaN es siempre falsa)
+ *  y el lote nunca cierra, fusionando TODO el resto del guión en uno solo; un Infinity
+ *  revienta `Array.from({ length: Infinity })` con RangeError. 0.1s es arbitrario — el
+ *  valor correcto no existe sin re-preguntarle al LLM — pero garantiza que la función
+ *  no crashee ni rompa el invariante. */
 const DUR_FALLBACK = 0.1
 const sanearDuracion = (d: number) => (Number.isFinite(d) && d > 0 ? d : DUR_FALLBACK)
 
@@ -81,7 +83,15 @@ const sanearDuracion = (d: number) => (Number.isFinite(d) && d > 0 ? d : DUR_FAL
  */
 function splitLongToma(t: TomaFinal): TomaFinal[] {
   const dur = sanearDuracion(t.duracionSeg)
-  if (dur <= LOTE_MAX_SEC) return [{ ...t, duracionSeg: r1(dur) }]
+  // SIN r1 acá (fix round 2): esta es la salida de la inmensa mayoría de las tomas —
+  // las que no necesitan dividirse. Aplastar su duración a 1 decimal antes de que
+  // `groupIntoLotes` la sume anula el epsilon de `excedeTope`: dos tomas de 7.51 s
+  // (15.02 s reales) llegaban redondeadas a 7.5 y sumaban exactamente 15.0, así que el
+  // guard nunca disparaba. El resultado no se veía como lote inválido (el invariante
+  // publicado seguía en <=15) sino como MENOS lotes de los que tocaba — la API igual
+  // renderiza una duración entera, así que ese excedente sale como diálogo cortado.
+  // El redondeo se queda solo en `r1` sobre el `duracionSeg` de display del lote.
+  if (dur <= LOTE_MAX_SEC) return [{ ...t, duracionSeg: dur }]
 
   const partes = t.locucion.split(/(?<=[.!?])\s+/).filter((s) => s.trim())
 

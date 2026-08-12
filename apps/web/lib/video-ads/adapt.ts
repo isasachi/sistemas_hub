@@ -19,12 +19,18 @@ import type { ProductScan } from '@/lib/types'
 export const TomaFinalSchema = z.object({
   n: z.number(),
   tiempoOriginal: z.string(),
-  // .finite().positive(): esta duración la produce un LLM y de acá sale directo a
-  // groupIntoLotes (lotes.ts), que suma duraciones para decidir dónde cortar cada
-  // lote de generación (llamada PAGADA a KIE). Un NaN/Infinity/0 aquí es más barato
-  // de atajar en el parse (falla ruidoso, se reintenta) que en el algoritmo de
-  // agrupación (lotes.ts igual se defiende, pero esa es la última línea, no la primera).
-  duracionSeg: z.number().finite().positive(),
+  // Sin refinar a propósito (fix round 2, se probó `.finite().positive()` y se
+  // revirtió): `.finite()` es no-op en la versión de zod de este repo — z.number()
+  // ya rechaza NaN/Infinity sin él, así que no defendía nada que no estuviera
+  // defendido. `.positive()` sí cambiaba algo, y para peor: template.ts y forensic.ts
+  // declaran duracionSeg sin restricción de signo, y este prompt manda copiar la
+  // duración de la plantilla sin cambios — un corte de 0s legítimo (relámpago) tumba
+  // los 6 intentos de AdaptedScriptSchema (3 OpenAI + 3 Gemini) de forma determinista,
+  // porque el reintento relee la misma plantilla guardada: la sesión queda trabada sin
+  // salida salvo re-correr el análisis forense, que es el paso caro con tope per-step.
+  // Las duraciones degeneradas (NaN/Infinity/0/negativo) se sanean en un solo lugar:
+  // `sanearDuracion` en lotes.ts, justo antes de que importen (agrupar en lotes).
+  duracionSeg: z.number(),
   accionVisual: z.string(),
   personaje: z.string(),
   producto: z.string(),
