@@ -47,10 +47,11 @@ sistemas_hub/                (git root — package.json con "workspaces": ["apps
 
 Genera un video ad UGC vertical (9:16) con **Grok Imagine 1.5 vía KIE AI** (`KIE_API_KEY`). Espeja el generador de anuncios (sesión en tabla propia + wizard de 5 pasos + `gen-quota`), con tres divergencias obligadas.
 
-**Tres líneas de entrada, un solo pipeline.** La columna `video_sessions.mode` discrimina: `video-ref` (video de referencia + producto), `character-ref` (foto de personaje + producto), `character-gen` (personaje generado + producto). `character-gen` es `character-ref` con un paso previo — no es una rama aparte. La bifurcación real es el guión:
+**Una sola línea de entrada.** El VIDEO ORIGINAL es obligatorio: es la fuente de verdad de estructura, orden, ritmo, cámara y número de tomas (`docs/superpowers/plans/2026-08-12-video-ugc-plan-a-analisis.md`). Los modos `character-ref`/`character-gen` se eliminaron con el recableado al PROMPT MAESTRO — sin referencia no hay ADN estructural que copiar, que es el valor de la tool.
 
-- **Con referencia:** Gemini analiza el video segundo a segundo (`forensic_analysis`: beats con `t`/visual/diálogo/texto en pantalla/cámara) → se extrae el **esqueleto** (`script_template`: el guión literal con [blancos] solo en las palabras de contenido) → se rellena con el producto del usuario. Es el sistema de plantillas de `generate-copy` (anuncios) aplicado a beats: mismo número, mismo orden, sustitución quirúrgica, todo lo demás verbatim. Los tres artefactos se guardan; el esqueleto se muestra en el wizard.
-- **Sin referencia:** guión UGC desde cero a partir de personaje + producto, dos versiones A/B.
+**FASE 0 — gate de validación bloqueante.** `validation.ts` construye una matriz determinista (sin LLM: preguntar "¿el usuario entregó esto?" no necesita un modelo, y pedírselo abriría la puerta a que lo rellene). `canProceed` bloquea el wizard mientras una variable crítica siga pendiente. ⚠️ **Etnia y acento NUNCA se marcan confirmados desde la referencia**, ni habiendo foto de personaje: el spec lo prohíbe explícitamente y una foto no confirma origen cultural.
+
+**FASE 1 — la unidad de análisis es el CORTE REAL, no la frase.** El pipeline viejo pedía un beat por cambio visual *o* por frase, lo que llegara primero; eso fabricaba cortes donde el original tenía una toma continua y destruía el ritmo al reconstruir. Ahora: "no dividas una toma continua solo porque cambia el diálogo". Los elementos gráficos (subtítulos, watermark) se capturan en su **propio campo** (`elementosGraficos`), nunca dentro de `accion` ni `camara` — así no viajan al render como algo a reproducir.
 
 **Lo que NO se copia de anuncios (y por qué):**
 
