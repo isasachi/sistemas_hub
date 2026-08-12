@@ -40,7 +40,15 @@ export default function Section2Character() {
       // que recién ahí lo persiste en `video_sessions.character_url`. Sin este
       // segundo patch a `inputs`, la matriz de validación nunca confirmaba
       // "Personaje" por imagen aunque la foto ya estuviera en el bucket.
-      patch({ characterUrl: url, inputs: { ...inputs, characterUrl: url } })
+      //
+      // OJO: se lee `useVideoStore.getState().inputs` (fresco), NO el `inputs` del
+      // closure de este render. `uploadDirect` cruza dos viajes de red (firmar +
+      // PUT); nada deshabilita los campos de texto durante esa ventana, así que si
+      // el usuario tipea en Personaje/Etnia/Acento/Voz/Restricciones mientras la
+      // foto sube, el `inputs` capturado en el closure queda desactualizado. Si se
+      // usa ese closure acá, este patch lo pisa y borra en silencio lo que el
+      // usuario acaba de escribir. No "simplificar" esto de vuelta a `...inputs`.
+      patch({ characterUrl: url, inputs: { ...useVideoStore.getState().inputs, characterUrl: url } })
     } catch (err) {
       setError((err as Error).message)
     } finally {
