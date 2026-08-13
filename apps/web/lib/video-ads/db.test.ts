@@ -28,7 +28,7 @@ beforeEach(() => {
 })
 
 describe('claimFreshLotes', () => {
-  const patch = { step: 6, lotes: [], duration: 0 }
+  const patch = { step: 6, lotes: [], duration: 0, render_done: false }
 
   it('true cuando la condición `lotes IS NULL` se cumple: la fila queda reclamada', async () => {
     mockSelect.mockResolvedValue({ data: [{ id: 's1' }], error: null })

@@ -86,6 +86,11 @@ export interface VideoSessionResponse {
   lotes: Lote[] | null
   video_url: string | null   // primer lote listo: sirve de miniatura en el dashboard
   duration: number | null
+  // `renderDone(lotes)` cacheado (render-lotes.ts) — distinto de `!!video_url`, que se
+  // estampa con el PRIMER lote listo, no cuando TODOS terminan. Ver la migración
+  // 20260812000003_video_render_done.sql para el porqué de cachearlo en vez de leer
+  // `lotes` (jsonb pesado) en cada listado del dashboard.
+  render_done: boolean
 }
 
 export { ProductScanSchema }

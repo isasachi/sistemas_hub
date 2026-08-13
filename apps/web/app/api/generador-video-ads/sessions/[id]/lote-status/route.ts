@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getVideoSession, updateVideoSession } from '@/lib/video-ads/db'
 import { getTaskDetail } from '@/lib/video-ads/kie'
 import { uploadToStorage } from '@/lib/storage'
+import { renderDone } from '@/lib/video-ads/render-lotes'
 import type { Lote } from '@/lib/video-ads/lotes'
 
 export const dynamic = 'force-dynamic'
@@ -76,10 +77,17 @@ export async function GET(
     }
   }
 
+  const done = renderDone(lotes)
+
   if (changed) {
     const first = lotes.find((l) => l.videoUrl)?.videoUrl ?? null
-    await updateVideoSession(id, { lotes, ...(first ? { video_url: first } : {}) })
+    // `render_done` (fix round 5): esta ruta es la única que sabe, lote por lote, si
+    // TODOS ya resolvieron — es la fuente real detrás del `done` que ya devuelve en
+    // el JSON de abajo. Cachearlo acá en la fila es lo que le permite al dashboard
+    // (`sessions/route.ts`, vía `listVideoSessions`) leer un booleano angosto en vez
+    // de traer `lotes` completo (jsonb con los prompts de cada lote) en cada listado.
+    await updateVideoSession(id, { lotes, render_done: done, ...(first ? { video_url: first } : {}) })
   }
 
-  return NextResponse.json({ lotes, done: lotes.every((l) => l.videoUrl || l.status === 'fail') })
+  return NextResponse.json({ lotes, done })
 }

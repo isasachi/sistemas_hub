@@ -195,18 +195,43 @@ describe('POST generate-lotes — fix round 2: cuota por video, no por lote', ()
     expect(updateVideoSession).not.toHaveBeenCalled()
   })
 
-  it('gate de video-generation bloqueado: 429 en la unidad nueva, sin tocar KIE ni el claim', async () => {
+  // Fix round 5: antes esta rama IGNORABA el `Response` real de `checkGenQuota` y
+  // devolvía siempre el mismo texto hardcodeado ("empieza otra sesión"), sin importar
+  // qué capa bloqueó. Ahora se propaga el `blocked` tal cual — mismo patrón que la
+  // rama de reanudación (`checkGlobalBackstop`).
+  it('gate per-sesión bloqueado (regensLeft: 0): se devuelve el mensaje real de checkGenQuota, no uno inventado', async () => {
     vi.mocked(getVideoSession).mockResolvedValue(session())
     vi.mocked(checkGenQuota).mockResolvedValue({
-      blocked: Response.json({ error: 'generic' }, { status: 429 }),
+      blocked: Response.json({ error: 'Llegaste al límite de 2 regeneraciones para este paso.' }, { status: 429 }),
       regensLeft: 0,
     })
 
     const res = await POST(req(), ctx())
     expect(res.status).toBe(429)
     const body = await res.json()
-    expect(body.error).toMatch(/video/i)
-    expect(body.error).not.toMatch(/render/i)
+    expect(body.error).toBe('Llegaste al límite de 2 regeneraciones para este paso.')
+
+    expect(claimFreshLotes).not.toHaveBeenCalled()
+    expect(createVideoTask).not.toHaveBeenCalled()
+  })
+
+  // El bug que motivó el fix: un usuario que choca contra el backstop GLOBAL (500/día
+  // de TODO el hub, `regensLeft: null`) recibía el consejo de "empieza otra sesión" —
+  // que no puede funcionar, porque la sesión nueva gasta MÁS contra el mismo backstop
+  // compartido. Con el fix, el mensaje real del backstop ("vuelve mañana") es el que
+  // llega, y el texto viejo específico de sesión ya no aparece.
+  it('backstop GLOBAL bloqueado (regensLeft: null): el mensaje NO sugiere abrir otra sesión', async () => {
+    vi.mocked(getVideoSession).mockResolvedValue(session())
+    vi.mocked(checkGenQuota).mockResolvedValue({
+      blocked: Response.json({ error: 'El servicio alcanzó su límite diario de generaciones. Vuelve mañana.' }, { status: 429 }),
+      regensLeft: null,
+    })
+
+    const res = await POST(req(), ctx())
+    expect(res.status).toBe(429)
+    const body = await res.json()
+    expect(body.error).toMatch(/diario|mañana/i)
+    expect(body.error).not.toMatch(/otra sesión/i)
 
     expect(claimFreshLotes).not.toHaveBeenCalled()
     expect(createVideoTask).not.toHaveBeenCalled()

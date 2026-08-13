@@ -46,6 +46,12 @@ export default function Section6Lotes() {
         const data = (await res.json()) as { lotes?: Lote[]; done?: boolean; error?: string }
         if (!res.ok) throw new Error(data.error ?? 'No se pudo consultar el render')
         setConnectionLost(false)
+        // Fix round 5: sin esto, un error transitorio (el catch de abajo llama
+        // `setError`) dejaba el aviso rojo pegado en pantalla para siempre incluso
+        // después de que un tick posterior conectara bien — `connectionLost` se
+        // apagaba pero `error` no, y la UI mostraba "algo requiere tu acción" sobre
+        // un render que ya volvió a reportar estado con normalidad.
+        setError(null)
         if (data.lotes) patch({ lotes: data.lotes })
         // `data.done` cubre el caso feliz (todo resuelto, con éxito o con un `fail`
         // explícito de KIE), pero un lote "quedó a medias" (`isStuck`) nunca lo pone
@@ -113,9 +119,18 @@ export default function Section6Lotes() {
             ))}
           </ol>
           <p className="mt-3 text-[11.5px] leading-relaxed text-[#8b8b8b]">
-            Cada lote es un render aparte: esto consume <strong className="text-[#cfcfcf]">
-            {preview.length} {preview.length === 1 ? 'generación' : 'generaciones'}</strong> de tu cuota.
-            Los clips se descargan por separado y los unes en tu editor.
+            {/* La cuota se cuenta por VIDEO, no por lote (ver generate-lotes/route.ts):
+                un render de 4 lotes con tope de 3 generaciones NO se bloquea, porque
+                sigue siendo una sola generación. Decir "consume N generaciones" era
+                literalmente falso y le hacía creer al usuario que un guión de varios
+                lotes no le iba a alcanzar la cuota. */}
+            Esto produce <strong className="text-[#cfcfcf]">
+            {preview.length} {preview.length === 1 ? 'clip' : 'clips'}</strong> en{' '}
+            <strong className="text-[#cfcfcf]">
+            {preview.length === 1 ? 'un render' : `${preview.length} renders`}</strong>, pero
+            consume <strong className="text-[#cfcfcf]">una sola generación</strong> de tu cuota:
+            se cuenta por video, no por lote. Los clips se descargan por separado y los unes
+            en tu editor.
           </p>
         </div>
         {error && <div className={errorBox}>{error}</div>}
@@ -137,10 +152,23 @@ export default function Section6Lotes() {
   return (
     <div className="flex flex-col gap-4">
       {stuck && (
+        // Este aviso se pinta ANTES de que el usuario pulse "Reintentar" — con lo que
+        // hay en pantalla en este momento, no hay forma de saber si el guión, el
+        // personaje o la voz cambiaron desde el último intento (eso lo decide el
+        // servidor recién cuando llega el POST, comparando la huella de contenido).
+        // Devolver el hecho (`reanuda`) en la respuesta de `generate-lotes` solo
+        // podría condicionar el mensaje DESPUÉS del click, cuando este aviso ya no
+        // está en pantalla — no sirve para lo que se muestra acá. Por eso se optó
+        // por sacar la promesa incondicional y explicar los dos desenlaces posibles,
+        // en vez de agregar un campo nuevo al contrato de la respuesta que no
+        // resolvería el problema real (este texto se renderiza antes de esa respuesta).
         <div className={warnBox}>
           El render quedó a medias: algunos lotes nunca llegaron a iniciarse en KIE.
-          Reintentar solo crea los que faltan — no vuelve a gastar cuota por los que
-          ya se generaron.
+          Si no tocaste el guión, el personaje ni la voz desde el último intento,
+          reintentar solo crea los que faltan y no vuelve a gastar cuota. Si los
+          cambiaste, el servidor lo nota (la huella del contenido ya no coincide) y
+          cobra una generación nueva — los intentos ya pagados de este render quedan
+          abandonados.
         </div>
       )}
       {running && connectionLost && (

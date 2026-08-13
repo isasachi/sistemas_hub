@@ -33,12 +33,18 @@ export interface VideoListRow {
   video_url: string | null
   character_url: string | null
   product_url: string | null
+  // Señal angosta de "¿terminó el render?" — NO `!!video_url` (ese se estampa con el
+  // primer lote listo). Ver render_done en types.ts / la migración
+  // 20260812000003_video_render_done.sql. Se selecciona sola, sin `lotes` (jsonb con
+  // los prompts de cada lote, miles de caracteres) para no arrastrar ese peso en una
+  // lista de 24 filas.
+  render_done: boolean
 }
 
 export async function listVideoSessions(userId: string): Promise<VideoListRow[]> {
   const { data, error } = await getDb()
     .from('video_sessions')
-    .select('id, created_at, step, product_name, video_url, character_url, product_url')
+    .select('id, created_at, step, product_name, video_url, character_url, product_url, render_done')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(24)
@@ -104,7 +110,7 @@ export async function updateVideoSession(
  */
 export async function claimFreshLotes(
   id: string,
-  patch: Pick<VideoSessionResponse, 'step' | 'lotes' | 'duration'>
+  patch: Pick<VideoSessionResponse, 'step' | 'lotes' | 'duration' | 'render_done'>
 ): Promise<boolean> {
   const { data, error } = await getDb()
     .from('video_sessions')

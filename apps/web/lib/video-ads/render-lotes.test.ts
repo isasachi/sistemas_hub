@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { totalDuration, resumeSeed, mergeRescue, isPaidResume, scriptFingerprint } from './render-lotes'
+import { totalDuration, resumeSeed, mergeRescue, isPaidResume, scriptFingerprint, renderDone } from './render-lotes'
 import type { Lote } from './lotes'
 
 const lote = (n: number, over: Partial<Lote> = {}): Lote => ({
@@ -40,6 +40,36 @@ describe('totalDuration', () => {
 
   it('array vacío suma 0', () => {
     expect(totalDuration([])).toBe(0)
+  })
+})
+
+describe('renderDone', () => {
+  // El caso que motivó el fix (dashboard fix round 5): `video_url` se estampa con el
+  // PRIMER lote listo, no cuando TODOS terminan — `renderDone` es la fórmula real que
+  // el dashboard debería reflejar en vez de `!!video_url`.
+  it('false si algún lote sigue vivo (sin videoUrl y sin fail), aunque otro ya tenga video', () => {
+    const lotes = [
+      lote(1, { videoUrl: 'https://x/1.mp4', status: 'success' }),
+      lote(2, { taskId: 't2', status: 'generating' }),
+    ]
+    expect(renderDone(lotes)).toBe(false)
+  })
+
+  it('true cuando TODOS los lotes tienen video o fallaron explícitamente', () => {
+    const lotes = [
+      lote(1, { videoUrl: 'https://x/1.mp4', status: 'success' }),
+      lote(2, { status: 'fail', failMsg: 'error de KIE' }),
+    ]
+    expect(renderDone(lotes)).toBe(true)
+  })
+
+  it('false si un lote quedó a medias (idle, sin taskId ni video)', () => {
+    const lotes = [lote(1, { videoUrl: 'https://x/1.mp4', status: 'success' }), lote(2)]
+    expect(renderDone(lotes)).toBe(false)
+  })
+
+  it('array vacío: true (vacuously, sin lotes no hay nada pendiente)', () => {
+    expect(renderDone([])).toBe(true)
   })
 })
 

@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getVideoSession, updateVideoSession, claimFreshLotes } from '@/lib/video-ads/db'
 import { createVideoTask, clampDuration, KIE_PROMPT_MAX, type VideoImage } from '@/lib/video-ads/kie'
 import { groupIntoLotes, buildLotePrompt, type Lote } from '@/lib/video-ads/lotes'
-import { totalDuration, resumeSeed, mergeRescue, isPaidResume, scriptFingerprint } from '@/lib/video-ads/render-lotes'
+import { totalDuration, resumeSeed, mergeRescue, isPaidResume, scriptFingerprint, renderDone } from '@/lib/video-ads/render-lotes'
 import { AdaptedScriptSchema, type AdaptedScript } from '@/lib/video-ads/adapt'
-import { checkGenQuota, checkGlobalBackstop, recordGenQuota, VIDEO_GENERATION_LIMIT } from '@/lib/gen-quota'
+import { checkGenQuota, checkGlobalBackstop, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 import { STEP } from '@/lib/video-ads/steps'
 
@@ -20,7 +20,13 @@ export const maxDuration = 300
  */
 async function saveRescue(id: string, lotes: Lote[]) {
   try {
-    await updateVideoSession(id, { step: STEP.LOTES, lotes, duration: totalDuration(lotes) })
+    // `render_done` (fix round 5) se recalcula con la MISMA fórmula que `lote-status`
+    // usa para su propio `done` — acá casi siempre da `false` (los lotes recién
+    // creados quedan `waiting`, no `success`/`fail`), pero escribirlo explícito evita
+    // que una sesión que se está re-renderizando (`generate-lotes` volvió a tocar
+    // `lotes` tras un `render_done: true` de una vuelta anterior) se quede mostrando
+    // "listo" en el dashboard mientras el nuevo intento sigue en curso.
+    await updateVideoSession(id, { step: STEP.LOTES, lotes, duration: totalDuration(lotes), render_done: renderDone(lotes) })
   } catch (err) {
     console.error(
       // Con el id de sesión: un mp4 recuperado a mano desde KIE hay que devolvérselo a
@@ -170,15 +176,18 @@ export async function POST(
     const { blocked } = await checkGlobalBackstop()
     if (blocked) return blocked
   } else {
+    // Fix round 5: antes se descartaba el `Response` real de `checkGenQuota` y se
+    // devolvía SIEMPRE el mismo mensaje ("empieza otra sesión"), sin importar cuál de
+    // las dos capas bloqueó. `checkGenQuota` bloquea por dos motivos distintos —el
+    // tope per-sesión (`regensLeft: 0`) o el backstop GLOBAL de todo el hub
+    // (`regensLeft: null`, 500/día, ver gen-quota.ts)— y son dos avisos que no se
+    // pueden intercambiar: a alguien que chocó con el backstop global, decirle "abre
+    // otra sesión" es un consejo que no puede funcionar (la sesión nueva gasta MÁS
+    // contra el mismo backstop compartido). El propio `blocked` ya trae el mensaje
+    // correcto para cada caso — se devuelve tal cual, igual que la rama de
+    // reanudación tres líneas arriba (`checkGlobalBackstop`), en vez de reinventarlo.
     const { blocked } = await checkGenQuota(id, 'video-generation')
-    if (blocked) {
-      return NextResponse.json(
-        {
-          error: `Ya generaste el máximo de videos para esta sesión (${VIDEO_GENERATION_LIMIT}). Empieza otra sesión para seguir.`,
-        },
-        { status: 429 },
-      )
-    }
+    if (blocked) return blocked
   }
 
   // Había taskId pagados pero esta llamada NO es una reanudación (huella distinta, o
@@ -214,7 +223,7 @@ export async function POST(
   // alcance angosto (no cubre reintentos sobre una sesión ya tocada, aunque haya
   // fallado por completo la primera vez).
   if (!reanuda && wasVirgin) {
-    const claimed = await claimFreshLotes(id, { step: STEP.LOTES, lotes: seed, duration: totalDuration(seed) })
+    const claimed = await claimFreshLotes(id, { step: STEP.LOTES, lotes: seed, duration: totalDuration(seed), render_done: renderDone(seed) })
     if (!claimed) {
       return NextResponse.json(
         { error: 'Esta sesión ya tiene un render en curso o parcialmente completado. Reanúdalo en vez de reiniciar.' },
@@ -320,8 +329,8 @@ export async function POST(
   // escapaba el handler (500 opaco de Next, sin log) dejando la fila con los
   // placeholders `idle` del claim — las tareas recién creadas en KIE quedaban
   // pagadas y huérfanas, sin que `lote-status` supiera que existen. El patch es
-  // idéntico al que escribía acá (`step`, `lotes`, `duration`), así que el camino
-  // feliz no cambia; sólo se suma el log si la escritura falla.
+  // idéntico al que escribía acá (`step`, `lotes`, `duration`, `render_done`), así
+  // que el camino feliz no cambia; sólo se suma el log si la escritura falla.
   await saveRescue(id, lotes)
   return NextResponse.json({ lotes })
 }

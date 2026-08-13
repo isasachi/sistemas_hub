@@ -31,7 +31,11 @@ export async function GET() {
     // de KIE y puede no terminar en .mp4, que es lo que el board usa para distinguir
     // video de imagen. En ese caso, y a media sesión, cae al still que ya exista.
     thumb: r.video_url?.includes('.mp4') ? r.video_url : (r.character_url ?? r.product_url ?? null),
-    done: !!r.video_url,
+    // Fix round 5: `!!r.video_url` marcaba "listo" apenas el PRIMER lote terminaba
+    // (es lo que `video_url` guarda) — un render de 4 lotes con solo el primero OK
+    // ya mostraba el check verde. `render_done` (columna cacheada, ver db.ts /
+    // render-lotes.ts `renderDone`) solo es `true` cuando TODOS los lotes resolvieron.
+    done: !!r.render_done,
   }))
   return NextResponse.json({ sessions })
 }

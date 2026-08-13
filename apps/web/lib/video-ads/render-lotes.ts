@@ -27,6 +27,25 @@ export function totalDuration(lotes: Lote[]): number {
 }
 
 /**
+ * `true` solo cuando NINGÚN lote puede seguir avanzando solo: cada uno o ya tiene
+ * video (`videoUrl`) o terminó en `fail` explícito de KIE. Un lote `waiting` /
+ * `queuing` / `generating` (sigue vivo del lado de KIE) o `idle` (nunca llegó a
+ * crear tarea — el caso "a medias" que `Section6Lotes` llama `stuck`) hace que esto
+ * dé `false`.
+ *
+ * Única fórmula de "¿terminó el render?" del módulo — antes vivía solo, inline, en
+ * `lote-status/route.ts` (para su propio `done` de respuesta); ahora también la usan
+ * `generate-lotes/route.ts` (para escribir `render_done` en la base cada vez que
+ * persiste `lotes`) y `db.ts`/`sessions/route.ts` (para leerlo en el dashboard sin
+ * traer el jsonb completo). Que las tres fuentes deriven del mismo cálculo es lo que
+ * evita que el booleano cacheado en `render_done` se desincronice de lo que `lotes`
+ * dice de verdad.
+ */
+export function renderDone(lotes: Lote[]): boolean {
+  return lotes.every((l) => l.videoUrl || l.status === 'fail')
+}
+
+/**
  * Empareja `base` (recién recalculado por `groupIntoLotes`, siempre determinista
  * mientras `adapted.tomas` no cambie — que ya no es un supuesto: `isPaidResume` lo
  * EXIGE vía la huella antes de dejar llamar acá) con lo que ya estaba guardado,
