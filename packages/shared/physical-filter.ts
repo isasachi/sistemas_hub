@@ -39,7 +39,15 @@ const APP = /\b(descarga (la |nuestra )?app|descargar (la )?app|instala (la )?ap
 // producto que trajo la búsqueda.
 // Sin \b al final: los nombres reales vienen pegados al país ("TemuPeru",
 // "SHEIN KIDS"). `amazon` va aparte con frontera para no comerse "Amazonia".
-const MARKETPLACE = /^(alibaba|aliexpress|shein|temu|mercado ?libre|linio|falabella|ripley|lazada|shopee|tiktok ?shop|google ads)|^(amazon|wish|walmart|ebay)\b/
+// `shoptemu` va explícito: no empieza con "temu" y es, medido 2026-08-12, el
+// anunciante con más anuncios de toda la base (50k, en 40 nichos distintos).
+const MARKETPLACE = /^(alibaba|aliexpress|shein|temu|shop ?temu|mercado ?libre|linio|falabella|ripley|lazada|shopee|tiktok ?shop|google ads)|^(amazon|wish|walmart|ebay|havan|carrefour|sodimac|promart|coppel|liverpool|elektra|casas ?bahia|magazine ?luiza|americanas|submarino|home ?depot|the home depot)\b/
+
+// Plataformas y apps globales: mismo problema que los marketplaces (decenas de
+// miles de anuncios activos, ninguna caja que enviar), pero no son tiendas.
+// Salieron de mirar qué encabezaba cada categoría del buscador: al agrupar
+// nichos, estas páginas ganaban todos los chips.
+const PLATAFORMA = /^(uber|airbnb|spotify|netflix|disney|paramount|hbo|prime video|tiktok|instagram|facebook|whatsapp|mercado ?pago|rappi|didi|pedidos ?ya|binance|booking|despegar|melolo|hallow)\b/
 
 // Señales de que SÍ se envía un objeto: mandan sobre las de arriba, porque el
 // error caro es descartar un producto real.
@@ -58,6 +66,8 @@ export function nonPhysicalSignal(
   const nombre = norm(advertiser ?? '')
   const mkt = nombre.match(MARKETPLACE)
   if (mkt) return { cluster: 'marketplace', match: mkt[0] }
+  const plat = nombre.match(PLATAFORMA)
+  if (plat) return { cluster: 'plataforma', match: plat[0] }
 
   const t = norm(`${advertiser ?? ''} ${text ?? ''}`)
   if (FISICO.test(t)) return null

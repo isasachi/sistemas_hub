@@ -13,6 +13,19 @@ describe('lista negra de no-físicos', () => {
     expect(nonPhysicalSignal('Mega Venta', 'Temu Mexico')?.cluster).toBe('marketplace')
   })
 
+  // Estos encabezaban TODAS las categorías del buscador: decenas de miles de
+  // anuncios activos y ninguna caja que enviar. "Shoptemu" no empieza con "temu",
+  // por eso hay que nombrarlo aparte.
+  it('bloquea marketplaces y plataformas que copaban el ranking por anuncios', () => {
+    expect(nonPhysicalSignal('Ofertas del día', 'Shoptemu')?.cluster).toBe('marketplace')
+    expect(nonPhysicalSignal('Todo para tu hogar', 'Havan')?.cluster).toBe('marketplace')
+    expect(nonPhysicalSignal('Viaja a donde quieras', 'Uber')?.cluster).toBe('plataforma')
+    expect(nonPhysicalSignal('Escucha lo que quieras', 'Spotify')?.cluster).toBe('plataforma')
+    expect(nonPhysicalSignal('Cashback', 'Mercado Pago')?.cluster).toBe('plataforma')
+    // Y no se lleva puesto a un producto cuyo nombre solo EMPIEZA parecido.
+    expect(isPhysicalEnough('Faja moldeadora', 'Disneyland Fajas')).toBe(true)
+  })
+
   it('deja pasar productos físicos que MENCIONAN a un médico o un tratamiento', () => {
     // El error caro: una crema real citando a una dermatóloga.
     expect(isPhysicalEnough('Una dermatóloga lo explica ✅', 'Auré Profesional')).toBe(true)
