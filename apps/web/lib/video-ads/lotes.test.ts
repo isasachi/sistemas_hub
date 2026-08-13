@@ -339,12 +339,16 @@ describe('buildLotePrompt', () => {
     expect(p).toContain(bloqueLargo)
     expect(p).toContain(productoLargo)
     // Prueba que SÍ llegó a degradar, no que por casualidad entró en el nivel completo:
-    // sin locución por toma (nivel 2) y con `accionVisual` truncada (piso, con "…").
-    expect(p).not.toMatch(/Locución: /)
+    // sin el bloque global de locución (nivel 2) y con `accionVisual` truncada (piso).
+    expect(p).not.toContain('GUION DE LOCUCIÓN FINAL')
     expect(p).toContain('…')
-    // La locución sigue siendo exacta pese a la degradación: sobrevive en el bloque
-    // GUION DE LOCUCIÓN FINAL aunque las líneas por-toma se hayan soltado.
-    expect(p).toContain('Frase número 8')
+    // Lo que NUNCA se suelta: la locución de cada toma, junto a su acción y sus
+    // segundos. Es la sincronización audio↔imagen — el bloque global que sí se soltó
+    // traía el mismo texto pero sin decir qué frase va con qué toma.
+    expect(p).toMatch(/### Toma 8 — 1\.8 s/)
+    expect(p).toContain('Locución: “Frase número 8')
+    // Y el texto sigue completo: soltar el bloque global no perdió ni una frase.
+    for (let i = 1; i <= 8; i++) expect(p).toContain(`Frase número ${i}`)
   })
 
   it('la cámara que recibe es la que sale en el prompt, no una fija del video', () => {

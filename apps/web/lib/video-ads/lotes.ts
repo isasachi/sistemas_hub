@@ -215,6 +215,10 @@ export function camaraDeLote(
 }
 
 /**
+ * Niveles de detalle del prompt, de más a menos detallado. Lo que se suelta primero es
+ * lo que DUPLICA información que ya está en otro lado; la línea `Locución:` de cada toma
+ * no está en esa categoría y nunca se suelta (ver el comentario en `renderAcciones`).
+ *
  * Niveles de detalle de la sección "SECUENCIA DE ACCIONES VISUALES", de más a menos
  * detallado. `buildLotePrompt` prueba cada uno en orden y usa el primero que entra en
  * `KIE_PROMPT_MAX` — ver el comentario grande sobre `render` más abajo para el porqué
@@ -222,7 +226,7 @@ export function camaraDeLote(
  */
 const NIVEL_COMPLETO = 0
 const NIVEL_SIN_OVERLAY_POR_TOMA = 1
-const NIVEL_SIN_LOCUCION_POR_TOMA = 2
+const NIVEL_SIN_GUION_GLOBAL = 2
 
 /**
  * Prompt de un lote. Es autosuficiente por obligación: el generador no recuerda el
@@ -272,9 +276,19 @@ export function buildLotePrompt(args: {
         return [
           `### Toma ${t.n} — ${t.duracionSeg} s`,
           accionVisual,
-          // Se solapa con GUION DE LOCUCIÓN FINAL más abajo, que ya trae el texto
-          // exacto — el primero en soltarse porque duplica, no informa.
-          nivel < NIVEL_SIN_LOCUCION_POR_TOMA && t.locucion ? `Locución: “${t.locucion}”` : '',
+          // NUNCA se suelta, en ningún nivel de degradación. Esta línea es lo único que
+          // le dice al generador QUÉ FRASE va con QUÉ ACCIÓN y en cuántos segundos: es
+          // la sincronización audio↔imagen, no una copia del guion global.
+          //
+          // La versión anterior la soltaba primero, razonando que "duplica, no informa"
+          // porque el texto ya estaba abajo en GUION DE LOCUCIÓN FINAL. Se comprobó en
+          // una sesión real que eso es falso: el lote 1 (4095/4096 caracteres) la perdió
+          // y los lotes 2–4 la conservaron, así que el primer clip recibió un párrafo de
+          // 263 caracteres sin ninguna pista de cómo repartirlo entre sus cuatro tomas y
+          // el resto sí la tuvo. El usuario lo describió como "una habla muy rápido y la
+          // otra muy lento, no hay consistencia" — que es exactamente lo que produce
+          // degradar un lote sí y otro no en la única señal de ritmo del prompt.
+          t.locucion ? `Locución: “${t.locucion}”` : '',
           // Se solapa con el párrafo global "TEXTO / OVERLAY: NINGUNO" de más abajo,
           // que ya prohíbe overlay para TODO el lote — igual de redundante por toma.
           nivel < NIVEL_SIN_OVERLAY_POR_TOMA ? 'Texto / Overlay: NINGUNO.' : '',
@@ -333,9 +347,19 @@ export function buildLotePrompt(args: {
       'SECUENCIA DE ACCIONES VISUALES:',
       renderAcciones(nivel, capAccion),
       '',
-      'GUION DE LOCUCIÓN FINAL (exacto: no resumir, no extender, no corregir, no añadir frases, no eliminar frases):',
-      `“${locucionFinal}”`,
-      '',
+      // El guion completo de una vez. Es lo PRIMERO que se suelta bajo presión de
+      // presupuesto (antes era lo último): sale del mismo texto que las líneas
+      // `Locución:` de cada toma, así que soltarlo no pierde ni una palabra — solo deja
+      // de repetirlas juntas. La regla de diálogo del spec ("exacto: no resumir, no
+      // extender…") se sigue cumpliendo, distribuida por toma, y de paso el modelo
+      // conserva la correspondencia frase↔toma↔segundos que este bloque no da.
+      ...(nivel < NIVEL_SIN_GUION_GLOBAL
+        ? [
+            'GUION DE LOCUCIÓN FINAL (exacto: no resumir, no extender, no corregir, no añadir frases, no eliminar frases):',
+            `“${locucionFinal}”`,
+            '',
+          ]
+        : []),
       'TEXTO / OVERLAY: NINGUNO.',
       'No generes captions, subtítulos, texto en pantalla, títulos, lower thirds, banners,',
       'stickers, emojis, flechas, callouts, gráficos, watermarks, interfaces ni elementos',
@@ -345,7 +369,7 @@ export function buildLotePrompt(args: {
       'No inventes diálogo para rellenar: el clip termina cuando termina la locución.',
     ].join('\n')
 
-  for (const nivel of [NIVEL_COMPLETO, NIVEL_SIN_OVERLAY_POR_TOMA, NIVEL_SIN_LOCUCION_POR_TOMA]) {
+  for (const nivel of [NIVEL_COMPLETO, NIVEL_SIN_OVERLAY_POR_TOMA, NIVEL_SIN_GUION_GLOBAL]) {
     const prompt = render(nivel, null)
     if (prompt.length <= KIE_PROMPT_MAX) return prompt
   }
@@ -362,7 +386,7 @@ export function buildLotePrompt(args: {
   let mejor: string | null = null
   while (lo <= hi) {
     const cap = Math.floor((lo + hi) / 2)
-    const prompt = render(NIVEL_SIN_LOCUCION_POR_TOMA, cap)
+    const prompt = render(NIVEL_SIN_GUION_GLOBAL, cap)
     if (prompt.length <= KIE_PROMPT_MAX) {
       mejor = prompt
       lo = cap + 1
@@ -372,7 +396,7 @@ export function buildLotePrompt(args: {
   }
   if (mejor) return mejor
 
-  const piso = render(NIVEL_SIN_LOCUCION_POR_TOMA, 0)
+  const piso = render(NIVEL_SIN_GUION_GLOBAL, 0)
   throw new Error(
     `El prompt del Lote ${lote.n} no entra en el tope de KIE (${KIE_PROMPT_MAX} caracteres) ` +
     `ni truncando la acción de cada toma al mínimo (${piso.length} caracteres resultantes). ` +

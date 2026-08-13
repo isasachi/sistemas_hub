@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractSlots, fillTemplate, validateTemplate, assembleTemplate } from './fill'
+import { extractSlots, fillTemplate, validateTemplate, assembleTemplate, rejectBadValues } from './fill'
 import type { ScriptTemplate } from './template'
 
 // Plantilla recortada del caso real (serum Apivita → suero de niacinamida). Trae los
@@ -38,6 +38,90 @@ describe('extractSlots', () => {
     const s = extractSlots(T)
     expect(s.find((x) => x.id === 'producto#1')!.campo).toBe('locucion')
     expect(s.find((x) => x.id === 'producto#2')!.campo).toBe('accion')
+  })
+})
+
+// Caso REAL de la sesión 79b94ab9. La plantilla marcó tres [Producto] en una sola
+// frase y el modelo devolvió, como valor del primero, la oración entera ya rellenada.
+// `fillTemplate` la copió literal dentro de la frase que ya la contenía y salió el
+// texto que el usuario llamó "un monstruo de Frankenstein".
+describe('rejectBadValues', () => {
+  const T4: ScriptTemplate = {
+    ...T,
+    tomas: [{
+      n: 1, duracionSeg: 5, accionVisual: 'Sostiene el frasco.',
+      locucion: 'Este es el [Producto] de la marca [Producto] y se llama [Producto].',
+    }],
+  }
+
+  it('rechaza el valor que trae la oración entera ya armada', () => {
+    const { valores, rechazados } = rejectBadValues(T4, {
+      'Producto#1': 'Este es el suero de la marca La Roche-Posay y se llama Suero de niacinamida',
+    })
+    expect(rechazados).toContain('Producto#1')
+    expect(valores['Producto#1']).toBeUndefined()
+  })
+
+  // Lo que se rechaza queda como hueco, no como texto roto: el usuario lo escribe.
+  it('lo rechazado sale como marcador pendiente, no como el valor malo', () => {
+    const { valores } = rejectBadValues(T4, { 'Producto#1': 'Este es el suero de la marca X y se llama Y' })
+    expect(fillTemplate(T4, valores).tomas[0].locucion)
+      .toBe('Este es el [PENDIENTE: Producto] de la marca [PENDIENTE: Producto 2] y se llama [PENDIENTE: Producto 3].')
+  })
+
+  it('deja pasar los tres valores correctos, que son cortos y distintos', () => {
+    const buenos = { 'Producto#1': 'suero', 'Producto#2': 'La Roche-Posay', 'Producto#3': 'Pure Niacinamide' }
+    const { valores, rechazados } = rejectBadValues(T4, buenos)
+    expect(rechazados).toEqual([])
+    expect(fillTemplate(T4, valores).tomas[0].locucion)
+      .toBe('Este es el suero de la marca La Roche-Posay y se llama Pure Niacinamide.')
+  })
+
+  // Tres palabras seguidas del andamiaje son la firma del eco. Dos no: "de la" aparece
+  // en media lengua española y rechazarlo tumbaría valores legítimos.
+  it('rechaza por eco de tres palabras del andamiaje, no por dos', () => {
+    expect(rejectBadValues(T4, { 'Producto#2': 'de la marca X' }).rechazados).toContain('Producto#2')
+    expect(rejectBadValues(T4, { 'Producto#2': 'de la' }).rechazados).toEqual([])
+  })
+
+  // Toma 6 de la sesión real. El eco se compara normalizado: sin acentos, sin
+  // mayúsculas y sin puntuación, porque el modelo devuelve el eco reescrito, no
+  // copiado byte a byte.
+  it('el eco se compara sin acentos, mayúsculas ni puntuación', () => {
+    const t: ScriptTemplate = {
+      ...T,
+      tomas: [{ n: 1, duracionSeg: 5, accionVisual: 'a', locucion: 'lo que nos ayuda a [Beneficio] las capas más profundas de la piel' }],
+    }
+    expect(rejectBadValues(t, { 'Beneficio#1': 'LO QUE NOS ayuda a hidratar' }).rechazados).toContain('Beneficio#1')
+    expect(rejectBadValues(t, { 'Beneficio#1': 'las capas MAS profundas' }).rechazados).toContain('Beneficio#1')
+    expect(rejectBadValues(t, { 'Beneficio#1': 'hidratar' }).rechazados).toEqual([])
+  })
+
+  it('rechaza un valor más largo que un sintagma corto', () => {
+    expect(rejectBadValues(T4, { 'Producto#1': 'x'.repeat(61) }).rechazados).toContain('Producto#1')
+    expect(rejectBadValues(T4, { 'Producto#1': 'x'.repeat(60) }).rechazados).toEqual([])
+  })
+
+  it('rechaza el nombre del propio hueco como valor', () => {
+    expect(rejectBadValues(T4, { 'Producto#1': 'el producto de skincare' }).rechazados).toContain('Producto#1')
+  })
+
+  // Un hueco que el modelo dejó vacío ya es pendiente; no cuenta como rechazo.
+  it('un valor vacío no se reporta como rechazado', () => {
+    expect(rejectBadValues(T4, { 'Producto#1': '   ' }).rechazados).toEqual([])
+  })
+
+  // El andamiaje se compara por TOMA: una frase de la toma 2 no puede invalidar un
+  // valor de la toma 1, porque no está escrita a su alrededor.
+  it('solo compara contra el andamiaje de su propia toma', () => {
+    const dos: ScriptTemplate = {
+      ...T,
+      tomas: [
+        { n: 1, duracionSeg: 5, accionVisual: 'a', locucion: 'Yo uso [Producto] siempre.' },
+        { n: 2, duracionSeg: 5, accionVisual: 'b', locucion: 'Este es el [Producto] que me gusta.' },
+      ],
+    }
+    expect(rejectBadValues(dos, { 'Producto#1': 'este es el serum' }).rechazados).toEqual([])
   })
 })
 

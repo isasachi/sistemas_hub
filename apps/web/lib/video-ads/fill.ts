@@ -70,6 +70,81 @@ export function extractSlots(t: ScriptTemplate): Slot[] {
   return out
 }
 
+/**
+ * Un valor de hueco es una palabra o un sintagma corto. Más largo que esto y no es un
+ * valor: es una frase, y meterla dentro de una frase que ya existe produce el engendro
+ * que motivó este guard.
+ */
+const MAX_VALOR = 60
+
+const norm = (s: string) =>
+    s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter(Boolean)
+
+/** Todas las secuencias de `n` palabras consecutivas. */
+function ngramas(palabras: string[], n: number): Set<string> {
+  const out = new Set<string>()
+  for (let i = 0; i + n <= palabras.length; i++) out.add(palabras.slice(i, i + n).join(' '))
+  return out
+}
+
+/**
+ * Descarta los valores que no pueden ser valores, ANTES de sustituirlos.
+ * ---------------------------------------------------------------------------
+ * `fillTemplate` copia literalmente lo que se le da, que es justo su virtud: no
+ * interpreta. Eso convierte un mal valor del modelo en texto imposible. Caso real, con
+ * la plantilla `Este es el [Producto] de la marca [Producto] y se llama [Producto].`:
+ * el modelo devolvió como valor del primer hueco la ORACIÓN ENTERA ya rellenada ("Este
+ * es el suero de la marca La Roche-Posay y se llama Suero de niacinamida"), y al
+ * sustituirla dentro de la frase que ya la contenía salió esto —
+ *
+ *   "Este es el Este es el suero de la marca La Roche-Posay y se llama Suero de
+ *    niacinamida de la marca Suero de niacinamida de la marca La Roche-Posay y se
+ *    llama Suero de niacinamida. y se llama…"
+ *
+ * — que es lo que el usuario llamó "un monstruo de Frankenstein". Cuatro rondas de
+ * prompt no lo evitaron; el prompt PEOR aún lo causaba, porque el ejemplo que le daba
+ * al modelo de "esto salió mal" tenía forma de valor y se lo copiaba. Verificarlo en
+ * código sí lo evita, pase lo que pase con el texto del prompt.
+ *
+ * Tres criterios, todos por la misma razón (un valor no es una frase):
+ *  1. más largo que `MAX_VALOR`;
+ *  2. contiene el nombre del propio hueco ("el tipo de producto de la marca…");
+ *  3. repite tres palabras seguidas del texto que rodea al hueco en su toma — la firma
+ *     exacta del eco: el valor trae "este es el" y la plantilla ya dice "Este es el".
+ *
+ * Lo descartado se devuelve como hueco vacío, así que `fillTemplate` deja su marcador
+ * `[PENDIENTE: …]` y el usuario lo escribe él. Es el mismo desenlace que un valor que el
+ * modelo no supo rellenar: preferible a texto ilegible dentro de un lote pagado.
+ */
+export function rejectBadValues(
+  t: ScriptTemplate,
+  valores: Record<string, string>,
+): { valores: Record<string, string>; rechazados: string[] } {
+  // El andamiaje de cada toma: su texto CON los huecos quitados. Es lo que el valor no
+  // puede repetir, porque ya está escrito alrededor de él.
+  const andamio = new Map<number, Set<string>>()
+  for (const toma of t.tomas) {
+    andamio.set(toma.n, ngramas(norm(toma.locucion.replace(HUECO, ' ')), 3))
+  }
+
+  const limpios: Record<string, string> = {}
+  const rechazados: string[] = []
+  for (const s of extractSlots(t)) {
+    const v = valores[s.id]?.trim()
+    if (!v) continue
+
+    const malo =
+      v.length > MAX_VALOR ||
+      norm(v).join(' ').includes(norm(s.nombre).join(' ')) ||
+      [...ngramas(norm(v), 3)].some((g) => andamio.get(s.toma)?.has(g))
+
+    if (malo) rechazados.push(s.id)
+    else limpios[s.id] = v
+  }
+  return { valores: limpios, rechazados }
+}
+
 export interface FilledTemplate {
   guionFinal: string
   tomas: { n: number; locucion: string; accionVisual: string; duracionSeg: number }[]

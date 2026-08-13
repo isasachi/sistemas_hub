@@ -72,7 +72,18 @@ describe('buildAdaptInstruction', () => {
   // "mi ⟦parte del cuerpo⟧" → el valor es "cara", no "mi cara": el posesivo ya está.
   it('avisa que el valor no repite las palabras vecinas', () => {
     expect(p).toMatch(/el posesivo ya está puesto/i)
-    expect(p).toMatch(/el segundo la MARCA/i)
+    expect(p).toMatch(/nunca devuelvas la frase entera ya armada/i)
+  })
+
+  // El ejemplo anterior de este bloque citaba una frase de plantilla ya rellenada
+  // ("Este es el suero de la marca … y se llama …") como muestra de lo que sale MAL, y
+  // el modelo la copió literal como valor de hueco. Un anti-ejemplo con forma de valor
+  // es una plantilla que rellenar. Ahora los tres roles se nombran sin dar la frase.
+  it('distingue categoría, marca y nombre comercial sin darle una frase que copiar', () => {
+    expect(p).toMatch(/la CATEGORÍA/)
+    expect(p).toMatch(/la MARCA/)
+    expect(p).toMatch(/el NOMBRE COMERCIAL/)
+    expect(p).not.toContain('y se llama ⟦Producto⟧')
   })
 
   it('prohíbe usar el nombre del hueco como valor', () => {

@@ -5,7 +5,7 @@ import { callStructured } from '@/lib/gemini'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 import { SlotValuesSchema, buildAdaptInstruction } from '@/lib/video-ads/adapt'
-import { extractSlots, fillTemplate } from '@/lib/video-ads/fill'
+import { extractSlots, fillTemplate, rejectBadValues } from '@/lib/video-ads/fill'
 import { extractPending } from '@/lib/video-ads/pending'
 import { canProceed } from '@/lib/video-ads/validation'
 import { STEP } from '@/lib/video-ads/steps'
@@ -68,7 +68,16 @@ export async function POST(
     const mapa: Record<string, string> = {}
     for (const v of valores) mapa[v.id] = v.valor
 
-    const relleno = fillTemplate(session.template, mapa)
+    // Guard determinista antes de sustituir: un valor que es una frase entera (o que
+    // repite el texto que ya lo rodea) produce texto ilegible al meterlo dentro de la
+    // frase que lo contiene. `fillTemplate` copia sin interpretar —esa es su virtud— así
+    // que filtrar es trabajo de acá. Lo rechazado queda como hueco y el usuario lo
+    // escribe editando la línea.
+    const { valores: limpios, rechazados } = rejectBadValues(session.template, mapa)
+    if (rechazados.length)
+      console.warn(`[video-ads/adapt-script] sesión ${id}: valores descartados por no ser valores:`, rechazados)
+
+    const relleno = fillTemplate(session.template, limpios)
     const porToma = new Map(acciones.map((a) => [a.n, a.accionVisual]))
     const cortes = session.forensic_analysis.cortes
 

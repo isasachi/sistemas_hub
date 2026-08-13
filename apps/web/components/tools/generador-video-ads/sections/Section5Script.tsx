@@ -126,6 +126,24 @@ export default function Section5Script() {
   const caracteresOriginal = adapted.caracteresAdaptado - adapted.diferenciaCaracteres
   const diferencia = guionActual.length - caracteresOriginal
 
+  // Ritmo de habla del video original, en caracteres por segundo. La duración de cada
+  // toma viene del análisis forense y NO se recalcula con el texto nuevo: el clip que se
+  // le pide a KIE dura esos segundos pase lo que pase. Así que una línea que creció el
+  // doble tiene que decirse al doble de velocidad, y una que se acortó deja al modelo
+  // rellenando silencio. Eso es lo que se escuchó como "una habla muy rápido y la otra
+  // muy lento": el contador global de caracteres puede estar bien y aun así cada toma
+  // ir a un ritmo distinto, porque hasta ahora nada se medía por toma.
+  //
+  // Se muestra, no se bloquea: recalcular las duraciones para que el texto entre haría
+  // crecer el número de lotes, y cada lote es una llamada pagada. Cuánto recortar es
+  // decisión de quien escribe.
+  const segundosTotal = adapted.tomas.reduce((n, t) => n + t.duracionSeg, 0)
+  const cpsOriginal = segundosTotal > 0 ? caracteresOriginal / segundosTotal : 0
+  const cabenEn = (seg: number) => Math.round(seg * cpsOriginal)
+  const holgado = (l: { texto: string; duracionSeg: number }) =>
+    cpsOriginal > 0 && l.texto.length > cabenEn(l.duracionSeg) * 1.3
+  const apretados = lineas.filter(holgado).length
+
   return (
     <div className="flex flex-col gap-5">
       <div className="rounded-2xl border border-white/[0.06] bg-[#121214] px-4 py-4">
@@ -146,17 +164,26 @@ export default function Section5Script() {
         <div className="flex flex-col gap-3">
           {lineas.map((l) => {
             const falta = l.texto.includes('[PENDIENTE:')
+            const cabe = cabenEn(l.duracionSeg)
+            const largo = holgado(l)
             return (
               <div key={l.i} className="flex flex-col gap-1">
                 <div className="flex items-center justify-between text-[11px] text-[#8b8b8b]">
                   <span>Toma {l.n} · {l.duracionSeg}s</span>
-                  {falta && <span className="text-amber-400">falta completar</span>}
+                  <span className="flex items-center gap-2">
+                    {cpsOriginal > 0 && (
+                      <span className={largo ? 'text-amber-400' : ''} title="Caracteres que caben en esta toma al ritmo del video original">
+                        {l.texto.length}/{cabe} car
+                      </span>
+                    )}
+                    {falta && <span className="text-amber-400">falta completar</span>}
+                  </span>
                 </div>
                 <textarea
                   value={l.texto}
                   onChange={(e) => setEdiciones({ ...ediciones, [l.i]: e.target.value })}
                   rows={2}
-                  className={`jr-field rounded-lg px-3 py-2 text-[13px] leading-relaxed ${falta ? 'border-amber-500/40' : ''}`}
+                  className={`jr-field rounded-lg px-3 py-2 text-[13px] leading-relaxed ${falta || largo ? 'border-amber-500/40' : ''}`}
                 />
               </div>
             )
@@ -179,6 +206,15 @@ export default function Section5Script() {
           {pendientes.length === 1 ? 'Queda un dato' : `Quedan ${pendientes.length} datos`} sin
           completar. No los inventamos porque no estaban en lo que nos diste, y el video los
           leería en voz alta tal cual. Escríbelos arriba y guarda.
+        </div>
+      )}
+
+      {!!apretados && (
+        <div className="rounded-2xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-[12.5px] leading-relaxed text-amber-300">
+          {apretados === 1 ? 'Una toma tiene' : `${apretados} tomas tienen`} más texto del que
+          entra en sus segundos. La duración de cada toma la fija el video de referencia y no
+          se estira: si sobra texto, el personaje lo dice atropellado y se desincroniza de la
+          imagen. Recorta esas líneas hasta acercarlas a su cuenta.
         </div>
       )}
 
