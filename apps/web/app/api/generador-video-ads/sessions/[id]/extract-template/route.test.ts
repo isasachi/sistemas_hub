@@ -40,7 +40,12 @@ function ctx(id = 's1') {
   return { params: Promise.resolve({ id }) }
 }
 
-const FORENSIC = { guionOriginal: 'x' } as unknown as VideoSessionResponse['forensic_analysis']
+const FORENSIC = {
+  guionOriginal: 'Este serum me cambió la piel.',
+  cortes: [{ n: 1, dialogo: 'Este serum me cambió la piel.', duracionSeg: 6, accion: 'Sostiene el frasco.' }],
+  sujeto: '', vestuario: '', producto: '', fondo: '',
+  edicion: {},
+} as unknown as VideoSessionResponse['forensic_analysis']
 
 const OK_MATRIX: ValidationMatrix = {
   rows: [{ variable: 'Acento', valor: 'Español peruano', fuente: 'USUARIO', estado: 'CONFIRMADA', critica: true }],
@@ -85,14 +90,18 @@ describe('POST /api/generador-video-ads/sessions/[id]/extract-template', () => {
       forensic_analysis: FORENSIC,
       validation: OK_MATRIX,
     } as unknown as VideoSessionResponse)
-    vi.mocked(callStructured).mockResolvedValue({ guionFillInBlank: 'plantilla' })
+    vi.mocked(callStructured).mockResolvedValue({
+      locuciones: [{ n: 1, texto: 'Este [producto] me cambió la piel.' }],
+      escenario: {}, edicion: {}, resumenParaUsuario: 'ok',
+    })
 
     const res = await POST(req(), ctx())
     const data = await res.json()
 
     expect(res.status).toBe(200)
-    expect(data.template).toEqual({ guionFillInBlank: 'plantilla' })
+    expect(data.template.guionFillInBlank).toBe('Este [producto] me cambió la piel.')
+    expect(data.template.tomas).toHaveLength(1)
     expect(callStructured).toHaveBeenCalledTimes(1)
-    expect(updateVideoSession).toHaveBeenCalledWith('s1', { step: 4, template: { guionFillInBlank: 'plantilla' } })
+    expect(updateVideoSession).toHaveBeenCalledWith('s1', expect.objectContaining({ step: 4 }))
   })
 })

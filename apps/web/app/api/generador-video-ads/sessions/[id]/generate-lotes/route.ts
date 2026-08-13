@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getVideoSession, updateVideoSession, claimFreshLotes } from '@/lib/video-ads/db'
 import { createVideoTask, clampDuration, KIE_PROMPT_MAX, type VideoImage } from '@/lib/video-ads/kie'
-import { groupIntoLotes, buildLotePrompt, type Lote } from '@/lib/video-ads/lotes'
+import { groupIntoLotes, buildLotePrompt, camaraDeLote, type Lote } from '@/lib/video-ads/lotes'
 import { totalDuration, resumeSeed, mergeRescue, isPaidResume, scriptFingerprint, renderDone } from '@/lib/video-ads/render-lotes'
 import { AdaptedScriptSchema, type AdaptedScript } from '@/lib/video-ads/adapt'
+import { extractPending } from '@/lib/video-ads/pending'
 import { checkGenQuota, checkGlobalBackstop, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 import { STEP } from '@/lib/video-ads/steps'
@@ -73,9 +74,13 @@ export async function POST(
       { status: 500 },
     )
   }
-  if (adapted.variablesPendientes.length)
+  // Se mira el TEXTO, no solo la lista del modelo: en una corrida real devolvió la
+  // lista vacía habiendo dejado marcadores. Un marcador que llega al render se lee en
+  // voz alta dentro de un lote ya pagado.
+  const marcadores = extractPending(adapted.guionFinal)
+  if (marcadores.length || adapted.variablesPendientes.length)
     return NextResponse.json(
-      { error: `El guión tiene variables sin completar: ${adapted.variablesPendientes.join(', ')}` },
+      { error: `El guión tiene variables sin completar: ${[...new Set([...marcadores, ...adapted.variablesPendientes])].join(', ')}` },
       { status: 409 },
     )
 
@@ -91,11 +96,20 @@ export async function POST(
   // renderizar) sería la forma más fácil de que la huella deje de describir lo que
   // realmente se renderizó.
   const productDesc = session.product_scan?.productDescription ?? adapted.tomas[0]?.producto ?? 'el producto'
+  // El `fondo` del forense incluye la iluminación (su prompt la pide ahí dentro), por
+  // eso el prompt del lote lo rotula "ESCENARIO E ILUMINACIÓN".
   const escenario = session.forensic_analysis?.fondo ?? 'interior con luz natural'
-  const camara = session.forensic_analysis?.cortes[0]?.camara ?? 'primer plano, cámara en mano'
+  const cortes = session.forensic_analysis?.cortes ?? []
+  const camaraFallback = cortes[0]?.camara?.trim() || 'primer plano, cámara en mano'
 
   const agrupados = groupIntoLotes(adapted.tomas)
   if (!agrupados.length) return NextResponse.json({ error: 'El guión no tiene tomas' }, { status: 409 })
+
+  // Una cámara por lote, con los planos de SUS cortes: el spec pide replicar el
+  // lenguaje visual del original y antes acá se mandaba el encuadre del corte 1 a
+  // todos los lotes. Índice a índice con `agrupados` — y por tanto con `base` y con
+  // `seed`, que son `agrupados` mapeado.
+  const camaras = agrupados.map((l) => camaraDeLote(l, cortes, camaraFallback))
 
   // Huella del contenido de ESTE intento (guión + personaje + voz + producto +
   // escenario + cámara + imágenes). Se estampa en todos los lotes que se persistan
@@ -104,7 +118,7 @@ export async function POST(
   // empezando otro distinto (ver `isPaidResume`).
   const huella = scriptFingerprint({
     lotes: agrupados, consistencyBlock: session.consistency_block, productDesc,
-    escenario, camara, voz: session.voice_profile, images,
+    escenario, camaras, voz: session.voice_profile, images,
   })
   const base: Lote[] = agrupados.map((l) => ({ ...l, scriptHash: huella }))
 
@@ -244,7 +258,7 @@ export async function POST(
   let creados = 0
 
   try {
-    for (const lote of seed) {
+    for (const [i, lote] of seed.entries()) {
       if (lote.taskId) { lotes.push(lote); continue } // reanudado: ya pagado, no se recrea
 
       // Una sola fuente para la duración: el texto del prompt ("Duración total del
@@ -263,7 +277,7 @@ export async function POST(
           consistencyBlock: session.consistency_block,
           productDesc,
           escenario,
-          camara,
+          camara: camaras[i],
           voz: session.voice_profile,
           images,
         })

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { groupIntoLotes, LOTE_MAX_SEC, LoteSchema, buildLotePrompt } from './lotes'
+import { groupIntoLotes, LOTE_MAX_SEC, LoteSchema, buildLotePrompt, camaraDeLote } from './lotes'
 import type { TomaFinal } from './adapt'
 import { KIE_PROMPT_MAX } from './kie'
 
@@ -184,6 +184,55 @@ describe('groupIntoLotes', () => {
   })
 })
 
+// El spec pide una cámara POR LOTE que replique el lenguaje visual del original; antes
+// se le mandaba a todos el encuadre del corte 1, así que un guión que abría en primer
+// plano y cerraba en plano medio salía entero en primer plano.
+describe('camaraDeLote', () => {
+  const conTiempo = (n: number, dur: number, tiempo: string): TomaFinal => ({ ...toma(n, dur), tiempoOriginal: tiempo })
+  const CORTES = [
+    { tiempo: '00:00 - 00:06', camara: 'Primer plano, altura de ojos' },
+    { tiempo: '00:06 - 00:12', camara: 'Plano medio, cámara fija' },
+    { tiempo: '00:12 - 00:20', camara: 'Plano detalle del producto' },
+  ]
+
+  it('toma los planos de SUS cortes, no los del primer corte del video', () => {
+    const [l1, l2] = groupIntoLotes([
+      conTiempo(1, 6, '00:00 - 00:06'), conTiempo(2, 6, '00:06 - 00:12'), conTiempo(3, 8, '00:12 - 00:20'),
+    ])
+    expect(camaraDeLote(l1, CORTES, 'fallback')).toBe('Primer plano, altura de ojos · Plano medio, cámara fija')
+    expect(camaraDeLote(l2, CORTES, 'fallback')).toBe('Plano detalle del producto')
+  })
+
+  it('no repite el mismo plano cuando varios cortes lo comparten', () => {
+    const cortes = [{ tiempo: 'a', camara: 'Primer plano' }, { tiempo: 'b', camara: 'Primer plano' }]
+    const [l] = groupIntoLotes([conTiempo(1, 5, 'a'), conTiempo(2, 5, 'b')])
+    expect(camaraDeLote(l, cortes, 'fallback')).toBe('Primer plano')
+  })
+
+  // `groupIntoLotes` renumera la secuencia entera tras `splitLongToma`, así que en cuanto
+  // una toma se parte el `n` deja de ser el índice de su corte. El emparejamiento va por
+  // `tiempoOriginal`, que los fragmentos heredan intacto.
+  it('sigue emparejando bien después de que una toma larga se parte en fragmentos', () => {
+    const lotes = groupIntoLotes([
+      conTiempo(1, 22, '00:00 - 00:22 Primero. Segundo. Tercero.'),
+      conTiempo(2, 5, '00:22 - 00:27'),
+    ])
+    const cortes = [
+      { tiempo: '00:00 - 00:22 Primero. Segundo. Tercero.', camara: 'Plano general' },
+      { tiempo: '00:22 - 00:27', camara: 'Primer plano' },
+    ]
+    // Los fragmentos del corte largo siguen resolviendo a "Plano general" pese a que
+    // sus `n` ya no son 1 (la renumeración global los corrió).
+    expect(camaraDeLote(lotes[0], cortes, 'fallback')).toBe('Plano general')
+    expect(camaraDeLote(lotes[lotes.length - 1], cortes, 'fallback')).toContain('Primer plano')
+  })
+
+  it('cae al fallback cuando ningún tiempo empareja', () => {
+    const [l] = groupIntoLotes([conTiempo(1, 5, 'no existe en cortes')])
+    expect(camaraDeLote(l, CORTES, 'primer plano, cámara en mano')).toBe('primer plano, cámara en mano')
+  })
+})
+
 const BLOQUE = 'Mujer de 25 años, latina peruana, cabello negro liso recogido en moño bajo, piel clara, ojos marrón claro, complexión delgada, polo blanco de algodón sin estampado.'
 const VOZ = {
   idioma: 'Español', varianteRegional: 'Perú - Lima', acento: 'Limeño', pronunciacion: 'Clara',
@@ -241,6 +290,22 @@ describe('buildLotePrompt', () => {
     expect(p).toContain('Perú - Lima')
   })
 
+  // El spec lista "Iluminación" como bloque obligatorio de cada lote. El `fondo` del
+  // forense ya la describe (su prompt la pide ahí), así que lo que faltaba era el
+  // rótulo — sacarla a un campo propio obligaría a re-correr el análisis forense de
+  // cada sesión guardada, que es el paso caro.
+  it('rotula la iluminación junto al escenario', () => {
+    expect(p).toContain(`ESCENARIO E ILUMINACIÓN: ${ARGS.escenario}`)
+  })
+
+  // Bloque "Continuidad" del spec: qué debe permanecer idéntico durante todo el lote.
+  it('declara qué no puede cambiar dentro del clip', () => {
+    expect(p).toContain('CONTINUIDAD:')
+    for (const invariante of ['personaje', 'producto', 'vestuario', 'escenario', 'iluminación']) {
+      expect(p.slice(p.indexOf('CONTINUIDAD:'), p.indexOf('PERFIL DE VOZ'))).toContain(invariante)
+    }
+  })
+
   it('entra en el tope de prompt de KIE', () => {
     expect(p.length).toBeLessThanOrEqual(KIE_PROMPT_MAX)
   })
@@ -280,6 +345,11 @@ describe('buildLotePrompt', () => {
     // La locución sigue siendo exacta pese a la degradación: sobrevive en el bloque
     // GUION DE LOCUCIÓN FINAL aunque las líneas por-toma se hayan soltado.
     expect(p).toContain('Frase número 8')
+  })
+
+  it('la cámara que recibe es la que sale en el prompt, no una fija del video', () => {
+    expect(buildLotePrompt({ lote, ...ARGS, camara: 'Plano medio, cámara fija en trípode' }))
+      .toContain('CÁMARA: Plano medio, cámara fija en trípode.')
   })
 
   it('si ni el bloque de consistencia por sí solo entra en el tope, lanza un error explicando el exceso', () => {

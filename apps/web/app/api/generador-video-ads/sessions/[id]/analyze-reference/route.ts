@@ -53,6 +53,11 @@ export async function POST(
     ]
     const analysis = await geminiCallStructured('forensic_report', ForensicReportSchema, parts)
 
+    // Mismo motivo que en adapt-script: el modelo estima mal el conteo (reportó 562
+    // sobre un guión de 776) y ese número es la referencia contra la que se mide si el
+    // guión adaptado se fue de largo. Se cuenta acá.
+    analysis.caracteresGuion = analysis.guionOriginal.length
+
     await updateVideoSession(id, {
       step: STEP.PRODUCT,
       reference_video_url: parsed.data.videoUrl,

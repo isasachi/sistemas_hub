@@ -26,7 +26,7 @@ const fpInput = (over: Partial<Parameters<typeof scriptFingerprint>[0]> = {}) =>
   consistencyBlock: 'Mujer de 25, cabello negro',
   productDesc: 'Frasco celeste',
   escenario: 'cocina',
-  camara: 'primer plano',
+  camaras: ['primer plano', 'plano medio'],
   voz: VOZ,
   images: [{ url: 'https://x/p.png', role: 'la persona' }, { url: 'https://x/prod.png', role: 'el producto' }],
   ...over,
@@ -159,8 +159,16 @@ describe('scriptFingerprint', () => {
       images: [{ url: 'https://x/OTRA.png', role: 'la persona' }, { url: 'https://x/prod.png', role: 'el producto' }],
     }))).not.toBe(original)
     expect(scriptFingerprint(fpInput({ escenario: 'playa' }))).not.toBe(original)
-    expect(scriptFingerprint(fpInput({ camara: 'plano general' }))).not.toBe(original)
+    expect(scriptFingerprint(fpInput({ camaras: ['plano general', 'plano medio'] }))).not.toBe(original)
     expect(scriptFingerprint(fpInput({ productDesc: 'Otro frasco' }))).not.toBe(original)
+  })
+
+  // La cámara pasó de un string único a una por lote: si el reparto de planos entre
+  // lotes cambia, el video que sale es otro aunque las tomas sean las mismas. Los dos
+  // arrays traen los mismos dos planos y solo difieren en cuál va en cada lote.
+  it('distingue el mismo par de planos repartido al revés entre los lotes', () => {
+    expect(scriptFingerprint(fpInput({ camaras: ['plano medio', 'primer plano'] })))
+      .not.toBe(scriptFingerprint(fpInput({ camaras: ['primer plano', 'plano medio'] })))
   })
 
   // Si el estado mutable entrara en la huella, la segunda llamada NUNCA podría

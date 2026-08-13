@@ -29,6 +29,16 @@ describe('buildForensicInstruction', () => {
     expect(p).toMatch(/acento/i)
   })
 
+  // El render reconstruye un video: "muestra el producto" hace que el generador invente
+  // un gesto y el resultado deje de parecerse al original. Caso real: el forense capturó
+  // el gotero y el giro del frasco, pero el nivel de detalle no estaba exigido.
+  it('exige coreografía de manos, no un resumen de la acción', () => {
+    expect(p).toMatch(/qué mano usa y cómo agarra/i)
+    expect(p).toMatch(/ENTRA al cuadro/i)
+    expect(p).toMatch(/mano libre/i)
+    expect(p).toContain('"muestra el producto" es inservible')
+  })
+
   it('pide español para lo que ve el usuario', () => {
     expect(p).toMatch(/español/i)
   })

@@ -103,23 +103,38 @@ export function scriptFingerprint(input: {
   consistencyBlock: string
   productDesc: string
   escenario: string
-  camara: string
+  /** Una por lote, en el mismo orden que `lotes` (ver `camaraDeLote`, lotes.ts). */
+  camaras: string[]
   voz: VoiceProfile
   images: LoteImage[]
 }): string {
-  const { lotes, consistencyBlock, productDesc, escenario, camara, voz, images } = input
+  const { lotes, consistencyBlock, productDesc, escenario, camaras, voz, images } = input
   const campos: string[] = [
     // Versión del formato canónico: si algún día cambia qué entra en la huella, este
     // prefijo hace que las huellas viejas no coincidan (que es lo correcto: dejan de
     // ser comparables) en vez de coincidir por casualidad.
-    'v1',
-    consistencyBlock, productDesc, escenario, camara,
+    //
+    // v1 → v2: la huella hashea los INSUMOS de `buildLotePrompt`, no el texto que
+    // produce, así que un cambio en la plantilla del prompt (bloque de continuidad,
+    // rótulo de iluminación, cámara por lote) es invisible para ella. Sin bumpear,
+    // reanudar una sesión a medias pegaría un lote renderizado con el prompt viejo a
+    // uno con el nuevo mientras `isPaidResume` jura que es el mismo contenido — la
+    // incoherencia que la huella existe para evitar, entrando por una puerta que no
+    // vigila. Con el bump, esos parciales cuentan como generación nueva: fail-closed,
+    // igual que las sesiones legadas sin `scriptHash`.
+    'v2',
+    consistencyBlock, productDesc, escenario,
     voz.idioma, voz.varianteRegional, voz.acento, voz.pronunciacion, voz.ritmo,
     voz.velocidad, voz.entonacion, voz.energia, voz.pausas, voz.tono, voz.timbre,
     voz.edadVocal, voz.estilo,
     String(images.length),
   ]
   for (const img of images) campos.push(img.url, img.role)
+  // Van con su largo delante, igual que las demás listas: la cámara ya no es un solo
+  // string, y dos repartos distintos de los mismos planos entre lotes tienen que dar
+  // huellas distintas.
+  campos.push(String(camaras.length))
+  for (const c of camaras) campos.push(c)
   campos.push(String(lotes.length))
   for (const l of lotes) {
     campos.push(String(l.n), num(l.duracionSeg), String(l.tomas.length))

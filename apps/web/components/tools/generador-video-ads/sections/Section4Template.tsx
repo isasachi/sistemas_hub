@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useVideoStore } from '@/store/video'
 import type { ScriptTemplate } from '@/lib/video-ads/types'
+import { STEP } from '@/lib/video-ads/steps'
 import { btnPrimary, btnGhost, errorBox, spinner } from './shared'
 
 // Muestra los tres artefactos de la FASE 1-2: el guión literal del original, los
@@ -85,6 +86,15 @@ export default function Section4Template() {
       ))}
       <p className="text-[12px] leading-relaxed text-[#8b8b8b]">{template.resumenParaUsuario}</p>
       {error && <div className={errorBox}>{error}</div>}
+      {/* Este paso era el ÚLTIMO del wizard cuando se escribió, así que no necesitaba
+          salida. Al agregarse los pasos de guión y lotes detrás, nadie cableó el avance:
+          la plantilla quedaba sin botón para continuar y el riel tampoco servía, porque
+          solo deja navegar hasta el paso más avanzado ALCANZADO — que era este. Sesión
+          sin salida. El avance es del cliente, no de una ruta: la ruta que escribe
+          `STEP.SCRIPT` es la de adaptación, que corre cuando el usuario YA está allá. */}
+      <button onClick={() => patch({ step: STEP.SCRIPT })} className={btnPrimary}>
+        Escribir mi guión →
+      </button>
       <button onClick={extract} disabled={isLoading} className={btnGhost}>
         {isLoading ? <><span className={spinner} />Reextrayendo...</> : 'Extraer otra vez'}
       </button>

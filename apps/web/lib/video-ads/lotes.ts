@@ -184,6 +184,37 @@ export interface LoteImage {
 }
 
 /**
+ * La cámara de UN lote son las cámaras de SUS cortes, no la del primer corte del video.
+ *
+ * El spec pide la cámara por lote y que replique "el lenguaje visual detectado en el
+ * original"; mandarle a los lotes 2 y 3 el encuadre del corte 1 es justamente no
+ * replicarlo — un guión que abre en primer plano y cierra en plano medio salía entero
+ * en primer plano.
+ *
+ * El emparejamiento va por `tiempoOriginal` y NO por `n`: `groupIntoLotes` renumera la
+ * secuencia entera después de `splitLongToma`, así que en cuanto una toma se parte el
+ * `n` de la toma deja de ser el índice de su corte y `cortes[n - 1]` apunta a otro
+ * plano. `tiempoOriginal` es la marca del análisis forense y sobrevive al split intacta
+ * (los fragmentos la heredan), que es exactamente lo que hace falta acá.
+ *
+ * Se deduplica por texto: varios cortes seguidos con el mismo encuadre son lo normal y
+ * repetirlo tres veces solo gasta presupuesto de prompt.
+ */
+export function camaraDeLote(
+  lote: Lote,
+  cortes: { tiempo: string; camara: string }[],
+  fallback: string,
+): string {
+  const porTiempo = new Map(cortes.map((c) => [c.tiempo, c.camara]))
+  const vistas: string[] = []
+  for (const t of lote.tomas) {
+    const c = porTiempo.get(t.tiempoOriginal)?.trim()
+    if (c && !vistas.includes(c)) vistas.push(c)
+  }
+  return vistas.join(' · ') || fallback
+}
+
+/**
  * Niveles de detalle de la sección "SECUENCIA DE ACCIONES VISUALES", de más a menos
  * detallado. `buildLotePrompt` prueba cada uno en orden y usa el primero que entra en
  * `KIE_PROMPT_MAX` — ver el comentario grande sobre `render` más abajo para el porqué
@@ -273,8 +304,25 @@ export function buildLotePrompt(args: {
       'colores y texto; nunca lo rediseñes):',
       productDesc,
       '',
-      `ESCENARIO: ${escenario}`,
+      // "ESCENARIO E ILUMINACIÓN" y no "ESCENARIO" a secas porque el spec pide la
+      // iluminación como bloque propio dentro de cada lote, y el `fondo` del forense ya
+      // la trae dentro (su prompt la pide junto a paredes, superficies y profundidad).
+      // Rotularla es gratis; sacarla a un campo aparte del forense costaría una
+      // re-corrida del análisis —el paso caro— para cada sesión ya guardada.
+      `ESCENARIO E ILUMINACIÓN: ${escenario}`,
       `CÁMARA: ${camara}. Formato vertical 9:16, estable, enfoque en el personaje y el producto.`,
+      // Bloque "Continuidad" del spec: qué NO puede cambiar dentro del clip. Una línea,
+      // no un párrafo — todo lo que describe ya está arriba, acá solo se declara que es
+      // invariante, y cada carácter que ocupa sale del presupuesto de la coreografía.
+      //
+      // Redactado SIN "el mismo personaje" / "igual que antes" a propósito: acá esas
+      // palabras significarían "idéntico a lo largo de este clip", pero son
+      // literalmente las frases que el spec prohíbe y que el test de referencias a
+      // lotes anteriores vigila. Un generador que las lee no distingue las dos
+      // intenciones — busca un contexto anterior que no existe y devuelve otra persona.
+      'CONTINUIDAD: personaje, producto, vestuario, escenario e iluminación permanecen',
+      'idénticos de principio a fin del clip, tal como se describen arriba. Lo único que',
+      'avanza es la acción detallada abajo.',
       '',
       'PERFIL DE VOZ Y ACENTO:',
       `  Idioma: ${voz.idioma} · Variante: ${voz.varianteRegional} · Acento: ${voz.acento}`,

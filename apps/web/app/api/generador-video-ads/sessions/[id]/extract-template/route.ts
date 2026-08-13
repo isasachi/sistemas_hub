@@ -3,8 +3,9 @@ import { getVideoSession, updateVideoSession } from '@/lib/video-ads/db'
 import { callStructured } from '@/lib/gemini'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
-import { ScriptTemplateSchema } from '@/lib/video-ads/types'
-import { buildTemplateInstruction } from '@/lib/video-ads/template'
+
+import { TemplateDraftSchema, buildTemplateInstruction } from '@/lib/video-ads/template'
+import { validateTemplate, assembleTemplate } from '@/lib/video-ads/fill'
 import { canProceed } from '@/lib/video-ads/validation'
 import { STEP } from '@/lib/video-ads/steps'
 
@@ -39,9 +40,23 @@ export async function POST(
     )
 
   try {
-    const template = await callStructured('script_template', ScriptTemplateSchema, [
+    const draft = await callStructured('template_draft', TemplateDraftSchema, [
       { text: buildTemplateInstruction(session.forensic_analysis) },
     ])
+
+    // Las tomas se arman con los cortes del forense, no con lo que devuelva el modelo.
+    const template = assembleTemplate(draft, session.forensic_analysis.cortes)
+
+    // Una plantilla degenerada (locuciones que son el nombre del campo, o que no
+    // cubren el guion) no se puede rellenar: produciría un guion vacío en el paso
+    // siguiente. Se detecta acá, que es gratis, en vez de allá, que cuesta una llamada.
+    const problema = validateTemplate(template)
+    if (problema)
+      return NextResponse.json(
+        { error: `La plantilla salió mal: ${problema} Vuelve a extraerla.` },
+        { status: 502 },
+      )
+
     await updateVideoSession(id, { step: STEP.TEMPLATE, template })
     await recordGenQuota(id, 'video-template', userId)
     return NextResponse.json({ template })

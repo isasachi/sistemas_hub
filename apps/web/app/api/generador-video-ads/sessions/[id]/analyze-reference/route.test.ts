@@ -65,14 +65,19 @@ describe('POST /api/generador-video-ads/sessions/[id]/analyze-reference — guar
   it('procede normalmente cuando el video está dentro del tope', async () => {
     vi.mocked(getVideoSession).mockResolvedValue({ id: 's1' } as unknown as VideoSessionResponse)
     vi.mocked(fetchAsBase64).mockResolvedValue({ data: 'YWJj', mimeType: 'video/mp4' })
-    vi.mocked(geminiCallStructured).mockResolvedValue({ guionOriginal: 'x' })
+    // El modelo devuelve un conteo estimado y lo estima MAL: en una corrida real reportó
+    // 562 caracteres sobre un guión de 776. Ese número es la referencia contra la que se
+    // mide si el guión adaptado se fue de largo, así que el servidor lo recalcula.
+    vi.mocked(geminiCallStructured).mockResolvedValue({ guionOriginal: 'hola', caracteresGuion: 999 })
 
     const res = await POST(req({ videoUrl: 'https://x.supabase.co/reference-video.mp4' }), ctx())
     const data = await res.json()
 
     expect(res.status).toBe(200)
-    expect(data.analysis).toEqual({ guionOriginal: 'x' })
+    expect(data.analysis.caracteresGuion).toBe(4)
     expect(updateVideoSession).toHaveBeenCalled()
+    expect(vi.mocked(updateVideoSession).mock.calls[0][1].forensic_analysis)
+      .toMatchObject({ caracteresGuion: 4 })
   })
 
   it('otros errores de fetchAsBase64 siguen devolviendo el 500 genérico', async () => {

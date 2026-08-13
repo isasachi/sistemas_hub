@@ -1,8 +1,10 @@
 import { z } from 'zod'
 import type { ScriptTemplate } from './template'
+import type { Slot } from './fill'
 import type { ForensicReport } from './forensic'
 import type { UserInputs } from './types'
 import type { ProductScan } from '@/lib/types'
+import { extractPending } from './pending'
 
 /**
  * FASE 3 del prompt maestro — rellenar el Fill in the Blank con los INPUTS.
@@ -15,6 +17,25 @@ import type { ProductScan } from '@/lib/types'
  * `variablesPendientes` existe para que la UI pueda avisar antes de gastar un render:
  * un guión con [VARIABLE PENDIENTE] se renderizaría con el corchete leído en voz alta.
  */
+
+/**
+ * Lo ÚNICO que el modelo decide en la FASE 3: qué valor va en cada hueco y cómo se
+ * traduce la coreografía observada al producto nuevo. El guión no lo escribe él — lo
+ * arma `fillTemplate` copiando la plantilla, que es la única forma de garantizar que
+ * fuera de los corchetes no cambie ni una palabra.
+ */
+export const SlotValuesSchema = z.object({
+  valores: z.array(z.object({
+    id: z.string(),
+    /** Vacío = no hay dato para rellenarlo; queda pendiente y se le pide al usuario. */
+    valor: z.string(),
+  })),
+  acciones: z.array(z.object({
+    n: z.number(),
+    accionVisual: z.string(),
+  })),
+})
+export type SlotValues = z.infer<typeof SlotValuesSchema>
 
 export const TomaFinalSchema = z.object({
   n: z.number(),
@@ -47,29 +68,117 @@ export const AdaptedScriptSchema = z.object({
 })
 export type AdaptedScript = z.infer<typeof AdaptedScriptSchema>
 
+/**
+ * Aplica las ediciones del usuario sobre el guión ya adaptado, línea por línea.
+ *
+ * El spec de la FASE 3 es explícito: "No preguntes nada" — si una variable no se puede
+ * completar con seguridad, se deja el marcador en el texto y punto. La versión anterior
+ * hacía lo contrario: levantaba un formulario con un campo por variable pendiente y
+ * volvía a llamar al modelo con esos valores. El usuario lo llamó engorroso y tenía
+ * razón por partida doble — preguntaba lo que el spec manda no preguntar, y aun así
+ * dejaba fuera lo único que hacía falta cuando el modelo elegía mal un valor (arreglar
+ * la concordancia, cambiar una palabra que no encaja), porque un campo etiquetado
+ * "Producto" no permite escribir la frase entera.
+ *
+ * Editar la locución directamente cubre los dos casos con un mecanismo en vez de dos.
+ *
+ * Se edita POR TOMA y no sobre `guionFinal`: las tomas son lo que `groupIntoLotes` lee
+ * para armar los lotes, y `guionFinal` es la concatenación de sus locuciones. Editar el
+ * texto unido y guardarlo aparte dejaría al usuario leyendo un guión corregido mientras
+ * el render sigue mandando los marcadores originales.
+ *
+ * Todo lo derivado se recalcula acá (nunca se acepta del cliente): los caracteres, la
+ * diferencia contra el original y los marcadores que quedan. `variablesPendientes` sale
+ * del texto y no de una lista aparte — es lo que bloquea el render, y un cliente que
+ * mandara la lista vacía renderizaría corchetes leídos en voz alta.
+ *
+ * Las ediciones se indexan por POSICIÓN en el array, no por `toma.n`. El `n` viene del
+ * análisis forense (`assembleTemplate` mapea los cortes uno a uno y hereda su `n`), y
+ * nada garantiza que sea único: dos cortes con el mismo número harían que una sola
+ * edición pisara las dos locuciones. La posición es única por construcción.
+ */
+export function applyScriptEdits(
+  adapted: AdaptedScript,
+  ediciones: Record<number, string>,
+  caracteresOriginal: number,
+): AdaptedScript {
+  const tomas = adapted.tomas.map((t, i) => {
+    const nueva = ediciones[i]
+    return nueva !== undefined ? { ...t, locucion: nueva.trim() } : t
+  })
+  const guionFinal = tomas.map((t) => t.locucion).join(' ')
+  return {
+    ...adapted,
+    tomas,
+    guionFinal,
+    caracteresAdaptado: guionFinal.length,
+    diferenciaCaracteres: guionFinal.length - caracteresOriginal,
+    variablesPendientes: extractPending(guionFinal),
+  }
+}
+
 export function buildAdaptInstruction(
   template: ScriptTemplate,
   forensic: ForensicReport,
   inputs: UserInputs,
   scan: ProductScan | null,
+  slots: Slot[],
 ): string {
   return [
     'Actúa como estratega de marketing de respuesta directa.',
-    'Rellena la plantilla Fill in the Blank con los INPUTS del usuario.',
     '',
-    'PLANTILLA (guión):',
-    template.guionFillInBlank,
+    'TU TRABAJO NO ES ESCRIBIR UN GUION. El guion ya existe: es el del video de',
+    'referencia, y se reconstruye copiándolo con código, palabra por palabra. Lo único',
+    'que decides tú es QUÉ VALOR va en cada hueco y cómo se traduce al producto nuevo lo',
+    'que el cuerpo hace en cada toma. Cualquier frase que escribas fuera de esos dos',
+    'campos se descarta, así que no reescribas el guion: no se usaría.',
     '',
-    'TOMAS DE LA PLANTILLA:',
+    '── HUECOS ──',
+    'Devuelve un `valores` por cada `id` de esta lista, exactamente estos ids:',
+    ...slots.map((sl) => `  ${sl.id}  ·  ${sl.contexto}`),
+    '',
+    'Reglas de los valores:',
+    '  - El valor sustituye SOLO lo que estaba entre corchetes; lo de alrededor ya está',
+    '    escrito. Si el contexto dice "mi ⟦parte del cuerpo⟧", el valor es "cara", no',
+    '    "mi cara": el posesivo ya está puesto y duplicarlo rompe la frase.',
+    '  - Dos huecos con el MISMO nombre y distinto número casi nunca llevan el mismo',
+    '    valor: mira la frase de cada uno. Caso real que salió mal — la plantilla decía',
+    '    "Este es el ⟦Producto⟧ de la marca ⟦Producto⟧ y se llama ⟦Producto⟧" y los tres',
+    '    se rellenaron igual, dando "el suero de la marca suero y se llama suero". Ahí',
+    '    el primero es la categoría, el segundo la MARCA y el tercero el NOMBRE COMERCIAL.',
+    '    Igual con "en ⟦parte del cuerpo⟧ y en ⟦parte del cuerpo⟧": es "cara" y "cuello".',
+    '  - Encaja en género, número y en la forma que pide la oración. El contexto te',
+    '    muestra las palabras vecinas justamente para eso.',
+    '  - Forma CORTA. El hueco ocupa el lugar de una palabra o dos, y la locución va',
+    '    cronometrada contra tomas de duración fija: meter la descripción entera del',
+    '    producto donde iba "serum" alarga el audio y lo desincroniza de la imagen.',
+    '  - NUNCA uses el nombre del hueco como valor: "tipo de producto" es la etiqueta del',
+    '    agujero, no un valor.',
+    '  - Si no tienes con qué rellenarlo, devuelve `valor` VACÍO. No lo adivines: el',
+    '    hueco queda marcado en el guión y el usuario lo escribe él mismo antes de',
+    '    renderizar. Un hueco vacío es un resultado correcto; uno inventado es',
+    '    inservible.',
+    '',
+    '── ACCIONES ──',
+    'Devuelve un `acciones` por cada toma, con su `n`. La acción de cada toma NO se',
+    'inventa ni se resume: se copia la `accion` del corte con el mismo índice, cambiando',
+    'solo lo que es específico del producto viejo.',
+    'Si el original dice "aplica unas gotas en la mejilla derecha con un gotero, luego',
+    'masajea y muestra el producto a cámara girándolo", tu acción conserva el gotero (o',
+    'su equivalente en el producto nuevo: una gomita se toma con los dedos, un frasco se',
+    'destapa), la mejilla, el masaje, el giro y el orden. Perder "con un gotero" o',
+    '"girándolo" convierte una coreografía en un gesto genérico y el video deja de',
+    'parecerse al original, que es lo único que se le pide.',
+    'Conserva SIEMPRE: qué mano, cómo agarra, dónde toca, hacia dónde mira, y en qué',
+    'momento el producto entra y sale del cuadro.',
+    '',
+    'CORTES REALES DE LA REFERENCIA (empareja por índice con las tomas):',
+    JSON.stringify(forensic.cortes.map((c) => ({ n: c.n, tiempo: c.tiempo, accion: c.accion, camara: c.camara }))),
+    '',
+    'TOMAS DE LA PLANTILLA (para ver el contexto de cada hueco):',
     JSON.stringify(template.tomas),
     '',
-    'ESCENARIO DE LA PLANTILLA:',
-    JSON.stringify(template.escenario),
-    '',
-    'MARCAS DE TIEMPO DE LA REFERENCIA (empareja por posición/índice):',
-    JSON.stringify(forensic.cortes.map((c) => ({ n: c.n, tiempo: c.tiempo }))),
-    '',
-    'INPUTS DEL USUARIO (jerarquía de sustitución, en este orden):',
+    '── INPUTS DEL USUARIO ── (jerarquía de sustitución, en este orden)',
     `  1. PRODUCTO: ${inputs.productName}`,
     `  2. DESCRIPCIÓN DEL PRODUCTO: ${inputs.productDescription}`,
     `  3. ÁNGULO DEL VIDEO: ${inputs.angle}`,
@@ -80,55 +189,31 @@ export function buildAdaptInstruction(
     scan?.productDescription ? `  8. IMAGEN DEL PRODUCTO (observado): ${scan.productDescription}` : '',
     inputs.constraints ? `  9. INFORMACIÓN ADICIONAL: ${inputs.constraints}` : '',
     '',
-    'VARIANTE REGIONAL:',
-    'El diálogo adaptado se escribe en la variante regional del español indicada en',
-    'los INPUTS (acento). Vocabulario, giros locales, y conjugación deben coincidir:',
-    'diferencia entre "tú", "vos", "usted", y los giros idiolectales propios de esa región.',
+    'La locución se escribe en la variante regional del español del acento indicado:',
+    'vocabulario, giros y conjugación ("tú" / "vos" / "usted") tienen que coincidir.',
     '',
-    'REGLA DE ADAPTACIÓN LITERAL — así y solo así:',
-    '  ORIGINAL:   "Si estás cansado de las marcas, necesitas probar este suero."',
-    '  ADAPTACIÓN: "Si estás cansado de las marcas de acné, necesitas probar Serum Eunoia."',
-    '  PROHIBIDO:  "¿Sabías que miles de personas están descubriendo una revolucionaria',
-    '              solución...?" — cambiaría la estructura.',
+    '⛔ LA REGLA QUE MANDA SOBRE TODAS LAS DEMÁS: NO INVENTES.',
+    'Ni beneficios, ni ingredientes, ni marcas, ni cantidades, ni plazos, ni estudios, ni',
+    'certificaciones, ni resultados, ni características, ni claims, ni mecanismos. Solo',
+    'puedes usar lo que está literalmente en los INPUTS y en la descripción observada del',
+    'producto. Tu conocimiento del mundo NO es una fuente válida acá.',
     '',
-    'REGLAS:',
-    '  - Mantén flujo, ritmo, orden, intención, función de cada frase, longitud',
-    '    aproximada, número de tomas, tipo de hook, tipo de demostración y tipo de CTA.',
-    '  - Ajustes gramaticales permitidos SOLO para género, número, concordancia,',
-    '    tiempos verbales y la naturalidad mínima indispensable.',
-    '  - NO mejores el guion por iniciativa propia.',
-    '  - NO introduzcas frameworks de marketing externos.',
-    '  - NO agregues argumentos que el anuncio original no tenga.',
-    '  - Si una frase original cumple una función específica, la adaptación debe',
-    '    cumplir esa misma función.',
+    'Esto pasó de verdad y no puede repetirse. El usuario escribió solo "Suero de',
+    'niacinamida para marcas de acné", y el guion salió diciendo: "contiene niacinamida,',
+    'PHE-resorcinol y agua termal de La Roche-Posay". Esos dos últimos son la fórmula',
+    'real de un producto de OTRA marca, sacados de memoria. Publicar eso es una',
+    'declaración falsa de composición nombrando a un competidor. Lo correcto era dejar',
+    'el hueco vacío. En el mismo guion se inventó "la marca Pure" a partir del nombre',
+    'del producto: el nombre comercial NO es la marca, y ninguna marca que el usuario no',
+    'haya escrito puede aparecer jamás.',
     '',
-    'NO INVENTES beneficios, ingredientes, estudios, certificaciones, resultados,',
-    'características, claims ni mecanismos que no estén en los INPUTS. Si falta',
-    'información para completar una variable de forma segura, déjala literalmente como',
-    '[VARIABLE PENDIENTE] y regístrala en `variablesPendientes`. Este es el ÚNICO',
-    'corchete permitido en el output; todo lo demás debe ser texto despejado.',
+    'Antes de escribir un ingrediente, una cifra, un plazo, una marca o una cantidad,',
+    'búscalo palabra por palabra en los INPUTS. Si no está ahí es invención, por muy',
+    'plausible que suene y por muy bien que encaje en la frase.',
     '',
-    'LONGITUD:',
-    `  El guion original tiene ${forensic.caracteresGuion} caracteres. Cuenta los del`,
-    '  guion adaptado en `caracteresAdaptado` y la diferencia en `diferenciaCaracteres`',
-    '  (positiva si es más largo). Mantente tan cerca como sea razonablemente posible.',
-    '',
-    'TOMAS (`tomas`): mismo número y mismo orden que la plantilla.',
-    '  `tiempoOriginal` se copia del bloque "MARCAS DE TIEMPO DE LA REFERENCIA" emparejando',
-    '  por posición (si tomas[i] existe, busca la marca con n=tomas[i].n). Si la marca',
-    '  no existe, usa un tiempo aproximado basado en duracionSeg o deja explícitamente',
-    '  `tiempoOriginal: "[VARIABLE PENDIENTE]"` — NO inventes marcas de tiempo.',
-    '  `duracionSeg` se copia de la plantilla sin cambios.',
-    '  `accionVisual` describe secuencialmente: posición inicial, movimiento,',
-    '  interacción, dirección de manos, manipulación del producto, mirada, expresión y',
-    '  posición final. No describas solo el resultado final.',
-    '  `personaje` y `producto` describen lo que se ve en esa toma.',
-    '  `locucion` es el texto hablado EXACTO de esa toma, tomado del guión adaptado.',
-    '',
-    'TEXTO EN PANTALLA: NINGUNO. No generes captions, subtítulos, overlays, títulos,',
-    'stickers, emojis, flechas, banners, gráficos, UI ni watermarks. Solo puede',
-    'aparecer texto físicamente impreso en el producto o en elementos reales del',
-    'escenario. No agregues ningún campo de texto en pantalla a las tomas.',
+    'TEXTO EN PANTALLA: NINGUNO. Ni captions, ni subtítulos, ni overlays, ni watermarks.',
+    'Solo puede aparecer texto físicamente impreso en el producto o en objetos reales del',
+    'escenario. No agregues ningún campo de texto en pantalla.',
     '',
     'Todo el output va en español.',
   ].filter(Boolean).join('\n')
