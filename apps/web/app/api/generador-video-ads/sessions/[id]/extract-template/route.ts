@@ -5,7 +5,7 @@ import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 
 import { TemplateDraftSchema, buildTemplateInstruction } from '@/lib/video-ads/template'
-import { validateTemplate, assembleTemplate, capSlots } from '@/lib/video-ads/fill'
+import { validateTemplate, assembleTemplate, normalizeSlots } from '@/lib/video-ads/fill'
 import { canProceed } from '@/lib/video-ads/validation'
 import { repairCutTiming } from '@/lib/video-ads/forensic'
 import { resyncTomaDurations } from '@/lib/video-ads/adapt'
@@ -80,12 +80,13 @@ export async function POST(
     // paso aparte, porque `extractSlots`/`fillTemplate` numeran los huecos por orden de
     // recorrido (`nombre#n`) — fusionar corre esa numeración, así que ningún id guardado
     // puede haberse calculado sobre la plantilla previa a la fusión.
-    const { template, reporte } = capSlots(armada, forensic.cortes)
-    if (reporte.antes !== reporte.despues || reporte.desalineadas.length)
+    const { template, reporte } = normalizeSlots(armada, forensic.cortes)
+    if (reporte.antes !== reporte.despues || reporte.desalineadas.length || reporte.renombrados.length)
       console.warn(
         `[video-ads/extract-template] sesión ${id}: huecos ${reporte.antes} → ${reporte.despues}` +
         (reporte.desmarcados.length ? ` · desmarcados por universales: ${reporte.desmarcados.join(', ')}` : '') +
         (reporte.fusionados ? ` · fusionados en enumeraciones: ${reporte.fusionados}` : '') +
+        (reporte.renombrados.length ? ` · renombrados por rol: ${reporte.renombrados.join(', ')}` : '') +
         (reporte.desalineadas.length ? ` · ⚠ tomas cuyo andamiaje NO copia su corte: ${reporte.desalineadas.join(', ')}` : ''),
       )
 

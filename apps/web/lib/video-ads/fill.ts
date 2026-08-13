@@ -198,6 +198,30 @@ const universal = (texto: string) => /^\s*\d+([.,]\d+)?\s*$/.test(texto)
 /** Entre dos huecos del mismo nombre, solo puntuación o conjunción: es una enumeración. */
 const SEPARADOR_ENUM = /^[\s,;]*(?:y|e|o|u)?[\s,;]*$/i
 
+/**
+ * "Este es el X de la marca Y y se llama Z" son TRES datos distintos —categoría, marca y
+ * nombre comercial— y la FASE 2 los marcaba los tres como `[Producto]`. Con la misma
+ * etiqueta tres veces, la FASE 3 les pone el mismo valor: "el suero de la marca suero y
+ * se llama suero".
+ *
+ * El prompt ya pide los tres nombres por separado; esto es el respaldo para cuando no
+ * obedece. Renombra por lo que hay INMEDIATAMENTE ANTES del hueco, que en español es
+ * inequívoco: detrás de "de la marca" solo puede venir una marca. Es angosto a
+ * propósito — dos marcadores, no un clasificador — y solo pisa nombres genéricos, así
+ * que un hueco que el modelo ya nombró bien nunca se toca.
+ */
+const ROL_POR_ANTECEDENTE: [RegExp, string][] = [
+  [/\bde\s+(?:la\s+)?marca\s*$/i, 'Marca'],
+  [/\bse\s+llama\s*$/i, 'Nombre comercial'],
+]
+const NOMBRES_GENERICOS = new Set(['producto', 'categoría del producto', 'categoria del producto'])
+
+function rolPorContexto(nombre: string, antes: string): string {
+  if (!NOMBRES_GENERICOS.has(nombre.toLowerCase())) return nombre
+  for (const [re, rol] of ROL_POR_ANTECEDENTE) if (re.test(antes)) return rol
+  return nombre
+}
+
 export interface SlotCapReport {
   antes: number
   despues: number
@@ -207,21 +231,27 @@ export interface SlotCapReport {
   fusionados: number
   /** Tomas cuyo andamiaje no coincide con su corte: el modelo no copió. */
   desalineadas: number[]
+  /** Huecos genéricos renombrados a su rol real: `Producto → Marca`. */
+  renombrados: string[]
 }
 
 /**
- * Acota los huecos de la plantilla, en código, después de que el modelo la devuelve.
+ * Normaliza los huecos de la plantilla, en código, después de que el modelo la devuelve.
  * ---------------------------------------------------------------------------
  * En la sesión real la FASE 2 marcó 17 huecos sobre un guión de 11 tomas, incluidos 5
  * `[Producto]` y un `[Problema]` sobre una edad. El prompt ya pide moderación y ya nombra
  * ese caso; cuatro rondas de redacción no lo consiguieron, así que se acota acá.
  *
- * Hace DOS cosas, las dos seguras:
+ * Hace TRES cosas, las tres seguras:
  *
  *  1. **Desmarca los universales.** El hueco vuelve a ser la palabra original. Nada se
  *     pierde: esa palabra sirve igual para cualquier producto, que es la definición de
  *     universal.
- *  2. **Fusiona enumeraciones del mismo nombre.** `[Ingrediente], [Ingrediente] y
+ *  2. **Renombra los roles genéricos del producto** por lo que hay justo antes del hueco:
+ *     detrás de "de la marca" va `[Marca]`, detrás de "se llama" va `[Nombre comercial]`.
+ *     Tres huecos `[Producto]` en la misma frase hacen que la FASE 3 les ponga el mismo
+ *     valor; con nombres distintos, cada uno pide su dato.
+ *  3. **Fusiona enumeraciones del mismo nombre.** `[Ingrediente], [Ingrediente] y
  *     [Ingrediente]` pasa a ser UN hueco que cubre la lista entera. Tres blancos que
  *     pedían tres datos se vuelven uno que pide una lista — menos trabajo para quien
  *     escribe, y no se pierde nada porque la enumeración es una sola pieza de
@@ -235,12 +265,12 @@ export interface SlotCapReport {
  * existe para impedir, solo que entrando por la puerta de atrás. El conteo que queda se
  * reporta; no se disfraza de objetivo cumplido.
  */
-export function capSlots(
+export function normalizeSlots(
   t: ScriptTemplate,
   cortes: { n: number; dialogo: string }[],
 ): { template: ScriptTemplate; reporte: SlotCapReport } {
   const porN = new Map(cortes.map((c) => [c.n, c.dialogo]))
-  const reporte: SlotCapReport = { antes: extractSlots(t).length, despues: 0, desmarcados: [], fusionados: 0, desalineadas: [] }
+  const reporte: SlotCapReport = { antes: extractSlots(t).length, despues: 0, desmarcados: [], fusionados: 0, desalineadas: [], renombrados: [] }
 
   const tomas = t.tomas.map((toma) => {
     const dialogo = porN.get(toma.n)
@@ -263,14 +293,14 @@ export function capSlots(
         SEPARADOR_ENUM.test(literales[j + 1])
       ) j++
 
-      if (j > i) {
-        reporte.fusionados += j - i
-        out += `[${huecos[i].nombre}]`
-      } else if (universal(huecos[i].original)) {
+      if (universal(huecos[i].original) && j === i) {
         reporte.desmarcados.push(huecos[i].original.trim())
         out += huecos[i].original
       } else {
-        out += `[${huecos[i].nombre}]`
+        if (j > i) reporte.fusionados += j - i
+        const rol = rolPorContexto(huecos[i].nombre, literales[i])
+        if (rol !== huecos[i].nombre) reporte.renombrados.push(`${huecos[i].nombre} → ${rol}`)
+        out += `[${rol}]`
       }
       out += literales[j + 1] ?? ''
       i = j + 1

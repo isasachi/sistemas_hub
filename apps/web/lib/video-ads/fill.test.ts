@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractSlots, fillTemplate, validateTemplate, assembleTemplate, rejectBadValues, alignSlots, capSlots } from './fill'
+import { extractSlots, fillTemplate, validateTemplate, assembleTemplate, rejectBadValues, alignSlots, normalizeSlots } from './fill'
 import type { ScriptTemplate } from './template'
 
 // Plantilla recortada del caso real (serum Apivita → suero de niacinamida). Trae los
@@ -154,14 +154,14 @@ describe('alignSlots', () => {
 
 // Caso REAL: la FASE 2 marcó 17 huecos sobre 11 tomas, incluido un [Problema] sobre una
 // edad. El prompt ya pide moderación y ya nombra ese caso; se acota en código.
-describe('capSlots', () => {
+describe('normalizeSlots', () => {
   const tmpl = (locuciones: string[]): ScriptTemplate => ({
     ...T,
     tomas: locuciones.map((l, i) => ({ n: i + 1, locucion: l, accionVisual: 'a', duracionSeg: 5 })),
   })
 
   it('desmarca un hueco cuyo original es un número: vuelve la palabra, no queda blanco', () => {
-    const { template, reporte } = capSlots(
+    const { template, reporte } = normalizeSlots(
       tmpl(['Si tú también estás casi a punto de entrar a los [Problema] como yo,']),
       [{ n: 1, dialogo: 'Si tú también estás casi a punto de entrar a los 30 como yo,' }],
     )
@@ -173,7 +173,7 @@ describe('capSlots', () => {
   // Tres blancos que pedían tres datos se vuelven uno que pide una lista. No se pierde
   // nada: la enumeración es una sola pieza de información.
   it('fusiona una enumeración del mismo nombre en un solo hueco', () => {
-    const { template, reporte } = capSlots(
+    const { template, reporte } = normalizeSlots(
       tmpl(['Este [Producto] contiene [Ingrediente], [Ingrediente] y [Ingrediente].']),
       [{ n: 1, dialogo: 'Este serum contiene ácido hialurónico, niacinamida y propóleo.' }],
     )
@@ -186,7 +186,7 @@ describe('capSlots', () => {
   // El hueco fusionado tiene que cubrir la lista ENTERA, no solo el primer elemento:
   // si no, "niacinamida y propóleo" se quedarían literales en el anuncio de otro producto.
   it('el hueco fusionado cubre la lista completa, comas y conjunción incluidas', () => {
-    const { template } = capSlots(
+    const { template } = normalizeSlots(
       tmpl(['Contiene [Ingrediente], [Ingrediente] y [Ingrediente].']),
       [{ n: 1, dialogo: 'Contiene ácido hialurónico, niacinamida y propóleo.' }],
     )
@@ -194,16 +194,19 @@ describe('capSlots', () => {
   })
 
   it('no fusiona dos huecos del mismo nombre separados por texto real', () => {
-    const { template, reporte } = capSlots(
+    const { template, reporte } = normalizeSlots(
       tmpl(['Este es el [Producto] de la marca [Producto].']),
       [{ n: 1, dialogo: 'Este es el serum de la marca Apivita.' }],
     )
-    expect(template.tomas[0].locucion).toBe('Este es el [Producto] de la marca [Producto].')
+    // El segundo se renombra a [Marca] por lo que tiene delante — el punto del test es
+    // que siguen siendo DOS huecos, no que conserven la etiqueta.
+    expect(template.tomas[0].locucion).toBe('Este es el [Producto] de la marca [Marca].')
     expect(reporte.fusionados).toBe(0)
+    expect(reporte.despues).toBe(2)
   })
 
   it('no fusiona huecos contiguos de nombres distintos', () => {
-    const { reporte } = capSlots(
+    const { reporte } = normalizeSlots(
       tmpl(['Da [Beneficio] y [Resultado].']),
       [{ n: 1, dialogo: 'Da luminosidad y lifting.' }],
     )
@@ -214,17 +217,61 @@ describe('capSlots', () => {
   // La razón por la que la lista de universales son SOLO números: desmarcar deja la
   // palabra original en el guión, y el guión termina siendo un anuncio publicado.
   it('NUNCA desmarca un ingrediente o una marca para bajar el conteo', () => {
-    const { template, reporte } = capSlots(
+    const { template, reporte } = normalizeSlots(
       tmpl(['Contiene [Ingrediente] de la marca [Producto].']),
       [{ n: 1, dialogo: 'Contiene propóleo de la marca Apivita.' }],
     )
-    expect(template.tomas[0].locucion).toBe('Contiene [Ingrediente] de la marca [Producto].')
+    expect(template.tomas[0].locucion).toBe('Contiene [Ingrediente] de la marca [Marca].')
     expect(reporte.desmarcados).toEqual([])
     expect(reporte.despues).toBe(2)
   })
 
+  // Tres datos distintos con la misma etiqueta hacen que la FASE 3 les ponga el mismo
+  // valor: "el suero de la marca suero y se llama suero". El prompt ya pide los tres
+  // nombres; esto es el respaldo determinista para cuando no obedece.
+  it('renombra los tres roles del producto por lo que tienen delante', () => {
+    const { template, reporte } = normalizeSlots(
+      tmpl(['Este es el [Producto] de la marca [Producto] y se llama [Producto].']),
+      [{ n: 1, dialogo: 'Este es el serum antienvejecimiento de la marca Apivita y se llama Beevine Elixir.' }],
+    )
+    expect(template.tomas[0].locucion)
+      .toBe('Este es el [Producto] de la marca [Marca] y se llama [Nombre comercial].')
+    expect(reporte.renombrados).toEqual(['Producto → Marca', 'Producto → Nombre comercial'])
+    // Y ahora cada hueco pide su propio dato en vez de tres veces el mismo.
+    expect(fillTemplate(template, {
+      'Producto#1': 'suero', 'Marca#1': 'La Roche-Posay', 'Nombre comercial#1': 'Pure Niacinamide',
+    }).tomas[0].locucion)
+      .toBe('Este es el suero de la marca La Roche-Posay y se llama Pure Niacinamide.')
+  })
+
+  it('renombra también [Categoría del producto], que es igual de genérico ahí', () => {
+    const { template } = normalizeSlots(
+      tmpl(['de la marca [Categoría del producto].']),
+      [{ n: 1, dialogo: 'de la marca Apivita.' }],
+    )
+    expect(template.tomas[0].locucion).toBe('de la marca [Marca].')
+  })
+
+  // Un hueco que el modelo ya nombró bien no se toca: el respaldo solo pisa genéricos.
+  it('no pisa un nombre que ya es específico', () => {
+    const { template, reporte } = normalizeSlots(
+      tmpl(['de la marca [Ingrediente].']),
+      [{ n: 1, dialogo: 'de la marca propóleo.' }],
+    )
+    expect(template.tomas[0].locucion).toBe('de la marca [Ingrediente].')
+    expect(reporte.renombrados).toEqual([])
+  })
+
+  it('no renombra un [Producto] que no viene detrás de un marcador de rol', () => {
+    const { reporte } = normalizeSlots(
+      tmpl(['Este [Producto] me cambió la piel.']),
+      [{ n: 1, dialogo: 'Este serum me cambió la piel.' }],
+    )
+    expect(reporte.renombrados).toEqual([])
+  })
+
   it('deja intacta la toma cuyo andamiaje no copia su corte, y la reporta', () => {
-    const { template, reporte } = capSlots(
+    const { template, reporte } = normalizeSlots(
       tmpl(['Este [Producto] transformó mi piel.']),
       [{ n: 1, dialogo: 'Este serum me cambió la piel.' }],
     )
@@ -233,12 +280,12 @@ describe('capSlots', () => {
   })
 
   it('una toma sin corte correspondiente se deja como está', () => {
-    const { template } = capSlots(tmpl(['Este [Producto] es bueno.']), [])
+    const { template } = normalizeSlots(tmpl(['Este [Producto] es bueno.']), [])
     expect(template.tomas[0].locucion).toBe('Este [Producto] es bueno.')
   })
 
   it('rehace el guión completo con las locuciones acotadas', () => {
-    const { template } = capSlots(
+    const { template } = normalizeSlots(
       tmpl(['A los [Problema] pasa esto.', 'Contiene [Ingrediente] y [Ingrediente].']),
       [{ n: 1, dialogo: 'A los 30 pasa esto.' }, { n: 2, dialogo: 'Contiene agua y sal.' }],
     )
@@ -249,8 +296,8 @@ describe('capSlots', () => {
   // extracciones de la misma plantilla darían guiones distintos.
   it('es idempotente', () => {
     const cortes = [{ n: 1, dialogo: 'Contiene ácido hialurónico, niacinamida y propóleo, a los 30.' }]
-    const uno = capSlots(tmpl(['Contiene [Ingrediente], [Ingrediente] y [Ingrediente], a los [Problema].']), cortes)
-    const dos = capSlots(uno.template, cortes)
+    const uno = normalizeSlots(tmpl(['Contiene [Ingrediente], [Ingrediente] y [Ingrediente], a los [Problema].']), cortes)
+    const dos = normalizeSlots(uno.template, cortes)
     expect(dos.template.tomas[0].locucion).toBe(uno.template.tomas[0].locucion)
     expect(dos.reporte.antes).toBe(dos.reporte.despues)
   })
