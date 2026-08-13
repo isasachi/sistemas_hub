@@ -84,8 +84,6 @@ export async function POST(
     if (reporte.antes !== reporte.despues || reporte.desalineadas.length || reporte.renombrados.length)
       console.warn(
         `[video-ads/extract-template] sesión ${id}: huecos ${reporte.antes} → ${reporte.despues}` +
-        (reporte.desmarcados.length ? ` · desmarcados por universales: ${reporte.desmarcados.join(', ')}` : '') +
-        (reporte.fusionados ? ` · fusionados en enumeraciones: ${reporte.fusionados}` : '') +
         (reporte.renombrados.length ? ` · renombrados por rol: ${reporte.renombrados.join(', ')}` : '') +
         (reporte.desalineadas.length ? ` · ⚠ tomas cuyo andamiaje NO copia su corte: ${reporte.desalineadas.join(', ')}` : ''),
       )

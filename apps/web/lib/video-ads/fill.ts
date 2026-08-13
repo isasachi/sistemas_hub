@@ -181,24 +181,6 @@ export function alignSlots(
 }
 
 /**
- * Un hueco cuyo texto original es UNIVERSAL no debía marcarse: cualquier anuncio de
- * cualquier producto puede decir esa palabra igual, así que convertirla en variable solo
- * fabrica un agujero que alguien tiene que rellenar a mano.
- *
- * La lista se limita a NÚMEROS a propósito, y es el caso que se vio de verdad: en la
- * sesión real la plantilla marcó `[Problema]` sobre el "30" de "casi a punto de entrar a
- * los 30 como yo" — una edad, que el prompt de FASE 2 ya nombra textualmente como
- * ejemplo de lo que NO se marca. Ensanchar esto a un léxico de palabras "genéricas" es
- * justo cómo se empieza a desmarcar cosas que sí importan: desmarcar un hueco deja la
- * palabra ORIGINAL en el guión, así que equivocarse acá con "propóleo" publica un
- * ingrediente falso.
- */
-const universal = (texto: string) => /^\s*\d+([.,]\d+)?\s*$/.test(texto)
-
-/** Entre dos huecos del mismo nombre, solo puntuación o conjunción: es una enumeración. */
-const SEPARADOR_ENUM = /^[\s,;]*(?:y|e|o|u)?[\s,;]*$/i
-
-/**
  * "Este es el X de la marca Y y se llama Z" son TRES datos distintos —categoría, marca y
  * nombre comercial— y la FASE 2 los marcaba los tres como `[Producto]`. Con la misma
  * etiqueta tres veces, la FASE 3 les pone el mismo valor: "el suero de la marca suero y
@@ -211,10 +193,12 @@ const SEPARADOR_ENUM = /^[\s,;]*(?:y|e|o|u)?[\s,;]*$/i
  * que un hueco que el modelo ya nombró bien nunca se toca.
  */
 const ROL_POR_ANTECEDENTE: [RegExp, string][] = [
-  [/\bde\s+(?:la\s+)?marca\s*$/i, 'Marca'],
-  [/\bse\s+llama\s*$/i, 'Nombre comercial'],
+  [/\bde\s+(?:la\s+)?marca\s*$/i, 'nombre de la marca'],
+  [/\bse\s+llama\s*$/i, 'nombre del producto'],
 ]
-const NOMBRES_GENERICOS = new Set(['producto', 'categoría del producto', 'categoria del producto'])
+const NOMBRES_GENERICOS = new Set([
+  'producto', 'categoría del producto', 'categoria del producto', 'tipo de producto',
+])
 
 function rolPorContexto(nombre: string, antes: string): string {
   if (!NOMBRES_GENERICOS.has(nombre.toLowerCase())) return nombre
@@ -225,10 +209,6 @@ function rolPorContexto(nombre: string, antes: string): string {
 export interface SlotCapReport {
   antes: number
   despues: number
-  /** Textos originales que se devolvieron al guión por ser universales. */
-  desmarcados: string[]
-  /** Huecos que desaparecieron al fusionar enumeraciones. */
-  fusionados: number
   /** Tomas cuyo andamiaje no coincide con su corte: el modelo no copió. */
   desalineadas: number[]
   /** Huecos genéricos renombrados a su rol real: `Producto → Marca`. */
@@ -236,41 +216,34 @@ export interface SlotCapReport {
 }
 
 /**
- * Normaliza los huecos de la plantilla, en código, después de que el modelo la devuelve.
+ * Corrige los nombres de hueco genéricos que la FASE 2 no supo distinguir.
  * ---------------------------------------------------------------------------
- * En la sesión real la FASE 2 marcó 17 huecos sobre un guión de 11 tomas, incluidos 5
- * `[Producto]` y un `[Problema]` sobre una edad. El prompt ya pide moderación y ya nombra
- * ese caso; cuatro rondas de redacción no lo consiguieron, así que se acota acá.
+ * `Este es el X de la marca Y y se llama Z` son TRES datos distintos, y el modelo tiende
+ * a etiquetarlos los tres igual. Con la misma etiqueta, la FASE 3 les pone el mismo
+ * valor: "el suero de la marca suero y se llama suero". Acá se deduce el rol por lo que
+ * hay INMEDIATAMENTE ANTES del hueco, que en español es inequívoco.
  *
- * Hace TRES cosas, las tres seguras:
+ * ⚠️ ESTA FUNCIÓN LLEGÓ A HACER DOS COSAS MÁS Y AMBAS ESTABAN AL REVÉS. Desmarcaba los
+ * huecos cuyo original era un número y fusionaba las enumeraciones del mismo nombre en
+ * uno solo, todo para bajar el conteo hacia un "entre 5 y 8" que YO inventé y que el
+ * spec nunca pidió. La plantilla de referencia que escribió el dueño del repo para el
+ * mismo video de prueba tiene 23 huecos, marca `casi a punto de entrar a los 30` como
+ * `[situación personal / edad / hito]` y mantiene los tres ingredientes como
+ * `[ingrediente 1..3]` numerados — exactamente lo contrario de lo que esto hacía.
  *
- *  1. **Desmarca los universales.** El hueco vuelve a ser la palabra original. Nada se
- *     pierde: esa palabra sirve igual para cualquier producto, que es la definición de
- *     universal.
- *  2. **Renombra los roles genéricos del producto** por lo que hay justo antes del hueco:
- *     detrás de "de la marca" va `[Marca]`, detrás de "se llama" va `[Nombre comercial]`.
- *     Tres huecos `[Producto]` en la misma frase hacen que la FASE 3 les ponga el mismo
- *     valor; con nombres distintos, cada uno pide su dato.
- *  3. **Fusiona enumeraciones del mismo nombre.** `[Ingrediente], [Ingrediente] y
- *     [Ingrediente]` pasa a ser UN hueco que cubre la lista entera. Tres blancos que
- *     pedían tres datos se vuelven uno que pide una lista — menos trabajo para quien
- *     escribe, y no se pierde nada porque la enumeración es una sola pieza de
- *     información.
- *
- * Lo que NO hace, y es deliberado: no baja el conteo hasta un número objetivo. Desmarcar
- * un hueco deja su palabra ORIGINAL en el guión, así que recortar hasta 8 en el caso real
- * obligaría a desmarcar `propóleo`, `niacinamida` y `Apivita` — y el anuncio del usuario
- * afirmaría que SU producto contiene los ingredientes y la marca del producto del video
- * de referencia. Es exactamente la clase de declaración falsa que la regla de no inventar
- * existe para impedir, solo que entrando por la puerta de atrás. El conteo que queda se
- * reporta; no se disfraza de objetivo cumplido.
+ * El razonamiento correcto va en la otra dirección y ya estaba escrito acá mismo:
+ * desmarcar un hueco deja su palabra ORIGINAL en el guión, así que marcar de MENOS es lo
+ * peligroso. "en cara y en cuello" sin marcar es falso para un champú; "de día y de
+ * noche" es falso para una mascarilla semanal; "todo tipo de piel" es una afirmación
+ * sobre un producto que nadie validó. Más huecos = menos texto ajeno colado en el
+ * anuncio del usuario. No reintroduzcas el recorte por conteo.
  */
 export function normalizeSlots(
   t: ScriptTemplate,
   cortes: { n: number; dialogo: string }[],
 ): { template: ScriptTemplate; reporte: SlotCapReport } {
   const porN = new Map(cortes.map((c) => [c.n, c.dialogo]))
-  const reporte: SlotCapReport = { antes: extractSlots(t).length, despues: 0, desmarcados: [], fusionados: 0, desalineadas: [], renombrados: [] }
+  const reporte: SlotCapReport = { antes: extractSlots(t).length, despues: 0, desalineadas: [], renombrados: [] }
 
   const tomas = t.tomas.map((toma) => {
     const dialogo = porN.get(toma.n)
@@ -282,28 +255,10 @@ export function normalizeSlots(
 
     const { literales, huecos } = al
     let out = literales[0]
-    let i = 0
-    while (i < huecos.length) {
-      // Extiende la corrida mientras el siguiente hueco se llame igual y entre medio
-      // solo haya coma o conjunción.
-      let j = i
-      while (
-        j + 1 < huecos.length &&
-        huecos[j + 1].nombre === huecos[i].nombre &&
-        SEPARADOR_ENUM.test(literales[j + 1])
-      ) j++
-
-      if (universal(huecos[i].original) && j === i) {
-        reporte.desmarcados.push(huecos[i].original.trim())
-        out += huecos[i].original
-      } else {
-        if (j > i) reporte.fusionados += j - i
-        const rol = rolPorContexto(huecos[i].nombre, literales[i])
-        if (rol !== huecos[i].nombre) reporte.renombrados.push(`${huecos[i].nombre} → ${rol}`)
-        out += `[${rol}]`
-      }
-      out += literales[j + 1] ?? ''
-      i = j + 1
+    for (let i = 0; i < huecos.length; i++) {
+      const rol = rolPorContexto(huecos[i].nombre, literales[i])
+      if (rol !== huecos[i].nombre) reporte.renombrados.push(`${huecos[i].nombre} → ${rol}`)
+      out += `[${rol}]${literales[i + 1] ?? ''}`
     }
     return { ...toma, locucion: out }
   })
