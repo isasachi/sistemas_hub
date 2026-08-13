@@ -99,7 +99,12 @@ export function isImageKind(kind: string): boolean {
 // null`, `existentes` vuelve a ser `[]` en la siguiente llamada — nada que abandonar,
 // ninguna ambigüedad de si un `resume` es real. Limpiar a `[]` en vez de `null`
 // dejaría la fila para siempre fuera del alcance de `claimFreshLotes` (esa condición
-// nunca volvería a cumplirse) sin ganar nada a cambio.
+// nunca volvería a cumplirse) sin ganar nada a cambio. Invariante nuevo que ese botón
+// también tiene que respetar (fix round 5/6): `render_done` (`video_sessions`,
+// `render-lotes.ts` `renderDone`) se escribe SIEMPRE en el mismo write que toca
+// `lotes` — el reset a `null` tiene que llevarse `render_done` de vuelta a `false` en
+// la misma escritura, o el dashboard se queda mostrando "listo" sobre una sesión que
+// ese botón acaba de vaciar para regenerar.
 export const VIDEO_GENERATION_LIMIT = Number(process.env.GEN_VIDEO_LIMIT ?? 3)
 function limitFor(kind: string): number {
   return kind === 'video-generation' ? VIDEO_GENERATION_LIMIT : GEN_PER_STEP_LIMIT

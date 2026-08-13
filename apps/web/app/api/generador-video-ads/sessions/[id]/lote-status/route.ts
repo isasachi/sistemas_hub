@@ -79,7 +79,18 @@ export async function GET(
 
   const done = renderDone(lotes)
 
-  if (changed) {
+  // Fix round 6: `changed` solo se enciende si ALGÚN lote se movió en ESTA pasada —
+  // pero `render_done` puede estar desincronizado de `done` sin que nada se haya
+  // movido. Es exactamente el caso de una fila legada backfilleada por la migración
+  // (`render_done = video_url IS NOT NULL`, una aproximación al comportamiento viejo)
+  // o de una fila donde un `generate-lotes` anterior escribió `render_done` con otro
+  // valor: el lote 1 ya está mirroreado (no cambia), los lotes 2-4 siguen `idle` sin
+  // `taskId` (no cambian, `continue` antes de tocar red) — `changed` da `false`,
+  // `done` se calcula bien y se DEVUELVE en el JSON, pero sin este OR nunca se
+  // persistía: el dashboard se quedaba leyendo el `render_done` viejo para siempre,
+  // sin que ningún sondeo futuro lo pudiera corregir. `session.render_done` no cuesta
+  // una query extra — `getVideoSession` ya trae la fila completa (`select('*')`).
+  if (changed || done !== session.render_done) {
     const first = lotes.find((l) => l.videoUrl)?.videoUrl ?? null
     // `render_done` (fix round 5): esta ruta es la única que sabe, lote por lote, si
     // TODOS ya resolvieron — es la fuente real detrás del `done` que ya devuelve en
