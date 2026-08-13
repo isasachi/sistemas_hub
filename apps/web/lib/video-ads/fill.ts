@@ -145,6 +145,144 @@ export function rejectBadValues(
   return { valores: limpios, rechazados }
 }
 
+/**
+ * Reconstruye qué texto del diálogo original ocupaba cada hueco.
+ *
+ * Se puede porque el andamiaje —lo que está FUERA de los corchetes— es idéntico carácter
+ * por carácter al diálogo del corte; es la regla de copia que la FASE 2 tiene que
+ * cumplir. Entonces lo que hay entre dos trozos literales consecutivos, en el diálogo, es
+ * exactamente lo que el modelo reemplazó por el corchete.
+ *
+ * Devuelve `null` si un trozo literal no aparece en el diálogo en su orden: eso significa
+ * que el modelo NO copió, y entonces no hay forma segura de reescribir esa locución.
+ */
+export function alignSlots(
+  dialogo: string,
+  locucion: string,
+): { literales: string[]; huecos: { nombre: string; original: string }[] } | null {
+  const literales = locucion.split(HUECO)
+  const nombres = [...locucion.matchAll(HUECO)].map((m) => m[0].slice(1, -1).trim())
+  const huecos: { nombre: string; original: string }[] = []
+  let pos = 0
+  for (let i = 0; i < nombres.length; i++) {
+    const antes = literales[i]
+    if (antes) {
+      const k = dialogo.indexOf(antes, pos)
+      if (k < 0) return null
+      pos = k + antes.length
+    }
+    const sig = literales[i + 1]
+    const fin = sig ? dialogo.indexOf(sig, pos) : dialogo.length
+    if (fin < 0) return null
+    huecos.push({ nombre: nombres[i], original: dialogo.slice(pos, fin) })
+    pos = fin
+  }
+  return { literales, huecos }
+}
+
+/**
+ * Un hueco cuyo texto original es UNIVERSAL no debía marcarse: cualquier anuncio de
+ * cualquier producto puede decir esa palabra igual, así que convertirla en variable solo
+ * fabrica un agujero que alguien tiene que rellenar a mano.
+ *
+ * La lista se limita a NÚMEROS a propósito, y es el caso que se vio de verdad: en la
+ * sesión real la plantilla marcó `[Problema]` sobre el "30" de "casi a punto de entrar a
+ * los 30 como yo" — una edad, que el prompt de FASE 2 ya nombra textualmente como
+ * ejemplo de lo que NO se marca. Ensanchar esto a un léxico de palabras "genéricas" es
+ * justo cómo se empieza a desmarcar cosas que sí importan: desmarcar un hueco deja la
+ * palabra ORIGINAL en el guión, así que equivocarse acá con "propóleo" publica un
+ * ingrediente falso.
+ */
+const universal = (texto: string) => /^\s*\d+([.,]\d+)?\s*$/.test(texto)
+
+/** Entre dos huecos del mismo nombre, solo puntuación o conjunción: es una enumeración. */
+const SEPARADOR_ENUM = /^[\s,;]*(?:y|e|o|u)?[\s,;]*$/i
+
+export interface SlotCapReport {
+  antes: number
+  despues: number
+  /** Textos originales que se devolvieron al guión por ser universales. */
+  desmarcados: string[]
+  /** Huecos que desaparecieron al fusionar enumeraciones. */
+  fusionados: number
+  /** Tomas cuyo andamiaje no coincide con su corte: el modelo no copió. */
+  desalineadas: number[]
+}
+
+/**
+ * Acota los huecos de la plantilla, en código, después de que el modelo la devuelve.
+ * ---------------------------------------------------------------------------
+ * En la sesión real la FASE 2 marcó 17 huecos sobre un guión de 11 tomas, incluidos 5
+ * `[Producto]` y un `[Problema]` sobre una edad. El prompt ya pide moderación y ya nombra
+ * ese caso; cuatro rondas de redacción no lo consiguieron, así que se acota acá.
+ *
+ * Hace DOS cosas, las dos seguras:
+ *
+ *  1. **Desmarca los universales.** El hueco vuelve a ser la palabra original. Nada se
+ *     pierde: esa palabra sirve igual para cualquier producto, que es la definición de
+ *     universal.
+ *  2. **Fusiona enumeraciones del mismo nombre.** `[Ingrediente], [Ingrediente] y
+ *     [Ingrediente]` pasa a ser UN hueco que cubre la lista entera. Tres blancos que
+ *     pedían tres datos se vuelven uno que pide una lista — menos trabajo para quien
+ *     escribe, y no se pierde nada porque la enumeración es una sola pieza de
+ *     información.
+ *
+ * Lo que NO hace, y es deliberado: no baja el conteo hasta un número objetivo. Desmarcar
+ * un hueco deja su palabra ORIGINAL en el guión, así que recortar hasta 8 en el caso real
+ * obligaría a desmarcar `propóleo`, `niacinamida` y `Apivita` — y el anuncio del usuario
+ * afirmaría que SU producto contiene los ingredientes y la marca del producto del video
+ * de referencia. Es exactamente la clase de declaración falsa que la regla de no inventar
+ * existe para impedir, solo que entrando por la puerta de atrás. El conteo que queda se
+ * reporta; no se disfraza de objetivo cumplido.
+ */
+export function capSlots(
+  t: ScriptTemplate,
+  cortes: { n: number; dialogo: string }[],
+): { template: ScriptTemplate; reporte: SlotCapReport } {
+  const porN = new Map(cortes.map((c) => [c.n, c.dialogo]))
+  const reporte: SlotCapReport = { antes: extractSlots(t).length, despues: 0, desmarcados: [], fusionados: 0, desalineadas: [] }
+
+  const tomas = t.tomas.map((toma) => {
+    const dialogo = porN.get(toma.n)
+    if (!dialogo) return toma
+    const al = alignSlots(dialogo, toma.locucion)
+    // Sin alineación no se puede reescribir sin riesgo de corromper el texto: se deja
+    // la locución como está y se reporta, que es lo único honesto que se puede hacer.
+    if (!al) { reporte.desalineadas.push(toma.n); return toma }
+
+    const { literales, huecos } = al
+    let out = literales[0]
+    let i = 0
+    while (i < huecos.length) {
+      // Extiende la corrida mientras el siguiente hueco se llame igual y entre medio
+      // solo haya coma o conjunción.
+      let j = i
+      while (
+        j + 1 < huecos.length &&
+        huecos[j + 1].nombre === huecos[i].nombre &&
+        SEPARADOR_ENUM.test(literales[j + 1])
+      ) j++
+
+      if (j > i) {
+        reporte.fusionados += j - i
+        out += `[${huecos[i].nombre}]`
+      } else if (universal(huecos[i].original)) {
+        reporte.desmarcados.push(huecos[i].original.trim())
+        out += huecos[i].original
+      } else {
+        out += `[${huecos[i].nombre}]`
+      }
+      out += literales[j + 1] ?? ''
+      i = j + 1
+    }
+    return { ...toma, locucion: out }
+  })
+
+  const template = { ...t, tomas, guionFillInBlank: tomas.map((x) => x.locucion).join(' ') }
+  reporte.despues = extractSlots(template).length
+  return { template, reporte }
+}
+
 export interface FilledTemplate {
   guionFinal: string
   tomas: { n: number; locucion: string; accionVisual: string; duracionSeg: number }[]

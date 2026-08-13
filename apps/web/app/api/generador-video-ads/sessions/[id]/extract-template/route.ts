@@ -5,7 +5,7 @@ import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 
 import { TemplateDraftSchema, buildTemplateInstruction } from '@/lib/video-ads/template'
-import { validateTemplate, assembleTemplate } from '@/lib/video-ads/fill'
+import { validateTemplate, assembleTemplate, capSlots } from '@/lib/video-ads/fill'
 import { canProceed } from '@/lib/video-ads/validation'
 import { repairCutTiming } from '@/lib/video-ads/forensic'
 import { resyncTomaDurations } from '@/lib/video-ads/adapt'
@@ -73,7 +73,21 @@ export async function POST(
     ])
 
     // Las tomas se arman con los cortes del forense, no con lo que devuelva el modelo.
-    const template = assembleTemplate(draft, forensic.cortes)
+    const armada = assembleTemplate(draft, forensic.cortes)
+
+    // Y se acotan los huecos ANTES de persistir: desmarca los universales y fusiona las
+    // enumeraciones del mismo nombre. Va acá, dentro de la misma escritura, y no en un
+    // paso aparte, porque `extractSlots`/`fillTemplate` numeran los huecos por orden de
+    // recorrido (`nombre#n`) — fusionar corre esa numeración, así que ningún id guardado
+    // puede haberse calculado sobre la plantilla previa a la fusión.
+    const { template, reporte } = capSlots(armada, forensic.cortes)
+    if (reporte.antes !== reporte.despues || reporte.desalineadas.length)
+      console.warn(
+        `[video-ads/extract-template] sesión ${id}: huecos ${reporte.antes} → ${reporte.despues}` +
+        (reporte.desmarcados.length ? ` · desmarcados por universales: ${reporte.desmarcados.join(', ')}` : '') +
+        (reporte.fusionados ? ` · fusionados en enumeraciones: ${reporte.fusionados}` : '') +
+        (reporte.desalineadas.length ? ` · ⚠ tomas cuyo andamiaje NO copia su corte: ${reporte.desalineadas.join(', ')}` : ''),
+      )
 
     // Una plantilla degenerada (locuciones que son el nombre del campo, o que no
     // cubren el guion) no se puede rellenar: produciría un guion vacío en el paso
