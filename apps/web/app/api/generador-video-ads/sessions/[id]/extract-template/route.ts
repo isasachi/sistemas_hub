@@ -7,6 +7,7 @@ import { readUserId } from '@/lib/product-hunter/session'
 import { TemplateDraftSchema, buildTemplateInstruction } from '@/lib/video-ads/template'
 import { validateTemplate, assembleTemplate } from '@/lib/video-ads/fill'
 import { canProceed } from '@/lib/video-ads/validation'
+import { repairCutTiming } from '@/lib/video-ads/forensic'
 import { STEP } from '@/lib/video-ads/steps'
 
 export const dynamic = 'force-dynamic'
@@ -39,13 +40,32 @@ export async function POST(
       { status: 409 },
     )
 
+  // Segunda puerta de la reparación de cronometraje, para las sesiones cuyo análisis se
+  // guardó ANTES de que `analyze-reference` la aplicara. Acá es gratis: este paso no
+  // vuelve a mandarle el video a Gemini (por eso `video-template` no tiene tope
+  // per-step), así que un análisis viejo con cortes indecibles se arregla sin pagar el
+  // paso caro. Es idempotente: sobre un informe ya sano devuelve el mismo objeto y este
+  // bloque no escribe nada.
+  //
+  // Es seguro justamente porque la reparación NO toca `tiempo`: `adapt-script` lo copia
+  // a `tiempoOriginal` y `camaraDeLote` empareja por él, así que reparar acá no puede
+  // desalinear el guión ya adaptado con los cortes.
+  const { report: forensic, ajustes } = repairCutTiming(session.forensic_analysis)
+  if (ajustes.length) {
+    console.warn(
+      `[video-ads/extract-template] sesión ${id}: ${ajustes.length} cortes recronometrados sobre un análisis ya guardado:`,
+      ajustes.map((a) => `corte ${a.n}: ${a.de.toFixed(1)}s → ${a.a.toFixed(1)}s`),
+    )
+    await updateVideoSession(id, { forensic_analysis: forensic })
+  }
+
   try {
     const draft = await callStructured('template_draft', TemplateDraftSchema, [
-      { text: buildTemplateInstruction(session.forensic_analysis) },
+      { text: buildTemplateInstruction(forensic) },
     ])
 
     // Las tomas se arman con los cortes del forense, no con lo que devuelva el modelo.
-    const template = assembleTemplate(draft, session.forensic_analysis.cortes)
+    const template = assembleTemplate(draft, forensic.cortes)
 
     // Una plantilla degenerada (locuciones que son el nombre del campo, o que no
     // cubren el guion) no se puede rellenar: produciría un guion vacío en el paso

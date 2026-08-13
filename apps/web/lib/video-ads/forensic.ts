@@ -62,6 +62,120 @@ export const ForensicReportSchema = z.object({
 })
 export type ForensicReport = z.infer<typeof ForensicReportSchema>
 
+/**
+ * Techo físico de velocidad de habla, en caracteres por segundo.
+ *
+ * El español conversacional va entre 14 y 17 cps; una lectura UGC rápida llega a ~20.
+ * Por encima de eso no es que suene apurado: no se puede pronunciar. El número está acá
+ * arriba y no enterrado en la fórmula justamente para que se pueda discutir — si algún
+ * día se analizan videos en otro idioma o con locución acelerada, este es el valor a
+ * mover, no la lógica.
+ *
+ * A propósito NO se deriva del propio video (`caracteres / duración total`): ese
+ * promedio ya viene contaminado por los cortes mal medidos que esto existe para
+ * reparar, así que un video con varios errores se calibraría contra sus propios
+ * errores. En la sesión que motivó esto el promedio daba 16.9 cps y un techo relativo
+ * de 1.4× habría dejado el corte roto en 24 cps: la reparación se ejecutaría, reportaría
+ * éxito y no arreglaría nada.
+ */
+export const CPS_MAX = 20
+
+/** Un corte cuya duración se movió, para poder loguear qué se tocó. */
+export interface AjusteTiempo {
+  n: number
+  de: number
+  a: number
+}
+
+const EPS = 1e-9
+
+/**
+ * Repara los cortes cuyo diálogo NO cabe en su propia duración.
+ * ---------------------------------------------------------------------------
+ * El análisis de video mide bien el TOTAL y mal el REPARTO. Medido en la sesión
+ * `79b94ab9`: 776 caracteres en 46 s dan 16.9 cps, un ritmo perfectamente normal en
+ * español; pero el corte 2 traía 60 caracteres en 2 s — 30 cps, imposible de
+ * pronunciar — y los límites caían casi todos en múltiplos de 5, o sea que el modelo
+ * cuantiza los cortes a la resolución que alcanza a muestrear.
+ *
+ * Eso envenena todo lo que viene después, porque la duración del corte es la que
+ * termina pidiéndole al generador de video: una toma mal cronometrada desde acá sale
+ * atropellada aunque el guión adaptado sea perfecto.
+ *
+ * La reparación es CONSERVADORA y deliberadamente aburrida:
+ *
+ *  - No re-cronometra nada que ya sea decible. Si todos los cortes caben, devuelve el
+ *    informe intacto — no se toca un dato bueno.
+ *  - A los cortes imposibles les da el mínimo que necesitan (`caracteres / CPS_MAX`).
+ *  - Ese tiempo sale de los cortes que tienen holgura, en proporción a cuánta tienen,
+ *    así que el TOTAL se conserva exacto y el ritmo general del original no se altera.
+ *  - Solo si no hay holgura suficiente en todo el video (el texto entero no entra en su
+ *    duración) el total crece; es el único caso en el que `duracionTotalSeg` se mueve.
+ *
+ * Lo que NO toca: `tiempo`. Esa marca apunta a DÓNDE estaba el corte en el video fuente
+ * y el spec la trata como un campo distinto de la duración ("Tiempo original de
+ * referencia" vs. "Duración objetivo" en el SHOT LIST FINAL). Dejarla quieta además
+ * evita tres problemas de golpe: sigue siendo la clave única con la que `camaraDeLote`
+ * empareja lote y plano, no cambia el formato que entra en `scriptFingerprint`, y no
+ * puede colisionar consigo misma al redondear.
+ *
+ * Es idempotente por construcción: al salir, todo corte cumple `duración >= mínimo`, así
+ * que una segunda pasada encuentra déficit cero y devuelve la entrada sin tocarla.
+ */
+export function repairCutTiming(
+  report: ForensicReport,
+): { report: ForensicReport; ajustes: AjusteTiempo[] } {
+  const cortes = report.cortes ?? []
+  if (!cortes.length) return { report, ajustes: [] }
+
+  const dur = cortes.map((c) => (Number.isFinite(c.duracionSeg) && c.duracionSeg > 0 ? c.duracionSeg : 0))
+  const min = cortes.map((c) => (c.dialogo ?? '').length / CPS_MAX)
+
+  const deficit = cortes.reduce((n, _, i) => n + Math.max(0, min[i] - dur[i]), 0)
+  if (deficit <= EPS) return { report, ajustes: [] }
+
+  const holgura = cortes.map((_, i) => Math.max(0, dur[i] - min[i]))
+  const totalHolgura = holgura.reduce((a, b) => a + b, 0)
+
+  // `totalHolgura >= deficit > 0` implica `totalHolgura > 0`, así que la división es
+  // segura; el caso sin holgura suficiente cae en la otra rama.
+  const nuevas = cortes.map((_, i) =>
+    Math.max(
+      totalHolgura >= deficit
+        ? Math.max(dur[i], min[i]) - (holgura[i] / totalHolgura) * deficit
+        : Math.max(dur[i], min[i]),
+      // El `max` final con el mínimo es lo que garantiza la idempotencia: sin él, el
+      // error de coma flotante del reparto puede dejar un corte una billonésima por
+      // debajo de su mínimo y una segunda pasada volvería a moverlo.
+      min[i],
+    ),
+  )
+
+  const ajustes: AjusteTiempo[] = []
+  for (let i = 0; i < cortes.length; i++) {
+    if (Math.abs(nuevas[i] - dur[i]) > 0.05) ajustes.push({ n: cortes[i].n, de: dur[i], a: nuevas[i] })
+  }
+
+  const suma = nuevas.reduce((a, b) => a + b, 0)
+  return {
+    report: {
+      ...report,
+      // Solo crece si el texto entero no entraba en el video; con reparto interno el
+      // total se conserva y este `max` es un no-op.
+      duracionTotalSeg: Math.max(report.duracionTotalSeg, suma),
+      cortes: cortes.map((c, i) => ({ ...c, duracionSeg: nuevas[i] })),
+      // El prompt exige exactamente una toma por corte y en el mismo orden, así que el
+      // emparejamiento por índice está definido. Nadie río abajo lee estas duraciones
+      // (todo sale de `cortes`), pero dejarlas desincronizadas es una trampa para quien
+      // las lea mañana.
+      tomas: report.tomas?.length === cortes.length
+        ? report.tomas.map((t, i) => ({ ...t, duracionSeg: nuevas[i] }))
+        : report.tomas,
+    },
+    ajustes,
+  }
+}
+
 export function buildForensicInstruction(): string {
   return [
     'Actúa como analista forense experto en videos de respuesta directa.',
@@ -119,6 +233,16 @@ export function buildForensicInstruction(): string {
     'etiqueta quede al frente; la mano izquierda queda fuera de cuadro; mira al producto',
     'y después a la cámara". Frente a eso, "muestra el producto" es inservible.',
     'Si en un corte el producto NO aparece, dilo explícitamente.',
+    '',
+    'CRONOMETRAJE — se mide, no se estima:',
+    '  `duracionSeg` lleva DECIMALES (4.3, no 5). No redondees a números redondos ni',
+    '  acomodes los límites en una rejilla de 5 segundos: los cortes de un video real',
+    '  caen donde caen, y una rejilla es la señal de que se rellenó en vez de medir.',
+    '  Antes de cerrar cada corte, comprueba que su diálogo SE PUEDA DECIR en su',
+    '  duración: el español conversacional va a 14–17 caracteres por segundo y una',
+    `  lectura rápida llega a ~${CPS_MAX}. Si el texto que le asignaste necesita más que eso, el`,
+    '  límite del corte está mal puesto, no es que la persona hable rapidísimo — corrige',
+    '  el límite. La suma de las duraciones tiene que dar la duración total del video.',
     '',
     'CORTES (`cortes`): uno por corte real, en orden. Para cada uno:',
     '  `tiempo` "MM:SS - MM:SS", `duracionSeg`, `accion` (descripción literal de lo',

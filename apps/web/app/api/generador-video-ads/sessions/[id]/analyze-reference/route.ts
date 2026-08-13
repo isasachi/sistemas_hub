@@ -6,7 +6,7 @@ import { geminiCallStructured } from '@/lib/gemini'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 import { ForensicReportSchema } from '@/lib/video-ads/types'
-import { buildForensicInstruction } from '@/lib/video-ads/forensic'
+import { buildForensicInstruction, repairCutTiming } from '@/lib/video-ads/forensic'
 import { MAX_VIDEO_MB } from '@/lib/video-ads/limits'
 import { STEP } from '@/lib/video-ads/steps'
 import type { Part } from '@google/genai'
@@ -58,13 +58,28 @@ export async function POST(
     // guión adaptado se fue de largo. Se cuenta acá.
     analysis.caracteresGuion = analysis.guionOriginal.length
 
+    // Se repara ACÁ y se persiste ya reparado, en vez de arreglarlo donde se consume: la
+    // duración de cada corte es la columna vertebral de todo lo que sigue (la plantilla
+    // la copia, el guión adaptado la hereda, y termina siendo los segundos que se le
+    // piden a KIE). Un solo lugar que la corrija es la única forma de que las tres
+    // etapas vean el mismo número. Nota: las sesiones YA analizadas conservan sus
+    // duraciones viejas — hay que re-correr el análisis para repararlas.
+    const { report: reparado, ajustes } = repairCutTiming(analysis)
+    if (ajustes.length)
+      console.warn(
+        `[video-ads/analyze-reference] sesión ${id}: ${ajustes.length} cortes con diálogo indecible en su duración, recronometrados:`,
+        ajustes.map((a) => `corte ${a.n}: ${a.de.toFixed(1)}s → ${a.a.toFixed(1)}s`),
+      )
+
     await updateVideoSession(id, {
       step: STEP.PRODUCT,
       reference_video_url: parsed.data.videoUrl,
-      forensic_analysis: analysis,
+      forensic_analysis: reparado,
     })
     await recordGenQuota(id, 'video-forensic', userId)
-    return NextResponse.json({ analysis })
+    // El reparado, no `analysis`: es lo que quedó en la base, y el store del cliente no
+    // puede contar una versión distinta de la que va a leer el paso siguiente.
+    return NextResponse.json({ analysis: reparado })
   } catch (err) {
     if (err instanceof PayloadTooLargeError) {
       // Mismo texto que el guard de UX del cliente (Section0Reference): un usuario que
