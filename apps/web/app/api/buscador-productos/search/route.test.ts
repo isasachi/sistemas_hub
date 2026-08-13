@@ -161,6 +161,21 @@ describe('POST /api/buscador-productos/search — por categoría', () => {
     expect(data.status).toBe('empty')
   })
 
+  // El invariante que importa: este es el path que usa la UI. Si alguien vuelve
+  // a meter estado por usuario, se cae acá.
+  it('la misma categoría dos veces devuelve exactamente lo mismo', async () => {
+    conStockCat({ '100+': 50 })
+    const a = await (await POST(req({ category: 'mascotas' }))).json()
+    const res = await POST(req({ category: 'mascotas' }))
+    const b = await res.json()
+
+    expect(b.groups[0].products).toEqual(a.groups[0].products)
+    expect(res.cookies.getAll()).toHaveLength(0)
+    expect(vi.mocked(getApprovedByCategory).mock.calls[0]).toEqual(
+      vi.mocked(getApprovedByCategory).mock.calls[1],
+    )
+  })
+
   it('pide 50 productos de la categoría', async () => {
     conStockCat({ '100+': 50 })
     const data = await (await POST(req({ category: 'mascotas' }))).json()
