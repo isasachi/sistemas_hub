@@ -6,7 +6,7 @@ import { useVideoStore } from '@/store/video'
 import { groupIntoLotes, type Lote } from '@/lib/video-ads/lotes'
 import { isInFlight, isStuck } from '@/lib/video-ads/lote-ui'
 import BackToDashboard from '@/components/tools/ui/BackToDashboard'
-import { btnPrimary, btnGhost, errorBox, warnBox, spinner } from './shared'
+import { btnPrimary, btnGhost, errorBox, warnBox, spinner, seg } from './shared'
 
 const LABEL: Record<string, string> = {
   idle: 'Sin iniciar', waiting: 'En cola', queuing: 'En cola',
@@ -114,7 +114,7 @@ export default function Section6Lotes() {
             {preview.map((l) => (
               <li key={l.n} className="text-[12.5px] text-[#cfcfcf]">
                 <span className="mr-2 font-mono text-[11px] text-[#8b8b8b]">Lote {l.n}</span>
-                Tomas {l.tomas[0].n}–{l.tomas[l.tomas.length - 1].n} · {l.duracionSeg}s
+                Tomas {l.tomas[0].n}–{l.tomas[l.tomas.length - 1].n} · {seg(l.duracionSeg)}
               </li>
             ))}
           </ol>
@@ -185,7 +185,7 @@ export default function Section6Lotes() {
         <div key={l.n} className="rounded-2xl border border-white/[0.06] bg-[#121214] p-3">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-[11px] font-semibold uppercase tracking-wide text-[#c9a227]">
-              Lote {l.n} · {l.duracionSeg}s
+              Lote {l.n} · {seg(l.duracionSeg)}
             </span>
             <span className="text-[11.5px] text-[#8b8b8b]">{LABEL[l.status] ?? l.status}</span>
           </div>

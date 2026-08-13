@@ -6,6 +6,7 @@ import { RotateCw } from "lucide-react";
 import ToolShell from "@/components/tools/ui/ToolShell";
 import type { VideoSessionResponse } from "@/lib/video-ads/types";
 import { SESSION_KEY } from "@/store/video";
+import { seg } from "@/components/tools/generador-video-ads/sections/shared";
 
 export default function VideoDetalle() {
   const { id } = useParams<{ id: string }>();
@@ -76,7 +77,7 @@ export default function VideoDetalle() {
                   {s.lotes.map((l) => (
                     <div key={l.n} className="rounded-2xl border border-white/[0.06] bg-[#121214] p-3">
                       <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#c9a227]">
-                        Lote {l.n} · {l.duracionSeg}s
+                        Lote {l.n} · {seg(l.duracionSeg)}
                       </div>
                       {l.videoUrl ? (
                         <video src={l.videoUrl} controls playsInline className="w-full rounded-xl bg-black" />

@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useVideoStore } from '@/store/video'
 import type { ScriptTemplate } from '@/lib/video-ads/types'
 import { STEP } from '@/lib/video-ads/steps'
-import { btnPrimary, btnGhost, errorBox, spinner } from './shared'
+import { btnPrimary, btnGhost, errorBox, spinner, seg } from './shared'
 
 // Muestra los tres artefactos de la FASE 1-2: el guión literal del original, los
 // cortes detectados y el guión convertido a Fill in the Blank. El usuario tiene que
@@ -75,7 +75,7 @@ export default function Section4Template() {
         <ol className="flex flex-col gap-2">
           {template.tomas.map((t) => (
             <li key={t.n} className="flex gap-3">
-              <span className="mt-0.5 shrink-0 font-mono text-[11px] text-[#8b8b8b]">{t.duracionSeg}s</span>
+              <span className="mt-0.5 shrink-0 font-mono text-[11px] text-[#8b8b8b]">{seg(t.duracionSeg)}</span>
               <span className="flex flex-col gap-0.5">
                 <span className="text-[12.5px] leading-relaxed text-[#ededed]">“{t.locucion}”</span>
                 <span className="text-[11.5px] leading-relaxed text-[#8b8b8b]">{t.accionVisual}</span>

@@ -16,3 +16,15 @@ export const warnBox =
 
 export const spinner =
   'w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin'
+
+/**
+ * Segundos, para mostrar. Una décima como mucho, y sin decimal cuando es redondo.
+ *
+ * Las duraciones dejaron de ser enteras cuando `repairCutTiming` (forensic.ts) empezó a
+ * repartir décimas entre los cortes para que el diálogo fuera decible, y ese reparto es
+ * proporcional: sale 8.399999999999999, no 8.4. El redondeo va SOLO acá, en la
+ * presentación — el cálculo de cuántos caracteres entran en una toma
+ * (`Section5Script`) y la duración que se le pide a KIE siguen usando el valor exacto,
+ * porque degradar el dato para que se vea bonito es cómo se acumula deriva.
+ */
+export const seg = (n: number) => `${Math.round(n * 10) / 10}s`

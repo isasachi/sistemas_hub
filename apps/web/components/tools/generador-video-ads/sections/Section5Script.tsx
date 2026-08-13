@@ -6,7 +6,7 @@ import type { AdaptedScript } from '@/lib/video-ads/adapt'
 import type { VoiceProfile } from '@/lib/video-ads/character'
 import { STEP } from '@/lib/video-ads/steps'
 import { extractPending } from '@/lib/video-ads/pending'
-import { btnPrimary, btnGhost, errorBox, spinner } from './shared'
+import { btnPrimary, btnGhost, errorBox, spinner, seg } from './shared'
 
 // FASE 3 en pantalla + FASE 4/4.5 encadenadas: el personaje y la voz se construyen
 // acá porque el usuario ya no toca nada de eso — lo definió en el paso 2. Encadenar
@@ -139,7 +139,7 @@ export default function Section5Script() {
   // decisión de quien escribe.
   const segundosTotal = adapted.tomas.reduce((n, t) => n + t.duracionSeg, 0)
   const cpsOriginal = segundosTotal > 0 ? caracteresOriginal / segundosTotal : 0
-  const cabenEn = (seg: number) => Math.round(seg * cpsOriginal)
+  const cabenEn = (segundos: number) => Math.round(segundos * cpsOriginal)
   const holgado = (l: { texto: string; duracionSeg: number }) =>
     cpsOriginal > 0 && l.texto.length > cabenEn(l.duracionSeg) * 1.3
   const apretados = lineas.filter(holgado).length
@@ -169,7 +169,7 @@ export default function Section5Script() {
             return (
               <div key={l.i} className="flex flex-col gap-1">
                 <div className="flex items-center justify-between text-[11px] text-[#8b8b8b]">
-                  <span>Toma {l.n} · {l.duracionSeg}s</span>
+                  <span>Toma {l.n} · {seg(l.duracionSeg)}</span>
                   <span className="flex items-center gap-2">
                     {cpsOriginal > 0 && (
                       <span className={largo ? 'text-amber-400' : ''} title="Caracteres que caben en esta toma al ritmo del video original">
