@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import {
-  getApprovedByBucket, countApproved, countRawPending,
+  getApprovedByBucket, getApprovedByCategory, getNichesWithInventory,
+  countApproved, countRawPending,
   getRawNicheStatus, upsertRawNiche, markSeen, isBlocked,
-  RAW_BUCKETS, RAW_BUCKET_LABEL, isRawBucket,
+  RAW_BUCKETS, RAW_BUCKET_LABEL, isRawBucket, isCategoryId, categoryOf,
   type RawBucket, type RawProductEntry, type RawBucketGroup, type RawSearchResponse,
 } from '@ph/shared'
 import { readUserId, newUserId, PH_USER_COOKIE } from '@/lib/product-hunter/session'
@@ -30,12 +31,14 @@ const POR_RANGO = 10
 const ORDEN_AUTO = [...RAW_BUCKETS].reverse() as RawBucket[]
 
 export async function POST(req: NextRequest) {
-  let body: { niche?: string; bucket?: string }
+  let body: { niche?: string; bucket?: string; category?: string }
   try { body = await req.json() } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
+  // La UI busca por CATEGORÍA (los chips); el path por nicho sigue vivo para
+  // quien pegue directo a la ruta y es el que conserva el cold start.
+  const category = isCategoryId(body.category) ? body.category : null
   const niche = body.niche?.trim().toLowerCase().replace(/\s+/g, ' ')
-  if (!niche) return NextResponse.json({ error: 'Falta el nicho' }, { status: 400 })
   // Rango pedido por el filtro. Sin él (o inválido) se autoelige.
   const pedido = isRawBucket(body.bucket) ? body.bucket : null
 
@@ -50,6 +53,35 @@ export async function POST(req: NextRequest) {
     }
     return res
   }
+  // ─── Búsqueda por CATEGORÍA (los chips de la UI) ───────────────────────────
+  // Una categoría son decenas de nichos: se resuelve la lista contra el
+  // inventario vivo (`categoryOf` clasifica por reglas, así que un nicho nuevo
+  // del daemon entra solo) y se sirve el mismo rango sobre todos ellos.
+  // Acá no hay cold start: los chips son categorías fijas, no consultas libres.
+  if (category) {
+    const niches = (await getNichesWithInventory()).filter((n) => categoryOf(n) === category)
+    let servidoCat: RawBucket = pedido ?? ORDEN_AUTO[0]
+    let productos: RawProductEntry[] = []
+    for (const bucket of pedido ? [pedido] : ORDEN_AUTO) {
+      servidoCat = bucket
+      productos = (await getApprovedByCategory(niches, bucket, userId!, POR_RANGO)).map(toEntry)
+      if (productos.length) break
+    }
+    if (productos.length) {
+      markSeen(userId!, productos.map((p) => p.id)).catch(() => {})
+    }
+    return responder({
+      niche: category,
+      // Con rango explícito se responde `ready` aunque venga vacío, para que la
+      // UI deje el filtro a la vista y se pueda cambiar de rango.
+      status: productos.length > 0 || pedido ? 'ready' : 'empty',
+      groups: [{ bucket: servidoCat, label: RAW_BUCKET_LABEL[servidoCat], products: productos }],
+      total: productos.length,
+    })
+  }
+
+  if (!niche) return NextResponse.json({ error: 'Falta el nicho' }, { status: 400 })
+
   const vacío = (extra: Partial<RawSearchResponse> = {}): RawSearchResponse => ({
     niche, status: 'pending', groups: [], total: 0, ...extra,
   })

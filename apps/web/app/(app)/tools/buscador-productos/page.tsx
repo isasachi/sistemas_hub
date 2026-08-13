@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { ExternalLink, Loader2, PackageSearch, Flame, ChevronDown } from "lucide-react";
 import ToolShell from "@/components/tools/ui/ToolShell";
-import { RAW_BUCKETS, RAW_BUCKET_LABEL, type RawBucket, type RawProductEntry, type RawSearchResponse } from "@ph/shared";
+import {
+  RAW_BUCKETS, RAW_BUCKET_LABEL, CATEGORIES,
+  type CategoryId, type RawBucket, type RawProductEntry, type RawSearchResponse,
+} from "@ph/shared";
 
 const ACCENT = "#ff9b4a";
 
@@ -79,12 +82,11 @@ export default function BuscadorProductosPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [topPicks, setTopPicks] = useState<RawProductEntry[]>([]);
-  const [sugerencias, setSugerencias] = useState<string[]>([]);
-  // El chip elegido, no el nicho de la respuesta: así se enciende en el click
-  // (antes de que llegue el fetch) y no depende de que la etiqueta del chip
-  // coincida carácter a carácter con el nicho normalizado que devuelve el
-  // servidor. null = "Todos" (la portada).
-  const [sel, setSel] = useState<string | null>(null);
+  // La categoría elegida, no la que devuelve la respuesta: así el chip se
+  // enciende en el click, antes de que llegue el fetch. null = "Todos" (la
+  // portada). Los chips salen de `CATEGORIES`, que es data del código — no hay
+  // ninguna llamada para pintarlos.
+  const [sel, setSel] = useState<CategoryId | null>(null);
   const [expandido, setExpandido] = useState(false);
 
   // Lo más pautado del rango más alto, de todos los nichos. Se refresca solo:
@@ -94,28 +96,24 @@ export default function BuscadorProductosPage() {
       .then((r) => r.json())
       .then((d: { products?: RawProductEntry[] }) => setTopPicks(d.products ?? []))
       .catch(() => {});
-    fetch("/api/buscador-productos/top-niches")
-      .then((r) => r.json())
-      .then((d: { niches?: string[] }) => setSugerencias(d.niches ?? []))
-      .catch(() => {});
   }, []);
 
-  // `q` y `bucket` van por parámetro y no desde el estado: el chip busca en el
+  // `cat` y `bucket` van por parámetro y no desde el estado: el chip busca en el
   // mismo click en que se marca seleccionado, y el estado todavía no llegó.
   // bucket null = que el servidor elija el primer rango con stock.
-  const search = useCallback(async (q: string, bucket: RawBucket | null) => {
-    if (!q || loading) return;
+  const search = useCallback(async (cat: CategoryId, bucket: RawBucket | null) => {
+    if (loading) return;
     setLoading(true);
     setError(null);
     // Cambiar de RANGO no borra lo que hay en pantalla: si se limpiara, el filtro
     // desaparecería a media transición y no habría dónde volver a hacer click.
-    // Cambiar de NICHO sí limpia. (`q` ya viene normalizado en el refetch de rango.)
-    setResult((prev) => (prev?.niche === q ? prev : null));
+    // Cambiar de CATEGORÍA sí limpia.
+    setResult((prev) => (prev?.niche === cat ? prev : null));
     try {
       const res = await fetch("/api/buscador-productos/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ niche: q, bucket }),
+        body: JSON.stringify({ category: cat, bucket }),
       });
       const data = (await res.json()) as RawSearchResponse & { error?: string };
       if (!res.ok) throw new Error(data.error ?? "Error en la búsqueda");
@@ -127,9 +125,9 @@ export default function BuscadorProductosPage() {
     }
   }, [loading]);
 
-  const elegirNicho = useCallback((q: string) => {
-    setSel(q);
-    search(q, null);
+  const elegirCategoria = useCallback((id: CategoryId) => {
+    setSel(id);
+    search(id, null);
   }, [search]);
 
   // "Todos": vuelve a la portada (top picks de todos los nichos). No pega a la
@@ -152,19 +150,18 @@ export default function BuscadorProductosPage() {
             Buscador de Productos
           </h1>
           <p className="text-[14px] text-[#cfcfcf] leading-[1.6]">
-            Elige un nicho y te mostramos productos físicos que se están pautando.
+            Elige una categoría y te mostramos productos físicos que se están pautando.
             Se ve un rango de anuncios a la vez — el filtro lo cambia.
           </p>
         </div>
 
         {/* Los chips SON la navegación: sin barra de búsqueda, esta lista es la
-            única entrada a la herramienta. Son los NICHOS con más productos en la
-            base (no categorías — el ranking es por cantidad de entradas, y así
-            salen "cuello" o "cama para perros"), así que cualquier click trae
-            resultados garantizados. */}
-        {sugerencias.length > 0 && (
-          <div className="flex items-start gap-3 mb-8">
-            <span className="text-[12px] text-[#bebebe] shrink-0 py-1.5">Nichos</span>
+            única entrada a la herramienta. Son CATEGORÍAS (`@ph/shared`
+            `categories.ts`), no nichos: el inventario tiene 528 nichos y esa
+            lista no cabe en chips. Van fijas y en código — pintarlas no cuesta
+            ninguna llamada. */}
+        <div className="flex items-start gap-3 mb-8">
+            <span className="text-[12px] text-[#bebebe] shrink-0 py-1.5">Categorías</span>
             {/* ponytail: colapsado = dos filas por altura fija. El chip mide
                 33.2px renderizado (12px de texto + line-height del navegador +
                 py-1.5 + borde) y el gap es 8 → dos filas = 74.4, la tercera
@@ -176,21 +173,21 @@ export default function BuscadorProductosPage() {
               style={expandido ? undefined : { maxHeight: 75 }}
             >
               <Chip label="Todos" active={sel === null} disabled={loading} onClick={verTodos} />
-              {sugerencias.map((n) => (
+              {CATEGORIES.map((c) => (
                 <Chip
-                  key={n}
-                  label={n}
-                  active={sel === n}
-                  busy={loading && sel === n}
+                  key={c.id}
+                  label={c.label}
+                  active={sel === c.id}
+                  busy={loading && sel === c.id}
                   disabled={loading}
-                  onClick={() => elegirNicho(n)}
+                  onClick={() => elegirCategoria(c.id)}
                 />
               ))}
             </div>
             {/* ponytail: el toggle aparece por conteo de chips, no midiendo el
                 DOM. Con etiquetas muy largas puede sobrar/faltar por uno; si
                 molesta, un ResizeObserver sobre el contenedor lo resuelve. */}
-            {sugerencias.length > 12 && (
+            {CATEGORIES.length > 8 && (
               <button
                 onClick={() => setExpandido((v) => !v)}
                 aria-expanded={expandido}
@@ -201,12 +198,11 @@ export default function BuscadorProductosPage() {
                 <ChevronDown className={`w-3.5 h-3.5 transition-transform ${expandido ? "rotate-180" : ""}`} />
               </button>
             )}
-          </div>
-        )}
+        </div>
 
         {error && <p className="text-[13px] text-[#fca5a5] mb-4">{error}</p>}
 
-        {/* Cambiar de nicho vacía el cuerpo (y esconde el marquee): sin esta
+        {/* Cambiar de categoría vacía el cuerpo (y esconde el marquee): sin esta
             línea la pantalla queda en blanco hasta que responde la API. */}
         {loading && !result && <p className="text-[13px] text-[#bebebe] mb-4">Buscando…</p>}
 
@@ -241,20 +237,12 @@ export default function BuscadorProductosPage() {
           </section>
         )}
 
-        {result?.status === "pending" && (
-          <div className="flex items-start gap-3 bg-white/[0.03] border border-white/[0.06] rounded-2xl p-5">
-            <PackageSearch className="w-5 h-5 shrink-0 mt-0.5" style={{ color: ACCENT }} />
-            <p className="text-[13px] text-[#cfcfcf] leading-[1.6]">
-              {result.queued
-                ? "Es un nicho nuevo: lo encolamos y el scraper lo levanta en la próxima vuelta. Vuelve a buscarlo en unos minutos."
-                : "Estamos verificando los productos de este nicho. Vuelve a buscarlo en un rato."}
-            </p>
-          </div>
-        )}
-
+        {/* No hay estado `pending` por categoría: las categorías son fijas y sus
+            nichos ya tienen inventario. El cold start ("lo encolamos") vivía en
+            la búsqueda libre por nicho, que ya no existe en la UI. */}
         {result?.status === "empty" && (
           <p className="text-[13px] text-[#cfcfcf]">
-            No encontramos productos físicos que cumplan los criterios en este nicho.
+            No encontramos productos físicos que cumplan los criterios en esta categoría.
           </p>
         )}
 
@@ -270,7 +258,7 @@ export default function BuscadorProductosPage() {
                   label={RAW_BUCKET_LABEL[b]}
                   active={grupo.bucket === b}
                   disabled={loading}
-                  onClick={() => search(result!.niche, b)}
+                  onClick={() => search(sel!, b)}
                 />
               ))}
             </div>

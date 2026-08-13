@@ -5,6 +5,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('@ph/shared', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@ph/shared')>()),
   getApprovedByBucket: vi.fn(),
+  getApprovedByCategory: vi.fn(),
+  getNichesWithInventory: vi.fn().mockResolvedValue([
+    'cama para perros', 'arena para gatos', 'acne', 'rodilla',
+  ]),
   countApproved: vi.fn().mockResolvedValue(0),
   countRawPending: vi.fn().mockResolvedValue(0),
   getRawNicheStatus: vi.fn().mockResolvedValue({ id: 'acne', status: 'active' }),
@@ -24,7 +28,10 @@ vi.mock('@/lib/product-hunter/entry', () => ({
 
 import { NextRequest } from 'next/server'
 import { POST } from './route'
-import { getApprovedByBucket, countApproved, markSeen, type RawBucket } from '@ph/shared'
+import {
+  getApprovedByBucket, getApprovedByCategory, getNichesWithInventory,
+  countApproved, markSeen, type RawBucket,
+} from '@ph/shared'
 
 const req = (body: unknown) =>
   new NextRequest('http://localhost/api/buscador-productos/search', {
@@ -94,5 +101,69 @@ describe('POST /api/buscador-productos/search — un rango a la vez', () => {
     expect(vi.mocked(markSeen)).toHaveBeenCalledWith('user-1', [
       'acne:p100+0', 'acne:p100+1', 'acne:p100+2',
     ])
+  })
+})
+
+// La UI busca por categoría: la ruta traduce la categoría a la lista de nichos
+// con inventario que le corresponden y sirve un rango sobre todos ellos.
+describe('POST /api/buscador-productos/search — por categoría', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const conStockCat = (stock: Partial<Record<RawBucket, number>>) =>
+    vi.mocked(getApprovedByCategory).mockImplementation(async (_n, bucket) =>
+      Array.from({ length: stock[bucket] ?? 0 }, (_, i) => ({ page_id: `p${bucket}${i}` }) as never),
+    )
+
+  it('resuelve la categoría a SUS nichos y no toca el path por nicho', async () => {
+    conStockCat({ '100+': 2 })
+    const data = await (await POST(req({ category: 'mascotas' }))).json()
+
+    expect(data.status).toBe('ready')
+    expect(data.niche).toBe('mascotas')
+    expect(vi.mocked(getNichesWithInventory)).toHaveBeenCalled()
+    // De los 4 nichos con inventario, solo los dos de mascotas.
+    expect(vi.mocked(getApprovedByCategory).mock.calls[0][0])
+      .toEqual(['cama para perros', 'arena para gatos'])
+    expect(vi.mocked(getApprovedByBucket)).not.toHaveBeenCalled()
+  })
+
+  it('sin bucket: autoelige el rango más alto con stock', async () => {
+    conStockCat({ '0-50': 3 })
+    const data = await (await POST(req({ category: 'salud' }))).json()
+
+    expect(data.groups[0].bucket).toBe('0-50')
+    expect(data.total).toBe(3)
+    expect(vi.mocked(getApprovedByCategory)).toHaveBeenCalledTimes(3)
+  })
+
+  it('con bucket explícito y sin stock: ready con el grupo vacío (deja el filtro a la vista)', async () => {
+    conStockCat({ '100+': 5 })
+    const data = await (await POST(req({ category: 'mascotas', bucket: '0-50' }))).json()
+
+    expect(data.status).toBe('ready')
+    expect(data.groups[0].bucket).toBe('0-50')
+    expect(data.total).toBe(0)
+  })
+
+  it('sin stock en ningún rango: empty, y no marca nada como visto', async () => {
+    conStockCat({})
+    const data = await (await POST(req({ category: 'mascotas' }))).json()
+
+    expect(data.status).toBe('empty')
+    expect(vi.mocked(markSeen)).not.toHaveBeenCalled()
+  })
+
+  it('categoría inválida: cae al path por nicho', async () => {
+    conStock({ '100+': 1 })
+    const data = await (await POST(req({ category: 'inventada', niche: 'acne' }))).json()
+
+    expect(data.niche).toBe('acne')
+    expect(vi.mocked(getApprovedByBucket)).toHaveBeenCalled()
+    expect(vi.mocked(getApprovedByCategory)).not.toHaveBeenCalled()
+  })
+
+  it('sin categoría ni nicho: 400', async () => {
+    const res = await POST(req({}))
+    expect(res.status).toBe(400)
   })
 })
