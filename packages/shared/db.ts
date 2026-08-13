@@ -489,48 +489,6 @@ export async function resetNicheAnalysis(niche: string): Promise<number> {
   return data?.length ?? 0
 }
 
-// ─── SERVE: lectura para el usuario (vía RPC, rápido, sin LLM) ─────────────────
-
-// Productos del nicho rankeados con penalización de "visto" (ver migración
-// 20260611_seen_economy): frescos-para-el-usuario primero, lo visto-hace-poco al
-// fondo y re-aparece tras 7 días. NO excluye → nunca vacío si hay inventario.
-export async function getUnseenProducts(
-  niche: string,
-  userId: string,
-  limit = 20
-): Promise<ProductRow[]> {
-  const { data, error } = await getDb().rpc('ph_unseen_products', {
-    p_niche: niche,
-    p_user: userId,
-    p_limit: limit,
-  })
-  if (error) throw new Error(error.message)
-  return (data as ProductRow[]) ?? []
-}
-
-// Cuántos GANADORES (alta/media + reglas de oro) son frescos para el usuario:
-// el "nuevos para ti" honesto de la UI. 0 = ya vio todos los recientes.
-export async function countUnseenProducts(niche: string, userId: string): Promise<number> {
-  const { data, error } = await getDb().rpc('ph_count_unseen', {
-    p_niche: niche,
-    p_user: userId,
-  })
-  if (error) throw new Error(error.message)
-  return (data as number) ?? 0
-}
-
-export async function markSeen(userId: string, productIds: string[]): Promise<void> {
-  if (!productIds.length) return
-  // seen_at SE ACTUALIZA al re-ver: resetea el reloj de re-aparición (7 días en
-  // ph_unseen_products). Por eso upsert sin ignoreDuplicates — actualiza la fila.
-  const now = new Date().toISOString()
-  const rows = productIds.map((id) => ({ user_id: userId, product_id: id, seen_at: now }))
-  const { error } = await getDb()
-    .from('ph_user_seen')
-    .upsert(rows, { onConflict: 'user_id,product_id' })
-  if (error) throw new Error(error.message)
-}
-
 // ─── RESEARCH POR URL (cola independiente de la de nichos) ────────────────────
 
 // Encola una request de research por URL (la ruta web). Devuelve su id para que
@@ -721,11 +679,12 @@ export async function saveRawVerdict(v: RawVerdictInput): Promise<void> {
 // de anuncios (regla 2). Las reglas 1 y 3 no filtran acá — `status` se sigue
 // escribiendo por la cola de verificación, pero no se consulta.
 //
-// La economía del visto vive en el código y no en el RPC ph_raw_unseen (que
-// filtra status='monoproducto' y quedó sin uso): mismo criterio — lo visto hace
-// menos de 7 días va al final, nunca se excluye, así el pool no se vacía.
-const VISTO_DIAS = 7
-const MAX_VISTOS = 500   // tope del filtro NOT IN: la URL de PostgREST tiene límite
+// ⚠️ El serving NO es personalizado (decisión del dueño del repo, 2026-08-13):
+// dos usuarios que abren la misma categoría en el mismo rango ven exactamente lo
+// mismo, y volver a entrar devuelve lo mismo otra vez. Antes había una economía
+// del visto (`ph_user_seen` + `markSeen`) que hundía lo ya mostrado y lo hacía
+// reaparecer a los 7 días; se eliminó entera. La TABLA sigue en la base con sus
+// datos — solo dejó de leerse y de escribirse.
 const SOBRE_PEDIDO = 4   // se piden 4× filas porque la lista negra recorta después
 
 function bucketQuery(niche: string, bucket: RawBucket) {
@@ -761,27 +720,11 @@ function categoriaQuery(niches: string[], bucket: RawBucket) {
 export async function getApprovedByBucket(
   niche: string,
   bucket: RawBucket,
-  userId: string,
   limit = 10,
 ): Promise<RawProductRow[]> {
-  const desde = new Date(Date.now() - VISTO_DIAS * 86_400_000).toISOString()
-  const { data: seen } = await getDb()
-    .from('ph_user_seen').select('product_id')
-    .eq('user_id', userId).gte('seen_at', desde).like('product_id', `${niche}:%`)
-    .limit(MAX_VISTOS)
-  const vistos = (seen ?? []).map((r) => (r.product_id as string).slice(niche.length + 1))
-
-  let q = bucketQuery(niche, bucket).limit(limit * SOBRE_PEDIDO)
-  if (vistos.length) q = q.not('page_id', 'in', `(${vistos.join(',')})`)
-  const { data, error } = await q
+  const { data, error } = await bucketQuery(niche, bucket).limit(limit * SOBRE_PEDIDO)
   if (error) throw new Error(error.message)
-  const frescos = fisicos(data as RawProductRow[]).slice(0, limit)
-  if (frescos.length >= limit || !vistos.length) return frescos
-
-  // Ya vio todo lo del rango: se le repiten los vistos en vez de devolver menos.
-  const { data: repetidos } = await bucketQuery(niche, bucket)
-    .in('page_id', vistos).limit(limit * SOBRE_PEDIDO)
-  return [...frescos, ...fisicos(repetidos as RawProductRow[]).slice(0, limit - frescos.length)]
+  return fisicos(data as RawProductRow[]).slice(0, limit)
 }
 
 /**
@@ -799,36 +742,22 @@ export async function getApprovedByBucket(
  *   2. una página (`page_id`) aparece UNA vez aunque esté en cinco nichos;
  *   3. tope por nicho, para que un nicho enorme no se coma la categoría.
  *
- * La economía del visto se resuelve en JS y no en la query (el path por nicho
- * excluye `page_id` en SQL): con varios nichos el mismo `page_id` puede estar
- * repetido, y lo que identifica a un producto visto es el id completo
- * `<nicho>:<page_id>`. Como no se excluye nada en SQL, los vistos ya vienen en
- * el fetch y sirven de relleno cuando los frescos no alcanzan.
- *
- * ponytail: `MAX_VISTOS` (500) era un presupuesto POR NICHO y acá pasa a ser por
- * usuario sobre todo el inventario. Un usuario muy pesado (>500 productos vistos
- * en 7 días) empieza a ver repetidos antes de tiempo. Si molesta, filtrar los
- * vistos por los nichos de la categoría (`.in('product_id', ...)` no sirve: es
- * prefijo) o subir el tope.
+ * El resultado NO depende del usuario: la misma categoría en el mismo rango
+ * devuelve siempre lo mismo (ver el comentario de `SOBRE_PEDIDO`).
  */
 export async function getApprovedByCategory(
   niches: string[],
   bucket: RawBucket,
-  userId: string,
   limit = 10,
 ): Promise<RawProductRow[]> {
   if (!niches.length) return []
-  const desde = new Date(Date.now() - VISTO_DIAS * 86_400_000).toISOString()
-  const [{ data: seen }, verificados, resto] = await Promise.all([
-    getDb().from('ph_user_seen').select('product_id')
-      .eq('user_id', userId).gte('seen_at', desde).limit(MAX_VISTOS),
+  const [verificados, resto] = await Promise.all([
     categoriaQuery(niches, bucket).eq('status', 'monoproducto').limit(limit * SOBRE_PEDIDO),
     categoriaQuery(niches, bucket).not('status', 'in', '(inactivo,descartado,monoproducto)')
       .limit(VENTANA_CAT),
   ])
   if (verificados.error) throw new Error(verificados.error.message)
   if (resto.error) throw new Error(resto.error.message)
-  const vistos = new Set((seen ?? []).map((r) => r.product_id as string))
 
   const confirmados = fisicos(verificados.data as unknown as RawProductRow[])
   const relleno = fisicos(resto.data as unknown as RawProductRow[])
@@ -847,6 +776,7 @@ export async function getApprovedByCategory(
   const esCatalogo = (r: RawProductRow) =>
     (nichosPorPagina.get(r.page_id)?.size ?? 0) >= NICHOS_CATALOGO
 
+  const tope = maxPorNicho(limit)
   const paginas = new Set<string>()
   const porNicho = new Map<string, number>()
   const elegidos: RawProductRow[] = []
@@ -855,26 +785,29 @@ export async function getApprovedByCategory(
     if (paginas.has(r.page_id)) continue
     paginas.add(r.page_id)
     const n = porNicho.get(r.niche) ?? 0
-    if (n >= MAX_POR_NICHO_CAT) { relegados.push(r); continue }
+    if (n >= tope) { relegados.push(r); continue }
     porNicho.set(r.niche, n + 1)
     elegidos.push(r)
   }
 
   // El tope es para variar la categoría, no para dejarla corta.
-  const orden = [...elegidos, ...relegados]
-  const visto = (r: RawProductRow) => vistos.has(`${r.niche}:${r.page_id}`)
-  return [...orden.filter((r) => !visto(r)), ...orden.filter(visto)].slice(0, limit)
+  return [...elegidos, ...relegados].slice(0, limit)
 }
 
-// Máximo de productos del mismo nicho en una categoría. Con 10 por pantalla, 3
-// deja ver al menos 4 nichos distintos y no ahoga a los nichos chicos.
-const MAX_POR_NICHO_CAT = 3
-// Ventana del relleno. Tiene que ser MUCHO más grande que en el path por nicho:
-// una categoría une decenas de nichos y la misma página aparece repetida en
-// todos ellos, así que las primeras filas por anuncios son casi todas copias.
-// Medido: con 40 filas, "Salud y dolor" (207 nichos) quedaba en 1 producto tras
-// el dedupe.
-const VENTANA_CAT = 400
+// Máximo de productos del mismo nicho en una categoría. Escala con el pedido: el
+// tope existe para que se vean varios nichos, y si no escalara, pedir 50 con
+// tope 3 exigiría 17 nichos con stock — las categorías chicas (ortopedia tiene
+// 7) llenarían la mayor parte de la página con relegados, o sea con el ranking
+// crudo por anuncios que el tope quería evitar. Con limit/8 son ~6 por nicho a
+// 50 productos, y sigue en 3 para la pantalla de 10.
+const maxPorNicho = (limit: number) => Math.max(3, Math.ceil(limit / 8))
+// Ventana del relleno. Tiene que ser MUCHO más grande que el pedido: una
+// categoría une decenas de nichos y la misma página aparece repetida en todos
+// ellos, así que las primeras filas por anuncios son casi todas copias. Medido
+// sobre "Salud y dolor" (207 nichos, el peor caso) sirviendo 50 productos: con
+// 400 filas devuelve 42, con 800 llega a 50 y cuesta ~90ms más; de 800 para
+// arriba no cambia nada. Antes, sirviendo 10, con 40 filas quedaba en 1.
+const VENTANA_CAT = 800
 // Cuántos nichos distintos de la categoría tiene que tocar una misma página para
 // tratarla como catálogo/marketplace y no como producto.
 const NICHOS_CATALOGO = 5

@@ -19,7 +19,10 @@ const norm = (s: string) =>
     .toLowerCase()
 
 // ── Cluster 1: apps de dramas / novelas / streaming ──────────────────────────
-const DRAMA = /\b(doblado|drama|dramas|novela|novelas|serie|series|episodio|episodios|capitulo|capitulos|short drama|shortmax|dramabox|pocket fm|webtoon|manhwa|toca para ver|sigue viendo|seguir viendo|ver el final|get the full story|tap to watch|watch (more|the full|wonderful))\b/
+// Las tres últimas alternativas son portugués: las mismas granjas de novelas
+// pautan en pt-BR y la regla en español no las tocaba. Salieron de paginar hasta
+// el final de una categoría, donde se concentran.
+const DRAMA = /\b(doblado|drama|dramas|novela|novelas|serie|series|episodio|episodios|capitulo|capitulos|short drama|shortmax|dramabox|pocket fm|webtoon|manhwa|toca para ver|sigue viendo|seguir viendo|ver el final|get the full story|tap to watch|watch (more|the full|wonderful)|descarga la aplicacion|descargar y mirar|mira gratis ahora|baixe para assistir|assista de graca|leia a versao completa)\b/
 
 // ── Cluster 2: clínicas, spas y consultorios ─────────────────────────────────
 // Ojo: acá los términos sueltos ("dermatólogo", "spa", "sucursal") NO sirven —
@@ -41,13 +44,22 @@ const APP = /\b(descarga (la |nuestra )?app|descargar (la )?app|instala (la )?ap
 // "SHEIN KIDS"). `amazon` va aparte con frontera para no comerse "Amazonia".
 // `shoptemu` va explícito: no empieza con "temu" y es, medido 2026-08-12, el
 // anunciante con más anuncios de toda la base (50k, en 40 nichos distintos).
-const MARKETPLACE = /^(alibaba|aliexpress|shein|temu|shop ?temu|mercado ?libre|linio|falabella|ripley|lazada|shopee|tiktok ?shop|google ads)|^(amazon|wish|walmart|ebay|havan|carrefour|sodimac|promart|coppel|liverpool|elektra|casas ?bahia|magazine ?luiza|americanas|submarino|home ?depot|the home depot)\b/
+const MARKETPLACE = /^(alibaba|aliexpress|shein|temu|shop ?temu|mercado ?libre|linio|falabella|ripley|lazada|shopee|tiktok ?shop|google ads)|^(amazon|wish|walmart|ebay|havan|carrefour|sodimac|promart|coppel|liverpool|elektra|casas ?bahia|magazine ?luiza|americanas|submarino|home ?depot|the home depot|plaza ?vea|tottus|jumbo|lider|sam'?s club|suburbia|el palacio de hierro|petco|sephora|zara home|groupon|iherb|marcimex|totto|cencosud|almacenes)\b/
 
 // Plataformas y apps globales: mismo problema que los marketplaces (decenas de
 // miles de anuncios activos, ninguna caja que enviar), pero no son tiendas.
 // Salieron de mirar qué encabezaba cada categoría del buscador: al agrupar
 // nichos, estas páginas ganaban todos los chips.
-const PLATAFORMA = /^(uber|airbnb|spotify|netflix|disney|paramount|hbo|prime video|tiktok|instagram|facebook|whatsapp|mercado ?pago|rappi|didi|pedidos ?ya|binance|booking|despegar|melolo|hallow)\b/
+const PLATAFORMA = /^(uber|airbnb|spotify|netflix|disney|paramount|hbo|prime video|tiktok|instagram|facebook|whatsapp|mercado ?pago|rappi|didi|pedidos ?ya|binance|booking|despegar|melolo|hallow|roblox|indrive|revolut|meta for business)\b/
+
+// ── Cluster 6: servicios que nunca envían una caja ───────────────────────────
+// Bancos, aseguradoras, telcos y universidades. Salieron de paginar las 50 de
+// cada categoría: no encabezaban el ranking (por eso no aparecieron cuando solo
+// se mostraban 10), pero pueblan la cola con "Banco Plata", "Seguros SURA",
+// "Claro Colombia", "UPN Posgrado".
+// Las marcas de telco van ANCLADAS al inicio del nombre a propósito: `claro` con
+// \b se llevaría puesto al "Suplemento Aire Claro", que sí es un producto.
+const SERVICIO_NOMBRE = /\b(bancos?|seguros|aseguradora|financiera|cooperativa|universidad|universitaria|posgrados?|maestrias?|business school|educacion continua)\b|^(claro|movistar|telcel|entel|tigo|directv|izzi|totalplay|infinitum|copec|compensar)\b/
 
 // Señales de que SÍ se envía un objeto: mandan sobre las de arriba, porque el
 // error caro es descartar un producto real.
@@ -68,6 +80,8 @@ export function nonPhysicalSignal(
   if (mkt) return { cluster: 'marketplace', match: mkt[0] }
   const plat = nombre.match(PLATAFORMA)
   if (plat) return { cluster: 'plataforma', match: plat[0] }
+  const serv = nombre.match(SERVICIO_NOMBRE)
+  if (serv) return { cluster: 'servicio', match: serv[0] }
 
   const t = norm(`${advertiser ?? ''} ${text ?? ''}`)
   if (FISICO.test(t)) return null
