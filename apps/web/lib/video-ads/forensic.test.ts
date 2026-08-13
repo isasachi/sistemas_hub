@@ -1,0 +1,218 @@
+import { describe, it, expect } from 'vitest'
+import { buildForensicInstruction, ForensicReportSchema, repairCutTiming, CPS_MAX, type ForensicReport } from './forensic'
+
+// El prompt es el contrato con Gemini. Estos asserts fijan las reglas del spec que,
+// si se caen, producen el bug que ya vimos en producción: cortes inventados por
+// cambio de diálogo y subtítulos tratados como contenido.
+
+describe('buildForensicInstruction', () => {
+  const p = buildForensicInstruction()
+
+  it('prohíbe partir una toma continua por cambio de diálogo', () => {
+    expect(p).toContain('cambio visual real o un corte de edición')
+    expect(p).toMatch(/no dividas.*toma continua/i)
+  })
+
+  it('exige transcripción literal con sus errores', () => {
+    expect(p).toMatch(/literal/i)
+    expect(p).toContain('[inaudible]')
+    expect(p).toMatch(/no resumir|no corregir|no parafrasear/i)
+  })
+
+  it('pide los gráficos SOLO para entender el original', () => {
+    expect(p).toMatch(/no deben reproducirse/i)
+  })
+
+  it('prohíbe inferir etnia y acento', () => {
+    expect(p).toMatch(/nunca infieras|no infieras/i)
+    expect(p).toMatch(/raza|etnia/i)
+    expect(p).toMatch(/acento/i)
+  })
+
+  // El render reconstruye un video: "muestra el producto" hace que el generador invente
+  // un gesto y el resultado deje de parecerse al original. Caso real: el forense capturó
+  // el gotero y el giro del frasco, pero el nivel de detalle no estaba exigido.
+  it('exige coreografía de manos, no un resumen de la acción', () => {
+    expect(p).toMatch(/qué mano usa y cómo agarra/i)
+    expect(p).toMatch(/ENTRA al cuadro/i)
+    expect(p).toMatch(/mano libre/i)
+    expect(p).toContain('"muestra el producto" es inservible')
+  })
+
+  it('pide español para lo que ve el usuario', () => {
+    expect(p).toMatch(/español/i)
+  })
+
+  // El análisis devolvía los límites cuadrados en una rejilla de 5 s y con diálogos que
+  // no caben en su propio corte. El prompt es una pasada; lo que lo hace cumplir es
+  // `repairCutTiming`.
+  it('prohíbe la rejilla de segundos redondos y exige diálogo decible', () => {
+    expect(p).toMatch(/decimales/i)
+    expect(p).toMatch(/rejilla/i)
+    expect(p).toMatch(/SE PUEDA DECIR/)
+    expect(p).toContain(String(CPS_MAX))
+  })
+})
+
+// La columna vertebral de todo el sistema: la duración de cada corte es la que termina
+// pidiéndosele a KIE. En la sesión real el TOTAL era creíble (776 car / 46 s = 16.9 cps)
+// pero el reparto no: el corte 2 traía 60 caracteres en 2 s = 30 cps, indecible.
+describe('repairCutTiming', () => {
+  const corte = (n: number, duracionSeg: number, dialogo: string) => ({
+    n, duracionSeg, dialogo,
+    tiempo: `00:${String(n).padStart(2, '0')} - 00:${String(n + 1).padStart(2, '0')}`,
+    accion: 'a', camara: 'c', textoOverlay: 'No aparece', transicion: 'corte directo',
+  })
+  const informe = (cortes: ReturnType<typeof corte>[]): ForensicReport => ({
+    duracionTotalSeg: cortes.reduce((n, c) => n + c.duracionSeg, 0),
+    caracteresGuion: cortes.reduce((n, c) => n + c.dialogo.length, 0),
+    guionOriginal: cortes.map((c) => c.dialogo).join(' '),
+    sujeto: '', vestuario: '', producto: '', fondo: '', elementosGraficos: '',
+    cortes,
+    tomas: cortes.map((c) => ({
+      n: c.n, encuadre: '', posicion: '', accionFisica: '', objeto: '',
+      dialogo: c.dialogo, duracionSeg: c.duracionSeg,
+    })),
+    edicion: { sincronizacion: '', textoOverlay: '', escalaZoom: '', cortes: '', ritmo: '', corteFinal: '' },
+    resumenParaUsuario: '',
+  })
+  const cps = (c: { dialogo: string; duracionSeg: number }) => c.dialogo.length / c.duracionSeg
+
+  // Un dato bueno no se toca: se devuelve el MISMO objeto, sin copiar ni recalcular.
+  it('no toca un informe cuyos cortes ya son decibles', () => {
+    const sano = informe([corte(1, 5, 'x'.repeat(70)), corte(2, 5, 'y'.repeat(60))])
+    const r = repairCutTiming(sano)
+    expect(r.ajustes).toEqual([])
+    expect(r.report).toBe(sano)
+  })
+
+  it('baja el corte imposible exactamente al techo, no a un valor apenas mejor', () => {
+    const { report } = repairCutTiming(informe([corte(1, 2, 'z'.repeat(60)), corte(2, 10, 'w'.repeat(40))]))
+    expect(cps(report.cortes[0])).toBeCloseTo(CPS_MAX, 6)
+    expect(report.cortes[0].duracionSeg).toBeCloseTo(3, 6)
+  })
+
+  // Lo que hace que la reparación sea conservadora: el ritmo global del original no se
+  // altera porque el tiempo sale de donde sobra, no de la nada.
+  it('conserva el total exacto: el tiempo sale de los cortes con holgura', () => {
+    const antes = informe([corte(1, 2, 'z'.repeat(60)), corte(2, 10, 'w'.repeat(40)), corte(3, 8, 'v'.repeat(20))])
+    const { report } = repairCutTiming(antes)
+    const suma = report.cortes.reduce((n, c) => n + c.duracionSeg, 0)
+    expect(suma).toBeCloseTo(20, 9)
+    expect(report.duracionTotalSeg).toBe(20)
+    // Los dos holgados ceden en proporción a su holgura, no a partes iguales.
+    expect(report.cortes[1].duracionSeg).toBeLessThan(10)
+    expect(report.cortes[2].duracionSeg).toBeLessThan(8)
+  })
+
+  it('ningún corte queda por debajo de su mínimo después de repartir', () => {
+    const { report } = repairCutTiming(informe([
+      corte(1, 1, 'a'.repeat(60)), corte(2, 1, 'b'.repeat(50)), corte(3, 20, 'c'.repeat(30)),
+    ]))
+    for (const c of report.cortes) expect(cps(c)).toBeLessThanOrEqual(CPS_MAX + 1e-9)
+  })
+
+  // El texto entero no entra en la duración del video: no hay de dónde sacar tiempo, así
+  // que el total crece. Es el ÚNICO caso en que `duracionTotalSeg` se mueve.
+  it('si no hay holgura en todo el video, el total crece y se reporta', () => {
+    const { report } = repairCutTiming(informe([corte(1, 1, 'a'.repeat(60)), corte(2, 1, 'b'.repeat(60))]))
+    expect(report.duracionTotalSeg).toBeCloseTo(6, 6)
+    for (const c of report.cortes) expect(cps(c)).toBeCloseTo(CPS_MAX, 6)
+  })
+
+  // `tiempo` apunta a DÓNDE estaba el corte en el video fuente — el spec lo trata como
+  // campo distinto de la duración. Además es la clave con la que `camaraDeLote` empareja
+  // lote y plano, y entra en `scriptFingerprint`: moverla rompería las dos cosas.
+  it('nunca toca la marca `tiempo`', () => {
+    const antes = informe([corte(1, 2, 'z'.repeat(60)), corte(2, 10, 'w'.repeat(40))])
+    const { report } = repairCutTiming(antes)
+    expect(report.cortes.map((c) => c.tiempo)).toEqual(antes.cortes.map((c) => c.tiempo))
+  })
+
+  it('sincroniza las duraciones de `tomas` con las de `cortes`', () => {
+    const { report } = repairCutTiming(informe([corte(1, 2, 'z'.repeat(60)), corte(2, 10, 'w'.repeat(40))]))
+    expect(report.tomas.map((t) => t.duracionSeg)).toEqual(report.cortes.map((c) => c.duracionSeg))
+  })
+
+  it('deja `tomas` en paz si no hay una por corte', () => {
+    const raro = { ...informe([corte(1, 2, 'z'.repeat(60)), corte(2, 10, 'w'.repeat(40))]) }
+    raro.tomas = [raro.tomas[0]]
+    expect(repairCutTiming(raro).report.tomas).toHaveLength(1)
+  })
+
+  // Sin esto, el error de coma flotante del reparto puede dejar un corte una billonésima
+  // por debajo de su mínimo y una segunda pasada lo movería otra vez — dos huellas
+  // distintas para el mismo contenido.
+  it('es idempotente: la segunda pasada no mueve nada', () => {
+    const uno = repairCutTiming(informe([
+      corte(1, 2, 'z'.repeat(60)), corte(2, 10, 'w'.repeat(137)), corte(3, 3.7, 'v'.repeat(41)), corte(4, 8, 'u'.repeat(19)),
+    ])).report
+    const dos = repairCutTiming(uno)
+    expect(dos.ajustes).toEqual([])
+    expect(dos.report.cortes.map((c) => c.duracionSeg)).toEqual(uno.cortes.map((c) => c.duracionSeg))
+  })
+
+  it('reporta qué cortes movió y desde dónde', () => {
+    const { ajustes } = repairCutTiming(informe([corte(1, 2, 'z'.repeat(60)), corte(2, 10, 'w'.repeat(40))]))
+    expect(ajustes.find((a) => a.n === 1)).toMatchObject({ n: 1, de: 2 })
+    expect(ajustes.find((a) => a.n === 1)!.a).toBeCloseTo(3, 6)
+  })
+
+  it('un corte sin diálogo no exige nada y conserva su duración de acción', () => {
+    const { report } = repairCutTiming(informe([corte(1, 2, 'z'.repeat(60)), corte(2, 10, '')]))
+    expect(report.cortes[1].duracionSeg).toBeCloseTo(9, 6)
+  })
+
+  it('sin diálogo en ningún corte no hay nada que reparar', () => {
+    const mudo = informe([corte(1, 3, ''), corte(2, 4, '')])
+    expect(repairCutTiming(mudo).report).toBe(mudo)
+  })
+
+  // Duraciones degeneradas: el saneo real vive en `sanearDuracion` (lotes.ts), pero esto
+  // corre antes y no puede ser lo que reviente.
+  it('no revienta con duraciones cero, negativas o no finitas', () => {
+    const roto = informe([corte(1, 0, 'z'.repeat(20)), corte(2, -3, 'w'.repeat(10)), corte(3, 10, 'v'.repeat(10))])
+    roto.cortes[1].duracionSeg = NaN
+    const { report } = repairCutTiming(roto)
+    for (const c of report.cortes) expect(Number.isFinite(c.duracionSeg)).toBe(true)
+  })
+})
+
+describe('ForensicReportSchema', () => {
+  it('acepta un informe completo', () => {
+    const ok = ForensicReportSchema.safeParse({
+      duracionTotalSeg: 28.3,
+      caracteresGuion: 412,
+      guionOriginal: 'este suero de niacinamida de anua y tengo que contarte',
+      sujeto: 'Mujer de unos 25, cabello oscuro recogido, piel clara, ojos claros',
+      vestuario: 'Polo azul marino con estampado de oso, pulsera dorada',
+      producto: 'Frasco de vidrio rojo con gotero, etiqueta blanca',
+      fondo: 'Dormitorio, pared clara, repisas blancas al fondo',
+      elementosGraficos: 'Subtítulos blancos centrados abajo; marca de agua de TikTok',
+      cortes: [{
+        n: 1, tiempo: '00:00 - 00:03', duracionSeg: 3,
+        accion: 'Sostiene el frasco frente a la cámara',
+        camara: 'Primer plano, altura de ojos, cámara en mano',
+        dialogo: 'este suero de niacinamida', textoOverlay: 'este suero de niacinamida',
+        transicion: 'corte directo',
+      }],
+      tomas: [{
+        n: 1, encuadre: 'Primer plano', posicion: 'Frente a cámara',
+        accionFisica: 'Levanta el frasco', objeto: 'Frasco de suero',
+        dialogo: 'este suero de niacinamida', duracionSeg: 3,
+      }],
+      edicion: {
+        sincronizacion: 'Acción sincronizada con cada frase',
+        textoOverlay: 'Subtítulos quemados en todo el video',
+        escalaZoom: 'Sin zoom', cortes: 'Jump cuts secos',
+        ritmo: 'Rápido, sin silencios', corteFinal: 'Placa de cierre de TikTok',
+      },
+      resumenParaUsuario: 'Testimonio en primera persona con demostración de uso.',
+    })
+    expect(ok.success).toBe(true)
+  })
+
+  it('rechaza un informe sin cortes', () => {
+    expect(ForensicReportSchema.safeParse({ cortes: [] }).success).toBe(false)
+  })
+})

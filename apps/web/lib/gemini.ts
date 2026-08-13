@@ -87,12 +87,15 @@ export function clampTooBigStrings(obj: unknown, error: z.ZodError): boolean {
 }
 
 // Gemini structured (fallback). Contiene la lógica de recuperación de strings 'too_big'.
-async function geminiCallStructured<T>(
+// Exportada también como entrada directa para el análisis forense de video:
+// `callStructured` es OpenAI-primario y gpt-4o-mini no acepta partes de video, así que
+// ahí no sirven ni el fallback ni `preferGemini`.
+export async function geminiCallStructured<T>(
   schemaName: string,
   schema: z.ZodSchema<T>,
   parts: Part[],
-  maxRetries: number,
-  systemInstruction: string,
+  maxRetries = 3,
+  systemInstruction: string = SYSTEM_PROMPT,
 ): Promise<T> {
   let lastError: unknown = new Error(`geminiCallStructured(${schemaName}): no attempts`)
   for (let i = 0; i < maxRetries; i++) {

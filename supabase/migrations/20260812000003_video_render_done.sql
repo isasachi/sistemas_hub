@@ -1,0 +1,31 @@
+-- Fix round 5 (revisión final antes del merge, PLAN B): el dashboard marcaba una
+-- sesión como "lista" con `done: !!video_url` (sessions/route.ts) — y `video_url` se
+-- estampa con el PRIMER lote que termina (`lote-status/route.ts`), no cuando TODOS
+-- terminan. Un video de 4 lotes donde solo el primero salió bien ya mostraba el check
+-- verde en el historial, y como un lote fallido no se puede reintentar solo desde el
+-- dashboard, la sesión quedaba diciendo "listo" para siempre.
+--
+-- La señal correcta ("¿están TODOS los lotes resueltos?") vive hoy solo dentro del
+-- jsonb `lotes` — y `listVideoSessions` (db.ts) trae 24 filas por página a propósito
+-- sin esa columna: cada lote carga su `prompt` (miles de caracteres, ver AGENTS.md,
+-- "presupuesto de caracteres"), así que seleccionar `lotes` en una lista solo para
+-- leer un booleano derivado sería arrastrar ese texto entero 24 veces por cada carga
+-- del dashboard. La alternativa (una función/columna generada de Postgres sobre el
+-- jsonb) evita el booleano desincronizado pero sigue leyendo el jsonb completo por
+-- fila en cada SELECT de la lista — mismo costo.
+--
+-- Se elige persistir un booleano angosto en vez de eso: `render_done` se escribe en
+-- el MISMO write que ya toca `lotes` (`saveRescue`/`claimFreshLotes` en
+-- generate-lotes/route.ts, el update de `lote-status/route.ts`), calculado con la
+-- misma fórmula que ya usa `lote-status` para su propio `done` de respuesta
+-- (`renderDone`, render-lotes.ts) — no hay una tercera fuente de verdad, solo una
+-- columna que cachea el resultado de la que ya existe. `listVideoSessions` puede
+-- entonces seleccionar esta columna sola, sin jsonb, y quedarse angosta.
+alter table video_sessions add column if not exists render_done boolean not null default false;
+
+-- Backfill: aproximación al comportamiento VIEJO (video_url IS NOT NULL) para no
+-- regresionar el historial ya existente a "nada está terminado" de un día para otro.
+-- Sigue siendo una aproximación (el mismo bug que este fix corrige), pero es la mejor
+-- lectura disponible sin re-computar sobre el jsonb de cada fila vieja; las sesiones
+-- nuevas quedan calculadas correctamente desde el próximo write.
+update video_sessions set render_done = true where video_url is not null;

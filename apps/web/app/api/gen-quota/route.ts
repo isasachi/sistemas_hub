@@ -22,6 +22,6 @@ export async function GET(req: NextRequest) {
   for (const r of data ?? []) counts[r.kind] = (counts[r.kind] ?? 0) + 1
 
   const out: Record<string, number> = {}
-  for (const [kind, c] of Object.entries(counts)) if (isImageKind(kind)) out[kind] = regensLeftFor(c)
+  for (const [kind, c] of Object.entries(counts)) if (isImageKind(kind)) out[kind] = regensLeftFor(c, kind)
   return NextResponse.json(out)
 }

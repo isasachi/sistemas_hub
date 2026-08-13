@@ -1,0 +1,273 @@
+import { z } from 'zod'
+
+/**
+ * FASE 1 del prompt maestro — análisis forense del VIDEO ORIGINAL.
+ * ---------------------------------------------------------------------------
+ * Cambio de fondo respecto del pipeline anterior: la unidad de análisis es el
+ * CORTE REAL (cambio visual o corte de edición), no la frase. El sistema viejo
+ * pedía "un beat por cada cambio visual O por frase, lo que llegue primero", lo
+ * que fabricaba cortes donde el original tenía una toma continua y destruía el
+ * ritmo al reconstruir.
+ *
+ * Los elementos gráficos SÍ se analizan (para entender el original) pero se
+ * registran aparte, nunca dentro de la acción — así no viajan al render como algo
+ * a reproducir.
+ */
+
+export const CorteSchema = z.object({
+  n: z.number(),
+  tiempo: z.string(),          // "00:00 - 00:03"
+  duracionSeg: z.number(),
+  accion: z.string(),          // qué sucede, literal
+  camara: z.string(),          // plano, posición, movimiento, zoom
+  dialogo: z.string(),         // texto hablado en este corte
+  textoOverlay: z.string(),    // "No aparece" si no hay
+  transicion: z.string(),      // jump cut / corte directo / continuidad / zoom digital
+})
+export type Corte = z.infer<typeof CorteSchema>
+
+export const TomaSchema = z.object({
+  n: z.number(),
+  encuadre: z.string(),
+  posicion: z.string(),
+  accionFisica: z.string(),
+  objeto: z.string(),
+  dialogo: z.string(),
+  duracionSeg: z.number(),
+})
+export type Toma = z.infer<typeof TomaSchema>
+
+export const EdicionSchema = z.object({
+  sincronizacion: z.string(),
+  textoOverlay: z.string(),
+  escalaZoom: z.string(),
+  cortes: z.string(),
+  ritmo: z.string(),
+  corteFinal: z.string(),
+})
+
+export const ForensicReportSchema = z.object({
+  duracionTotalSeg: z.number(),
+  caracteresGuion: z.number(),
+  guionOriginal: z.string(),
+  sujeto: z.string(),
+  vestuario: z.string(),
+  producto: z.string(),
+  fondo: z.string(),
+  elementosGraficos: z.string(),
+  cortes: z.array(CorteSchema).min(1),
+  tomas: z.array(TomaSchema).min(1),
+  edicion: EdicionSchema,
+  resumenParaUsuario: z.string(),
+})
+export type ForensicReport = z.infer<typeof ForensicReportSchema>
+
+/**
+ * Techo físico de velocidad de habla, en caracteres por segundo.
+ *
+ * El español conversacional va entre 14 y 17 cps; una lectura UGC rápida llega a ~20.
+ * Por encima de eso no es que suene apurado: no se puede pronunciar. El número está acá
+ * arriba y no enterrado en la fórmula justamente para que se pueda discutir — si algún
+ * día se analizan videos en otro idioma o con locución acelerada, este es el valor a
+ * mover, no la lógica.
+ *
+ * A propósito NO se deriva del propio video (`caracteres / duración total`): ese
+ * promedio ya viene contaminado por los cortes mal medidos que esto existe para
+ * reparar, así que un video con varios errores se calibraría contra sus propios
+ * errores. En la sesión que motivó esto el promedio daba 16.9 cps y un techo relativo
+ * de 1.4× habría dejado el corte roto en 24 cps: la reparación se ejecutaría, reportaría
+ * éxito y no arreglaría nada.
+ */
+export const CPS_MAX = 20
+
+/** Un corte cuya duración se movió, para poder loguear qué se tocó. */
+export interface AjusteTiempo {
+  n: number
+  de: number
+  a: number
+}
+
+const EPS = 1e-9
+
+/**
+ * Repara los cortes cuyo diálogo NO cabe en su propia duración.
+ * ---------------------------------------------------------------------------
+ * El análisis de video mide bien el TOTAL y mal el REPARTO. Medido en la sesión
+ * `79b94ab9`: 776 caracteres en 46 s dan 16.9 cps, un ritmo perfectamente normal en
+ * español; pero el corte 2 traía 60 caracteres en 2 s — 30 cps, imposible de
+ * pronunciar — y los límites caían casi todos en múltiplos de 5, o sea que el modelo
+ * cuantiza los cortes a la resolución que alcanza a muestrear.
+ *
+ * Eso envenena todo lo que viene después, porque la duración del corte es la que
+ * termina pidiéndole al generador de video: una toma mal cronometrada desde acá sale
+ * atropellada aunque el guión adaptado sea perfecto.
+ *
+ * La reparación es CONSERVADORA y deliberadamente aburrida:
+ *
+ *  - No re-cronometra nada que ya sea decible. Si todos los cortes caben, devuelve el
+ *    informe intacto — no se toca un dato bueno.
+ *  - A los cortes imposibles les da el mínimo que necesitan (`caracteres / CPS_MAX`).
+ *  - Ese tiempo sale de los cortes que tienen holgura, en proporción a cuánta tienen,
+ *    así que el TOTAL se conserva exacto y el ritmo general del original no se altera.
+ *  - Solo si no hay holgura suficiente en todo el video (el texto entero no entra en su
+ *    duración) el total crece; es el único caso en el que `duracionTotalSeg` se mueve.
+ *
+ * Lo que NO toca: `tiempo`. Esa marca apunta a DÓNDE estaba el corte en el video fuente
+ * y el spec la trata como un campo distinto de la duración ("Tiempo original de
+ * referencia" vs. "Duración objetivo" en el SHOT LIST FINAL). Dejarla quieta además
+ * evita tres problemas de golpe: sigue siendo la clave única con la que `camaraDeLote`
+ * empareja lote y plano, no cambia el formato que entra en `scriptFingerprint`, y no
+ * puede colisionar consigo misma al redondear.
+ *
+ * Es idempotente por construcción: al salir, todo corte cumple `duración >= mínimo`, así
+ * que una segunda pasada encuentra déficit cero y devuelve la entrada sin tocarla.
+ */
+export function repairCutTiming(
+  report: ForensicReport,
+): { report: ForensicReport; ajustes: AjusteTiempo[] } {
+  const cortes = report.cortes ?? []
+  if (!cortes.length) return { report, ajustes: [] }
+
+  const dur = cortes.map((c) => (Number.isFinite(c.duracionSeg) && c.duracionSeg > 0 ? c.duracionSeg : 0))
+  const min = cortes.map((c) => (c.dialogo ?? '').length / CPS_MAX)
+
+  const deficit = cortes.reduce((n, _, i) => n + Math.max(0, min[i] - dur[i]), 0)
+  if (deficit <= EPS) return { report, ajustes: [] }
+
+  const holgura = cortes.map((_, i) => Math.max(0, dur[i] - min[i]))
+  const totalHolgura = holgura.reduce((a, b) => a + b, 0)
+
+  // `totalHolgura >= deficit > 0` implica `totalHolgura > 0`, así que la división es
+  // segura; el caso sin holgura suficiente cae en la otra rama.
+  const nuevas = cortes.map((_, i) =>
+    Math.max(
+      totalHolgura >= deficit
+        ? Math.max(dur[i], min[i]) - (holgura[i] / totalHolgura) * deficit
+        : Math.max(dur[i], min[i]),
+      // El `max` final con el mínimo es lo que garantiza la idempotencia: sin él, el
+      // error de coma flotante del reparto puede dejar un corte una billonésima por
+      // debajo de su mínimo y una segunda pasada volvería a moverlo.
+      min[i],
+    ),
+  )
+
+  const ajustes: AjusteTiempo[] = []
+  for (let i = 0; i < cortes.length; i++) {
+    if (Math.abs(nuevas[i] - dur[i]) > 0.05) ajustes.push({ n: cortes[i].n, de: dur[i], a: nuevas[i] })
+  }
+
+  const suma = nuevas.reduce((a, b) => a + b, 0)
+  return {
+    report: {
+      ...report,
+      // Solo crece si el texto entero no entraba en el video; con reparto interno el
+      // total se conserva y este `max` es un no-op.
+      duracionTotalSeg: Math.max(report.duracionTotalSeg, suma),
+      cortes: cortes.map((c, i) => ({ ...c, duracionSeg: nuevas[i] })),
+      // El prompt exige exactamente una toma por corte y en el mismo orden, así que el
+      // emparejamiento por índice está definido. Nadie río abajo lee estas duraciones
+      // (todo sale de `cortes`), pero dejarlas desincronizadas es una trampa para quien
+      // las lea mañana.
+      tomas: report.tomas?.length === cortes.length
+        ? report.tomas.map((t, i) => ({ ...t, duracionSeg: nuevas[i] }))
+        : report.tomas,
+    },
+    ajustes,
+  }
+}
+
+export function buildForensicInstruction(): string {
+  return [
+    'Actúa como analista forense experto en videos de respuesta directa.',
+    'Analiza el VIDEO ORIGINAL completo, en orden cronológico.',
+    '',
+    'REGLA DE CORTES — la más importante:',
+    '  Registra una nueva escena/corte ÚNICAMENTE cuando exista un cambio visual real o un corte de edición identificable. NO dividas una toma continua solo porque cambia el diálogo. Una toma de 8 segundos con tres frases es UN corte, no tres.',
+    '',
+    'MÉTRICAS GLOBALES:',
+    '  - `duracionTotalSeg`: duración total del video en segundos.',
+    '  - `caracteresGuion`: número total de caracteres del texto hablado, con espacios.',
+    '',
+    'GUION ORIGINAL (`guionOriginal`): transcripción literal, palabra por palabra.',
+    '  Conserva errores, repeticiones, muletillas, frases incompletas y la gramática',
+    '  original. No resumir. No corregir. No parafrasear. Si una palabra no se puede',
+    '  identificar con certeza, escribe [inaudible].',
+    '',
+    'ELEMENTOS BASE (solo lo observable):',
+    '  - `sujeto`: edad aparente, sexo aparente, cabello, barba si existe, expresión,',
+    '    complexión visible y posición. Descríbelo con detalle suficiente para hacer',
+    '    un casting equivalente.',
+    '  - `vestuario`: prendas, colores, tejidos visibles, joyería, gafas, maquillaje.',
+    '  - `producto`: forma, envase, colores, etiqueta, texto legible, materiales y',
+    '    forma de manipulación.',
+    '  - `fondo`: localización aparente, paredes, muebles, superficies, texturas,',
+    '    objetos, iluminación y profundidad.',
+    '  - `elementosGraficos`: texto en pantalla, subtítulos, colores, posición,',
+    '    tipografía aparente, contorno, animación, duración, emojis, flechas, gráficos',
+    '    y watermarks.',
+    '',
+    'Los elementos gráficos se analizan ÚNICAMENTE para entender el original.',
+    'NO deben reproducirse en el video generado. Por eso van en su propio campo y',
+    'nunca dentro de `accion` ni de `camara`.',
+    '',
+    'LA `accion` DE CADA CORTE ES COREOGRAFÍA, NO RESUMEN.',
+    'Lo que se reconstruye después es un video: si la acción dice "muestra el producto",',
+    'el generador inventa un gesto cualquiera y el resultado deja de parecerse al',
+    'original. Describe lo que el CUERPO hace, en orden, con este nivel de detalle:',
+    '  - qué mano usa y cómo agarra (con los dedos, con el puño, con ambas manos, por',
+    '    el cuerpo del envase o por la tapa);',
+    '  - qué hace exactamente con el producto: destaparlo, girarlo, inclinarlo, apretar',
+    '    el gotero, sacar una unidad, dejarlo fuera de cuadro;',
+    '  - en qué momento el producto ENTRA al cuadro y en cuál SALE, y a qué altura queda',
+    '    respecto de la cara (a la altura del mentón, junto a la mejilla, tapando el',
+    '    cuello, centrado frente al pecho);',
+    '  - dónde se aplica o se toca: qué zona concreta, con qué dedos, en qué dirección',
+    '    (círculos, toques, deslizamiento hacia arriba);',
+    '  - qué hace la mano libre mientras tanto;',
+    '  - hacia dónde mira: a la cámara, al producto, fuera de cuadro;',
+    '  - qué expresión tiene y en qué posición empieza y termina el corte — el spec pide',
+    '    la secuencia completa (posición inicial → movimiento → interacción → posición',
+    '    final), no solo el resultado.',
+    'Un ejemplo del nivel esperado: "sostiene el frasco con la mano derecha por el cuerpo,',
+    'lo levanta hasta la altura del mentón y lo gira un cuarto de vuelta para que la',
+    'etiqueta quede al frente; la mano izquierda queda fuera de cuadro; mira al producto',
+    'y después a la cámara". Frente a eso, "muestra el producto" es inservible.',
+    'Si en un corte el producto NO aparece, dilo explícitamente.',
+    '',
+    'CRONOMETRAJE — se mide, no se estima:',
+    '  `duracionSeg` lleva DECIMALES (4.3, no 5). No redondees a números redondos ni',
+    '  acomodes los límites en una rejilla de 5 segundos: los cortes de un video real',
+    '  caen donde caen, y una rejilla es la señal de que se rellenó en vez de medir.',
+    '  Antes de cerrar cada corte, comprueba que su diálogo SE PUEDA DECIR en su',
+    '  duración: el español conversacional va a 14–17 caracteres por segundo y una',
+    `  lectura rápida llega a ~${CPS_MAX}. Si el texto que le asignaste necesita más que eso, el`,
+    '  límite del corte está mal puesto, no es que la persona hable rapidísimo — corrige',
+    '  el límite. La suma de las duraciones tiene que dar la duración total del video.',
+    '',
+    'CORTES (`cortes`): uno por corte real, en orden. Para cada uno:',
+    '  `tiempo` "MM:SS - MM:SS", `duracionSeg`, `accion` (descripción literal de lo',
+    '  que sucede), `camara` (plano, posición, movimiento, zoom), `dialogo` (texto',
+    '  hablado durante ese corte), `textoOverlay` (o "No aparece") y `transicion`',
+    '  (jump cut / corte directo / continuidad / zoom digital).',
+    '',
+    'TOMAS (`tomas`): convierte cada corte real en una toma de grabación, con',
+    '  `encuadre`, `posicion` del personaje, `accionFisica` exacta, `objeto` usado,',
+    '  `dialogo` literal y `duracionSeg` derivada del video original.',
+    '  Debe haber exactamente una toma por corte, en el mismo orden.',
+    '',
+    'EDICIÓN (`edicion`): describe SOLO el patrón realmente usado en el original —',
+    '  `sincronizacion`, `textoOverlay`, `escalaZoom`, `cortes`, `ritmo` y',
+    '  `corteFinal` (cómo termina el video).',
+    '',
+    'PROHIBICIONES:',
+    '  - No describas como hecho nada que no sea visible o audible en el video.',
+    '  - NUNCA infieras raza, etnia, origen cultural ni acento a partir de la',
+    '    apariencia visual. Esos datos los entrega el usuario, no el análisis.',
+    '    Descríbe lo que se ve (tono de piel, cabello, facciones) sin etiquetarlo.',
+    '  - Si algo no se puede determinar con seguridad, dilo explícitamente en el',
+    '    campo correspondiente en vez de inventarlo.',
+    '',
+    '`resumenParaUsuario` va en español neutro: se muestra en la interfaz.',
+    'Todo el output va en español.',
+  ].join('\n')
+}

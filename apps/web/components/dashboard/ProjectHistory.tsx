@@ -13,6 +13,7 @@ const SESSION_TOOLS = [
   { slug: 'generador-anuncios', name: 'Generador de Anuncios', short: 'Anuncios' },
   { slug: 'generador-branding', name: 'Generador de Branding', short: 'Branding' },
   { slug: 'generador-landing', name: 'Generador de Landing', short: 'Landing' },
+  { slug: 'generador-video-ads', name: 'Generador de Video Ads', short: 'Video' },
   { slug: 'calculadora-costos', name: 'Calculadora de Costos', short: 'Costos' },
 ] as const
 
@@ -243,7 +244,24 @@ function ProjectCard({
       >
         <Trash2 className="h-4 w-4" />
       </button>
-      {p.thumb ? (
+      {p.thumb && p.thumb.includes('.mp4') ? (
+        // El generador de video manda el mp4 como miniatura: el browser pinta su primer
+        // frame. No es un póster generado — no hay ffmpeg acá y no vale uno por esto.
+        // `preload="metadata"` es obligatorio: sin metadata el elemento mide 0 de alto y
+        // el masonry salta cuando cada card termina de cargar. El wrapper 9:16 reserva
+        // el hueco desde el primer render (todo lo que sale de esta tool es 9:16).
+        <div className="relative z-[1] aspect-[9/16] w-full overflow-hidden bg-black">
+          <video
+            // `#t=0.1` pide el frame de los 0.1s: muchos mp4 abren en negro, y con el
+            // frame 0 la card se vería vacía.
+            src={`${p.thumb}#t=0.1`}
+            preload="metadata"
+            muted
+            playsInline
+            className="block h-full w-full object-cover"
+          />
+        </div>
+      ) : p.thumb ? (
         // Miniatura completa a altura natural (sin recorte) para la estética masonry.
         // eslint-disable-next-line @next/next/no-img-element
         <img src={p.thumb} alt="" className="relative z-[1] block h-auto w-full" />
