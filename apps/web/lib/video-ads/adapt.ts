@@ -117,6 +117,32 @@ export function applyScriptEdits(
   }
 }
 
+/**
+ * Baja al guión ya adaptado las duraciones recronometradas de los cortes.
+ *
+ * Sin esto, reparar el cronometraje de una sesión que YA tiene guión adaptado no llega
+ * al render: `generate-lotes` agrupa sobre `adapted.tomas`, no sobre el forense, así que
+ * el video seguiría saliendo con las duraciones rotas hasta que alguien re-adaptara — y
+ * nada se lo diría al usuario.
+ *
+ * Se re-sincroniza en vez de borrar `adapted` y obligar a re-adaptar por dos razones:
+ * re-adaptar tira las correcciones que el usuario escribió a mano línea por línea, y
+ * volvería a pasar por el modelo un texto que ya estaba bien. Acá solo cambia el número
+ * de segundos; el texto no se toca.
+ *
+ * Empareja por ÍNDICE porque así se construyó (`adapt-script` toma `cortes[i].tiempo`
+ * para el `tiempoOriginal` de la toma i). Si los largos no coinciden, el guión no
+ * corresponde a estos cortes y no se toca nada.
+ */
+export function resyncTomaDurations(
+  adapted: AdaptedScript,
+  cortes: { duracionSeg: number }[],
+): AdaptedScript | null {
+  if (adapted.tomas.length !== cortes.length) return null
+  if (adapted.tomas.every((t, i) => t.duracionSeg === cortes[i].duracionSeg)) return null
+  return { ...adapted, tomas: adapted.tomas.map((t, i) => ({ ...t, duracionSeg: cortes[i].duracionSeg })) }
+}
+
 export function buildAdaptInstruction(
   template: ScriptTemplate,
   forensic: ForensicReport,

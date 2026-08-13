@@ -164,12 +164,12 @@ export default function Section6Lotes() {
         // resolvería el problema real (este texto se renderiza antes de esa respuesta).
         <div className={warnBox}>
           El render quedó a medias: algunos lotes nunca llegaron a iniciarse en KIE.
-          Si no tocaste el guión, el personaje ni la voz desde el último intento,
-          reintentar solo crea los que faltan y no vuelve a gastar cuota. Si los
-          cambiaste — <strong className="font-semibold">editar una sola línea del guión
-          ya cuenta</strong> — el servidor lo nota (la huella del contenido ya no
-          coincide) y cobra una generación nueva; los intentos ya pagados de este render
-          quedan abandonados.
+          Si desde el último intento no volviste a ningún paso anterior, reintentar solo
+          crea los que faltan y no vuelve a gastar cuota. Si sí volviste —{' '}
+          <strong className="font-semibold">editar una línea del guión, re-extraer la
+          plantilla o rehacer el personaje ya cuentan</strong> — el servidor lo nota (la
+          huella del contenido ya no coincide) y cobra una generación nueva; los intentos
+          ya pagados de este render quedan abandonados.
         </div>
       )}
       {running && connectionLost && (

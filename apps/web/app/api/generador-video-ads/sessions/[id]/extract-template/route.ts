@@ -8,6 +8,7 @@ import { TemplateDraftSchema, buildTemplateInstruction } from '@/lib/video-ads/t
 import { validateTemplate, assembleTemplate } from '@/lib/video-ads/fill'
 import { canProceed } from '@/lib/video-ads/validation'
 import { repairCutTiming } from '@/lib/video-ads/forensic'
+import { resyncTomaDurations } from '@/lib/video-ads/adapt'
 import { STEP } from '@/lib/video-ads/steps'
 
 export const dynamic = 'force-dynamic'
@@ -56,7 +57,14 @@ export async function POST(
       `[video-ads/extract-template] sesión ${id}: ${ajustes.length} cortes recronometrados sobre un análisis ya guardado:`,
       ajustes.map((a) => `corte ${a.n}: ${a.de.toFixed(1)}s → ${a.a.toFixed(1)}s`),
     )
-    await updateVideoSession(id, { forensic_analysis: forensic })
+    // Y se bajan las duraciones nuevas al guión YA adaptado, si lo hay. `generate-lotes`
+    // agrupa sobre `adapted.tomas`, no sobre el forense: sin esto la reparación no
+    // llegaría al render y el video seguiría saliendo con los tiempos rotos, en
+    // silencio. Se re-sincroniza en vez de borrar `adapted` porque borrarlo tiraría las
+    // correcciones que el usuario escribió a mano línea por línea; acá solo cambian los
+    // segundos, el texto queda igual.
+    const resync = session.adapted ? resyncTomaDurations(session.adapted, forensic.cortes) : null
+    await updateVideoSession(id, { forensic_analysis: forensic, ...(resync ? { adapted: resync } : {}) })
   }
 
   try {

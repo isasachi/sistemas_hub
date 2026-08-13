@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildAdaptInstruction, AdaptedScriptSchema, applyScriptEdits, type AdaptedScript } from './adapt'
+import { buildAdaptInstruction, AdaptedScriptSchema, applyScriptEdits, resyncTomaDurations, type AdaptedScript } from './adapt'
 import { extractSlots } from './fill'
 import type { ScriptTemplate } from './template'
 import type { ForensicReport } from './forensic'
@@ -188,6 +188,43 @@ describe('applyScriptEdits', () => {
     const r = applyScriptEdits(base, { 99: 'fantasma' }, 50)
     expect(r.tomas).toHaveLength(2)
     expect(r.guionFinal).not.toContain('fantasma')
+  })
+})
+
+// Reparar el cronometraje del forense no sirve de nada si la sesión ya tiene guión
+// adaptado: `generate-lotes` agrupa sobre `adapted.tomas`, no sobre el forense.
+describe('resyncTomaDurations', () => {
+  const base: AdaptedScript = {
+    guionFinal: 'Uno. Dos.',
+    caracteresAdaptado: 9, diferenciaCaracteres: 0,
+    tomas: [
+      { n: 1, tiempoOriginal: '00:00 - 00:02', duracionSeg: 2, accionVisual: 'a', personaje: 'p', producto: 'x', locucion: 'Uno.' },
+      { n: 2, tiempoOriginal: '00:02 - 00:12', duracionSeg: 10, accionVisual: 'b', personaje: 'p', producto: 'x', locucion: 'Dos.' },
+    ],
+    variablesPendientes: [],
+  }
+
+  it('baja las duraciones nuevas sin tocar el texto', () => {
+    const r = resyncTomaDurations(base, [{ duracionSeg: 3 }, { duracionSeg: 9 }])!
+    expect(r.tomas.map((t) => t.duracionSeg)).toEqual([3, 9])
+    expect(r.tomas.map((t) => t.locucion)).toEqual(['Uno.', 'Dos.'])
+    expect(r.guionFinal).toBe(base.guionFinal)
+  })
+
+  // Devolver null = "no hay nada que escribir", para no tocar la fila por gusto.
+  it('devuelve null si las duraciones ya coinciden', () => {
+    expect(resyncTomaDurations(base, [{ duracionSeg: 2 }, { duracionSeg: 10 }])).toBeNull()
+  })
+
+  // Si los largos no cuadran, el guión no corresponde a estos cortes: emparejar por
+  // índice le pondría a cada toma la duración de otra.
+  it('no toca nada si el guión no tiene una toma por corte', () => {
+    expect(resyncTomaDurations(base, [{ duracionSeg: 3 }])).toBeNull()
+  })
+
+  it('conserva tiempoOriginal, que apunta al video fuente y no se recalcula', () => {
+    const r = resyncTomaDurations(base, [{ duracionSeg: 3 }, { duracionSeg: 9 }])!
+    expect(r.tomas.map((t) => t.tiempoOriginal)).toEqual(base.tomas.map((t) => t.tiempoOriginal))
   })
 })
 
