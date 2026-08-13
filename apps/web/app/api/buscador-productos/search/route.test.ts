@@ -13,13 +13,6 @@ vi.mock('@ph/shared', async (importOriginal) => ({
   countRawPending: vi.fn().mockResolvedValue(0),
   getRawNicheStatus: vi.fn().mockResolvedValue({ id: 'acne', status: 'active' }),
   upsertRawNiche: vi.fn().mockResolvedValue(undefined),
-  markSeen: vi.fn().mockResolvedValue(undefined),
-}))
-
-vi.mock('@/lib/product-hunter/session', () => ({
-  readUserId: vi.fn().mockResolvedValue('user-1'),
-  newUserId: () => 'user-nuevo',
-  PH_USER_COOKIE: 'ph_uid',
 }))
 
 vi.mock('@/lib/product-hunter/entry', () => ({
@@ -30,7 +23,7 @@ import { NextRequest } from 'next/server'
 import { POST } from './route'
 import {
   getApprovedByBucket, getApprovedByCategory, getNichesWithInventory,
-  countApproved, markSeen, type RawBucket,
+  countApproved, type RawBucket,
 } from '@ph/shared'
 
 const req = (body: unknown) =>
@@ -94,13 +87,30 @@ describe('POST /api/buscador-productos/search — un rango a la vez', () => {
     expect(data.groups[0].bucket).toBe('100+')
   })
 
-  it('marca como vistos SOLO los del rango servido, no los 30 de los tres', async () => {
-    conStock({ '100+': 3, '50-100': 5, '0-50': 7 })
-    await POST(req({ niche: 'acne' }))
+  // Reemplaza al viejo test de `markSeen`: ya no hay economía del visto, así que
+  // lo que hay que sostener es lo contrario — la misma consulta devuelve lo
+  // mismo, sin cookie ni estado por usuario.
+  it('la misma consulta dos veces devuelve exactamente lo mismo', async () => {
+    conStock({ '100+': 3 })
+    const a = await (await POST(req({ niche: 'acne' }))).json()
+    const b = await (await POST(req({ niche: 'acne' }))).json()
 
-    expect(vi.mocked(markSeen)).toHaveBeenCalledWith('user-1', [
-      'acne:p100+0', 'acne:p100+1', 'acne:p100+2',
-    ])
+    expect(b.groups[0].products).toEqual(a.groups[0].products)
+    expect(vi.mocked(getApprovedByBucket).mock.calls[0]).toEqual(
+      vi.mocked(getApprovedByBucket).mock.calls[1],
+    )
+  })
+
+  it('no setea cookie de usuario: el serving no es personalizado', async () => {
+    conStock({ '100+': 1 })
+    const res = await POST(req({ niche: 'acne' }))
+    expect(res.cookies.getAll()).toHaveLength(0)
+  })
+
+  it('pide 50 productos por rango (la UI los pagina de a 10)', async () => {
+    conStock({ '100+': 3 })
+    await POST(req({ niche: 'acne' }))
+    expect(vi.mocked(getApprovedByBucket).mock.calls[0][2]).toBe(50)
   })
 })
 
@@ -145,12 +155,17 @@ describe('POST /api/buscador-productos/search — por categoría', () => {
     expect(data.total).toBe(0)
   })
 
-  it('sin stock en ningún rango: empty, y no marca nada como visto', async () => {
+  it('sin stock en ningún rango: empty', async () => {
     conStockCat({})
     const data = await (await POST(req({ category: 'mascotas' }))).json()
-
     expect(data.status).toBe('empty')
-    expect(vi.mocked(markSeen)).not.toHaveBeenCalled()
+  })
+
+  it('pide 50 productos de la categoría', async () => {
+    conStockCat({ '100+': 50 })
+    const data = await (await POST(req({ category: 'mascotas' }))).json()
+    expect(vi.mocked(getApprovedByCategory).mock.calls[0][2]).toBe(50)
+    expect(data.total).toBe(50)
   })
 
   it('categoría inválida: cae al path por nicho', async () => {

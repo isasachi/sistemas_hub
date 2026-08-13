@@ -26,6 +26,19 @@ describe('lista negra de no-físicos', () => {
     expect(isPhysicalEnough('Faja moldeadora', 'Disneyland Fajas')).toBe(true)
   })
 
+  // Estos no encabezaban nada — poblaban la COLA, y salieron a la luz al pasar
+  // de mostrar 10 productos por rango a mostrar 50 paginados.
+  it('bloquea bancos, telcos y universidades, que nunca envían una caja', () => {
+    expect(nonPhysicalSignal('Abre tu cuenta', 'Banco Plata')?.cluster).toBe('servicio')
+    expect(nonPhysicalSignal('Protege tu auto', 'Seguros SURA Colombia')?.cluster).toBe('servicio')
+    expect(nonPhysicalSignal('Estudia con nosotros', 'UPN Posgrado')?.cluster).toBe('servicio')
+    expect(nonPhysicalSignal('Plan ilimitado', 'Claro Colombia')?.cluster).toBe('servicio')
+    expect(nonPhysicalSignal('Ofertas', 'plazaVea')?.cluster).toBe('marketplace')
+    // ⚠️ Por esto las telcos van ancladas al inicio: con \b, "claro" se llevaba
+    // puesto a un suplemento real.
+    expect(isPhysicalEnough('Respira mejor', 'Suplemento Aire Claro')).toBe(true)
+  })
+
   it('deja pasar productos físicos que MENCIONAN a un médico o un tratamiento', () => {
     // El error caro: una crema real citando a una dermatóloga.
     expect(isPhysicalEnough('Una dermatóloga lo explica ✅', 'Auré Profesional')).toBe(true)

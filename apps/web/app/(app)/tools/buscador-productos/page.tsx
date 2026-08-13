@@ -10,6 +10,9 @@ import {
 
 const ACCENT = "#ff9b4a";
 
+// La respuesta trae 50 productos por rango y se muestran de a 10.
+const POR_PAGINA = 10;
+
 // Chip: mismo botón para las sugerencias de nicho y para el filtro de rango.
 // `busy` pinta el spinner del chip que se acaba de clickear; `disabled` apaga
 // al resto mientras carga — sin barra de búsqueda, un click ignorado en
@@ -32,6 +35,29 @@ function Chip({ label, active, busy, disabled, onClick }: {
       }
     >
       {busy && <Loader2 className="w-3 h-3 animate-spin" />}
+      {label}
+    </button>
+  );
+}
+
+// Botón de la paginación. Aparte del Chip: es cuadrado, más chico y el activo
+// se pinta relleno, no con borde.
+function PageBtn({ label, active, disabled, title, onClick }: {
+  label: string; active?: boolean; disabled?: boolean; title?: string; onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      aria-current={active ? "page" : undefined}
+      className="min-w-[30px] h-[30px] px-2 text-[12px] font-bold rounded-lg border transition-colors disabled:opacity-30"
+      style={
+        active
+          ? { borderColor: ACCENT, color: "#0b0b12", background: ACCENT }
+          : { borderColor: "rgba(255,255,255,0.12)", color: "#cfcfcf" }
+      }
+    >
       {label}
     </button>
   );
@@ -88,6 +114,10 @@ export default function BuscadorProductosPage() {
   // ninguna llamada para pintarlos.
   const [sel, setSel] = useState<CategoryId | null>(null);
   const [expandido, setExpandido] = useState(false);
+  // Página dentro del rango servido. Se resetea en `search`, que es por donde
+  // pasan TANTO el cambio de categoría como el de rango — quedarse en la página
+  // 4 al cambiar de chip mostraría el final de una lista que recién llega.
+  const [pagina, setPagina] = useState(0);
 
   // Lo más pautado del rango más alto, de todos los nichos. Se refresca solo:
   // la ruta lee en vivo lo que el daemon de vigencia acaba de escribir.
@@ -105,6 +135,7 @@ export default function BuscadorProductosPage() {
     if (loading) return;
     setLoading(true);
     setError(null);
+    setPagina(0);
     // Cambiar de RANGO no borra lo que hay en pantalla: si se limpiara, el filtro
     // desaparecería a media transición y no habría dónde volver a hacer click.
     // Cambiar de CATEGORÍA sí limpia.
@@ -141,6 +172,7 @@ export default function BuscadorProductosPage() {
   // El rango activo lo dicta la respuesta, no el click: sin filtro explícito el
   // servidor autoelige, y el chip encendido tiene que ser el que de verdad salió.
   const grupo = result?.status === "ready" ? result.groups[0] : undefined;
+  const paginas = Math.ceil((grupo?.products.length ?? 0) / POR_PAGINA);
 
   return (
     <ToolShell name="Buscador de Productos" slug="buscador-productos">
@@ -267,15 +299,47 @@ export default function BuscadorProductosPage() {
               <>
                 <div className="flex items-baseline gap-2.5 mb-3">
                   <h2 className="text-[15px] font-extrabold text-[#ededed]">{grupo.label}</h2>
-                  <span className="text-[12px] text-[#bebebe]">{grupo.products.length} productos</span>
+                  <span className="text-[12px] text-[#bebebe]">
+                    {grupo.products.length} productos
+                    {paginas > 1 && ` · página ${pagina + 1} de ${paginas}`}
+                  </span>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {grupo.products.map((p) => <ProductCard key={p.id} p={p} />)}
+                  {grupo.products
+                    .slice(pagina * POR_PAGINA, (pagina + 1) * POR_PAGINA)
+                    .map((p) => <ProductCard key={p.id} p={p} />)}
                 </div>
+
+                {/* La respuesta ya trae las 50: pasar de página no vuelve a pegarle
+                    a la API. Números en vez de "cargar más" — así se puede volver. */}
+                {paginas > 1 && (
+                  <nav className="flex items-center justify-center gap-1.5 mt-6" aria-label="Paginación">
+                    <PageBtn
+                      label="‹"
+                      title="Anterior"
+                      disabled={pagina === 0}
+                      onClick={() => setPagina((p) => p - 1)}
+                    />
+                    {Array.from({ length: paginas }, (_, i) => (
+                      <PageBtn
+                        key={i}
+                        label={String(i + 1)}
+                        active={i === pagina}
+                        onClick={() => setPagina(i)}
+                      />
+                    ))}
+                    <PageBtn
+                      label="›"
+                      title="Siguiente"
+                      disabled={pagina === paginas - 1}
+                      onClick={() => setPagina((p) => p + 1)}
+                    />
+                  </nav>
+                )}
               </>
             ) : (
               <p className="text-[13px] text-[#cfcfcf]">
-                Este nicho no tiene productos en el rango <span className="text-[#ededed]">{grupo.label}</span>.
+                Esta categoría no tiene productos en el rango <span className="text-[#ededed]">{grupo.label}</span>.
                 Prueba otro rango.
               </p>
             )}
