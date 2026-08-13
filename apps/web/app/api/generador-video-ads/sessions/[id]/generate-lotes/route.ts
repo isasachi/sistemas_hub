@@ -27,7 +27,13 @@ async function saveRescue(id: string, lotes: Lote[]) {
     // que una sesión que se está re-renderizando (`generate-lotes` volvió a tocar
     // `lotes` tras un `render_done: true` de una vuelta anterior) se quede mostrando
     // "listo" en el dashboard mientras el nuevo intento sigue en curso.
-    await updateVideoSession(id, { step: STEP.LOTES, lotes, duration: totalDuration(lotes), render_done: renderDone(lotes) })
+    // `Math.round`: la columna `duration` es `int` en Postgres y las duraciones dejaron
+    // de ser enteras cuando `repairCutTiming` empezó a repartir décimas entre los cortes
+    // (un guión real sumó 46.8). Sin redondear, Postgres rechaza la fila entera con
+    // "invalid input syntax for type integer" y el render no arranca. Redondear y no
+    // migrar la columna a numeric es deliberado: nadie lee este campo, es un resumen
+    // para el dashboard, y la décima de segundo no significa nada ahí.
+    await updateVideoSession(id, { step: STEP.LOTES, lotes, duration: Math.round(totalDuration(lotes)), render_done: renderDone(lotes) })
   } catch (err) {
     console.error(
       // Con el id de sesión: un mp4 recuperado a mano desde KIE hay que devolvérselo a
@@ -237,7 +243,10 @@ export async function POST(
   // alcance angosto (no cubre reintentos sobre una sesión ya tocada, aunque haya
   // fallado por completo la primera vez).
   if (!reanuda && wasVirgin) {
-    const claimed = await claimFreshLotes(id, { step: STEP.LOTES, lotes: seed, duration: totalDuration(seed), render_done: renderDone(seed) })
+    // Mismo `Math.round` que en `saveRescue`, por el mismo motivo (columna `int`). Acá
+    // se notó primero: el claim corre ANTES de crear ninguna tarea, así que el fallo
+    // salía como 500 sin haber gastado nada.
+    const claimed = await claimFreshLotes(id, { step: STEP.LOTES, lotes: seed, duration: Math.round(totalDuration(seed)), render_done: renderDone(seed) })
     if (!claimed) {
       return NextResponse.json(
         { error: 'Esta sesión ya tiene un render en curso o parcialmente completado. Reanúdalo en vez de reiniciar.' },

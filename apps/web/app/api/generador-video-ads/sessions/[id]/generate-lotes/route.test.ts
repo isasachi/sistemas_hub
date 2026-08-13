@@ -127,6 +127,36 @@ describe('POST generate-lotes — fix round 2: cuota por video, no por lote', ()
     vi.mocked(createVideoTask).mockImplementation(async () => `task-${Math.random()}`)
   })
 
+  // Regresión real: `duration` es una columna `int` en Postgres, y cuando
+  // `repairCutTiming` empezó a repartir décimas entre los cortes las duraciones dejaron
+  // de sumar entero (un guión real dio 46.8). Postgres rechazaba la fila con "invalid
+  // input syntax for type integer" y el render moría en el claim, ANTES de crear
+  // ninguna tarea — 500 opaco en el navegador. Los dos sitios que escriben la columna
+  // tienen que mandar un entero.
+  it('escribe `duration` como ENTERO aunque las tomas sumen décimas', async () => {
+    const conDecimales = {
+      ...ADAPTED_2_LOTES,
+      tomas: [
+        { ...ADAPTED_2_LOTES.tomas[0], duracionSeg: 2.9 },
+        { ...ADAPTED_2_LOTES.tomas[1], duracionSeg: 11.9 },
+      ],
+    }
+    vi.mocked(getVideoSession).mockResolvedValue(session({ adapted: conDecimales } as never))
+
+    const res = await POST(req(), ctx())
+    expect(res.status).toBe(200)
+
+    const escrituras = [
+      ...vi.mocked(claimFreshLotes).mock.calls.map((c) => c[1]),
+      ...vi.mocked(updateVideoSession).mock.calls.map((c) => c[1]),
+    ].filter((p) => p && 'duration' in p)
+
+    expect(escrituras.length).toBeGreaterThan(0)
+    for (const patch of escrituras) {
+      expect(Number.isInteger((patch as { duration: number }).duration)).toBe(true)
+    }
+  })
+
   it('un guión de 2 lotes cobra UNA sola video-generation, no una por lote', async () => {
     vi.mocked(getVideoSession).mockResolvedValue(session())
 
