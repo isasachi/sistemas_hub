@@ -4,13 +4,17 @@ import { useState } from 'react'
 import { useVideoStore } from '@/store/video'
 import type { ScriptTemplate } from '@/lib/video-ads/types'
 import { STEP } from '@/lib/video-ads/steps'
-import { btnPrimary, btnGhost, errorBox, spinner, seg } from './shared'
+import { btnPrimary, btnGhost, errorBox, warnBox, spinner, seg } from './shared'
 
 // Muestra los tres artefactos de la FASE 1-2: el guión literal del original, los
 // cortes detectados y el guión convertido a Fill in the Blank. El usuario tiene que
 // poder ver QUÉ se conservó del original — es la promesa del sistema de plantillas.
 export default function Section4Template() {
   const { sessionId, forensicAnalysis, template, patch, setLoading, isLoading } = useVideoStore()
+  // Tomas donde el andamiaje de la plantilla dejó de ser copia literal del corte. No es
+  // fatal (la locución se conserva), pero sí significa que en esas tomas no se pudo
+  // corregir el nombre de los huecos y que el guión puede haberse desviado del original.
+  const [desalineadas, setDesalineadas] = useState<number[]>([])
   const [error, setError] = useState<string | null>(null)
 
   async function extract() {
@@ -18,9 +22,10 @@ export default function Section4Template() {
     setLoading(true); setError(null)
     try {
       const res = await fetch(`/api/generador-video-ads/sessions/${sessionId}/extract-template`, { method: 'POST' })
-      const data = (await res.json()) as { template?: ScriptTemplate; error?: string }
+      const data = (await res.json()) as { template?: ScriptTemplate; desalineadas?: number[]; error?: string }
       if (!res.ok) throw new Error(data.error ?? 'No se pudo extraer la plantilla')
       patch({ template: data.template! })
+      setDesalineadas(data.desalineadas ?? [])
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -66,6 +71,15 @@ export default function Section4Template() {
 
   return (
     <div className="flex flex-col gap-5">
+      {!!desalineadas.length && (
+        <div className={warnBox}>
+          {desalineadas.length === 1
+            ? `En la toma ${desalineadas[0]} la plantilla no copió el guión palabra por palabra`
+            : `En ${desalineadas.length} tomas (${desalineadas.join(', ')}) la plantilla no copió el guión palabra por palabra`}
+          {' '}— revísalas abajo contra el original, o vuelve a extraer. Pasa sobre todo en
+          videos sin cortes, donde una sola toma trae el guión entero.
+        </div>
+      )}
       {card('Guión convertido a Fill in the Blank', (
         <p className="whitespace-pre-wrap text-[12.5px] leading-relaxed text-[#cfcfcf]">
           {template.guionFillInBlank}

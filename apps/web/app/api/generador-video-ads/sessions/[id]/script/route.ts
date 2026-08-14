@@ -17,14 +17,28 @@ export const runtime = 'nodejs'
  * variable por variable, que es justo lo que el spec prohíbe, y no dejaba tocar el resto
  * de la frase cuando el modelo elegía un valor que no concordaba).
  *
- * El tope por línea es generoso pero existe: la locución viaja dentro del prompt de
- * lote, que tiene presupuesto de caracteres (`KIE_PROMPT_MAX`), y la duración de la toma
- * está fija — una línea kilométrica se paga allá, en audio cortado a mitad de frase.
+ * ⚠️ El tope por línea NO puede dimensionarse pensando en una toma "normal". Un video de
+ * referencia SIN CORTES —una sola toma continua de cámara, que en UGC de cabeza parlante
+ * es de lo más común— produce UN corte, UNA toma y por tanto UNA línea con el guión
+ * entero. Caso real: 33 s de toma continua dieron 706 caracteres en una sola locución, el
+ * tope estaba en 600, y el usuario no pudo guardar ediciones que ya había escrito. Peor:
+ * el error salía como "Ediciones inválidas" a secas, porque el `catch` del parse colapsa
+ * todas las causas en un mismo string y hay que leer los logs del servidor para saber qué
+ * pasó.
+ *
+ * `MAX_LINEA` se dimensiona contra ese caso: el guión completo de una referencia larga.
+ * A ~20 caracteres por segundo (el techo de habla de `CPS_MAX`), un minuto entero de
+ * locución son ~1200 caracteres; 2500 deja holgura de sobra sin volverse ilimitado. El
+ * presupuesto de KIE no lo administra este tope sino `buildLotePrompt`, que degrada por
+ * niveles, y una toma de más de 15 s la parte `splitLongToma` antes de llegar allá.
  */
+const MAX_LINEA = 2500
+const MAX_LINEAS = 200
+
 const EditsSchema = z.object({
   // `indice` es la POSICIÓN en `adapted.tomas`, no `toma.n`: el `n` lo hereda el forense
   // y nada garantiza que sea único (ver `applyScriptEdits`).
-  locuciones: z.array(z.object({ indice: z.number().int().min(0), texto: z.string().max(600) })).max(200),
+  locuciones: z.array(z.object({ indice: z.number().int().min(0), texto: z.string() })),
 })
 
 export async function POST(
@@ -37,8 +51,26 @@ export async function POST(
   try {
     body = EditsSchema.parse(await req.json())
   } catch {
-    return NextResponse.json({ error: 'Ediciones inválidas' }, { status: 400 })
+    return NextResponse.json({ error: 'No se entendió el formato de las ediciones.' }, { status: 400 })
   }
+
+  // Los topes se comprueban acá y no en el schema para poder decir CUÁL línea y POR
+  // CUÁNTO se pasa: un `.max()` de zod colapsa cualquier motivo en un mismo mensaje, y
+  // eso fue exactamente lo que dejó al usuario sin saber por qué no podía guardar.
+  if (body.locuciones.length > MAX_LINEAS)
+    return NextResponse.json(
+      { error: `El guión tiene ${body.locuciones.length} líneas y el máximo es ${MAX_LINEAS}.` },
+      { status: 400 },
+    )
+  const larga = body.locuciones.find((l) => l.texto.length > MAX_LINEA)
+  if (larga)
+    return NextResponse.json(
+      {
+        error: `La línea de la toma ${larga.indice + 1} tiene ${larga.texto.length} caracteres y el máximo es ${MAX_LINEA}. `
+          + `Recórtala en ${larga.texto.length - MAX_LINEA} caracteres.`,
+      },
+      { status: 400 },
+    )
 
   const session = await getVideoSession(id)
   if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 })

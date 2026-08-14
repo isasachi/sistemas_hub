@@ -100,7 +100,10 @@ export async function POST(
 
     await updateVideoSession(id, { step: STEP.TEMPLATE, template })
     await recordGenQuota(id, 'video-template', userId)
-    return NextResponse.json({ template })
+    // `desalineadas` viaja al cliente: es la señal de que la FASE 2 dejó de copiar el
+    // guión literal, y hasta ahora solo se veía en los logs del servidor. Quien puede
+    // hacer algo al respecto (re-extraer, o corregir a mano) es el usuario.
+    return NextResponse.json({ template, desalineadas: reporte.desalineadas })
   } catch (err) {
     console.error('[video-ads/extract-template]', err)
     return NextResponse.json({ error: 'No se pudo extraer la plantilla.' }, { status: 500 })
