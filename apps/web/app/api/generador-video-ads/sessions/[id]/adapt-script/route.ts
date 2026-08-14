@@ -101,6 +101,7 @@ export async function POST(
               .filter((sl) => limpios[sl.id])
               .map((sl) => ({ id: sl.id, valor: limpios[sl.id], contexto: sl.contexto })),
             inputs,
+            session.product_scan,
           ),
         },
       ])

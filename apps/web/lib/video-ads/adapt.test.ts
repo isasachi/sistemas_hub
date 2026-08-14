@@ -36,15 +36,31 @@ describe('buildAdaptInstruction', () => {
 
 
 
-  // Caso real: el usuario dio solo "Suero de niacinamida" y el guión salió afirmando
-  // que contiene PHE-resorcinol y agua termal de La Roche-Posay — la fórmula de otra
-  // marca, sacada de la memoria del modelo. Una declaración falsa de composición
-  // nombrando a un competidor, en un anuncio que se publica.
-  it('prohíbe inventar ingredientes y marcas, con el caso real como ejemplo', () => {
+  // La regla sigue: no se inventa lo que no está en los inputs. Lo que se corrigió es su
+  // justificación — el ejemplo que citaba (PHE-resorcinol) resultó ser un dato CORRECTO
+  // que el modelo leyó de la etiqueta del propio producto del usuario, no una invención.
+  it('prohíbe inventar lo que no está en los inputs', () => {
     expect(p).toMatch(/no inventes/i)
-    expect(p).toContain('PHE-resorcinol')
-    expect(p).toMatch(/marca/i)
     expect(p).toMatch(/conocimiento del mundo NO es una fuente/i)
+  })
+
+  // El hallazgo que corrigió el dueño del repo: la etiqueta es la fuente más autorizada
+  // que existe sobre el producto, y durante un tiempo se leía de la foto, se guardaba y
+  // no llegaba a esta fase — 11 huecos pendientes cuya respuesta estaba en la base.
+  it('pasa el texto de la etiqueta como fuente, y manda adaptarlo, no pegarlo', () => {
+    const conEtiqueta = buildAdaptInstruction(
+      TEMPLATE, FORENSIC, INPUTS,
+      { productDescription: 'Frasco púrpura con gotero', brandingDescription: 'NIACINAMIDA PURA, PHE-RESORCINOL' } as never,
+      extractSlots(TEMPLATE),
+    )
+    expect(conEtiqueta).toContain('TEXTO DE LA ETIQUETA')
+    expect(conEtiqueta).toContain('PHE-RESORCINOL')
+    expect(conEtiqueta).toMatch(/LA ETIQUETA DEL PRODUCTO SÍ CUENTA COMO FUENTE/)
+    expect(conEtiqueta).toMatch(/se ADAPTA, no se pega/)
+  })
+
+  it('sin etiqueta leída, no inventa la sección', () => {
+    expect(p).not.toContain('TEXTO DE LA ETIQUETA')
   })
 
 
