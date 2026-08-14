@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractSlots, fillTemplate, validateTemplate, assembleTemplate, rejectBadValues, alignSlots, normalizeSlots } from './fill'
+import { extractSlots, fillTemplate, validateTemplate, assembleTemplate, rejectBadValues, alignSlots, normalizeSlots, resolveSlotId } from './fill'
 import type { ScriptTemplate } from './template'
 
 // Plantilla recortada del caso real (serum Apivita → suero de niacinamida). Trae los
@@ -377,5 +377,44 @@ describe('assembleTemplate', () => {
     const t = assembleTemplate(DRAFT, [])
     expect(t.tomas).toEqual([])
     expect(validateTemplate(t)).toContain('no tiene tomas')
+  })
+})
+
+// El fallo más caro es el que se reporta como éxito: el corrector de coherencia devolvía
+// `situacion personal / edad / hito#1` (sin tilde) e `ingrediente 4` (sin `#1`), la
+// búsqueda exacta no encontraba nada, la corrección se aplicaba a NADA y el log decía
+// que se había aplicado.
+describe('resolveSlotId', () => {
+  const T5: ScriptTemplate = {
+    ...T,
+    tomas: [{
+      n: 1, duracionSeg: 5, accionVisual: 'a',
+      locucion: 'andas muy [situación personal / edad / hito] y tiene [ingrediente 4].',
+    }],
+  }
+  const slots = extractSlots(T5)
+
+  it('resuelve un id al que el modelo le comió las tildes', () => {
+    expect(resolveSlotId(slots, 'situacion personal / edad / hito#1'))
+      .toBe('situación personal / edad / hito#1')
+  })
+
+  it('resuelve un id sin el sufijo #n asumiendo la primera aparición', () => {
+    expect(resolveSlotId(slots, 'ingrediente 4')).toBe('ingrediente 4#1')
+  })
+
+  it('tolera mayúsculas y espacios de más', () => {
+    expect(resolveSlotId(slots, '  INGREDIENTE   4#1  ')).toBe('ingrediente 4#1')
+  })
+
+  // Devolver null en vez de un id cualquiera: el caller lo reporta en vez de tragárselo.
+  it('devuelve null si no hay hueco que coincida', () => {
+    expect(resolveSlotId(slots, 'hueco inventado#1')).toBeNull()
+  })
+
+  it('no confunde el hueco 2 con el 1 cuando el nombre se repite', () => {
+    const dos = extractSlots({ ...T, tomas: [{ n: 1, duracionSeg: 5, accionVisual: 'a', locucion: '[x] y [x]' }] })
+    expect(resolveSlotId(dos, 'x#2')).toBe('x#2')
+    expect(resolveSlotId(dos, 'x')).toBe('x#1')
   })
 })

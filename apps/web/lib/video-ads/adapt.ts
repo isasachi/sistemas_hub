@@ -37,6 +37,31 @@ export const SlotValuesSchema = z.object({
 })
 export type SlotValues = z.infer<typeof SlotValuesSchema>
 
+/**
+ * Segunda pasada de la FASE 3: releer el guión YA ARMADO y corregir los valores que no
+ * encajan en su frase.
+ *
+ * Existe porque la primera pasada juzga a ciegas. El modelo devuelve pares `id → valor`
+ * y el guión lo ensambla `fillTemplate` con código, así que nunca lee el resultado: mide
+ * cada valor contra la ETIQUETA del hueco, no contra la oración que queda. Con eso, en
+ * dos pruebas reales, salieron valores que respondían bien a su etiqueta y mal a su
+ * frase — un adjetivo pedido donde se volcó una oración entera, un ingrediente pedido
+ * donde se puso un beneficio, una cantidad pedida donde se puso un momento del día.
+ *
+ * Devuelve SOLO correcciones de valores, nunca texto de locución. Si pudiera devolver la
+ * frase, alguien terminaría usándola y se perdería en silencio la fidelidad del 100%
+ * fuera de los corchetes, que es lo único que este diseño garantiza por construcción.
+ */
+export const CoherenceSchema = z.object({
+  correcciones: z.array(z.object({
+    id: z.string(),
+    /** Valor nuevo. VACÍO = borrar el valor: el hueco queda pendiente y lo escribe el usuario. */
+    valor: z.string(),
+    motivo: z.string(),
+  })),
+})
+export type Coherence = z.infer<typeof CoherenceSchema>
+
 export const TomaFinalSchema = z.object({
   n: z.number(),
   tiempoOriginal: z.string(),
@@ -245,6 +270,83 @@ export function buildAdaptInstruction(
     'TEXTO EN PANTALLA: NINGUNO. Ni captions, ni subtítulos, ni overlays, ni watermarks.',
     'Solo puede aparecer texto físicamente impreso en el producto o en objetos reales del',
     'escenario. No agregues ningún campo de texto en pantalla.',
+    '',
+    'Todo el output va en español.',
+  ].filter(Boolean).join('\n')
+}
+
+/**
+ * Prompt de la segunda pasada. Recibe el guión ya armado por código y la tabla de qué
+ * valor ocupó cada hueco.
+ *
+ * ⚠️ NO trae ejemplos con forma de frase rellenada. Los defectos se enuncian por
+ * CATEGORÍA, no mostrando oraciones rotas. La razón está documentada en `fill.ts`: la
+ * primera versión del prompt de esta fase incluía un "así salió mal" con forma de valor
+ * y el modelo lo copió literal como valor. Acá el artefacto bajo revisión ES una frase
+ * rellenada, así que un ejemplo con esa forma sería todavía más fácil de copiar.
+ */
+export function buildCoherenceInstruction(
+  tomas: { n: number; locucion: string }[],
+  valores: { id: string; valor: string; contexto: string }[],
+  inputs: UserInputs,
+): string {
+  return [
+    'Eres un corrector de estilo. Abajo hay un guión publicitario en español al que ya se',
+    'le rellenaron los huecos, y la tabla de qué valor se puso en cada uno.',
+    '',
+    'TU ÚNICO TRABAJO: leerlo EN VOZ ALTA mentalmente, frase por frase, y devolver los',
+    'valores que NO encajan. Nada más. No reescribas el guión: el texto de alrededor de',
+    'cada hueco es intocable y se copia con código — si devuelves una frase, se descarta.',
+    '',
+    '── GUIÓN ARMADO, tal como se leería ──',
+    ...tomas.map((t) => `  Toma ${t.n}: ${t.locucion}`),
+    '',
+    '── QUÉ VALOR OCUPÓ CADA HUECO ──',
+    ...valores.map((v) => `  ${v.id} = "${v.valor}"     en: ${v.contexto}`),
+    '',
+    '── QUÉ CUENTA COMO "NO ENCAJA" ──',
+    'Cuatro categorías. Todas se detectan leyendo la frase completa, no la etiqueta:',
+    '',
+    '  1. LA FRASE SE ROMPE GRAMATICALMENTE. Concordancia de género o número, o un verbo',
+    '     que no rige lo que se le puso delante. Si al leerlo suena a traducción rota,',
+    '     está mal.',
+    '  2. EL VALOR NO ES DE LA CLASE QUE PIDE EL VERBO. "tiene ___" pide una cosa que el',
+    '     producto contiene, no un efecto que produce. "con solo tomar ___" pide una',
+    '     cantidad o una dosis, no un momento del día. "andas muy ___" pide un adjetivo,',
+    '     no una oración. Fíjate en qué exige el verbo que va antes del hueco.',
+    '  3. SE VOLCÓ UN INPUT CRUDO. Los datos del usuario están redactados como notas',
+    '     ("No puedo dormir por las noches"), no como parte de una frase. Meterlos tal',
+    '     cual donde la oración pedía una palabra deja el guión ilegible: hay que',
+    '     adaptarlos a la forma que la frase pide.',
+    '  4. EL VALOR REPITE PALABRAS QUE YA ESTÁN A SU LADO, o arrastra puntuación que',
+    '     duplica la de la frase.',
+    '',
+    '── CÓMO CORREGIR ──',
+    'Para cada hueco que falle, devuelve su `id`, el `valor` nuevo y el `motivo` (corto).',
+    'Los huecos que están bien NO se devuelven.',
+    '',
+    '⚠️ DEJAR EL HUECO VACÍO ES UNA CORRECCIÓN VÁLIDA Y A MENUDO LA CORRECTA.',
+    'Devuelve `valor` como cadena vacía cuando en los INPUTS no haya con qué rellenarlo.',
+    'Si la frase pide un ingrediente y el usuario nunca dijo qué ingredientes tiene su',
+    'producto, NO inventes uno que suene creíble: vacíalo. El hueco queda marcado y lo',
+    'escribe el usuario, que sí lo sabe. Un ingrediente inventado en un anuncio que se',
+    'publica es una declaración falsa de composición; un hueco vacío es solo un pendiente.',
+    '',
+    'El valor corregido sigue siendo CORTO —una palabra o un sintagma— y sustituye solo lo',
+    'que estaba entre corchetes: las palabras vecinas ya están escritas.',
+    '',
+    '── LO ÚNICO QUE PUEDES USAR PARA RELLENAR ──',
+    'Ojo: esto son NOTAS que escribió el usuario en un formulario, no texto listo para',
+    'pegar. Están redactadas en primera persona y como oraciones completas. Pegarlas tal',
+    'cual dentro de una frase que pedía una palabra es el error más frecuente de esta',
+    'fase: hay que extraer el dato y darle la forma que la oración exige.',
+    `  PRODUCTO: ${inputs.productName}`,
+    `  DESCRIPCIÓN: ${inputs.productDescription}`,
+    `  ÁNGULO: ${inputs.angle}`,
+    `  PÚBLICO: ${inputs.targetAudience}`,
+    `  PROBLEMA: ${inputs.problem}`,
+    inputs.constraints ? `  ADICIONAL: ${inputs.constraints}` : '',
+    'Nada que no esté en esa lista. Tu conocimiento del producto real no cuenta.',
     '',
     'Todo el output va en español.',
   ].filter(Boolean).join('\n')

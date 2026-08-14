@@ -140,7 +140,11 @@ export function rejectBadValues(
       [...ngramas(norm(v), 3)].some((g) => andamio.get(s.toma)?.has(g))
 
     if (malo) rechazados.push(s.id)
-    else limpios[s.id] = v
+    // La puntuación final se recorta acá y no se le pide al modelo: la frase ya trae la
+    // suya, y un valor que termina en punto produce ".." en el guión. Caso real:
+    // "andas muy cansada por las mañanas..". Es más fiable un `replace` que una regla
+    // de prompt que hay que acertar en cada pasada.
+    else limpios[s.id] = v.replace(/[.,;:]+$/, '').trim()
   }
   return { valores: limpios, rechazados }
 }
@@ -266,6 +270,28 @@ export function normalizeSlots(
   const template = { ...t, tomas, guionFillInBlank: tomas.map((x) => x.locucion).join(' ') }
   reporte.despues = extractSlots(template).length
   return { template, reporte }
+}
+
+/**
+ * Resuelve el id de hueco que devolvió un modelo contra los ids reales de la plantilla.
+ *
+ * Los ids llevan el nombre del hueco dentro (`situación personal / edad / hito#1`), y un
+ * modelo que los reescribe pierde detalles: en una corrida real devolvió
+ * `situacion personal / edad / hito#1` —sin tilde— y `ingrediente 4` —sin el `#1`—. Con
+ * una búsqueda exacta esas dos correcciones se aplicaban a NADA y el log decía que sí:
+ * el fallo más caro de todos, porque se reporta como éxito.
+ *
+ * Se compara normalizado (sin acentos, sin mayúsculas, espacios colapsados) y con `#1`
+ * por defecto cuando falta el sufijo. Devuelve `null` si no hay match, para que el
+ * caller pueda reportarlo en vez de tragárselo.
+ */
+export function resolveSlotId(slots: Slot[], id: string): string | null {
+  const clave = (x: string) => {
+    const t = x.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ')
+    return t.includes('#') ? t : `${t}#1`
+  }
+  const objetivo = clave(id)
+  return slots.find((s) => clave(s.id) === objetivo)?.id ?? null
 }
 
 export interface FilledTemplate {
