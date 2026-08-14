@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractSlots, fillTemplate, validateTemplate, assembleTemplate, rejectBadValues, alignSlots, normalizeSlots } from './fill'
+import { extractSlots, fillTemplate, validateTemplate, assembleTemplate, rejectBadValues, alignSlots, normalizeSlots, resolveSlotId, acceptScaffoldFix, acceptRewrite, slotOriginals } from './fill'
 import type { ScriptTemplate } from './template'
 
 // Plantilla recortada del caso real (serum Apivita → suero de niacinamida). Trae los
@@ -152,79 +152,20 @@ describe('alignSlots', () => {
   })
 })
 
-// Caso REAL: la FASE 2 marcó 17 huecos sobre 11 tomas, incluido un [Problema] sobre una
-// edad. El prompt ya pide moderación y ya nombra ese caso; se acota en código.
+// Lo único que queda acá es corregir nombres genéricos. El recorte por conteo que esto
+// hacía antes (desmarcar números, fusionar enumeraciones) se eliminó: iba en dirección
+// contraria a la plantilla de referencia, que marca la edad y numera los ingredientes.
 describe('normalizeSlots', () => {
   const tmpl = (locuciones: string[]): ScriptTemplate => ({
     ...T,
     tomas: locuciones.map((l, i) => ({ n: i + 1, locucion: l, accionVisual: 'a', duracionSeg: 5 })),
   })
 
-  it('desmarca un hueco cuyo original es un número: vuelve la palabra, no queda blanco', () => {
-    const { template, reporte } = normalizeSlots(
-      tmpl(['Si tú también estás casi a punto de entrar a los [Problema] como yo,']),
-      [{ n: 1, dialogo: 'Si tú también estás casi a punto de entrar a los 30 como yo,' }],
-    )
-    expect(template.tomas[0].locucion).toBe('Si tú también estás casi a punto de entrar a los 30 como yo,')
-    expect(reporte.desmarcados).toEqual(['30'])
-    expect(reporte.despues).toBe(0)
-  })
 
-  // Tres blancos que pedían tres datos se vuelven uno que pide una lista. No se pierde
-  // nada: la enumeración es una sola pieza de información.
-  it('fusiona una enumeración del mismo nombre en un solo hueco', () => {
-    const { template, reporte } = normalizeSlots(
-      tmpl(['Este [Producto] contiene [Ingrediente], [Ingrediente] y [Ingrediente].']),
-      [{ n: 1, dialogo: 'Este serum contiene ácido hialurónico, niacinamida y propóleo.' }],
-    )
-    expect(template.tomas[0].locucion).toBe('Este [Producto] contiene [Ingrediente].')
-    expect(reporte.fusionados).toBe(2)
-    expect(reporte.antes).toBe(4)
-    expect(reporte.despues).toBe(2)
-  })
 
-  // El hueco fusionado tiene que cubrir la lista ENTERA, no solo el primer elemento:
-  // si no, "niacinamida y propóleo" se quedarían literales en el anuncio de otro producto.
-  it('el hueco fusionado cubre la lista completa, comas y conjunción incluidas', () => {
-    const { template } = normalizeSlots(
-      tmpl(['Contiene [Ingrediente], [Ingrediente] y [Ingrediente].']),
-      [{ n: 1, dialogo: 'Contiene ácido hialurónico, niacinamida y propóleo.' }],
-    )
-    expect(fillTemplate(template, { 'Ingrediente#1': 'X e Y' }).tomas[0].locucion).toBe('Contiene X e Y.')
-  })
 
-  it('no fusiona dos huecos del mismo nombre separados por texto real', () => {
-    const { template, reporte } = normalizeSlots(
-      tmpl(['Este es el [Producto] de la marca [Producto].']),
-      [{ n: 1, dialogo: 'Este es el serum de la marca Apivita.' }],
-    )
-    // El segundo se renombra a [Marca] por lo que tiene delante — el punto del test es
-    // que siguen siendo DOS huecos, no que conserven la etiqueta.
-    expect(template.tomas[0].locucion).toBe('Este es el [Producto] de la marca [Marca].')
-    expect(reporte.fusionados).toBe(0)
-    expect(reporte.despues).toBe(2)
-  })
 
-  it('no fusiona huecos contiguos de nombres distintos', () => {
-    const { reporte } = normalizeSlots(
-      tmpl(['Da [Beneficio] y [Resultado].']),
-      [{ n: 1, dialogo: 'Da luminosidad y lifting.' }],
-    )
-    expect(reporte.fusionados).toBe(0)
-    expect(reporte.despues).toBe(2)
-  })
 
-  // La razón por la que la lista de universales son SOLO números: desmarcar deja la
-  // palabra original en el guión, y el guión termina siendo un anuncio publicado.
-  it('NUNCA desmarca un ingrediente o una marca para bajar el conteo', () => {
-    const { template, reporte } = normalizeSlots(
-      tmpl(['Contiene [Ingrediente] de la marca [Producto].']),
-      [{ n: 1, dialogo: 'Contiene propóleo de la marca Apivita.' }],
-    )
-    expect(template.tomas[0].locucion).toBe('Contiene [Ingrediente] de la marca [Marca].')
-    expect(reporte.desmarcados).toEqual([])
-    expect(reporte.despues).toBe(2)
-  })
 
   // Tres datos distintos con la misma etiqueta hacen que la FASE 3 les ponga el mismo
   // valor: "el suero de la marca suero y se llama suero". El prompt ya pide los tres
@@ -235,21 +176,21 @@ describe('normalizeSlots', () => {
       [{ n: 1, dialogo: 'Este es el serum antienvejecimiento de la marca Apivita y se llama Beevine Elixir.' }],
     )
     expect(template.tomas[0].locucion)
-      .toBe('Este es el [Producto] de la marca [Marca] y se llama [Nombre comercial].')
-    expect(reporte.renombrados).toEqual(['Producto → Marca', 'Producto → Nombre comercial'])
+      .toBe('Este es el [Producto] de la marca [nombre de la marca] y se llama [nombre del producto].')
+    expect(reporte.renombrados).toEqual(['Producto → nombre de la marca', 'Producto → nombre del producto'])
     // Y ahora cada hueco pide su propio dato en vez de tres veces el mismo.
     expect(fillTemplate(template, {
-      'Producto#1': 'suero', 'Marca#1': 'La Roche-Posay', 'Nombre comercial#1': 'Pure Niacinamide',
+      'Producto#1': 'suero', 'nombre de la marca#1': 'La Roche-Posay', 'nombre del producto#1': 'Pure Niacinamide',
     }).tomas[0].locucion)
       .toBe('Este es el suero de la marca La Roche-Posay y se llama Pure Niacinamide.')
   })
 
-  it('renombra también [Categoría del producto], que es igual de genérico ahí', () => {
+  it('renombra también los otros nombres genéricos del producto', () => {
     const { template } = normalizeSlots(
       tmpl(['de la marca [Categoría del producto].']),
       [{ n: 1, dialogo: 'de la marca Apivita.' }],
     )
-    expect(template.tomas[0].locucion).toBe('de la marca [Marca].')
+    expect(template.tomas[0].locucion).toBe('de la marca [nombre de la marca].')
   })
 
   // Un hueco que el modelo ya nombró bien no se toca: el respaldo solo pisa genéricos.
@@ -284,23 +225,7 @@ describe('normalizeSlots', () => {
     expect(template.tomas[0].locucion).toBe('Este [Producto] es bueno.')
   })
 
-  it('rehace el guión completo con las locuciones acotadas', () => {
-    const { template } = normalizeSlots(
-      tmpl(['A los [Problema] pasa esto.', 'Contiene [Ingrediente] y [Ingrediente].']),
-      [{ n: 1, dialogo: 'A los 30 pasa esto.' }, { n: 2, dialogo: 'Contiene agua y sal.' }],
-    )
-    expect(template.guionFillInBlank).toBe('A los 30 pasa esto. Contiene [Ingrediente].')
-  })
 
-  // Correr el acotado dos veces no puede seguir bajando el conteo: si lo hiciera, dos
-  // extracciones de la misma plantilla darían guiones distintos.
-  it('es idempotente', () => {
-    const cortes = [{ n: 1, dialogo: 'Contiene ácido hialurónico, niacinamida y propóleo, a los 30.' }]
-    const uno = normalizeSlots(tmpl(['Contiene [Ingrediente], [Ingrediente] y [Ingrediente], a los [Problema].']), cortes)
-    const dos = normalizeSlots(uno.template, cortes)
-    expect(dos.template.tomas[0].locucion).toBe(uno.template.tomas[0].locucion)
-    expect(dos.reporte.antes).toBe(dos.reporte.despues)
-  })
 })
 
 describe('fillTemplate', () => {
@@ -452,5 +377,318 @@ describe('assembleTemplate', () => {
     const t = assembleTemplate(DRAFT, [])
     expect(t.tomas).toEqual([])
     expect(validateTemplate(t)).toContain('no tiene tomas')
+  })
+})
+
+// El fallo más caro es el que se reporta como éxito: el corrector de coherencia devolvía
+// `situacion personal / edad / hito#1` (sin tilde) e `ingrediente 4` (sin `#1`), la
+// búsqueda exacta no encontraba nada, la corrección se aplicaba a NADA y el log decía
+// que se había aplicado.
+describe('resolveSlotId', () => {
+  const T5: ScriptTemplate = {
+    ...T,
+    tomas: [{
+      n: 1, duracionSeg: 5, accionVisual: 'a',
+      locucion: 'andas muy [situación personal / edad / hito] y tiene [ingrediente 4].',
+    }],
+  }
+  const slots = extractSlots(T5)
+
+  it('resuelve un id al que el modelo le comió las tildes', () => {
+    expect(resolveSlotId(slots, 'situacion personal / edad / hito#1'))
+      .toBe('situación personal / edad / hito#1')
+  })
+
+  it('resuelve un id sin el sufijo #n asumiendo la primera aparición', () => {
+    expect(resolveSlotId(slots, 'ingrediente 4')).toBe('ingrediente 4#1')
+  })
+
+  it('tolera mayúsculas y espacios de más', () => {
+    expect(resolveSlotId(slots, '  INGREDIENTE   4#1  ')).toBe('ingrediente 4#1')
+  })
+
+  // Devolver null en vez de un id cualquiera: el caller lo reporta en vez de tragárselo.
+  it('devuelve null si no hay hueco que coincida', () => {
+    expect(resolveSlotId(slots, 'hueco inventado#1')).toBeNull()
+  })
+
+  it('no confunde el hueco 2 con el 1 cuando el nombre se repite', () => {
+    const dos = extractSlots({ ...T, tomas: [{ n: 1, duracionSeg: 5, accionVisual: 'a', locucion: '[x] y [x]' }] })
+    expect(resolveSlotId(dos, 'x#2')).toBe('x#2')
+    expect(resolveSlotId(dos, 'x')).toBe('x#1')
+  })
+})
+
+// La ÚNICA excepción a la copia literal. Existe para las frases donde ningún valor cabe
+// ("andas muy ___" con un producto que no tiene adjetivo que poner), y solo sobre el
+// guión adaptado: la plantilla sigue siendo espejo del original.
+describe('acceptScaffoldFix', () => {
+  const ok = (r: ReturnType<typeof acceptScaffoldFix>) => r.ok
+  const motivo = (r: ReturnType<typeof acceptScaffoldFix>) => (r.ok ? '' : r.motivo)
+
+  // El caso real. Cambia 5 de 8 palabras: cualquier tope estricto de palabras lo
+  // rechazaría, y es justo el arreglo que esto viene a permitir.
+  it('acepta el arreglo mínimo que motivó la excepción', () => {
+    expect(ok(acceptScaffoldFix({
+      original: 'sobre todo si últimamente andas muy no puedo dormir por las noches',
+      propuesta: 'sobre todo si últimamente andas sin poder dormir por las noches',
+      valores: [],
+    }))).toBe(true)
+  })
+
+  it('rechaza una frase nueva disfrazada de ajuste', () => {
+    const r = acceptScaffoldFix({
+      original: 'sobre todo si últimamente andas muy no puedo dormir por las noches',
+      propuesta: 'descubre el secreto que miles de personas ya están probando hoy mismo',
+      valores: [],
+    })
+    expect(ok(r)).toBe(false)
+    expect(motivo(r)).toMatch(/palabras/)
+  })
+
+  // Los datos no se pueden perder: el ajuste toca el andamiaje, no el relleno.
+  it('rechaza el ajuste que se lleva por delante un valor ya rellenado', () => {
+    const r = acceptScaffoldFix({
+      original: 'Número uno, contiene melatonina, te ayuda a dormir',
+      propuesta: 'Número uno, te ayuda a dormir muy bien por la noche',
+      valores: ['melatonina'],
+    })
+    expect(ok(r)).toBe(false)
+    expect(motivo(r)).toContain('melatonina')
+  })
+
+  // Un pendiente lo escribe el usuario; no se resuelve por la puerta de atrás.
+  it('rechaza el ajuste que hace desaparecer un pendiente', () => {
+    const r = acceptScaffoldFix({
+      original: 'Número dos, tiene [PENDIENTE: ingrediente 2] que ayuda al descanso',
+      propuesta: 'Número dos, tiene valeriana que ayuda mucho al descanso',
+      valores: [],
+    })
+    expect(ok(r)).toBe(false)
+    expect(motivo(r)).toContain('PENDIENTE')
+  })
+
+  it('rechaza un ajuste que alarga o acorta demasiado', () => {
+    expect(motivo(acceptScaffoldFix({
+      original: 'andas muy cansada por las mañanas y no rindes',
+      propuesta: 'andas mal',
+      valores: [],
+    }))).toMatch(/largo/)
+  })
+
+  it('rechaza un ajuste que no cambia nada y uno vacío', () => {
+    const t = 'andas muy cansada'
+    expect(ok(acceptScaffoldFix({ original: t, propuesta: t, valores: [] }))).toBe(false)
+    expect(ok(acceptScaffoldFix({ original: t, propuesta: '   ', valores: [] }))).toBe(false)
+  })
+
+  it('rechaza el ajuste que mete marcadores nuevos', () => {
+    expect(motivo(acceptScaffoldFix({
+      original: 'Número uno, contiene melatonina para dormir mejor cada noche',
+      propuesta: 'Número uno, contiene melatonina y [otro] para dormir cada noche',
+      valores: ['melatonina'],
+    }))).toMatch(/marcadores/)
+  })
+})
+
+// El cambio de garantía CONSTRUCTIVA a VERIFICADA: el modelo redacta la frase (que es
+// como lo hace el spec, y por eso le salen bien las costuras) y el código mide si se
+// fue. Lo que no pasa cae al relleno determinista, que sigue siendo el piso.
+describe('acceptRewrite', () => {
+  const PLANTILLA = 'sobre todo si últimamente andas muy [situación personal] por las noches'
+  const PISO = 'sobre todo si últimamente andas muy no puedo dormir por las noches'
+  const base = { plantilla: PLANTILLA, piso: PISO, fuentes: ['no puedo dormir por las noches', 'cansada'] }
+
+  it('acepta la redacción que arregla la costura conservando el andamiaje', () => {
+    const r = acceptRewrite({ ...base, propuesta: 'sobre todo si últimamente andas muy cansada por las noches' })
+    expect(r.ok).toBe(true)
+  })
+
+  // El fallo que hizo abandonar este enfoque: el modelo escribía otro anuncio. Se medía
+  // 66-71% de fidelidad y no había forma de detectarlo; ahora cae al piso.
+  it('rechaza otro anuncio disfrazado de adaptación', () => {
+    const r = acceptRewrite({ ...base, propuesta: 'descubre hoy el secreto que miles de personas ya prueban' })
+    expect(r.ok).toBe(false)
+    expect(r.fidelidad).toBeLessThan(0.85)
+  })
+
+  // La reescritura es texto libre: no pasa por `rejectBadValues`. Caso real — afirmó que
+  // unas gomitas de melatonina llevan "vitamina B6", que no está en ningún dato.
+  it('rechaza la reescritura que afirma algo que no está en ninguna fuente', () => {
+    const r = acceptRewrite({
+      plantilla: 'Número dos, tiene [ingrediente 2] que también ayuda a [beneficio 2]',
+      piso: 'Número dos, tiene melatonina que también ayuda a dormir',
+      propuesta: 'Número dos, tiene vitamina B6 que también ayuda a dormir',
+      fuentes: ['gomitas de melatonina', 'Melatonin 10mg Per Serving'],
+    })
+    expect(r.ok).toBe(false)
+    expect(r.ok === false && r.motivo).toContain('vitamina')
+  })
+
+  // La flexión no es invención: la libertad gramatical es justo lo que esto viene a ganar.
+  it('no confunde una conjugación distinta con un dato inventado', () => {
+    const r = acceptRewrite({
+      plantilla: 'te [beneficio 1] a dormir',
+      piso: 'te ayuda a dormir',
+      propuesta: 'te ayudan a dormir',
+      fuentes: ['ayudar a dormir'],
+    })
+    expect(r.ok).toBe(true)
+  })
+
+  // `extractPending` bloquea el render; resolver un hueco por la puerta de atrás lo abre.
+  it('rechaza la reescritura que resuelve sola un pendiente', () => {
+    const r = acceptRewrite({
+      ...base,
+      piso: 'sobre todo si últimamente andas muy [PENDIENTE: situación personal] por las noches',
+      propuesta: 'sobre todo si últimamente andas muy cansada por las noches',
+    })
+    expect(r.ok).toBe(false)
+    expect(r.ok === false && r.motivo).toMatch(/pendiente/)
+  })
+
+  it('rechaza una reescritura vacía o que cambia mucho de largo', () => {
+    expect(acceptRewrite({ ...base, propuesta: '   ' }).ok).toBe(false)
+    expect(acceptRewrite({ ...base, propuesta: 'andas mal' }).ok).toBe(false)
+  })
+})
+
+// El eco es la firma de haber pegado un valor que ya traía las palabras de alrededor.
+// `rejectBadValues` lo vigila en los valores; la reescritura es texto libre y no pasa
+// por ahí. Caso real: "estás en mis veintitantos como yo como yo".
+describe('acceptRewrite — eco', () => {
+  it('rechaza la reescritura que repite un tramo dos veces seguidas', () => {
+    const r = acceptRewrite({
+      plantilla: 'Si tú también estás [situación personal] como yo,',
+      piso: 'Si tú también estás en mis veintitantos como yo,',
+      propuesta: 'Si tú también estás en mis veintitantos como yo como yo,',
+      fuentes: ['en mis veintitantos'],
+    })
+    expect(r.ok).toBe(false)
+    expect(r.ok === false && r.motivo).toContain('como yo')
+  })
+
+  it('no confunde una palabra repetida a distancia con un eco', () => {
+    expect(acceptRewrite({
+      plantilla: 'de día y de noche en [área] y en [área]',
+      piso: 'de día y de noche en cara y en cuello',
+      propuesta: 'de día y de noche en cara y en cuello',
+      fuentes: ['cara', 'cuello'],
+    }).ok).toBe(true)
+  })
+})
+
+// `al` = a+el y `del` = de+el. Cuando el hueco se lleva el artículo la contracción
+// desaparece y el modelo escribe la forma suelta — que es lo CORRECTO. Exigir copia
+// byte a byte lo leía como "no copió" y descartaba la toma. Caso real: 2 de 7 tomas.
+describe('alignSlots — contracciones', () => {
+  it('tolera "ayuda al X" ↔ "ayuda a [X]"', () => {
+    const r = alignSlots(
+      'Número dos, tiene aguaje, que también ayuda al equilibrio hormonal y a la salud del cabello.',
+      'Número dos, tiene [ingrediente 2], que también ayuda a [beneficio 1] y a la salud de [aspecto].',
+    )!
+    expect(r).not.toBeNull()
+    expect(r.huecos.map((h) => h.original)).toEqual(['aguaje', 'equilibrio hormonal', 'cabello'])
+  })
+
+  it('sigue rechazando una paráfrasis de verdad', () => {
+    expect(alignSlots('tiene aguaje que ayuda al cabello', 'tiene [x] que mejora a [y]')).toBeNull()
+  })
+})
+
+// El mismo nombre en dos huecos hace que la FASE 3 les ponga el mismo valor — el fallo
+// de los tres [Producto], reaparecido entre tomas.
+describe('normalizeSlots — nombres que colisionan', () => {
+  const tpl = (locs: string[]): ScriptTemplate => ({
+    ...T,
+    tomas: locs.map((l, i) => ({ n: i + 1, locucion: l, accionVisual: 'a', duracionSeg: 5 })),
+  })
+
+  it('numera por familia cuando el mismo nombre cubre datos distintos', () => {
+    const { template, reporte } = normalizeSlots(
+      tpl(['Te ayuda a [beneficio 1].', 'También ayuda a [beneficio 1].']),
+      [{ n: 1, dialogo: 'Te ayuda a dormir.' }, { n: 2, dialogo: 'También ayuda a descansar.' }],
+    )
+    expect(template.tomas[0].locucion).toBe('Te ayuda a [beneficio 1].')
+    expect(template.tomas[1].locucion).toBe('También ayuda a [beneficio 2].')
+    expect(reporte.numerados).toHaveLength(1)
+  })
+
+  // Si el texto original coincide, es el MISMO dato y las dos apariciones tienen que
+  // recibir la misma palabra: numerarlas produciría dos productos distintos.
+  it('NO numera cuando el original dice lo mismo en los dos huecos', () => {
+    const { template, reporte } = normalizeSlots(
+      tpl(['Este [tipo de producto] va bien.', 'Ese [tipo de producto] también.']),
+      [{ n: 1, dialogo: 'Este serum va bien.' }, { n: 2, dialogo: 'Ese serum también.' }],
+    )
+    expect(template.tomas[1].locucion).toContain('[tipo de producto]')
+    expect(reporte.numerados).toEqual([])
+  })
+
+  // Se agrupa por familia (el nombre sin su número) porque el modelo ya numera a veces,
+  // y mal: repetir `beneficio 1` es justo el defecto, así que saltarse los nombres con
+  // dígito lo dejaba pasar. Renumerar la familia evita chocar con un `beneficio 2` real.
+  it('renumera la familia entera sin chocar con un número ya usado', () => {
+    const { template } = normalizeSlots(
+      tpl(['Da [beneficio 1] y [beneficio 2].', 'Y también [beneficio 1].']),
+      [{ n: 1, dialogo: 'Da energía y vitalidad.' }, { n: 2, dialogo: 'Y también calma.' }],
+    )
+    const nombres = [...template.tomas.map((t) => t.locucion).join(' ').matchAll(/\[([^\]]+)\]/g)].map((m) => m[1])
+    expect(new Set(nombres).size).toBe(3)
+    expect(nombres).toEqual(['beneficio 1', 'beneficio 2', 'beneficio 3'])
+  })
+
+  it('una toma que no alinea no se renumera ni rompe al resto', () => {
+    const { template, reporte } = normalizeSlots(
+      tpl(['Te ayuda a [beneficio 1].', 'Frase inventada con [beneficio 1].']),
+      [{ n: 1, dialogo: 'Te ayuda a dormir.' }, { n: 2, dialogo: 'Otra cosa distinta acá.' }],
+    )
+    expect(reporte.desalineadas).toEqual([2])
+    expect(template.tomas[1].locucion).toBe('Frase inventada con [beneficio 1].')
+  })
+})
+
+// El contexto que el spec tiene gratis: qué decía el ORIGINAL en cada hueco. Sin esto la
+// FASE 3 elige el valor mirando solo la etiqueta del hueco, y para `[producto]` la
+// categoría es tan válida como el nombre comercial que había ahí.
+describe('slotOriginals', () => {
+  const tpl = (tomas: { loc: string; acc?: string }[]): ScriptTemplate => ({
+    ...T,
+    tomas: tomas.map((t, i) => ({ n: i + 1, locucion: t.loc, accionVisual: t.acc ?? 'a', duracionSeg: 5 })),
+  })
+
+  it('recupera el texto que ocupaba cada hueco', () => {
+    const o = slotOriginals(
+      tpl([{ loc: 'Tres razones para tomar [producto] para [público].' }]),
+      [{ n: 1, dialogo: 'Tres razones para tomar Gomi Energy para ella.' }],
+    )
+    expect(o['producto#1']).toBe('Gomi Energy')
+    expect(o['público#1']).toBe('ella')
+  })
+
+  // Los ids se numeran recorriendo locución Y acción de cada toma; si el cursor no
+  // contara los huecos de `accionVisual`, los de la toma 2 quedarían desfasados y cada
+  // hueco recibiría el original de otro — un fallo peor que no tener el dato.
+  it('los ids siguen alineados aunque la acción también tenga huecos', () => {
+    const o = slotOriginals(
+      tpl([
+        { loc: 'Yo tomo [producto].', acc: 'Sostiene [producto] y [gesto]' },
+        { loc: 'Me da [beneficio].' },
+      ]),
+      [{ n: 1, dialogo: 'Yo tomo Gomi Energy.' }, { n: 2, dialogo: 'Me da energía.' }],
+    )
+    expect(o['producto#1']).toBe('Gomi Energy')
+    expect(o['beneficio#1']).toBe('energía')
+  })
+
+  // Es un extra, no la base: cuando el modelo parafraseó no hay forma segura de saber qué
+  // ocupaba cada hueco, y adivinarlo sería peor que omitirlo.
+  it('omite la toma que no alinea, sin arrastrar a las demás', () => {
+    const o = slotOriginals(
+      tpl([{ loc: 'Frase inventada con [producto].' }, { loc: 'Me da [beneficio].' }]),
+      [{ n: 1, dialogo: 'Otra cosa totalmente distinta.' }, { n: 2, dialogo: 'Me da energía.' }],
+    )
+    expect(o['producto#1']).toBeUndefined()
+    expect(o['beneficio#1']).toBe('energía')
   })
 })

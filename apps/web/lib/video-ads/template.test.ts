@@ -36,40 +36,69 @@ describe('buildTemplateInstruction', () => {
     expect(p).toMatch(/ni una\s+palabra añadida, quitada ni reordenada/i)
   })
 
-  // Tensión real: empujar a marcar MÁS (para que no sobreviva el nicho del original)
-  // hizo que los corchetes se tragaran posesivos y preposiciones — "mi cara" quedó como
-  // "[parte del cuerpo]" y "en cara y en cuello" perdió el segundo "en".
-  it('exige que el corchete cubra el mínimo, sin tragarse palabras funcionales', () => {
-    expect(p).toContain('El corchete cubre el MÍNIMO')
-    expect(p).toContain('El corchete cubre el MÍNIMO')
-    expect(p).toMatch(/Nunca metas una\s+oración entera/i)
-    expect(p).toContain('[Este es el Producto]')
-  })
 
-  // El spec da una lista CERRADA de 12 variables y dice "no reemplaces palabras
-  // universales innecesariamente". Autorizar nombres inventados produjo [frecuencia]
-  // para una edad y 14 huecos en un guion de un minuto: ilegible y engorroso de llenar.
-  it('impone la lista cerrada del spec y prohíbe inventar nombres', () => {
-    expect(p).toMatch(/Esa lista es CERRADA/i)
-    expect(p).toMatch(/No inventes nombres nuevos/i)
-    expect(p).toContain('[Situación frustrante]')
-    expect(p).not.toMatch(/inv[eé]ntalo/i)
-  })
 
-  it('repite la regla del spec sobre palabras universales', () => {
-    expect(p).toMatch(/NO REEMPLACES PALABRAS UNIVERSALES/i)
-    expect(p).toMatch(/PR[AÁ]CTICAMENTE IGUAL al guion original/i)
-  })
 
-  // "cara" y "los 30" las diría igual un anuncio de cualquier producto; "menstruación"
-  // no. Ese es el criterio, y sin él el modelo marca todo o nada.
-  it('da el criterio y un techo de volumen', () => {
-    expect(p).toMatch(/un anuncio de otro producto NO la\s+podría decir igual/i)
-    expect(p).toMatch(/entre cinco y\s+ocho huecos/i)
-  })
 
   it('exige NO GENERAR subtítulos ni overlays', () => {
     expect(p).toContain('NO GENERAR')
+  })
+
+  // La plantilla que escribió el dueño del repo para el video de prueba tiene 23 huecos
+  // sobre ~45 s, y marca cosas que la versión anterior de este prompt declaraba
+  // "universales": la edad del avatar, la zona de aplicación, la frecuencia de uso.
+  // Dejarlas fijas no es conservador, es peligroso — un champú no se aplica en cara y
+  // cuello, y el anuncio del usuario lo afirmaría igual.
+  it('manda marcar edad, zona de aplicación, frecuencia y público', () => {
+    expect(p).toMatch(/edad o el hito vital/i)
+    expect(p).toContain('en cara y en cuello')
+    expect(p).toContain('de día y de noche')
+    expect(p).toContain('todo tipo de piel')
+    expect(p).toMatch(/afirmando algo que su\s+producto no hace/i)
+  })
+
+  it('pide nombres descriptivos en vez de una lista cerrada', () => {
+    expect(p).toMatch(/No hay lista cerrada/i)
+    expect(p).toContain('[situación personal / edad / hito]')
+    expect(p).toContain('[frecuencia / momento del día]')
+  })
+
+  // Tres blancos numerados, no uno fusionado: son datos distintos y numerarlos es lo que
+  // impide que la FASE 3 les ponga el mismo valor a todos. Pero el producto nombrado tres
+  // veces SÍ es el mismo dato y no se numera — si no, saldrían tres productos distintos.
+  it('manda numerar datos distintos del mismo tipo, y NO el mismo dato repetido', () => {
+    expect(p).toMatch(/NUMERA cuando son DATOS DISTINTOS/)
+    expect(p).toContain('[ingrediente 1]')
+    expect(p).toMatch(/NO numeres cuando es LITERALMENTE EL MISMO dato/)
+  })
+
+  // El corchete se pasaba de ancho por el otro lado: se tragaba "de la marca", el
+  // posesivo "tu"/"mi", o marcaba "y de verdad", que es andamiaje puro.
+  it('marca los bordes que el modelo se traga: fórmulas fijas y posesivos', () => {
+    expect(p).toMatch(/TAMPOCO se traga el andamiaje/)
+    expect(p).toContain('de la marca [nombre de la marca]')
+    expect(p).toContain('a tu [rutina]')
+    expect(p).toContain('que vean mi [evidencia visible]')
+  })
+
+  // Antes decía "el corchete cubre el MÍNIMO", y por eso marcaba "hidratar" donde el
+  // dato real era "hidratar las capas más profundas de la piel".
+  it('exige que el corchete cubra el dato completo, no su primera palabra', () => {
+    expect(p).toMatch(/DATO COMPLETO/)
+    expect(p).toContain('hidratar las capas más profundas de la piel')
+  })
+
+  // El ejemplo es una tabla de alineación, no una plantilla ejecutable, y avisa de que
+  // viene de otro video: un ejemplo con forma de output ya se copió literal una vez.
+  it('presenta la referencia como alineación y avisa que es de otro video', () => {
+    expect(p).toMatch(/ALINEACIÓN DE REFERENCIA/)
+    expect(p).toMatch(/de OTRO video/)
+    expect(p).toMatch(/NO copies estas palabras/)
+  })
+
+  it('avisa de que marcar de menos es el fallo habitual', () => {
+    expect(p).toMatch(/VEINTITR[EÉ]S huecos/i)
+    expect(p).toMatch(/Marcar de\s+menos es el fallo habitual/i)
   })
 
 })

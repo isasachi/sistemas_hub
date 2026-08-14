@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getVideoSession, updateVideoSession } from '@/lib/video-ads/db'
-import { callStructured } from '@/lib/gemini'
+import { callVideoAds } from '@/lib/video-ads/llm'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 
@@ -15,7 +15,7 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 export const maxDuration = 300
 
-// Acá sí se usa `callStructured` (OpenAI primario, Gemini fallback): la entrada ya
+// Acá sí pasa por un LLM de texto (`callVideoAds`, Gemini): la entrada ya
 // es texto — el informe forense —, así que no hace falta un modelo que coma video.
 export async function POST(
   _req: NextRequest,
@@ -68,7 +68,7 @@ export async function POST(
   }
 
   try {
-    const draft = await callStructured('template_draft', TemplateDraftSchema, [
+    const draft = await callVideoAds('template_draft', TemplateDraftSchema, [
       { text: buildTemplateInstruction(forensic) },
     ])
 
@@ -81,12 +81,11 @@ export async function POST(
     // recorrido (`nombre#n`) — fusionar corre esa numeración, así que ningún id guardado
     // puede haberse calculado sobre la plantilla previa a la fusión.
     const { template, reporte } = normalizeSlots(armada, forensic.cortes)
-    if (reporte.antes !== reporte.despues || reporte.desalineadas.length || reporte.renombrados.length)
+    if (reporte.antes !== reporte.despues || reporte.desalineadas.length || reporte.renombrados.length || reporte.numerados.length)
       console.warn(
         `[video-ads/extract-template] sesión ${id}: huecos ${reporte.antes} → ${reporte.despues}` +
-        (reporte.desmarcados.length ? ` · desmarcados por universales: ${reporte.desmarcados.join(', ')}` : '') +
-        (reporte.fusionados ? ` · fusionados en enumeraciones: ${reporte.fusionados}` : '') +
         (reporte.renombrados.length ? ` · renombrados por rol: ${reporte.renombrados.join(', ')}` : '') +
+        (reporte.numerados.length ? ` · numerados por colisión: ${reporte.numerados.join(', ')}` : '') +
         (reporte.desalineadas.length ? ` · ⚠ tomas cuyo andamiaje NO copia su corte: ${reporte.desalineadas.join(', ')}` : ''),
       )
 
@@ -102,7 +101,10 @@ export async function POST(
 
     await updateVideoSession(id, { step: STEP.TEMPLATE, template })
     await recordGenQuota(id, 'video-template', userId)
-    return NextResponse.json({ template })
+    // `desalineadas` viaja al cliente: es la señal de que la FASE 2 dejó de copiar el
+    // guión literal, y hasta ahora solo se veía en los logs del servidor. Quien puede
+    // hacer algo al respecto (re-extraer, o corregir a mano) es el usuario.
+    return NextResponse.json({ template, desalineadas: reporte.desalineadas })
   } catch (err) {
     console.error('[video-ads/extract-template]', err)
     return NextResponse.json({ error: 'No se pudo extraer la plantilla.' }, { status: 500 })

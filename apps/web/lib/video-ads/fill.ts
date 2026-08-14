@@ -120,6 +120,24 @@ function ngramas(palabras: string[], n: number): Set<string> {
 export function rejectBadValues(
   t: ScriptTemplate,
   valores: Record<string, string>,
+  /**
+   * Todo lo que el usuario entregó (inputs + etiqueta del envase). Cuando se pasa, un
+   * valor que afirma algo que no está en ninguna fuente se descarta.
+   *
+   * Existe por una medición: con una etiqueta que solo dice "Kukamonga" y "90 mg de
+   * melatonina", una corrida entregó "extracto de valeriana", "vitamina B6" y "ácido
+   * gamma-aminobutírico (GABA)" — un guión RENDERIZABLE, con 0 pendientes, afirmando una
+   * composición falsa. `ungrounded` ya vigilaba eso, pero solo en `acceptRewrite`, y ahí
+   * llega tarde por partida doble: los valores inventados entran igual por
+   * `fillTemplate`, y además se pasan como `fuentes` de la reescritura, así que un
+   * ingrediente inventado se respalda a sí mismo.
+   *
+   * ⚠️ Rechaza también las traducciones de la etiqueta ("dormir" por "Fall Asleep"), que
+   * el prompt pide expresamente. Se acepta ese costo: lo rechazado queda pendiente y lo
+   * escribe el usuario, mientras que un ingrediente inventado en un anuncio publicado es
+   * una declaración falsa de composición. La regla 9 del spec no admite grises.
+   */
+  fuentes?: string[],
 ): { valores: Record<string, string>; rechazados: string[] } {
   // El andamiaje de cada toma: su texto CON los huecos quitados. Es lo que el valor no
   // puede repetir, porque ya está escrito alrededor de él.
@@ -134,13 +152,19 @@ export function rejectBadValues(
     const v = valores[s.id]?.trim()
     if (!v) continue
 
+    const sinRespaldo = fuentes?.length ? ungrounded(v, fuentes) : null
     const malo =
+      !!sinRespaldo ||
       v.length > MAX_VALOR ||
       norm(v).join(' ').includes(norm(s.nombre).join(' ')) ||
       [...ngramas(norm(v), 3)].some((g) => andamio.get(s.toma)?.has(g))
 
     if (malo) rechazados.push(s.id)
-    else limpios[s.id] = v
+    // La puntuación final se recorta acá y no se le pide al modelo: la frase ya trae la
+    // suya, y un valor que termina en punto produce ".." en el guión. Caso real:
+    // "andas muy cansada por las mañanas..". Es más fiable un `replace` que una regla
+    // de prompt que hay que acertar en cada pasada.
+    else limpios[s.id] = v.replace(/[.,;:]+$/, '').trim()
   }
   return { valores: limpios, rechazados }
 }
@@ -156,6 +180,22 @@ export function rejectBadValues(
  * Devuelve `null` si un trozo literal no aparece en el diálogo en su orden: eso significa
  * que el modelo NO copió, y entonces no hay forma segura de reescribir esa locución.
  */
+/**
+ * Variantes de un fragmento de andamiaje por CONTRACCIÓN del español.
+ *
+ * `al` = a+el y `del` = de+el. Cuando el hueco se lleva el artículo, la contracción
+ * desaparece y el modelo escribe la forma suelta — que es lo gramaticalmente correcto:
+ * el original dice "ayuda AL equilibrio hormonal" y la plantilla queda "ayuda A
+ * [beneficio]". Exigir copia byte a byte lee eso como "el modelo no copió" y descarta
+ * la toma entera. Caso real: 2 de 7 tomas marcadas como desalineadas por esto.
+ */
+function conContraccion(lit: string): string[] {
+  const out = [lit]
+  if (/\ba(\s+)$/.test(lit)) out.push(lit.replace(/\ba(\s+)$/, 'al$1'))
+  if (/\bde(\s+)$/.test(lit)) out.push(lit.replace(/\bde(\s+)$/, 'del$1'))
+  return out
+}
+
 export function alignSlots(
   dialogo: string,
   locucion: string,
@@ -167,12 +207,23 @@ export function alignSlots(
   for (let i = 0; i < nombres.length; i++) {
     const antes = literales[i]
     if (antes) {
-      const k = dialogo.indexOf(antes, pos)
-      if (k < 0) return null
-      pos = k + antes.length
+      let encontrado = -1
+      for (const v of conContraccion(antes)) {
+        const k = dialogo.indexOf(v, pos)
+        if (k >= 0) { encontrado = k + v.length; break }
+      }
+      if (encontrado < 0) return null
+      pos = encontrado
     }
     const sig = literales[i + 1]
-    const fin = sig ? dialogo.indexOf(sig, pos) : dialogo.length
+    let fin = dialogo.length
+    if (sig) {
+      fin = -1
+      for (const v of conContraccion(sig)) {
+        const k = dialogo.indexOf(v, pos)
+        if (k >= 0) { fin = k; break }
+      }
+    }
     if (fin < 0) return null
     huecos.push({ nombre: nombres[i], original: dialogo.slice(pos, fin) })
     pos = fin
@@ -181,22 +232,47 @@ export function alignSlots(
 }
 
 /**
- * Un hueco cuyo texto original es UNIVERSAL no debía marcarse: cualquier anuncio de
- * cualquier producto puede decir esa palabra igual, así que convertirla en variable solo
- * fabrica un agujero que alguien tiene que rellenar a mano.
+ * Qué decía el ORIGINAL en cada hueco, indexado por el `id` de `extractSlots`.
+ * ---------------------------------------------------------------------------
+ * Es el contexto que el spec tiene gratis y esta implementación no tenía: cuando el
+ * PROMPT MAESTRO corre de una sola pasada, el modelo ve el guión original al lado de la
+ * plantilla, así que sabe que en ese hueco iba un NOMBRE COMERCIAL de dos palabras y no
+ * la categoría del producto. Acá la FASE 3 elegía el valor mirando solo la etiqueta del
+ * hueco y sus palabras vecinas — y con esa información "gomitas de melatonina" es una
+ * respuesta correcta para `[producto]`, aunque el original dijera "Gomi Energy".
  *
- * La lista se limita a NÚMEROS a propósito, y es el caso que se vio de verdad: en la
- * sesión real la plantilla marcó `[Problema]` sobre el "30" de "casi a punto de entrar a
- * los 30 como yo" — una edad, que el prompt de FASE 2 ya nombra textualmente como
- * ejemplo de lo que NO se marca. Ensanchar esto a un léxico de palabras "genéricas" es
- * justo cómo se empieza a desmarcar cosas que sí importan: desmarcar un hueco deja la
- * palabra ORIGINAL en el guión, así que equivocarse acá con "propóleo" publica un
- * ingrediente falso.
+ * Es un EXTRA, no la base: `alignSlots` devuelve `null` cuando el modelo parafraseó, y
+ * justo las sesiones de una sola toma larga son las que más fallan la alineación. Lo que
+ * no puede faltar nunca es el diálogo completo del corte, que va al prompt sin depender
+ * de esto.
  */
-const universal = (texto: string) => /^\s*\d+([.,]\d+)?\s*$/.test(texto)
+export function slotOriginals(
+  t: ScriptTemplate,
+  cortes: { n: number; dialogo: string }[],
+): Record<string, string> {
+  const porN = new Map(cortes.map((c) => [c.n, c.dialogo]))
+  const slots = extractSlots(t)
+  const cuantos = (s: string) => (s.match(HUECO) ?? []).length
+  const out: Record<string, string> = {}
 
-/** Entre dos huecos del mismo nombre, solo puntuación o conjunción: es una enumeración. */
-const SEPARADOR_ENUM = /^[\s,;]*(?:y|e|o|u)?[\s,;]*$/i
+  // Se avanza sobre `slots` con un cursor en vez de filtrar por `toma.n`: el `n` viene
+  // del forense y nada garantiza que sea único, así que filtrar mezclaría los huecos de
+  // dos tomas homónimas. `extractSlots` recorre en este mismo orden, por construcción.
+  let k = 0
+  for (const toma of t.tomas) {
+    const propios = slots.slice(k, k + cuantos(toma.locucion))
+    k += cuantos(toma.locucion) + cuantos(toma.accionVisual)
+
+    const dialogo = porN.get(toma.n)
+    const al = dialogo ? alignSlots(dialogo, toma.locucion) : null
+    if (!al) continue
+    al.huecos.forEach((h, i) => {
+      const texto = h.original.trim()
+      if (propios[i] && texto) out[propios[i].id] = texto
+    })
+  }
+  return out
+}
 
 /**
  * "Este es el X de la marca Y y se llama Z" son TRES datos distintos —categoría, marca y
@@ -211,10 +287,12 @@ const SEPARADOR_ENUM = /^[\s,;]*(?:y|e|o|u)?[\s,;]*$/i
  * que un hueco que el modelo ya nombró bien nunca se toca.
  */
 const ROL_POR_ANTECEDENTE: [RegExp, string][] = [
-  [/\bde\s+(?:la\s+)?marca\s*$/i, 'Marca'],
-  [/\bse\s+llama\s*$/i, 'Nombre comercial'],
+  [/\bde\s+(?:la\s+)?marca\s*$/i, 'nombre de la marca'],
+  [/\bse\s+llama\s*$/i, 'nombre del producto'],
 ]
-const NOMBRES_GENERICOS = new Set(['producto', 'categoría del producto', 'categoria del producto'])
+const NOMBRES_GENERICOS = new Set([
+  'producto', 'categoría del producto', 'categoria del producto', 'tipo de producto',
+])
 
 function rolPorContexto(nombre: string, antes: string): string {
   if (!NOMBRES_GENERICOS.has(nombre.toLowerCase())) return nombre
@@ -225,52 +303,43 @@ function rolPorContexto(nombre: string, antes: string): string {
 export interface SlotCapReport {
   antes: number
   despues: number
-  /** Textos originales que se devolvieron al guión por ser universales. */
-  desmarcados: string[]
-  /** Huecos que desaparecieron al fusionar enumeraciones. */
-  fusionados: number
   /** Tomas cuyo andamiaje no coincide con su corte: el modelo no copió. */
   desalineadas: number[]
   /** Huecos genéricos renombrados a su rol real: `Producto → Marca`. */
   renombrados: string[]
+  /** Huecos que compartían nombre siendo datos distintos, ahora numerados. */
+  numerados: string[]
 }
 
 /**
- * Normaliza los huecos de la plantilla, en código, después de que el modelo la devuelve.
+ * Corrige los nombres de hueco genéricos que la FASE 2 no supo distinguir.
  * ---------------------------------------------------------------------------
- * En la sesión real la FASE 2 marcó 17 huecos sobre un guión de 11 tomas, incluidos 5
- * `[Producto]` y un `[Problema]` sobre una edad. El prompt ya pide moderación y ya nombra
- * ese caso; cuatro rondas de redacción no lo consiguieron, así que se acota acá.
+ * `Este es el X de la marca Y y se llama Z` son TRES datos distintos, y el modelo tiende
+ * a etiquetarlos los tres igual. Con la misma etiqueta, la FASE 3 les pone el mismo
+ * valor: "el suero de la marca suero y se llama suero". Acá se deduce el rol por lo que
+ * hay INMEDIATAMENTE ANTES del hueco, que en español es inequívoco.
  *
- * Hace TRES cosas, las tres seguras:
+ * ⚠️ ESTA FUNCIÓN LLEGÓ A HACER DOS COSAS MÁS Y AMBAS ESTABAN AL REVÉS. Desmarcaba los
+ * huecos cuyo original era un número y fusionaba las enumeraciones del mismo nombre en
+ * uno solo, todo para bajar el conteo hacia un "entre 5 y 8" que YO inventé y que el
+ * spec nunca pidió. La plantilla de referencia que escribió el dueño del repo para el
+ * mismo video de prueba tiene 23 huecos, marca `casi a punto de entrar a los 30` como
+ * `[situación personal / edad / hito]` y mantiene los tres ingredientes como
+ * `[ingrediente 1..3]` numerados — exactamente lo contrario de lo que esto hacía.
  *
- *  1. **Desmarca los universales.** El hueco vuelve a ser la palabra original. Nada se
- *     pierde: esa palabra sirve igual para cualquier producto, que es la definición de
- *     universal.
- *  2. **Renombra los roles genéricos del producto** por lo que hay justo antes del hueco:
- *     detrás de "de la marca" va `[Marca]`, detrás de "se llama" va `[Nombre comercial]`.
- *     Tres huecos `[Producto]` en la misma frase hacen que la FASE 3 les ponga el mismo
- *     valor; con nombres distintos, cada uno pide su dato.
- *  3. **Fusiona enumeraciones del mismo nombre.** `[Ingrediente], [Ingrediente] y
- *     [Ingrediente]` pasa a ser UN hueco que cubre la lista entera. Tres blancos que
- *     pedían tres datos se vuelven uno que pide una lista — menos trabajo para quien
- *     escribe, y no se pierde nada porque la enumeración es una sola pieza de
- *     información.
- *
- * Lo que NO hace, y es deliberado: no baja el conteo hasta un número objetivo. Desmarcar
- * un hueco deja su palabra ORIGINAL en el guión, así que recortar hasta 8 en el caso real
- * obligaría a desmarcar `propóleo`, `niacinamida` y `Apivita` — y el anuncio del usuario
- * afirmaría que SU producto contiene los ingredientes y la marca del producto del video
- * de referencia. Es exactamente la clase de declaración falsa que la regla de no inventar
- * existe para impedir, solo que entrando por la puerta de atrás. El conteo que queda se
- * reporta; no se disfraza de objetivo cumplido.
+ * El razonamiento correcto va en la otra dirección y ya estaba escrito acá mismo:
+ * desmarcar un hueco deja su palabra ORIGINAL en el guión, así que marcar de MENOS es lo
+ * peligroso. "en cara y en cuello" sin marcar es falso para un champú; "de día y de
+ * noche" es falso para una mascarilla semanal; "todo tipo de piel" es una afirmación
+ * sobre un producto que nadie validó. Más huecos = menos texto ajeno colado en el
+ * anuncio del usuario. No reintroduzcas el recorte por conteo.
  */
 export function normalizeSlots(
   t: ScriptTemplate,
   cortes: { n: number; dialogo: string }[],
 ): { template: ScriptTemplate; reporte: SlotCapReport } {
   const porN = new Map(cortes.map((c) => [c.n, c.dialogo]))
-  const reporte: SlotCapReport = { antes: extractSlots(t).length, despues: 0, desmarcados: [], fusionados: 0, desalineadas: [], renombrados: [] }
+  const reporte: SlotCapReport = { antes: extractSlots(t).length, despues: 0, desalineadas: [], renombrados: [], numerados: [] }
 
   const tomas = t.tomas.map((toma) => {
     const dialogo = porN.get(toma.n)
@@ -282,35 +351,272 @@ export function normalizeSlots(
 
     const { literales, huecos } = al
     let out = literales[0]
-    let i = 0
-    while (i < huecos.length) {
-      // Extiende la corrida mientras el siguiente hueco se llame igual y entre medio
-      // solo haya coma o conjunción.
-      let j = i
-      while (
-        j + 1 < huecos.length &&
-        huecos[j + 1].nombre === huecos[i].nombre &&
-        SEPARADOR_ENUM.test(literales[j + 1])
-      ) j++
-
-      if (universal(huecos[i].original) && j === i) {
-        reporte.desmarcados.push(huecos[i].original.trim())
-        out += huecos[i].original
-      } else {
-        if (j > i) reporte.fusionados += j - i
-        const rol = rolPorContexto(huecos[i].nombre, literales[i])
-        if (rol !== huecos[i].nombre) reporte.renombrados.push(`${huecos[i].nombre} → ${rol}`)
-        out += `[${rol}]`
-      }
-      out += literales[j + 1] ?? ''
-      i = j + 1
+    for (let i = 0; i < huecos.length; i++) {
+      const rol = rolPorContexto(huecos[i].nombre, literales[i])
+      if (rol !== huecos[i].nombre) reporte.renombrados.push(`${huecos[i].nombre} → ${rol}`)
+      out += `[${rol}]${literales[i + 1] ?? ''}`
     }
     return { ...toma, locucion: out }
   })
 
-  const template = { ...t, tomas, guionFillInBlank: tomas.map((x) => x.locucion).join(' ') }
+  // SEGUNDA PASADA — nombres repetidos para datos DISTINTOS.
+  // El mismo nombre en dos huecos hace que la FASE 3 les ponga el mismo valor: es el
+  // fallo de los tres `[Producto]`, y reaparece entre tomas — en una sesión real
+  // `[beneficio 1]` salió en tres tomas para tres beneficios distintos. Acá se puede
+  // decidir en código porque `alignSlots` recupera QUÉ decía el original en cada hueco:
+  // si dos huecos de la misma familia tienen texto original distinto, son datos
+  // distintos y se numeran; si coincide (el producto nombrado tres veces) NO se tocan,
+  // porque las tres apariciones tienen que recibir la misma palabra.
+  //
+  // Se agrupa por FAMILIA (el nombre sin su número final) y no por nombre exacto: el
+  // modelo ya numera a veces, y mal — repetir `beneficio 1` tres veces es precisamente
+  // el caso a arreglar, así que saltarse los nombres que ya llevan dígito dejaba fuera
+  // el defecto. Renumerar la familia entera evita además chocar con un `beneficio 2`
+  // que ya existiera.
+  const familia = (n: string) => n.replace(/\s+\d+$/, '')
+  const alineadas = new Map<number, ReturnType<typeof alignSlots>>()
+  const porFamilia = new Map<string, string[]>()
+  for (const toma of tomas) {
+    const dialogo = porN.get(toma.n)
+    const al = dialogo ? alignSlots(dialogo, toma.locucion) : null
+    alineadas.set(toma.n, al)
+    for (const h of al?.huecos ?? []) {
+      const f = familia(h.nombre)
+      const vistos = porFamilia.get(f) ?? []
+      const clave = h.original.trim().toLowerCase()
+      if (!vistos.includes(clave)) vistos.push(clave)
+      porFamilia.set(f, vistos)
+    }
+  }
+  const multiples = new Set([...porFamilia].filter(([, v]) => v.length > 1).map(([k]) => k))
+
+  const numeradas = !multiples.size ? tomas : tomas.map((toma) => {
+    const al = alineadas.get(toma.n)
+    if (!al) return toma
+    let out = al.literales[0]
+    al.huecos.forEach((h, i) => {
+      const f = familia(h.nombre)
+      let nombre = h.nombre
+      if (multiples.has(f)) {
+        const idx = porFamilia.get(f)!.indexOf(h.original.trim().toLowerCase()) + 1
+        nombre = `${f} ${idx}`
+        if (nombre !== h.nombre) reporte.numerados.push(`${h.nombre} → ${nombre} ("${h.original.trim()}")`)
+      }
+      out += `[${nombre}]${al.literales[i + 1] ?? ''}`
+    })
+    return { ...toma, locucion: out }
+  })
+
+  const template = { ...t, tomas: numeradas, guionFillInBlank: numeradas.map((x) => x.locucion).join(' ') }
   reporte.despues = extractSlots(template).length
   return { template, reporte }
+}
+
+/**
+ * Resuelve el id de hueco que devolvió un modelo contra los ids reales de la plantilla.
+ *
+ * Los ids llevan el nombre del hueco dentro (`situación personal / edad / hito#1`), y un
+ * modelo que los reescribe pierde detalles: en una corrida real devolvió
+ * `situacion personal / edad / hito#1` —sin tilde— y `ingrediente 4` —sin el `#1`—. Con
+ * una búsqueda exacta esas dos correcciones se aplicaban a NADA y el log decía que sí:
+ * el fallo más caro de todos, porque se reporta como éxito.
+ *
+ * Se compara normalizado (sin acentos, sin mayúsculas, espacios colapsados) y con `#1`
+ * por defecto cuando falta el sufijo. Devuelve `null` si no hay match, para que el
+ * caller pueda reportarlo en vez de tragárselo.
+ */
+export function resolveSlotId(slots: Slot[], id: string): string | null {
+  const clave = (x: string) => {
+    const t = x.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ')
+    return t.includes('#') ? t : `${t}#1`
+  }
+  const objetivo = clave(id)
+  return slots.find((s) => clave(s.id) === objetivo)?.id ?? null
+}
+
+/**
+ * ¿Es aceptable este ajuste de andamiaje?
+ * ---------------------------------------------------------------------------
+ * El andamiaje —el texto fuera de los corchetes— lo copia código, y esa es LA garantía
+ * del sistema: fidelidad del 100% por construcción, no por obediencia. Esta función
+ * abre la única excepción, y existe porque hay frases donde NINGÚN valor cabe: el
+ * original dice "andas muy ___" y el producto nuevo no tiene ningún adjetivo que poner
+ * ahí. Con el andamiaje congelado, ese hueco no tiene solución posible.
+ *
+ * El spec lo contempla — la directiva crítica 13 permite "pequeños ajustes gramaticales
+ * exclusivamente para: género; número; concordancia; tiempos verbales; naturalidad
+ * mínima indispensable". Esto es esa licencia, acotada en código.
+ *
+ * ⚠️ Solo se aplica al guión ADAPTADO. La plantilla sigue siendo copia literal del
+ * original: es el artefacto que tiene que espejar la referencia, y no se toca nunca.
+ *
+ * Los topes son deliberadamente flojos en palabras y duros en DATOS. Se probó un tope
+ * estricto de palabras contra el caso real y rechazaba justamente el arreglo que esto
+ * viene a permitir: "andas muy no puedo dormir por las noches" → "andas sin poder dormir
+ * por las noches" cambia 5 de 8 palabras. Lo que no puede pasar es que el modelo escriba
+ * OTRO anuncio, y eso se vigila por lo que tiene que sobrevivir intacto: los valores ya
+ * rellenados, los pendientes y el largo.
+ */
+export function acceptScaffoldFix(args: {
+  original: string
+  propuesta: string
+  /**
+   * Valores sustituidos en esa toma que tienen que sobrevivir al ajuste. NO incluye el
+   * del hueco que motivó el cambio: ese es precisamente el que no cabía, y exigir que
+   * siga ahí rechazaría el único caso para el que esta excepción existe. El caller lo
+   * excluye (ver `adapt-script/route.ts`).
+   */
+  valores: string[]
+}): { ok: true } | { ok: false; motivo: string } {
+  const { original, propuesta, valores } = args
+  const p = propuesta.trim()
+  if (!p) return { ok: false, motivo: 'vacío' }
+  if (p === original.trim()) return { ok: false, motivo: 'no cambia nada' }
+
+  // Un anuncio nuevo no se disfraza de ajuste: el largo se mueve poco.
+  const ratio = p.length / (original.length || 1)
+  if (ratio < 0.65 || ratio > 1.35)
+    return { ok: false, motivo: `el largo cambia demasiado (${Math.round(ratio * 100)}% del original)` }
+
+  // Los datos ya rellenados no se pueden perder ni reescribir.
+  const faltante = valores.find((v) => v.trim() && !p.includes(v.trim()))
+  if (faltante) return { ok: false, motivo: `pierde el valor "${faltante}"` }
+
+  // Un pendiente no se resuelve por la puerta de atrás: lo escribe el usuario.
+  const pendientes = original.match(/\[PENDIENTE:[^\]]*\]/gi) ?? []
+  const perdido = pendientes.find((m) => !p.includes(m))
+  if (perdido) return { ok: false, motivo: `hace desaparecer ${perdido}` }
+
+  // Ni corchetes nuevos que nadie pidió.
+  const antes = (original.match(HUECO) ?? []).length
+  if ((p.match(HUECO) ?? []).length > antes) return { ok: false, motivo: 'introduce marcadores nuevos' }
+
+  // Y por debajo de la mitad de las palabras compartidas ya no es un ajuste, es otra frase.
+  const wo = norm(original), wp = new Set(norm(p))
+  const conservadas = wo.filter((w) => wp.has(w)).length
+  const pct = wo.length ? conservadas / wo.length : 1
+  if (pct < 0.5) return { ok: false, motivo: `solo conserva el ${Math.round(pct * 100)}% de las palabras` }
+
+  return { ok: true }
+}
+
+/**
+ * Fracción del ANDAMIAJE de la plantilla que sobrevive en un texto reescrito.
+ * El andamiaje es lo de fuera de los corchetes: las palabras que vienen del video de
+ * referencia. Conservarlas ES la promesa del producto ("el guión es el del original").
+ */
+export function scaffoldFidelity(plantilla: string, texto: string): number {
+  const andamio = norm(plantilla.replace(HUECO, ' '))
+  if (!andamio.length) return 1
+  const presentes = new Set(norm(texto))
+  return andamio.filter((w) => presentes.has(w)).length / andamio.length
+}
+
+/**
+ * Piso de fidelidad para aceptar que el MODELO reescriba una locución en vez de que la
+ * arme `fillTemplate`.
+ *
+ * El número no es arbitrario: cuando se le pedía al modelo escribir el guión adaptado sin
+ * ninguna verificación, conservaba entre el 66% y el 71% de las palabras del original —
+ * ese era el nivel de deriva que hizo abandonar el enfoque. 0.85 está cómodamente por
+ * encima de eso, así que una reescritura que pase este filtro no es de las que derivaban.
+ */
+export const FIDELIDAD_MIN = 0.85
+
+/**
+ * Primera palabra de contenido del texto que no aparece en ninguna fuente, o `null` si
+ * todas están respaldadas.
+ *
+ * Se miran solo las palabras de 5+ letras: las cortas son andamiaje gramatical y no
+ * afirman nada sobre el producto. La comparación es por PREFIJO de 5 para tolerar la
+ * flexión ("ayuda"/"ayudan"/"ayudarte" comparten raíz), que es justo la libertad
+ * gramatical que la reescritura viene a ganar — sin eso, cada conjugación nueva se
+ * leería como invención.
+ */
+/**
+ * Secuencia de palabras que aparece dos veces SEGUIDAS, o `null`.
+ *
+ * El eco es la firma de que la redacción pegó un valor que ya contenía las palabras del
+ * andamiaje. `rejectBadValues` lo vigila en los valores, pero la reescritura es texto
+ * libre y no pasa por ahí: caso real, "estás en mis veintitantos como yo como yo".
+ */
+function repeticionInmediata(texto: string): string | null {
+  const w = norm(texto)
+  for (let n = 4; n >= 2; n--) {
+    for (let i = 0; i + 2 * n <= w.length; i++) {
+      const a = w.slice(i, i + n).join(' ')
+      if (a === w.slice(i + n, i + 2 * n).join(' ')) return a
+    }
+  }
+  return null
+}
+
+function ungrounded(texto: string, fuentes: string[]): string | null {
+  const pool = norm(fuentes.join(' ')).map((w) => w.slice(0, 5))
+  const respaldada = new Set(pool)
+  for (const w of norm(texto)) {
+    if (w.length < 5) continue
+    if (!respaldada.has(w.slice(0, 5))) return w
+  }
+  return null
+}
+
+/**
+ * ¿Se acepta la locución que reescribió el modelo, o se cae al relleno determinista?
+ * ---------------------------------------------------------------------------
+ * Este es el cambio de garantía CONSTRUCTIVA a garantía VERIFICADA. `fillTemplate`
+ * garantiza el andamiaje por construcción —copia y pega— pero por eso mismo nadie
+ * escribe la frase, y las costuras salen rotas: "andas muy no puedo dormir por las
+ * noches", "te ayuda a ayudarte a dormir". El spec no tiene ese problema porque su
+ * modelo REDACTA el guión con el original delante, como haría una persona.
+ *
+ * La razón por la que ahora se puede permitir y antes no: antes no había forma de
+ * detectar la deriva. Ahora se mide contra el andamiaje de la plantilla, y lo que no
+ * pasa el filtro cae al relleno determinista, que sigue siendo el piso. Nunca se queda
+ * peor que hoy — como mucho, igual.
+ */
+export function acceptRewrite(args: {
+  /** Locución de la PLANTILLA, con sus corchetes: de ahí sale el andamiaje. */
+  plantilla: string
+  /** Relleno determinista de esa toma: el piso al que se cae si esto se rechaza. */
+  piso: string
+  propuesta: string
+  /**
+   * Todo lo que el usuario entregó: inputs, texto de la etiqueta y los valores elegidos.
+   * La reescritura es TEXTO LIBRE y por tanto esquiva `rejectBadValues`, así que este es
+   * el único punto donde se puede comprobar que no aparezca contenido de la nada. Medido:
+   * sin esto, una reescritura afirmó que unas gomitas de melatonina llevan "vitamina B6"
+   * —que no está ni en los inputs ni en la etiqueta— y otra convirtió la "hoja verde" del
+   * logo en un ingrediente.
+   */
+  fuentes: string[]
+}): { ok: true; fidelidad: number } | { ok: false; motivo: string; fidelidad: number } {
+  const { plantilla, piso, propuesta, fuentes } = args
+  const t = propuesta.trim()
+  const fidelidad = scaffoldFidelity(plantilla, t)
+  if (!t) return { ok: false, motivo: 'vacía', fidelidad }
+
+  const ratio = t.length / (piso.length || 1)
+  if (ratio < 0.6 || ratio > 1.4)
+    return { ok: false, motivo: `el largo se va (${Math.round(ratio * 100)}% del relleno)`, fidelidad }
+
+  // Un pendiente MENOS que el piso significa que el modelo rellenó por su cuenta algo
+  // que el paso de valores dejó vacío — y `extractPending` es lo que bloquea el render,
+  // así que eso abriría la puerta con contenido inventado.
+  const marcador = /\[PENDIENTE:/gi
+  if ((t.match(marcador) ?? []).length < (piso.match(marcador) ?? []).length)
+    return { ok: false, motivo: 'resuelve por su cuenta un hueco que quedó pendiente', fidelidad }
+
+  if (fidelidad < FIDELIDAD_MIN)
+    return { ok: false, motivo: `conserva el ${Math.round(fidelidad * 100)}% del andamiaje`, fidelidad }
+
+  const eco = repeticionInmediata(t)
+  if (eco) return { ok: false, motivo: `repite "${eco}" dos veces seguidas`, fidelidad }
+
+  const inventada = ungrounded(t, [plantilla, piso, ...fuentes])
+  if (inventada) return { ok: false, motivo: `afirma "${inventada}", que no está en ningún dato`, fidelidad }
+
+  return { ok: true, fidelidad }
 }
 
 export interface FilledTemplate {

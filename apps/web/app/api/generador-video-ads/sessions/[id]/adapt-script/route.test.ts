@@ -1,0 +1,260 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+vi.mock('@/lib/video-ads/llm', () => ({ callVideoAds: vi.fn() }))
+vi.mock('@/lib/video-ads/db', () => ({
+  getVideoSession: vi.fn(),
+  updateVideoSession: vi.fn(async () => undefined),
+}))
+vi.mock('@/lib/gen-quota', () => ({
+  checkGenQuota: vi.fn(async () => ({ blocked: null, regensLeft: null })),
+  recordGenQuota: vi.fn(async () => undefined),
+}))
+vi.mock('@/lib/product-hunter/session', () => ({ readUserId: vi.fn(async () => 'u1') }))
+
+import { POST } from './route'
+import { callVideoAds } from '@/lib/video-ads/llm'
+import { getVideoSession, updateVideoSession } from '@/lib/video-ads/db'
+import type { VideoSessionResponse } from '@/lib/video-ads/types'
+import type { AdaptedScript } from '@/lib/video-ads/adapt'
+
+// El corte y la plantilla comparten andamiaje palabra por palabra: es la regla de copia
+// de la FASE 2, y lo que permite que `alignSlots` funcione.
+const DIALOGO = 'sobre todo si últimamente andas muy cansada por las noches'
+const LOCUCION = 'sobre todo si últimamente andas muy [situación personal] por las noches'
+
+function session(): VideoSessionResponse {
+  return {
+    id: 's1',
+    product_name: 'Natrol', what_it_does: 'Gomitas de melatonina',
+    angle: 'Testimonio', target_audience: 'Adultos', problem: 'No puedo dormir por las noches',
+    validation: { rows: [], pending: [] },
+    forensic_analysis: {
+      guionOriginal: DIALOGO,
+      cortes: [{ n: 1, tiempo: '00:00 - 00:06', duracionSeg: 6, accion: '', camara: '', dialogo: DIALOGO, textoOverlay: '', transicion: '' }],
+    },
+    template: {
+      guionFillInBlank: LOCUCION,
+      escenario: {}, edicion: {}, resumenParaUsuario: '',
+      tomas: [{ n: 1, locucion: LOCUCION, accionVisual: 'a', duracionSeg: 6 }],
+    },
+  } as unknown as VideoSessionResponse
+}
+
+const req = () => new Request('http://x/api', { method: 'POST' }) as never
+const ctx = () => ({ params: Promise.resolve({ id: 's1' }) })
+
+/** Encadena las dos llamadas de la FASE 3: relleno y después coherencia.
+ *  `locuciones` es la reescritura del modelo; vacía = el guión lo arma `fillTemplate`. */
+function responder(
+  valores: { id: string; valor: string }[],
+  coherencia: object,
+  locuciones: { n: number; texto: string }[] = [],
+) {
+  vi.mocked(callVideoAds)
+    .mockResolvedValueOnce({ valores, acciones: [], locuciones } as never)
+    .mockResolvedValueOnce(coherencia as never)
+}
+
+const guardado = () =>
+  vi.mocked(updateVideoSession).mock.calls.at(-1)![1].adapted as AdaptedScript
+
+describe('POST adapt-script — ajuste de andamiaje', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getVideoSession).mockResolvedValue(session())
+  })
+
+  // La única excepción a la copia literal. Solo se aplica sobre el guión ADAPTADO; la
+  // plantilla sigue siendo espejo del original.
+  it('aplica el ajuste y guarda el texto de ANTES para que sea auditable', async () => {
+    responder(
+      [{ id: 'situación personal#1', valor: 'no puedo dormir' }],
+      {
+        correcciones: [],
+        ajustes: [{
+          n: 1, idHueco: 'situación personal#1',
+          locucion: 'sobre todo si últimamente andas sin poder dormir por las noches',
+          motivo: 'ningún adjetivo encaja tras "andas muy"',
+        }],
+      },
+    )
+    const res = await POST(req(), ctx())
+    expect(res.status).toBe(200)
+
+    const a = guardado()
+    expect(a.tomas[0].locucion).toBe('sobre todo si últimamente andas sin poder dormir por las noches')
+    expect(a.ajustesAndamiaje).toHaveLength(1)
+    expect(a.ajustesAndamiaje![0].antes).toContain('andas muy no puedo dormir')
+    expect(a.guionFinal).toContain('andas sin poder dormir')
+  })
+
+  // El `idHueco` ata el cambio de andamiaje a su justificación. Sin esa comprobación
+  // sería un permiso abierto para reescribir cualquier frase con cualquier excusa.
+  it('ignora el ajuste cuyo hueco no pertenece a esa toma', async () => {
+    responder(
+      [{ id: 'situación personal#1', valor: 'cansada' }],
+      {
+        correcciones: [],
+        ajustes: [{ n: 1, idHueco: 'hueco inventado#1', locucion: 'otra cosa totalmente distinta acá', motivo: 'x' }],
+      },
+    )
+    await POST(req(), ctx())
+    const a = guardado()
+    expect(a.tomas[0].locucion).toBe('sobre todo si últimamente andas muy cansada por las noches')
+    expect(a.ajustesAndamiaje).toBeUndefined()
+  })
+
+  it('ignora el ajuste que no pasa el guard de fidelidad', async () => {
+    responder(
+      [{ id: 'situación personal#1', valor: 'cansada' }],
+      {
+        correcciones: [],
+        ajustes: [{
+          n: 1, idHueco: 'situación personal#1',
+          locucion: 'descubre hoy el secreto que todas están probando ya mismo',
+          motivo: 'suena mejor',
+        }],
+      },
+    )
+    await POST(req(), ctx())
+    const a = guardado()
+    expect(a.tomas[0].locucion).toContain('sobre todo si últimamente')
+    expect(a.ajustesAndamiaje).toBeUndefined()
+  })
+
+  // Sin ajustes, el campo no se escribe: las sesiones normales no cargan con él.
+  it('sin ajustes no agrega el campo', async () => {
+    responder([{ id: 'situación personal#1', valor: 'cansada' }], { correcciones: [], ajustes: [] })
+    await POST(req(), ctx())
+    expect(guardado().ajustesAndamiaje).toBeUndefined()
+  })
+
+  // Si el corrector revienta, la adaptación de la primera pasada tiene que sobrevivir.
+  it('un fallo del corrector no tumba la adaptación', async () => {
+    vi.mocked(callVideoAds)
+      .mockResolvedValueOnce({ valores: [{ id: 'situación personal#1', valor: 'cansada' }], acciones: [], locuciones: [] } as never)
+      .mockRejectedValueOnce(new Error('modelo caído'))
+    const res = await POST(req(), ctx())
+    expect(res.status).toBe(200)
+    expect(guardado().tomas[0].locucion).toContain('andas muy cansada')
+  })
+})
+
+// El cambio de garantía CONSTRUCTIVA (código pega) a garantía VERIFICADA (el modelo
+// redacta y el código mide). El piso nunca desaparece: lo que deriva cae al relleno.
+describe('POST adapt-script — reescritura del modelo', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getVideoSession).mockResolvedValue(session())
+  })
+
+  it('usa la reescritura cuando conserva el andamiaje', async () => {
+    responder(
+      [{ id: 'situación personal#1', valor: 'cansada' }],
+      { correcciones: [], ajustes: [] },
+      [{ n: 1, texto: 'sobre todo si últimamente andas cansada por las noches' }],
+    )
+    await POST(req(), ctx())
+    expect(guardado().tomas[0].locucion).toBe('sobre todo si últimamente andas cansada por las noches')
+  })
+
+  // El fallo que hizo abandonar este enfoque la primera vez: el modelo escribía otro
+  // anuncio. Ahora se mide y se cae al piso en vez de publicarlo.
+  it('cae al relleno automático cuando el modelo escribe otra cosa', async () => {
+    responder(
+      [{ id: 'situación personal#1', valor: 'cansada' }],
+      { correcciones: [], ajustes: [] },
+      [{ n: 1, texto: 'descubre hoy el secreto que miles de personas ya están probando' }],
+    )
+    await POST(req(), ctx())
+    expect(guardado().tomas[0].locucion).toBe('sobre todo si últimamente andas muy cansada por las noches')
+  })
+
+  // `extractPending` bloquea el render; si la reescritura resuelve un hueco por su
+  // cuenta, esa puerta se abriría con contenido que nadie entregó.
+  it('rechaza la reescritura que resuelve sola un hueco pendiente', async () => {
+    responder(
+      [{ id: 'situación personal#1', valor: '' }],
+      { correcciones: [], ajustes: [] },
+      [{ n: 1, texto: 'sobre todo si últimamente andas muy agotada por las noches' }],
+    )
+    await POST(req(), ctx())
+    expect(guardado().tomas[0].locucion).toContain('[PENDIENTE:')
+  })
+
+  // ⚠️ EL BUG QUE ESTO CUBRE: el refill que aplica las correcciones reconstruía la toma
+  // desde la plantilla y BORRABA la reescritura ya aceptada. Como el corrector casi
+  // siempre corrige algo, la reescritura no llegaba a producción casi nunca — el
+  // corrector leía un texto y sus correcciones producían otro, el pegado automático con
+  // sus costuras rotas.
+  describe('la reescritura sobrevive al corrector', () => {
+    // Un hueco en la ACCIÓN y otro en la locución: así se puede corregir uno sin que el
+    // otro quede obsoleto, que es el caso que distingue "preservar" de "no comprobar".
+    const conAccion = () => {
+      const s = session()
+      s.template!.tomas[0].accionVisual = 'Sostiene el [envase]'
+      return s
+    }
+    const REESCRITA = 'sobre todo si últimamente andas cansada por las noches'
+
+    beforeEach(() => vi.mocked(getVideoSession).mockResolvedValue(conAccion()))
+
+    it('una corrección que no la toca no la tira al relleno', async () => {
+      responder(
+        [{ id: 'situación personal#1', valor: 'cansada' }, { id: 'envase#1', valor: 'frasco' }],
+        { correcciones: [{ id: 'envase#1', valor: 'pote', motivo: 'x' }], ajustes: [] },
+        [{ n: 1, texto: REESCRITA }],
+      )
+      await POST(req(), ctx())
+      expect(guardado().tomas[0].locucion).toBe(REESCRITA)
+    })
+
+    // La otra mitad: si el corrector cambió un valor que la reescritura lleva dentro,
+    // ese texto es anterior a la corrección y publicarlo sería ignorarla en silencio.
+    it('una corrección que la deja obsoleta sí la tira al relleno', async () => {
+      responder(
+        [{ id: 'situación personal#1', valor: 'cansada' }, { id: 'envase#1', valor: 'frasco' }],
+        { correcciones: [{ id: 'situación personal#1', valor: 'agotada', motivo: 'x' }], ajustes: [] },
+        [{ n: 1, texto: REESCRITA }],
+      )
+      await POST(req(), ctx())
+      expect(guardado().tomas[0].locucion).toBe('sobre todo si últimamente andas muy agotada por las noches')
+    })
+  })
+
+  it('sin reescritura, el guión lo arma el relleno determinista', async () => {
+    responder([{ id: 'situación personal#1', valor: 'cansada' }], { correcciones: [], ajustes: [] })
+    await POST(req(), ctx())
+    expect(guardado().tomas[0].locucion).toBe('sobre todo si últimamente andas muy cansada por las noches')
+  })
+})
+
+// El prompt de la FASE 3 muestra el original rotulado por toma ("Toma 1" / "ORIGINAL:")
+// y el modelo devuelve a veces ese rótulo pegado al texto. `acceptRewrite` no lo ve —el
+// andamiaje sigue entero, solo hay un prefijo de más— y se renderizaría leído en voz alta.
+describe('POST adapt-script — el rótulo del prompt no se cuela al guión', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getVideoSession).mockResolvedValue(session())
+  })
+
+  it('quita un "Toma N:" delante de la reescritura', async () => {
+    responder(
+      [{ id: 'situación personal#1', valor: 'cansada' }],
+      { correcciones: [], ajustes: [] },
+      [{ n: 1, texto: 'Toma 1: sobre todo si últimamente andas cansada por las noches' }],
+    )
+    await POST(req(), ctx())
+    expect(guardado().tomas[0].locucion).toBe('sobre todo si últimamente andas cansada por las noches')
+  })
+
+  it('no toca una locución que solo empieza parecido', async () => {
+    responder(
+      [{ id: 'situación personal#1', valor: 'cansada' }],
+      { correcciones: [], ajustes: [] },
+      [{ n: 1, texto: 'sobre todo si últimamente andas cansada por las noches' }],
+    )
+    await POST(req(), ctx())
+    expect(guardado().tomas[0].locucion).toBe('sobre todo si últimamente andas cansada por las noches')
+  })
+})

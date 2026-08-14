@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getVideoSession, updateVideoSession } from '@/lib/video-ads/db'
-import { callStructured } from '@/lib/gemini'
+import { callVideoAds } from '@/lib/video-ads/llm'
 import { openaiGenerateImage } from '@/lib/llm-openai'
 import { uploadToStorage, fetchAsBase64 } from '@/lib/storage'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
@@ -52,7 +52,7 @@ export async function POST(
       !!session.character_url,
     )
 
-    const identity = await callStructured(
+    const identity = await callVideoAds(
       'character_identity',
       CharacterIdentitySchema,
       buildCharacterParts(instruction, image),

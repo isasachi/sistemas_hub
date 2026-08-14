@@ -6,6 +6,7 @@ import type { AdaptedScript } from '@/lib/video-ads/adapt'
 import type { VoiceProfile } from '@/lib/video-ads/character'
 import { STEP } from '@/lib/video-ads/steps'
 import { extractPending } from '@/lib/video-ads/pending'
+import { segmentar, unir } from '@/lib/video-ads/segments'
 import { btnPrimary, btnGhost, errorBox, spinner, seg } from './shared'
 
 // FASE 3 en pantalla + FASE 4/4.5 encadenadas: el personaje y la voz se construyen
@@ -18,10 +19,12 @@ export default function Section5Script() {
   // construir el personaje falla, mezclar los dos mensajes en un solo `error` haría
   // parecer que nada se guardó — cuando en realidad el guión nuevo ya está en la base.
   const [characterError, setCharacterError] = useState<string | null>(null)
-  // Ediciones del usuario sobre las locuciones, por POSICIÓN en `adapted.tomas` (no por
-  // `toma.n`, que lo hereda el forense y puede repetirse). Solo las tomas que tocó
-  // entran acá; el resto queda tal cual está guardado.
-  const [ediciones, setEdiciones] = useState<Record<number, string>>({})
+  // Ediciones del usuario, por FRASE: la clave es `posiciónDeToma:posiciónDeFrase`.
+  // El dato guardado sigue siendo UNA locución por toma — las frases son solo para
+  // editar, y se vuelven a unir al guardar (`unir`, segments.ts). Un video sin cortes da
+  // una sola toma con el guión entero, y trabajar eso en un único textarea de 700
+  // caracteres era impracticable.
+  const [ediciones, setEdiciones] = useState<Record<string, string>>({})
   const [guardando, setGuardando] = useState(false)
 
   async function run() {
@@ -80,7 +83,10 @@ export default function Section5Script() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          locuciones: Object.entries(ediciones).map(([indice, texto]) => ({ indice: Number(indice), texto })),
+          // Se manda una locución por toma, con las frases ya unidas: el dato nunca
+          // deja de ser un string por toma, la partición es solo de pantalla.
+          locuciones: [...new Set(Object.keys(ediciones).map((k) => Number(k.split(':')[0])))]
+            .map((indice) => ({ indice, texto: lineas[indice].texto })),
         }),
       })
       const d = (await r.json()) as { adapted?: AdaptedScript; error?: string }
@@ -110,9 +116,13 @@ export default function Section5Script() {
     )
   }
 
-  // El texto que el usuario está viendo: lo guardado, pisado por lo que haya editado y
-  // todavía no guardado.
-  const lineas = adapted.tomas.map((t, i) => ({ ...t, i, texto: ediciones[i] ?? t.locucion }))
+  // El texto que el usuario está viendo: cada toma partida en frases, con lo que haya
+  // editado pisando lo guardado. `texto` es la toma entera re-unida — es lo que se
+  // persiste y lo que alimenta todos los contadores.
+  const lineas = adapted.tomas.map((t, i) => {
+    const frases = segmentar(t.locucion).map((f, j) => ediciones[`${i}:${j}`] ?? f)
+    return { ...t, i, frases, texto: unir(frases) }
+  })
   const guionActual = lineas.map((l) => l.texto).join(' ')
   // Del TEXTO, no de `adapted.variablesPendientes`: el modelo no mantiene esa lista
   // sincronizada con los marcadores que deja (ver `extractPending`), y acá además el
@@ -161,10 +171,14 @@ export default function Section5Script() {
           Lo que quedó entre corchetes no lo inventamos: escríbelo tú.
         </p>
 
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-4">
           {lineas.map((l) => {
             const falta = l.texto.includes('[PENDIENTE:')
             const cabe = cabenEn(l.duracionSeg)
+            // El andamiaje es copia literal del original salvo en este caso, así que se
+            // muestra el ANTES: la razón de permitir el cambio es que sea auditable, y
+            // un aviso de que "algo cambió" no le sirve de nada a quien tiene que juzgarlo.
+            const ajuste = adapted.ajustesAndamiaje?.find((a) => a.n === l.n)
             const largo = holgado(l)
             return (
               <div key={l.i} className="flex flex-col gap-1">
@@ -179,12 +193,28 @@ export default function Section5Script() {
                     {falta && <span className="text-amber-400">falta completar</span>}
                   </span>
                 </div>
-                <textarea
-                  value={l.texto}
-                  onChange={(e) => setEdiciones({ ...ediciones, [l.i]: e.target.value })}
-                  rows={2}
-                  className={`jr-field rounded-lg px-3 py-2 text-[13px] leading-relaxed ${falta || largo ? 'border-amber-500/40' : ''}`}
-                />
+                {ajuste && (
+                  <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.06] px-2.5 py-2 text-[11px] leading-relaxed">
+                    <div className="text-amber-400">Se ajustó la redacción — {ajuste.motivo}</div>
+                    <div className="mt-1 text-[#8b8b8b]">antes: <span className="line-through">{ajuste.antes}</span></div>
+                  </div>
+                )}
+                {/* Una caja por frase. El corte va por punto natural — el mismo criterio
+                    con el que `splitLongToma` reparte en clips — así lo que se edita por
+                    separado se parece a lo que después se renderiza por separado. */}
+                <div className="flex flex-col gap-1.5">
+                  {l.frases.map((f, j) => (
+                    <textarea
+                      key={j}
+                      value={f}
+                      onChange={(e) => setEdiciones({ ...ediciones, [`${l.i}:${j}`]: e.target.value })}
+                      rows={2}
+                      className={`jr-field rounded-lg px-3 py-2 text-[13px] leading-relaxed ${
+                        f.includes('[PENDIENTE:') ? 'border-amber-500/40' : ''
+                      }`}
+                    />
+                  ))}
+                </div>
               </div>
             )
           })}
