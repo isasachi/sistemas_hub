@@ -3,7 +3,7 @@ import type { ProductRow, NicheRow, PePoolRow, WatchlistRow, StoredAnalysis, Url
 import { bucketRange, type RawBucket } from './raw-buckets'
 import { prescore } from './prescore'
 import { sanitizeJsonDeep, cleanJsonText } from './json-clean'
-import { isPhysicalEnough } from './physical-filter'
+import { isServible } from './physical-filter'
 
 // Cliente Supabase con service role (bypassa RLS), igual que lib/db.ts del hub.
 // Se usa tanto desde rutas Next como desde los scripts de GitHub Actions.
@@ -489,48 +489,6 @@ export async function resetNicheAnalysis(niche: string): Promise<number> {
   return data?.length ?? 0
 }
 
-// ─── SERVE: lectura para el usuario (vía RPC, rápido, sin LLM) ─────────────────
-
-// Productos del nicho rankeados con penalización de "visto" (ver migración
-// 20260611_seen_economy): frescos-para-el-usuario primero, lo visto-hace-poco al
-// fondo y re-aparece tras 7 días. NO excluye → nunca vacío si hay inventario.
-export async function getUnseenProducts(
-  niche: string,
-  userId: string,
-  limit = 20
-): Promise<ProductRow[]> {
-  const { data, error } = await getDb().rpc('ph_unseen_products', {
-    p_niche: niche,
-    p_user: userId,
-    p_limit: limit,
-  })
-  if (error) throw new Error(error.message)
-  return (data as ProductRow[]) ?? []
-}
-
-// Cuántos GANADORES (alta/media + reglas de oro) son frescos para el usuario:
-// el "nuevos para ti" honesto de la UI. 0 = ya vio todos los recientes.
-export async function countUnseenProducts(niche: string, userId: string): Promise<number> {
-  const { data, error } = await getDb().rpc('ph_count_unseen', {
-    p_niche: niche,
-    p_user: userId,
-  })
-  if (error) throw new Error(error.message)
-  return (data as number) ?? 0
-}
-
-export async function markSeen(userId: string, productIds: string[]): Promise<void> {
-  if (!productIds.length) return
-  // seen_at SE ACTUALIZA al re-ver: resetea el reloj de re-aparición (7 días en
-  // ph_unseen_products). Por eso upsert sin ignoreDuplicates — actualiza la fila.
-  const now = new Date().toISOString()
-  const rows = productIds.map((id) => ({ user_id: userId, product_id: id, seen_at: now }))
-  const { error } = await getDb()
-    .from('ph_user_seen')
-    .upsert(rows, { onConflict: 'user_id,product_id' })
-  if (error) throw new Error(error.message)
-}
-
 // ─── RESEARCH POR URL (cola independiente de la de nichos) ────────────────────
 
 // Encola una request de research por URL (la ruta web). Devuelve su id para que
@@ -721,11 +679,12 @@ export async function saveRawVerdict(v: RawVerdictInput): Promise<void> {
 // de anuncios (regla 2). Las reglas 1 y 3 no filtran acá — `status` se sigue
 // escribiendo por la cola de verificación, pero no se consulta.
 //
-// La economía del visto vive en el código y no en el RPC ph_raw_unseen (que
-// filtra status='monoproducto' y quedó sin uso): mismo criterio — lo visto hace
-// menos de 7 días va al final, nunca se excluye, así el pool no se vacía.
-const VISTO_DIAS = 7
-const MAX_VISTOS = 500   // tope del filtro NOT IN: la URL de PostgREST tiene límite
+// ⚠️ El serving NO es personalizado (decisión del dueño del repo, 2026-08-13):
+// dos usuarios que abren la misma categoría en el mismo rango ven exactamente lo
+// mismo, y volver a entrar devuelve lo mismo otra vez. Antes había una economía
+// del visto (`ph_user_seen` + `markSeen`) que hundía lo ya mostrado y lo hacía
+// reaparecer a los 7 días; se eliminó entera. La TABLA sigue en la base con sus
+// datos — solo dejó de leerse y de escribirse.
 const SOBRE_PEDIDO = 4   // se piden 4× filas porque la lista negra recorta después
 
 function bucketQuery(niche: string, bucket: RawBucket) {
@@ -738,37 +697,132 @@ function bucketQuery(niche: string, bucket: RawBucket) {
   return q.order('ad_count', { ascending: false }).order('page_id')
 }
 
+// Igual que `bucketQuery` pero sobre los N nichos de una categoría. Va aparte y
+// no como parámetro opcional del anterior porque el `select` acotado (400 filas
+// con `*` es peso al pedo: las columnas del veredicto no se usan al servir)
+// obliga a otra lista de columnas, y mezclarlas en una sola función rompe el
+// tipado del cliente de Supabase.
+//
+// Medido 2026-08-12 contra el proyecto real: un `.in()` con los 528 nichos
+// (~6.9KB de querystring) responde en ~350ms sin que PostgREST se queje; la
+// categoría más grande arma ~2.4KB, así que hay margen de sobra.
+function categoriaQuery(niches: string[], bucket: RawBucket) {
+  const { min, max } = bucketRange(bucket)
+  let q = getDb().from('ph_raw_products')
+    .select('niche,page_id,name,product_name,country,ad_count,raw_data,status')
+    .in('niche', niches)
+    .neq('status', 'inactivo')
+    .gte('ad_count', min)
+  if (max !== null) q = q.lt('ad_count', max)
+  return q.order('ad_count', { ascending: false }).order('page_id')
+}
+
 export async function getApprovedByBucket(
   niche: string,
   bucket: RawBucket,
-  userId: string,
   limit = 10,
 ): Promise<RawProductRow[]> {
-  const desde = new Date(Date.now() - VISTO_DIAS * 86_400_000).toISOString()
-  const { data: seen } = await getDb()
-    .from('ph_user_seen').select('product_id')
-    .eq('user_id', userId).gte('seen_at', desde).like('product_id', `${niche}:%`)
-    .limit(MAX_VISTOS)
-  const vistos = (seen ?? []).map((r) => (r.product_id as string).slice(niche.length + 1))
-
-  let q = bucketQuery(niche, bucket).limit(limit * SOBRE_PEDIDO)
-  if (vistos.length) q = q.not('page_id', 'in', `(${vistos.join(',')})`)
-  const { data, error } = await q
+  const { data, error } = await bucketQuery(niche, bucket).limit(limit * SOBRE_PEDIDO)
   if (error) throw new Error(error.message)
-  const frescos = fisicos(data as RawProductRow[]).slice(0, limit)
-  if (frescos.length >= limit || !vistos.length) return frescos
-
-  // Ya vio todo lo del rango: se le repiten los vistos en vez de devolver menos.
-  const { data: repetidos } = await bucketQuery(niche, bucket)
-    .in('page_id', vistos).limit(limit * SOBRE_PEDIDO)
-  return [...frescos, ...fisicos(repetidos as RawProductRow[]).slice(0, limit - frescos.length)]
+  return fisicos(data as RawProductRow[]).slice(0, limit)
 }
 
-// Regla 1 sin LLM: la lista negra corre acá y no en la query porque es texto,
-// no columna. Por eso se piden SOBRE_PEDIDO× filas y se recortan después.
+/**
+ * Serving por CATEGORÍA: el mismo rango, pero sobre los nichos de la categoría.
+ *
+ * ⚠️ Una categoría NO es "un nicho más grande": la unión de decenas de nichos
+ * saca a flote justo lo que el serving por nicho puede tolerar. Medido en dev
+ * 2026-08-12 con el orden crudo por anuncios, las 13 categorías abrían con
+ * "Shoptemu | Shoptemu | Shoptemu" — el mismo marketplace está registrado en
+ * decenas de nichos, así que gana todas. Por eso acá se aplica el mismo
+ * tratamiento que la vitrina (`getTopPicks`) y no el del nicho:
+ *
+ *   1. los `monoproducto` (verificados: el anunciante dedica su página a ese
+ *      producto) van primero, y el relleno excluye lo ya `descartado`;
+ *   2. una página (`page_id`) aparece UNA vez aunque esté en cinco nichos;
+ *   3. tope por nicho, para que un nicho enorme no se coma la categoría.
+ *
+ * El resultado NO depende del usuario: la misma categoría en el mismo rango
+ * devuelve siempre lo mismo (ver el comentario de `SOBRE_PEDIDO`).
+ */
+export async function getApprovedByCategory(
+  niches: string[],
+  bucket: RawBucket,
+  limit = 10,
+): Promise<RawProductRow[]> {
+  if (!niches.length) return []
+  const [verificados, resto] = await Promise.all([
+    categoriaQuery(niches, bucket).eq('status', 'monoproducto').limit(limit * SOBRE_PEDIDO),
+    categoriaQuery(niches, bucket).not('status', 'in', '(inactivo,descartado,monoproducto)')
+      .limit(VENTANA_CAT),
+  ])
+  if (verificados.error) throw new Error(verificados.error.message)
+  if (resto.error) throw new Error(resto.error.message)
+
+  const confirmados = fisicos(verificados.data as unknown as RawProductRow[])
+  const relleno = fisicos(resto.data as unknown as RawProductRow[])
+
+  // Firma de marketplace: la MISMA página pautando en muchos nichos distintos de
+  // la categoría (Shoptemu, Uber, Airbnb, Mercado Pago). No es un producto, es
+  // un catálogo, y con decenas de miles de anuncios encabeza todas las
+  // categorías. Solo se aplica al relleno sin verificar: un `monoproducto` que
+  // aparezca en muchos nichos sí es un producto real bien distribuido.
+  const nichosPorPagina = new Map<string, Set<string>>()
+  for (const r of relleno) {
+    const s = nichosPorPagina.get(r.page_id) ?? new Set<string>()
+    s.add(r.niche)
+    nichosPorPagina.set(r.page_id, s)
+  }
+  const esCatalogo = (r: RawProductRow) =>
+    (nichosPorPagina.get(r.page_id)?.size ?? 0) >= NICHOS_CATALOGO
+
+  const tope = maxPorNicho(limit)
+  const paginas = new Set<string>()
+  const porNicho = new Map<string, number>()
+  const elegidos: RawProductRow[] = []
+  const relegados: RawProductRow[] = []   // los que solo el tope por nicho dejó fuera
+  for (const r of [...confirmados, ...relleno.filter((r) => !esCatalogo(r))]) {
+    if (paginas.has(r.page_id)) continue
+    paginas.add(r.page_id)
+    const n = porNicho.get(r.niche) ?? 0
+    if (n >= tope) { relegados.push(r); continue }
+    porNicho.set(r.niche, n + 1)
+    elegidos.push(r)
+  }
+
+  // El tope es para variar la categoría, no para dejarla corta.
+  return [...elegidos, ...relegados].slice(0, limit)
+}
+
+// Máximo de productos del mismo nicho en una categoría. Escala con el pedido: el
+// tope existe para que se vean varios nichos, y si no escalara, pedir 50 con
+// tope 3 exigiría 17 nichos con stock — las categorías chicas (ortopedia tiene
+// 7) llenarían la mayor parte de la página con relegados, o sea con el ranking
+// crudo por anuncios que el tope quería evitar. Con limit/8 son ~6 por nicho a
+// 50 productos, y sigue en 3 para la pantalla de 10.
+const maxPorNicho = (limit: number) => Math.max(3, Math.ceil(limit / 8))
+// Ventana del relleno. Tiene que ser MUCHO más grande que el pedido: una
+// categoría une decenas de nichos y la misma página aparece repetida en todos
+// ellos, así que las primeras filas por anuncios son casi todas copias. Medido
+// sobre "Salud y dolor" (207 nichos, el peor caso) sirviendo 50 productos: con
+// 400 filas devuelve 42, con 800 llega a 50 y cuesta ~90ms más; de 800 para
+// arriba no cambia nada. Antes, sirviendo 10, con 40 filas quedaba en 1.
+const VENTANA_CAT = 800
+// Cuántos nichos distintos de la categoría tiene que tocar una misma página para
+// tratarla como catálogo/marketplace y no como producto.
+const NICHOS_CATALOGO = 5
+
+// Todos los nichos que hoy tienen inventario servible — el buscador los agrupa
+// en categorías (`categories.ts`) para armar los chips y resolver la búsqueda.
+export const getNichesWithInventory = () => getTopNiches(2000)
+
+// La lista negra corre acá y no en la query porque es texto, no columna. Por eso
+// se piden SOBRE_PEDIDO× filas y se recortan después.
+// Filtra por tres motivos distintos: no es físico (regla 1 sin LLM), es una
+// marca grande (física, pero no una oportunidad) o es la red de spam.
 const fisicos = (rows: RawProductRow[] | null) =>
   (rows ?? []).filter((r) =>
-    isPhysicalEnough([r.raw_data?.title, r.raw_data?.body].filter(Boolean).join(' — '), r.name))
+    isServible([r.raw_data?.title, r.raw_data?.body].filter(Boolean).join(' — '), r.name))
 
 /**
  * Top picks: la vitrina de la portada. Del rango MÁS ALTO (100+) y de todos los

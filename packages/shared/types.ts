@@ -192,22 +192,6 @@ export interface ProductCard {
   pageUrl: string
 }
 
-export interface SearchResponse {
-  niche: string
-  status: 'ready' | 'pending' | 'empty'
-  products: ProductCard[]
-  // Ganadores frescos para el usuario (no vistos en los últimos 7 días).
-  totalUnseen: number
-  // true cuando no hay ganadores (alta/media) y se muestran los mejores
-  // candidatos disponibles por score — la UI lo etiqueta como tal.
-  bestEffort?: boolean
-  // pending + queued: nicho NUEVO recién encolado al scraper (cold start).
-  // pending sin queued: nicho existe pero aún sin productos analizados.
-  queued?: boolean
-  // ready + allSeen: el usuario ya vio todos los ganadores frescos; se le
-  // re-muestran los mejores (el pool no se vacía) mientras llegan nuevos.
-  allSeen?: boolean
-}
 
 // ─── Nodo de anuncio capturado por el scraper ─────────────────────────────────
 // Definido aquí (no en scraper.ts) para que dom-fallback.ts pueda importarlo

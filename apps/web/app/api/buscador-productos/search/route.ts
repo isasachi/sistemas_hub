@@ -1,55 +1,77 @@
 import { NextRequest, NextResponse } from 'next/server'
 import {
-  getApprovedByBucket, countApproved, countRawPending,
-  getRawNicheStatus, upsertRawNiche, markSeen, isBlocked,
-  RAW_BUCKETS, RAW_BUCKET_LABEL, isRawBucket,
+  getApprovedByBucket, getApprovedByCategory, getNichesWithInventory,
+  countApproved, countRawPending,
+  getRawNicheStatus, upsertRawNiche, isBlocked,
+  RAW_BUCKETS, RAW_BUCKET_LABEL, isRawBucket, isCategoryId, categoryOf,
   type RawBucket, type RawProductEntry, type RawBucketGroup, type RawSearchResponse,
 } from '@ph/shared'
-import { readUserId, newUserId, PH_USER_COOKIE } from '@/lib/product-hunter/session'
 import { toEntry } from '@/lib/product-hunter/entry'
 
 // ⚠️ Esta ruta SOLO lee de Supabase: ni Anthropic ni Playwright. El scraping
 // corre en el worker local.
 //
-// Devuelve UN rango a la vez (10 productos), el que pida `bucket`. Antes salían
-// los tres de golpe: mucha pared de cards, y marcaba como vistos 30 productos
-// que el usuario nunca miró. Ahora el filtro de la UI manda y `markSeen` solo
-// toca lo que se muestra. Sin `bucket` se autoelige el primer rango con stock
-// (del más pautado al menos), para que la primera búsqueda nunca caiga vacía.
+// Devuelve UN rango a la vez, el que pida `bucket`. Antes salían los tres de
+// golpe y era una pared de cards. Sin `bucket` se autoelige el primer rango con
+// stock (del más pautado al menos), para que la primera búsqueda nunca caiga
+// vacía.
 //
 // Por lo demás se sirve TODO el inventario clasificado solo por rango de
 // anuncios (regla 2): las reglas de producto físico y de anunciante
-// monoproducto no filtran el serving. El orden lo da getApprovedByBucket: lo
-// que este usuario no ha visto va primero, y lo visto reaparece a los 7 días —
-// así dos usuarios ven productos distintos sin que el pool se vacíe nunca.
+// monoproducto no filtran el serving.
+//
+// ⚠️ La respuesta NO depende del usuario: no hay cookie, ni "visto", ni
+// personalización. Dos personas en la misma categoría y rango ven lo mismo.
 
-const POR_RANGO = 10
+// Se sirven 50 de una y la UI los pagina de a 10. El costo de traer 50 en vez de
+// 10 es el mismo viaje a Postgres, y así pasar de página no vuelve a pegarle a
+// la API ni corre el riesgo de que el ranking se mueva entre página y página.
+const POR_RANGO = 50
 
 // Autoelección: del rango más pautado al menos. RAW_BUCKETS va al revés (es el
 // orden de lectura del filtro), así que acá se invierte.
 const ORDEN_AUTO = [...RAW_BUCKETS].reverse() as RawBucket[]
 
 export async function POST(req: NextRequest) {
-  let body: { niche?: string; bucket?: string }
+  let body: { niche?: string; bucket?: string; category?: string }
   try { body = await req.json() } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
+  // La UI busca por CATEGORÍA (los chips); el path por nicho sigue vivo para
+  // quien pegue directo a la ruta y es el que conserva el cold start.
+  const category = isCategoryId(body.category) ? body.category : null
   const niche = body.niche?.trim().toLowerCase().replace(/\s+/g, ' ')
-  if (!niche) return NextResponse.json({ error: 'Falta el nicho' }, { status: 400 })
   // Rango pedido por el filtro. Sin él (o inválido) se autoelige.
   const pedido = isRawBucket(body.bucket) ? body.bucket : null
 
-  let userId = await readUserId()
-  let setCookie = false
-  if (!userId) { userId = newUserId(); setCookie = true }
+  const responder = (payload: RawSearchResponse) => NextResponse.json(payload)
 
-  const responder = (payload: RawSearchResponse) => {
-    const res = NextResponse.json(payload)
-    if (setCookie) {
-      res.cookies.set(PH_USER_COOKIE, userId!, { httpOnly: true, path: '/', maxAge: 60 * 60 * 24 * 365 })
+  // ─── Búsqueda por CATEGORÍA (los chips de la UI) ───────────────────────────
+  // Una categoría son decenas de nichos: se resuelve la lista contra el
+  // inventario vivo (`categoryOf` clasifica por reglas, así que un nicho nuevo
+  // del daemon entra solo) y se sirve el mismo rango sobre todos ellos.
+  // Acá no hay cold start: los chips son categorías fijas, no consultas libres.
+  if (category) {
+    const niches = (await getNichesWithInventory()).filter((n) => categoryOf(n) === category)
+    let servidoCat: RawBucket = pedido ?? ORDEN_AUTO[0]
+    let productos: RawProductEntry[] = []
+    for (const bucket of pedido ? [pedido] : ORDEN_AUTO) {
+      servidoCat = bucket
+      productos = (await getApprovedByCategory(niches, bucket, POR_RANGO)).map(toEntry)
+      if (productos.length) break
     }
-    return res
+    return responder({
+      niche: category,
+      // Con rango explícito se responde `ready` aunque venga vacío, para que la
+      // UI deje el filtro a la vista y se pueda cambiar de rango.
+      status: productos.length > 0 || pedido ? 'ready' : 'empty',
+      groups: [{ bucket: servidoCat, label: RAW_BUCKET_LABEL[servidoCat], products: productos }],
+      total: productos.length,
+    })
   }
+
+  if (!niche) return NextResponse.json({ error: 'Falta el nicho' }, { status: 400 })
+
   const vacío = (extra: Partial<RawSearchResponse> = {}): RawSearchResponse => ({
     niche, status: 'pending', groups: [], total: 0, ...extra,
   })
@@ -64,7 +86,7 @@ export async function POST(req: NextRequest) {
   let products: RawProductEntry[] = []
   for (const bucket of pedido ? [pedido] : ORDEN_AUTO) {
     servido = bucket
-    products = (await getApprovedByBucket(niche, bucket, userId!, POR_RANGO)).map(toEntry)
+    products = (await getApprovedByBucket(niche, bucket, POR_RANGO)).map(toEntry)
     if (products.length) break
   }
   const grupo: RawBucketGroup = { bucket: servido, label: RAW_BUCKET_LABEL[servido], products }
@@ -95,10 +117,6 @@ export async function POST(req: NextRequest) {
     }
     return responder(vacío({ status: aprobados === 0 && pendientes > 0 ? 'pending' : 'empty' }))
   }
-
-  // Marcar como vistos los que se muestran: la próxima búsqueda de ESTE usuario
-  // trae otros, y lo visto vuelve recién a los 7 días.
-  markSeen(userId, grupo.products.map((p) => p.id)).catch(() => {})
 
   return responder({ niche, status: 'ready', groups: [grupo], total })
 }
