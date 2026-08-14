@@ -3,7 +3,7 @@ import type { ProductRow, NicheRow, PePoolRow, WatchlistRow, StoredAnalysis, Url
 import { bucketRange, type RawBucket } from './raw-buckets'
 import { prescore } from './prescore'
 import { sanitizeJsonDeep, cleanJsonText } from './json-clean'
-import { isPhysicalEnough } from './physical-filter'
+import { isServible } from './physical-filter'
 
 // Cliente Supabase con service role (bypassa RLS), igual que lib/db.ts del hub.
 // Se usa tanto desde rutas Next como desde los scripts de GitHub Actions.
@@ -816,11 +816,13 @@ const NICHOS_CATALOGO = 5
 // en categorías (`categories.ts`) para armar los chips y resolver la búsqueda.
 export const getNichesWithInventory = () => getTopNiches(2000)
 
-// Regla 1 sin LLM: la lista negra corre acá y no en la query porque es texto,
-// no columna. Por eso se piden SOBRE_PEDIDO× filas y se recortan después.
+// La lista negra corre acá y no en la query porque es texto, no columna. Por eso
+// se piden SOBRE_PEDIDO× filas y se recortan después.
+// Filtra por tres motivos distintos: no es físico (regla 1 sin LLM), es una
+// marca grande (física, pero no una oportunidad) o es la red de spam.
 const fisicos = (rows: RawProductRow[] | null) =>
   (rows ?? []).filter((r) =>
-    isPhysicalEnough([r.raw_data?.title, r.raw_data?.body].filter(Boolean).join(' — '), r.name))
+    isServible([r.raw_data?.title, r.raw_data?.body].filter(Boolean).join(' — '), r.name))
 
 /**
  * Top picks: la vitrina de la portada. Del rango MÁS ALTO (100+) y de todos los

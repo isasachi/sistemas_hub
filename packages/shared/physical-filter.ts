@@ -62,7 +62,7 @@ const PLATAFORMA = /^(uber|airbnb|spotify|netflix|disney|paramount|hbo|prime vid
 // `institutos?` va junto a `universidad` porque salieron juntos al medir: 60+
 // nombres del tipo "Instituto Nord", "ITQ - Instituto Superior Tecnológico".
 // Cubre además los institutos médicos, que son clínicas con otro nombre.
-const SERVICIO_NOMBRE = /\b(bancos?|seguros|aseguradora|financiera|cooperativa|universidad|universitaria|institutos?|posgrados?|maestrias?|business school|educacion continua|casinos?|apuestas|betsson|bet365|1xbet|codere|forex)\b|^(claro|movistar|telcel|entel|tigo|directv|izzi|totalplay|infinitum|copec|compensar)\b/
+const SERVICIO_NOMBRE = /\b(bancos?|seguros|aseguradora|financiera|cooperativa|universidad|universitaria|institutos?|posgrados?|maestrias?|business school|educacion continua|casinos?|apuestas|betsson|bet365|1xbet|codere|forex|remitly|ria money|c6 bank|bradesco|klar|metlife|kaiser permanente|ggpoker|turo|tickpick)\b|^(claro|movistar|telcel|entel|tigo|directv|izzi|totalplay|infinitum|copec|compensar)\b/
 
 // ── Cluster 7: software, SaaS y edtech con marca propia ──────────────────────
 // El disparador fue "Adobe Creative Cloud": 7,008 anuncios activos, el primero
@@ -70,7 +70,7 @@ const SERVICIO_NOMBRE = /\b(bancos?|seguros|aseguradora|financiera|cooperativa|u
 // plataforma de consumo, no es banco. Dos de sus cuatro filas llegan con
 // `{{product.name}}` sin renderizar como único texto, así que el NOMBRE del
 // anunciante es la única señal que existe para ellas.
-const SOFTWARE_NOMBRE = /\b(adobe|acrobat|creative cloud|microsoft|office 365|canva|figma|notion|dropbox|salesforce|hubspot|shopify|godaddy|mcafee|chatgpt|openai|midjourney|copilot|paypal|udemy|coursera|platzi|domestika|duolingo|babbel|crehana|classpass|kavak)\b/
+const SOFTWARE_NOMBRE = /\b(adobe|acrobat|creative cloud|microsoft|office 365|canva|figma|notion|dropbox|salesforce|hubspot|shopify|godaddy|mcafee|chatgpt|openai|midjourney|copilot|paypal|udemy|coursera|platzi|domestika|duolingo|babbel|crehana|classpass|kavak|monday\.com|twilio|deel|elevenlabs|photoroom|meshy|speechify|coursiv|mindvalley|betterme|yoga.?go|justfit|fitbod|calm|airalo|holafly)\b/
 
 // Apps y juegos que se nombran a sí mismos. Medido sobre las 70,175 filas de la
 // base: los 77 anunciantes con "app"/"apps" en el nombre son apps, sin un solo
@@ -130,3 +130,55 @@ export function nonPhysicalSignal(
 
 export const isPhysicalEnough = (text?: string | null, advertiser?: string | null) =>
   nonPhysicalSignal(text, advertiser) === null
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Lo que sigue NO responde "¿es un producto físico?" — responde "¿esto merece
+// un lugar en la vitrina?". Son dos motivos distintos del de arriba y por eso
+// viven en otra función: Nike sí manda una caja, y la red de spam también.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Marcas grandes: envían un objeto, pero no son una OPORTUNIDAD. Tienen su
+// propio canal y su propia demanda; el buscador existe para encontrar productos
+// sin dueño, y estas ocupan los primeros puestos de la vitrina por volumen de
+// anuncios, que es justo el orden en que se sirve.
+// Las de colisión conocida van ANCLADAS al inicio: `natura` con \b se llevaba
+// puesto a "Santa Natura" y "ZEN natura MX", que son otras empresas; `metro` y
+// `wong` son palabra corriente y apellido.
+const MARCA_GRANDE = /\b(nike|adidas|reebok|under armour|levi'?s|lacoste|new balance|new era|skechers|crocs|converse|chanel|gucci|dior|prada|versace|calvin klein|carolina herrera|tommy hilfiger|ray.?ban|oakley|l'?oreal|la roche.?posay|nivea|garnier|maybelline|revlon|pantene|dove|colgate|oral.?b|avon|mary kay|oriflame|omnilife|yanbal|esika|cyzone|samsung|sony|philips|huawei|panasonic|epson|mcdonald'?s|burger king|kfc|starbucks|sonic drive|kroger|bodega aurrera|colsubsidio|la anonima)\b|^(natura|metro|wong|exito)\b/
+
+// Red de spam. Es la fuente de basura más grande que queda: al medir la vitrina,
+// 15 de los 25 primeros por anuncios eran de esta red, con hasta 8,904 anuncios
+// activos y casi todos en el mismo nicho. No se reconoce por una palabra sino
+// por la FORMA del nombre — una palabra inventada en inglés más un código de
+// granja ("Emboadlie.xs01", "Beyonddraw.ND02") — y por la serie "Ns-".
+//
+// Las bases van en lista explícita porque la red también publica el nombre
+// pelado ("Emboadlie", "Accurateg") o con TLD ("Accurateg.shop"), y ahí no hay
+// forma que detectar. Son palabras inventadas: no colisionan con nada.
+const SPAM_BASE = /^(emboadlie|benighty|beyonddraw|atmospherei|hardpointing|documentw|applicabley|occasionalous|visulong|statisticsing|civilizek|pickelect|sakesfor|classificaty|explanationi|ancienflow|regulatev|repertoireof|deepwily|accurateg|roarrave|comstipose|newmindstart|approvalp|flowarmth|gloryboom|frequentlyk|forttender)\b/
+
+// ⚠️ El código exige 1-3 letras Y 2-3 dígitos, y esa precisión no es cosmética.
+// Con la forma floja (sufijo de letras sueltas) se iban puestas "KiddoSpace-MX",
+// "Kokoro-ec", "Luramart-us" y "HerramientasJ&M": tiendas reales con su código
+// de país. Y sin exigir dos dígitos caían "PulseSense-N1" y "ChaskiBox.593"
+// (593 es el código de Ecuador). Todo eso está medido, no supuesto.
+const SPAM_FORMA = /^[a-z]{6,}[.\-&/·][a-z]{1,3}\d{2,3}$|^(ns|srsz)[-\d]/
+
+/**
+ * Todo lo que no debe llegar a la vitrina: lo no-físico, las marcas grandes y
+ * la red de spam. Es lo que usa el serving.
+ */
+export function servingSignal(
+  text: string | null | undefined,
+  advertiser?: string | null,
+): NonPhysicalHit | null {
+  const nombre = norm(advertiser ?? '')
+  const spam = nombre.match(SPAM_BASE) ?? nombre.match(SPAM_FORMA)
+  if (spam) return { cluster: 'spam', match: spam[0] }
+  const marca = nombre.match(MARCA_GRANDE)
+  if (marca) return { cluster: 'marca-grande', match: marca[0] }
+  return nonPhysicalSignal(text, advertiser)
+}
+
+export const isServible = (text?: string | null, advertiser?: string | null) =>
+  servingSignal(text, advertiser) === null

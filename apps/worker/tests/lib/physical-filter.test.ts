@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { nonPhysicalSignal, isPhysicalEnough } from '@ph/shared'
+import { nonPhysicalSignal, isPhysicalEnough, servingSignal, isServible } from '@ph/shared'
 
 // Medido contra los 3,970 anuncios que el LLM ya etiquetó: bloquea el 37% de lo
 // no-físico perdiendo 1.8% de los físicos (y 30 de esas 43 pérdidas son
@@ -78,5 +78,46 @@ describe('lista negra de no-físicos', () => {
   it('sin texto no descarta', () => {
     expect(isPhysicalEnough(null, null)).toBe(true)
     expect(isPhysicalEnough('{{product.name}}', 'Alquimia Botanica')).toBe(true)
+  })
+})
+
+// Dos motivos que NO son "no es físico": Nike manda una caja igual que la red de
+// spam. Por eso viven en servingSignal y no en nonPhysicalSignal.
+describe('lo que no merece un lugar en la vitrina', () => {
+  it('saca las marcas grandes, que no son una oportunidad', () => {
+    expect(servingSignal('Just Do It', 'Nike')?.cluster).toBe('marca-grande')
+    expect(servingSignal('Bleu de Chanel', 'CHANEL')?.cluster).toBe('marca-grande')
+    expect(servingSignal('Serum reparador', 'La Roche-Posay')?.cluster).toBe('marca-grande')
+    // Pero siguen siendo productos físicos: el otro filtro no las toca.
+    expect(isPhysicalEnough('Just Do It', 'Nike')).toBe(true)
+  })
+
+  it('las marcas de colisión conocida van ancladas al inicio', () => {
+    expect(servingSignal('Cosméticos', 'Natura')?.cluster).toBe('marca-grande')
+    // ⚠️ Otras empresas que solo CONTIENEN la palabra: si esto se bloquea, el
+    // ancla se perdió.
+    expect(isServible('Suplementos naturales', 'Santa Natura')).toBe(true)
+    expect(isServible('Cuidado de la piel', 'ZEN natura MX')).toBe(true)
+  })
+
+  it('caza la red de spam por la forma del nombre', () => {
+    expect(servingSignal('Brochas', 'Emboadlie.xs01')?.cluster).toBe('spam')
+    expect(servingSignal('Cepillo', 'Beyonddraw.ND02')?.cluster).toBe('spam')
+    expect(servingSignal('Faja', 'NS-YXB-YHb')?.cluster).toBe('spam')
+    // El nombre pelado y el que lleva TLD: no hay forma que detectar, por eso
+    // las bases van en lista.
+    expect(servingSignal('Brochas', 'Emboadlie')?.cluster).toBe('spam')
+    expect(servingSignal('Ofertas', 'Accurateg.shop')?.cluster).toBe('spam')
+  })
+
+  it('⚠️ no se lleva puesta a una tienda real con código de país', () => {
+    // Cada uno de estos cayó con una versión más floja del patrón.
+    for (const tienda of [
+      'Detodo.cl', 'Aqualo.ar', 'coofandy.shop', 'KiddoSpace-MX', 'Kokoro-ec',
+      'Luramart-us', 'HerramientasJ&M', 'MayoristaC&Y', 'ChaskiBox.593',
+      'PulseSense-N1', 'Shopymarket.2',
+    ]) {
+      expect(isServible('Envío a todo el país', tienda), tienda).toBe(true)
+    }
   })
 })
