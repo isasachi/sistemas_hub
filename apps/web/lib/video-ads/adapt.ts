@@ -281,6 +281,13 @@ export function buildAdaptInstruction(
     '    demográfica entera—. Mismo tipo de dato y aproximadamente el mismo número de',
     '    palabras. Una frase del original que cumplía una función, adaptada, cumple esa',
     '    misma función.',
+    // "Ella" → "adultos y jóvenes" pasaba la regla de arriba (es corto) y aun así perdía
+    // lo único que ese hueco decía: a quién le habla el personaje, en qué persona y en
+    // qué género. Nada conectaba el hueco con quién está en cámara.
+    '  - CONSERVA LA PERSONA Y EL GÉNERO DEL ORIGINAL. Si el original le hablaba a alguien',
+    '    en concreto ("para ella", "para ti"), el tuyo también: un hueco de público no se',
+    '    cambia por una franja demográfica solo porque quepa. Quien habla es el PERSONAJE',
+    '    de los INPUTS, así que el género y el tratamiento salen de ahí.',
     '  - LOS INPUTS SON NOTAS DE UN FORMULARIO, no texto listo para pegar. Están escritos',
     '    como apuntes sueltos ("adultos y jóvenes desde los 12 años", "no puedo dormir por',
     '    las noches") y no como parte de una oración. Volcarlos tal cual dentro de una',

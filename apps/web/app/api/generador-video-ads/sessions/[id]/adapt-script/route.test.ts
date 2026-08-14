@@ -228,3 +228,33 @@ describe('POST adapt-script — reescritura del modelo', () => {
     expect(guardado().tomas[0].locucion).toBe('sobre todo si últimamente andas muy cansada por las noches')
   })
 })
+
+// El prompt de la FASE 3 muestra el original rotulado por toma ("Toma 1" / "ORIGINAL:")
+// y el modelo devuelve a veces ese rótulo pegado al texto. `acceptRewrite` no lo ve —el
+// andamiaje sigue entero, solo hay un prefijo de más— y se renderizaría leído en voz alta.
+describe('POST adapt-script — el rótulo del prompt no se cuela al guión', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getVideoSession).mockResolvedValue(session())
+  })
+
+  it('quita un "Toma N:" delante de la reescritura', async () => {
+    responder(
+      [{ id: 'situación personal#1', valor: 'cansada' }],
+      { correcciones: [], ajustes: [] },
+      [{ n: 1, texto: 'Toma 1: sobre todo si últimamente andas cansada por las noches' }],
+    )
+    await POST(req(), ctx())
+    expect(guardado().tomas[0].locucion).toBe('sobre todo si últimamente andas cansada por las noches')
+  })
+
+  it('no toca una locución que solo empieza parecido', async () => {
+    responder(
+      [{ id: 'situación personal#1', valor: 'cansada' }],
+      { correcciones: [], ajustes: [] },
+      [{ n: 1, texto: 'sobre todo si últimamente andas cansada por las noches' }],
+    )
+    await POST(req(), ctx())
+    expect(guardado().tomas[0].locucion).toBe('sobre todo si últimamente andas cansada por las noches')
+  })
+})

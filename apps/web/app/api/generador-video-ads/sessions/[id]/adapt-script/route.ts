@@ -86,7 +86,12 @@ export async function POST(
       ...Object.values(inputs), ...Object.values(limpios),
       session.product_scan?.brandingDescription ?? '', session.product_scan?.productDescription ?? '',
     ].filter(Boolean)
-    const porTomaTexto = new Map(locuciones.map((l) => [l.n, l.texto]))
+    // ⚠️ El prompt muestra el original rotulado ("Toma 1" / "ORIGINAL:") y el modelo
+    // devuelve a veces ese rótulo pegado al texto — "Toma 1: Tres razones para tomar…".
+    // `acceptRewrite` no lo ve (el andamiaje sigue intacto, solo hay un prefijo de más) y
+    // se renderizaría leído en voz alta. El `n` ya viaja en su propio campo.
+    const porTomaTexto = new Map(locuciones.map((l) =>
+      [l.n, l.texto.replace(/^\s*(toma|original|locución|locucion)\s*\d*\s*[:.\-–]\s*/i, '')]))
     const reescritas: number[] = []
     relleno = {
       ...relleno,

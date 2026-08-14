@@ -28,6 +28,12 @@ import { callStructured } from '@/lib/gemini'
  *
  * El análisis forense (`analyze-reference`) ya llamaba a Gemini directo por otra razón
  * —gpt-4o-mini no acepta partes de video— y sigue igual.
+ *
+ * ⚠️ `preferGemini` es PREFERENCIA, no exclusividad: si Gemini falla, `callStructured`
+ * cae a gpt-4o-mini — el modelo que produce justamente la salida medida arriba — y lo
+ * único que queda es un `console.warn` que el usuario nunca ve. Es el comportamiento que
+ * se quiere (mejor un guión flojo que un 500), pero si alguna vez vuelve a aparecer
+ * "gomitas de melatonina" en producción, ese fallback es el primer sitio donde mirar.
  */
 export function callVideoAds<T>(
   schemaName: string,
