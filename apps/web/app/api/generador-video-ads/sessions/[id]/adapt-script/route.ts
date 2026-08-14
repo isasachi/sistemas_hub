@@ -5,7 +5,7 @@ import { callStructured } from '@/lib/gemini'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 import { SlotValuesSchema, CoherenceSchema, buildAdaptInstruction, buildCoherenceInstruction } from '@/lib/video-ads/adapt'
-import { extractSlots, fillTemplate, rejectBadValues, resolveSlotId, acceptScaffoldFix } from '@/lib/video-ads/fill'
+import { extractSlots, fillTemplate, rejectBadValues, resolveSlotId, acceptScaffoldFix, acceptRewrite } from '@/lib/video-ads/fill'
 import { extractPending } from '@/lib/video-ads/pending'
 import { canProceed } from '@/lib/video-ads/validation'
 import { STEP } from '@/lib/video-ads/steps'
@@ -51,7 +51,7 @@ export async function POST(
       constraints: session.constraints ?? '',
     }
 
-    const { valores, acciones } = await callStructured('slot_values', SlotValuesSchema, [
+    const { valores, acciones, locuciones } = await callStructured('slot_values', SlotValuesSchema, [
       { text: buildAdaptInstruction(session.template, session.forensic_analysis, inputs, session.product_scan, slots) },
     ])
 
@@ -72,6 +72,40 @@ export async function POST(
       console.warn(`[video-ads/adapt-script] sesión ${id}: valores descartados por no ser valores:`, rechazados)
 
     let relleno = fillTemplate(session.template, limpios)
+
+    // EL MODELO REESCRIBE, EL CÓDIGO VERIFICA.
+    // `fillTemplate` garantiza el andamiaje por construcción, y por eso mismo nadie
+    // redacta la frase: las costuras salen rotas ("andas muy no puedo dormir por las
+    // noches", "te ayuda a ayudarte a dormir"). El spec no tiene ese problema porque su
+    // modelo REDACTA el guión con el original delante. Acá se le pide lo mismo, pero lo
+    // que devuelve se mide contra el andamiaje de la plantilla: lo que deriva cae al
+    // relleno determinista, que sigue siendo el piso. Nunca queda peor que antes.
+    // Todo lo que el usuario entregó. La reescritura es texto libre y no pasa por
+    // `rejectBadValues`, así que este es el único sitio donde se puede exigir que lo que
+    // afirma esté respaldado por algún dato real.
+    const fuentes = [
+      ...Object.values(inputs), ...Object.values(limpios),
+      session.product_scan?.brandingDescription ?? '', session.product_scan?.productDescription ?? '',
+    ].filter(Boolean)
+    const porTomaTexto = new Map(locuciones.map((l) => [l.n, l.texto]))
+    const reescritas: number[] = []
+    relleno = {
+      ...relleno,
+      tomas: relleno.tomas.map((t) => {
+        const propuesta = porTomaTexto.get(t.n)
+        const plantilla = session.template!.tomas.find((x) => x.n === t.n)?.locucion
+        if (!propuesta || !plantilla) return t
+        const v = acceptRewrite({ plantilla, piso: t.locucion, propuesta, fuentes })
+        if (!v.ok) {
+          console.info(`[video-ads/adapt-script] sesión ${id}: toma ${t.n} cae al relleno automático — ${v.motivo}`)
+          return t
+        }
+        reescritas.push(t.n)
+        return { ...t, locucion: propuesta.trim() }
+      }),
+    }
+    relleno = { ...relleno, guionFinal: relleno.tomas.map((t) => t.locucion).join(' ') }
+    console.info(`[video-ads/adapt-script] sesión ${id}: ${reescritas.length}/${relleno.tomas.length} tomas usan la reescritura del modelo`)
     // Los valores realmente vigentes tras el corrector, para comprobar que un ajuste de
     // andamiaje no se lleve por delante un dato ya rellenado.
     let vigentes = limpios

@@ -34,6 +34,19 @@ export const SlotValuesSchema = z.object({
     n: z.number(),
     accionVisual: z.string(),
   })),
+  /**
+   * La locución de cada toma REESCRITA por el modelo, como la escribiría el spec: el
+   * guión original con los datos nuevos puestos y la gramática cosida a mano.
+   *
+   * No sustituye a `valores` — se piden las dos cosas en la misma llamada. `valores`
+   * alimenta el relleno determinista, que es el PISO al que se cae cuando la reescritura
+   * deriva demasiado del andamiaje (`acceptRewrite`, fill.ts). Por eso el sistema nunca
+   * queda peor que con el relleno solo: como mucho, igual.
+   */
+  locuciones: z.array(z.object({
+    n: z.number(),
+    texto: z.string(),
+  })).default([]),
 })
 export type SlotValues = z.infer<typeof SlotValuesSchema>
 
@@ -243,6 +256,23 @@ export function buildAdaptInstruction(
     '    hueco queda marcado en el guión y el usuario lo escribe él mismo antes de',
     '    renderizar. Un hueco vacío es un resultado correcto; uno inventado es',
     '    inservible.',
+    '',
+    '── EL GUION REESCRITO (`locuciones`) ──',
+    'Además de los valores, devuelve la locución COMPLETA de cada toma ya adaptada: el',
+    'texto del original con los datos nuevos puestos en su sitio. Escríbela como la',
+    'escribirías a mano, no como un pegado — si al poner el valor la frase pide un ajuste',
+    'de concordancia, de preposición o de conector, hazlo. Eso es lo único que puedes',
+    'tocar del texto que rodea al hueco.',
+    '',
+    'TODO LO DEMÁS SE COPIA PALABRA POR PALABRA del original. No reordenes, no resumas, no',
+    'mejores el argumento, no cambies el tono ni agregues frases. Si al leer tu locución',
+    'no se reconoce el guion de referencia, te fuiste: se descarta y se usa el pegado',
+    'automático en su lugar.',
+    '',
+    'Los huecos que dejes VACÍOS en `valores` van en la locución como `[PENDIENTE: nombre',
+    'del hueco]`, con ese formato exacto y el mismo nombre. Es lo que bloquea el render',
+    'para que nadie grabe un corchete leído en voz alta — si lo resuelves por tu cuenta',
+    'con algo que no está en los datos, se descarta tu reescritura entera.',
     '',
     '── ACCIONES ──',
     'Devuelve un `acciones` por cada toma, con su `n`. La acción de cada toma NO se',

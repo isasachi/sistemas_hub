@@ -360,6 +360,125 @@ export function acceptScaffoldFix(args: {
   return { ok: true }
 }
 
+/**
+ * Fracción del ANDAMIAJE de la plantilla que sobrevive en un texto reescrito.
+ * El andamiaje es lo de fuera de los corchetes: las palabras que vienen del video de
+ * referencia. Conservarlas ES la promesa del producto ("el guión es el del original").
+ */
+export function scaffoldFidelity(plantilla: string, texto: string): number {
+  const andamio = norm(plantilla.replace(HUECO, ' '))
+  if (!andamio.length) return 1
+  const presentes = new Set(norm(texto))
+  return andamio.filter((w) => presentes.has(w)).length / andamio.length
+}
+
+/**
+ * Piso de fidelidad para aceptar que el MODELO reescriba una locución en vez de que la
+ * arme `fillTemplate`.
+ *
+ * El número no es arbitrario: cuando se le pedía al modelo escribir el guión adaptado sin
+ * ninguna verificación, conservaba entre el 66% y el 71% de las palabras del original —
+ * ese era el nivel de deriva que hizo abandonar el enfoque. 0.85 está cómodamente por
+ * encima de eso, así que una reescritura que pase este filtro no es de las que derivaban.
+ */
+export const FIDELIDAD_MIN = 0.85
+
+/**
+ * Primera palabra de contenido del texto que no aparece en ninguna fuente, o `null` si
+ * todas están respaldadas.
+ *
+ * Se miran solo las palabras de 5+ letras: las cortas son andamiaje gramatical y no
+ * afirman nada sobre el producto. La comparación es por PREFIJO de 5 para tolerar la
+ * flexión ("ayuda"/"ayudan"/"ayudarte" comparten raíz), que es justo la libertad
+ * gramatical que la reescritura viene a ganar — sin eso, cada conjugación nueva se
+ * leería como invención.
+ */
+/**
+ * Secuencia de palabras que aparece dos veces SEGUIDAS, o `null`.
+ *
+ * El eco es la firma de que la redacción pegó un valor que ya contenía las palabras del
+ * andamiaje. `rejectBadValues` lo vigila en los valores, pero la reescritura es texto
+ * libre y no pasa por ahí: caso real, "estás en mis veintitantos como yo como yo".
+ */
+function repeticionInmediata(texto: string): string | null {
+  const w = norm(texto)
+  for (let n = 4; n >= 2; n--) {
+    for (let i = 0; i + 2 * n <= w.length; i++) {
+      const a = w.slice(i, i + n).join(' ')
+      if (a === w.slice(i + n, i + 2 * n).join(' ')) return a
+    }
+  }
+  return null
+}
+
+function ungrounded(texto: string, fuentes: string[]): string | null {
+  const pool = norm(fuentes.join(' ')).map((w) => w.slice(0, 5))
+  const respaldada = new Set(pool)
+  for (const w of norm(texto)) {
+    if (w.length < 5) continue
+    if (!respaldada.has(w.slice(0, 5))) return w
+  }
+  return null
+}
+
+/**
+ * ¿Se acepta la locución que reescribió el modelo, o se cae al relleno determinista?
+ * ---------------------------------------------------------------------------
+ * Este es el cambio de garantía CONSTRUCTIVA a garantía VERIFICADA. `fillTemplate`
+ * garantiza el andamiaje por construcción —copia y pega— pero por eso mismo nadie
+ * escribe la frase, y las costuras salen rotas: "andas muy no puedo dormir por las
+ * noches", "te ayuda a ayudarte a dormir". El spec no tiene ese problema porque su
+ * modelo REDACTA el guión con el original delante, como haría una persona.
+ *
+ * La razón por la que ahora se puede permitir y antes no: antes no había forma de
+ * detectar la deriva. Ahora se mide contra el andamiaje de la plantilla, y lo que no
+ * pasa el filtro cae al relleno determinista, que sigue siendo el piso. Nunca se queda
+ * peor que hoy — como mucho, igual.
+ */
+export function acceptRewrite(args: {
+  /** Locución de la PLANTILLA, con sus corchetes: de ahí sale el andamiaje. */
+  plantilla: string
+  /** Relleno determinista de esa toma: el piso al que se cae si esto se rechaza. */
+  piso: string
+  propuesta: string
+  /**
+   * Todo lo que el usuario entregó: inputs, texto de la etiqueta y los valores elegidos.
+   * La reescritura es TEXTO LIBRE y por tanto esquiva `rejectBadValues`, así que este es
+   * el único punto donde se puede comprobar que no aparezca contenido de la nada. Medido:
+   * sin esto, una reescritura afirmó que unas gomitas de melatonina llevan "vitamina B6"
+   * —que no está ni en los inputs ni en la etiqueta— y otra convirtió la "hoja verde" del
+   * logo en un ingrediente.
+   */
+  fuentes: string[]
+}): { ok: true; fidelidad: number } | { ok: false; motivo: string; fidelidad: number } {
+  const { plantilla, piso, propuesta, fuentes } = args
+  const t = propuesta.trim()
+  const fidelidad = scaffoldFidelity(plantilla, t)
+  if (!t) return { ok: false, motivo: 'vacía', fidelidad }
+
+  const ratio = t.length / (piso.length || 1)
+  if (ratio < 0.6 || ratio > 1.4)
+    return { ok: false, motivo: `el largo se va (${Math.round(ratio * 100)}% del relleno)`, fidelidad }
+
+  // Un pendiente MENOS que el piso significa que el modelo rellenó por su cuenta algo
+  // que el paso de valores dejó vacío — y `extractPending` es lo que bloquea el render,
+  // así que eso abriría la puerta con contenido inventado.
+  const marcador = /\[PENDIENTE:/gi
+  if ((t.match(marcador) ?? []).length < (piso.match(marcador) ?? []).length)
+    return { ok: false, motivo: 'resuelve por su cuenta un hueco que quedó pendiente', fidelidad }
+
+  if (fidelidad < FIDELIDAD_MIN)
+    return { ok: false, motivo: `conserva el ${Math.round(fidelidad * 100)}% del andamiaje`, fidelidad }
+
+  const eco = repeticionInmediata(t)
+  if (eco) return { ok: false, motivo: `repite "${eco}" dos veces seguidas`, fidelidad }
+
+  const inventada = ungrounded(t, [plantilla, piso, ...fuentes])
+  if (inventada) return { ok: false, motivo: `afirma "${inventada}", que no está en ningún dato`, fidelidad }
+
+  return { ok: true, fidelidad }
+}
+
 export interface FilledTemplate {
   guionFinal: string
   tomas: { n: number; locucion: string; accionVisual: string; duracionSeg: number }[]

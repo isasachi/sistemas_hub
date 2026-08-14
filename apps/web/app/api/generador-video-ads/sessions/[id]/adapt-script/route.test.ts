@@ -43,10 +43,15 @@ function session(): VideoSessionResponse {
 const req = () => new Request('http://x/api', { method: 'POST' }) as never
 const ctx = () => ({ params: Promise.resolve({ id: 's1' }) })
 
-/** Encadena las dos llamadas de la FASE 3: relleno y después coherencia. */
-function responder(valores: { id: string; valor: string }[], coherencia: object) {
+/** Encadena las dos llamadas de la FASE 3: relleno y después coherencia.
+ *  `locuciones` es la reescritura del modelo; vacía = el guión lo arma `fillTemplate`. */
+function responder(
+  valores: { id: string; valor: string }[],
+  coherencia: object,
+  locuciones: { n: number; texto: string }[] = [],
+) {
   vi.mocked(callStructured)
-    .mockResolvedValueOnce({ valores, acciones: [] } as never)
+    .mockResolvedValueOnce({ valores, acciones: [], locuciones } as never)
     .mockResolvedValueOnce(coherencia as never)
 }
 
@@ -127,10 +132,59 @@ describe('POST adapt-script — ajuste de andamiaje', () => {
   // Si el corrector revienta, la adaptación de la primera pasada tiene que sobrevivir.
   it('un fallo del corrector no tumba la adaptación', async () => {
     vi.mocked(callStructured)
-      .mockResolvedValueOnce({ valores: [{ id: 'situación personal#1', valor: 'cansada' }], acciones: [] } as never)
+      .mockResolvedValueOnce({ valores: [{ id: 'situación personal#1', valor: 'cansada' }], acciones: [], locuciones: [] } as never)
       .mockRejectedValueOnce(new Error('modelo caído'))
     const res = await POST(req(), ctx())
     expect(res.status).toBe(200)
     expect(guardado().tomas[0].locucion).toContain('andas muy cansada')
+  })
+})
+
+// El cambio de garantía CONSTRUCTIVA (código pega) a garantía VERIFICADA (el modelo
+// redacta y el código mide). El piso nunca desaparece: lo que deriva cae al relleno.
+describe('POST adapt-script — reescritura del modelo', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getVideoSession).mockResolvedValue(session())
+  })
+
+  it('usa la reescritura cuando conserva el andamiaje', async () => {
+    responder(
+      [{ id: 'situación personal#1', valor: 'cansada' }],
+      { correcciones: [], ajustes: [] },
+      [{ n: 1, texto: 'sobre todo si últimamente andas cansada por las noches' }],
+    )
+    await POST(req(), ctx())
+    expect(guardado().tomas[0].locucion).toBe('sobre todo si últimamente andas cansada por las noches')
+  })
+
+  // El fallo que hizo abandonar este enfoque la primera vez: el modelo escribía otro
+  // anuncio. Ahora se mide y se cae al piso en vez de publicarlo.
+  it('cae al relleno automático cuando el modelo escribe otra cosa', async () => {
+    responder(
+      [{ id: 'situación personal#1', valor: 'cansada' }],
+      { correcciones: [], ajustes: [] },
+      [{ n: 1, texto: 'descubre hoy el secreto que miles de personas ya están probando' }],
+    )
+    await POST(req(), ctx())
+    expect(guardado().tomas[0].locucion).toBe('sobre todo si últimamente andas muy cansada por las noches')
+  })
+
+  // `extractPending` bloquea el render; si la reescritura resuelve un hueco por su
+  // cuenta, esa puerta se abriría con contenido que nadie entregó.
+  it('rechaza la reescritura que resuelve sola un hueco pendiente', async () => {
+    responder(
+      [{ id: 'situación personal#1', valor: '' }],
+      { correcciones: [], ajustes: [] },
+      [{ n: 1, texto: 'sobre todo si últimamente andas muy agotada por las noches' }],
+    )
+    await POST(req(), ctx())
+    expect(guardado().tomas[0].locucion).toContain('[PENDIENTE:')
+  })
+
+  it('sin reescritura, el guión lo arma el relleno determinista', async () => {
+    responder([{ id: 'situación personal#1', valor: 'cansada' }], { correcciones: [], ajustes: [] })
+    await POST(req(), ctx())
+    expect(guardado().tomas[0].locucion).toBe('sobre todo si últimamente andas muy cansada por las noches')
   })
 })

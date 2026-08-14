@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractSlots, fillTemplate, validateTemplate, assembleTemplate, rejectBadValues, alignSlots, normalizeSlots, resolveSlotId, acceptScaffoldFix } from './fill'
+import { extractSlots, fillTemplate, validateTemplate, assembleTemplate, rejectBadValues, alignSlots, normalizeSlots, resolveSlotId, acceptScaffoldFix, acceptRewrite } from './fill'
 import type { ScriptTemplate } from './template'
 
 // Plantilla recortada del caso real (serum Apivita → suero de niacinamida). Trae los
@@ -488,5 +488,92 @@ describe('acceptScaffoldFix', () => {
       propuesta: 'Número uno, contiene melatonina y [otro] para dormir cada noche',
       valores: ['melatonina'],
     }))).toMatch(/marcadores/)
+  })
+})
+
+// El cambio de garantía CONSTRUCTIVA a VERIFICADA: el modelo redacta la frase (que es
+// como lo hace el spec, y por eso le salen bien las costuras) y el código mide si se
+// fue. Lo que no pasa cae al relleno determinista, que sigue siendo el piso.
+describe('acceptRewrite', () => {
+  const PLANTILLA = 'sobre todo si últimamente andas muy [situación personal] por las noches'
+  const PISO = 'sobre todo si últimamente andas muy no puedo dormir por las noches'
+  const base = { plantilla: PLANTILLA, piso: PISO, fuentes: ['no puedo dormir por las noches', 'cansada'] }
+
+  it('acepta la redacción que arregla la costura conservando el andamiaje', () => {
+    const r = acceptRewrite({ ...base, propuesta: 'sobre todo si últimamente andas muy cansada por las noches' })
+    expect(r.ok).toBe(true)
+  })
+
+  // El fallo que hizo abandonar este enfoque: el modelo escribía otro anuncio. Se medía
+  // 66-71% de fidelidad y no había forma de detectarlo; ahora cae al piso.
+  it('rechaza otro anuncio disfrazado de adaptación', () => {
+    const r = acceptRewrite({ ...base, propuesta: 'descubre hoy el secreto que miles de personas ya prueban' })
+    expect(r.ok).toBe(false)
+    expect(r.fidelidad).toBeLessThan(0.85)
+  })
+
+  // La reescritura es texto libre: no pasa por `rejectBadValues`. Caso real — afirmó que
+  // unas gomitas de melatonina llevan "vitamina B6", que no está en ningún dato.
+  it('rechaza la reescritura que afirma algo que no está en ninguna fuente', () => {
+    const r = acceptRewrite({
+      plantilla: 'Número dos, tiene [ingrediente 2] que también ayuda a [beneficio 2]',
+      piso: 'Número dos, tiene melatonina que también ayuda a dormir',
+      propuesta: 'Número dos, tiene vitamina B6 que también ayuda a dormir',
+      fuentes: ['gomitas de melatonina', 'Melatonin 10mg Per Serving'],
+    })
+    expect(r.ok).toBe(false)
+    expect(r.ok === false && r.motivo).toContain('vitamina')
+  })
+
+  // La flexión no es invención: la libertad gramatical es justo lo que esto viene a ganar.
+  it('no confunde una conjugación distinta con un dato inventado', () => {
+    const r = acceptRewrite({
+      plantilla: 'te [beneficio 1] a dormir',
+      piso: 'te ayuda a dormir',
+      propuesta: 'te ayudan a dormir',
+      fuentes: ['ayudar a dormir'],
+    })
+    expect(r.ok).toBe(true)
+  })
+
+  // `extractPending` bloquea el render; resolver un hueco por la puerta de atrás lo abre.
+  it('rechaza la reescritura que resuelve sola un pendiente', () => {
+    const r = acceptRewrite({
+      ...base,
+      piso: 'sobre todo si últimamente andas muy [PENDIENTE: situación personal] por las noches',
+      propuesta: 'sobre todo si últimamente andas muy cansada por las noches',
+    })
+    expect(r.ok).toBe(false)
+    expect(r.ok === false && r.motivo).toMatch(/pendiente/)
+  })
+
+  it('rechaza una reescritura vacía o que cambia mucho de largo', () => {
+    expect(acceptRewrite({ ...base, propuesta: '   ' }).ok).toBe(false)
+    expect(acceptRewrite({ ...base, propuesta: 'andas mal' }).ok).toBe(false)
+  })
+})
+
+// El eco es la firma de haber pegado un valor que ya traía las palabras de alrededor.
+// `rejectBadValues` lo vigila en los valores; la reescritura es texto libre y no pasa
+// por ahí. Caso real: "estás en mis veintitantos como yo como yo".
+describe('acceptRewrite — eco', () => {
+  it('rechaza la reescritura que repite un tramo dos veces seguidas', () => {
+    const r = acceptRewrite({
+      plantilla: 'Si tú también estás [situación personal] como yo,',
+      piso: 'Si tú también estás en mis veintitantos como yo,',
+      propuesta: 'Si tú también estás en mis veintitantos como yo como yo,',
+      fuentes: ['en mis veintitantos'],
+    })
+    expect(r.ok).toBe(false)
+    expect(r.ok === false && r.motivo).toContain('como yo')
+  })
+
+  it('no confunde una palabra repetida a distancia con un eco', () => {
+    expect(acceptRewrite({
+      plantilla: 'de día y de noche en [área] y en [área]',
+      piso: 'de día y de noche en cara y en cuello',
+      propuesta: 'de día y de noche en cara y en cuello',
+      fuentes: ['cara', 'cuello'],
+    }).ok).toBe(true)
   })
 })
