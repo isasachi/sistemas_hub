@@ -577,3 +577,73 @@ describe('acceptRewrite — eco', () => {
     }).ok).toBe(true)
   })
 })
+
+// `al` = a+el y `del` = de+el. Cuando el hueco se lleva el artículo la contracción
+// desaparece y el modelo escribe la forma suelta — que es lo CORRECTO. Exigir copia
+// byte a byte lo leía como "no copió" y descartaba la toma. Caso real: 2 de 7 tomas.
+describe('alignSlots — contracciones', () => {
+  it('tolera "ayuda al X" ↔ "ayuda a [X]"', () => {
+    const r = alignSlots(
+      'Número dos, tiene aguaje, que también ayuda al equilibrio hormonal y a la salud del cabello.',
+      'Número dos, tiene [ingrediente 2], que también ayuda a [beneficio 1] y a la salud de [aspecto].',
+    )!
+    expect(r).not.toBeNull()
+    expect(r.huecos.map((h) => h.original)).toEqual(['aguaje', 'equilibrio hormonal', 'cabello'])
+  })
+
+  it('sigue rechazando una paráfrasis de verdad', () => {
+    expect(alignSlots('tiene aguaje que ayuda al cabello', 'tiene [x] que mejora a [y]')).toBeNull()
+  })
+})
+
+// El mismo nombre en dos huecos hace que la FASE 3 les ponga el mismo valor — el fallo
+// de los tres [Producto], reaparecido entre tomas.
+describe('normalizeSlots — nombres que colisionan', () => {
+  const tpl = (locs: string[]): ScriptTemplate => ({
+    ...T,
+    tomas: locs.map((l, i) => ({ n: i + 1, locucion: l, accionVisual: 'a', duracionSeg: 5 })),
+  })
+
+  it('numera por familia cuando el mismo nombre cubre datos distintos', () => {
+    const { template, reporte } = normalizeSlots(
+      tpl(['Te ayuda a [beneficio 1].', 'También ayuda a [beneficio 1].']),
+      [{ n: 1, dialogo: 'Te ayuda a dormir.' }, { n: 2, dialogo: 'También ayuda a descansar.' }],
+    )
+    expect(template.tomas[0].locucion).toBe('Te ayuda a [beneficio 1].')
+    expect(template.tomas[1].locucion).toBe('También ayuda a [beneficio 2].')
+    expect(reporte.numerados).toHaveLength(1)
+  })
+
+  // Si el texto original coincide, es el MISMO dato y las dos apariciones tienen que
+  // recibir la misma palabra: numerarlas produciría dos productos distintos.
+  it('NO numera cuando el original dice lo mismo en los dos huecos', () => {
+    const { template, reporte } = normalizeSlots(
+      tpl(['Este [tipo de producto] va bien.', 'Ese [tipo de producto] también.']),
+      [{ n: 1, dialogo: 'Este serum va bien.' }, { n: 2, dialogo: 'Ese serum también.' }],
+    )
+    expect(template.tomas[1].locucion).toContain('[tipo de producto]')
+    expect(reporte.numerados).toEqual([])
+  })
+
+  // Se agrupa por familia (el nombre sin su número) porque el modelo ya numera a veces,
+  // y mal: repetir `beneficio 1` es justo el defecto, así que saltarse los nombres con
+  // dígito lo dejaba pasar. Renumerar la familia evita chocar con un `beneficio 2` real.
+  it('renumera la familia entera sin chocar con un número ya usado', () => {
+    const { template } = normalizeSlots(
+      tpl(['Da [beneficio 1] y [beneficio 2].', 'Y también [beneficio 1].']),
+      [{ n: 1, dialogo: 'Da energía y vitalidad.' }, { n: 2, dialogo: 'Y también calma.' }],
+    )
+    const nombres = [...template.tomas.map((t) => t.locucion).join(' ').matchAll(/\[([^\]]+)\]/g)].map((m) => m[1])
+    expect(new Set(nombres).size).toBe(3)
+    expect(nombres).toEqual(['beneficio 1', 'beneficio 2', 'beneficio 3'])
+  })
+
+  it('una toma que no alinea no se renumera ni rompe al resto', () => {
+    const { template, reporte } = normalizeSlots(
+      tpl(['Te ayuda a [beneficio 1].', 'Frase inventada con [beneficio 1].']),
+      [{ n: 1, dialogo: 'Te ayuda a dormir.' }, { n: 2, dialogo: 'Otra cosa distinta acá.' }],
+    )
+    expect(reporte.desalineadas).toEqual([2])
+    expect(template.tomas[1].locucion).toBe('Frase inventada con [beneficio 1].')
+  })
+})

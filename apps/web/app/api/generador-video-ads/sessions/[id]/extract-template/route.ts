@@ -81,10 +81,11 @@ export async function POST(
     // recorrido (`nombre#n`) — fusionar corre esa numeración, así que ningún id guardado
     // puede haberse calculado sobre la plantilla previa a la fusión.
     const { template, reporte } = normalizeSlots(armada, forensic.cortes)
-    if (reporte.antes !== reporte.despues || reporte.desalineadas.length || reporte.renombrados.length)
+    if (reporte.antes !== reporte.despues || reporte.desalineadas.length || reporte.renombrados.length || reporte.numerados.length)
       console.warn(
         `[video-ads/extract-template] sesión ${id}: huecos ${reporte.antes} → ${reporte.despues}` +
         (reporte.renombrados.length ? ` · renombrados por rol: ${reporte.renombrados.join(', ')}` : '') +
+        (reporte.numerados.length ? ` · numerados por colisión: ${reporte.numerados.join(', ')}` : '') +
         (reporte.desalineadas.length ? ` · ⚠ tomas cuyo andamiaje NO copia su corte: ${reporte.desalineadas.join(', ')}` : ''),
       )
 

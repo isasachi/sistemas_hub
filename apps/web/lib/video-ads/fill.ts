@@ -160,6 +160,22 @@ export function rejectBadValues(
  * Devuelve `null` si un trozo literal no aparece en el diálogo en su orden: eso significa
  * que el modelo NO copió, y entonces no hay forma segura de reescribir esa locución.
  */
+/**
+ * Variantes de un fragmento de andamiaje por CONTRACCIÓN del español.
+ *
+ * `al` = a+el y `del` = de+el. Cuando el hueco se lleva el artículo, la contracción
+ * desaparece y el modelo escribe la forma suelta — que es lo gramaticalmente correcto:
+ * el original dice "ayuda AL equilibrio hormonal" y la plantilla queda "ayuda A
+ * [beneficio]". Exigir copia byte a byte lee eso como "el modelo no copió" y descarta
+ * la toma entera. Caso real: 2 de 7 tomas marcadas como desalineadas por esto.
+ */
+function conContraccion(lit: string): string[] {
+  const out = [lit]
+  if (/\ba(\s+)$/.test(lit)) out.push(lit.replace(/\ba(\s+)$/, 'al$1'))
+  if (/\bde(\s+)$/.test(lit)) out.push(lit.replace(/\bde(\s+)$/, 'del$1'))
+  return out
+}
+
 export function alignSlots(
   dialogo: string,
   locucion: string,
@@ -171,12 +187,23 @@ export function alignSlots(
   for (let i = 0; i < nombres.length; i++) {
     const antes = literales[i]
     if (antes) {
-      const k = dialogo.indexOf(antes, pos)
-      if (k < 0) return null
-      pos = k + antes.length
+      let encontrado = -1
+      for (const v of conContraccion(antes)) {
+        const k = dialogo.indexOf(v, pos)
+        if (k >= 0) { encontrado = k + v.length; break }
+      }
+      if (encontrado < 0) return null
+      pos = encontrado
     }
     const sig = literales[i + 1]
-    const fin = sig ? dialogo.indexOf(sig, pos) : dialogo.length
+    let fin = dialogo.length
+    if (sig) {
+      fin = -1
+      for (const v of conContraccion(sig)) {
+        const k = dialogo.indexOf(v, pos)
+        if (k >= 0) { fin = k; break }
+      }
+    }
     if (fin < 0) return null
     huecos.push({ nombre: nombres[i], original: dialogo.slice(pos, fin) })
     pos = fin
@@ -217,6 +244,8 @@ export interface SlotCapReport {
   desalineadas: number[]
   /** Huecos genéricos renombrados a su rol real: `Producto → Marca`. */
   renombrados: string[]
+  /** Huecos que compartían nombre siendo datos distintos, ahora numerados. */
+  numerados: string[]
 }
 
 /**
@@ -247,7 +276,7 @@ export function normalizeSlots(
   cortes: { n: number; dialogo: string }[],
 ): { template: ScriptTemplate; reporte: SlotCapReport } {
   const porN = new Map(cortes.map((c) => [c.n, c.dialogo]))
-  const reporte: SlotCapReport = { antes: extractSlots(t).length, despues: 0, desalineadas: [], renombrados: [] }
+  const reporte: SlotCapReport = { antes: extractSlots(t).length, despues: 0, desalineadas: [], renombrados: [], numerados: [] }
 
   const tomas = t.tomas.map((toma) => {
     const dialogo = porN.get(toma.n)
@@ -267,7 +296,55 @@ export function normalizeSlots(
     return { ...toma, locucion: out }
   })
 
-  const template = { ...t, tomas, guionFillInBlank: tomas.map((x) => x.locucion).join(' ') }
+  // SEGUNDA PASADA — nombres repetidos para datos DISTINTOS.
+  // El mismo nombre en dos huecos hace que la FASE 3 les ponga el mismo valor: es el
+  // fallo de los tres `[Producto]`, y reaparece entre tomas — en una sesión real
+  // `[beneficio 1]` salió en tres tomas para tres beneficios distintos. Acá se puede
+  // decidir en código porque `alignSlots` recupera QUÉ decía el original en cada hueco:
+  // si dos huecos de la misma familia tienen texto original distinto, son datos
+  // distintos y se numeran; si coincide (el producto nombrado tres veces) NO se tocan,
+  // porque las tres apariciones tienen que recibir la misma palabra.
+  //
+  // Se agrupa por FAMILIA (el nombre sin su número final) y no por nombre exacto: el
+  // modelo ya numera a veces, y mal — repetir `beneficio 1` tres veces es precisamente
+  // el caso a arreglar, así que saltarse los nombres que ya llevan dígito dejaba fuera
+  // el defecto. Renumerar la familia entera evita además chocar con un `beneficio 2`
+  // que ya existiera.
+  const familia = (n: string) => n.replace(/\s+\d+$/, '')
+  const alineadas = new Map<number, ReturnType<typeof alignSlots>>()
+  const porFamilia = new Map<string, string[]>()
+  for (const toma of tomas) {
+    const dialogo = porN.get(toma.n)
+    const al = dialogo ? alignSlots(dialogo, toma.locucion) : null
+    alineadas.set(toma.n, al)
+    for (const h of al?.huecos ?? []) {
+      const f = familia(h.nombre)
+      const vistos = porFamilia.get(f) ?? []
+      const clave = h.original.trim().toLowerCase()
+      if (!vistos.includes(clave)) vistos.push(clave)
+      porFamilia.set(f, vistos)
+    }
+  }
+  const multiples = new Set([...porFamilia].filter(([, v]) => v.length > 1).map(([k]) => k))
+
+  const numeradas = !multiples.size ? tomas : tomas.map((toma) => {
+    const al = alineadas.get(toma.n)
+    if (!al) return toma
+    let out = al.literales[0]
+    al.huecos.forEach((h, i) => {
+      const f = familia(h.nombre)
+      let nombre = h.nombre
+      if (multiples.has(f)) {
+        const idx = porFamilia.get(f)!.indexOf(h.original.trim().toLowerCase()) + 1
+        nombre = `${f} ${idx}`
+        if (nombre !== h.nombre) reporte.numerados.push(`${h.nombre} → ${nombre} ("${h.original.trim()}")`)
+      }
+      out += `[${nombre}]${al.literales[i + 1] ?? ''}`
+    })
+    return { ...toma, locucion: out }
+  })
+
+  const template = { ...t, tomas: numeradas, guionFillInBlank: numeradas.map((x) => x.locucion).join(' ') }
   reporte.despues = extractSlots(template).length
   return { template, reporte }
 }
