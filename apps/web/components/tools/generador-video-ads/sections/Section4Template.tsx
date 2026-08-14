@@ -5,6 +5,7 @@ import { useVideoStore } from '@/store/video'
 import type { ScriptTemplate } from '@/lib/video-ads/types'
 import { STEP } from '@/lib/video-ads/steps'
 import { groupIntoLotes } from '@/lib/video-ads/lotes'
+import { segmentar } from '@/lib/video-ads/segments'
 import { btnPrimary, btnGhost, errorBox, warnBox, spinner, seg } from './shared'
 
 // Muestra los tres artefactos de la FASE 1-2: el guión literal del original, los
@@ -115,8 +116,19 @@ export default function Section4Template() {
             <li key={t.n} className="flex gap-3">
               <span className="mt-0.5 shrink-0 font-mono text-[11px] text-[#8b8b8b]">{seg(t.duracionSeg)}</span>
               <span className="flex flex-col gap-0.5">
-                <span className="text-[12.5px] leading-relaxed text-[#ededed]">“{t.locucion}”</span>
-                <span className="text-[11.5px] leading-relaxed text-[#8b8b8b]">{t.accionVisual}</span>
+                {/* Partida por frase, igual que el editor del paso siguiente: en un video
+                    sin cortes una sola toma trae el guión entero, y verlo como un párrafo
+                    de 700 caracteres esconde la estructura que después se renderiza por
+                    separado. Es presentación — el dato sigue siendo una locución por toma. */}
+                {segmentar(t.locucion).map((f, j) => (
+                  <span key={j} className="text-[12.5px] leading-relaxed text-[#ededed]">
+                    {segmentar(t.locucion).length > 1 && (
+                      <span className="mr-1.5 font-mono text-[10px] text-[#6b6b6b]">{j + 1}</span>
+                    )}
+                    {f}
+                  </span>
+                ))}
+                <span className="mt-0.5 text-[11.5px] leading-relaxed text-[#8b8b8b]">{t.accionVisual}</span>
               </span>
             </li>
           ))}
