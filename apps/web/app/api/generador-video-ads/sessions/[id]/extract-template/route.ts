@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getVideoSession, updateVideoSession } from '@/lib/video-ads/db'
-import { callStructured } from '@/lib/gemini'
+import { callVideoAds } from '@/lib/video-ads/llm'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 
@@ -15,7 +15,7 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 export const maxDuration = 300
 
-// Acá sí se usa `callStructured` (OpenAI primario, Gemini fallback): la entrada ya
+// Acá sí pasa por un LLM de texto (`callVideoAds`, Gemini): la entrada ya
 // es texto — el informe forense —, así que no hace falta un modelo que coma video.
 export async function POST(
   _req: NextRequest,
@@ -68,7 +68,7 @@ export async function POST(
   }
 
   try {
-    const draft = await callStructured('template_draft', TemplateDraftSchema, [
+    const draft = await callVideoAds('template_draft', TemplateDraftSchema, [
       { text: buildTemplateInstruction(forensic) },
     ])
 

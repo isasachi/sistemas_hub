@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-vi.mock('@/lib/gemini', () => ({ callStructured: vi.fn() }))
+vi.mock('@/lib/video-ads/llm', () => ({ callVideoAds: vi.fn() }))
 vi.mock('@/lib/video-ads/db', () => ({
   getVideoSession: vi.fn(),
   updateVideoSession: vi.fn(async () => undefined),
@@ -12,7 +12,7 @@ vi.mock('@/lib/gen-quota', () => ({
 vi.mock('@/lib/product-hunter/session', () => ({ readUserId: vi.fn(async () => 'u1') }))
 
 import { POST } from './route'
-import { callStructured } from '@/lib/gemini'
+import { callVideoAds } from '@/lib/video-ads/llm'
 import { getVideoSession, updateVideoSession } from '@/lib/video-ads/db'
 import type { VideoSessionResponse } from '@/lib/video-ads/types'
 import type { AdaptedScript } from '@/lib/video-ads/adapt'
@@ -50,7 +50,7 @@ function responder(
   coherencia: object,
   locuciones: { n: number; texto: string }[] = [],
 ) {
-  vi.mocked(callStructured)
+  vi.mocked(callVideoAds)
     .mockResolvedValueOnce({ valores, acciones: [], locuciones } as never)
     .mockResolvedValueOnce(coherencia as never)
 }
@@ -131,7 +131,7 @@ describe('POST adapt-script — ajuste de andamiaje', () => {
 
   // Si el corrector revienta, la adaptación de la primera pasada tiene que sobrevivir.
   it('un fallo del corrector no tumba la adaptación', async () => {
-    vi.mocked(callStructured)
+    vi.mocked(callVideoAds)
       .mockResolvedValueOnce({ valores: [{ id: 'situación personal#1', valor: 'cansada' }], acciones: [], locuciones: [] } as never)
       .mockRejectedValueOnce(new Error('modelo caído'))
     const res = await POST(req(), ctx())
@@ -180,6 +180,46 @@ describe('POST adapt-script — reescritura del modelo', () => {
     )
     await POST(req(), ctx())
     expect(guardado().tomas[0].locucion).toContain('[PENDIENTE:')
+  })
+
+  // ⚠️ EL BUG QUE ESTO CUBRE: el refill que aplica las correcciones reconstruía la toma
+  // desde la plantilla y BORRABA la reescritura ya aceptada. Como el corrector casi
+  // siempre corrige algo, la reescritura no llegaba a producción casi nunca — el
+  // corrector leía un texto y sus correcciones producían otro, el pegado automático con
+  // sus costuras rotas.
+  describe('la reescritura sobrevive al corrector', () => {
+    // Un hueco en la ACCIÓN y otro en la locución: así se puede corregir uno sin que el
+    // otro quede obsoleto, que es el caso que distingue "preservar" de "no comprobar".
+    const conAccion = () => {
+      const s = session()
+      s.template!.tomas[0].accionVisual = 'Sostiene el [envase]'
+      return s
+    }
+    const REESCRITA = 'sobre todo si últimamente andas cansada por las noches'
+
+    beforeEach(() => vi.mocked(getVideoSession).mockResolvedValue(conAccion()))
+
+    it('una corrección que no la toca no la tira al relleno', async () => {
+      responder(
+        [{ id: 'situación personal#1', valor: 'cansada' }, { id: 'envase#1', valor: 'frasco' }],
+        { correcciones: [{ id: 'envase#1', valor: 'pote', motivo: 'x' }], ajustes: [] },
+        [{ n: 1, texto: REESCRITA }],
+      )
+      await POST(req(), ctx())
+      expect(guardado().tomas[0].locucion).toBe(REESCRITA)
+    })
+
+    // La otra mitad: si el corrector cambió un valor que la reescritura lleva dentro,
+    // ese texto es anterior a la corrección y publicarlo sería ignorarla en silencio.
+    it('una corrección que la deja obsoleta sí la tira al relleno', async () => {
+      responder(
+        [{ id: 'situación personal#1', valor: 'cansada' }, { id: 'envase#1', valor: 'frasco' }],
+        { correcciones: [{ id: 'situación personal#1', valor: 'agotada', motivo: 'x' }], ajustes: [] },
+        [{ n: 1, texto: REESCRITA }],
+      )
+      await POST(req(), ctx())
+      expect(guardado().tomas[0].locucion).toBe('sobre todo si últimamente andas muy agotada por las noches')
+    })
   })
 
   it('sin reescritura, el guión lo arma el relleno determinista', async () => {

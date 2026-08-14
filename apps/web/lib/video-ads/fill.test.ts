@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractSlots, fillTemplate, validateTemplate, assembleTemplate, rejectBadValues, alignSlots, normalizeSlots, resolveSlotId, acceptScaffoldFix, acceptRewrite } from './fill'
+import { extractSlots, fillTemplate, validateTemplate, assembleTemplate, rejectBadValues, alignSlots, normalizeSlots, resolveSlotId, acceptScaffoldFix, acceptRewrite, slotOriginals } from './fill'
 import type { ScriptTemplate } from './template'
 
 // Plantilla recortada del caso real (serum Apivita → suero de niacinamida). Trae los
@@ -645,5 +645,50 @@ describe('normalizeSlots — nombres que colisionan', () => {
     )
     expect(reporte.desalineadas).toEqual([2])
     expect(template.tomas[1].locucion).toBe('Frase inventada con [beneficio 1].')
+  })
+})
+
+// El contexto que el spec tiene gratis: qué decía el ORIGINAL en cada hueco. Sin esto la
+// FASE 3 elige el valor mirando solo la etiqueta del hueco, y para `[producto]` la
+// categoría es tan válida como el nombre comercial que había ahí.
+describe('slotOriginals', () => {
+  const tpl = (tomas: { loc: string; acc?: string }[]): ScriptTemplate => ({
+    ...T,
+    tomas: tomas.map((t, i) => ({ n: i + 1, locucion: t.loc, accionVisual: t.acc ?? 'a', duracionSeg: 5 })),
+  })
+
+  it('recupera el texto que ocupaba cada hueco', () => {
+    const o = slotOriginals(
+      tpl([{ loc: 'Tres razones para tomar [producto] para [público].' }]),
+      [{ n: 1, dialogo: 'Tres razones para tomar Gomi Energy para ella.' }],
+    )
+    expect(o['producto#1']).toBe('Gomi Energy')
+    expect(o['público#1']).toBe('ella')
+  })
+
+  // Los ids se numeran recorriendo locución Y acción de cada toma; si el cursor no
+  // contara los huecos de `accionVisual`, los de la toma 2 quedarían desfasados y cada
+  // hueco recibiría el original de otro — un fallo peor que no tener el dato.
+  it('los ids siguen alineados aunque la acción también tenga huecos', () => {
+    const o = slotOriginals(
+      tpl([
+        { loc: 'Yo tomo [producto].', acc: 'Sostiene [producto] y [gesto]' },
+        { loc: 'Me da [beneficio].' },
+      ]),
+      [{ n: 1, dialogo: 'Yo tomo Gomi Energy.' }, { n: 2, dialogo: 'Me da energía.' }],
+    )
+    expect(o['producto#1']).toBe('Gomi Energy')
+    expect(o['beneficio#1']).toBe('energía')
+  })
+
+  // Es un extra, no la base: cuando el modelo parafraseó no hay forma segura de saber qué
+  // ocupaba cada hueco, y adivinarlo sería peor que omitirlo.
+  it('omite la toma que no alinea, sin arrastrar a las demás', () => {
+    const o = slotOriginals(
+      tpl([{ loc: 'Frase inventada con [producto].' }, { loc: 'Me da [beneficio].' }]),
+      [{ n: 1, dialogo: 'Otra cosa totalmente distinta.' }, { n: 2, dialogo: 'Me da energía.' }],
+    )
+    expect(o['producto#1']).toBeUndefined()
+    expect(o['beneficio#1']).toBe('energía')
   })
 })

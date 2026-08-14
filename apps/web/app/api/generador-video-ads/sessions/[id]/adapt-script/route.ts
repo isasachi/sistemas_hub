@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getVideoSession, updateVideoSession } from '@/lib/video-ads/db'
-import { callStructured } from '@/lib/gemini'
+import { callVideoAds } from '@/lib/video-ads/llm'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 import { SlotValuesSchema, CoherenceSchema, buildAdaptInstruction, buildCoherenceInstruction } from '@/lib/video-ads/adapt'
@@ -37,7 +37,6 @@ export async function POST(
 
   try {
     const slots = extractSlots(session.template)
-
     const inputs = {
       productName: session.product_name ?? '',
       productDescription: session.what_it_does ?? '',
@@ -51,7 +50,7 @@ export async function POST(
       constraints: session.constraints ?? '',
     }
 
-    const { valores, acciones, locuciones } = await callStructured('slot_values', SlotValuesSchema, [
+    const { valores, acciones, locuciones } = await callVideoAds('slot_values', SlotValuesSchema, [
       { text: buildAdaptInstruction(session.template, session.forensic_analysis, inputs, session.product_scan, slots) },
     ])
 
@@ -127,7 +126,7 @@ export async function POST(
     // Cuesta una llamada de texto extra (sin tope per-step, pero suma unos segundos).
     // Un fallo acá NO tumba la adaptación: se conserva el relleno de la primera pasada.
     try {
-      const { correcciones, ajustes } = await callStructured('coherence_check', CoherenceSchema, [
+      const { correcciones, ajustes } = await callVideoAds('coherence_check', CoherenceSchema, [
         {
           text: buildCoherenceInstruction(
             relleno.tomas.map((t) => ({ n: t.n, locucion: t.locucion })),
@@ -159,6 +158,39 @@ export async function POST(
           console.warn(`[video-ads/adapt-script] sesión ${id}: correcciones con id desconocido, ignoradas:`, sinResolver)
         const revisados = rejectBadValues(session.template, corregidos)
         relleno = fillTemplate(session.template, revisados.valores)
+
+        // ⚠️ EL REFILL DE ARRIBA BORRABA LA REESCRITURA, Y ESE ERA EL BUG.
+        // La primera pasada acepta la locución que redactó el modelo (`acceptRewrite`) y
+        // la loguea como usada; después el corrector devolvía UNA sola corrección y este
+        // `fillTemplate` reconstruía la toma entera desde la plantilla, así que lo que
+        // se guardaba era el pegado automático — con sus costuras rotas ("andas muy no
+        // poder dormir por las noches"). Como el corrector casi siempre corrige algo, la
+        // reescritura no llegaba a producción casi nunca: el corrector leía un texto y
+        // sus correcciones producían otro.
+        //
+        // Se vuelve a intentar con el piso NUEVO. `acceptRewrite` ya rechaza la propuesta
+        // que resuelve por su cuenta un hueco que el corrector vació; lo que no ve es un
+        // valor CAMBIADO, así que eso se comprueba acá: una reescritura que todavía
+        // contiene el valor viejo es texto anterior a la corrección y cae al piso.
+        const cambiados = Object.keys({ ...limpios, ...revisados.valores })
+          .filter((k) => (limpios[k] ?? '') !== (revisados.valores[k] ?? '') && limpios[k])
+        relleno = {
+          ...relleno,
+          tomas: relleno.tomas.map((t) => {
+            const propuesta = porTomaTexto.get(t.n)
+            const plantilla = session.template!.tomas.find((x) => x.n === t.n)?.locucion
+            if (!propuesta || !plantilla || !reescritas.includes(t.n)) return t
+            const viejo = cambiados.find((k) =>
+              slots.some((sl) => sl.id === k && sl.toma === t.n) && propuesta.includes(limpios[k]))
+            if (viejo) {
+              console.info(`[video-ads/adapt-script] sesión ${id}: toma ${t.n} vuelve al relleno — la reescritura trae el valor corregido "${limpios[viejo]}"`)
+              return t
+            }
+            const v = acceptRewrite({ plantilla, piso: t.locucion, propuesta, fuentes })
+            return v.ok ? { ...t, locucion: propuesta.trim() } : t
+          }),
+        }
+        relleno = { ...relleno, guionFinal: relleno.tomas.map((t) => t.locucion).join(' ') }
         console.info(
           `[video-ads/adapt-script] sesión ${id}: coherencia corrigió ${correcciones.length} valores:`,
           correcciones.map((c) => `${c.id} → ${c.valor ? `"${c.valor}"` : 'VACIADO'} (${c.motivo})`),

@@ -120,6 +120,24 @@ function ngramas(palabras: string[], n: number): Set<string> {
 export function rejectBadValues(
   t: ScriptTemplate,
   valores: Record<string, string>,
+  /**
+   * Todo lo que el usuario entregó (inputs + etiqueta del envase). Cuando se pasa, un
+   * valor que afirma algo que no está en ninguna fuente se descarta.
+   *
+   * Existe por una medición: con una etiqueta que solo dice "Kukamonga" y "90 mg de
+   * melatonina", una corrida entregó "extracto de valeriana", "vitamina B6" y "ácido
+   * gamma-aminobutírico (GABA)" — un guión RENDERIZABLE, con 0 pendientes, afirmando una
+   * composición falsa. `ungrounded` ya vigilaba eso, pero solo en `acceptRewrite`, y ahí
+   * llega tarde por partida doble: los valores inventados entran igual por
+   * `fillTemplate`, y además se pasan como `fuentes` de la reescritura, así que un
+   * ingrediente inventado se respalda a sí mismo.
+   *
+   * ⚠️ Rechaza también las traducciones de la etiqueta ("dormir" por "Fall Asleep"), que
+   * el prompt pide expresamente. Se acepta ese costo: lo rechazado queda pendiente y lo
+   * escribe el usuario, mientras que un ingrediente inventado en un anuncio publicado es
+   * una declaración falsa de composición. La regla 9 del spec no admite grises.
+   */
+  fuentes?: string[],
 ): { valores: Record<string, string>; rechazados: string[] } {
   // El andamiaje de cada toma: su texto CON los huecos quitados. Es lo que el valor no
   // puede repetir, porque ya está escrito alrededor de él.
@@ -134,7 +152,9 @@ export function rejectBadValues(
     const v = valores[s.id]?.trim()
     if (!v) continue
 
+    const sinRespaldo = fuentes?.length ? ungrounded(v, fuentes) : null
     const malo =
+      !!sinRespaldo ||
       v.length > MAX_VALOR ||
       norm(v).join(' ').includes(norm(s.nombre).join(' ')) ||
       [...ngramas(norm(v), 3)].some((g) => andamio.get(s.toma)?.has(g))
@@ -209,6 +229,49 @@ export function alignSlots(
     pos = fin
   }
   return { literales, huecos }
+}
+
+/**
+ * Qué decía el ORIGINAL en cada hueco, indexado por el `id` de `extractSlots`.
+ * ---------------------------------------------------------------------------
+ * Es el contexto que el spec tiene gratis y esta implementación no tenía: cuando el
+ * PROMPT MAESTRO corre de una sola pasada, el modelo ve el guión original al lado de la
+ * plantilla, así que sabe que en ese hueco iba un NOMBRE COMERCIAL de dos palabras y no
+ * la categoría del producto. Acá la FASE 3 elegía el valor mirando solo la etiqueta del
+ * hueco y sus palabras vecinas — y con esa información "gomitas de melatonina" es una
+ * respuesta correcta para `[producto]`, aunque el original dijera "Gomi Energy".
+ *
+ * Es un EXTRA, no la base: `alignSlots` devuelve `null` cuando el modelo parafraseó, y
+ * justo las sesiones de una sola toma larga son las que más fallan la alineación. Lo que
+ * no puede faltar nunca es el diálogo completo del corte, que va al prompt sin depender
+ * de esto.
+ */
+export function slotOriginals(
+  t: ScriptTemplate,
+  cortes: { n: number; dialogo: string }[],
+): Record<string, string> {
+  const porN = new Map(cortes.map((c) => [c.n, c.dialogo]))
+  const slots = extractSlots(t)
+  const cuantos = (s: string) => (s.match(HUECO) ?? []).length
+  const out: Record<string, string> = {}
+
+  // Se avanza sobre `slots` con un cursor en vez de filtrar por `toma.n`: el `n` viene
+  // del forense y nada garantiza que sea único, así que filtrar mezclaría los huecos de
+  // dos tomas homónimas. `extractSlots` recorre en este mismo orden, por construcción.
+  let k = 0
+  for (const toma of t.tomas) {
+    const propios = slots.slice(k, k + cuantos(toma.locucion))
+    k += cuantos(toma.locucion) + cuantos(toma.accionVisual)
+
+    const dialogo = porN.get(toma.n)
+    const al = dialogo ? alignSlots(dialogo, toma.locucion) : null
+    if (!al) continue
+    al.huecos.forEach((h, i) => {
+      const texto = h.original.trim()
+      if (propios[i] && texto) out[propios[i].id] = texto
+    })
+  }
+  return out
 }
 
 /**

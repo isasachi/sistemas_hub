@@ -36,6 +36,54 @@ describe('buildAdaptInstruction', () => {
 
 
 
+  // EL CONTEXTO QUE EL SPEC TIENE GRATIS Y ESTA FASE NO TENÍA.
+  // Caso real reportado: el original decía "Tres razones para tomar Gomi Energy para
+  // ella" y salió "…para tomar gomitas de melatonina para adultos y jóvenes desde los 12
+  // años" — la categoría en vez del nombre comercial, y la nota del formulario pegada
+  // entera donde iba una palabra. Con solo la etiqueta del hueco delante, ambas son
+  // respuestas correctas; con el original delante, ninguna lo es.
+  describe('el guión original va en el prompt', () => {
+    const ORIGINAL = 'Tres razones para tomar Gomi Energy para ella.'
+    const forense = (dialogo: string) => ({
+      caracteresGuion: ORIGINAL.length, guionOriginal: ORIGINAL,
+      cortes: [{ n: 1, tiempo: '00:00 - 00:05', duracionSeg: 5, accion: '', camara: '', dialogo, textoOverlay: '', transicion: '' }],
+    }) as ForensicReport
+    const plantilla = (locucion: string): ScriptTemplate =>
+      ({ ...TEMPLATE, tomas: [{ n: 1, accionVisual: 'Sostiene el frasco', locucion, duracionSeg: 5 }] })
+
+    const COPIADA = 'Tres razones para tomar [nombre del producto] para [público objetivo].'
+
+    it('manda el diálogo original de cada toma junto a su plantilla', () => {
+      const p = buildAdaptInstruction(plantilla(COPIADA), forense(ORIGINAL), INPUTS, null, extractSlots(plantilla(COPIADA)))
+      expect(p).toContain('EL ORIGINAL, TOMA POR TOMA')
+      expect(p).toContain(ORIGINAL)
+    })
+
+    it('dice qué decía el original EN CADA HUECO', () => {
+      const p = buildAdaptInstruction(plantilla(COPIADA), forense(ORIGINAL), INPUTS, null, extractSlots(plantilla(COPIADA)))
+      expect(p).toContain('el original decía: "Gomi Energy"')
+      expect(p).toContain('el original decía: "ella"')
+    })
+
+    // El per-hueco depende de `alignSlots`, que devuelve null si el modelo parafraseó —y
+    // justo las sesiones de una sola toma larga son las que más fallan la alineación. El
+    // diálogo completo NO puede depender de eso: es la mitad que sostiene la regla.
+    it('sin alineación se pierde el original por hueco, pero NO el de la toma', () => {
+      const parafraseada = 'Tres motivos para tomar [nombre del producto] para [público objetivo].'
+      const t = plantilla(parafraseada)
+      const p = buildAdaptInstruction(t, forense(ORIGINAL), INPUTS, null, extractSlots(t))
+      expect(p).not.toContain('el original decía:')
+      expect(p).toContain(ORIGINAL)
+    })
+
+    it('pide misma función y misma forma, y avisa que los inputs son notas', () => {
+      const p = buildAdaptInstruction(plantilla(COPIADA), forense(ORIGINAL), INPUTS, null, extractSlots(plantilla(COPIADA)))
+      expect(p).toMatch(/MISMA FUNCIÓN Y MISMA FORMA/)
+      expect(p).toMatch(/nombre comercial —no la categoría/)
+      expect(p).toMatch(/LOS INPUTS SON NOTAS DE UN FORMULARIO/)
+    })
+  })
+
   // La regla sigue: no se inventa lo que no está en los inputs. Lo que se corrigió es su
   // justificación — el ejemplo que citaba (PHE-resorcinol) resultó ser un dato CORRECTO
   // que el modelo leyó de la etiqueta del propio producto del usuario, no una invención.
@@ -75,9 +123,13 @@ describe('buildAdaptInstruction', () => {
     expect(p).toMatch(/qué\s+mano,\s+cómo\s+agarra/i)
   })
 
-  it('le dice al modelo que NO escriba el guión', () => {
-    expect(p).toMatch(/TU TRABAJO NO ES ESCRIBIR UN GUION/i)
-    expect(p).toMatch(/se reconstruye copi[aá]ndolo con c[oó]digo/i)
+  // El encabezado decía "no reescribas el guion: no se usaría" — texto de cuando
+  // `locuciones` no existía, que contradecía a la sección que sí pide la reescritura.
+  // Lo que tiene que quedar prohibido es escribir OTRO anuncio, no redactar la frase.
+  it('le dice al modelo que adapte el guión, no que escriba uno nuevo', () => {
+    expect(p).toMatch(/TU TRABAJO NO ES ESCRIBIR UN GUION NUEVO/i)
+    expect(p).toMatch(/reordenas, no resumes/i)
+    expect(p).not.toMatch(/no se usar[íi]a/i)
   })
 
   it('lista los huecos con su id y su contexto', () => {
