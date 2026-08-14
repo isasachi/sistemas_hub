@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useVideoStore } from '@/store/video'
 import type { ScriptTemplate } from '@/lib/video-ads/types'
 import { STEP } from '@/lib/video-ads/steps'
+import { groupIntoLotes } from '@/lib/video-ads/lotes'
 import { btnPrimary, btnGhost, errorBox, warnBox, spinner, seg } from './shared'
 
 // Muestra los tres artefactos de la FASE 1-2: el guión literal del original, los
@@ -33,6 +34,19 @@ export default function Section4Template() {
     }
   }
 
+  // En cuántos clips va a salir el video. El generador topa en 15 s por llamada, así que
+  // un corte más largo se parte en FASE 5 (`splitLongToma`, regla 7 del spec) por pausas
+  // del guión. Se calcula ACÁ, con la misma función que usa el render, porque es donde el
+  // usuario se forma la expectativa: leer "Cortes detectados — 1" sobre un video de 33 s
+  // hace pensar que no se cortó nada, cuando en realidad saldrán 3 clips. Antes eso solo
+  // se veía en el paso 7, después de haber pasado por la plantilla y el guión.
+  const clips = forensicAnalysis
+    ? groupIntoLotes(forensicAnalysis.cortes.map((c) => ({
+        n: c.n, duracionSeg: c.duracionSeg, locucion: c.dialogo, tiempoOriginal: c.tiempo,
+        accionVisual: c.accion, personaje: '', producto: '',
+      })))
+    : []
+
   const card = (title: string, children: React.ReactNode) => (
     <div className="rounded-2xl border border-white/[0.06] bg-[#121214] px-4 py-4">
       <div className="mb-2.5 text-[11px] font-semibold uppercase tracking-wide text-[#c9a227]">{title}</div>
@@ -48,6 +62,16 @@ export default function Section4Template() {
             {forensicAnalysis.guionOriginal}
           </p>
         ))}
+        {forensicAnalysis && clips.length > forensicAnalysis.cortes.length && (
+          <div className="rounded-2xl border border-white/[0.06] bg-[#121214] px-4 py-3 text-[12px] leading-relaxed text-[#8b8b8b]">
+            Este video es <strong className="text-[#cfcfcf]">una toma continua de {seg(forensicAnalysis.duracionTotalSeg)}</strong>,
+            sin cortes de edición — el análisis está bien. Pero el generador no produce más
+            de 15 s por clip, así que al renderizar se dividirá en{' '}
+            <strong className="text-[#cfcfcf]">{clips.length} clips</strong> ({clips.map((l) => seg(l.duracionSeg)).join(' · ')}),
+            cortando en pausas del guión. No se pierde una sola palabra; los descargas por
+            separado y los unes en tu editor.
+          </div>
+        )}
         {forensicAnalysis && card(`Cortes detectados — ${forensicAnalysis.cortes.length}`, (
           <ol className="flex flex-col gap-2">
             {forensicAnalysis.cortes.map((c) => (
