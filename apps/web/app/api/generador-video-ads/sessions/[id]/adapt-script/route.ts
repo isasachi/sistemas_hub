@@ -5,7 +5,7 @@ import { callStructured } from '@/lib/gemini'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 import { SlotValuesSchema, CoherenceSchema, buildAdaptInstruction, buildCoherenceInstruction } from '@/lib/video-ads/adapt'
-import { extractSlots, fillTemplate, rejectBadValues, resolveSlotId } from '@/lib/video-ads/fill'
+import { extractSlots, fillTemplate, rejectBadValues, resolveSlotId, acceptScaffoldFix } from '@/lib/video-ads/fill'
 import { extractPending } from '@/lib/video-ads/pending'
 import { canProceed } from '@/lib/video-ads/validation'
 import { STEP } from '@/lib/video-ads/steps'
@@ -72,6 +72,10 @@ export async function POST(
       console.warn(`[video-ads/adapt-script] sesión ${id}: valores descartados por no ser valores:`, rechazados)
 
     let relleno = fillTemplate(session.template, limpios)
+    // Los valores realmente vigentes tras el corrector, para comprobar que un ajuste de
+    // andamiaje no se lleve por delante un dato ya rellenado.
+    let vigentes = limpios
+    const andamiaje: { n: number; antes: string; motivo: string }[] = []
 
     // SEGUNDA PASADA — "¿esto se entiende al leerlo?".
     // La primera pasada juzga a ciegas: devuelve pares `id → valor` y el guión lo arma
@@ -89,7 +93,7 @@ export async function POST(
     // Cuesta una llamada de texto extra (sin tope per-step, pero suma unos segundos).
     // Un fallo acá NO tumba la adaptación: se conserva el relleno de la primera pasada.
     try {
-      const { correcciones } = await callStructured('coherence_check', CoherenceSchema, [
+      const { correcciones, ajustes } = await callStructured('coherence_check', CoherenceSchema, [
         {
           text: buildCoherenceInstruction(
             relleno.tomas.map((t) => ({ n: t.n, locucion: t.locucion })),
@@ -126,7 +130,46 @@ export async function POST(
         )
         if (revisados.rechazados.length)
           console.warn(`[video-ads/adapt-script] sesión ${id}: correcciones descartadas por el guard:`, revisados.rechazados)
+        vigentes = revisados.valores
       }
+
+      // AJUSTE DE ANDAMIAJE — la única excepción a la copia literal, y solo sobre el
+      // guión adaptado (la plantilla sigue siendo espejo del original). Es la licencia de
+      // la directiva 13 del spec para las frases donde NINGÚN valor cabe.
+      for (const a of ajustes) {
+        const toma = relleno.tomas.find((t) => t.n === a.n)
+        // El hueco nombrado tiene que existir EN ESA TOMA: es lo que ata el cambio de
+        // andamiaje a su justificación. Sin esta comprobación sería un permiso abierto
+        // para reescribir cualquier frase con cualquier excusa.
+        const hueco = resolveSlotId(slots.filter((sl) => sl.toma === a.n), a.idHueco)
+        if (!toma || !hueco) {
+          console.warn(`[video-ads/adapt-script] sesión ${id}: ajuste ignorado, hueco "${a.idHueco}" no está en la toma ${a.n}`)
+          continue
+        }
+        const veredicto = acceptScaffoldFix({
+          original: toma.locucion,
+          propuesta: a.locucion,
+          // El valor del hueco NOMBRADO se excluye a propósito: el ajuste existe porque
+          // ese valor no cabe en la frase, así que exigir que sobreviva bloquearía el
+          // único caso para el que la excepción se abrió. Los demás valores de la toma
+          // son datos ajenos al problema y sí tienen que seguir ahí — es lo que impide
+          // que "arreglar una concordancia" se lleve por delante media frase.
+          valores: slots
+            .filter((sl) => sl.toma === a.n && sl.id !== hueco)
+            .map((sl) => vigentes[sl.id])
+            .filter(Boolean),
+        })
+        if (!veredicto.ok) {
+          console.warn(`[video-ads/adapt-script] sesión ${id}: ajuste de la toma ${a.n} rechazado — ${veredicto.motivo}`)
+          continue
+        }
+        // Se guarda el texto de ANTES: la justificación de permitir esto es que el
+        // usuario pueda ver qué se movió, no que se le avise de que algo se movió.
+        andamiaje.push({ n: a.n, antes: toma.locucion, motivo: a.motivo })
+        toma.locucion = a.locucion.trim()
+        console.info(`[video-ads/adapt-script] sesión ${id}: andamiaje de la toma ${a.n} ajustado (${a.motivo})`)
+      }
+      if (andamiaje.length) relleno = { ...relleno, guionFinal: relleno.tomas.map((t) => t.locucion).join(' ') }
     } catch (err) {
       // Que el corrector falle no puede costarle al usuario la adaptación entera: el
       // guión de la primera pasada ya es utilizable y él lo edita línea por línea.
@@ -154,6 +197,7 @@ export async function POST(
       // Se derivan del texto, no se le preguntan al modelo: `fillTemplate` deja un
       // marcador por cada hueco que quedó sin valor.
       variablesPendientes: extractPending(relleno.guionFinal),
+      ...(andamiaje.length ? { ajustesAndamiaje: andamiaje } : {}),
     }
 
     await updateVideoSession(id, { step: STEP.SCRIPT, adapted })

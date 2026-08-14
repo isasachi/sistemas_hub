@@ -294,6 +294,72 @@ export function resolveSlotId(slots: Slot[], id: string): string | null {
   return slots.find((s) => clave(s.id) === objetivo)?.id ?? null
 }
 
+/**
+ * ¿Es aceptable este ajuste de andamiaje?
+ * ---------------------------------------------------------------------------
+ * El andamiaje —el texto fuera de los corchetes— lo copia código, y esa es LA garantía
+ * del sistema: fidelidad del 100% por construcción, no por obediencia. Esta función
+ * abre la única excepción, y existe porque hay frases donde NINGÚN valor cabe: el
+ * original dice "andas muy ___" y el producto nuevo no tiene ningún adjetivo que poner
+ * ahí. Con el andamiaje congelado, ese hueco no tiene solución posible.
+ *
+ * El spec lo contempla — la directiva crítica 13 permite "pequeños ajustes gramaticales
+ * exclusivamente para: género; número; concordancia; tiempos verbales; naturalidad
+ * mínima indispensable". Esto es esa licencia, acotada en código.
+ *
+ * ⚠️ Solo se aplica al guión ADAPTADO. La plantilla sigue siendo copia literal del
+ * original: es el artefacto que tiene que espejar la referencia, y no se toca nunca.
+ *
+ * Los topes son deliberadamente flojos en palabras y duros en DATOS. Se probó un tope
+ * estricto de palabras contra el caso real y rechazaba justamente el arreglo que esto
+ * viene a permitir: "andas muy no puedo dormir por las noches" → "andas sin poder dormir
+ * por las noches" cambia 5 de 8 palabras. Lo que no puede pasar es que el modelo escriba
+ * OTRO anuncio, y eso se vigila por lo que tiene que sobrevivir intacto: los valores ya
+ * rellenados, los pendientes y el largo.
+ */
+export function acceptScaffoldFix(args: {
+  original: string
+  propuesta: string
+  /**
+   * Valores sustituidos en esa toma que tienen que sobrevivir al ajuste. NO incluye el
+   * del hueco que motivó el cambio: ese es precisamente el que no cabía, y exigir que
+   * siga ahí rechazaría el único caso para el que esta excepción existe. El caller lo
+   * excluye (ver `adapt-script/route.ts`).
+   */
+  valores: string[]
+}): { ok: true } | { ok: false; motivo: string } {
+  const { original, propuesta, valores } = args
+  const p = propuesta.trim()
+  if (!p) return { ok: false, motivo: 'vacío' }
+  if (p === original.trim()) return { ok: false, motivo: 'no cambia nada' }
+
+  // Un anuncio nuevo no se disfraza de ajuste: el largo se mueve poco.
+  const ratio = p.length / (original.length || 1)
+  if (ratio < 0.65 || ratio > 1.35)
+    return { ok: false, motivo: `el largo cambia demasiado (${Math.round(ratio * 100)}% del original)` }
+
+  // Los datos ya rellenados no se pueden perder ni reescribir.
+  const faltante = valores.find((v) => v.trim() && !p.includes(v.trim()))
+  if (faltante) return { ok: false, motivo: `pierde el valor "${faltante}"` }
+
+  // Un pendiente no se resuelve por la puerta de atrás: lo escribe el usuario.
+  const pendientes = original.match(/\[PENDIENTE:[^\]]*\]/gi) ?? []
+  const perdido = pendientes.find((m) => !p.includes(m))
+  if (perdido) return { ok: false, motivo: `hace desaparecer ${perdido}` }
+
+  // Ni corchetes nuevos que nadie pidió.
+  const antes = (original.match(HUECO) ?? []).length
+  if ((p.match(HUECO) ?? []).length > antes) return { ok: false, motivo: 'introduce marcadores nuevos' }
+
+  // Y por debajo de la mitad de las palabras compartidas ya no es un ajuste, es otra frase.
+  const wo = norm(original), wp = new Set(norm(p))
+  const conservadas = wo.filter((w) => wp.has(w)).length
+  const pct = wo.length ? conservadas / wo.length : 1
+  if (pct < 0.5) return { ok: false, motivo: `solo conserva el ${Math.round(pct * 100)}% de las palabras` }
+
+  return { ok: true }
+}
+
 export interface FilledTemplate {
   guionFinal: string
   tomas: { n: number; locucion: string; accionVisual: string; duracionSeg: number }[]

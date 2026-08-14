@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractSlots, fillTemplate, validateTemplate, assembleTemplate, rejectBadValues, alignSlots, normalizeSlots, resolveSlotId } from './fill'
+import { extractSlots, fillTemplate, validateTemplate, assembleTemplate, rejectBadValues, alignSlots, normalizeSlots, resolveSlotId, acceptScaffoldFix } from './fill'
 import type { ScriptTemplate } from './template'
 
 // Plantilla recortada del caso real (serum Apivita → suero de niacinamida). Trae los
@@ -416,5 +416,77 @@ describe('resolveSlotId', () => {
     const dos = extractSlots({ ...T, tomas: [{ n: 1, duracionSeg: 5, accionVisual: 'a', locucion: '[x] y [x]' }] })
     expect(resolveSlotId(dos, 'x#2')).toBe('x#2')
     expect(resolveSlotId(dos, 'x')).toBe('x#1')
+  })
+})
+
+// La ÚNICA excepción a la copia literal. Existe para las frases donde ningún valor cabe
+// ("andas muy ___" con un producto que no tiene adjetivo que poner), y solo sobre el
+// guión adaptado: la plantilla sigue siendo espejo del original.
+describe('acceptScaffoldFix', () => {
+  const ok = (r: ReturnType<typeof acceptScaffoldFix>) => r.ok
+  const motivo = (r: ReturnType<typeof acceptScaffoldFix>) => (r.ok ? '' : r.motivo)
+
+  // El caso real. Cambia 5 de 8 palabras: cualquier tope estricto de palabras lo
+  // rechazaría, y es justo el arreglo que esto viene a permitir.
+  it('acepta el arreglo mínimo que motivó la excepción', () => {
+    expect(ok(acceptScaffoldFix({
+      original: 'sobre todo si últimamente andas muy no puedo dormir por las noches',
+      propuesta: 'sobre todo si últimamente andas sin poder dormir por las noches',
+      valores: [],
+    }))).toBe(true)
+  })
+
+  it('rechaza una frase nueva disfrazada de ajuste', () => {
+    const r = acceptScaffoldFix({
+      original: 'sobre todo si últimamente andas muy no puedo dormir por las noches',
+      propuesta: 'descubre el secreto que miles de personas ya están probando hoy mismo',
+      valores: [],
+    })
+    expect(ok(r)).toBe(false)
+    expect(motivo(r)).toMatch(/palabras/)
+  })
+
+  // Los datos no se pueden perder: el ajuste toca el andamiaje, no el relleno.
+  it('rechaza el ajuste que se lleva por delante un valor ya rellenado', () => {
+    const r = acceptScaffoldFix({
+      original: 'Número uno, contiene melatonina, te ayuda a dormir',
+      propuesta: 'Número uno, te ayuda a dormir muy bien por la noche',
+      valores: ['melatonina'],
+    })
+    expect(ok(r)).toBe(false)
+    expect(motivo(r)).toContain('melatonina')
+  })
+
+  // Un pendiente lo escribe el usuario; no se resuelve por la puerta de atrás.
+  it('rechaza el ajuste que hace desaparecer un pendiente', () => {
+    const r = acceptScaffoldFix({
+      original: 'Número dos, tiene [PENDIENTE: ingrediente 2] que ayuda al descanso',
+      propuesta: 'Número dos, tiene valeriana que ayuda mucho al descanso',
+      valores: [],
+    })
+    expect(ok(r)).toBe(false)
+    expect(motivo(r)).toContain('PENDIENTE')
+  })
+
+  it('rechaza un ajuste que alarga o acorta demasiado', () => {
+    expect(motivo(acceptScaffoldFix({
+      original: 'andas muy cansada por las mañanas y no rindes',
+      propuesta: 'andas mal',
+      valores: [],
+    }))).toMatch(/largo/)
+  })
+
+  it('rechaza un ajuste que no cambia nada y uno vacío', () => {
+    const t = 'andas muy cansada'
+    expect(ok(acceptScaffoldFix({ original: t, propuesta: t, valores: [] }))).toBe(false)
+    expect(ok(acceptScaffoldFix({ original: t, propuesta: '   ', valores: [] }))).toBe(false)
+  })
+
+  it('rechaza el ajuste que mete marcadores nuevos', () => {
+    expect(motivo(acceptScaffoldFix({
+      original: 'Número uno, contiene melatonina para dormir mejor cada noche',
+      propuesta: 'Número uno, contiene melatonina y [otro] para dormir cada noche',
+      valores: ['melatonina'],
+    }))).toMatch(/marcadores/)
   })
 })

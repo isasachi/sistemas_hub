@@ -59,6 +59,21 @@ export const CoherenceSchema = z.object({
     valor: z.string(),
     motivo: z.string(),
   })),
+  /**
+   * La ÚNICA excepción a la copia literal, y solo sobre el guión adaptado — la plantilla
+   * sigue siendo espejo del original. Es la licencia de la directiva 13 del spec
+   * ("naturalidad mínima indispensable"), para las frases donde NINGÚN valor cabe en el
+   * andamiaje congelado ("andas muy ___" con un producto que no tiene adjetivo que poner).
+   *
+   * `idHueco` ata el cambio a su justificación: código verifica que ese hueco exista en
+   * esa toma. Sin eso, sería un permiso abierto para reescribir cualquier frase.
+   */
+  ajustes: z.array(z.object({
+    n: z.number(),
+    idHueco: z.string(),
+    locucion: z.string(),
+    motivo: z.string(),
+  })).default([]),
 })
 export type Coherence = z.infer<typeof CoherenceSchema>
 
@@ -90,6 +105,20 @@ export const AdaptedScriptSchema = z.object({
   diferenciaCaracteres: z.number(),
   tomas: z.array(TomaFinalSchema).min(1),
   variablesPendientes: z.array(z.string()),
+  /**
+   * Tomas cuyo andamiaje se ajustó, con el texto de ANTES. Se guarda el texto y no solo
+   * el número de toma porque la justificación entera de permitir el cambio es que sea
+   * auditable: un contador no le dice al usuario qué se movió.
+   *
+   * `.optional()` de verdad, no solo ausente en los fixtures: `generate-lotes` hace
+   * `AdaptedScriptSchema.parse` sobre el jsonb guardado, y sin esto cada sesión anterior
+   * a este cambio reventaría con un 500 al renderizar.
+   */
+  ajustesAndamiaje: z.array(z.object({
+    n: z.number(),
+    antes: z.string(),
+    motivo: z.string(),
+  })).optional(),
 })
 export type AdaptedScript = z.infer<typeof AdaptedScriptSchema>
 
@@ -334,6 +363,23 @@ export function buildCoherenceInstruction(
     '',
     'El valor corregido sigue siendo CORTO —una palabra o un sintagma— y sustituye solo lo',
     'que estaba entre corchetes: las palabras vecinas ya están escritas.',
+    '',
+    '── SI NINGÚN VALOR CABE: `ajustes` ──',
+    'A veces la frase original no admite ningún valor correcto. El guion dice "andas muy',
+    '___" y para este producto no existe el adjetivo que iría ahí: cualquier cosa que',
+    'pongas deja la oración rota. Solo en ESE caso puedes tocar las palabras de alrededor.',
+    '',
+    'Devuelve entonces un `ajustes` con: la toma `n`, el `idHueco` que no se puede',
+    'rellenar, la `locucion` COMPLETA de esa toma ya arreglada, y el `motivo`.',
+    '',
+    'Condiciones, todas obligatorias:',
+    '  - Es el ÚLTIMO recurso. Si existe un valor que encaje, usa `correcciones`, no esto.',
+    '  - El arreglo es MÍNIMO y local: se toca el conector o la concordancia que estorba,',
+    '    no se reescribe la frase ni se cambia lo que dice.',
+    '  - Todo lo demás de la toma se copia palabra por palabra: el resto del guion, los',
+    '    valores ya rellenados y los marcadores [PENDIENTE: …] siguen exactamente igual.',
+    '  - No es para mejorar el estilo de una frase que ya se entiende. Una toma sin',
+    '    problema no lleva ajuste.',
     '',
     '── LO ÚNICO QUE PUEDES USAR PARA RELLENAR ──',
     'Ojo: esto son NOTAS que escribió el usuario en un formulario, no texto listo para',

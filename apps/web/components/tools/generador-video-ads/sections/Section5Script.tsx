@@ -165,6 +165,10 @@ export default function Section5Script() {
           {lineas.map((l) => {
             const falta = l.texto.includes('[PENDIENTE:')
             const cabe = cabenEn(l.duracionSeg)
+            // El andamiaje es copia literal del original salvo en este caso, así que se
+            // muestra el ANTES: la razón de permitir el cambio es que sea auditable, y
+            // un aviso de que "algo cambió" no le sirve de nada a quien tiene que juzgarlo.
+            const ajuste = adapted.ajustesAndamiaje?.find((a) => a.n === l.n)
             const largo = holgado(l)
             return (
               <div key={l.i} className="flex flex-col gap-1">
@@ -179,6 +183,12 @@ export default function Section5Script() {
                     {falta && <span className="text-amber-400">falta completar</span>}
                   </span>
                 </div>
+                {ajuste && (
+                  <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.06] px-2.5 py-2 text-[11px] leading-relaxed">
+                    <div className="text-amber-400">Se ajustó la redacción — {ajuste.motivo}</div>
+                    <div className="mt-1 text-[#8b8b8b]">antes: <span className="line-through">{ajuste.antes}</span></div>
+                  </div>
+                )}
                 <textarea
                   value={l.texto}
                   onChange={(e) => setEdiciones({ ...ediciones, [l.i]: e.target.value })}
