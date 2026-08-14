@@ -59,7 +59,25 @@ const PLATAFORMA = /^(uber|airbnb|spotify|netflix|disney|paramount|hbo|prime vid
 // "Claro Colombia", "UPN Posgrado".
 // Las marcas de telco van ANCLADAS al inicio del nombre a propósito: `claro` con
 // \b se llevaría puesto al "Suplemento Aire Claro", que sí es un producto.
-const SERVICIO_NOMBRE = /\b(bancos?|seguros|aseguradora|financiera|cooperativa|universidad|universitaria|posgrados?|maestrias?|business school|educacion continua)\b|^(claro|movistar|telcel|entel|tigo|directv|izzi|totalplay|infinitum|copec|compensar)\b/
+// `institutos?` va junto a `universidad` porque salieron juntos al medir: 60+
+// nombres del tipo "Instituto Nord", "ITQ - Instituto Superior Tecnológico".
+// Cubre además los institutos médicos, que son clínicas con otro nombre.
+const SERVICIO_NOMBRE = /\b(bancos?|seguros|aseguradora|financiera|cooperativa|universidad|universitaria|institutos?|posgrados?|maestrias?|business school|educacion continua|casinos?|apuestas|betsson|bet365|1xbet|codere|forex)\b|^(claro|movistar|telcel|entel|tigo|directv|izzi|totalplay|infinitum|copec|compensar)\b/
+
+// ── Cluster 7: software, SaaS y edtech con marca propia ──────────────────────
+// El disparador fue "Adobe Creative Cloud": 7,008 anuncios activos, el primero
+// de su nicho, y ninguna lista de arriba lo veía — no es marketplace, no es
+// plataforma de consumo, no es banco. Dos de sus cuatro filas llegan con
+// `{{product.name}}` sin renderizar como único texto, así que el NOMBRE del
+// anunciante es la única señal que existe para ellas.
+const SOFTWARE_NOMBRE = /\b(adobe|acrobat|creative cloud|microsoft|office 365|canva|figma|notion|dropbox|salesforce|hubspot|shopify|godaddy|mcafee|chatgpt|openai|midjourney|copilot|paypal|udemy|coursera|platzi|domestika|duolingo|babbel|crehana|classpass|kavak)\b/
+
+// Apps y juegos que se nombran a sí mismos. Medido sobre las 70,175 filas de la
+// base: los 77 anunciantes con "app"/"apps" en el nombre son apps, sin un solo
+// falso positivo — por eso acá la palabra suelta sí alcanza, al revés que en el
+// cluster de clínicas. `studio` se probó y se DESCARTÓ: 172 nombres, casi todos
+// negocios reales (Auka Dress Studio, Bombshell Nails & Lashes Studio).
+const APP_NOMBRE = /\b(apps?|games?|chatbot|streaming|player)\b/
 
 // Señales de que SÍ se envía un objeto: mandan sobre las de arriba, porque el
 // error caro es descartar un producto real.
@@ -82,6 +100,13 @@ export function nonPhysicalSignal(
   if (plat) return { cluster: 'plataforma', match: plat[0] }
   const serv = nombre.match(SERVICIO_NOMBRE)
   if (serv) return { cluster: 'servicio', match: serv[0] }
+  // Antes del override de FISICO, igual que los tres de arriba: las marcas
+  // grandes sí usan esas palabras — "Uber Eats" anuncia "delivery gratis", y a
+  // un anuncio de Adobe no lo vuelve físico que diga "prueba sin costo".
+  const soft = nombre.match(SOFTWARE_NOMBRE)
+  if (soft) return { cluster: 'software', match: soft[0] }
+  const appN = nombre.match(APP_NOMBRE)
+  if (appN) return { cluster: 'app-nombre', match: appN[0] }
 
   const t = norm(`${advertiser ?? ''} ${text ?? ''}`)
   if (FISICO.test(t)) return null

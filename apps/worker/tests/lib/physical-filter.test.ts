@@ -39,6 +39,26 @@ describe('lista negra de no-físicos', () => {
     expect(isPhysicalEnough('Respira mejor', 'Suplemento Aire Claro')).toBe(true)
   })
 
+  // Adobe llegaba primero en su nicho con 7,008 anuncios. Dos de sus cuatro
+  // filas traen `{{product.name}}` como único texto: si el filtro mirara el
+  // cuerpo del anuncio no tendría NADA que leer, por eso esto va por el nombre.
+  it('bloquea software, SaaS y edtech aunque el anuncio venga sin texto', () => {
+    expect(nonPhysicalSignal('{{product.name}} — {{product.brand}}', 'Adobe Creative Cloud')?.cluster).toBe('software')
+    expect(nonPhysicalSignal('Probar Acrobat Pro', 'Adobe Latinoamerica')?.cluster).toBe('software')
+    expect(nonPhysicalSignal('Diseña lo que quieras', 'Canva')?.cluster).toBe('software')
+    expect(nonPhysicalSignal('Aprende a tu ritmo', 'Udemy')?.cluster).toBe('software')
+    expect(nonPhysicalSignal('Pregúntame lo que sea', 'ChatGPT')?.cluster).toBe('software')
+  })
+
+  it('bloquea apps y juegos que se nombran a sí mismos', () => {
+    expect(nonPhysicalSignal('Baja de peso', 'Simple App')?.cluster).toBe('app-nombre')
+    expect(nonPhysicalSignal('Resúmenes de libros', 'Headway App')?.cluster).toBe('app-nombre')
+    expect(nonPhysicalSignal('Juega gratis', 'MindCare Game Mahjong Other')?.cluster).toBe('app-nombre')
+    // ⚠️ `studio` se descartó a propósito: son negocios reales, no apps.
+    expect(isPhysicalEnough('Vestidos a medida', 'Auka Dress Studio')).toBe(true)
+    expect(isPhysicalEnough('Marcos de colección', 'Grid Studio Perú')).toBe(true)
+  })
+
   it('deja pasar productos físicos que MENCIONAN a un médico o un tratamiento', () => {
     // El error caro: una crema real citando a una dermatóloga.
     expect(isPhysicalEnough('Una dermatóloga lo explica ✅', 'Auré Profesional')).toBe(true)
