@@ -197,13 +197,69 @@ export function zoneNeedsOwnPlate(focus: BodyFocus | null | undefined): boolean 
 // más detalle de locale/rasgos en la extracción (`model_persona` se escribe una vez y se repite
 // literal en las 8 secciones: mismo rostro, mismo peinado, misma ropa, mismos accesorios).
 export const DEMOGRAPHIC_PERSONA: Record<DemographicId, string> = {
-  female_18_30: 'Mujer peruana de 18-30 años, piel real con textura natural, cabello recogido, camiseta blanca de tirantes, aretes dorados discretos, expresión serena y segura',
-  female_30_45: 'Mujer peruana de 30-45 años, piel real con textura natural, cabello suelto con ondas suaves, blusa neutra sencilla, sin joyería llamativa, expresión cálida y confiada',
-  female_45_plus: 'Mujer peruana de 45 años o más, piel real con textura natural, canas visibles o cabello entrecano, ropa cómoda y neutra, expresión de bienestar y alivio sereno',
-  male_20_35: 'Hombre peruano de 20-35 años, piel real con textura natural, cabello corto prolijo, camiseta deportiva ajustada de color neutro, expresión de confianza física',
-  male_35_55: 'Hombre peruano de 35-55 años, piel real con textura natural, barba corta prolija, camisa casual de color neutro, expresión de autoridad tranquila',
-  senior_55_plus: 'Persona peruana mayor de 55 años, piel real con textura natural, cabello canoso, ropa cómoda y neutra, expresión cálida y estable',
+  female_18_30: 'Mujer peruana de 18-30 años, piel real con textura natural, cabello recogido, aretes dorados discretos, expresión serena y segura',
+  female_30_45: 'Mujer peruana de 30-45 años, piel real con textura natural, cabello suelto con ondas suaves, sin joyería llamativa, expresión cálida y confiada',
+  female_45_plus: 'Mujer peruana de 45 años o más, piel real con textura natural, canas visibles o cabello entrecano, expresión de bienestar y alivio sereno',
+  male_20_35: 'Hombre peruano de 20-35 años, piel real con textura natural, cabello corto prolijo, expresión de confianza física',
+  male_35_55: 'Hombre peruano de 35-55 años, piel real con textura natural, barba corta prolija, expresión de autoridad tranquila',
+  senior_55_plus: 'Persona peruana mayor de 55 años, piel real con textura natural, cabello canoso, expresión cálida y estable',
   no_talent: '',
+}
+
+// ─── Vestuario (2026-08-15) ─────────────────────────────────────────────────
+// La ROPA salió de `DEMOGRAPHIC_PERSONA`, donde estaba incrustada y era ciega al producto: una
+// `female_18_30` iba con "camiseta blanca de tirantes" tanto para un sérum como para una creatina
+// de glúteos, y el modelo rellenaba lo que faltaba abajo — en un caso real, un short de jean para
+// un producto cuya promesa es el tren inferior. El vestuario no es un rasgo de la persona: es una
+// función del NICHO (qué registro) y de la ZONA (qué tiene que dejarse ver).
+//
+// Tabla y no LLM, por la misma razón que la tipografía, el halo y los props: hay ~20 respuestas
+// posibles, la decisión es estable y pedírsela a un modelo agrega una variable que después hay que
+// auditar en cada corrida.
+export const NICHE_WARDROBE: Record<NicheId, string> = {
+  supplement_skin_female: 'top o camiseta lisa de tono neutro, look limpio de cuidado personal',
+  skincare_topical: 'top o camiseta lisa de tono neutro, hombros descubiertos, look limpio de skincare',
+  haircare: 'camiseta lisa de tono neutro que no compita con el cabello',
+  fitness_weightloss: 'ropa deportiva de entrenamiento ajustada — licra y top deportivo',
+  supplement_male_performance: 'camiseta deportiva ajustada o musculosa de color neutro',
+  joint_mobility: 'ropa deportiva cómoda de entrenamiento suave, tejido elástico',
+  intimate_wellness: 'ropa de casa cómoda y discreta, tonos suaves, nada sugerente',
+  herbal_natural: 'prendas de fibras naturales en tonos tierra, look sereno',
+  baby_maternity: 'ropa de casa suave y cómoda en tonos claros',
+  pets: 'ropa casual de diario, cómoda',
+  home_cleaning: 'ropa casual de estar en casa, mangas remangadas',
+  tech_gadgets: 'ropa urbana minimalista de tonos neutros',
+  kitchen_tools: 'ropa casual con delantal de cocina liso',
+  jewelry_fashion: 'prenda elegante y sobria que no compita con la pieza',
+  automotive: 'ropa de trabajo casual, resistente',
+  generic: 'ropa casual sencilla de tono neutro',
+}
+
+// Restricción de la ZONA: la prenda tiene que DEJAR VER la parte que el producto cambia. Sin esto,
+// una rodillera con "ropa deportiva cómoda" sale con pantalón largo y la rodilla tapada — el mismo
+// fallo que el short de jean, en otra zona. Solo llevan entrada las zonas que lo necesitan; el
+// resto usa el vestuario del nicho tal cual.
+export const WARDROBE_FOR_FOCUS: Partial<Record<BodyFocus, string>> = {
+  torso: 'la prenda superior deja ver la línea del torso',
+  abdomen: 'la prenda deja el abdomen y la cintura a la vista',
+  gluteos_piernas: 'la prenda inferior es ceñida y de cintura alta (licra o calza), y deja ver la forma de glúteos y piernas — nunca jean, pantalón suelto ni falda',
+  rodilla: 'la prenda inferior es corta (short) y deja la rodilla completamente descubierta — nunca pantalón largo',
+  articulacion: 'la prenda deja la articulación descubierta — sin manga o manga corta',
+  pies: 'pies descalzos o con sandalia simple, tobillos a la vista',
+}
+
+// Arma la persona completa: rasgos (demografía) + vestuario (nicho + zona). Es lo que se guarda
+// como `model_persona` y viaja LITERAL a las dos placas y a las 8 secciones, así que tiene que
+// resolverse UNA vez acá y no re-derivarse en cada consumidor.
+export function personaFor(
+  demographic: DemographicId,
+  niche: NicheId,
+  focus?: BodyFocus | null,
+): string {
+  const base = DEMOGRAPHIC_PERSONA[demographic]
+  if (!base) return base // no_talent: el carril lo llena el sustituto por nicho, sin persona
+  const zona = focus ? WARDROBE_FOR_FOCUS[focus] : undefined
+  return [base, `viste ${NICHE_WARDROBE[niche]}${zona ? `, y ${zona}` : ''}`].join(', ')
 }
 
 // Anexo B.7 — sustituto del carril de talento cuando `demographic_id` es `no_talent`. Cinco

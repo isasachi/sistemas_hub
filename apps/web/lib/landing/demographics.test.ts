@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { DemographicId, BodyFocus, type SectionType } from './types'
+import { DemographicId, BodyFocus, NicheId, type SectionType } from './types'
 import {
   DEMOGRAPHIC_POSES, DEMOGRAPHIC_PERSONA, assignPoses,
   ZONE_POSES, BODY_FOCUS_LABELS, BODY_FOCUS_FRAMING, zoneNeedsOwnPlate,
+  personaFor, NICHE_WARDROBE,
 } from './demographics'
 
 describe('Anexo B — poses y persona', () => {
@@ -91,5 +92,57 @@ describe('assignPoses con body_focus', () => {
       expect(BODY_FOCUS_LABELS[f]).toBeTruthy()
       expect(BODY_FOCUS_FRAMING[f]).toBeTruthy()
     }
+  })
+})
+
+// ─── Vestuario por nicho + zona (2026-08-15) ────────────────────────────────
+// El bug: la ropa vivía incrustada en `DEMOGRAPHIC_PERSONA` y era ciega al producto. Una
+// `female_18_30` iba con "camiseta blanca de tirantes" para un sérum y para una creatina de
+// glúteos, y el modelo completaba lo que faltaba abajo — en un caso real, un short de jean sobre
+// un producto cuya promesa ES el tren inferior.
+describe('personaFor — vestuario del nicho y de la zona', () => {
+  it('el caso reportado: creatina de glúteos viste licra, nunca jean', () => {
+    const p = personaFor('female_18_30', 'fitness_weightloss', 'gluteos_piernas')
+    expect(p).toContain('licra')
+    expect(p).toContain('nunca jean')
+  })
+
+  // La ropa NO es un rasgo de la persona: el mismo cuerpo con otro producto se viste distinto.
+  it('la misma demografía cambia de vestuario según el nicho', () => {
+    const fitness = personaFor('female_18_30', 'fitness_weightloss', 'rostro')
+    const skincare = personaFor('female_18_30', 'skincare_topical', 'rostro')
+    expect(fitness).not.toBe(skincare)
+    expect(fitness).toContain('deportiva')
+    expect(skincare).toContain('skincare')
+    // los rasgos sí se conservan: es la misma persona, otra ropa
+    expect(fitness).toContain('Mujer peruana de 18-30 años')
+    expect(skincare).toContain('Mujer peruana de 18-30 años')
+  })
+
+  // Sin esto una rodillera sale con pantalón largo y la rodilla tapada: el mismo fallo que el jean.
+  it('la zona impone que la prenda DEJE VER la parte que el producto cambia', () => {
+    expect(personaFor('senior_55_plus', 'joint_mobility', 'rodilla')).toContain('nunca pantalón largo')
+    expect(personaFor('female_30_45', 'fitness_weightloss', 'abdomen')).toContain('abdomen y la cintura a la vista')
+  })
+
+  it('las zonas sin restricción propia (rostro/cabello) solo llevan el vestuario del nicho', () => {
+    const conZona = personaFor('female_18_30', 'skincare_topical', 'rostro')
+    const sinZona = personaFor('female_18_30', 'skincare_topical', null)
+    expect(conZona).toBe(sinZona)
+  })
+
+  it('ninguna persona menciona ya una prenda fija de demografía', () => {
+    for (const d of DemographicId.options) {
+      if (d === 'no_talent') continue
+      expect(DEMOGRAPHIC_PERSONA[d]).not.toMatch(/camiseta|blusa|camisa|ropa cómoda/)
+    }
+  })
+
+  it('no_talent no arma persona: el carril lo llena el sustituto del nicho', () => {
+    expect(personaFor('no_talent', 'pets', 'rostro')).toBe('')
+  })
+
+  it('cada nicho tiene vestuario — un nicho sin entrada dejaría "viste undefined" en el prompt', () => {
+    for (const n of NicheId.options) expect(NICHE_WARDROBE[n]).toBeTruthy()
   })
 })
