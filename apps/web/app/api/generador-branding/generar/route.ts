@@ -3,7 +3,7 @@ import { createBrandingSession, getBrandingSession, updateBrandingSession } from
 import { generateImage } from '@/lib/gemini'
 import { uploadToStorage } from '@/lib/storage'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
-import { readUserId } from '@/lib/product-hunter/session'
+import { ensureUserId } from '@/lib/product-hunter/session'
 import { isFlagged } from '@/lib/branding/moderation'
 import { isComplete, type Brief, type PartialBrief } from '@/lib/branding/brief'
 import { briefFromRow } from '@/lib/branding/session-brief'
@@ -44,11 +44,15 @@ export async function POST(req: NextRequest) {
     only?: Stage
   }
 
+  // La identidad se resuelve ANTES del stream: el Set-Cookie viaja en los headers de
+  // la respuesta, que ya salieron cuando corre `start()`. Acuñarla acá (y no solo
+  // leerla) es lo que evita que la sesión nazca huérfana en un navegador sin ph_uid.
+  const { uid: userId, setCookie } = await ensureUserId()
+
   const stream = new ReadableStream({
     async start(controller) {
       const send = (data: Record<string, unknown>) =>
         controller.enqueue(`data: ${JSON.stringify(data)}\n\n`)
-      const userId = await readUserId()
 
       try {
         // ── Resolver brief + sesión: corrida nueva o regeneración de una etapa ──
@@ -72,7 +76,7 @@ export async function POST(req: NextRequest) {
             return controller.close()
           }
 
-          sessionId = await createBrandingSession(userId ?? undefined)
+          sessionId = await createBrandingSession(userId)
           await updateBrandingSession(sessionId, {
             brand_name: b.brandName,
             product_category: b.category,
@@ -175,6 +179,11 @@ export async function POST(req: NextRequest) {
   })
 
   return new Response(stream, {
-    headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' },
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+      ...(setCookie ? { 'Set-Cookie': setCookie } : {}),
+    },
   })
 }
