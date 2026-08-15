@@ -40,14 +40,22 @@ export async function generateTalent(
 // Segunda placa, encuadrada en la parte del cuerpo sobre la que actúa el producto y SIN rostro.
 // La usan las secciones con protagonista menos el hero (ver `talent_zone_url` en types.ts).
 //
-// POR QUÉ UNA SEGUNDA IMAGEN Y NO UNA INSTRUCCIÓN DE RECORTE: el encuadre es GEOMETRÍA, y contra
-// la plantilla curada —una imagen ráster que muestra un retrato— el texto pierde. Ya se midió con
-// la luz: el carve-out estaba escrito y no movió un píxel. Lo que sí gana es otra IMAGEN: la placa
-// adjunta es lo que la difusión copia, igual que hoy copia el envase canónico y la cara del talento.
+// ⚠️ PARA QUÉ SIRVE REALMENTE — medido, y NO es lo que se predijo. La apuesta era que el encuadre
+// es geometría y que solo otra IMAGEN podía ganarle a la plantilla, como pasó con la luz (donde el
+// carve-out de texto no movió un píxel). Se probó sobre una sesión real de creatina con zona
+// `gluteos_piernas`, comparando la placa de zona contra la canónica con la MISMA pose de zona:
 //
-// La placa canónica se adjunta como referencia para que sea la MISMA persona (tono de piel,
-// complexión, ropa), aunque la cara no salga en cuadro: sin eso el tren inferior podría ser de otro
-// cuerpo que el rostro del hero, y la landing dejaría de leerse como una sola persona.
+//   - El ENCUADRE lo movió el TEXTO: el control, con el retrato adjunto, también salió de tren
+//     inferior. La pose de zona bastó. (No es el caso de la luz: acá el texto sí gana.)
+//   - Lo que la placa aporta es la IDENTIDAD. Sin ella el modelo improvisó otro cuerpo — una
+//     modelo fitness en top deportivo dentro de un gimnasio — que contradice `model_persona`
+//     ("mujer 30-45, blusa neutra sencilla") y no es la persona del hero. Con la placa, el cuerpo
+//     y la ropa son los del retrato canónico.
+//
+// O sea: la placa existe por CONSISTENCIA entre secciones, no por encuadre. Sigue valiendo su
+// generación —una landing donde el hero y los beneficios muestran dos mujeres distintas está rota—
+// pero no la borres pensando que el texto de encuadre no alcanza, ni la cites como el mecanismo
+// que produce el recorte.
 function buildZonePrompt(persona: string, focus: BodyFocus): string {
   return [
     `Generate a REFERENCE PLATE of ONE real Latin-American person framed on ${BODY_FOCUS_FRAMING[focus]}. The person is: ${persona}.`,
