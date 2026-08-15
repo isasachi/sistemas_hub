@@ -7,21 +7,23 @@ import { RegenControls } from '@/components/tools/ui/RegenControls'
 import { GenerationProgress } from '@/components/tools/ui/GenerationProgress'
 import BackToDashboard from '@/components/tools/ui/BackToDashboard'
 
+// El orden es imágenes → prompt: el instructivo necesita el ratio real de la referencia,
+// que sale de sus bytes. Si se invierte acá, la barra retrocede.
 const STATUS_LABELS: Record<string, { text: string; pct: number }> = {
-  building_prompt: { text: 'Preparando instrucciones...', pct: 15 },
-  loading_images:  { text: 'Cargando imágenes...', pct: 30 },
+  loading_images:  { text: 'Cargando imágenes...', pct: 15 },
+  building_prompt: { text: 'Preparando instrucciones...', pct: 30 },
   generating:      { text: 'Generando el anuncio con IA...', pct: 60 },
   uploading:       { text: 'Guardando imagen final...', pct: 90 },
   done:            { text: '¡Listo!', pct: 100 },
 }
 
-const STAGES = ['building_prompt', 'loading_images', 'generating', 'uploading', 'done']
+const STAGES = ['loading_images', 'building_prompt', 'generating', 'uploading', 'done']
 
 const btnPrimary = 'rounded-xl jr-cta text-[13px] font-bold disabled:opacity-40 transition-all duration-200 cursor-pointer border-0 font-sans flex items-center justify-center gap-2'
 
 export default function Section5Generate() {
   const { sessionId, imageUrl, setImageUrl, startNewSession, regens, setRegen } = useWizardStore()
-  const [status, setStatus] = useState<string>('building_prompt')
+  const [status, setStatus] = useState<string>('loading_images')
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [feedback, setFeedback] = useState('')
@@ -92,7 +94,7 @@ export default function Section5Generate() {
           <GenerationProgress
             percent={progress}
             label={STATUS_LABELS[status]?.text ?? status}
-            steps={['prompt', 'imágenes', 'generando', 'guardando', 'listo']}
+            steps={['imágenes', 'prompt', 'generando', 'guardando', 'listo']}
             currentStep={STAGES.indexOf(status)}
           />
 
@@ -107,7 +109,7 @@ export default function Section5Generate() {
         <div className="flex flex-col gap-3">
           <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-[12px] text-red-400">{error}</div>
           <button
-            onClick={() => { setError(null); setProgress(0); setStatus('building_prompt'); sseKey.current += 1 }}
+            onClick={() => { setError(null); setProgress(0); setStatus('loading_images'); sseKey.current += 1 }}
             className={btnPrimary + ' h-11 w-full'}
           >
             Reintentar

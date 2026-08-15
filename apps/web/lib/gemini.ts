@@ -161,8 +161,26 @@ async function geminiCallReasoning(systemPrompt: string, userMessage: string): P
   return res.text ?? ''
 }
 
-export async function callReasoning(systemPrompt: string, userMessage: string): Promise<string> {
+// `preferGemini`: mismo escape hatch que `callStructured`. Lo usa el generador de anuncios
+// (STEP5): armar el instructivo de imagen es una cadena de razonamiento contextual (§10:
+// identificar → evaluar contra el público → decidir) y gpt-4o-mini es el techo de calidad ahí,
+// igual que lo medido para video-ads (ver AGENTS.md). No se invierte globalmente: branding y
+// landing siguen con OpenAI primario.
+export async function callReasoning(
+  systemPrompt: string,
+  userMessage: string,
+  opts?: { preferGemini?: boolean }
+): Promise<string> {
   if (geminiForced()) return geminiCallReasoning(systemPrompt, userMessage)
+  if (opts?.preferGemini) {
+    try {
+      const out = await geminiCallReasoning(systemPrompt, userMessage)
+      if (out.trim()) return out // vacío no tira: cae a OpenAI igual que un error
+    } catch (e) {
+      console.warn('[llm] Gemini reasoning (preferGemini) falló → fallback a OpenAI', e)
+    }
+    return openaiCallReasoning(systemPrompt, userMessage)
+  }
   try {
     return await openaiCallReasoning(systemPrompt, userMessage)
   } catch (e) {
@@ -265,11 +283,17 @@ export async function editWithPrompt(
 const PRODUCT_RULE =
   'PRODUCT FIDELITY (mandatory): Image 2 is the REAL product. Render it in the final ad EXACTLY as it appears in Image 2 — identical shape, proportions, colors, finish and label (every text and graphic printed on the label reproduced faithfully; do not simplify, alter or omit any detail). This product MUST REPLACE whatever product appears in Image 1 (the reference ad), taking over its physical position and integration. If Image 1 shows no physical product, insert the product from Image 2 into the scene naturally and believably. Never invent, redraw, restyle or substitute the product.'
 
+// ⚠️ `aspectRatio` NO es opcional de verdad: sin `imageConfig` el modelo elige el formato y
+// una referencia 9:16 salía como ad 16:9 (sesión 4c8f6c8b, verificado: ref 335x597 → out
+// 1376x768). El ratio se mide del archivo de referencia (`aspectRatioOf`), no del texto que
+// devuelve el análisis — ese decía "16:9" sobre una imagen vertical. Se deja `| undefined`
+// solo para el caso en que sharp no pueda leer el archivo.
 export async function editImage(
   refBase64: string, refMime: string,
   productBase64: string, productMime: string,
   logoBase64: string | null, logoMime: string | null,
-  instruction: string
+  instruction: string,
+  aspectRatio?: string
 ): Promise<string> {
   const parts: Part[] = [
     { inlineData: { mimeType: refMime, data: refBase64 } },
@@ -277,15 +301,11 @@ export async function editImage(
     ...(logoBase64 && logoMime ? [{ inlineData: { mimeType: logoMime, data: logoBase64 } } as Part] : []),
     { text: instruction },
     { text: PRODUCT_RULE },
-    { text: SPANISH_RULE },
   ]
-  const res = await getAI().models.generateContent({
-    model: 'gemini-3.1-flash-image',
-    contents: [{ role: 'user', parts }],
-    config: { responseModalities: [Modality.IMAGE] },
-  })
-  const imagePart = res.candidates?.[0]?.content?.parts?.find((p: Part) => p.inlineData)
-  return imagePart?.inlineData?.data ?? ''
+  // Pasa por `generateImage` (gpt-image-2 primario, Gemini fallback) en vez de llamar a Gemini
+  // directo: comparados sobre el mismo anuncio y el mismo instructivo, gpt-image-2 rinde
+  // mejor en el detalle de la etiqueta y en el rostro. Hereda la SPANISH_RULE y el retry.
+  return generateImage(parts, 3, aspectRatio ? { aspectRatio } : undefined)
 }
 
 export async function refineImage(
@@ -293,7 +313,8 @@ export async function refineImage(
   productBase64: string, productMime: string,
   logoBase64: string | null, logoMime: string | null,
   resultBase64: string, resultMime: string,
-  feedback: string
+  feedback: string,
+  aspectRatio?: string
 ): Promise<string> {
   const logoCount = logoBase64 ? 1 : 0
   const resultImageNumber = 3 + logoCount
@@ -315,18 +336,15 @@ export async function refineImage(
             `Change request: ${feedback.trim()}`,
           ].join(' ')
         : [
+            // ⚠️ "variar la composición" era licencia para abandonar la plantilla, que es lo
+            // único que esta tool promete replicar. La variación se acota a tratamiento visual:
+            // el layout de la referencia (Image 1) sigue siendo la ley.
             `Image ${resultImageNumber} above is the current ad. Produce a fresh alternative version:`,
-            `keep the same product, logo and copy, but vary the composition, background and visual`,
-            `treatment so it looks clearly different from the current one.`,
+            `keep the same product, logo, copy AND the layout, composition and format of image 1`,
+            `(the reference ad). Vary only the visual treatment — lighting, framing detail, background`,
+            `texture, color accents — so it reads as a different take of the same ad, never a redesign.`,
           ].join(' '),
     },
-    { text: SPANISH_RULE },
   ]
-  const res = await getAI().models.generateContent({
-    model: 'gemini-3.1-flash-image',
-    contents: [{ role: 'user', parts }],
-    config: { responseModalities: [Modality.IMAGE] },
-  })
-  const imagePart = res.candidates?.[0]?.content?.parts?.find((p: Part) => p.inlineData)
-  return imagePart?.inlineData?.data ?? ''
+  return generateImage(parts, 3, aspectRatio ? { aspectRatio } : undefined)
 }

@@ -67,7 +67,14 @@ export async function POST(
         `Product name: ${productName}`,
         `What it does: ${whatItDoes}`,
         `Target audience: ${targetAudience}`,
-        logoB64 ? 'A brand logo is also provided.' : 'No logo provided.',
+        // ⚠️ El logo entra como imagen 2 y el scan lo confundía con el producto: medido en la
+        // sesión 4c8f6c8b, `brandingDescription` salió "LUMINA - ciencia que ilumina tu piel",
+        // que es el lockup del LOGO, no la etiqueta del frasco. Ese string viaja a STEP5 como
+        // `Branding:` y ahí se convierte en algo a renderizar → el logo entero flotando al medio.
+        logoB64
+          ? 'Image 1 is the PRODUCT. Image 2 is the brand LOGO — a separate asset, not part of the product. Describe ONLY image 1: never fold the logo lockup, its tagline or its layout into productDescription or brandingDescription.'
+          : 'No logo provided.',
+        'brandingDescription = only the text and graphics actually printed on the product in image 1 (label, packaging). If the product carries no readable text, return null.',
         precision ? `Ajuste pedido: ${precision}` : '',
         'Analyze the product image. Return ProductScan JSON.',
       ].join('\n'),
@@ -76,7 +83,7 @@ export async function POST(
 
   const [productUrl, scan] = await Promise.all([
     uploadToStorage(id, productBytes, productMime, 'product'),
-    callStructured('product_scan', ProductScanSchema, parts),
+    callStructured('product_scan', ProductScanSchema, parts, 3, undefined, { preferGemini: true }),
   ])
 
   const logoUrl = logoBytes && logoMime

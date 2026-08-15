@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession, updateSession } from '@/lib/db'
-import { uploadToStorage, fetchAsBase64 } from '@/lib/storage'
+import { uploadToStorage } from '@/lib/storage'
 import { callStructured } from '@/lib/gemini'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
@@ -36,10 +36,13 @@ export async function POST(
 
   const [referenceUrl, analysis] = await Promise.all([
     uploadToStorage(id, bytes, mimeType, 'reference'),
+    // preferGemini: gpt-4o-mini leyó una referencia 335x597 (vertical) como "16:9" y devolvió
+    // style/typography de una línea ("moderno", "estilo moderno y limpio") — el análisis es la
+    // base de TODO lo que sigue, así que ahí es donde más cuesta el modelo chico.
     callStructured('reference_analysis', ReferenceAnalysisSchema, [
       { inlineData: { mimeType, data: base64 } },
       { text: `Analyze this reference ad. Return the complete structured analysis including all sceneElements.${precision ? '\nAjuste pedido: ' + precision : ''}` },
-    ]),
+    ], 3, undefined, { preferGemini: true }),
   ])
 
   await updateSession(id, { step: 1, reference_url: referenceUrl, reference_analysis: analysis })
