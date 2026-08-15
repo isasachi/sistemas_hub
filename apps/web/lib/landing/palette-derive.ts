@@ -1,6 +1,7 @@
 import { contrastRatio } from '@/lib/branding/contrast'
 import type { BrandSystem } from '@/lib/branding/brand-system'
 import type { PaletteTokens, Polarity } from './types'
+import { styleOf } from './style-dna'
 export type { Polarity }
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
@@ -67,10 +68,6 @@ const ICON_OFFSETS = [0, 25, 50, 75]
 // Luminosidad común de los 4 iconos: es lo que los hace leer como un juego.
 const ICON_L = 80
 
-// Separación mínima de L entre los dos extremos del degradado. Menos que esto se lee como fondo
-// plano, que el DESIGN_SYSTEM prohíbe explícitamente.
-const GRADIENT_DELTA = 8
-
 // ─── Camino SIN marca (producto suelto) ──────────────────────────────────────
 // Un solo hue extraído del envase por visión; todo lo demás se sintetiza. Es la ruta de las
 // sesiones sin branding (decisión #7).
@@ -126,16 +123,26 @@ export function paletteFromBrand(brand: BrandSystem): PaletteTokens {
   })()
 
   const bgHsl = hexToHsl(bg_start)
-  // El compañero del degradado se separa 8 puntos de L y baja la saturación — misma RELACIÓN que
-  // tenía el camino sintético (L90→L98 en claro), ahora anclada al color real de la marca.
+  // El compañero del degradado se separa en L y baja la saturación — misma RELACIÓN que tenía el
+  // camino sintético (L90→L98 en claro), ahora anclada al color real de la marca.
   //
-  // ⚠️ Se aleja del centro SI HAY LUGAR, y si no se acerca. Un `Math.max(4, l-8)` colapsaba: una
+  // ⚠️ CUÁNTO se separa lo decide el ESTILO (`bgDeltaL`), y ese número es la perilla real del
+  // contraste de la escena: el prompt entrega estos dos hex como colores EXACTOS, así que dos
+  // casi-blancos son una pieza plana por más que el texto pida luz dura (medido). El valor está
+  // escrito para pieza CLARA; en una OSCURA se invierte, y así `glass_premium` (+8) reproduce el
+  // comportamiento histórico en las dos polaridades. Solo se mueve el extremo de ABAJO: `bg_start`
+  // es el fondo contra el que `fitHeadline` garantiza 7:1 y no se toca.
+  const delta = styleOf(brand.style).bgDeltaL
+  const away = bgHsl.l + (polarity === 'dark' ? -delta : delta)
+  // ⚠️ Se aleja SI HAY LUGAR, y si no rebota al otro lado. Un `Math.max(4, l-8)` colapsaba: una
   // marca casi negra (#0B0B0F, L≈5) daba L5→L4, un punto de diferencia = el "negro plano de
   // estudio" que el propio prompt prohíbe. Con el rebote, esa marca da L5→L13: profundidad
   // atmosférica en vez de una plancha.
-  const away = polarity === 'dark' ? bgHsl.l - GRADIENT_DELTA : bgHsl.l + GRADIENT_DELTA
-  const endL = away >= 4 && away <= 98 ? away : polarity === 'dark' ? bgHsl.l + GRADIENT_DELTA : bgHsl.l - GRADIENT_DELTA
-  const bg_end = hslToHex(bgHsl.h, Math.min(bgHsl.s, 15), clamp(endL, 4, 98))
+  const endL = away >= 4 && away <= 98 ? away : bgHsl.l - (polarity === 'dark' ? -delta : delta)
+  // Un extremo que OSCURECE con la saturación aplastada a 15 da un gris muerto, no profundidad de
+  // marca: cuando el degradado cae, conserva croma. Cuando aclara (el caso histórico), 15 como antes.
+  const endS = delta < 0 ? clamp(bgHsl.s, 35, 70) : Math.min(bgHsl.s, 15)
+  const bg_end = hslToHex(bgHsl.h, endS, clamp(endL, 4, 98))
 
   // El titular arranca del PRIMARY de la marca y solo se le mueve L hasta cumplir 7:1.
   const pHsl = hexToHsl(primary)

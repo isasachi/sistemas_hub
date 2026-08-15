@@ -48,6 +48,25 @@ export interface StyleDna {
   light: string
   /** Expresión tipográfica: pesos, tracking y contraste. La FAMILIA la manda la marca. */
   type: string
+  /**
+   * Recorrido de LUMINOSIDAD del degradado de fondo, de arriba hacia abajo, en puntos de L.
+   * Positivo = el borde inferior ACLARA (aire); negativo = OSCURECE (profundidad, viñeta).
+   *
+   * ⚠️ ESTO ES LA PERILLA DEL CONTRASTE DE ESCENA, no `light`. Medido: `light` describe la luz en
+   * prosa y el modelo la ignora, porque el mismo prompt le entrega `bg_start`/`bg_end` como colores
+   * EXACTOS ("no una sugerencia aproximada") — y dos casi-blancos separados por 8 puntos SON una
+   * escena de bajo contraste, le digas lo que le digas. Con la instrucción idéntica palabra por
+   * palabra, `L 90→98` sale plana y `L 90→30` sale con profundidad real.
+   *
+   * El valor se expresa para una pieza CLARA; en una OSCURA se invierte el signo, para que la
+   * relación con el fondo se conserve. Así `glass_premium` (+8) da 90→98 en claro y 12→4 en oscuro:
+   * exactamente el comportamiento histórico en las dos polaridades.
+   *
+   * ⚠️ El extremo que se mueve es SIEMPRE el de ABAJO. `fitHeadline` garantiza 7:1 del titular
+   * contra `bg_start`, y su loop resta luminosidad cuando la pieza es clara: oscurecer el extremo
+   * de ARRIBA lo empuja al lado contrario y deja el titular ilegible (visto en un render).
+   */
+  bgDeltaL: number
 }
 
 export const STYLE_DNA: Record<BrandStyle, StyleDna> = {
@@ -59,6 +78,7 @@ export const STYLE_DNA: Record<BrandStyle, StyleDna> = {
     background: 'bruma atmosférica suave y bokeh tenue sobre el degradado; sin textura de material.',
     light: 'luz difusa envolvente de estudio, sombras suaves y reflejos húmedos.',
     type: 'contraste alto de PESO entre el titular extrabold y el cuerpo regular; tracking normal.',
+    bgDeltaL: 8,    // el histórico (`GRADIENT_DELTA`): el borde inferior aclara, aire pálido
   },
   editorial_clean: {
     name: 'editorial limpio',
@@ -69,6 +89,7 @@ export const STYLE_DNA: Record<BrandStyle, StyleDna> = {
       'degradado casi imperceptible y aire limpio y generoso; sin bruma, sin bokeh, sin grano, sin textura de material.',
     light: 'luz de estudio neutra y pareja, sombras cortas y limpias, cero dramatismo.',
     type: 'jerarquía por TAMAÑO y espacio antes que por peso: titular en peso medio, interlineado amplio, cuerpo ligero.',
+    bgDeltaL: 4,    // aún más plano: el aire lo da el espacio, no el degradado
   },
   natural_organic: {
     name: 'natural artesanal',
@@ -78,6 +99,7 @@ export const STYLE_DNA: Record<BrandStyle, StyleDna> = {
     background: 'grano fino visible y textura de fibra de papel sobre el degradado, como luz entrando por una ventana.',
     light: 'luz natural de día, cálida y direccional suave, con sombras de contacto reales y contraste orgánico.',
     type: 'titular semibold generoso y cuerpo relajado; se admite tracking abierto en el microcopy.',
+    bgDeltaL: -14,  // caída cálida y corta hacia abajo, como luz entrando por una ventana
   },
   bold_impact: {
     name: 'impacto sólido',
@@ -87,6 +109,7 @@ export const STYLE_DNA: Record<BrandStyle, StyleDna> = {
     background: 'alto contraste con viñeta marcada y foco duro sobre el producto; sin bruma lechosa ni bokeh suave.',
     light: 'luz direccional dura de estudio deportivo: sombras definidas, alto contraste, borde de luz marcado.',
     type: 'titular extrabold dominante con tracking cerrado y cuerpo notablemente menor — la jerarquía grita.',
+    bgDeltaL: -60,  // medido: es el valor con el que la escena gana profundidad y contraste reales
   },
   tech_precision: {
     name: 'técnico de precisión',
@@ -96,6 +119,7 @@ export const STYLE_DNA: Record<BrandStyle, StyleDna> = {
     background: 'degradado frío y limpio con una retícula técnica apenas visible; sin bruma cálida.',
     light: 'luz fría y controlada con filo de luz (rim) en el borde del producto y reflejos especulares cortos y precisos.',
     type: 'titular condensado de peso alto; microcopy en mayúsculas con tracking ligeramente abierto, cifras y unidades con presencia.',
+    bgDeltaL: -38,  // caída fría y marcada, para el filo de luz y los especulares
   },
 }
 

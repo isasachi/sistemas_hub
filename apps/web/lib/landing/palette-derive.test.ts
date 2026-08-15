@@ -3,6 +3,7 @@ import { hslToHex, hexToHsl, derivePalette, paletteFromBrand, moneyRamp, GOLD, C
 import { contrastRatio } from '@/lib/branding/contrast'
 import type { BrandSystem } from '@/lib/branding/brand-system'
 import { NICHE_FALLBACK } from './niches'
+import { BrandStyle } from './style-dna'
 
 function brand(over: Partial<BrandSystem> = {}): BrandSystem {
   return {
@@ -292,5 +293,61 @@ describe('moneyRamp (decisión #6)', () => {
       expect(moneyRamp(derivePalette({ h: NICHE_FALLBACK[n].hue, s: 80, l: 50 })), n).toBe(COPPER)
     }
     expect(moneyRamp(derivePalette({ h: NICHE_FALLBACK.skincare_topical.hue, s: 80, l: 50 }))).toBe(GOLD)
+  })
+})
+
+// ─── El estilo modula el degradado de fondo (2026-08-15) ─────────────────────
+// Medido en píxeles: el contraste de la escena NO responde al texto sobre la luz, responde a la
+// distancia de luminosidad entre bg_start y bg_end — el prompt entrega esos dos hex como colores
+// exactos, y dos casi-blancos son una pieza plana diga lo que diga la instrucción.
+describe('bgDeltaL — el estilo decide el recorrido del degradado', () => {
+  const L = (hex: string) => hexToHsl(hex).l
+  const conEstilo = (b: BrandSystem, style: BrandStyle) => paletteFromBrand({ ...b, style })
+
+  it('glass_premium y el ADN legado (sin estilo) dan la MISMA paleta de siempre, en ambas polaridades', () => {
+    for (const b of [LIGHT_BRAND, brand()]) {
+      expect(conEstilo(b, 'glass_premium')).toEqual(paletteFromBrand(b))
+    }
+  })
+
+  it('un estilo de caída oscurece el borde inferior; uno de aire lo aclara', () => {
+    const base = L(paletteFromBrand(LIGHT_BRAND).bg_start)
+    expect(L(conEstilo(LIGHT_BRAND, 'bold_impact').bg_end)).toBeLessThan(base - 40)
+    expect(L(conEstilo(LIGHT_BRAND, 'editorial_clean').bg_end)).toBeGreaterThan(base)
+  })
+
+  // Un extremo oscuro con la saturación aplastada a 15 es un gris muerto, no profundidad de marca.
+  it('el extremo que oscurece conserva croma; el que aclara sigue desaturado como antes', () => {
+    expect(hexToHsl(conEstilo(LIGHT_BRAND, 'bold_impact').bg_end).s).toBeGreaterThanOrEqual(35)
+    // el tope real es 15; el margen absorbe el redondeo del viaje HSL→hex→HSL (da 15.07)
+    expect(hexToHsl(conEstilo(LIGHT_BRAND, 'glass_premium').bg_end).s).toBeLessThan(16)
+  })
+
+  // La razón de mover SOLO el extremo de abajo: `fitHeadline` fija el titular contra `bg_start`.
+  // Si el estilo tocara ese extremo, la garantía de contraste cambiaría con la dirección de arte.
+  it('el titular no depende del estilo — bg_start no se toca, y el 7:1 aguanta', () => {
+    for (const b of [LIGHT_BRAND, brand()]) {
+      const ref = paletteFromBrand(b)
+      for (const style of BrandStyle.options) {
+        const p = conEstilo(b, style)
+        expect(p.bg_start).toBe(ref.bg_start)
+        expect(p.color_headline).toBe(ref.color_headline)
+        expect(contrastRatio(p.color_headline, p.bg_start)).toBeGreaterThanOrEqual(7)
+      }
+    }
+  })
+
+  // El rebote existía para que una marca casi negra no diera un degradado de 1 punto. Con deltas
+  // grandes se sale de rango mucho más seguido, así que tiene que seguir dando separación real.
+  it('con delta grande y una marca casi negra, el rebote sigue dando un degradado visible', () => {
+    const casiNegro = brand({ palette: [
+      { hex: '#0B0B0F', name: 'Casi negro', role: 'background' },
+      { hex: '#2E7D5B', name: 'Verde', role: 'primary' },
+      { hex: '#E85D2E', name: 'Naranja', role: 'accent' },
+    ] })
+    for (const style of BrandStyle.options) {
+      const p = conEstilo(casiNegro, style)
+      expect(Math.abs(L(p.bg_end) - L(p.bg_start))).toBeGreaterThanOrEqual(4)
+    }
   })
 })
