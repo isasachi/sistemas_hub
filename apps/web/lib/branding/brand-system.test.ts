@@ -62,3 +62,23 @@ describe('BrandSystemSchema', () => {
     expect(BrandSystemSchema.safeParse({ ...ok, polarity: 'claro' }).success).toBe(false)
   })
 })
+
+// El eje de ESTILO (2026-08-15) es opcional a propósito: las filas ya guardadas en producción no lo
+// traen y la landing lo defaultea en el sitio de uso (`styleOf`). Si dejara de ser opcional, cada
+// marca extraída antes de esta fecha fallaría el parse — y el tipo mentiría sobre lo que hay en la
+// base.
+describe('BrandSystemSchema — eje de estilo', () => {
+  it('acepta un estilo del catálogo', () => {
+    const parsed = BrandSystemSchema.safeParse({ ...ok, style: 'natural_organic' })
+    expect(parsed.success && parsed.data.style).toBe('natural_organic')
+  })
+
+  it('acepta su AUSENCIA (filas anteriores a 2026-08-15)', () => {
+    const parsed = BrandSystemSchema.safeParse(ok)
+    expect(parsed.success && parsed.data.style).toBeUndefined()
+  })
+
+  it('rechaza un estilo fuera del catálogo', () => {
+    expect(BrandSystemSchema.safeParse({ ...ok, style: 'brutalista' }).success).toBe(false)
+  })
+})

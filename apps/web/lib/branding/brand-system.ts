@@ -3,6 +3,7 @@ import type { Part } from '@google/genai'
 import { callStructured } from '@/lib/gemini'
 import { fetchAsBase64 } from '@/lib/storage'
 import { NICHE_TYPOGRAPHY } from '@/lib/landing/niches'
+import { BrandStyle } from '@/lib/landing/style-dna'
 
 // ADN de marca (decisión 2026-08-07, análisis en
 // docs/superpowers/specs/2026-08-07-landing-branding-como-sistema-analisis.md).
@@ -62,6 +63,13 @@ export const BrandSystemSchema = z.object({
   font_accent: FontName.nullable(),
   halo: BrandHalo,
   particles: BrandParticles,
+  // Dirección de arte / lenguaje material (2026-08-15). Es lo que distingue una landing de otra:
+  // sin este campo la marca solo movía color y fuente, y el acabado (vidrio, glow, iconos 3D) era
+  // el mismo en todas. `.optional()` a propósito y NO `.default()`: las filas ya guardadas en
+  // producción no lo traen, `getLandingSession` castea sin `.parse()` y un default de zod no
+  // correría al leer — que el tipo diga `| undefined` obliga al sitio de uso a resolverlo
+  // (`styleOf`). Ver style-dna.ts para el límite material-vs-geometría.
+  style: BrandStyle.optional(),
 })
   // La landing pinta el fondo del degradado con el rol `background`; sin él no hay de dónde sacarlo.
   // Se exige en el schema para que la falta dispare el retry de callStructured, no un default
@@ -100,6 +108,21 @@ const PROMPT = [
   'particles: cuánta materia flotante admite la estética de la marca. `none` = una marca limpia y',
   'sobria, sin nada flotando; `low`/`medium`/`high` = de sutil a abundante. Es una decisión de',
   'ESTILO de la marca, no del producto.',
+  '',
+  'style: el LENGUAJE MATERIAL de la marca — de qué está hecho lo que toca. Decidilo por los',
+  'ACABADOS que ves en sus superficies (etiqueta, envase, lockup): si el material se lee brillante o',
+  'mate, texturado o liso, translúcido u opaco, si los bordes son finos o gruesos, si la luz es',
+  'suave o dura. NO lo decidas por el color ni por la categoría del producto. Elegí uno:',
+  '  `glass_premium` = brillo y translucidez, acabados pulidos, luz húmeda de estudio, look premium',
+  '  de laboratorio o cosmética moderna.',
+  '  `editorial_clean` = mate, sobrio y minimal, muchísimo aire, líneas finas, cero adorno; look de',
+  '  farmacia clínica o revista de diseño.',
+  '  `natural_organic` = mate y texturado, papel/cartón/fibra, tinta estampada, luz de día cálida;',
+  '  look artesanal, botánico o de origen natural.',
+  '  `bold_impact` = macizo y de alto contraste, bloques sólidos de color, tipografía dominante,',
+  '  luz dura; look deportivo, urbano o de oferta agresiva.',
+  '  `tech_precision` = mate frío y controlado, geometría precisa, filo de luz, retícula; look',
+  '  técnico, de ingeniería o de dispositivo.',
 ].join('\n')
 
 // Extrae el ADN de marca del board de identidad. Lanza si la visión falla tras los reintentos de

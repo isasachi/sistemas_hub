@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { buildDiffusionInstruction, MULTI_UNIT_SECTIONS, PAYMENT_SECTIONS, NO_TALENT_SECTIONS } from './instructions'
 import type { SectionCopy, SectionType, LandingDna, Offer, TrustBlock } from './types'
 import { COPPER } from './palette-derive'
+import { BrandStyle, STYLE_DNA } from './style-dna'
 
 const ALL: SectionType[] = [
   'hero', 'oferta', 'antes-despues', 'beneficios',
@@ -133,7 +134,7 @@ describe('buildDiffusionInstruction — DNA-driven (spec 2026-07-23)', () => {
   it('nota de plantilla: presente, marcada fuente de verdad de estructura, subordinada al resto de la instrucción', () => {
     const out = build('hero')
     expect(out).toContain('PLANTILLA DE COMPOSICIÓN')
-    expect(out).toContain('fuente de verdad de estructura')
+    expect(out).toContain('fuente de verdad de ESTRUCTURA')
     expect(out).toContain('La ESTRUCTURA manda la plantilla')
   })
 
@@ -352,5 +353,85 @@ describe('buildDiffusionInstruction — DNA-driven (spec 2026-07-23)', () => {
     expect(out).toContain('Hogar / limpieza')
     const withoutNiche = build('antes-despues')
     expect(withoutNiche).toContain('estado ANTES') // sigue funcionando sin nicheId
+  })
+})
+
+// ─── Eje de ESTILO / dirección de arte (2026-08-15) ──────────────────────────
+// Lo que se prueba acá es la línea que separa MATERIAL de GEOMETRÍA: el estilo de la marca cambia
+// el acabado y NO puede tocar lo que la plantilla adjunta manda. Y que el prompt no se contradiga
+// solo — el modo de falla recurrente de este builder (partículas on/off duplicadas, banda de pago
+// vs banda de confianza, el metal declarado en dos lugares).
+describe('estilo de marca (style-dna)', () => {
+  const conEstilo = (style: BrandStyle) => build('beneficios', { dna: { ...DNA, style } })
+
+  it('cada estilo emite SU acabado de card y su icono, no los del default', () => {
+    for (const style of BrandStyle.options) {
+      const out = conEstilo(style)
+      expect(out).toContain(STYLE_DNA[style].surface)
+      expect(out).toContain(STYLE_DNA[style].icon)
+      expect(out).toContain(STYLE_DNA[style].background)
+      expect(out).toContain(STYLE_DNA[style].light)
+      expect(out).toContain(STYLE_DNA[style].type)
+      if (style !== 'glass_premium') {
+        // el acabado histórico tiene que DESAPARECER, no convivir: dos materiales en el mismo
+        // prompt es exactamente la contradicción que hace que la difusión elija el de la plantilla.
+        expect(out).not.toContain(STYLE_DNA.glass_premium.surface)
+        expect(out).not.toContain(STYLE_DNA.glass_premium.icon)
+      }
+    }
+  })
+
+  it('ADN legado (style undefined) sale IDÉNTICO a glass_premium — comportamiento histórico intacto', () => {
+    const legacy = build('beneficios', { dna: { ...DNA, style: undefined } })
+    expect(legacy).toBe(conEstilo('glass_premium'))
+  })
+
+  it('la GEOMETRÍA no la toca el estilo: el radio de card sigue siendo el de la plantilla', () => {
+    for (const style of BrandStyle.options) {
+      expect(conEstilo(style)).toContain('radio 28-32px')
+    }
+  })
+
+  it('un estilo no-default lleva el carve-out ⚠️ ACABADO ≠ ESTRUCTURA; glass_premium no', () => {
+    expect(conEstilo('natural_organic')).toContain('ACABADO ≠ ESTRUCTURA')
+    expect(conEstilo('natural_organic')).toContain(STYLE_DNA.natural_organic.name)
+    expect(conEstilo('glass_premium')).not.toContain('ACABADO ≠ ESTRUCTURA')
+  })
+
+  it('la plantilla ya NO manda el "tratamiento" (si lo mandara, el estilo sería letra muerta)', () => {
+    for (const style of BrandStyle.options) {
+      const out = conEstilo(style)
+      expect(out).toContain('fuente de verdad de ESTRUCTURA')
+      expect(out).not.toContain('encuadre y tratamiento')
+    }
+  })
+
+  // Contradicción REAL encontrada al imprimir el prompt armado (probe 2026-08-15): la línea de
+  // paleta afirmaba "superficie de card al 75-85% de opacidad" — glassmorphism hardcodeado — aunque
+  // el acabado de la marca pidiera un bloque sólido. Dos frases del mismo prompt diciendo cosas
+  // opuestas es lo que hace que la difusión se quede con el acabado de la plantilla.
+  it('la OPACIDAD de la card la fija el acabado, no la línea de paleta', () => {
+    const solido = conEstilo('bold_impact')
+    expect(solido).toContain('100% opaco')
+    expect(solido).not.toContain('al 75-85% de opacidad')
+    expect(conEstilo('glass_premium')).toContain('al 75-85% de opacidad')
+  })
+
+  // Misma clase de fallo por el otro lado: la línea de MODO OSCURO reimponía "el glassmorphism
+  // sigue siendo el mismo", que contradice a los cuatro acabados que lo prohíben.
+  it('el modo oscuro no reimpone glassmorphism sobre un acabado que lo prohíbe', () => {
+    const oscuro = build('beneficios', {
+      dna: { ...DNA, style: 'bold_impact', palette: { ...DNA.palette, polarity: 'dark' } },
+    })
+    expect(oscuro).toContain('MODO OSCURO')
+    expect(oscuro).not.toContain('glassmorphism')
+  })
+
+  it('el estilo NO toca la banda metálica de confianza (invariante declarada en dos lugares)', () => {
+    for (const style of BrandStyle.options) {
+      const out = build('beneficios', { dna: { ...DNA, style }, trust: TRUST })
+      expect(out).toContain('degradado metálico dorado')       // designSystemBlock
+      expect(out).toContain('NO se re-tinta')                   // trustText
+    }
   })
 })

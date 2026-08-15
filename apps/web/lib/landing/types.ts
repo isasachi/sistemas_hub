@@ -1,6 +1,8 @@
 import { z } from 'zod'
 // Solo tipo: `brand-system.ts` arrastra gemini/storage y este módulo lo consume el cliente.
 import type { BrandSystem } from '@/lib/branding/brand-system'
+// Enum liviano (sin gemini/storage detrás), así que sí se puede importar como VALOR desde acá.
+import { BrandStyle } from './style-dna'
 
 // ─── Catálogo de secciones ───────────────────────────────────────────────────
 // El orden del enum NO es el orden de la landing — ese lo define `order` por sesión.
@@ -92,6 +94,13 @@ export const LandingDnaSchema = z.object({
   font_family: z.string(),
   font_accent: z.string().nullable(),
   halo: Halo,
+  // Dirección de arte heredada de la marca (2026-08-15): el lenguaje MATERIAL de la pieza (acabado
+  // de card, relleno de icono, textura de fondo, luz, expresión tipográfica). Es lo único que
+  // diferencia visualmente una landing de otra más allá del re-tinte. `.optional()` y NO
+  // `.default()`: los ADN ya guardados no lo traen y `getLandingSession` castea sin `.parse()`, así
+  // que el default se aplica en el SITIO DE USO (`styleOf`) — como ya pasa con `polarity`, solo que
+  // acá el tipo lo dice en voz alta en vez de mentir. Sin marca → `glass_premium` = lo histórico.
+  style: BrandStyle.optional(),
   model_persona: z.string(),
   // clave = SectionType slug; valor = descripción de pose. Parcial: solo las secciones elegidas.
   poses: z.record(z.string(), z.string()),

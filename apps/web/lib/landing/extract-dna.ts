@@ -123,6 +123,9 @@ export async function extractDna(
     ? { font_family: brand.font_family, font_accent: brand.font_accent }
     : NICHE_TYPOGRAPHY[niche]
   const halo = brand ? brand.halo : fallback.halo
+  // Dirección de arte: la manda la MARCA y solo la marca. Sin board de identidad no hay identidad
+  // que leer, así que un producto suelto sale con el acabado histórico (`styleOf(undefined)`).
+  const style = brand?.style
   const model_persona = demographic === 'no_talent' ? NO_TALENT_SUBSTITUTE[niche] : DEMOGRAPHIC_PERSONA[demographic]
   const poses = assignPoses(order, demographic)
 
@@ -136,6 +139,7 @@ export async function extractDna(
     font_family,
     font_accent,
     halo,
+    style,
     model_persona,
     poses,
   }
