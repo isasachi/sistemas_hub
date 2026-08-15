@@ -18,8 +18,10 @@ export interface Tool {
   // preview: sneak peek que renderiza <ToolPreview> — imagen generada con
   // Gemini en /public/showcase/<slug>.jpg (asset del sistema de diseño),
   // enmarcada en el spec-card con metadata mono. `ratio` = formato nativo.
+  // `kind: "video"` = clip real en /public/showcase/<slug>.mp4 (autoplay/loop/
+  // mudo). Mismo marco y mismo recorte que la imagen.
   preview?: {
-    kind: "image";
+    kind: "image" | "video";
     ratio?: "9/16" | "1/1" | "4/3" | "16/10";
   };
   // stats: chips hardcodeados por tool. TODO wire: ver lib/home/stats.ts
@@ -78,8 +80,7 @@ export const tools: Tool[] = [
     tagStyle: "new",
     status: "live",
     pitch: "El guión de un video que ya vende, listo para tu producto.",
-    // Sin `preview`: falta el asset /public/showcase/generador-video-ads.jpg. Al
-    // sembrarlo, añadir `preview: { kind: "image", ratio: "9/16" }`.
+    preview: { kind: "video", ratio: "9/16" },
     stats: [
       { value: "1 referencia", label: "video vertical obligatorio" },
       { value: "corte a corte", label: "análisis del original" },
@@ -98,7 +99,7 @@ export const tools: Tool[] = [
     tagStyle: "new",
     status: "live",
     pitch: "De una idea a logo, etiqueta y mockup del producto final.",
-    preview: { kind: "image", ratio: "1/1" },
+    preview: { kind: "image", ratio: "9/16" },
     stats: [
       { value: "340+", label: "marcas creadas" },
       { value: "4 logos", label: "por dirección" },

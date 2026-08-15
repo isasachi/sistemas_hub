@@ -18,6 +18,7 @@ const RATIO_CLASS: Record<string, string> = {
 const SPEC_META: Record<string, [string, string]> = {
   "buscador-productos": ["Meta Ads", "5 países"],
   "generador-anuncios": ["Anuncio 9:16", "~40s"],
+  "generador-video-ads": ["Video 9:16", "15s"],
   "generador-branding": ["Kit de marca", "4 logos"],
   "generador-landing": ["Landing", "8 secciones"],
   "calculadora-costos": ["P&G", "Excel"],
@@ -28,6 +29,8 @@ const SPEC_META: Record<string, [string, string]> = {
 // importante de cada imagen.
 const OBJECT_POS: Record<string, string> = {
   "generador-anuncios": "center 42%",
+  "generador-branding": "center 55%",
+  "generador-video-ads": "center 45%",
 };
 
 /**
@@ -41,7 +44,9 @@ const OBJECT_POS: Record<string, string> = {
  */
 export function ToolPreview({ tool, ratio }: { tool: Tool; ratio?: string }) {
   const [failed, setFailed] = useState(false);
-  const ratioClass = RATIO_CLASS[ratio ?? tool.preview?.ratio ?? ""] ?? "";
+  const frameRatio = ratio ?? tool.preview?.ratio ?? "";
+  const ratioClass = RATIO_CLASS[frameRatio] ?? "";
+  const narrow = frameRatio === "9/16";
   const [metaLeft, metaRight] = SPEC_META[tool.slug] ?? ["JR AI Hub", "IA"];
   const Icon = toolIcon(tool.icon);
 
@@ -49,7 +54,21 @@ export function ToolPreview({ tool, ratio }: { tool: Tool; ratio?: string }) {
     <div
       className={`jr-inset relative h-full w-full overflow-hidden rounded-2xl ${ratioClass}`}
     >
-      {!failed && (
+      {!failed && tool.preview?.kind === "video" && (
+        <video
+          src={`/showcase/${tool.slug}.mp4`}
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="metadata"
+          aria-label={`Ejemplo generado con ${tool.name}`}
+          className="absolute inset-0 h-full w-full object-cover"
+          style={{ objectPosition: OBJECT_POS[tool.slug] ?? "top" }}
+          onError={() => setFailed(true)}
+        />
+      )}
+      {!failed && tool.preview?.kind !== "video" && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={`/showcase/${tool.slug}.jpg`}
@@ -78,9 +97,18 @@ export function ToolPreview({ tool, ratio }: { tool: Tool; ratio?: string }) {
             "linear-gradient(to bottom, rgba(18,16,13,0.8) 0%, rgba(18,16,13,0.35) 60%, transparent 100%)",
         }}
       />
+      {/* En un tile 9:16 (los del marquee) no entran los dos rótulos: a 11px
+          se encimaban en dos líneas ("KIT DE / MARCALOGOS"). Ahí va solo el
+          izquierdo, más chico y sin envolver. */}
       <div className="absolute inset-x-0 top-0 flex items-center justify-between px-3.5 pt-2.5">
-        <span className="spec-label !text-[#bebebe]">{metaLeft}</span>
-        <span className="spec-label !text-[#bebebe]">{metaRight}</span>
+        <span
+          className={`spec-label whitespace-nowrap !text-[#bebebe]${narrow ? " !text-[9px]" : ""}`}
+        >
+          {metaLeft}
+        </span>
+        {!narrow && (
+          <span className="spec-label whitespace-nowrap !text-[#bebebe]">{metaRight}</span>
+        )}
       </div>
     </div>
   );
