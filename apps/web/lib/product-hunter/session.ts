@@ -26,3 +26,28 @@ export async function readUserId(): Promise<string | null> {
 export function newUserId(): string {
   return randomUUID()
 }
+
+// Un año, igual que el `maxAge` de los POST de /sessions que ya acuñaban la cookie.
+const COOKIE_MAX_AGE = 60 * 60 * 24 * 365
+
+/**
+ * Identidad para las rutas que CREAN una sesión: devuelve la existente o acuña una
+ * nueva junto al header que la persiste. Devuelve un `Set-Cookie` crudo y no un
+ * NextResponse porque los dos call sites responden distinto — `from-branding` un
+ * NextResponse y `generar` un stream SSE (Response plano) — y el header sirve igual
+ * para ambos.
+ *
+ * Existe porque esas dos rutas hacían `readUserId() ?? undefined`: adoptaban la
+ * identidad si ya estaba, pero no la creaban cuando faltaba, y la fila nacía con
+ * user_id null → invisible en el historial para siempre (16 sesiones así al
+ * 2026-08-15). Los POST de /sessions ya hacían este leer-o-acuñar a mano.
+ */
+export async function ensureUserId(): Promise<{ uid: string; setCookie?: string }> {
+  const uid = await readUserId()
+  if (uid) return { uid }
+  const nuevo = newUserId()
+  return {
+    uid: nuevo,
+    setCookie: `${PH_USER_COOKIE}=${nuevo}; Path=/; HttpOnly; Max-Age=${COOKIE_MAX_AGE}`,
+  }
+}

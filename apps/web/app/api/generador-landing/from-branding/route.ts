@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getBrandingSession } from '@/lib/branding/db'
 import { createLandingSession, updateLandingSession } from '@/lib/landing/db'
-import { readUserId } from '@/lib/product-hunter/session'
+import { ensureUserId } from '@/lib/product-hunter/session'
 import type { SectionType } from '@/lib/landing/types'
 
 export const dynamic = 'force-dynamic'
@@ -35,7 +35,11 @@ export async function POST(req: NextRequest) {
   // tablero y no sirve como imagen de producto.
   const photo = bs.container_url || bs.logo_url
 
-  const id = await createLandingSession((await readUserId()) ?? undefined)
+  // Acuñar la identidad si falta, no solo adoptarla: este handoff crea la sesión
+  // como efecto secundario de otra acción, y un navegador sin cookie ph_uid dejaba
+  // la landing huérfana (user_id null → fuera del historial para siempre).
+  const { uid, setCookie } = await ensureUserId()
+  const id = await createLandingSession(uid)
   await updateLandingSession(id, {
     product_name: bs.brand_name ?? null,
     audience: bs.target_audience || null,
@@ -54,5 +58,7 @@ export async function POST(req: NextRequest) {
     step: 2,
   })
 
-  return NextResponse.json({ id })
+  const res = NextResponse.json({ id })
+  if (setCookie) res.headers.set('Set-Cookie', setCookie)
+  return res
 }
