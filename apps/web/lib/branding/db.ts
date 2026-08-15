@@ -16,10 +16,11 @@ function getDb(): SupabaseClient {
   return _db
 }
 
-export async function createBrandingSession(userId?: string): Promise<string> {
+// `userId` es OBLIGATORIO — ver el mismo comentario en lib/landing/db.ts.
+export async function createBrandingSession(userId: string): Promise<string> {
   const { data, error } = await getDb()
     .from('branding_sessions')
-    .insert({ step: 0, user_id: userId ?? null })
+    .insert({ step: 0, user_id: userId })
     .select('id')
     .single()
   if (error) throw new Error(error.message)

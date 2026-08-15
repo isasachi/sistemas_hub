@@ -14,10 +14,13 @@ function getDb(): SupabaseClient {
   return _db
 }
 
-export async function createLandingSession(userId?: string): Promise<string> {
+// `userId` es OBLIGATORIO: con el parámetro opcional, un call site que lo omitía
+// escribía user_id null en silencio y la sesión no aparecía nunca en el historial.
+// Que sea requerido hace que tsc marque el hueco en vez de la base.
+export async function createLandingSession(userId: string): Promise<string> {
   const { data, error } = await getDb()
     .from('landing_sessions')
-    .insert({ step: 0, user_id: userId ?? null })
+    .insert({ step: 0, user_id: userId })
     .select('id')
     .single()
   if (error) throw new Error(error.message)
