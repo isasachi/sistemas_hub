@@ -398,6 +398,23 @@ describe('estilo de marca (style-dna)', () => {
     expect(conEstilo('glass_premium')).not.toContain('ACABADO ≠ ESTRUCTURA')
   })
 
+  // ⚠️ Esto verifica que el carve-out de luz se EMITE, no que funcione — medido en píxeles NO
+  // funciona (4 renders de `bold_impact`, la escena sale suave igual; ver el comentario largo en
+  // `templateNote`). No lo leas como cobertura de que la luz cambia.
+  it('un estilo no-default lleva su propio carve-out de LUZ, con la luz y el fondo del estilo', () => {
+    for (const style of BrandStyle.options) {
+      const out = conEstilo(style)
+      if (style === 'glass_premium') {
+        expect(out).not.toContain('LUZ Y CONTRASTE ≠ ESTRUCTURA')
+        continue
+      }
+      expect(out).toContain('LUZ Y CONTRASTE ≠ ESTRUCTURA')
+      expect(out).toContain('luz difusa y suave de estudio')  // qué muestra la plantilla
+      expect(out).toContain(STYLE_DNA[style].light)           // qué pide esta pieza
+      expect(out).toContain(STYLE_DNA[style].background)
+    }
+  })
+
   it('la plantilla ya NO manda el "tratamiento" (si lo mandara, el estilo sería letra muerta)', () => {
     for (const style of BrandStyle.options) {
       const out = conEstilo(style)

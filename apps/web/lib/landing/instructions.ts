@@ -194,7 +194,28 @@ function templateNote(talentImageAttached: boolean, dark: boolean, dna: LandingD
     persona,
     'ÚLTIMA = PLANTILLA DE COMPOSICIÓN (fuente de verdad de ESTRUCTURA): reproduce EXACTAMENTE su composición, distribución de zonas, geometría y anatomía de tarjetas (radio de esquina, proporciones, disposición), encuadre y jerarquía. La ESTRUCTURA manda la plantilla. Cambia SOLO lo que esta instrucción indica: producto, cara del talento, copy, color, acabado/material de las superficies, luz y props/partículas del nicho. NO copies de la plantilla su producto, marca, textos, ni props/persona de otro nicho.',
     ...(styled
-      ? [`⚠️ ACABADO ≠ ESTRUCTURA: la plantilla adjunta está armada con acabado de VIDRIO ESMERILADO (cards translúcidas con glow y borde blanco, iconos esféricos 3D glossy), pero esta pieza es de acabado «${st.name}». De la plantilla tomá SOLO la estructura y la geometría (zonas, encuadre, radio de esquina, proporciones, anatomía de las tarjetas); el MATERIAL, el acabado y la luz los manda el DESIGN_SYSTEM de arriba. NO devuelvas las cards al vidrio esmerilado ni los iconos a esferas glossy para parecerte a la plantilla — es criterio de fallo.`]
+      ? [
+          `⚠️ ACABADO ≠ ESTRUCTURA: la plantilla adjunta está armada con acabado de VIDRIO ESMERILADO (cards translúcidas con glow y borde blanco, iconos esféricos 3D glossy), pero esta pieza es de acabado «${st.name}». De la plantilla tomá SOLO la estructura y la geometría (zonas, encuadre, radio de esquina, proporciones, anatomía de las tarjetas); el MATERIAL y el acabado los manda el DESIGN_SYSTEM de arriba. NO devuelvas las cards al vidrio esmerilado ni los iconos a esferas glossy para parecerte a la plantilla — es criterio de fallo.`,
+          // ⚠️ CARVE-OUT DE LUZ — ESCRITO, PROBADO EN PÍXELES, Y **NO FUNCIONA**. No lo cites como
+          // mecanismo que anda. La medición (sesión bbbdb4c2, sección beneficios, `bold_impact`):
+          // 4 renders — 2 con este carve-out y 2 más cambiándole el halo a `backlight` y a `none` —
+          // y en los 4 la escena salió igual de clara y difusa que la plantilla: sin viñeta, sin
+          // sombras duras, sin contraste. El halo NO era el bloqueo.
+          //
+          // Por qué la luz se resiste donde el MATERIAL sí cedió: el material solo lo muestra la
+          // plantilla, y contra ella el carve-out gana. La luz, en cambio, la llevan también el
+          // ENVASE CANÓNICO y el RETRATO DEL TALENTO — dos assets que el mismo prompt manda
+          // reproducir con fidelidad exacta ("mismo objeto de la Imagen 1", "misma persona: cara,
+          // pelo, ropa idénticos"). Los dos están fotografiados con luz suave sobre fondo pálido, y
+          // el modelo conserva su iluminación porque se le ordenó conservarlos. Un carve-out contra
+          // la plantilla no toca esa fuente. Mover la luz de verdad pide re-iluminar esos assets
+          // por estilo, que es otro trabajo y otro costo.
+          //
+          // Se conserva —en vez de borrarlo— porque el texto es correcto y barato, y la medición es
+          // sobre UNA sesión cuyos assets son suaves; una con talento de luz dura podría responder.
+          // Pero hoy es intención declarada, no efecto verificado.
+          `⚠️ LUZ Y CONTRASTE ≠ ESTRUCTURA: la plantilla adjunta está iluminada con luz difusa y suave de estudio, fondo parejo y sombras apenas visibles. Esta pieza NO usa esa luz — usa esta: ${st.light} Y este fondo: ${st.background} Eso cambia respecto de la plantilla la DUREZA de las sombras, el CONTRASTE general y la presencia o ausencia de viñeta. De la plantilla tomá el encuadre y dónde va cada elemento; su ILUMINACIÓN no se copia. Igualar la luz suave y pareja de la plantilla es criterio de fallo.`,
+        ]
       : []),
     // Las 8 plantillas curadas están armadas sobre fondo CLARO. Sin esta línea, una pieza de modo
     // oscuro sale clara igual: la difusión sigue la tonalidad de la referencia por encima de los
