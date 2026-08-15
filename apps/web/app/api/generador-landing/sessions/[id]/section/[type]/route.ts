@@ -39,7 +39,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const userId = await readUserId()
 
   const session = await getLandingSession(id)
-  if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!session) return NextResponse.json({ error: 'No se encontró la sesión' }, { status: 404 })
 
   // Guard de sesión legada (spec 2026-07-23): sin `landing_dna` no hay paleta/partículas/props/
   // persona/poses que inyectar — el wizard debe re-extraer el ADN antes de generar secciones.

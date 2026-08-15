@@ -18,19 +18,19 @@ export async function POST(
   const userId = await readUserId()
 
   const session = await getSession(id)
-  if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!session) return NextResponse.json({ error: 'No se encontró la sesión' }, { status: 404 })
   if (!session.reference_analysis)
-    return NextResponse.json({ error: 'Complete step 1 first' }, { status: 409 })
+    return NextResponse.json({ error: 'Completa el paso anterior primero' }, { status: 409 })
 
   let formData: FormData
   try { formData = await req.formData() } catch {
-    return NextResponse.json({ error: 'Invalid form data' }, { status: 400 })
+    return NextResponse.json({ error: 'Los datos del formulario no son válidos' }, { status: 400 })
   }
 
   const productFile = formData.get('product') as File | null
-  if (!productFile) return NextResponse.json({ error: 'Missing product image' }, { status: 400 })
+  if (!productFile) return NextResponse.json({ error: 'Falta la foto del producto' }, { status: 400 })
   if (productFile.size > 10 * 1024 * 1024)
-    return NextResponse.json({ error: 'Product image too large (max 10 MB)' }, { status: 400 })
+    return NextResponse.json({ error: 'La foto del producto pesa más de 10 MB' }, { status: 400 })
 
   const logoFile = formData.get('logo') as File | null
 
@@ -40,7 +40,7 @@ export async function POST(
   const targetAudience = (formData.get('targetAudience') as string | null)?.trim()
 
   if (!productName || !whatItDoes || !targetAudience)
-    return NextResponse.json({ error: 'Missing product answers' }, { status: 400 })
+    return NextResponse.json({ error: 'Faltan datos del producto' }, { status: 400 })
 
   const productBytes = Buffer.from(await productFile.arrayBuffer())
   const productMime = productFile.type || 'image/jpeg'

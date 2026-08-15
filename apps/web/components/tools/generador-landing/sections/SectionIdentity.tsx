@@ -204,7 +204,7 @@ export default function SectionIdentity() {
   return (
     <div className="flex flex-col gap-5">
       <p className="text-[13px] text-[#cfcfcf]">
-        Confirmá el nicho y la demografía de <strong className="text-[#ededed]">{productName || 'tu producto'}</strong> — de ahí sale toda la identidad visual (paleta, partículas, props y el talento) para las 8 secciones.
+        Confirma el nicho y la demografía de <strong className="text-[#ededed]">{productName || 'tu producto'}</strong> — de ahí sale toda la identidad visual (paleta, partículas, props y el talento) para todas las secciones.
       </p>
 
       {classification?.reasoning && nicheOpen && (
@@ -290,7 +290,7 @@ export default function SectionIdentity() {
 
       {zoneMissing && (
         <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-[12px] text-amber-300">
-          No se pudo generar la foto de la zona ({BODY_FOCUS_LABELS[selFocus ?? 'rostro']}); las secciones van a mostrar el retrato en su lugar. Volvé a confirmar para reintentarlo.
+          No se pudo generar la foto de la zona ({BODY_FOCUS_LABELS[selFocus ?? 'rostro']}); las secciones van a mostrar el retrato en su lugar. Vuelve a confirmar para reintentarlo.
         </div>
       )}
 
@@ -327,7 +327,7 @@ function DnaDisplay({
   return (
     <div className="flex flex-col gap-5">
       <div className="flex items-start justify-between gap-3">
-        <p className="text-[13px] text-[#cfcfcf]">Esta es la identidad visual derivada de tu producto. Se aplica igual en las 8 secciones.</p>
+        <p className="text-[13px] text-[#cfcfcf]">Esta es la identidad visual derivada de tu producto. Se aplica igual en todas las secciones.</p>
         <button type="button" onClick={onChangeClick} className="text-[12px] text-[#ff9b4a] underline underline-offset-2 cursor-pointer bg-transparent border-0 shrink-0">cambiar</button>
       </div>
 

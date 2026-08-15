@@ -22,11 +22,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const userId = await readUserId()
 
   const session = await getLandingSession(id)
-  if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!session) return NextResponse.json({ error: 'No se encontró la sesión' }, { status: 404 })
 
   let body: { sections?: string[]; feedback?: string; prompt?: string }
   try { body = await req.json() } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+    return NextResponse.json({ error: 'Petición inválida' }, { status: 400 })
   }
 
   const sections = (body.sections ?? []).filter((s): s is SectionType => SectionType.safeParse(s).success)

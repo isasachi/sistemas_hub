@@ -7,7 +7,7 @@ import ToolShell from './ToolShell'
 import { pickIntroState, type HistoryItem } from './types'
 
 /**
- * Vista inicial de una tool — misma para las cuatro, en este orden:
+ * Vista inicial de una tool — la misma para todas, en este orden:
  *
  *   1. tu última sesión terminada, para volver a verla;
  *   2. el botón de empezar una sesión nueva;

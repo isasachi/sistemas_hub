@@ -29,6 +29,23 @@ function parse(formData: FormData) {
   return { email, password, next, fieldErrors }
 }
 
+/**
+ * Traduce el error de Supabase (siempre en inglés) al español del hub.
+ * Sin `export`: en un módulo 'use server' solo pueden exportarse funciones async.
+ */
+function signUpError(message: string): string {
+  const m = message.toLowerCase()
+  if (m.includes('already registered') || m.includes('already exists'))
+    return 'Ese email ya tiene una cuenta. Inicia sesión o usa otro.'
+  if (m.includes('rate limit') || m.includes('too many'))
+    return 'Demasiados intentos seguidos. Espera unos minutos y vuelve a probar.'
+  if (m.includes('password'))
+    return 'La contraseña no cumple los requisitos. Usa al menos 8 caracteres.'
+  if (m.includes('email'))
+    return 'Ese email no es válido. Revísalo e inténtalo de nuevo.'
+  return 'No se pudo crear la cuenta. Inténtalo de nuevo en un momento.'
+}
+
 // `next` debe ser una ruta interna; evita open-redirect.
 function safeNext(next: string) {
   return next.startsWith('/') && !next.startsWith('//') ? next : '/dashboard'
@@ -54,7 +71,10 @@ export async function signUp(_prev: AuthState, formData: FormData): Promise<Auth
   const supabase = await createClient()
   const { data, error } = await supabase.auth.signUp({ email, password })
   if (error) {
-    return { error: error.message }
+    // Supabase responde en inglés ("User already registered", "Email rate limit
+    // exceeded"…) y ese texto se pintaba tal cual en el formulario. Se traducen
+    // los casos que el usuario puede resolver y el resto cae a un genérico.
+    return { error: signUpError(error.message) }
   }
 
   // Si la confirmación por email está activa, no hay sesión todavía.

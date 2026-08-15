@@ -5,11 +5,13 @@ import { PLATFORM_STATS } from "@/lib/home/stats";
 export function StatsBar() {
   return (
     <section className="px-8 pt-12 pb-20">
+      {/* Antes decía "los ganadores que aún nadie pauta en Perú". El serving
+          actual no valida competencia peruana y el inventario SÍ incluye avisos
+          de Perú (5.682 filas medidas), así que la frase era falsa en pantalla. */}
       <p className="lp-serif mx-auto max-w-[820px] text-center text-[clamp(24px,3.2vw,34px)] font-normal leading-[1.4] text-[#bebebe]">
-        De <span className="text-[#ededed]">miles de productos analizados</span>{" "}
-        salen los ganadores que{" "}
-        <span className="text-[#ededed]">aún nadie pauta en Perú</span> — y los
-        creativos para venderlos,{" "}
+        De <span className="text-[#ededed]">miles de anuncios activos en LATAM</span>{" "}
+        sale lo que <span className="text-[#ededed]">de verdad se está vendiendo</span>{" "}
+        — y los creativos para venderlo,{" "}
         <span className="lp-gold-word">en minutos</span>.
       </p>
 

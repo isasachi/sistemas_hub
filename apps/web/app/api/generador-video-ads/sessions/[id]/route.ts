@@ -7,7 +7,7 @@ export async function GET(
 ) {
   const { id } = await params
   const session = await getVideoSession(id)
-  if (!session) return NextResponse.json({ error: 'Session not found' }, { status: 404 })
+  if (!session) return NextResponse.json({ error: 'No se encontró la sesión' }, { status: 404 })
   return NextResponse.json(session)
 }
 

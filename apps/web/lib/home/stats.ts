@@ -17,9 +17,12 @@ export interface PlatformStat {
 }
 
 export const PLATFORM_STATS: PlatformStat[] = [
-  { value: "8,900+", label: "productos ganadores encontrados" },
+  // "ganadores" prometía la validación de competencia en Perú que el serving
+  // actual NO hace (ver `getApprovedByCategory`: filtra físico + rango, no PE).
+  { value: "8,900+", label: "productos en el inventario" },
   { value: "3,400+", label: "activos generados con IA" },
-  { value: "5", label: "herramientas en producción" },
+  // Cuenta real de `tools` con status "live" — son 6, no 5.
+  { value: "6", label: "herramientas en producción" },
 ];
 
 // Contador destacado del hero (badge estilo "en vivo").

@@ -6,9 +6,12 @@ import ToolIntro from '@/components/tools/ui/ToolIntro'
 import { useBrief } from '@/components/tools/generador-branding/nuevo/BriefShell'
 import { STEPS, clearBrief, isResumable, resumePath, firstIncompleteStep, loadLastSession } from '@/lib/branding/brief'
 
-// Misma vista inicial que las otras tools (ToolIntro), con los datos de acá: el
+// Misma vista inicial que las otras tools (ToolIntro), con los datos de esta: el
 // brief a medias vive en localStorage y no en la API de sesiones, y la última
 // marca generada se guarda aparte (crear otra limpia el brief, no el historial).
+//
+// ⚠️ La descripción decía "un brandboard en PDF" y no existe: `buildKit` arma un
+// .zip con PNG (identidad, logo ×3, etiqueta-360, mockup) más un marca.txt.
 export default function GeneradorBrandingEntrada() {
   const router = useRouter()
   const { brief } = useBrief()
@@ -25,7 +28,7 @@ export default function GeneradorBrandingEntrada() {
       name="Generador de Branding"
       slug="generador-branding"
       title="Tu marca lista en cinco respuestas"
-      description="Cuéntanos qué vendes, cómo se llama, para quién es y qué debe transmitir. Te proponemos una paleta y unas tipografías hechas para esa marca, las ajustas a tu gusto, y te devolvemos el mockup, el logo, la etiqueta y un brandboard en PDF."
+      description="Cuéntanos qué vendes, cómo se llama, para quién es y qué debe transmitir. Te proponemos una paleta y unas tipografías hechas para esa marca, las ajustas a tu gusto, y te devolvemos la identidad completa, el logo en tres versiones, la etiqueta lista para imprenta y el mockup del producto, todo en un archivo descargable."
       cta={lastSession ? 'Crear otra marca' : 'Crear mi marca'}
       onStart={() => { clearBrief(); router.push(STEPS[0].path) }}
       state={{

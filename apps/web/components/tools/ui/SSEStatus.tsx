@@ -40,7 +40,7 @@ export async function readSSEStream(res: SSEResponse, onEvent: (e: SSEEvent) => 
     return;
   }
   if (!res.body) {
-    emit({ status: 'error', message: 'No response body' });
+    emit({ status: 'error', message: 'El servidor respondió sin contenido. Inténtalo de nuevo.', retryable: true });
     return;
   }
 
@@ -89,7 +89,10 @@ export function SSEStatus({ url, body, onEvent }: SSEStatusProps) {
         await readSSEStream(res, onEvent);
       } catch (err) {
         if ((err as Error).name !== 'AbortError') {
-          onEvent({ status: 'error', message: String(err), retryable: true });
+          // El texto crudo del error de red llega en inglés y sin contexto:
+          // se muestra un mensaje en español y el detalle queda en la consola.
+          console.error('[sse]', err);
+          onEvent({ status: 'error', message: 'Se perdió la conexión con el servidor. Inténtalo de nuevo.', retryable: true });
         }
       }
     })();

@@ -168,7 +168,7 @@ function CalculadoraWizard() {
   const steps: { label: string; title: string; intro: string; body: React.ReactNode }[] = [
     {
       label: "Modelo", title: "¿Cómo vendes?",
-      intro: "Lo primero: contanos cómo llega la venta. El resto del cálculo es igual para ambos.",
+      intro: "Lo primero: cuéntanos cómo llega la venta. El resto del cálculo es igual para ambos.",
       body: (
         <div className="flex flex-col gap-3">
           {([
@@ -270,7 +270,7 @@ function CalculadoraWizard() {
       : []),
     {
       label: "Ofertas", title: "Ofertas por cantidad",
-      intro: "Muchos venden más de una unidad por pedido (lleva 2, lleva 3…). Repartí a tus compradores entre tus 3 ofertas. Si los % no suman 100%, los ajustamos solos.",
+      intro: "Muchos venden más de una unidad por pedido (lleva 2, lleva 3…). Reparte a tus compradores entre tus 3 ofertas. Si los % no suman 100%, los ajustamos solos.",
       body: (
         <div className="flex flex-col gap-3">
           {Math.abs(pctOfertas - 1) > 0.001 && (
@@ -394,7 +394,7 @@ function CalculadoraWizard() {
             <p className="relative mt-1 text-[12px] leading-snug text-[#bebebe]">
               Se actualiza con tus datos y con los estimados que aún no tocaste.
             </p>
-            <div className="relative mt-5 text-[13px] text-[#bebebe]">Profit neto / mes</div>
+            <div className="relative mt-5 text-[13px] text-[#bebebe]">Utilidad neta / mes</div>
             <div
               className="readout relative mt-0.5 text-[32px] font-semibold"
               style={{ color: result.pg.profitNeto >= 0 ? "#ffffff" : "#e93d3d" }}

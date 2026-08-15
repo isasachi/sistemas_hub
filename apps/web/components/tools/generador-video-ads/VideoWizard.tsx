@@ -83,12 +83,12 @@ export default function VideoWizard() {
     {
       label: 'Validación',
       title: 'Antes de seguir, confirmemos los datos',
-      hint: 'Nada se rellena por suposición. Si algo falta, el proceso se detiene acá.',
+      hint: 'Nada se rellena por suposición. Si algo falta, el proceso se detiene aquí.',
     },
     {
       label: 'Plantilla',
       title: 'El ADN del original',
-      hint: 'El guión literal, los cortes reales y la plantilla Fill in the Blank que se rellenará con tu producto.',
+      hint: 'El guión literal, los cortes reales y la plantilla con espacios que se completará con tu producto.',
     },
     {
       label: 'Guión',

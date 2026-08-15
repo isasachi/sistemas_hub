@@ -32,7 +32,7 @@ export function FileUpload({ label, accept = 'image/*', onFile, preview, variant
           onClick={() => ref.current?.click()}
           className="relative rounded-2xl overflow-hidden border border-[rgba(255,155,74,0.6)] group"
         >
-          <img src={preview} alt="preview" className="w-full object-contain max-h-64" />
+          <img src={preview} alt="Vista previa del archivo subido" className="w-full object-contain max-h-64" />
           <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
             <span className="text-white text-xs font-medium">Cambiar imagen</span>
           </div>

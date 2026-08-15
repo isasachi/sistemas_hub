@@ -88,10 +88,13 @@ export default function Section2Character() {
   return (
     <div className="flex flex-col gap-5">
       <FileUpload label="Foto del personaje (opcional)" accept="image/*" preview={preview} onFile={pickCharacter} />
+      {/* Decía "si no la subes, hoy no se genera ninguna foto" y es falso: la ruta
+          `character` genera el retrato con gpt-image-2 a partir de la descripción
+          cuando `character_url` viene vacío. */}
       <p className="text-[12px] leading-relaxed text-[#8b8b8b]">
         Si la subes, es la fuente de verdad de la cara: edad, piel, cabello, facciones y
-        complexión salen de ahí. Si no la subes, hoy no se genera ninguna foto — tu
-        descripción queda como referencia para el guión. Vertical.
+        complexión salen de ahí. Debe ser vertical. Si no la subes, generamos el retrato
+        a partir de la descripción que escribas abajo.
       </p>
       {notVertical && <div className={warnBox}>{notVertical}</div>}
 

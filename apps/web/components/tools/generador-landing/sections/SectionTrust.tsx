@@ -105,7 +105,7 @@ export default function SectionTrust() {
     const t = trustBlock ?? DEFAULT
     return (
       <div className="flex flex-col gap-3">
-        <p className="text-[13px] text-[#cfcfcf]">Estos datos son tuyos, no los inventa la IA. Este es el default para negocios en Perú — edítalo si el tuyo es distinto.</p>
+        <p className="text-[13px] text-[#cfcfcf]">Estos datos son tuyos, no los inventa la IA. Estos son los valores habituales para negocios en Perú — edítalos si el tuyo es distinto.</p>
         <div className="rounded-xl border border-white/[0.08] bg-[#121214] px-4 py-3 text-[13px] text-[#cfcfcf]">{summary(t)}</div>
         {error && <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-[12px] text-red-400">{error}</div>}
         <div className="flex gap-2">

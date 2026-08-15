@@ -11,7 +11,7 @@ export async function GET(
 ) {
   const { id } = await params
   const session = await getCalcSession(id)
-  if (!session) return NextResponse.json({ error: 'Session not found' }, { status: 404 })
+  if (!session) return NextResponse.json({ error: 'No se encontró la sesión' }, { status: 404 })
   return NextResponse.json(session)
 }
 
@@ -22,7 +22,7 @@ export async function PUT(
   const { id } = await params
   let body: { inputs?: CalcInputs; snapshot?: CalcSnapshot }
   try { body = await req.json() } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+    return NextResponse.json({ error: 'Petición inválida' }, { status: 400 })
   }
   if (!body.inputs || !body.snapshot)
     return NextResponse.json({ error: 'Faltan inputs/snapshot' }, { status: 400 })

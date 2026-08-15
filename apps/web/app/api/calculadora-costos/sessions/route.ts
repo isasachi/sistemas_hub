@@ -9,7 +9,7 @@ export const runtime = 'nodejs'
 export async function POST(req: NextRequest) {
   let body: { inputs?: CalcInputs; snapshot?: CalcSnapshot }
   try { body = await req.json() } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+    return NextResponse.json({ error: 'Petición inválida' }, { status: 400 })
   }
   if (!body.inputs || !body.snapshot)
     return NextResponse.json({ error: 'Faltan inputs/snapshot' }, { status: 400 })

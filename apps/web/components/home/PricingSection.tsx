@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Check } from "lucide-react";
 
 // Precios TEMPORALES — inferidos de la marca (JR, mercado peruano → soles) y de
-// lo que la plataforma ya limita de verdad: 5 tools en producción, cuota de
+// lo que la plataforma ya limita de verdad: 6 tools en producción, cuota de
 // generación por paso (GEN_PER_STEP_LIMIT) y el backstop diario global
 // (GEN_GLOBAL_DAILY_LIMIT, 500). No hay cobro cableado: los botones llevan a
 // signup y el plan de agencia a contacto.
@@ -38,7 +38,7 @@ const PLANS: Plan[] = [
     period: "al mes",
     pitch: "Para quien pauta todas las semanas y necesita volumen.",
     features: [
-      "Las 5 herramientas sin límite de sesiones",
+      "Las 6 herramientas sin límite de sesiones",
       "300 generaciones con IA al mes",
       "Video ads UGC (3 renders por guión)",
       "5 marcas guardadas",

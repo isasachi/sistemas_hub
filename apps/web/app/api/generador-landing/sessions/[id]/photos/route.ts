@@ -12,11 +12,11 @@ export const maxDuration = 30 // + bbox por visión (~2-3s) + crop sobre la 1ª 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const session = await getLandingSession(id)
-  if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!session) return NextResponse.json({ error: 'No se encontró la sesión' }, { status: 404 })
 
   let formData: FormData
   try { formData = await req.formData() } catch {
-    return NextResponse.json({ error: 'Invalid form data' }, { status: 400 })
+    return NextResponse.json({ error: 'Los datos del formulario no son válidos' }, { status: 400 })
   }
   const files = formData.getAll('photos').filter((f): f is File => f instanceof File && f.size > 0)
   if (files.length === 0) return NextResponse.json({ error: 'Sube al menos una foto' }, { status: 400 })

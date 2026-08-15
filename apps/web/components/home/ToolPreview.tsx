@@ -17,9 +17,9 @@ const RATIO_CLASS: Record<string, string> = {
 // Metadata mono de esquina por tool (spec-labels del sistema): el lado
 // izquierdo nombra el tipo de output, el derecho es un dato real de la tool.
 const SPEC_META: Record<string, [string, string]> = {
-  "buscador-productos": ["Meta Ads", "5 países"],
-  "generador-anuncios": ["Anuncio 9:16", "~40s"],
-  "generador-video-ads": ["Video 9:16", "15s"],
+  "buscador-productos": ["Meta Ads", "6 países"],
+  "generador-anuncios": ["Anuncio 9:16", "~50s"],
+  "generador-video-ads": ["Video 9:16", "clips 15s"],
   "generador-branding": ["Kit de marca", "4 logos"],
   "generador-landing": ["Landing", "8 secciones"],
   "calculadora-costos": ["P&G", "Excel"],

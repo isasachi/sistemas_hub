@@ -29,7 +29,7 @@ export default function VibraPage() {
     <BriefShell
       step={4}
       title="¿Qué debe transmitir?"
-      hint={`Elige hasta ${FEEL_MAX} o descríbelo con tus palabras. De acá sale el carácter de la marca.`}
+      hint={`Elige hasta ${FEEL_MAX} o descríbelo con tus palabras. De ahí sale el carácter de la marca.`}
       onNext={next}
       nextDisabled={!feel.length}
     >

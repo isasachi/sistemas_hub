@@ -11,7 +11,7 @@ export const runtime = 'nodejs'
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const session = await getLandingSession(id)
-  if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!session) return NextResponse.json({ error: 'No se encontró la sesión' }, { status: 404 })
   let body: { trust?: unknown } = {}
   try { body = await req.json() } catch { /* body opcional */ }
   const parsed = TrustBlockSchema.safeParse(body.trust)

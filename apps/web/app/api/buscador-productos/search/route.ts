@@ -35,7 +35,7 @@ const ORDEN_AUTO = [...RAW_BUCKETS].reverse() as RawBucket[]
 export async function POST(req: NextRequest) {
   let body: { niche?: string; bucket?: string; category?: string }
   try { body = await req.json() } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+    return NextResponse.json({ error: 'Petición inválida' }, { status: 400 })
   }
   // La UI busca por CATEGORÍA (los chips); el path por nicho sigue vivo para
   // quien pegue directo a la ruta y es el que conserva el cold start.

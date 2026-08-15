@@ -23,9 +23,9 @@ export async function POST(
   const userId = await readUserId()
 
   const session = await getSession(id)
-  if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!session) return NextResponse.json({ error: 'No se encontró la sesión' }, { status: 404 })
   if (!session.image_url || !session.reference_url || !session.product_url)
-    return NextResponse.json({ error: 'No image to refine yet' }, { status: 409 })
+    return NextResponse.json({ error: 'Todavía no hay una imagen que ajustar' }, { status: 409 })
 
   let body: unknown
   try { body = await req.json() } catch {
@@ -55,7 +55,7 @@ export async function POST(
     aspectRatio
   )
 
-  if (!b64) return NextResponse.json({ error: 'Refinement returned empty result' }, { status: 422 })
+  if (!b64) return NextResponse.json({ error: 'La regeneración volvió vacía. Inténtalo de nuevo.' }, { status: 422 })
 
   const imageBuffer = Buffer.from(b64, 'base64')
   const imageUrl = await uploadToStorage(id, imageBuffer, 'image/png', `result-${Date.now()}`)

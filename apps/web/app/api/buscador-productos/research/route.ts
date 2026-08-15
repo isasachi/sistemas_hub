@@ -10,7 +10,7 @@ import { readUserId, newUserId, PH_USER_COOKIE } from '@/lib/product-hunter/sess
 export async function POST(req: NextRequest) {
   let body: { url?: string }
   try { body = await req.json() } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+    return NextResponse.json({ error: 'Petición inválida' }, { status: 400 })
   }
   const raw = body.url?.trim()
   if (!raw) return NextResponse.json({ error: 'Falta la URL' }, { status: 400 })
