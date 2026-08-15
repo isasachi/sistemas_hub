@@ -5,13 +5,22 @@ import type { Part } from '@google/genai'
 
 describe('llm-openai (motor primario)', () => {
 
-  it('sizeFor mapea aspectRatio → tamaño válido de gpt-image-2', () => {
-    expect(sizeFor('9:16')).toBe('1024x1536')
-    expect(sizeFor('3:4')).toBe('1024x1536')
-    expect(sizeFor('4:5')).toBe('1024x1536')
-    expect(sizeFor('1:1')).toBe('1024x1024')
-    expect(sizeFor('16:9')).toBe('1536x1024')
-    expect(sizeFor(undefined)).toBe('1024x1536')
+  it('sizeFor deriva el tamaño del ratio, no de tres buckets', () => {
+    // 9:16 real: 864/1536 = 0.5625 exacto. Antes daba 1024x1536, que es 2:3 (0.667).
+    expect(sizeFor('9:16')).toBe('864x1536')
+    expect(sizeFor('3:4')).toBe('1152x1536')
+    expect(sizeFor('4:5')).toBe('1232x1536')
+    expect(sizeFor('1:1')).toBe('1536x1536')
+    expect(sizeFor('16:9')).toBe('1536x864')
+    expect(sizeFor('2:3')).toBe('1024x1536')
+    expect(sizeFor(undefined)).toBe('864x1536')
+    expect(sizeFor('basura')).toBe('1024x1536')
+  })
+
+  it('sizeFor siempre devuelve múltiplos de 16 (lo único que la API exige)', () => {
+    for (const r of ['9:16', '3:4', '4:5', '1:1', '16:9', '21:9', '5:4', '3:2', '2:3'])
+      for (const n of sizeFor(r).split('x').map(Number))
+        expect(n % 16).toBe(0)
   })
 
   it('toChatContent traduce text + inlineData a content de chat', () => {

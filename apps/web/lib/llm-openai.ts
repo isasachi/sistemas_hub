@@ -18,15 +18,25 @@ function client(): OpenAI {
   return _client
 }
 
-// gpt-image-2 solo acepta 1024x1024 | 1024x1536 | 1536x1024. Mapeo desde el aspectRatio de Gemini.
-export type ImgSize = '1024x1024' | '1024x1536' | '1536x1024'
+// ⚠️ gpt-image-2 NO está limitado a 1024x1024 | 1024x1536 | 1536x1024 — ese es el tipado
+// (desactualizado) del SDK, no el contrato de la API. Verificado contra la API real: el único
+// requisito es que ancho y alto sean **múltiplos de 16** (`1080x1920` → 400 "Width and height
+// must both be divisible by 16"; `864x1536`, `1088x1920` y `2160x3840` → OK). Los tres buckets
+// viejos aplastaban TODO portrait a 1024x1536, que es 2:3: una referencia 9:16 (0.563) salía
+// 0.667 y el ad no calzaba en Reels ni TikTok. Ahora el tamaño se deriva del ratio.
+//
+// Lado largo 1536 (mismo presupuesto de píxeles que antes → misma latencia y costo), lado
+// corto proporcional redondeado al múltiplo de 16 más cercano.
+export type ImgSize = `${number}x${number}`
+const LONG_EDGE = 1536
+const mul16 = (n: number) => Math.max(256, Math.round(n / 16) * 16)
+
 export function sizeFor(aspectRatio?: string): ImgSize {
-  switch (aspectRatio) {
-    case '1:1': return '1024x1024'
-    case '16:9':
-    case '3:2': return '1536x1024'
-    default: return '1024x1536' // 9:16, 3:4, 4:5 y cualquier portrait
-  }
+  const [w, h] = (aspectRatio ?? '9:16').split(':').map(Number)
+  if (!w || !h || !Number.isFinite(w) || !Number.isFinite(h)) return '1024x1536'
+  return w >= h
+    ? `${LONG_EDGE}x${mul16((LONG_EDGE * h) / w)}`
+    : `${mul16((LONG_EDGE * w) / h)}x${LONG_EDGE}`
 }
 
 // Part[] de Gemini (text | inlineData) → content de chat de OpenAI (text | image_url data URI).

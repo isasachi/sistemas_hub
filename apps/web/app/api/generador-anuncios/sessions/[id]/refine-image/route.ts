@@ -3,8 +3,12 @@ import { z } from 'zod'
 import { getSession, updateSession } from '@/lib/db'
 import { fetchAsBase64, uploadToStorage } from '@/lib/storage'
 import { refineImage } from '@/lib/gemini'
+import { aspectRatioOf } from '@/lib/aspect'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
+
+// gpt-image-2 tarda ~40-90s (medido). Sin esto Vercel corta antes de que vuelva la imagen.
+export const maxDuration = 300
 
 const BodySchema = z.object({ feedback: z.string().max(1000).optional() })
 
@@ -38,12 +42,17 @@ export async function POST(
     fetchAsBase64(session.image_url),
   ])
 
+  // El ratio se re-mide de la REFERENCIA en cada refine: si no, un ad que ya salió con el
+  // formato equivocado lo arrastra en cada regeneración.
+  const aspectRatio = await aspectRatioOf(Buffer.from(ref.data, 'base64'))
+
   const b64 = await refineImage(
     ref.data, ref.mimeType,
     product.data, product.mimeType,
     logo?.data ?? null, logo?.mimeType ?? null,
     result.data, result.mimeType,
-    parsed.data.feedback ?? ''
+    parsed.data.feedback ?? '',
+    aspectRatio
   )
 
   if (!b64) return NextResponse.json({ error: 'Refinement returned empty result' }, { status: 422 })

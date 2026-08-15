@@ -52,15 +52,25 @@ Font style, weight, case, alignment, size hierarchy, color. Fixed from reference
 Describe product appearance accurately: shape, format, main colors, finish. Place it exactly per its physical position. The product's label — all text, graphics, and colors printed on it — must be reproduced exactly as it appears in Image 2. Do NOT simplify, alter, or omit any label detail.
 
 **8. BRANDING**
-If logo provided (Image 3): place it exactly where the original brand appeared in the reference.
-If no logo: leave that area as background. Do NOT invent a logo. Do NOT reuse the reference brand mark.
+
+If no logo provided: leave that area as background. Do NOT invent a logo. Do NOT reuse the reference brand mark.
+
+If a logo is provided (Image 3), first decide WHERE the reference's own brand actually lived, using the brandElements data:
+
+- The reference has a **dedicated logo zone** (a lockup in a corner, header, badge or footer, separate from the product) → place the logo exactly there, at the same size and alignment.
+- The reference's brand appears **only printed on the product itself** (label, bottle, packaging) → the product in Image 2 already carries its own branding. Do NOT place a second, separate logo in the scene. State explicitly: "no standalone logo — the brand reads from the product label."
+- No brand mark is visible anywhere in the reference → place the logo small and discreet in a corner, following the platform convention of the reference format. Never centered, never overlapping the product or the copy.
+
+A floating logo dropped in the middle of the canvas is always wrong.
 
 **9. COPY**
 Every text element: element name → exact text content. Specify font weight, exact color, and position for each.
 
 **10. SCENE ADAPTATIONS — contextual reasoning**
 
-For every non-product, non-text element visible in the reference (people, figures, props, setting details, background elements, brand marks):
+Primary subject first (the person using, holding or presenting the product): if their apparent demographic — gender, age range, apparent context — does not match targetAudience, REPLACE them with a description that does, keeping the exact same pose, framing, expression and position in frame. If it already matches, preserve exactly. State the decision explicitly either way. An ad for "mujeres de 20-40" showing a young man is a failed adaptation, no matter how well the rest is reproduced.
+
+Then, for every other non-product, non-text element visible in the reference (secondary figures, props, setting details, background elements, brand marks):
 
 - **Step A — Identify:** name the element and its role in the original ad's persuasive logic.
 - **Step B — Evaluate:** ask "Would this element appear naturally in a real ad for [whatItDoes] targeting [targetAudience]?" Consider whether the element belongs to the original brand's context or to the new product's context.

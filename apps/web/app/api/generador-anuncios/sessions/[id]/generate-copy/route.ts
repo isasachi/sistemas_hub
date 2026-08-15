@@ -42,20 +42,32 @@ export async function POST(
     { inlineData: { mimeType: refMime, data: refB64 } },
     {
       text: [
-        `Reference ad copy structure: ${JSON.stringify(refAnalysis.composition)}`,
+        `Reference ad visual layout (NOT copy slots): ${JSON.stringify(refAnalysis.composition)}`,
         `Persuasive logic: ${refAnalysis.persuasiveLogic}`,
         `Product: ${session.product_name} — ${session.what_it_does}`,
         `Target audience: ${session.target_audience}`,
         `Product description: ${productScan.productDescription}`,
+        `Product label text: ${productScan.brandingDescription ?? 'not provided'}`,
         '',
         'TikTok audience comments (raw):',
         comments,
         '',
+        'The first image is the reference ad. Read the words actually rendered on it — headline,',
+        'subhead, badge, CTA, any burned-in text. Those visible text blocks, in reading order, are',
+        'the copy slots. One element per text block, and NOTHING else: never emit an element for a',
+        'person, a product shot, a prop or any other visual — those are not copy. If the reference',
+        'has a single text block, return a single element.',
+        'A text block is one continuous phrase: line breaks INSIDE a phrase do not split it into',
+        'separate blocks. Name each element by its persuasive role (headline, subhead, badge, CTA…),',
+        'never by position.',
+        '',
         'Generate two copy versions as structured element arrays.',
         '',
         'VERSION A — Narrative adaptation:',
-        '  Mirror every structural slot from the reference ad composition exactly.',
-        '  Adapt content to the product and audience. Keep the same narrative arc.',
+        '  One element per text slot found in the reference, same order, same length register.',
+        '  Rewrite each slot for THIS product and audience: the words must change. Copying the',
+        '  reference wording verbatim is a failure — it advertises the other brand.',
+        '  Keep the same narrative arc and the same persuasive role per slot.',
         '  Never invent reviews, numbers, or guarantees.',
         '',
         'VERSION B — Fill-in-the-blank audience voice:',
@@ -75,7 +87,7 @@ export async function POST(
     },
   ]
 
-  const copyVersions = await callStructured('copy_versions', CopyVersionsSchema, parts)
+  const copyVersions = await callStructured('copy_versions', CopyVersionsSchema, parts, 3, undefined, { preferGemini: true })
   await updateSession(id, { step: 3, tiktok_comments: comments, copy_versions: copyVersions })
   await recordGenQuota(id, 'anuncios-copy', userId)
   return NextResponse.json({ copyVersions })
