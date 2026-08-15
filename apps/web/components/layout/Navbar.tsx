@@ -25,6 +25,14 @@ export function Navbar() {
           </li>
           <li>
             <a
+              href="#precios"
+              className="font-[Poppins] text-[14px] font-medium text-[#cfcfcf] no-underline transition-colors duration-200 hover:text-[#ffffff]"
+            >
+              Precios
+            </a>
+          </li>
+          <li>
+            <a
               href="https://jrconsulting.com.pe"
               target="_blank"
               rel="noopener noreferrer"

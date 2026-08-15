@@ -4,6 +4,7 @@ import { Footer } from "@/components/layout/Footer";
 import { HeroSection } from "@/components/home/HeroSection";
 import { StatsBar } from "@/components/home/StatsBar";
 import { LandingToolCard } from "@/components/home/LandingToolCard";
+import { PricingSection } from "@/components/home/PricingSection";
 import { tools } from "@/lib/tools";
 
 // Card ancha del bento (2 columnas): la calculadora, que tiene el preview con
@@ -67,6 +68,8 @@ export default function Home() {
             ))}
           </div>
         </section>
+
+        <PricingSection />
 
         {/* Cierre — CTA final (hero-card con glow naranja envolvente) */}
         <section className="px-8 pb-24 pt-8">
