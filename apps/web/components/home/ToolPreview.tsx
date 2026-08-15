@@ -10,6 +10,7 @@ const RATIO_CLASS: Record<string, string> = {
   "9/16": "aspect-[9/16]",
   "1/1": "aspect-square",
   "4/3": "aspect-[4/3]",
+  "2/3": "aspect-[2/3]",
   "16/10": "aspect-[16/10]",
 };
 
@@ -46,7 +47,7 @@ export function ToolPreview({ tool, ratio }: { tool: Tool; ratio?: string }) {
   const [failed, setFailed] = useState(false);
   const frameRatio = ratio ?? tool.preview?.ratio ?? "";
   const ratioClass = RATIO_CLASS[frameRatio] ?? "";
-  const narrow = frameRatio === "9/16";
+  const narrow = frameRatio === "9/16" || frameRatio === "2/3";
   const [metaLeft, metaRight] = SPEC_META[tool.slug] ?? ["JR AI Hub", "IA"];
   const Icon = toolIcon(tool.icon);
 
@@ -97,7 +98,7 @@ export function ToolPreview({ tool, ratio }: { tool: Tool; ratio?: string }) {
             "linear-gradient(to bottom, rgba(18,16,13,0.8) 0%, rgba(18,16,13,0.35) 60%, transparent 100%)",
         }}
       />
-      {/* En un tile 9:16 (los del marquee) no entran los dos rótulos: a 11px
+      {/* En un tile vertical (los del marquee) no entran los dos rótulos: a 11px
           se encimaban en dos líneas ("KIT DE / MARCALOGOS"). Ahí va solo el
           izquierdo, más chico y sin envolver. */}
       <div className="absolute inset-x-0 top-0 flex items-center justify-between px-3.5 pt-2.5">

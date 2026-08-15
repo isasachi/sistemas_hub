@@ -22,7 +22,7 @@ export interface Tool {
   // mudo). Mismo marco y mismo recorte que la imagen.
   preview?: {
     kind: "image" | "video";
-    ratio?: "9/16" | "1/1" | "4/3" | "16/10";
+    ratio?: "9/16" | "2/3" | "1/1" | "4/3" | "16/10";
   };
   // stats: chips hardcodeados por tool. TODO wire: ver lib/home/stats.ts
   stats?: { value: string; label: string }[];
@@ -137,7 +137,9 @@ export const tools: Tool[] = [
     tagStyle: "new",
     status: "live",
     pitch: "Una landing de conversión completa, sección por sección.",
-    preview: { kind: "image", ratio: "9/16" },
+    // 2:3 = el formato nativo del asset; en un marco 9:16 el cover le comía
+    // los lados y partía el titular del hero.
+    preview: { kind: "image", ratio: "2/3" },
     stats: [
       { value: "600+", label: "landings armadas" },
       { value: "8", label: "secciones por página" },

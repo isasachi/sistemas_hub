@@ -9,6 +9,7 @@ const tiles = tools.filter((t) => t.preview);
 const TILE_H = 220;
 const RATIO_W: Record<string, number> = {
   "9/16": Math.round(TILE_H * (9 / 16)),
+  "2/3": Math.round(TILE_H * (2 / 3)),
   "1/1": TILE_H,
   "4/3": Math.round(TILE_H * (4 / 3)),
   "16/10": Math.round(TILE_H * 1.6),
