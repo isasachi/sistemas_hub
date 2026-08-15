@@ -23,7 +23,7 @@ const DEFAULT_SECTIONS: SectionType[] = ['hero', 'beneficios', 'oferta', 'testim
 export async function POST(req: NextRequest) {
   let body: { brandingSessionId?: string }
   try { body = await req.json() } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+    return NextResponse.json({ error: 'Petición inválida' }, { status: 400 })
   }
   if (!body.brandingSessionId)
     return NextResponse.json({ error: 'Falta brandingSessionId' }, { status: 400 })

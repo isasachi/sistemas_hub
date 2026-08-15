@@ -11,17 +11,17 @@ export async function POST(
 ) {
   const { id } = await params
   const session = await getSession(id)
-  if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!session) return NextResponse.json({ error: 'No se encontró la sesión' }, { status: 404 })
   if (session.step < 3 || !session.copy_versions)
-    return NextResponse.json({ error: 'Complete steps 1–3 first' }, { status: 409 })
+    return NextResponse.json({ error: 'Completa los pasos anteriores primero' }, { status: 409 })
 
   let body: unknown
   try { body = await req.json() } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+    return NextResponse.json({ error: 'Petición inválida' }, { status: 400 })
   }
   const parsed = BodySchema.safeParse(body)
   if (!parsed.success)
-    return NextResponse.json({ error: 'version must be "A" or "B"' }, { status: 400 })
+    return NextResponse.json({ error: 'La versión debe ser A o B' }, { status: 400 })
 
   const { version } = parsed.data
   const copyVersions = CopyVersionsSchema.parse(session.copy_versions)

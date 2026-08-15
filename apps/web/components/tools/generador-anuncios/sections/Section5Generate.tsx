@@ -88,7 +88,9 @@ export default function Section5Generate() {
             url={`/api/generador-anuncios/sessions/${sessionId}/generate-image`}
             onEvent={handleEvent}
           />
-          <p className="text-[13px] text-[#cfcfcf]">Esto puede tomar entre 15 y 40 segundos.</p>
+          {/* gpt-image-2 mide 38-55 s (por eso la ruta lleva maxDuration = 300).
+              El "15 a 40" era del render anterior con Gemini. */}
+          <p className="text-[13px] text-[#cfcfcf]">Esto puede tomar alrededor de un minuto.</p>
 
           {/* Momento de generación unificado (compartido con landing) */}
           <GenerationProgress

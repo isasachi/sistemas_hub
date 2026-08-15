@@ -18,7 +18,7 @@ export const maxDuration = 30 // classifyNiche = 1 llamada gemini-flash con visi
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const session = await getLandingSession(id)
-  if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!session) return NextResponse.json({ error: 'No se encontró la sesión' }, { status: 404 })
 
   // `body_focus` entra en la condición: una sesión clasificada ANTES de que el campo existiera lo
   // tiene en null, y salir por acá la dejaría sin zona para siempre — con el hero y las tres

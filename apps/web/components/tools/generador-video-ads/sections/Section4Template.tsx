@@ -105,7 +105,7 @@ export default function Section4Template() {
           videos sin cortes, donde una sola toma trae el guión entero.
         </div>
       )}
-      {card('Guión convertido a Fill in the Blank', (
+      {card('Guión convertido en plantilla', (
         <p className="whitespace-pre-wrap text-[12.5px] leading-relaxed text-[#cfcfcf]">
           {template.guionFillInBlank}
         </p>

@@ -31,7 +31,7 @@ const fmtDate = (iso: string) =>
   new Date(iso).toLocaleDateString('es-PE', { day: 'numeric', month: 'short', year: 'numeric' })
 
 /**
- * Historial de proyectos a pantalla completa: agrega las sesiones de las 4 tools
+ * Historial de proyectos a pantalla completa: agrega las sesiones de las 5 tools
  * generativas (fan-out a sus endpoints, shape uniforme), las mergea y las muestra
  * en un tablero masonry ordenado (default reciente→antiguo) con filtro por tool.
  * Solo lecturas a endpoints existentes ($0, sin LLM).
@@ -179,12 +179,12 @@ function EmptyState({ filtered = false }: { filtered?: boolean }) {
         />
       </div>
       <h2 className="lp-serif text-[20px] text-[#ededed]">
-        {filtered ? 'Nada de esta herramienta todavía' : 'Acá vas a ver todo lo que crees'}
+        {filtered ? 'Nada de esta herramienta todavía' : 'Aquí aparece todo lo que generes'}
       </h2>
       <p className="mt-2.5 max-w-[420px] font-[Lato] text-[14px] leading-[1.6] text-[#bebebe]">
         {filtered
-          ? 'Todavía no usaste esta herramienta. Ábrela desde la barra de arriba y tu primer proyecto aparecerá acá.'
-          : 'Cada anuncio, marca, landing y cálculo que generes queda guardado en este tablero. Elige una herramienta de la barra de arriba para empezar.'}
+          ? 'Todavía no has usado esta herramienta. Ábrela desde la barra de arriba y tu primer proyecto aparecerá aquí.'
+          : 'Cada anuncio, video, marca, landing y cálculo que generes queda guardado en este tablero. Elige una herramienta de la barra de arriba para empezar.'}
       </p>
     </div>
   )

@@ -26,7 +26,7 @@ export async function POST(
   const userId = await readUserId()
 
   const session = await getVideoSession(id)
-  if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!session) return NextResponse.json({ error: 'No se encontró la sesión' }, { status: 404 })
   // El disjunto `!session.character_url` es de los modos `character-ref`/`character-gen`
   // que este recableado eliminó (una sola línea de entrada: video de referencia
   // obligatorio). Dejarlo vivo abría un bypass del gate de costo: `POST .../inputs`
@@ -38,7 +38,7 @@ export async function POST(
 
   let formData: FormData
   try { formData = await req.formData() } catch {
-    return NextResponse.json({ error: 'Invalid form data' }, { status: 400 })
+    return NextResponse.json({ error: 'Los datos del formulario no son válidos' }, { status: 400 })
   }
 
   const productFile = formData.get('product') as File | null

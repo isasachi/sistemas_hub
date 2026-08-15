@@ -18,20 +18,20 @@ export async function POST(
   const userId = await readUserId()
 
   const session = await getSession(id)
-  if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!session) return NextResponse.json({ error: 'No se encontró la sesión' }, { status: 404 })
   if (session.step < 2)
-    return NextResponse.json({ error: 'Complete steps 1–2 first' }, { status: 409 })
+    return NextResponse.json({ error: 'Completa los pasos anteriores primero' }, { status: 409 })
   if (!session.product_name || !session.what_it_does || !session.target_audience)
-    return NextResponse.json({ error: 'Missing product answers' }, { status: 409 })
+    return NextResponse.json({ error: 'Faltan datos del producto' }, { status: 409 })
 
   let body: { comments?: unknown; prompt?: string }
   try { body = await req.json() } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+    return NextResponse.json({ error: 'Petición inválida' }, { status: 400 })
   }
   const comments = typeof body.comments === 'string' ? body.comments.trim() : ''
   const precision = (body.prompt ?? '').trim()
-  if (!comments) return NextResponse.json({ error: 'Missing comments' }, { status: 400 })
-  if (comments.length > 8000) return NextResponse.json({ error: 'Comments too long (max 8000 chars)' }, { status: 400 })
+  if (!comments) return NextResponse.json({ error: 'Faltan los comentarios' }, { status: 400 })
+  if (comments.length > 8000) return NextResponse.json({ error: 'Los comentarios pasan de 8000 caracteres' }, { status: 400 })
 
   try {
   const refAnalysis = ReferenceAnalysisSchema.parse(session.reference_analysis)

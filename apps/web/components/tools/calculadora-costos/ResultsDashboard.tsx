@@ -71,7 +71,7 @@ export default function ResultsDashboard({
     { label: "Comisión pasarela", val: pg.comisionPasarela, color: "#a4a4ae" },
     { label: "Gastos fijos", val: pg.gastosFijos, color: "#bbbbc5" },
     { label: "Inversión en ads", val: pg.inversionPublicidad, color: "#ff9b4a" },
-    { label: "Profit neto", val: Math.max(0, pn), color: "#2ccf6f" },
+    { label: "Utilidad neta", val: Math.max(0, pn), color: "#2ccf6f" },
   ].filter((s) => s.val > 0);
 
   return (
@@ -83,7 +83,7 @@ export default function ResultsDashboard({
           <span className="text-[13px] font-semibold uppercase tracking-wide" style={{ color: estado.c }}>{estado.label}</span>
         </div>
         <div className="text-[40px] font-bold mt-2 readout" style={{ color: estado.c }}>{fmtMoney(pn)}</div>
-        <div className="text-[13px] text-[#cfcfcf]">Profit neto proyectado al mes</div>
+        <div className="text-[13px] text-[#cfcfcf]">Utilidad neta proyectada al mes</div>
         <p className="text-[13px] text-[#cfcfcf] mt-3 leading-relaxed">{estado.msg}</p>
       </div>
 
@@ -93,7 +93,7 @@ export default function ResultsDashboard({
         <div className="grid grid-cols-3 gap-3">
           <Card label="Margen bruto" value={fmtPct(pg.margenBruto)} help="De cada sol que vendes, cuánto queda después de costos de producto y operación (antes de gastos fijos)." />
           <Card label="Margen neto" value={fmtPct(pg.margenNeto)} help="De cada sol que vendes, cuánto queda como ganancia final (después de TODO)." />
-          <Card label="ROI Ads" value={fmtPct(pg.roiAds)} help="Por cada sol invertido en publicidad, cuánto ganas de profit. 100% = duplicas tu inversión." />
+          <Card label="ROI Ads" value={fmtPct(pg.roiAds)} help="Por cada sol invertido en publicidad, cuánto ganas de utilidad. 100% = duplicas tu inversión." />
           <Card label="ROAS real" value={fmtX(embudo.roasReal)} help="Por cada sol en ads, cuántos soles de venta real generas (ya con entregas)." />
           <Card label="Ticket promedio" value={fmtMoney(pg.aovReal)} help="Cuánto factura en promedio cada cliente que recibe el producto." />
           <Card label="Ingresos / mes" value={fmtMoney(pg.ingresosTotales)} help="Total que facturas en el mes con estas ventas." />

@@ -17,17 +17,17 @@ export async function POST(
   const userId = await readUserId()
 
   const session = await getSession(id)
-  if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!session) return NextResponse.json({ error: 'No se encontró la sesión' }, { status: 404 })
 
   let formData: FormData
   try { formData = await req.formData() } catch {
-    return NextResponse.json({ error: 'Invalid form data' }, { status: 400 })
+    return NextResponse.json({ error: 'Los datos del formulario no son válidos' }, { status: 400 })
   }
 
   const file = formData.get('reference') as File | null
-  if (!file) return NextResponse.json({ error: 'Missing reference image' }, { status: 400 })
+  if (!file) return NextResponse.json({ error: 'Falta la imagen de referencia' }, { status: 400 })
   if (file.size > 10 * 1024 * 1024)
-    return NextResponse.json({ error: 'File too large (max 10 MB)' }, { status: 400 })
+    return NextResponse.json({ error: 'La imagen pesa más de 10 MB' }, { status: 400 })
 
   const bytes = Buffer.from(await file.arrayBuffer())
   const mimeType = file.type || 'image/jpeg'

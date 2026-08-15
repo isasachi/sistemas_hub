@@ -28,7 +28,7 @@ export async function POST(
   const userId = await readUserId()
 
   const session = await getVideoSession(id)
-  if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!session) return NextResponse.json({ error: 'No se encontró la sesión' }, { status: 404 })
   if (!session.forensic_analysis)
     return NextResponse.json({ error: 'Analiza el video de referencia primero' }, { status: 409 })
   // Guard real de la FASE 0: el cliente deshabilita el botón mientras haya una

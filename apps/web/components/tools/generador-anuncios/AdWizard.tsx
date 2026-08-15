@@ -62,7 +62,7 @@ export default function AdWizard() {
     {
       label: 'Producto',
       title: '¿Qué estás vendiendo?',
-      hint: 'El producto y a quién le hablas. De acá sale el ángulo del copy.',
+      hint: 'El producto y a quién le hablas. De ahí sale el ángulo del copy.',
     },
     {
       label: 'Comentarios',

@@ -60,7 +60,7 @@ export async function POST(
   const userId = await readUserId()
 
   const session = await getVideoSession(id)
-  if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!session) return NextResponse.json({ error: 'No se encontró la sesión' }, { status: 404 })
   if (!session.adapted || !session.consistency_block || !session.voice_profile)
     return NextResponse.json({ error: 'Completa los pasos anteriores' }, { status: 409 })
   if (!session.character_url || !session.product_url)

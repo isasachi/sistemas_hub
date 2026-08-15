@@ -35,17 +35,20 @@ export const tools: Tool[] = [
     description:
       "Encuentra productos físicos que se están pautando en LATAM, agrupados por volumen de anuncios.",
     longDescription:
-      "Escribe un nicho y la herramienta te muestra productos físicos que se están pautando ahora mismo en LATAM, agrupados por cantidad de anuncios activos y verificados como el producto principal de su anunciante.",
+      "Elige una categoría y la herramienta te muestra productos físicos que se están pautando ahora mismo en LATAM, agrupados por cantidad de anuncios activos. Ves un rango a la vez y entras a la Biblioteca de Anuncios de cada anunciante con un clic.",
     icon: "PackageSearch",
     stage: "investigar",
     tag: "Nuevo",
     tagStyle: "new",
     status: "live",
-    pitch: "Productos que ya venden en LATAM y aún nadie pauta en Perú.",
+    pitch: "Lo que más se está pautando en LATAM, por categoría.",
     preview: { kind: "image", ratio: "4/3" },
     stats: [
       { value: "8,900+", label: "productos analizados" },
-      { value: "5 países", label: "validación LATAM" },
+      // 6 países LATAM: MX, CO, CL, AR, EC y PE (`COUNTRIES`, @ph/shared
+      // keywords.ts). Decía "5" y además "validación LATAM", que prometía una
+      // verificación de competencia que el serving actual no hace.
+      { value: "6 países", label: "cobertura LATAM" },
     ],
   },
   {
@@ -64,26 +67,27 @@ export const tools: Tool[] = [
     preview: { kind: "image", ratio: "9/16" },
     stats: [
       { value: "1,200+", label: "anuncios generados" },
-      { value: "~40s", label: "por creativo" },
+      // gpt-image-2 mide 38-55 s (ver AGENTS.md); "~40s" era el piso, no el rango.
+      { value: "~50s", label: "por creativo" },
     ],
   },
   {
     name: "Generador de Video Ads",
     slug: "generador-video-ads",
     description:
-      "Sube un video que ya funciona y te devolvemos su ADN de guión, listo para rellenar con tu producto.",
+      "Sube un video que ya funciona y te devolvemos los clips con tu producto, con la estructura del original.",
     longDescription:
-      "Empieza con un video de referencia vertical. Lo desglosamos corte por corte —qué se ve, qué se dice, cómo está encuadrado, cuánto dura cada toma— y sacamos el esqueleto de su guión: la plantilla Fill in the Blank que rellenas con tu producto, tu ángulo y tu público.",
+      "Empieza con un video de referencia vertical. Lo desglosamos corte por corte —qué se ve, qué se dice, cómo está encuadrado, cuánto dura cada toma— y sacamos el esqueleto de su guión: una plantilla con espacios que se completan con tu producto, tu ángulo y tu público. Con ese guión renderizamos el video en clips verticales que descargas por separado.",
     icon: "Video",
     stage: "crear",
     tag: "IA Real",
     tagStyle: "new",
     status: "live",
-    pitch: "El guión de un video que ya vende, listo para tu producto.",
+    pitch: "Un video que ya vende, rehecho con tu producto.",
     preview: { kind: "video", ratio: "9/16" },
     stats: [
       { value: "1 referencia", label: "video vertical obligatorio" },
-      { value: "corte a corte", label: "análisis del original" },
+      { value: "clips de 15s", label: "descargables por separado" },
     ],
   },
   {
@@ -109,15 +113,15 @@ export const tools: Tool[] = [
     name: "Calculadora de Costos",
     slug: "calculadora-costos",
     description:
-      "Proyecta el P&G completo de tu campaña e-com y exporta el análisis a Excel.",
+      "Proyecta el P&G completo de tu campaña de e-commerce y exporta el análisis a Excel.",
     longDescription:
-      "Responde unas preguntas sobre tus costos, embudo (leads o mensajes) y ofertas. La calculadora arma tu estado de resultados completo — profit, márgenes, ROAS, ROI, CPA máximo y capital mínimo — y te deja exportar todo a un Excel idéntico al modelo.",
+      "Responde unas preguntas sobre tus costos, tu embudo (leads o mensajes) y tus ofertas. La calculadora arma tu estado de resultados completo — utilidad neta, márgenes, ROAS, ROI, CPA máximo y capital mínimo — y te deja exportar todo a un Excel idéntico al modelo.",
     icon: "DollarSign",
     stage: "investigar",
     tag: "Nuevo",
     tagStyle: "new",
     status: "live",
-    pitch: "Sabe si tu campaña es rentable antes de gastar el primer sol.",
+    pitch: "Descubre si tu campaña es rentable antes de gastar el primer sol.",
     preview: { kind: "image", ratio: "16/10" },
     stats: [
       { value: "P&G", label: "en 2 minutos" },
@@ -128,9 +132,9 @@ export const tools: Tool[] = [
     name: "Generador de Landing Pages",
     slug: "generador-landing",
     description:
-      "Genera el copy y estructura completa de tu landing page de conversión.",
+      "Genera tu landing page de conversión sección por sección, como imágenes listas para publicar.",
     longDescription:
-      "Crea el contenido y la estructura de una landing page optimizada para convertir: hero, beneficios, testimonios, FAQ y CTA.",
+      "Con tu producto, tus fotos y tu público, derivamos la identidad visual de la marca —paleta, materiales y talento— y con ella generamos cada sección de la landing como una imagen: hero, oferta, beneficios, testimonios, preguntas frecuentes, garantía y llamado final. Las revisas una por una, regeneras la que no te convenza y las descargas.",
     icon: "LayoutTemplate",
     stage: "crear",
     tag: "IA Real",
@@ -142,7 +146,8 @@ export const tools: Tool[] = [
     preview: { kind: "image", ratio: "2/3" },
     stats: [
       { value: "600+", label: "landings armadas" },
-      { value: "8", label: "secciones por página" },
+      // 8 es el CATÁLOGO de secciones (SECTION_LABELS); el usuario elige cuáles.
+      { value: "8", label: "secciones para elegir" },
     ],
   },
 ];

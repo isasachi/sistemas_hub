@@ -8,7 +8,7 @@ const TIKTOK_SCRIPT = `Busca en TikTok videos sobre el problema que resuelve tu 
 Abre 2–3 videos con muchos comentarios.
 Copia y pega aquí los comentarios tal como están — con errores, emojis y todo.
 
-Eso es lo que voy a usar para escribir el texto de tu anuncio con las palabras exactas de tu audiencia. Entre más reales, mejor.`
+Eso es lo que vamos a usar para escribir el texto de tu anuncio con las palabras exactas de tu audiencia. Cuanto más reales, mejor.`
 
 const btnPrimary = 'h-11 w-full rounded-xl jr-cta text-[13px] font-bold disabled:opacity-40 transition-all duration-200 cursor-pointer border-0 font-sans flex items-center justify-center gap-2'
 

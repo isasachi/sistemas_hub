@@ -73,7 +73,7 @@ export async function POST(
     )
 
   const session = await getVideoSession(id)
-  if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!session) return NextResponse.json({ error: 'No se encontró la sesión' }, { status: 404 })
   if (!session.adapted || !session.forensic_analysis)
     return NextResponse.json({ error: 'Adapta el guión primero' }, { status: 409 })
 

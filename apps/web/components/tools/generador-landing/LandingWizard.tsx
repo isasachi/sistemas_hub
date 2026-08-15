@@ -62,7 +62,7 @@ export default function LandingWizard() {
     {
       label: 'Producto',
       title: '¿Qué vas a vender en esta página?',
-      hint: 'El nombre y la promesa. Todo lo demás se construye a partir de acá.',
+      hint: 'El nombre y la promesa. Todo lo demás se construye a partir de ahí.',
     },
     {
       label: 'Fotos',
@@ -72,7 +72,7 @@ export default function LandingWizard() {
     {
       label: 'Identidad',
       title: 'El mundo visual de tu marca',
-      hint: 'Confirma el nicho y a quién le hablas: de ahí salen la paleta, los materiales y el talento de las 8 secciones.',
+      hint: 'Confirma el nicho y a quién le hablas: de ahí salen la paleta, los materiales y el talento de todas las secciones.',
     },
     {
       label: 'Confianza',

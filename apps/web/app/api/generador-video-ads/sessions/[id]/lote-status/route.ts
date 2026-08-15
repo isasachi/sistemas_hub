@@ -46,7 +46,7 @@ export async function GET(
 ) {
   const { id } = await params
   const session = await getVideoSession(id)
-  if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!session) return NextResponse.json({ error: 'No se encontró la sesión' }, { status: 404 })
   if (!session.lotes?.length) return NextResponse.json({ lotes: [], done: false })
 
   const lotes: Lote[] = []

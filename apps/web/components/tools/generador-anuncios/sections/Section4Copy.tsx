@@ -60,6 +60,15 @@ export default function Section4Copy() {
 
   if (!copyVersions) return null
 
+  // La regla del prompt dice que si ningún comentario aporta palabras propias, B
+  // copia A — y entonces salían dos tarjetas idénticas, con B marcada
+  // "Recomendada" y el texto prometiendo "las palabras exactas de tu audiencia".
+  // ponytail: comparación literal; si difieren en un espacio, se tratan como
+  // distintas, que es el lado seguro (se muestra la promesa solo cuando B es
+  // realmente otra versión).
+  const iguales =
+    JSON.stringify(copyVersions.versionA) === JSON.stringify(copyVersions.versionB)
+
   async function handleConfirm() {
     if (!sessionId || !selected || isLoading) return
     setLoading(true)
@@ -84,10 +93,12 @@ export default function Section4Copy() {
   return (
     <div className="flex flex-col gap-4">
       <p className="text-[13px] text-[#cfcfcf]">
-        Versión B usa las palabras exactas de tu audiencia. Ambas mantienen la estructura del anuncio original.
+        {iguales
+          ? 'Las dos versiones salieron iguales: los comentarios que pegaste no aportaron frases propias que sirvieran para reescribir el copy. Elige cualquiera, o vuelve atrás y pega comentarios con más texto.'
+          : 'La versión B usa las palabras exactas de tu audiencia. Ambas mantienen la estructura del anuncio original.'}
       </p>
       <CopyCard version="A" label="Versión A" elements={copyVersions.versionA} selected={selected === 'A'} onPick={() => setSelected('A')} />
-      <CopyCard version="B" label="Versión B" recommended elements={copyVersions.versionB} selected={selected === 'B'} onPick={() => setSelected('B')} />
+      <CopyCard version="B" label="Versión B" recommended={!iguales} elements={copyVersions.versionB} selected={selected === 'B'} onPick={() => setSelected('B')} />
       {error && (
         <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-[12px] text-red-400">{error}</div>
       )}

@@ -63,9 +63,12 @@ function PageBtn({ label, active, disabled, title, onClick }: {
   );
 }
 
-// Los productos llegan verificados por las tres reglas del daemon: producto
-// físico vendible, agrupado por cantidad de anuncios, y con la mayoría de la
-// página del anunciante dedicada a ese mismo producto.
+// ⚠️ Los productos NO llegan verificados por las tres reglas. El serving
+// (`getApprovedByCategory`, @ph/shared) filtra producto físico y agrupa por
+// rango de anuncios, pero la regla de anunciante monoproducto solo PRIORIZA:
+// detrás de los verificados va relleno sin verificar. Tampoco hay validación de
+// competencia en Perú — el inventario incluye avisos peruanos. No prometas
+// ninguna de esas dos cosas en el texto de esta pantalla.
 
 function ProductCard({ p }: { p: RawProductEntry }) {
   // Sin nombre ni titular (los anuncios de catálogo llegan con la plantilla sin
@@ -244,13 +247,13 @@ export default function BuscadorProductosPage() {
           <section className="mb-10">
             <div className="flex items-baseline gap-2.5 mb-1">
               <h2 className="flex items-center gap-2 text-[15px] font-extrabold text-[#ededed]">
-                <Flame className="w-4 h-4" style={{ color: ACCENT }} /> Top picks
+                <Flame className="w-4 h-4" style={{ color: ACCENT }} /> Lo más pautado
               </h2>
               <span className="text-[12px] text-[#bebebe]">{topPicks.length} productos</span>
             </div>
             <p className="text-[12px] text-[#bebebe] mb-3">
               Los de más anuncios activos del rango más alto (100+), de todos los nichos.
-              <span className="text-[#6b6b6b]"> · pasa el cursor para detener la cinta</span>
+              <span className="text-[#6b6b6b]"> · pasa el cursor por encima para detener la cinta</span>
             </p>
             {/* La lista va DOS veces: la animación desplaza -50%, o sea justo una
                 copia, y el salto al reiniciar cae en un punto idéntico. */}

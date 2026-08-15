@@ -60,7 +60,7 @@ export default function Section1Product() {
           <FieldGroup type="input" id="ld-audience" label="Público objetivo" helper="(opcional)" value={audienceV} onChange={setAudienceV}
             placeholder="Ej: Mujeres 25-45 con piel sensible" />
           <FieldGroup type="textarea" id="ld-labels" label="Texto de las etiquetas del producto"
-            helper="(opcional — una línea por renglón; mejora la fidelidad del texto en el envase)"
+            helper="(opcional — una etiqueta por línea; mejora la fidelidad del texto en el envase)"
             value={labelsV} onChange={setLabelsV} rows={4}
             placeholder={'Ej:\nEÚNOIA\nNiacinamida · Pantenol · Colágeno\nACNÉ + HIDRATACIÓN\n30ml / 1.85 fl oz'} />
 
