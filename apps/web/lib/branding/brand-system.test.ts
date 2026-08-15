@@ -5,7 +5,8 @@ import { describe, it, expect, vi } from 'vitest'
 vi.mock('@/lib/gemini', () => ({ callStructured: vi.fn() }))
 vi.mock('@/lib/storage', () => ({ fetchAsBase64: vi.fn() }))
 
-import { BRAND_FONTS, BrandSystemSchema } from './brand-system'
+import { z } from 'zod'
+import { BRAND_FONTS, BrandSystemSchema, BrandSystemExtractSchema } from './brand-system'
 import { NICHE_TYPOGRAPHY } from '@/lib/landing/niches'
 
 const ok = {
@@ -80,5 +81,26 @@ describe('BrandSystemSchema — eje de estilo', () => {
 
   it('rechaza un estilo fuera del catálogo', () => {
     expect(BrandSystemSchema.safeParse({ ...ok, style: 'brutalista' }).success).toBe(false)
+  })
+})
+
+// El guard que decide si el eje de estilo llega a existir. `callStructured` arma el responseSchema
+// con `z.toJSONSchema`, y lo que no está en `required` Gemini lo omite en silencio → todo el eje
+// cae al default y el síntoma es el bug original, sin ningún error. Esto se verificó imprimiendo el
+// JSON Schema real antes de partir los dos schemas.
+describe('BrandSystemExtractSchema — el eje de estilo es OBLIGATORIO al extraer', () => {
+  it('emite `style` en el `required` del JSON Schema que ve el modelo', () => {
+    const js = z.toJSONSchema(BrandSystemExtractSchema) as { required?: string[] }
+    expect(js.required).toContain('style')
+  })
+
+  it('rechaza una extracción sin estilo (dispara el retry de callStructured)', () => {
+    expect(BrandSystemExtractSchema.safeParse(ok).success).toBe(false)
+    expect(BrandSystemExtractSchema.safeParse({ ...ok, style: 'tech_precision' }).success).toBe(true)
+  })
+
+  it('el schema de LECTURA sigue tolerándolo ausente (filas anteriores a 2026-08-15)', () => {
+    const js = z.toJSONSchema(BrandSystemSchema) as { required?: string[] }
+    expect(js.required).not.toContain('style')
   })
 })

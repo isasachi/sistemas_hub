@@ -73,6 +73,7 @@ describe('extractDna', () => {
       font_accent: 'Anton',
       halo: 'rim',
       particles: 'none',
+      style: 'bold_impact',
     } as unknown as LandingSessionResponse['brand_system']
 
     const extraction = {
@@ -87,6 +88,17 @@ describe('extractDna', () => {
       vi.mocked(callStructured).mockResolvedValueOnce(extraction)
       return extractDna(baseSession({ brand_system }), niche, 'female_18_30', ['hero'])
     }
+
+    // El eje de estilo solo tiene valor si LLEGA al ADN. Los tests de instructions.ts prueban el
+    // consumidor dado un estilo; esto prueba al productor — sin esta línea el campo se pierde en el
+    // ensamblado y el consumidor cae al default sin que nada avise.
+    it('el estilo de la marca llega al ADN; sin marca queda undefined (→ acabado histórico)', async () => {
+      expect((await dnaConMarca()).style).toBe('bold_impact')
+
+      vi.mocked(callStructured).mockResolvedValueOnce(extraction)
+      const suelto = await extractDna(baseSession(), niche, 'female_18_30', ['hero'])
+      expect(suelto.style).toBeUndefined()
+    })
 
     it('la paleta sale del mapeo por roles de la marca, no de la fórmula del hue', async () => {
       const dna = await dnaConMarca()
