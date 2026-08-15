@@ -52,8 +52,13 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     // Fail-soft a propósito: si esta segunda gen falla, la sesión se queda con la canónica y las
     // secciones de zona la usan como siempre — peor encuadre, pero landing completa. Tumbar acá
     // perdería también el retrato que YA se generó y se cobró arriba.
+    // `zoneExpected` distingue los dos ceros de la respuesta: "este producto no necesita placa de
+    // zona" (rostro/cabello) de "la necesitaba y no salió". Sin ese flag los dos se ven igual
+    // (`zoneUrl: null`), y el segundo es una REGRESIÓN SILENCIOSA: las secciones caen al retrato y
+    // vuelven a mostrar la cara, que es exactamente el bug que la placa existe para arreglar.
+    const zoneExpected = zoneNeedsOwnPlate(session.body_focus)
     let zoneUrl: string | null = null
-    if (zoneNeedsOwnPlate(session.body_focus)) {
+    if (zoneExpected) {
       try {
         const zoneB64 = await generateZonePlate(session.landing_dna.model_persona, session.body_focus!, { data: b64, mimeType: 'image/png' })
         if (zoneB64) {
@@ -68,7 +73,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       // La zona es rostro/cabello (o cambió a una que no la necesita): limpia una placa previa.
       await updateLandingSession(id, { talent_zone_url: null })
     }
-    return NextResponse.json({ talentUrl: url, zoneUrl })
+    return NextResponse.json({ talentUrl: url, zoneUrl, zoneExpected })
   } catch (err) {
     console.error('[landing-talent]', err)
     return NextResponse.json({ error: 'No se pudo generar el talento', retryable: true }, { status: 502 })

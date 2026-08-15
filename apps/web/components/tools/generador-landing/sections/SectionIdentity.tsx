@@ -34,6 +34,8 @@ export default function SectionIdentity() {
   const [selDemo, setSelDemo] = useState<DemographicId | null>(demographicId)
   const [selFocus, setSelFocus] = useState<BodyFocus | null>(bodyFocus)
   const [nicheOpen, setNicheOpen] = useState(false)
+  // La placa de zona se pidió y no salió → las secciones van a mostrar el rostro. Ver más abajo.
+  const [zoneMissing, setZoneMissing] = useState(false)
   // Aviso de cambio de nicho (spec Paso 3): nicho candidato mientras se confirma la advertencia.
   const [pendingNiche, setPendingNiche] = useState<NicheId | null>(null)
   // Mismo aviso para demografía: también invalida landing_dna (model_persona/poses derivan de ella).
@@ -138,9 +140,13 @@ export default function SectionIdentity() {
       // retrato (primera confirmación). Si nada cambió y ya hay retrato, se reusa tal cual.
       if (changed || !talentUrl) {
         const talentRes = await fetch(`/api/generador-landing/sessions/${sessionId}/talent`, { method: 'POST' })
-        const talentData = (await talentRes.json()) as { talentUrl?: string | null; error?: string }
+        const talentData = (await talentRes.json()) as { talentUrl?: string | null; zoneUrl?: string | null; zoneExpected?: boolean; error?: string }
         if (!talentRes.ok) throw new Error(talentData.error ?? 'No se pudo generar el talento')
         setTalentUrl(talentData.talentUrl ?? null)
+        // La placa de zona falla sola (los filtros de contenido rechazan encuadres de cuerpo sin
+        // rostro) y su fallo NO tumba la generación. Pero sin avisar, las secciones caen al retrato
+        // y el usuario ve caras donde pidió una zona, sin ninguna señal de por qué.
+        setZoneMissing(!!talentData.zoneExpected && !talentData.zoneUrl)
       }
 
       setEditing(false)
@@ -271,6 +277,12 @@ export default function SectionIdentity() {
             <button type="button" onClick={confirmDemoChange} className={btnGhost}>Sí, cambiar de demografía</button>
             <button type="button" onClick={cancelDemoChange} className={btnGhost}>Cancelar</button>
           </div>
+        </div>
+      )}
+
+      {zoneMissing && (
+        <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-[12px] text-amber-300">
+          No se pudo generar la foto de la zona ({BODY_FOCUS_LABELS[selFocus ?? 'rostro']}); las secciones van a mostrar el retrato en su lugar. Volvé a confirmar para reintentarlo.
         </div>
       )}
 

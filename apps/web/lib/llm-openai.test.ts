@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sizeFor, toChatContent, splitImageParts, stripNulls, toStrictSchema } from './llm-openai'
+import { sizeFor, toChatContent, splitImageParts, stripNulls, toStrictSchema, isPermanentOpenAiError } from './llm-openai'
 import { z } from 'zod'
 import type { Part } from '@google/genai'
 
@@ -83,5 +83,30 @@ describe('llm-openai (motor primario)', () => {
     expect(item.properties.cta.type).toEqual(['string', 'null'])
     // se conservan las restricciones soportadas
     expect(item.properties.headline.maxLength).toBe(60)
+  })
+})
+
+// ─── Fail-fast a Gemini (2026-08-15) ────────────────────────────────────────
+describe('isPermanentOpenAiError', () => {
+  // Un rechazo por contenido es tan determinista como un 401: el MISMO prompt con la MISMA imagen
+  // se rechaza siempre. Medido sobre la placa de zona `gluteos_piernas`: 4/4 rechazos, y 52s con
+  // 3 reintentos contra 22s con uno. Reintentarlo es tiempo tirado antes del fallback.
+  it('moderation_blocked es permanente — no se reintenta, se cae a Gemini de una', () => {
+    expect(isPermanentOpenAiError({ status: 400, code: 'moderation_blocked' })).toBe(true)
+  })
+
+  it('sigue tratando billing y auth como permanentes', () => {
+    expect(isPermanentOpenAiError({ code: 'insufficient_quota' })).toBe(true)
+    expect(isPermanentOpenAiError({ status: 401 })).toBe(true)
+    expect(isPermanentOpenAiError({ status: 403 })).toBe(true)
+  })
+
+  // Lo transitorio SÍ se reintenta: si esto devolviera true, un 500 puntual de OpenAI mandaría
+  // toda la generación a Gemini sin darle una segunda chance al primario.
+  it('lo transitorio NO es permanente', () => {
+    expect(isPermanentOpenAiError({ status: 500 })).toBe(false)
+    expect(isPermanentOpenAiError({ status: 429, code: 'rate_limit_exceeded' })).toBe(false)
+    expect(isPermanentOpenAiError(new Error('socket hang up'))).toBe(false)
+    expect(isPermanentOpenAiError(undefined)).toBe(false)
   })
 })
