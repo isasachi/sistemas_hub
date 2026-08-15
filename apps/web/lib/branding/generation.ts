@@ -15,6 +15,9 @@
  *   · Los colores van por NOMBRE, nunca por hex: el modelo elige mejores
  *     valores que los que uno le impone, y rotula la paleta él mismo.
  *   · No hay casilla de tipografía ni de estilo gráfico. El modelo decide.
+ *   · El mockup se pide como EL PRODUCTO, nunca como su empaque, y el orden de
+ *     las frases importa: la versión que abría con "PRIMARY CONTAINER" hizo que
+ *     un cinturón saliera convertido en un bote. Ver la nota del mockup abajo.
  *
  * Motor: ráster PNG con gpt-image-2.
  * ---------------------------------------------------------------------------
@@ -140,12 +143,35 @@ export function buildPiecePrompt(stage: Exclude<Stage, 'identidad'>, b: Brief): 
     ].join(' ')
   }
 
+  // ⚠️ Pedía "a product shot of its PACKAGING" y para todo lo que se vende en caja el modelo
+  // devolvía la caja de cartón: el sérum de Lumina (sesión f401c346) salió como estuche, sin
+  // frasco a la vista, aunque el board de identidad SÍ muestra el gotero al lado de la caja —
+  // el dato estaba, lo pedido era otra cosa. La regla es general y no enumera productos.
+  //
+  // ⚠️ EL ORDEN DE LAS FRASES DECIDE EL RESULTADO, no la presencia de la excepción. La primera
+  // versión del arreglo abría con "Output ONE product shot of the PRIMARY CONTAINER — the vessel
+  // the product is used from" y cerraba con "si el producto no tiene envase, mostrá el objeto
+  // desnudo". Con eso, el cinturón de Veltor (sesión 9f251df4) salió como UN BOTE con el logo:
+  // el modelo se ancló en el sustantivo que abría la frase y le inventó un envase. Invertir el
+  // orden —el PRODUCTO primero, el envase como el caso en que el producto no existe sin él—
+  // arregló el cinturón sin romper los demás. Si vas a tocar esto, mové el arreglo, no agregues
+  // otra excepción al final.
+  //
+  // Verificado sobre las cuatro sesiones reales que hay en la base: Lumina (sérum en estuche)
+  // → frasco gotero; Linfitly (gotero herbal) → frasco; Veltor (cinturón, sin envase) → el
+  // cinturón; Protón (proteína, el envase ES la unidad de venta) → el bote, igual que antes.
   return [
     same,
-    'Output ONE photorealistic product shot of its packaging, with the same printed artwork and the same copy.',
+    'Output ONE photorealistic product shot of the product ITSELF, as the buyer holds it after unboxing:',
+    'clean, out of any packaging, with the same artwork and the same copy.',
+    'If the product only exists inside a container (a liquid, a cream, a powder), that container IS the',
+    'product — show the one it is used from, the one carrying the printed artwork.',
+    'If the product is a solid object, show the bare object and never invent a container for it.',
+    'Never the outer retail packaging: no carton, box, sleeve, blister or wrapper, and never the product',
+    'still inside one. If it would normally ship in an outer package, render only what comes out of it.',
     'Premium, modern, minimalist, editorial product photography, clean layout, photorealistic.',
     'Single product, centred, studio lighting, soft realistic shadow, clean uncluttered background,',
-    'no people, no hands, no board layout, no swatches, no text other than what belongs on the packaging.',
+    'no people, no hands, no board layout, no swatches, no text other than what belongs on the container.',
   ].join(' ')
 }
 
@@ -154,8 +180,9 @@ export function buildPrompt(stage: Stage, b: Brief): string {
 }
 
 /**
- * gpt-image-2 solo tiene 3 tamaños. La identidad y la etiqueta 360 son
- * apaisadas (1536x1024), el logo cuadrado y el mockup vertical.
+ * La identidad y la etiqueta 360 son apaisadas, el logo cuadrado y el mockup
+ * vertical. (`sizeFor` deriva el tamaño del ratio; gpt-image-2 no está limitado
+ * a tres tamaños como decía esta nota — solo exige múltiplos de 16.)
  */
 export function aspectFor(stage: Stage): string {
   if (stage === 'logo') return '1:1'
