@@ -61,19 +61,19 @@ export async function POST(req: NextRequest) {
 
         if (body.sessionId) {
           const row = await getBrandingSession(body.sessionId)
-          if (!row) { send({ status: 'error', message: 'Esa sesión no existe' }); return controller.close() }
+          if (!row) { send({ status: 'error', message: 'Esa sesión no existe' }); return }
           brief = briefFromRow(row as unknown as Record<string, unknown>)
           sessionId = body.sessionId
         } else {
           const b = body.brief ?? {}
-          if (!isComplete(b)) { send({ status: 'error', message: 'El brief está incompleto' }); return controller.close() }
+          if (!isComplete(b)) { send({ status: 'error', message: 'El brief está incompleto' }); return }
           brief = b
 
           // Moderación ANTES de la primera generación: es gratis y evita pagar
           // imágenes que el motor va a rechazar igual.
           if (await isFlagged([b.brandName, b.tagline, b.productDescription, b.feel.join(' ')].filter(Boolean).join('\n'))) {
             send({ status: 'error', message: 'El texto no pasó la moderación. Prueba con otro nombre o descripción.' })
-            return controller.close()
+            return
           }
 
           sessionId = await createBrandingSession(userId)
@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
           } as never)
         }
 
-        if (!brief) { send({ status: 'error', message: 'La sesión no tiene un brief válido' }); return controller.close() }
+        if (!brief) { send({ status: 'error', message: 'La sesión no tiene un brief válido' }); return }
         send({ status: 'session', sessionId })
 
         const stages = body.only ? [body.only] : STAGE_SEQUENCE
@@ -173,6 +173,10 @@ export async function POST(req: NextRequest) {
       } catch (err) {
         send({ status: 'error', message: String(err), retryable: true })
       } finally {
+        // ÚNICO cierre del stream. Los caminos de error de arriba hacen `return` a
+        // secas: cerrar ahí además del finally es un doble cierre, y desde que la
+        // identidad se resuelve fuera del stream `start()` ya no cede antes de esos
+        // returns, así que el choque es SÍNCRONO y tumba la respuesta con un 500.
         controller.close()
       }
     },
