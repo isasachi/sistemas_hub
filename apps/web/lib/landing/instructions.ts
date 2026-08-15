@@ -1,5 +1,6 @@
-import type { SectionCopy, SectionType, LandingDna, PaletteTokens, Offer, TrustBlock, NicheId, PaymentMethod } from './types'
+import type { SectionCopy, SectionType, LandingDna, PaletteTokens, Offer, TrustBlock, NicheId, PaymentMethod, BodyFocus } from './types'
 import { NICHE_LABELS } from './niches'
+import { BODY_FOCUS_FRAMING } from './demographics'
 import { SECTION_DNA } from './section-dna'
 import { moneyRamp, type MoneyRamp } from './palette-derive'
 import { styleOf, DEFAULT_STYLE } from './style-dna'
@@ -123,6 +124,8 @@ function masterLayoutBlock(
   hasTalent: boolean,
   talentSubstitute: string | undefined,
   demographicLabel: string | undefined,
+  bodyFocus: BodyFocus | undefined,
+  zonePlate: boolean | undefined,
 ): string {
   const pose = dna.poses[section] ?? ''
   const talentText = NO_TALENT_SECTIONS.has(section)
@@ -130,7 +133,10 @@ function masterLayoutBlock(
       ? `Talento: esta sección NO muestra al protagonista de la campaña. Las únicas personas son los CLIENTES de las tarjetas — rostros DISTINTOS entre sí, gente común peruana${demographicLabel ? `, TODOS coherentes con la demografía objetivo (${demographicLabel}): mismo género y rango de edad, aunque el nombre del testimonio sugiera otra cosa` : ''}.`
       : 'Talento: esta sección NO lleva persona alguna. El carril lo ocupan el producto, sus props y la atmósfera.'
     : hasTalent
-    ? `Persona (misma en todas las secciones con protagonista): ${dna.model_persona}. Pose de ESTA sección (variable, no se repite): ${pose}.`
+    // Con placa de zona el ENCUADRE se nombra además de venir en la imagen: la imagen es la que
+    // manda, pero el texto evita que el modelo "complete" la cara que la placa deliberadamente
+    // no muestra — la plantilla adjunta sí muestra un retrato y se la sugiere.
+    ? `Persona (misma en todas las secciones con protagonista): ${dna.model_persona}.${zonePlate && bodyFocus ? ` ENCUADRE DE ESTA SECCIÓN: se muestra ${BODY_FOCUS_FRAMING[bodyFocus]} — la placa adjunta ya viene así; NO agregues la cara ni amplíes el encuadre para incluirla.` : ''} Pose de ESTA sección (variable, no se repite): ${pose}.`
     : `Sin talento humano: el carril lo ocupa el sustituto — "${talentSubstitute}" — sin renderizar ninguna persona/rostro/silueta.`
   // `undefined` = ADN legado (guardado antes de que existiera el campo; getLandingSession castea
   // sin `.parse()`, así que el `.default(true)` del schema nunca corre en la lectura). El default
@@ -178,7 +184,7 @@ const TEXT_RULES = [
 // la plantilla es ahora la FUENTE DE VERDAD de estructura (no un "apoyo mutable"): manda zonas,
 // anatomía de cards, encuadre y tratamiento. Lo que cambia respecto a ella lo dice el resto de la
 // instrucción (producto, cara del talento, copy, re-tinte de color, props/partículas del nicho).
-function templateNote(talentImageAttached: boolean, dark: boolean, dna: LandingDna): string {
+function templateNote(talentImageAttached: boolean, dark: boolean, dna: LandingDna, zoneFraming?: string): string {
   // Las 8 plantillas curadas están armadas con acabado de VIDRIO ESMERILADO. Un estilo distinto es
   // texto peleando contra una imagen ráster, y la difusión le hace caso a la imagen — la misma
   // pelea que ya se perdió con la tonalidad. Por eso el carve-out repite la forma que sí funcionó:
@@ -186,7 +192,11 @@ function templateNote(talentImageAttached: boolean, dark: boolean, dna: LandingD
   const st = styleOf(dna.style)
   const styled = (dna.style ?? DEFAULT_STYLE) !== DEFAULT_STYLE
   const persona = talentImageAttached
-    ? 'Penúltima = retrato del talento (misma persona: cara, pelo, ropa idénticos).'
+    ? zoneFraming
+      // La plantilla curada muestra un retrato; la placa adjunta muestra la zona. Sin decir cuál
+      // de las dos manda el encuadre, el modelo sigue a la plantilla y vuelve a poner una cara.
+      ? `Penúltima = placa del talento encuadrada en ${zoneFraming} (misma persona: mismo tono de piel, complexión y ropa). ⚠️ ESE ENCUADRE MANDA sobre el de la plantilla: la plantilla muestra un retrato, esta pieza NO — no devuelvas el rostro al cuadro para parecerte a ella.`
+      : 'Penúltima = retrato del talento (misma persona: cara, pelo, ropa idénticos).'
     : 'No hay imagen de talento adjunta; NO reintroduzcas ninguna persona que la instrucción no pida.'
   return [
     'REFERENCIAS ADJUNTAS (orden) —',
@@ -253,12 +263,19 @@ function packNote(units: number): string {
 // `nicheLabel` (de NICHE_LABELS, vía `nicheId`) ancla el dominio cuando se conoce la categoría —
 // sin él, el modelo igual debe inferir el par ANTES/DESPUÉS del copy/producto, solo que sin el
 // ancla explícita de categoría.
-function beforeAfterNote(hasTalent: boolean, nicheLabel?: string): string {
+function beforeAfterNote(hasTalent: boolean, nicheLabel?: string, bodyFocus?: BodyFocus): string {
+  // La ZONA manda sobre la categoría. Antes esta nota decía "el mismo ROSTRO ya resuelto" para
+  // cualquier producto: en una rodillera o una creatina de glúteos, los dos paneles salían siendo
+  // caras. El par ANTES/DESPUÉS solo prueba algo si muestra la parte del cuerpo que el producto
+  // cambia — y es la única sección donde ese encuadre es, además, el argumento de venta.
+  const zona = bodyFocus ? BODY_FOCUS_FRAMING[bodyFocus] : undefined
   return [
     (nicheLabel ? `Para un producto de categoría «${nicheLabel}», ` : '') +
       'ANTES/DESPUÉS ADAPTATIVO: los dos paneles muestran el MISMO sujeto en dos estados coherentes con el nicho y el copy —',
     hasTalent
-      ? 'el estado ANTES = el/la protagonista con el problema del nicho visible (piel: brotes; movilidad: rigidez; etc.); el estado DESPUÉS = el mismo rostro ya resuelto. Misma persona en ambos paneles.'
+      ? zona
+        ? `los DOS paneles encuadran ${zona}, en el MISMO ángulo y la misma distancia: el estado ANTES muestra esa zona con el problema visible y el DESPUÉS la misma zona ya resuelta. Misma persona, mismo encuadre en ambos paneles — no cambies de parte del cuerpo entre uno y otro, ni sustituyas la zona por un rostro.`
+        : 'el estado ANTES = el/la protagonista con el problema del nicho visible (piel: brotes; movilidad: rigidez; etc.); el estado DESPUÉS = el mismo rostro ya resuelto. Misma persona en ambos paneles.'
       : 'el estado ANTES = superficie/objeto/situación con el problema del nicho; el estado DESPUÉS = el mismo con el resultado logrado.',
     'Nunca inventes una condición de otro nicho ni actúes sufrimiento explícito.',
   ].join('\n')
@@ -360,8 +377,10 @@ export function buildDiffusionInstruction(args: {
   reserveLockup?: boolean
   nicheId?: NicheId             // session.niche_id — ancla antes-despues a la categoría del nicho
   demographicLabel?: string     // DEMOGRAPHIC_LABELS[demographic_id] — restringe caras de testimonios
+  bodyFocus?: BodyFocus         // session.body_focus — la zona sobre la que actúa el producto
+  zonePlate?: boolean           // true si la placa ADJUNTA es la de zona (todo menos el hero)
 }): string {
-  const { section, copy, dna, productLabels, offer, trust, packUnits, hasTalent, talentSubstitute, reserveLockup, nicheId, demographicLabel } = args
+  const { section, copy, dna, productLabels, offer, trust, packUnits, hasTalent, talentSubstitute, reserveLockup, nicheId, demographicLabel, bodyFocus, zonePlate } = args
 
   // El talento/protagonista se muestra solo si el nicho lo tiene Y la sección no está en
   // NO_TALENT_SECTIONS (faq/testimonios/garantia/cta-final). Determina si se adjunta el retrato
@@ -377,18 +396,18 @@ export function buildDiffusionInstruction(args: {
     'Diseña UNA sección de landing 9:16 full-bleed, calidad de anuncio comercial premium, mobile-first. La ÚLTIMA imagen adjunta es la PLANTILLA DE COMPOSICIÓN — reproduce EXACTAMENTE su composición y estructura; esta instrucción solo cambia producto, talento, copy, colores, acabado/material y props del nicho.',
     brandBlock(productLabels),
     designSystemBlock(dna, money),
-    masterLayoutBlock(dna, section, hasTalent, talentSubstitute, demographicLabel),
+    masterLayoutBlock(dna, section, hasTalent, talentSubstitute, demographicLabel, bodyFocus, zonePlate),
     compositionReinforcementBlock(section),
     '',
     'Copy a renderizar (y SOLO este copy):',
     copyBlock(copy),
     '',
     TEXT_RULES,
-    templateNote(talentImageAttached, dna.palette.polarity === 'dark', dna),
+    templateNote(talentImageAttached, dna.palette.polarity === 'dark', dna, zonePlate && bodyFocus ? BODY_FOCUS_FRAMING[bodyFocus] : undefined),
   ]
 
   const extra: string[] = []
-  if (section === 'antes-despues') extra.push(beforeAfterNote(hasTalent, nicheId ? NICHE_LABELS[nicheId] : undefined))
+  if (section === 'antes-despues') extra.push(beforeAfterNote(hasTalent, nicheId ? NICHE_LABELS[nicheId] : undefined, bodyFocus))
   if (section === 'oferta' && offer) extra.push(offerText(offer))
   // Precio + urgencia en hero/cta-final: la cifra EXACTA del tier destacado y el badge único con la
   // línea del copy (oferta ya trae ambos en offerText). Sin esto, hero/cta inventan precio y moneda.

@@ -38,11 +38,12 @@ describe('POST /api/generador-landing/sessions/[id]/classify', () => {
     vi.clearAllMocks()
   })
 
-  it('idempotente: si la sesión ya tiene niche_id y demographic_id, devuelve el cacheado sin llamar a classifyNiche ni gastar quota', async () => {
+  it('idempotente: si la sesión ya tiene nicho, demografía Y zona, devuelve el cacheado sin llamar a classifyNiche ni gastar quota', async () => {
     vi.mocked(getLandingSession).mockResolvedValue({
       id: 's1',
       niche_id: 'salud',
       demographic_id: 'female_30_45',
+      body_focus: 'rodilla',
     } as unknown as LandingSessionResponse)
 
     const res = await POST(req(), ctx())
@@ -52,6 +53,7 @@ describe('POST /api/generador-landing/sessions/[id]/classify', () => {
     expect(data).toEqual({
       niche_id: 'salud',
       demographic_id: 'female_30_45',
+      body_focus: 'rodilla',
       confidence: 1,
       reasoning: 'ya clasificado',
     })
@@ -70,6 +72,7 @@ describe('POST /api/generador-landing/sessions/[id]/classify', () => {
     vi.mocked(classifyNiche).mockResolvedValue({
       niche_id: 'generic',
       demographic_id: 'female_30_45',
+      body_focus: 'rostro',
       confidence: 0.9,
       reasoning: 'match por producto',
     })
@@ -81,11 +84,12 @@ describe('POST /api/generador-landing/sessions/[id]/classify', () => {
     expect(data).toEqual({
       niche_id: 'generic',
       demographic_id: 'female_30_45',
+      body_focus: 'rostro',
       confidence: 0.9,
       reasoning: 'match por producto',
     })
     expect(classifyNiche).toHaveBeenCalledTimes(1)
-    expect(updateLandingSession).toHaveBeenCalledWith('s1', { niche_id: 'generic', demographic_id: 'female_30_45' })
+    expect(updateLandingSession).toHaveBeenCalledWith('s1', { niche_id: 'generic', demographic_id: 'female_30_45', body_focus: 'rostro' })
     expect(recordGenQuota).toHaveBeenCalledTimes(1)
   })
 

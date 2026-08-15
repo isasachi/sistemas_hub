@@ -20,10 +20,15 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   const session = await getLandingSession(id)
   if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  if (session.niche_id && session.demographic_id) {
+  // `body_focus` entra en la condición: una sesión clasificada ANTES de que el campo existiera lo
+  // tiene en null, y salir por acá la dejaría sin zona para siempre — con el hero y las tres
+  // secciones de zona apuntando todas al rostro, que es justo el bug. Re-clasificar cuesta una
+  // llamada de flash y solo pasa una vez por sesión legada.
+  if (session.niche_id && session.demographic_id && session.body_focus) {
     return NextResponse.json({
       niche_id: session.niche_id,
       demographic_id: session.demographic_id,
+      body_focus: session.body_focus,
       confidence: 1,
       reasoning: 'ya clasificado',
     })
@@ -33,7 +38,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   if (blocked) return blocked
   const userId = await readUserId()
   const result = await classifyNiche(session)
-  await updateLandingSession(id, { niche_id: result.niche_id, demographic_id: result.demographic_id })
+  await updateLandingSession(id, { niche_id: result.niche_id, demographic_id: result.demographic_id, body_focus: result.body_focus })
   await recordGenQuota(id, 'landing-classify', userId)
   return NextResponse.json(result)
 }

@@ -1,5 +1,7 @@
+import type { Part } from '@google/genai'
 import { generateImage } from '@/lib/gemini'
-import type { DemographicId, PaletteTokens } from './types'
+import { BODY_FOCUS_FRAMING } from './demographics'
+import type { BodyFocus, DemographicId, PaletteTokens } from './types'
 
 // Fase 4 C4.1 → paso 0.b (spec 2026-07-23). Placa canónica del TALENTO: un retrato de
 // referencia generado UNA vez por sesión desde el `model_persona` del ADN (texto ya resuelto
@@ -31,5 +33,44 @@ export async function generateTalent(
 ): Promise<string | null> {
   if (!persona.trim()) return null
   const b64 = await generateImage([{ text: buildTalentPrompt(persona) }], 3, { aspectRatio: '3:4' })
+  return b64 || null
+}
+
+// ─── Placa de ZONA (2026-08-15) ─────────────────────────────────────────────
+// Segunda placa, encuadrada en la parte del cuerpo sobre la que actúa el producto y SIN rostro.
+// La usan las secciones con protagonista menos el hero (ver `talent_zone_url` en types.ts).
+//
+// POR QUÉ UNA SEGUNDA IMAGEN Y NO UNA INSTRUCCIÓN DE RECORTE: el encuadre es GEOMETRÍA, y contra
+// la plantilla curada —una imagen ráster que muestra un retrato— el texto pierde. Ya se midió con
+// la luz: el carve-out estaba escrito y no movió un píxel. Lo que sí gana es otra IMAGEN: la placa
+// adjunta es lo que la difusión copia, igual que hoy copia el envase canónico y la cara del talento.
+//
+// La placa canónica se adjunta como referencia para que sea la MISMA persona (tono de piel,
+// complexión, ropa), aunque la cara no salga en cuadro: sin eso el tren inferior podría ser de otro
+// cuerpo que el rostro del hero, y la landing dejaría de leerse como una sola persona.
+function buildZonePrompt(persona: string, focus: BodyFocus): string {
+  return [
+    `Generate a REFERENCE PLATE of ONE real Latin-American person framed on ${BODY_FOCUS_FRAMING[focus]}. The person is: ${persona}.`,
+    `The FIRST image attached is the same person's portrait: match her/his skin tone, body type, build and clothing EXACTLY. It is the SAME person — only the framing changes. Do NOT include the face in this plate even if the reference shows it.`,
+    `Plain, smooth, evenly-lit NEUTRAL background (soft light grey/beige, no scenery, no props, no furniture). Soft, directional studio lighting.`,
+    `REAL, non-idealized body: visible skin texture and natural proportions appropriate to the age — NOT airbrushed, NOT a fitness-model composite, NOT an "AI stock" look.`,
+    `This is a REFERENCE PLATE, not an ad: render ZERO text, letters, numbers, logos, watermarks, captions or graphics anywhere in the image. No product, no packaging.`,
+  ].join('\n')
+}
+
+// Genera la placa de zona (base64) o null si no aplica. `portraitB64` es la placa canónica ya
+// generada: viaja como imagen de referencia para conservar la identidad del cuerpo.
+export async function generateZonePlate(
+  persona: string,
+  focus: BodyFocus,
+  portrait: { data: string; mimeType: string },
+): Promise<string | null> {
+  if (!persona.trim()) return null
+  const parts: Part[] = [
+    { inlineData: { mimeType: portrait.mimeType, data: portrait.data } },
+    { text: buildZonePrompt(persona, focus) },
+  ]
+  // 3:4 como la canónica: es una placa de referencia, no una sección — el 9:16 lo pone el render.
+  const b64 = await generateImage(parts, 3, { aspectRatio: '3:4' })
   return b64 || null
 }

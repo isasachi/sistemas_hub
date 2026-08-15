@@ -1,4 +1,4 @@
-import type { DemographicId, NicheId, SectionType } from './types'
+import type { BodyFocus, DemographicId, NicheId, SectionType } from './types'
 
 // Nombre legible (UI) por demografía — paso 0.a Paso 2 del wizard (selector siempre editable).
 export const DEMOGRAPHIC_LABELS: Record<DemographicId, string> = {
@@ -90,6 +90,108 @@ export const DEMOGRAPHIC_POSES: Record<DemographicId, string[]> = {
   no_talent: [],
 }
 
+// ─── Banco de poses por ZONA (2026-08-15) ───────────────────────────────────
+// Los bancos de arriba son de ACTITUD y están todos encuadrados en el rostro: sirven para un
+// sérum, no para una rodillera ni para una creatina de glúteos. Estos son de ENCUADRE: dicen qué
+// parte del cuerpo ocupa el carril, y NUNCA muestran la cara — la cara vive en el hero, que sigue
+// tomando su pose del banco demográfico.
+//
+// Son agnósticos de demografía a propósito: quién es la persona lo fija `model_persona` (y la
+// placa de talento), así que duplicar cada banco por las 6 demografías daría 60 listas para
+// decir lo mismo. Por eso están redactados sin género ni edad.
+//
+// `rostro` y `cabello` NO tienen banco: para esas zonas el banco demográfico YA es el correcto, y
+// dejarlas vacías es lo que hace que todo lo que existe hoy salga idéntico.
+// La ÚLTIMA pose de cada banco es la reservada de `assignPoses` (producto junto a la zona).
+export const ZONE_POSES: Record<BodyFocus, string[]> = {
+  rostro: [],
+  cabello: [],
+  torso: [
+    'Torso de frente recortado del cuello a la cintura, hombros abiertos, sin rostro en cuadro',
+    'Torso en 3/4, una mano apoyada sobre el esternón, encuadre de hombros a cintura',
+    'Perfil del torso, espalda erguida, luz rasante marcando la línea del hombro',
+    'Torso de frente sosteniendo el envase a la altura del pecho, sin rostro en cuadro',
+  ],
+  abdomen: [
+    'Abdomen y cintura de frente, encuadre del pecho bajo a la cadera, manos relajadas a los costados',
+    'Abdomen en 3/4, una mano apoyada sobre el costado de la cintura',
+    'Perfil de la cintura, postura erguida, sin rostro en cuadro',
+    'Abdomen de frente con el envase sostenido a la altura de la cintura',
+  ],
+  gluteos_piernas: [
+    'Tren inferior de espaldas, de la cintura a media pantorrilla, postura de pie firme, sin rostro en cuadro',
+    'Tren inferior en 3/4 de espaldas, peso sobre una pierna, línea de glúteo y muslo definida',
+    'Piernas de perfil en posición de zancada corta, encuadre de cadera a tobillo',
+    'Tren inferior de espaldas con el envase sostenido a la altura de la cadera',
+  ],
+  rodilla: [
+    'Rodilla y pierna en primer plano, persona sentada al borde de una superficie, encuadre de muslo a pantorrilla',
+    'Rodilla de perfil en flexión suave, ambas manos apoyadas alrededor de la articulación',
+    'Rodilla de frente, pierna estirada, encuadre cerrado sin rostro en cuadro',
+    'Rodilla en primer plano con el envase apoyado al lado, sobre la misma superficie',
+  ],
+  articulacion: [
+    'Hombro y brazo en primer plano, una mano del lado contrario apoyada sobre la articulación',
+    'Codo en flexión suave, encuadre cerrado del brazo, sin rostro en cuadro',
+    'Muñeca y antebrazo en primer plano, giro suave de la mano',
+    'Articulación en primer plano con el envase apoyado al lado',
+  ],
+  manos: [
+    'Ambas manos en primer plano sobre una superficie clara, dedos relajados, sin rostro en cuadro',
+    'Una mano en 3/4 con los dedos ligeramente extendidos, luz suave lateral',
+    'Manos entrelazadas en primer plano, encuadre cerrado de muñecas a dedos',
+    'Manos sosteniendo el envase, encuadre cerrado sin rostro en cuadro',
+  ],
+  pies: [
+    'Ambos pies en primer plano sobre una superficie clara, encuadre de tobillo a dedos',
+    'Un pie en 3/4 apoyado, el otro ligeramente atrás, sin rostro en cuadro',
+    'Pies de perfil en paso corto, encuadre cerrado',
+    'Pies en primer plano con el envase apoyado al lado, sobre la misma superficie',
+  ],
+  cuerpo_completo: [
+    'Cuerpo entero de pie, postura relajada y abierta, encuadre de cabeza a pies a distancia media',
+    'Cuerpo entero en 3/4, peso sobre una pierna, brazos sueltos',
+    'Cuerpo entero de perfil en paso natural, encuadre completo',
+    'Cuerpo entero de pie sosteniendo el envase a la altura de la cintura',
+  ],
+}
+
+// Nombre legible (UI) — el selector de Identidad, junto a nicho y demografía.
+export const BODY_FOCUS_LABELS: Record<BodyFocus, string> = {
+  rostro: 'Rostro',
+  cabello: 'Cabello',
+  torso: 'Torso / busto',
+  abdomen: 'Abdomen / cintura',
+  gluteos_piernas: 'Glúteos y piernas',
+  rodilla: 'Rodilla',
+  articulacion: 'Articulación (hombro, codo, muñeca)',
+  manos: 'Manos y uñas',
+  pies: 'Pies',
+  cuerpo_completo: 'Cuerpo completo',
+}
+
+// Encuadre en lenguaje de prompt. Lo consumen la PLACA de zona (`talent.ts`) y la nota de
+// antes/después: los dos necesitan nombrar la misma zona con las mismas palabras, y si cada uno la
+// escribiera por su lado podrían pedir recortes distintos para la misma sesión.
+export const BODY_FOCUS_FRAMING: Record<BodyFocus, string> = {
+  rostro: 'el rostro, encuadre de retrato de la cabeza a los hombros',
+  cabello: 'el cabello, encuadre de la cabeza y los hombros mostrando el largo y la textura del pelo',
+  torso: 'el torso, encuadre del cuello a la cintura, SIN el rostro en cuadro',
+  abdomen: 'el abdomen y la cintura, encuadre del pecho bajo a la cadera, SIN el rostro en cuadro',
+  gluteos_piernas: 'el tren inferior — glúteos y piernas —, encuadre de la cintura a media pantorrilla, SIN el rostro en cuadro',
+  rodilla: 'la rodilla, encuadre cerrado del muslo a la pantorrilla, SIN el rostro en cuadro',
+  articulacion: 'la articulación (hombro, codo o muñeca), encuadre cerrado del miembro, SIN el rostro en cuadro',
+  manos: 'las manos, encuadre cerrado de muñecas a dedos, SIN el rostro en cuadro',
+  pies: 'los pies, encuadre cerrado de tobillos a dedos, SIN el rostro en cuadro',
+  cuerpo_completo: 'el cuerpo entero, encuadre de cabeza a pies a distancia media',
+}
+
+// `rostro`/`cabello` ya están servidos por el banco demográfico y por la placa canónica: no
+// necesitan banco de zona ni una segunda placa. Es lo que mantiene intacto todo lo que ya existe.
+export function zoneNeedsOwnPlate(focus: BodyFocus | null | undefined): boolean {
+  return !!focus && ZONE_POSES[focus].length > 0
+}
+
 // Plantilla base de persona por demografía (Anexo B, reglas transversales: rasgos coherentes
 // con {{locale}} — es-PE aquí — piel real con textura natural, sin idealizar). Se concreta con
 // más detalle de locale/rasgos en la extracción (`model_persona` se escribe una vez y se repite
@@ -133,19 +235,37 @@ export const NO_TALENT_SUBSTITUTE: Record<NicheId, string> = {
 // del pool restante en orden, ciclando si `order` tiene más secciones que poses disponibles.
 // Banco vacío (`no_talent`) → toda sección mapea a cadena vacía (el carril lo llena el
 // sustituto de Anexo B.7, resuelto por nicho fuera de esta función).
-export function assignPoses(order: SectionType[], demographic: DemographicId): Record<string, string> {
+// `focus` reparte entre DOS bancos (2026-08-15): el HERO conserva la pose demográfica —muestra la
+// cara, que es lo que construye confianza al abrir la landing— y el resto de las secciones con
+// protagonista toman la pose de la ZONA donde el producto actúa. Con `rostro`/`cabello` el banco de
+// zona está vacío y todo sale del demográfico: comportamiento histórico exacto.
+export function assignPoses(
+  order: SectionType[],
+  demographic: DemographicId,
+  focus?: BodyFocus | null,
+): Record<string, string> {
   const bank = DEMOGRAPHIC_POSES[demographic]
   const out: Record<string, string> = {}
   if (bank.length === 0) {
     for (const s of order) out[s] = ''
     return out
   }
+  const zone = focus ? ZONE_POSES[focus] : []
   const reserved = bank[bank.length - 1]
   const pool = bank.slice(0, -1)
+  const zonePool = zone.slice(0, -1)
+  // Dos cursores: cada banco recorre el suyo, así ninguna sección repite pose dentro de su pool
+  // (QA#6) aunque el reparto entre bancos sea desparejo.
   let i = 0
+  let z = 0
   for (const s of order) {
     if (s === 'cta-final') {
-      out[s] = reserved
+      out[s] = zonePool.length ? zone[zone.length - 1] : reserved
+      continue
+    }
+    if (zonePool.length && s !== 'hero') {
+      out[s] = zonePool[z % zonePool.length]
+      z++
       continue
     }
     out[s] = pool[i % pool.length]

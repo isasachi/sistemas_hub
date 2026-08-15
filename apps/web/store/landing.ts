@@ -1,7 +1,7 @@
 'use client'
 
 import { create } from 'zustand'
-import type { SectionType, SectionCopy, LandingSection, LandingSessionResponse, NicheId, DemographicId, LandingDna, TrustBlock, Offer } from '@/lib/landing/types'
+import type { SectionType, SectionCopy, LandingSection, LandingSessionResponse, NicheId, DemographicId, BodyFocus, LandingDna, TrustBlock, Offer } from '@/lib/landing/types'
 
 export const SESSION_KEY = 'landing_session_id'
 
@@ -24,6 +24,7 @@ interface LandingState {
   productPhotoUrls: string[]
   nicheId: NicheId | null
   demographicId: DemographicId | null
+  bodyFocus: BodyFocus | null
   landingDna: LandingDna | null
   talentUrl: string | null
   trustBlock: TrustBlock | null
@@ -40,6 +41,7 @@ interface LandingActions {
   setPhotos: (urls: string[]) => void
   setNicheId: (id: NicheId | null) => void
   setDemographicId: (id: DemographicId | null) => void
+  setBodyFocus: (focus: BodyFocus | null) => void
   setLandingDna: (dna: LandingDna | null) => void
   setTalentUrl: (url: string | null) => void
   confirmIdentity: () => void
@@ -69,6 +71,7 @@ const initialState: LandingState = {
   productPhotoUrls: [],
   nicheId: null,
   demographicId: null,
+  bodyFocus: null,
   landingDna: null,
   talentUrl: null,
   trustBlock: null,
@@ -91,6 +94,7 @@ export const useLandingStore = create<LandingState & LandingActions>((set) => ({
 
   setNicheId: (nicheId) => set({ nicheId }),
   setDemographicId: (demographicId) => set({ demographicId }),
+  setBodyFocus: (bodyFocus) => set({ bodyFocus }),
   setLandingDna: (landingDna) => set({ landingDna }),
 
   setTalentUrl: (talentUrl) => set({ talentUrl }),
@@ -132,6 +136,7 @@ export const useLandingStore = create<LandingState & LandingActions>((set) => ({
       productPhotoUrls: s.product_photo_urls ?? [],
       nicheId: s.niche_id ?? null,
       demographicId: s.demographic_id ?? null,
+      bodyFocus: s.body_focus ?? null,
       landingDna: s.landing_dna ?? null,
       talentUrl: s.talent_canonical_url ?? null,
       trustBlock: s.trust_block ?? null,

@@ -452,3 +452,44 @@ describe('estilo de marca (style-dna)', () => {
     }
   })
 })
+
+// ─── Zona del cuerpo en el prompt (2026-08-15) ──────────────────────────────
+// La placa adjunta es lo que decide el encuadre; estas líneas de texto existen para que el modelo
+// no "complete" la cara que la placa deliberadamente no muestra, y para que la plantilla —que SÍ
+// muestra un retrato— no se lo sugiera.
+describe('body_focus en la instrucción', () => {
+  const zona = (section: SectionType, extra = {}) =>
+    build(section, { bodyFocus: 'gluteos_piernas', zonePlate: true, ...extra })
+
+  it('con placa de zona, nombra el encuadre y prohíbe agregar el rostro', () => {
+    const out = zona('beneficios')
+    expect(out).toContain('el tren inferior')
+    expect(out).toContain('NO agregues la cara')
+  })
+
+  it('el carve-out de plantilla dice que el encuadre de la PLACA gana al de la plantilla', () => {
+    const out = zona('beneficios')
+    expect(out).toContain('ESE ENCUADRE MANDA')
+    // sin placa de zona (hero, o producto de rostro) el texto vuelve a ser el de siempre
+    expect(build('beneficios')).toContain('Penúltima = retrato del talento')
+    expect(build('beneficios')).not.toContain('ESE ENCUADRE MANDA')
+  })
+
+  it('antes-despues encuadra la MISMA zona en los dos paneles, no dos rostros', () => {
+    const out = zona('antes-despues')
+    expect(out).toContain('los DOS paneles encuadran el tren inferior')
+    expect(out).not.toContain('el mismo rostro ya resuelto')
+  })
+
+  it('sin zona, antes-despues conserva la nota histórica', () => {
+    const out = build('antes-despues')
+    expect(out).toContain('el mismo rostro ya resuelto')
+    expect(out).not.toContain('los DOS paneles encuadran')
+  })
+
+  it('una sesión sin zona sale IDÉNTICA a antes en todas las secciones', () => {
+    for (const s of ALL) {
+      expect(build(s, { bodyFocus: undefined, zonePlate: undefined })).toBe(build(s))
+    }
+  })
+})

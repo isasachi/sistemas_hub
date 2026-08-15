@@ -12,6 +12,7 @@ import {
   type LandingDna,
   type NicheId,
   type DemographicId,
+  type BodyFocus,
   type SectionType,
   type LandingSessionResponse,
 } from './types'
@@ -83,6 +84,8 @@ export async function extractDna(
   niche: NicheId,
   demographic: DemographicId,
   order: SectionType[],
+  // Zona del producto: reparte las poses entre el banco demográfico (hero) y el de zona (resto).
+  focus?: BodyFocus | null,
 ): Promise<LandingDna> {
   const fallback = NICHE_FALLBACK[niche]
   const brand = session.brand_system
@@ -127,7 +130,7 @@ export async function extractDna(
   // que leer, así que un producto suelto sale con el acabado histórico (`styleOf(undefined)`).
   const style = brand?.style
   const model_persona = demographic === 'no_talent' ? NO_TALENT_SUBSTITUTE[niche] : DEMOGRAPHIC_PERSONA[demographic]
-  const poses = assignPoses(order, demographic)
+  const poses = assignPoses(order, demographic, focus)
 
   const dna: LandingDna = {
     brand_base,

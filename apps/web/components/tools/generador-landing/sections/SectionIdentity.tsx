@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from 'react'
 import { useLandingStore } from '@/store/landing'
-import { NicheId, DemographicId, type LandingDna, type NicheClassification } from '@/lib/landing/types'
+import { NicheId, DemographicId, BodyFocus, type LandingDna, type NicheClassification } from '@/lib/landing/types'
 import { NICHE_LABELS, NICHE_DEFAULT_DEMOGRAPHIC } from '@/lib/landing/niches'
-import { DEMOGRAPHIC_LABELS } from '@/lib/landing/demographics'
+import { DEMOGRAPHIC_LABELS, BODY_FOCUS_LABELS } from '@/lib/landing/demographics'
 
 const btnPrimary =
   'rounded-xl jr-cta text-[13px] font-bold disabled:opacity-40 transition-all duration-200 cursor-pointer border-0 font-sans flex items-center justify-center gap-2 h-11 w-full'
@@ -20,8 +20,8 @@ const lbl = 'text-[11px] uppercase tracking-wide text-[#bebebe]'
 export default function SectionIdentity() {
   const {
     sessionId, step, sections, productName,
-    nicheId, demographicId, landingDna, talentUrl,
-    setNicheId, setDemographicId, setLandingDna, setTalentUrl, confirmIdentity,
+    nicheId, demographicId, bodyFocus, landingDna, talentUrl,
+    setNicheId, setDemographicId, setBodyFocus, setLandingDna, setTalentUrl, confirmIdentity,
   } = useLandingStore()
 
   // Resultado crudo de /classify — solo para mostrar confianza/razonamiento la primera vez.
@@ -32,6 +32,7 @@ export default function SectionIdentity() {
   // Selección editable (no confirmada hasta el botón "Confirmar identidad visual").
   const [selNiche, setSelNiche] = useState<NicheId | null>(nicheId)
   const [selDemo, setSelDemo] = useState<DemographicId | null>(demographicId)
+  const [selFocus, setSelFocus] = useState<BodyFocus | null>(bodyFocus)
   const [nicheOpen, setNicheOpen] = useState(false)
   // Aviso de cambio de nicho (spec Paso 3): nicho candidato mientras se confirma la advertencia.
   const [pendingNiche, setPendingNiche] = useState<NicheId | null>(null)
@@ -54,6 +55,7 @@ export default function SectionIdentity() {
         setClassification(data)
         setSelNiche(data.niche_id)
         setSelDemo(data.demographic_id)
+        setSelFocus(data.body_focus ?? null)
         setNicheOpen(data.confidence < 0.75)
       })
       .catch((e) => setClassifyError((e as Error).message))
@@ -104,21 +106,23 @@ export default function SectionIdentity() {
       const putRes = await fetch(`/api/generador-landing/sessions/${sessionId}/brand`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ niche_id: selNiche, demographic_id: selDemo }),
+        body: JSON.stringify({ niche_id: selNiche, demographic_id: selDemo, body_focus: selFocus }),
       })
       const putData = (await putRes.json()) as {
         landing_dna?: LandingDna | null
         nicheChanged?: boolean
         demographicChanged?: boolean
+        focusChanged?: boolean
         error?: string
       }
       if (!putRes.ok) throw new Error(putData.error ?? 'No se pudo guardar la identidad')
       setNicheId(selNiche)
       setDemographicId(selDemo)
+      setBodyFocus(selFocus)
       let dna = putData.landing_dna ?? null
       setLandingDna(dna)
 
-      const changed = !!putData.nicheChanged || !!putData.demographicChanged
+      const changed = !!putData.nicheChanged || !!putData.demographicChanged || !!putData.focusChanged
       // Limpia la cara vieja de inmediato para que la UI no la muestre mientras se regenera.
       if (changed) setTalentUrl(null)
 
@@ -241,6 +245,23 @@ export default function SectionIdentity() {
         >
           {DemographicId.options.map((d) => <option key={d} value={d}>{DEMOGRAPHIC_LABELS[d]}</option>)}
         </select>
+      </div>
+
+      {/* Zona del cuerpo — decide el encuadre del talento en las secciones que no son el hero.
+          Sin aviso de confirmación: cambiarla no cambia la PERSONA (que es lo caro de perder),
+          solo qué parte de ella se muestra, y el server ya invalida el ADN y la placa de zona. */}
+      <div className="flex flex-col gap-1.5">
+        <span className={lbl}>Zona que muestra el producto</span>
+        <select
+          value={selFocus ?? 'rostro'}
+          onChange={(e) => setSelFocus(BodyFocus.parse(e.target.value))}
+          className={field}
+        >
+          {BodyFocus.options.map((f) => <option key={f} value={f}>{BODY_FOCUS_LABELS[f]}</option>)}
+        </select>
+        <p className="text-[11px] text-[#94a3b8]">
+          El hero siempre muestra el rostro; el resto de las secciones encuadran esta zona.
+        </p>
       </div>
 
       {pendingDemo && (
