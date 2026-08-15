@@ -236,10 +236,29 @@ async function geminiGenerateImage(
 export async function generateImage(
   parts: Part[],
   maxRetries = 3,
-  opts?: { aspectRatio?: string; imageSize?: string }
+  opts?: { aspectRatio?: string; imageSize?: string; preferGemini?: boolean }
 ): Promise<string> {
   const allParts: Part[] = [...parts, { text: SPANISH_RULE }]
   if (geminiForced()) return geminiGenerateImage(allParts, maxRetries, opts)
+  // `preferGemini` invierte el orden de proveedores para UNA llamada, igual que en callStructured.
+  // Existe porque hay imágenes que gpt-image-2 rechaza SIEMPRE por política de contenido — la placa
+  // de talento encuadrada en el tren inferior es el caso medido (`moderation_blocked`,
+  // `safety_violations=[sexual]`, 4/4 corridas). Para esas, OpenAI de primario es 19s de peaje
+  // garantizado antes de un fallback que igual iba a ocurrir.
+  //
+  // El fallback a OpenAI se conserva (misma forma que callStructured) y NO es contradictorio: cubre
+  // que Gemini caiga por algo transitorio —un 500, un pico de cuota— donde OpenAI sí respondería.
+  // Solo en la doble falla se pagan esos 19s, y ahí es preferible el último intento a devolver ''.
+  if (opts?.preferGemini) {
+    try {
+      const out = await geminiGenerateImage(allParts, maxRetries, opts)
+      if (out) return out
+      console.warn('[llm] Gemini image vacía (preferGemini) → fallback a OpenAI')
+    } catch (e) {
+      console.warn('[llm] Gemini image falló (preferGemini) → fallback a OpenAI', e)
+    }
+    return withTimeout(openaiGenerateImage(allParts, maxRetries, opts), imageTimeoutMs())
+  }
   // OpenAI primario (gpt-image-2, edit multi-imagen si hay refs), acotado por timeout para caber en
   // el presupuesto de Vercel; vacío/timeout/error → Gemini. gpt-image-2 no acepta aspectRatio libre,
   // solo tamaños fijos (ver openaiGenerateImage/sizeFor); Gemini sí respeta opts.aspectRatio.

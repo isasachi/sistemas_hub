@@ -79,6 +79,13 @@ export async function generateZonePlate(
     { text: buildZonePrompt(persona, focus) },
   ]
   // 3:4 como la canónica: es una placa de referencia, no una sección — el 9:16 lo pone el render.
-  const b64 = await generateImage(parts, 3, { aspectRatio: '3:4' })
+  //
+  // ⚠️ `preferGemini` NO es una preferencia estética: gpt-image-2 RECHAZA esta imagen. Medido con
+  // el prompt y el retrato reales de una sesión de producción, 4/4 corridas → 400
+  // `moderation_blocked`, `safety_violations=[sexual]`, `moderation_stage: output`. Un encuadre de
+  // cuerpo sin rostro cae del lado prohibido de su filtro, y no hay forma de pedirlo que no lo haga.
+  // Con OpenAI de primario eran 19s de peaje garantizado antes de un fallback que igual ocurría.
+  // La placa canónica (retrato, con cara) NO tiene este problema y sigue por el camino normal.
+  const b64 = await generateImage(parts, 3, { aspectRatio: '3:4', preferGemini: true })
   return b64 || null
 }
