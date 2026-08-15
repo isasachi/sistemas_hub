@@ -153,9 +153,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
   if (!b64) return NextResponse.json({ error: 'No se pudo generar la sección', retryable: true }, { status: 502 })
 
-  // La imagen de difusión se sube tal cual. (El overlay del lockup de marca en cta-final se retiró:
-  // forzaba 9:16 sobre la imagen 2:3 de OpenAI → la recortaba, y era un adorno menor; la difusión
-  // ya renderiza la marca por el label del producto. reserveLockup/BrandLockup quedan sin uso.)
+  // La imagen de difusión se sube tal cual.
+  //
+  // ⚠️ El `aspectRatio: '9:16'` de arriba NO se cumplía: `sizeFor` mapeaba todo portrait a
+  // 1024x1536 (2:3) y las secciones salían así — medido sobre las sesiones de prod del 08, 12
+  // y 15 de agosto, todas 1024x1536, mientras la UI las mostraba en contenedores `aspect-[9/16]`.
+  // Se arregló en `sizeFor` (deriva el tamaño del ratio); acá no había nada que cambiar, esta
+  // ruta siempre pidió 9:16. Verificado por el mismo camino: 864x1536 (0.563).
+  //
+  // (El overlay del lockup de marca en cta-final se retiró porque forzaba 9:16 sobre la imagen
+  // 2:3 de OpenAI → la recortaba. Ese motivo ya no aplica: la imagen ES 9:16. No se reinstala
+  // igual — era un adorno menor y la difusión ya renderiza la marca por el label del producto.
+  // reserveLockup/BrandLockup siguen sin uso.)
   const imageUrl = await uploadToStorage(id, Buffer.from(b64, 'base64'), 'image/png', `section-${copy.type}`)
 
   // Upsert ATÓMICO de la sección: el `order` lo manda el cliente (índice en selected_sections);
