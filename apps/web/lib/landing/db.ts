@@ -55,6 +55,31 @@ export async function getLandingSession(id: string): Promise<LandingSessionRespo
   return data as LandingSessionResponse
 }
 
+// Claim ATÓMICO de la clasificación (2026-08-15). Espeja `claimFreshLotes` de video-ads.
+//
+// POR QUÉ: `classify/route.ts` decide si clasificar leyendo la sesión, y dos llamadas solapadas
+// leen las dos "sin clasificar" antes de que cualquiera escriba — el guard de idempotencia no las
+// ve. Medido con dos POST concurrentes: las dos llamaron a Gemini y devolvieron clasificaciones
+// DISTINTAS (`supplement_skin_female/rostro` y `joint_mobility/rodilla`). Con escritura ciega gana
+// la última, y el navegador pinta la respuesta de SU fetch — así que la pantalla puede mostrar un
+// nicho y la base tener otro, que es de donde después sale el ADN.
+//
+// El `.is('niche_id', null)` hace que gane el PRIMERO que escribe; el que pierde se entera (false)
+// y devuelve lo que quedó guardado, así base y UI dicen siempre lo mismo.
+export async function claimClassification(
+  id: string,
+  patch: Pick<LandingSessionResponse, 'niche_id' | 'demographic_id' | 'body_focus'>
+): Promise<boolean> {
+  const { data, error } = await getDb()
+    .from('landing_sessions')
+    .update(patch)
+    .eq('id', id)
+    .is('niche_id', null)
+    .select('id')
+  if (error) throw new Error(error.message)
+  return (data?.length ?? 0) > 0
+}
+
 export async function updateLandingSession(
   id: string,
   patch: Partial<Omit<LandingSessionResponse, 'id' | 'created_at'>>

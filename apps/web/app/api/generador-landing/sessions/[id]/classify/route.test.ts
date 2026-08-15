@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('@/lib/landing/db', () => ({
   getLandingSession: vi.fn(),
-  updateLandingSession: vi.fn(),
+  claimClassification: vi.fn().mockResolvedValue(true),
 }))
 
 vi.mock('@/lib/landing/classify', () => ({
@@ -20,7 +20,7 @@ vi.mock('@/lib/product-hunter/session', () => ({
 
 import { NextRequest } from 'next/server'
 import { POST } from './route'
-import { getLandingSession, updateLandingSession } from '@/lib/landing/db'
+import { getLandingSession, claimClassification } from '@/lib/landing/db'
 import { classifyNiche } from '@/lib/landing/classify'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import type { LandingSessionResponse } from '@/lib/landing/types'
@@ -58,7 +58,7 @@ describe('POST /api/generador-landing/sessions/[id]/classify', () => {
       reasoning: 'ya clasificado',
     })
     expect(classifyNiche).not.toHaveBeenCalled()
-    expect(updateLandingSession).not.toHaveBeenCalled()
+    expect(claimClassification).not.toHaveBeenCalled()
     expect(checkGenQuota).not.toHaveBeenCalled()
     expect(recordGenQuota).not.toHaveBeenCalled()
   })
@@ -89,7 +89,30 @@ describe('POST /api/generador-landing/sessions/[id]/classify', () => {
       reasoning: 'match por producto',
     })
     expect(classifyNiche).toHaveBeenCalledTimes(1)
-    expect(updateLandingSession).toHaveBeenCalledWith('s1', { niche_id: 'generic', demographic_id: 'female_30_45', body_focus: 'rostro' })
+    expect(claimClassification).toHaveBeenCalledWith('s1', { niche_id: 'generic', demographic_id: 'female_30_45', body_focus: 'rostro' })
+    expect(recordGenQuota).toHaveBeenCalledTimes(1)
+  })
+
+  // La carrera medida en vivo: dos POST concurrentes clasifican los dos y devuelven resultados
+  // DISTINTOS. Con escritura ciega ganaba el último y el navegador pintaba la respuesta de SU
+  // fetch → pantalla y base diciendo cosas distintas, y el ADN saliendo de la base.
+  it('si pierde el claim, devuelve lo GUARDADO y no su propio resultado', async () => {
+    vi.mocked(getLandingSession)
+      .mockResolvedValueOnce({ id: 's1', niche_id: null, demographic_id: null } as unknown as LandingSessionResponse)
+      // segunda lectura: la del ganador de la carrera
+      .mockResolvedValueOnce({ id: 's1', niche_id: 'joint_mobility', demographic_id: 'senior_55_plus', body_focus: 'rodilla' } as unknown as LandingSessionResponse)
+    vi.mocked(classifyNiche).mockResolvedValue({
+      niche_id: 'generic', demographic_id: 'female_30_45', body_focus: 'rostro',
+      confidence: 0.9, reasoning: 'match por producto',
+    })
+    vi.mocked(claimClassification).mockResolvedValue(false)
+
+    const data = await (await POST(req(), ctx())).json()
+
+    expect(data.niche_id).toBe('joint_mobility')
+    expect(data.body_focus).toBe('rodilla')
+    expect(data.reasoning).toBe('ya clasificado')
+    // la llamada YA se pagó: se registra igual, para que el gasto de la carrera sea visible
     expect(recordGenQuota).toHaveBeenCalledTimes(1)
   })
 

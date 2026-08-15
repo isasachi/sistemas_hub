@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getLandingSession, updateLandingSession } from '@/lib/landing/db'
+import { getLandingSession, claimClassification } from '@/lib/landing/db'
 import { classifyNiche } from '@/lib/landing/classify'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
@@ -38,7 +38,26 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   if (blocked) return blocked
   const userId = await readUserId()
   const result = await classifyNiche(session)
-  await updateLandingSession(id, { niche_id: result.niche_id, demographic_id: result.demographic_id, body_focus: result.body_focus })
+  // La quota se registra pase lo que pase con el claim: la llamada a Gemini YA ocurrió y ya costó.
+  // Registrar solo al ganar escondería el gasto real de la carrera, que es justo lo que hay que ver.
   await recordGenQuota(id, 'landing-classify', userId)
-  return NextResponse.json(result)
+
+  // Claim atómico: el guard de arriba lee la sesión, así que dos llamadas solapadas pasan las dos.
+  // Gana quien escribe primero; el que pierde NO pisa nada y devuelve lo guardado, para que la
+  // pantalla y la base no puedan quedar diciendo cosas distintas (ver claimClassification).
+  const gano = await claimClassification(id, {
+    niche_id: result.niche_id,
+    demographic_id: result.demographic_id,
+    body_focus: result.body_focus,
+  })
+  if (gano) return NextResponse.json(result)
+
+  const actual = await getLandingSession(id)
+  return NextResponse.json({
+    niche_id: actual?.niche_id ?? result.niche_id,
+    demographic_id: actual?.demographic_id ?? result.demographic_id,
+    body_focus: actual?.body_focus ?? result.body_focus,
+    confidence: 1,
+    reasoning: 'ya clasificado',
+  })
 }

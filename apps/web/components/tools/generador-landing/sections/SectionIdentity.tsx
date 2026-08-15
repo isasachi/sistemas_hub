@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLandingStore } from '@/store/landing'
 import { NicheId, DemographicId, BodyFocus, type LandingDna, type NicheClassification } from '@/lib/landing/types'
 import { NICHE_LABELS, NICHE_DEFAULT_DEMOGRAPHIC } from '@/lib/landing/niches'
@@ -46,8 +46,16 @@ export default function SectionIdentity() {
   const [error, setError] = useState<string | null>(null)
 
   // Paso 1: clasificación automática al entrar, solo si aún no hay nicho confirmado.
+  //
+  // ⚠️ El guard va en un REF, no en estado. Con estado no alcanza: StrictMode invoca el efecto dos
+  // veces con el MISMO snapshot, así que `classifying` sigue en false en la segunda pasada y las
+  // dos llamadas salen. Medido: dos POST concurrentes clasifican las dos (Gemini pagado dos veces)
+  // y devuelven resultados distintos. El servidor ya no deja que eso corrompa la sesión (claim
+  // atómico), pero la llamada de más igual se paga — esto la evita en el origen.
+  const yaClasifico = useRef(false)
   useEffect(() => {
-    if (step !== 2 || !sessionId || nicheId || classification || classifying) return
+    if (step !== 2 || !sessionId || nicheId || classification || classifying || yaClasifico.current) return
+    yaClasifico.current = true
     setClassifying(true)
     setClassifyError(null)
     fetch(`/api/generador-landing/sessions/${sessionId}/classify`, { method: 'POST' })
