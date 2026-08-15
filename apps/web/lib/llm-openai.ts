@@ -123,9 +123,23 @@ export function stripNulls(v: unknown): unknown {
 // Errores PERMANENTES de OpenAI (billing/cuota/auth): no tiene sentido reintentar N veces (gasta
 // tiempo y llamadas) — se lanzan al toque para que `gemini.ts` caiga a Gemini de inmediato. Un 429
 // `insufficient_quota` NO es rate-limit transitorio: es la cuenta sin crédito.
-function isPermanentOpenAiError(e: unknown): boolean {
+// Errores que NO tiene sentido reintentar: el mismo request va a fallar igual las 3 veces. Se
+// lanzan de una para que el caller caiga a Gemini sin quemar los reintentos.
+//
+// ⚠️ `moderation_blocked` es tan determinista como un 401, y se agregó DESPUÉS de medirlo: la placa
+// de talento encuadrada en el tren inferior (`body_focus = gluteos_piernas`) dispara el filtro de
+// contenido de gpt-image-2 (`safety_violations=[sexual]`, `moderation_stage: output`) en el 100% de
+// las corridas. Sin esta línea, `openaiGenerateImage` reintentaba tres veces un rechazo que no
+// puede cambiar: medido, 22s con maxRetries=1 contra 52s con maxRetries=3, todo tirado antes de
+// caer a Gemini — dentro de una ruta que además ya gastó 40-90s en la placa canónica.
+export function isPermanentOpenAiError(e: unknown): boolean {
   const err = e as { status?: number; code?: string } | undefined
-  return err?.code === 'insufficient_quota' || err?.status === 401 || err?.status === 403
+  return (
+    err?.code === 'insufficient_quota' ||
+    err?.code === 'moderation_blocked' ||
+    err?.status === 401 ||
+    err?.status === 403
+  )
 }
 
 export async function openaiCallStructured<T>(

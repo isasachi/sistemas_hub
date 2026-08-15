@@ -3,6 +3,7 @@ import type { Part } from '@google/genai'
 import { callStructured } from '@/lib/gemini'
 import { fetchAsBase64 } from '@/lib/storage'
 import { NICHE_TYPOGRAPHY } from '@/lib/landing/niches'
+import { BrandStyle } from '@/lib/landing/style-dna'
 
 // ADN de marca (decisión 2026-08-07, análisis en
 // docs/superpowers/specs/2026-08-07-landing-branding-como-sistema-analisis.md).
@@ -55,20 +56,43 @@ export const BrandPolarity = z.enum(['light', 'dark'])
 export const BrandHalo = z.enum(['radial_soft', 'rays', 'backlight', 'rim', 'none'])
 export const BrandParticles = z.enum(['none', 'low', 'medium', 'high'])
 
-export const BrandSystemSchema = z.object({
+const BrandSystemBase = z.object({
   palette: z.array(z.object({ hex: Hex, name: z.string().max(40), role: BrandRole })).min(2).max(6),
   polarity: BrandPolarity,
   font_family: FontName,
   font_accent: FontName.nullable(),
   halo: BrandHalo,
   particles: BrandParticles,
+  // Dirección de arte / lenguaje material (2026-08-15). Es lo que distingue una landing de otra:
+  // sin este campo la marca solo movía color y fuente, y el acabado (vidrio, glow, iconos 3D) era
+  // el mismo en todas. Ver style-dna.ts para el límite material-vs-geometría.
+  style: BrandStyle,
 })
-  // La landing pinta el fondo del degradado con el rol `background`; sin él no hay de dónde sacarlo.
-  // Se exige en el schema para que la falta dispare el retry de callStructured, no un default
-  // silencioso aguas abajo.
-  .refine((d) => d.palette.some((c) => c.role === 'background'), {
-    message: 'la paleta debe incluir un color con rol background',
-  })
+
+// La landing pinta el fondo del degradado con el rol `background`; sin él no hay de dónde sacarlo.
+// Se exige en el schema para que la falta dispare el retry de callStructured, no un default
+// silencioso aguas abajo.
+const hasBackground = (d: { palette: { role: string }[] }) => d.palette.some((c) => c.role === 'background')
+const BACKGROUND_MSG = { message: 'la paleta debe incluir un color con rol background' }
+
+// ⚠️ DOS schemas, y la diferencia es UN campo por una razón concreta.
+//
+// EXTRACCIÓN (`BrandSystemExtractSchema`): `style` OBLIGATORIO. `callStructured` arma el
+// responseSchema con `z.toJSONSchema`, y un `.optional()` NO entra en `required` — verificado:
+// Gemini podía devolver el ADN entero sin `style` y todo seguía "funcionando", cayendo al default
+// `glass_premium`. O sea: el eje de estilo quedaba en no-op y el síntoma era exactamente el bug que
+// vino a arreglar ("todas las landings se parecen"), sin un solo error en el camino. Es el mismo
+// género de trampa que `OfferCopySchema` documenta con `const` vs `enum`: Gemini omite en silencio
+// lo que el schema no le exige.
+//
+// LECTURA/ALMACENAMIENTO (`BrandSystemSchema`): `style` OPCIONAL. Las filas guardadas antes de
+// 2026-08-15 no lo traen; `getLandingSession` castea sin `.parse()`, así que un `.default()` de zod
+// tampoco correría al leer. Que el tipo diga `| undefined` obliga al sitio de uso a resolverlo
+// (`styleOf`) en vez de mentir sobre lo que hay en la base.
+export const BrandSystemExtractSchema = BrandSystemBase.refine(hasBackground, BACKGROUND_MSG)
+export const BrandSystemSchema = BrandSystemBase
+  .extend({ style: BrandStyle.optional() })
+  .refine(hasBackground, BACKGROUND_MSG)
 export type BrandSystem = z.infer<typeof BrandSystemSchema>
 
 const PROMPT = [
@@ -100,6 +124,21 @@ const PROMPT = [
   'particles: cuánta materia flotante admite la estética de la marca. `none` = una marca limpia y',
   'sobria, sin nada flotando; `low`/`medium`/`high` = de sutil a abundante. Es una decisión de',
   'ESTILO de la marca, no del producto.',
+  '',
+  'style: el LENGUAJE MATERIAL de la marca — de qué está hecho lo que toca. Decidilo por los',
+  'ACABADOS que ves en sus superficies (etiqueta, envase, lockup): si el material se lee brillante o',
+  'mate, texturado o liso, translúcido u opaco, si los bordes son finos o gruesos, si la luz es',
+  'suave o dura. NO lo decidas por el color ni por la categoría del producto. Elegí uno:',
+  '  `glass_premium` = brillo y translucidez, acabados pulidos, luz húmeda de estudio, look premium',
+  '  de laboratorio o cosmética moderna.',
+  '  `editorial_clean` = mate, sobrio y minimal, muchísimo aire, líneas finas, cero adorno; look de',
+  '  farmacia clínica o revista de diseño.',
+  '  `natural_organic` = mate y texturado, papel/cartón/fibra, tinta estampada, luz de día cálida;',
+  '  look artesanal, botánico o de origen natural.',
+  '  `bold_impact` = macizo y de alto contraste, bloques sólidos de color, tipografía dominante,',
+  '  luz dura; look deportivo, urbano o de oferta agresiva.',
+  '  `tech_precision` = mate frío y controlado, geometría precisa, filo de luz, retícula; look',
+  '  técnico, de ingeniería o de dispositivo.',
 ].join('\n')
 
 // Extrae el ADN de marca del board de identidad. Lanza si la visión falla tras los reintentos de
@@ -112,5 +151,5 @@ export async function extractBrandSystem(identityUrl: string): Promise<BrandSyst
   ]
   // preferGemini: es una tarea de visión sobre una imagen generada y Gemini flash la resuelve más
   // barato que OpenAI. El fallback del helper cubre la caída.
-  return callStructured('brand_system_extract', BrandSystemSchema, parts, 3, undefined, { preferGemini: true })
+  return callStructured('brand_system_extract', BrandSystemExtractSchema, parts, 3, undefined, { preferGemini: true })
 }

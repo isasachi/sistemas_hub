@@ -4,7 +4,7 @@ import { fetchAsBase64, uploadToStorage, storagePublicUrl } from '@/lib/storage'
 import { generateImage, editWithPrompt } from '@/lib/gemini'
 import { buildDiffusionInstruction, MULTI_UNIT_SECTIONS, NO_TALENT_SECTIONS } from '@/lib/landing/instructions'
 import { buildProductPack } from '@/lib/landing/product-box'
-import { NO_TALENT_SUBSTITUTE, DEMOGRAPHIC_LABELS } from '@/lib/landing/demographics'
+import { NO_TALENT_SUBSTITUTE, DEMOGRAPHIC_LABELS, zoneNeedsOwnPlate } from '@/lib/landing/demographics'
 import { generateOfferCopy } from '@/lib/landing/copy'
 import { SectionCopySchema, OfferCopySchema, SectionType, SECTION_REF, resolveOffer, type LandingSection, type SectionCopy } from '@/lib/landing/types'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
@@ -110,9 +110,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // faq/testimonios/garantia/cta-final NUNCA llevan al protagonista (NO_TALENT_SECTIONS,
     // ampliado en Task 3 con el motor plantilla-como-scaffold): no se adjunta su retrato.
     const showProtagonist = hasTalent && !NO_TALENT_SECTIONS.has(parsedType.data)
+    // QUÉ PLACA VA: el HERO lleva el retrato (la cara es lo que construye confianza al abrir la
+    // landing); el resto de las secciones con protagonista llevan la placa de ZONA, encuadrada en
+    // la parte del cuerpo sobre la que actúa el producto. Sin placa de zona (producto de rostro, o
+    // la segunda gen falló) se cae a la canónica, que es el comportamiento de siempre.
+    //
+    // ⚠️ La placa es el lever REAL del encuadre, no el texto: es la imagen que la difusión copia.
+    // Pedir el recorte por prompt contra una plantilla que muestra un retrato es la misma pelea que
+    // ya se perdió con la luz.
+    const usaZona = showProtagonist && parsedType.data !== 'hero' && !!session.talent_zone_url
     if (showProtagonist) {
-      const talent = await fetchAsBase64(session.talent_canonical_url!)
-      parts.push({ inlineData: { mimeType: talent.mimeType, data: talent.data } })
+      const plate = await fetchAsBase64(usaZona ? session.talent_zone_url! : session.talent_canonical_url!)
+      parts.push({ inlineData: { mimeType: plate.mimeType, data: plate.data } })
     }
 
     // Plantilla curada de composición (última, Task 4: prefijo landing-templates/, reemplaza
@@ -144,6 +153,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         hasTalent,
         talentSubstitute,
         nicheId: session.niche_id ?? undefined,
+        bodyFocus: session.body_focus ?? undefined,
+        zonePlate: usaZona,
         // no_talent no aplica a las caras de clientes de testimonios ("coherentes con la demografía
         // objetivo (Sin persona / solo producto)" no tiene sentido) → undefined = clientes genéricos.
         demographicLabel: session.demographic_id && session.demographic_id !== 'no_talent' ? DEMOGRAPHIC_LABELS[session.demographic_id] : undefined,

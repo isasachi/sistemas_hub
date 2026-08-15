@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { buildDiffusionInstruction, MULTI_UNIT_SECTIONS, PAYMENT_SECTIONS, NO_TALENT_SECTIONS } from './instructions'
 import type { SectionCopy, SectionType, LandingDna, Offer, TrustBlock } from './types'
 import { COPPER } from './palette-derive'
+import { BrandStyle, STYLE_DNA } from './style-dna'
 
 const ALL: SectionType[] = [
   'hero', 'oferta', 'antes-despues', 'beneficios',
@@ -133,7 +134,7 @@ describe('buildDiffusionInstruction — DNA-driven (spec 2026-07-23)', () => {
   it('nota de plantilla: presente, marcada fuente de verdad de estructura, subordinada al resto de la instrucción', () => {
     const out = build('hero')
     expect(out).toContain('PLANTILLA DE COMPOSICIÓN')
-    expect(out).toContain('fuente de verdad de estructura')
+    expect(out).toContain('fuente de verdad de ESTRUCTURA')
     expect(out).toContain('La ESTRUCTURA manda la plantilla')
   })
 
@@ -352,5 +353,143 @@ describe('buildDiffusionInstruction — DNA-driven (spec 2026-07-23)', () => {
     expect(out).toContain('Hogar / limpieza')
     const withoutNiche = build('antes-despues')
     expect(withoutNiche).toContain('estado ANTES') // sigue funcionando sin nicheId
+  })
+})
+
+// ─── Eje de ESTILO / dirección de arte (2026-08-15) ──────────────────────────
+// Lo que se prueba acá es la línea que separa MATERIAL de GEOMETRÍA: el estilo de la marca cambia
+// el acabado y NO puede tocar lo que la plantilla adjunta manda. Y que el prompt no se contradiga
+// solo — el modo de falla recurrente de este builder (partículas on/off duplicadas, banda de pago
+// vs banda de confianza, el metal declarado en dos lugares).
+describe('estilo de marca (style-dna)', () => {
+  const conEstilo = (style: BrandStyle) => build('beneficios', { dna: { ...DNA, style } })
+
+  it('cada estilo emite SU acabado de card y su icono, no los del default', () => {
+    for (const style of BrandStyle.options) {
+      const out = conEstilo(style)
+      expect(out).toContain(STYLE_DNA[style].surface)
+      expect(out).toContain(STYLE_DNA[style].icon)
+      expect(out).toContain(STYLE_DNA[style].background)
+      expect(out).toContain(STYLE_DNA[style].light)
+      expect(out).toContain(STYLE_DNA[style].type)
+      if (style !== 'glass_premium') {
+        // el acabado histórico tiene que DESAPARECER, no convivir: dos materiales en el mismo
+        // prompt es exactamente la contradicción que hace que la difusión elija el de la plantilla.
+        expect(out).not.toContain(STYLE_DNA.glass_premium.surface)
+        expect(out).not.toContain(STYLE_DNA.glass_premium.icon)
+      }
+    }
+  })
+
+  it('ADN legado (style undefined) sale IDÉNTICO a glass_premium — comportamiento histórico intacto', () => {
+    const legacy = build('beneficios', { dna: { ...DNA, style: undefined } })
+    expect(legacy).toBe(conEstilo('glass_premium'))
+  })
+
+  it('la GEOMETRÍA no la toca el estilo: el radio de card sigue siendo el de la plantilla', () => {
+    for (const style of BrandStyle.options) {
+      expect(conEstilo(style)).toContain('radio 28-32px')
+    }
+  })
+
+  it('un estilo no-default lleva el carve-out ⚠️ ACABADO ≠ ESTRUCTURA; glass_premium no', () => {
+    expect(conEstilo('natural_organic')).toContain('ACABADO ≠ ESTRUCTURA')
+    expect(conEstilo('natural_organic')).toContain(STYLE_DNA.natural_organic.name)
+    expect(conEstilo('glass_premium')).not.toContain('ACABADO ≠ ESTRUCTURA')
+  })
+
+  // ⚠️ Esto verifica que el carve-out de luz se EMITE, no que funcione — medido en píxeles NO
+  // funciona (4 renders de `bold_impact`, la escena sale suave igual; ver el comentario largo en
+  // `templateNote`). No lo leas como cobertura de que la luz cambia.
+  it('un estilo no-default lleva su propio carve-out de LUZ, con la luz y el fondo del estilo', () => {
+    for (const style of BrandStyle.options) {
+      const out = conEstilo(style)
+      if (style === 'glass_premium') {
+        expect(out).not.toContain('LUZ Y CONTRASTE ≠ ESTRUCTURA')
+        continue
+      }
+      expect(out).toContain('LUZ Y CONTRASTE ≠ ESTRUCTURA')
+      expect(out).toContain('luz difusa y suave de estudio')  // qué muestra la plantilla
+      expect(out).toContain(STYLE_DNA[style].light)           // qué pide esta pieza
+      expect(out).toContain(STYLE_DNA[style].background)
+    }
+  })
+
+  it('la plantilla ya NO manda el "tratamiento" (si lo mandara, el estilo sería letra muerta)', () => {
+    for (const style of BrandStyle.options) {
+      const out = conEstilo(style)
+      expect(out).toContain('fuente de verdad de ESTRUCTURA')
+      expect(out).not.toContain('encuadre y tratamiento')
+    }
+  })
+
+  // Contradicción REAL encontrada al imprimir el prompt armado (probe 2026-08-15): la línea de
+  // paleta afirmaba "superficie de card al 75-85% de opacidad" — glassmorphism hardcodeado — aunque
+  // el acabado de la marca pidiera un bloque sólido. Dos frases del mismo prompt diciendo cosas
+  // opuestas es lo que hace que la difusión se quede con el acabado de la plantilla.
+  it('la OPACIDAD de la card la fija el acabado, no la línea de paleta', () => {
+    const solido = conEstilo('bold_impact')
+    expect(solido).toContain('100% opaco')
+    expect(solido).not.toContain('al 75-85% de opacidad')
+    expect(conEstilo('glass_premium')).toContain('al 75-85% de opacidad')
+  })
+
+  // Misma clase de fallo por el otro lado: la línea de MODO OSCURO reimponía "el glassmorphism
+  // sigue siendo el mismo", que contradice a los cuatro acabados que lo prohíben.
+  it('el modo oscuro no reimpone glassmorphism sobre un acabado que lo prohíbe', () => {
+    const oscuro = build('beneficios', {
+      dna: { ...DNA, style: 'bold_impact', palette: { ...DNA.palette, polarity: 'dark' } },
+    })
+    expect(oscuro).toContain('MODO OSCURO')
+    expect(oscuro).not.toContain('glassmorphism')
+  })
+
+  it('el estilo NO toca la banda metálica de confianza (invariante declarada en dos lugares)', () => {
+    for (const style of BrandStyle.options) {
+      const out = build('beneficios', { dna: { ...DNA, style }, trust: TRUST })
+      expect(out).toContain('degradado metálico dorado')       // designSystemBlock
+      expect(out).toContain('NO se re-tinta')                   // trustText
+    }
+  })
+})
+
+// ─── Zona del cuerpo en el prompt (2026-08-15) ──────────────────────────────
+// La placa adjunta es lo que decide el encuadre; estas líneas de texto existen para que el modelo
+// no "complete" la cara que la placa deliberadamente no muestra, y para que la plantilla —que SÍ
+// muestra un retrato— no se lo sugiera.
+describe('body_focus en la instrucción', () => {
+  const zona = (section: SectionType, extra = {}) =>
+    build(section, { bodyFocus: 'gluteos_piernas', zonePlate: true, ...extra })
+
+  it('con placa de zona, nombra el encuadre y prohíbe agregar el rostro', () => {
+    const out = zona('beneficios')
+    expect(out).toContain('el tren inferior')
+    expect(out).toContain('NO agregues la cara')
+  })
+
+  it('el carve-out de plantilla dice que el encuadre de la PLACA gana al de la plantilla', () => {
+    const out = zona('beneficios')
+    expect(out).toContain('ESE ENCUADRE MANDA')
+    // sin placa de zona (hero, o producto de rostro) el texto vuelve a ser el de siempre
+    expect(build('beneficios')).toContain('Penúltima = retrato del talento')
+    expect(build('beneficios')).not.toContain('ESE ENCUADRE MANDA')
+  })
+
+  it('antes-despues encuadra la MISMA zona en los dos paneles, no dos rostros', () => {
+    const out = zona('antes-despues')
+    expect(out).toContain('los DOS paneles encuadran el tren inferior')
+    expect(out).not.toContain('el mismo rostro ya resuelto')
+  })
+
+  it('sin zona, antes-despues conserva la nota histórica', () => {
+    const out = build('antes-despues')
+    expect(out).toContain('el mismo rostro ya resuelto')
+    expect(out).not.toContain('los DOS paneles encuadran')
+  })
+
+  it('una sesión sin zona sale IDÉNTICA a antes en todas las secciones', () => {
+    for (const s of ALL) {
+      expect(build(s, { bodyFocus: undefined, zonePlate: undefined })).toBe(build(s))
+    }
   })
 })

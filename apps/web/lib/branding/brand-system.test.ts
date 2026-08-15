@@ -5,7 +5,8 @@ import { describe, it, expect, vi } from 'vitest'
 vi.mock('@/lib/gemini', () => ({ callStructured: vi.fn() }))
 vi.mock('@/lib/storage', () => ({ fetchAsBase64: vi.fn() }))
 
-import { BRAND_FONTS, BrandSystemSchema } from './brand-system'
+import { z } from 'zod'
+import { BRAND_FONTS, BrandSystemSchema, BrandSystemExtractSchema } from './brand-system'
 import { NICHE_TYPOGRAPHY } from '@/lib/landing/niches'
 
 const ok = {
@@ -60,5 +61,46 @@ describe('BrandSystemSchema', () => {
     const { polarity: _, ...sinPolaridad } = ok
     expect(BrandSystemSchema.safeParse(sinPolaridad).success).toBe(false)
     expect(BrandSystemSchema.safeParse({ ...ok, polarity: 'claro' }).success).toBe(false)
+  })
+})
+
+// El eje de ESTILO (2026-08-15) es opcional a propósito: las filas ya guardadas en producción no lo
+// traen y la landing lo defaultea en el sitio de uso (`styleOf`). Si dejara de ser opcional, cada
+// marca extraída antes de esta fecha fallaría el parse — y el tipo mentiría sobre lo que hay en la
+// base.
+describe('BrandSystemSchema — eje de estilo', () => {
+  it('acepta un estilo del catálogo', () => {
+    const parsed = BrandSystemSchema.safeParse({ ...ok, style: 'natural_organic' })
+    expect(parsed.success && parsed.data.style).toBe('natural_organic')
+  })
+
+  it('acepta su AUSENCIA (filas anteriores a 2026-08-15)', () => {
+    const parsed = BrandSystemSchema.safeParse(ok)
+    expect(parsed.success && parsed.data.style).toBeUndefined()
+  })
+
+  it('rechaza un estilo fuera del catálogo', () => {
+    expect(BrandSystemSchema.safeParse({ ...ok, style: 'brutalista' }).success).toBe(false)
+  })
+})
+
+// El guard que decide si el eje de estilo llega a existir. `callStructured` arma el responseSchema
+// con `z.toJSONSchema`, y lo que no está en `required` Gemini lo omite en silencio → todo el eje
+// cae al default y el síntoma es el bug original, sin ningún error. Esto se verificó imprimiendo el
+// JSON Schema real antes de partir los dos schemas.
+describe('BrandSystemExtractSchema — el eje de estilo es OBLIGATORIO al extraer', () => {
+  it('emite `style` en el `required` del JSON Schema que ve el modelo', () => {
+    const js = z.toJSONSchema(BrandSystemExtractSchema) as { required?: string[] }
+    expect(js.required).toContain('style')
+  })
+
+  it('rechaza una extracción sin estilo (dispara el retry de callStructured)', () => {
+    expect(BrandSystemExtractSchema.safeParse(ok).success).toBe(false)
+    expect(BrandSystemExtractSchema.safeParse({ ...ok, style: 'tech_precision' }).success).toBe(true)
+  })
+
+  it('el schema de LECTURA sigue tolerándolo ausente (filas anteriores a 2026-08-15)', () => {
+    const js = z.toJSONSchema(BrandSystemSchema) as { required?: string[] }
+    expect(js.required).not.toContain('style')
   })
 })

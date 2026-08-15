@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLandingSession, updateLandingSession } from '@/lib/landing/db'
-import { uploadToStorage } from '@/lib/storage'
-import { generateTalent } from '@/lib/landing/talent'
+import { uploadToStorage, fetchAsBase64 } from '@/lib/storage'
+import { generateTalent, generateZonePlate } from '@/lib/landing/talent'
+import { zoneNeedsOwnPlate } from '@/lib/landing/demographics'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 
@@ -30,8 +31,8 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   // no_talent: el carril lo llena el sustituto por nicho (model_persona), no un retrato humano.
   // Limpia la placa (si había una de una demografía anterior) y devuelve null.
   if (session.demographic_id === 'no_talent') {
-    await updateLandingSession(id, { talent_canonical_url: null })
-    return NextResponse.json({ talentUrl: null })
+    await updateLandingSession(id, { talent_canonical_url: null, talent_zone_url: null })
+    return NextResponse.json({ talentUrl: null, zoneUrl: null })
   }
 
   try {
@@ -44,7 +45,35 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     const url = await uploadToStorage(id, Buffer.from(b64, 'base64'), 'image/png', 'talent-canonical')
     await updateLandingSession(id, { talent_canonical_url: url })
     await recordGenQuota(id, kind, userId)
-    return NextResponse.json({ talentUrl: url })
+
+    // Placa de ZONA: solo cuando el producto NO actúa sobre el rostro. Se genera con la canónica
+    // recién hecha como referencia (misma persona, otro encuadre) y se persiste aparte.
+    //
+    // Fail-soft a propósito: si esta segunda gen falla, la sesión se queda con la canónica y las
+    // secciones de zona la usan como siempre — peor encuadre, pero landing completa. Tumbar acá
+    // perdería también el retrato que YA se generó y se cobró arriba.
+    // `zoneExpected` distingue los dos ceros de la respuesta: "este producto no necesita placa de
+    // zona" (rostro/cabello) de "la necesitaba y no salió". Sin ese flag los dos se ven igual
+    // (`zoneUrl: null`), y el segundo es una REGRESIÓN SILENCIOSA: las secciones caen al retrato y
+    // vuelven a mostrar la cara, que es exactamente el bug que la placa existe para arreglar.
+    const zoneExpected = zoneNeedsOwnPlate(session.body_focus)
+    let zoneUrl: string | null = null
+    if (zoneExpected) {
+      try {
+        const zoneB64 = await generateZonePlate(session.landing_dna.model_persona, session.body_focus!, { data: b64, mimeType: 'image/png' })
+        if (zoneB64) {
+          zoneUrl = await uploadToStorage(id, Buffer.from(zoneB64, 'base64'), 'image/png', 'talent-zone')
+          await updateLandingSession(id, { talent_zone_url: zoneUrl })
+          await recordGenQuota(id, kind, userId)
+        }
+      } catch (err) {
+        console.warn('[landing-talent] placa de zona no generada, se sigue con la canónica', err)
+      }
+    } else {
+      // La zona es rostro/cabello (o cambió a una que no la necesita): limpia una placa previa.
+      await updateLandingSession(id, { talent_zone_url: null })
+    }
+    return NextResponse.json({ talentUrl: url, zoneUrl, zoneExpected })
   } catch (err) {
     console.error('[landing-talent]', err)
     return NextResponse.json({ error: 'No se pudo generar el talento', retryable: true }, { status: 502 })

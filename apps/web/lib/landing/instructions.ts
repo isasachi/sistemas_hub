@@ -1,7 +1,9 @@
-import type { SectionCopy, SectionType, LandingDna, PaletteTokens, Offer, TrustBlock, NicheId, PaymentMethod } from './types'
+import type { SectionCopy, SectionType, LandingDna, PaletteTokens, Offer, TrustBlock, NicheId, PaymentMethod, BodyFocus } from './types'
 import { NICHE_LABELS } from './niches'
+import { BODY_FOCUS_FRAMING } from './demographics'
 import { SECTION_DNA } from './section-dna'
 import { moneyRamp, type MoneyRamp } from './palette-derive'
+import { styleOf, DEFAULT_STYLE } from './style-dna'
 
 // Builders puros ($0) para el prompt de imagen de cada sección de la landing (motor de DIFUSIÓN).
 // FUENTE DE VERDAD: docs/superpowers/specs/2026-07-23-generador-landing-spec.md §1-§5 + Anexos.
@@ -80,26 +82,34 @@ function brandBlock(productLabels: string | null): string {
 // prompt decía "Siempre presentes" (esta capa) Y "SIN partículas" (masterLayoutBlock) a la vez.
 function designSystemBlock(dna: LandingDna, money: MoneyRamp): string {
   const p: PaletteTokens = dna.palette
+  // Lenguaje MATERIAL heredado de la marca (2026-08-15). Antes de esto las cuatro líneas de abajo
+  // que lo describen eran texto fijo, idéntico en toda sesión: la marca solo movía los hex y todas
+  // las landings salían con el mismo vidrio esmerilado y los mismos iconos 3D glossy. Ojo con el
+  // límite: MATERIAL sí, GEOMETRÍA no — el radio, la anatomía de la card, la cinta, el chevron y
+  // las pills los sigue mandando la plantilla adjunta (ver style-dna.ts y `templateNote`).
+  const st = styleOf(dna.style)
   // `undefined` = paleta LEGADA (guardada antes de que existiera el campo; `getLandingSession`
   // castea sin `.parse()`, así que el `.default('light')` del schema no corre al leer). 'light' es
   // el comportamiento histórico → una sesión vieja sale idéntica a como salía.
   const dark = p.polarity === 'dark'
   return [
     'DESIGN_SYSTEM —',
-    `Fondo: degradado vertical/diagonal suave de ${p.bg_start} (superior) a ${p.bg_end} (inferior). Nunca fondo plano, ${dark ? 'nunca negro puro — el fondo es OSCURO y conserva el tinte de la marca, con profundidad atmosférica, no un negro plano de estudio' : 'nunca blanco puro'}.`,
+    `Fondo: degradado vertical/diagonal suave de ${p.bg_start} (superior) a ${p.bg_end} (inferior). Nunca fondo plano, ${dark ? 'nunca negro puro — el fondo es OSCURO y conserva el tinte de la marca, con profundidad atmosférica, no un negro plano de estudio' : 'nunca blanco puro'}. Textura del fondo (acabado de la marca): ${st.background}`,
+    `Luz de la escena (acabado de la marca): ${st.light}`,
     `Halo: ${dna.halo}, detrás del talento (o de su sustituto).${dna.halo === 'none' ? ' La separación figura-fondo se resuelve solo con el degradado y la profundidad.' : ''} Constante en todo el funnel.`,
     'Base (invariante): superficie reflectante en el borde inferior donde el envase proyecta reflejo vertical difuso.',
     'Profundidad (invariante): tres planos — fondo atmosférico, talento, producto + props en primer plano. Ligera profundidad de campo en el fondo.',
-    `Paleta aplicada por ROL: titular base en ${p.color_headline}; palabra destacada del titular en ${p.color_accent}; cuerpo de texto en ${p.color_body}; superficie de card en ${p.color_surface} al 75-85% de opacidad; iconos en ${p.color_icon.join(', ')} (uno por atributo).${dark ? ' Pieza de MODO OSCURO: el fondo, las superficies de card y las bandas son oscuros, y el texto encima va claro. El glassmorphism sigue siendo el mismo (borde blanco fino, glow), solo que sobre superficie oscura.' : ''}`,
+    `Paleta aplicada por ROL: titular base en ${p.color_headline}; palabra destacada del titular en ${p.color_accent}; cuerpo de texto en ${p.color_body}; superficie de card en ${p.color_surface} (la OPACIDAD y el acabado de esa superficie los define el estilo de marca, más abajo en «Componentes» — no la fijes acá); iconos en ${p.color_icon.join(', ')} (uno por atributo).${dark ? ' Pieza de MODO OSCURO: el fondo, las superficies de card y las bandas son oscuros, y el texto encima va claro. El acabado de las superficies es el mismo que define el estilo de marca abajo — solo cambia que se aplica sobre superficie oscura.' : ''}`,
     `CONSISTENCIA DE COLOR (crítico): estos hex son los MISMOS exactos en las 8 secciones del funnel — el acento ${p.color_accent}, el titular ${p.color_headline} y los íconos NO deben variar de tono, saturación ni brillo de una sección a otra. Son el color EXACTO de la marca, no una sugerencia aproximada.`,
     // El oro es invariante salvo que la marca sea dorada (decisión #6): ahí marca y oro se
     // confundirían y muere la regla de significado. El TRATAMIENTO metálico se mantiene siempre —
     // es sobre él, no sobre el tono, que cabalga la distinción.
     `Oferta/premium/sellos: degradado metálico ${money.name} ${money.dark}→${money.light}, y ÚNICAMENTE ahí — oferta, sellos de garantía, cinta "RECOMENDADO", la etiqueta "DESPUÉS" y la BANDA DE CONFIANZA del pie. En ningún otro lugar. Precio ancla tachado en #D93025. Regla de significado (invariante): el color de marca comunica confianza; el metal ${money.name} comunica dinero y urgencia — por eso NUNCA deben ser el mismo color.`,
-    `Tipografía: una sola familia, ${dna.font_family}. Toda la expresividad viene de peso + color + tamaño, jamás de una segunda fuente.${dna.font_accent ? ` ${dna.font_accent} se usa SOLO en el titular de hero/oferta, nunca en cuerpo ni cards.` : ''}`,
+    `Tipografía: una sola familia, ${dna.font_family}. Toda la expresividad viene de peso + color + tamaño, jamás de una segunda fuente.${dna.font_accent ? ` ${dna.font_accent} se usa SOLO en el titular de hero/oferta, nunca en cuerpo ni cards.` : ''} Expresión tipográfica de la marca: ${st.type}`,
     'Titular (invariante): 3-4 líneas, alineado a la izquierda, ragged right; conviven líneas neutras en el color de titular semibold y 1-2 palabras clave en el color de acento extrabold, a mayor tamaño. Subtítulo: 1 línea, ~40% del tamaño del titular, con una palabra en el color de acento.',
     'Card title (invariante): bold en el color de titular. Card body: regular en el color de cuerpo, máximo 2 líneas. Microcopy: uppercase bold + descriptor regular debajo, a menor tamaño.',
-    'Componentes (estructura invariante, solo cambia color): card con radio 28-32px, relleno translúcido, borde blanco 1px, sombra difusa teñida del acento, leve glow — glassmorphism siempre, card sólida nunca. Icono: círculo 3D glossy con degradado del color asignado, símbolo blanco en relieve, sombra interior, diámetro constante dentro de una misma sección. Pill: "ANTES" en gris oscuro, "DESPUÉS" en dorado. Chevron: doble »» en el color de acento dentro de un círculo blanco entre las dos cards de comparación. Cinta de oferta: banda dorada con corona, superpuesta al borde superior de la card central. Sello: medalla circular dorada con texto curvo. CTA: botón redondeado — acento sólido en opciones laterales, dorado en la recomendada.',
+    `Componentes — la GEOMETRÍA es invariante (radio, proporciones y anatomía los manda la plantilla); el MATERIAL lo manda la marca. Card: radio 28-32px, con este acabado — ${st.surface} Icono: ${st.icon} Diámetro constante dentro de una misma sección.`,
+    'Componentes de oferta (geometría invariante, solo cambia color): Pill: "ANTES" en gris oscuro, "DESPUÉS" en dorado. Chevron: doble »» en el color de acento dentro de un círculo blanco entre las dos cards de comparación. Cinta de oferta: banda dorada con corona, superpuesta al borde superior de la card central. Sello: medalla circular dorada con texto curvo. CTA: botón redondeado — acento sólido en opciones laterales, dorado en la recomendada.',
   ].join('\n')
 }
 
@@ -114,6 +124,8 @@ function masterLayoutBlock(
   hasTalent: boolean,
   talentSubstitute: string | undefined,
   demographicLabel: string | undefined,
+  bodyFocus: BodyFocus | undefined,
+  zonePlate: boolean | undefined,
 ): string {
   const pose = dna.poses[section] ?? ''
   const talentText = NO_TALENT_SECTIONS.has(section)
@@ -121,7 +133,10 @@ function masterLayoutBlock(
       ? `Talento: esta sección NO muestra al protagonista de la campaña. Las únicas personas son los CLIENTES de las tarjetas — rostros DISTINTOS entre sí, gente común peruana${demographicLabel ? `, TODOS coherentes con la demografía objetivo (${demographicLabel}): mismo género y rango de edad, aunque el nombre del testimonio sugiera otra cosa` : ''}.`
       : 'Talento: esta sección NO lleva persona alguna. El carril lo ocupan el producto, sus props y la atmósfera.'
     : hasTalent
-    ? `Persona (misma en todas las secciones con protagonista): ${dna.model_persona}. Pose de ESTA sección (variable, no se repite): ${pose}.`
+    // Con placa de zona el ENCUADRE se nombra además de venir en la imagen: la imagen es la que
+    // manda, pero el texto evita que el modelo "complete" la cara que la placa deliberadamente
+    // no muestra — la plantilla adjunta sí muestra un retrato y se la sugiere.
+    ? `Persona (misma en todas las secciones con protagonista): ${dna.model_persona}.${zonePlate && bodyFocus ? ` ENCUADRE DE ESTA SECCIÓN: se muestra ${BODY_FOCUS_FRAMING[bodyFocus]} — la placa adjunta ya viene así; NO agregues la cara ni amplíes el encuadre para incluirla.` : ''} Pose de ESTA sección (variable, no se repite): ${pose}.`
     : `Sin talento humano: el carril lo ocupa el sustituto — "${talentSubstitute}" — sin renderizar ninguna persona/rostro/silueta.`
   // `undefined` = ADN legado (guardado antes de que existiera el campo; getLandingSession castea
   // sin `.parse()`, así que el `.default(true)` del schema nunca corre en la lectura). El default
@@ -169,15 +184,49 @@ const TEXT_RULES = [
 // la plantilla es ahora la FUENTE DE VERDAD de estructura (no un "apoyo mutable"): manda zonas,
 // anatomía de cards, encuadre y tratamiento. Lo que cambia respecto a ella lo dice el resto de la
 // instrucción (producto, cara del talento, copy, re-tinte de color, props/partículas del nicho).
-function templateNote(talentImageAttached: boolean, dark: boolean): string {
+function templateNote(talentImageAttached: boolean, dark: boolean, dna: LandingDna, zoneFraming?: string): string {
+  // Las 8 plantillas curadas están armadas con acabado de VIDRIO ESMERILADO. Un estilo distinto es
+  // texto peleando contra una imagen ráster, y la difusión le hace caso a la imagen — la misma
+  // pelea que ya se perdió con la tonalidad. Por eso el carve-out repite la forma que sí funcionó:
+  // nombra qué muestra la plantilla, qué manda el DESIGN_SYSTEM, y prohíbe el retroceso explícito.
+  const st = styleOf(dna.style)
+  const styled = (dna.style ?? DEFAULT_STYLE) !== DEFAULT_STYLE
   const persona = talentImageAttached
-    ? 'Penúltima = retrato del talento (misma persona: cara, pelo, ropa idénticos).'
+    ? zoneFraming
+      // La plantilla curada muestra un retrato; la placa adjunta muestra la zona. Sin decir cuál
+      // de las dos manda el encuadre, el modelo sigue a la plantilla y vuelve a poner una cara.
+      ? `Penúltima = placa del talento encuadrada en ${zoneFraming} (misma persona: mismo tono de piel, complexión y ropa). ⚠️ ESE ENCUADRE MANDA sobre el de la plantilla: la plantilla muestra un retrato, esta pieza NO — no devuelvas el rostro al cuadro para parecerte a ella.`
+      : 'Penúltima = retrato del talento (misma persona: cara, pelo, ropa idénticos).'
     : 'No hay imagen de talento adjunta; NO reintroduzcas ninguna persona que la instrucción no pida.'
   return [
     'REFERENCIAS ADJUNTAS (orden) —',
     'Imagen 1 = envase canónico (fidelidad EXACTA de forma y labels). Siguientes = fotos reales del producto.',
     persona,
-    'ÚLTIMA = PLANTILLA DE COMPOSICIÓN (fuente de verdad de estructura): reproduce EXACTAMENTE su composición, distribución de zonas, anatomía de tarjetas, encuadre y tratamiento. La ESTRUCTURA manda la plantilla. Cambia SOLO lo que esta instrucción indica: producto, cara del talento, copy, re-tinte de color, props/partículas del nicho. NO copies de la plantilla su producto, marca, textos, ni props/persona de otro nicho.',
+    'ÚLTIMA = PLANTILLA DE COMPOSICIÓN (fuente de verdad de ESTRUCTURA): reproduce EXACTAMENTE su composición, distribución de zonas, geometría y anatomía de tarjetas (radio de esquina, proporciones, disposición), encuadre y jerarquía. La ESTRUCTURA manda la plantilla. Cambia SOLO lo que esta instrucción indica: producto, cara del talento, copy, color, acabado/material de las superficies, luz y props/partículas del nicho. NO copies de la plantilla su producto, marca, textos, ni props/persona de otro nicho.',
+    ...(styled
+      ? [
+          `⚠️ ACABADO ≠ ESTRUCTURA: la plantilla adjunta está armada con acabado de VIDRIO ESMERILADO (cards translúcidas con glow y borde blanco, iconos esféricos 3D glossy), pero esta pieza es de acabado «${st.name}». De la plantilla tomá SOLO la estructura y la geometría (zonas, encuadre, radio de esquina, proporciones, anatomía de las tarjetas); el MATERIAL y el acabado los manda el DESIGN_SYSTEM de arriba. NO devuelvas las cards al vidrio esmerilado ni los iconos a esferas glossy para parecerte a la plantilla — es criterio de fallo.`,
+          // ⚠️ CARVE-OUT DE LUZ — ESCRITO, PROBADO EN PÍXELES, Y **NO FUNCIONA**. No lo cites como
+          // mecanismo que anda. La medición (sesión bbbdb4c2, sección beneficios, `bold_impact`):
+          // 4 renders — 2 con este carve-out y 2 más cambiándole el halo a `backlight` y a `none` —
+          // y en los 4 la escena salió igual de clara y difusa que la plantilla: sin viñeta, sin
+          // sombras duras, sin contraste. El halo NO era el bloqueo.
+          //
+          // Por qué la luz se resiste donde el MATERIAL sí cedió: el material solo lo muestra la
+          // plantilla, y contra ella el carve-out gana. La luz, en cambio, la llevan también el
+          // ENVASE CANÓNICO y el RETRATO DEL TALENTO — dos assets que el mismo prompt manda
+          // reproducir con fidelidad exacta ("mismo objeto de la Imagen 1", "misma persona: cara,
+          // pelo, ropa idénticos"). Los dos están fotografiados con luz suave sobre fondo pálido, y
+          // el modelo conserva su iluminación porque se le ordenó conservarlos. Un carve-out contra
+          // la plantilla no toca esa fuente. Mover la luz de verdad pide re-iluminar esos assets
+          // por estilo, que es otro trabajo y otro costo.
+          //
+          // Se conserva —en vez de borrarlo— porque el texto es correcto y barato, y la medición es
+          // sobre UNA sesión cuyos assets son suaves; una con talento de luz dura podría responder.
+          // Pero hoy es intención declarada, no efecto verificado.
+          `⚠️ LUZ Y CONTRASTE ≠ ESTRUCTURA: la plantilla adjunta está iluminada con luz difusa y suave de estudio, fondo parejo y sombras apenas visibles. Esta pieza NO usa esa luz — usa esta: ${st.light} Y este fondo: ${st.background} Eso cambia respecto de la plantilla la DUREZA de las sombras, el CONTRASTE general y la presencia o ausencia de viñeta. De la plantilla tomá el encuadre y dónde va cada elemento; su ILUMINACIÓN no se copia. Igualar la luz suave y pareja de la plantilla es criterio de fallo.`,
+        ]
+      : []),
     // Las 8 plantillas curadas están armadas sobre fondo CLARO. Sin esta línea, una pieza de modo
     // oscuro sale clara igual: la difusión sigue la tonalidad de la referencia por encima de los
     // hex de la instrucción. Separa explícitamente ESTRUCTURA (de la plantilla) de TONALIDAD (del
@@ -214,12 +263,19 @@ function packNote(units: number): string {
 // `nicheLabel` (de NICHE_LABELS, vía `nicheId`) ancla el dominio cuando se conoce la categoría —
 // sin él, el modelo igual debe inferir el par ANTES/DESPUÉS del copy/producto, solo que sin el
 // ancla explícita de categoría.
-function beforeAfterNote(hasTalent: boolean, nicheLabel?: string): string {
+function beforeAfterNote(hasTalent: boolean, nicheLabel?: string, bodyFocus?: BodyFocus): string {
+  // La ZONA manda sobre la categoría. Antes esta nota decía "el mismo ROSTRO ya resuelto" para
+  // cualquier producto: en una rodillera o una creatina de glúteos, los dos paneles salían siendo
+  // caras. El par ANTES/DESPUÉS solo prueba algo si muestra la parte del cuerpo que el producto
+  // cambia — y es la única sección donde ese encuadre es, además, el argumento de venta.
+  const zona = bodyFocus ? BODY_FOCUS_FRAMING[bodyFocus] : undefined
   return [
     (nicheLabel ? `Para un producto de categoría «${nicheLabel}», ` : '') +
       'ANTES/DESPUÉS ADAPTATIVO: los dos paneles muestran el MISMO sujeto en dos estados coherentes con el nicho y el copy —',
     hasTalent
-      ? 'el estado ANTES = el/la protagonista con el problema del nicho visible (piel: brotes; movilidad: rigidez; etc.); el estado DESPUÉS = el mismo rostro ya resuelto. Misma persona en ambos paneles.'
+      ? zona
+        ? `los DOS paneles encuadran ${zona}, en el MISMO ángulo y la misma distancia: el estado ANTES muestra esa zona con el problema visible y el DESPUÉS la misma zona ya resuelta. Misma persona, mismo encuadre en ambos paneles — no cambies de parte del cuerpo entre uno y otro, ni sustituyas la zona por un rostro.`
+        : 'el estado ANTES = el/la protagonista con el problema del nicho visible (piel: brotes; movilidad: rigidez; etc.); el estado DESPUÉS = el mismo rostro ya resuelto. Misma persona en ambos paneles.'
       : 'el estado ANTES = superficie/objeto/situación con el problema del nicho; el estado DESPUÉS = el mismo con el resultado logrado.',
     'Nunca inventes una condición de otro nicho ni actúes sufrimiento explícito.',
   ].join('\n')
@@ -321,8 +377,10 @@ export function buildDiffusionInstruction(args: {
   reserveLockup?: boolean
   nicheId?: NicheId             // session.niche_id — ancla antes-despues a la categoría del nicho
   demographicLabel?: string     // DEMOGRAPHIC_LABELS[demographic_id] — restringe caras de testimonios
+  bodyFocus?: BodyFocus         // session.body_focus — la zona sobre la que actúa el producto
+  zonePlate?: boolean           // true si la placa ADJUNTA es la de zona (todo menos el hero)
 }): string {
-  const { section, copy, dna, productLabels, offer, trust, packUnits, hasTalent, talentSubstitute, reserveLockup, nicheId, demographicLabel } = args
+  const { section, copy, dna, productLabels, offer, trust, packUnits, hasTalent, talentSubstitute, reserveLockup, nicheId, demographicLabel, bodyFocus, zonePlate } = args
 
   // El talento/protagonista se muestra solo si el nicho lo tiene Y la sección no está en
   // NO_TALENT_SECTIONS (faq/testimonios/garantia/cta-final). Determina si se adjunta el retrato
@@ -335,21 +393,21 @@ export function buildDiffusionInstruction(args: {
   const money = moneyRamp(dna.palette)
 
   const base = [
-    'Diseña UNA sección de landing 9:16 full-bleed, calidad de anuncio comercial premium, mobile-first. La ÚLTIMA imagen adjunta es la PLANTILLA DE COMPOSICIÓN — reproduce EXACTAMENTE su composición y estructura; esta instrucción solo cambia producto, talento, copy, colores y props del nicho.',
+    'Diseña UNA sección de landing 9:16 full-bleed, calidad de anuncio comercial premium, mobile-first. La ÚLTIMA imagen adjunta es la PLANTILLA DE COMPOSICIÓN — reproduce EXACTAMENTE su composición y estructura; esta instrucción solo cambia producto, talento, copy, colores, acabado/material y props del nicho.',
     brandBlock(productLabels),
     designSystemBlock(dna, money),
-    masterLayoutBlock(dna, section, hasTalent, talentSubstitute, demographicLabel),
+    masterLayoutBlock(dna, section, hasTalent, talentSubstitute, demographicLabel, bodyFocus, zonePlate),
     compositionReinforcementBlock(section),
     '',
     'Copy a renderizar (y SOLO este copy):',
     copyBlock(copy),
     '',
     TEXT_RULES,
-    templateNote(talentImageAttached, dna.palette.polarity === 'dark'),
+    templateNote(talentImageAttached, dna.palette.polarity === 'dark', dna, zonePlate && bodyFocus ? BODY_FOCUS_FRAMING[bodyFocus] : undefined),
   ]
 
   const extra: string[] = []
-  if (section === 'antes-despues') extra.push(beforeAfterNote(hasTalent, nicheId ? NICHE_LABELS[nicheId] : undefined))
+  if (section === 'antes-despues') extra.push(beforeAfterNote(hasTalent, nicheId ? NICHE_LABELS[nicheId] : undefined, bodyFocus))
   if (section === 'oferta' && offer) extra.push(offerText(offer))
   // Precio + urgencia en hero/cta-final: la cifra EXACTA del tier destacado y el badge único con la
   // línea del copy (oferta ya trae ambos en offerText). Sin esto, hero/cta inventan precio y moneda.

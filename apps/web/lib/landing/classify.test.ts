@@ -32,6 +32,7 @@ describe('classifyNiche', () => {
     expect(result).toEqual({
       niche_id: 'generic',
       demographic_id: 'female_30_45',
+      body_focus: 'rostro',
       confidence: 0,
       reasoning: 'fallback',
     })
@@ -47,6 +48,7 @@ describe('classifyNiche', () => {
     expect(result).toEqual({
       niche_id: 'generic',
       demographic_id: 'female_30_45',
+      body_focus: 'rostro',
       confidence: 0,
       reasoning: 'fallback',
     })

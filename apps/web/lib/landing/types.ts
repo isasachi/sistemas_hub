@@ -1,6 +1,8 @@
 import { z } from 'zod'
 // Solo tipo: `brand-system.ts` arrastra gemini/storage y este módulo lo consume el cliente.
 import type { BrandSystem } from '@/lib/branding/brand-system'
+// Enum liviano (sin gemini/storage detrás), así que sí se puede importar como VALOR desde acá.
+import { BrandStyle } from './style-dna'
 
 // ─── Catálogo de secciones ───────────────────────────────────────────────────
 // El orden del enum NO es el orden de la landing — ese lo define `order` por sesión.
@@ -44,10 +46,38 @@ export const DemographicId = z.enum([
 ])
 export type DemographicId = z.infer<typeof DemographicId>
 
+// ─── Zona del cuerpo sobre la que actúa el producto (2026-08-15) ─────────────
+// El eje que faltaba. `DEMOGRAPHIC_POSES` mezclaba dos cosas: la ACTITUD (que sí es demográfica) y
+// el ENCUADRE (que no lo es). Sin este campo, una `female_18_30` recibía siempre poses de rostro
+// —"mano en la mejilla", "ambas manos enmarcando el rostro"— fuera un sérum para el acné o una
+// creatina para glúteos, y una rodillera salía con un retrato en vez de una rodilla.
+//
+// NO se deriva del nicho ni de la demografía: creatina para masa y creatina para glúteos son el
+// MISMO nicho y la MISMA demografía, y distinta zona. Sale del producto + el ángulo (beneficios,
+// público, etiquetas), que es justo lo que ya recibe `classifyNiche`.
+export const BodyFocus = z.enum([
+  'rostro',
+  'cabello',
+  'torso',
+  'abdomen',
+  'gluteos_piernas',
+  'rodilla',
+  'articulacion',
+  'manos',
+  'pies',
+  'cuerpo_completo',
+])
+export type BodyFocus = z.infer<typeof BodyFocus>
+
 // Salida del paso 0.a (clasificación). Zod rechaza cualquier valor fuera del set.
 export const NicheClassification = z.object({
   niche_id: NicheId,
   demographic_id: DemographicId,
+  // OBLIGATORIO a propósito. Un `.optional()` no entra en el `required` del JSON Schema que
+  // `callStructured` le pasa al modelo, y lo que no se le exige lo omite en silencio: el campo
+  // llegaría siempre vacío, todo caería al default `rostro` y el eje entero quedaría en no-op con
+  // el síntoma idéntico al bug que vino a arreglar. Ya pasó con `style` en el ADN de marca.
+  body_focus: BodyFocus,
   confidence: z.number().min(0).max(1),
   reasoning: z.string().max(200),
 })
@@ -92,6 +122,13 @@ export const LandingDnaSchema = z.object({
   font_family: z.string(),
   font_accent: z.string().nullable(),
   halo: Halo,
+  // Dirección de arte heredada de la marca (2026-08-15): el lenguaje MATERIAL de la pieza (acabado
+  // de card, relleno de icono, textura de fondo, luz, expresión tipográfica). Es lo único que
+  // diferencia visualmente una landing de otra más allá del re-tinte. `.optional()` y NO
+  // `.default()`: los ADN ya guardados no lo traen y `getLandingSession` castea sin `.parse()`, así
+  // que el default se aplica en el SITIO DE USO (`styleOf`) — como ya pasa con `polarity`, solo que
+  // acá el tipo lo dice en voz alta en vez de mentir. Sin marca → `glass_premium` = lo histórico.
+  style: BrandStyle.optional(),
   model_persona: z.string(),
   // clave = SectionType slug; valor = descripción de pose. Parcial: solo las secciones elegidas.
   poses: z.record(z.string(), z.string()),
@@ -287,6 +324,17 @@ export interface LandingSessionResponse {
   // extracción. Null hasta que el wizard los confirma en Identidad.
   niche_id: NicheId | null
   demographic_id: DemographicId | null
+  // Zona del cuerpo sobre la que actúa el producto (paso 0.a, editable en Identidad). Decide el
+  // banco de poses y si hace falta una segunda placa de talento encuadrada en esa zona.
+  // Null = sesión anterior a 2026-08-15 → se resuelve como `rostro` en el sitio de uso, que es el
+  // comportamiento histórico (todas las poses eran de rostro).
+  body_focus: BodyFocus | null
+  // Placa de talento encuadrada en la ZONA, sin rostro (Fase 4 bis). Se genera junto a la
+  // canónica y SOLO cuando `body_focus` no es rostro/cabello. La usan las secciones que llevan
+  // protagonista MENOS el hero: el hero muestra la cara (es lo que construye confianza al abrir),
+  // el resto muestra la zona donde el producto actúa. Null = el producto es de rostro, o sesión
+  // legada → todas las secciones usan `talent_canonical_url` como siempre.
+  talent_zone_url: string | null
   // ADN visual (paso 0.b): paleta por fórmula, partículas, props, tipografía, halo, persona y
   // poses. Fuente única para las 8 secciones. Null en sesiones legadas → el wizard re-extrae.
   landing_dna: LandingDna | null

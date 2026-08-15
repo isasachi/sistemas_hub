@@ -1,4 +1,4 @@
-import type { DemographicId, NicheId, SectionType } from './types'
+import type { BodyFocus, DemographicId, NicheId, SectionType } from './types'
 
 // Nombre legible (UI) por demografía — paso 0.a Paso 2 del wizard (selector siempre editable).
 export const DEMOGRAPHIC_LABELS: Record<DemographicId, string> = {
@@ -90,18 +90,176 @@ export const DEMOGRAPHIC_POSES: Record<DemographicId, string[]> = {
   no_talent: [],
 }
 
+// ─── Banco de poses por ZONA (2026-08-15) ───────────────────────────────────
+// Los bancos de arriba son de ACTITUD y están todos encuadrados en el rostro: sirven para un
+// sérum, no para una rodillera ni para una creatina de glúteos. Estos son de ENCUADRE: dicen qué
+// parte del cuerpo ocupa el carril, y NUNCA muestran la cara — la cara vive en el hero, que sigue
+// tomando su pose del banco demográfico.
+//
+// Son agnósticos de demografía a propósito: quién es la persona lo fija `model_persona` (y la
+// placa de talento), así que duplicar cada banco por las 6 demografías daría 60 listas para
+// decir lo mismo. Por eso están redactados sin género ni edad.
+//
+// `rostro` y `cabello` NO tienen banco: para esas zonas el banco demográfico YA es el correcto, y
+// dejarlas vacías es lo que hace que todo lo que existe hoy salga idéntico.
+// La ÚLTIMA pose de cada banco es la reservada de `assignPoses` (producto junto a la zona).
+export const ZONE_POSES: Record<BodyFocus, string[]> = {
+  rostro: [],
+  cabello: [],
+  torso: [
+    'Torso de frente recortado del cuello a la cintura, hombros abiertos, sin rostro en cuadro',
+    'Torso en 3/4, una mano apoyada sobre el esternón, encuadre de hombros a cintura',
+    'Perfil del torso, espalda erguida, luz rasante marcando la línea del hombro',
+    'Torso de frente sosteniendo el envase a la altura del pecho, sin rostro en cuadro',
+  ],
+  abdomen: [
+    'Abdomen y cintura de frente, encuadre del pecho bajo a la cadera, manos relajadas a los costados',
+    'Abdomen en 3/4, una mano apoyada sobre el costado de la cintura',
+    'Perfil de la cintura, postura erguida, sin rostro en cuadro',
+    'Abdomen de frente con el envase sostenido a la altura de la cintura',
+  ],
+  gluteos_piernas: [
+    'Tren inferior de espaldas, de la cintura a media pantorrilla, postura de pie firme, sin rostro en cuadro',
+    'Tren inferior en 3/4 de espaldas, peso sobre una pierna, línea de glúteo y muslo definida',
+    'Piernas de perfil en posición de zancada corta, encuadre de cadera a tobillo',
+    'Tren inferior de espaldas con el envase sostenido a la altura de la cadera',
+  ],
+  rodilla: [
+    'Rodilla y pierna en primer plano, persona sentada al borde de una superficie, encuadre de muslo a pantorrilla',
+    'Rodilla de perfil en flexión suave, ambas manos apoyadas alrededor de la articulación',
+    'Rodilla de frente, pierna estirada, encuadre cerrado sin rostro en cuadro',
+    'Rodilla en primer plano con el envase apoyado al lado, sobre la misma superficie',
+  ],
+  articulacion: [
+    'Hombro y brazo en primer plano, una mano del lado contrario apoyada sobre la articulación',
+    'Codo en flexión suave, encuadre cerrado del brazo, sin rostro en cuadro',
+    'Muñeca y antebrazo en primer plano, giro suave de la mano',
+    'Articulación en primer plano con el envase apoyado al lado',
+  ],
+  manos: [
+    'Ambas manos en primer plano sobre una superficie clara, dedos relajados, sin rostro en cuadro',
+    'Una mano en 3/4 con los dedos ligeramente extendidos, luz suave lateral',
+    'Manos entrelazadas en primer plano, encuadre cerrado de muñecas a dedos',
+    'Manos sosteniendo el envase, encuadre cerrado sin rostro en cuadro',
+  ],
+  pies: [
+    'Ambos pies en primer plano sobre una superficie clara, encuadre de tobillo a dedos',
+    'Un pie en 3/4 apoyado, el otro ligeramente atrás, sin rostro en cuadro',
+    'Pies de perfil en paso corto, encuadre cerrado',
+    'Pies en primer plano con el envase apoyado al lado, sobre la misma superficie',
+  ],
+  cuerpo_completo: [
+    'Cuerpo entero de pie, postura relajada y abierta, encuadre de cabeza a pies a distancia media',
+    'Cuerpo entero en 3/4, peso sobre una pierna, brazos sueltos',
+    'Cuerpo entero de perfil en paso natural, encuadre completo',
+    'Cuerpo entero de pie sosteniendo el envase a la altura de la cintura',
+  ],
+}
+
+// Nombre legible (UI) — el selector de Identidad, junto a nicho y demografía.
+export const BODY_FOCUS_LABELS: Record<BodyFocus, string> = {
+  rostro: 'Rostro',
+  cabello: 'Cabello',
+  torso: 'Torso / busto',
+  abdomen: 'Abdomen / cintura',
+  gluteos_piernas: 'Glúteos y piernas',
+  rodilla: 'Rodilla',
+  articulacion: 'Articulación (hombro, codo, muñeca)',
+  manos: 'Manos y uñas',
+  pies: 'Pies',
+  cuerpo_completo: 'Cuerpo completo',
+}
+
+// Encuadre en lenguaje de prompt. Lo consumen la PLACA de zona (`talent.ts`) y la nota de
+// antes/después: los dos necesitan nombrar la misma zona con las mismas palabras, y si cada uno la
+// escribiera por su lado podrían pedir recortes distintos para la misma sesión.
+export const BODY_FOCUS_FRAMING: Record<BodyFocus, string> = {
+  rostro: 'el rostro, encuadre de retrato de la cabeza a los hombros',
+  cabello: 'el cabello, encuadre de la cabeza y los hombros mostrando el largo y la textura del pelo',
+  torso: 'el torso, encuadre del cuello a la cintura, SIN el rostro en cuadro',
+  abdomen: 'el abdomen y la cintura, encuadre del pecho bajo a la cadera, SIN el rostro en cuadro',
+  gluteos_piernas: 'el tren inferior — glúteos y piernas —, encuadre de la cintura a media pantorrilla, SIN el rostro en cuadro',
+  rodilla: 'la rodilla, encuadre cerrado del muslo a la pantorrilla, SIN el rostro en cuadro',
+  articulacion: 'la articulación (hombro, codo o muñeca), encuadre cerrado del miembro, SIN el rostro en cuadro',
+  manos: 'las manos, encuadre cerrado de muñecas a dedos, SIN el rostro en cuadro',
+  pies: 'los pies, encuadre cerrado de tobillos a dedos, SIN el rostro en cuadro',
+  cuerpo_completo: 'el cuerpo entero, encuadre de cabeza a pies a distancia media',
+}
+
+// `rostro`/`cabello` ya están servidos por el banco demográfico y por la placa canónica: no
+// necesitan banco de zona ni una segunda placa. Es lo que mantiene intacto todo lo que ya existe.
+export function zoneNeedsOwnPlate(focus: BodyFocus | null | undefined): boolean {
+  return !!focus && ZONE_POSES[focus].length > 0
+}
+
 // Plantilla base de persona por demografía (Anexo B, reglas transversales: rasgos coherentes
 // con {{locale}} — es-PE aquí — piel real con textura natural, sin idealizar). Se concreta con
 // más detalle de locale/rasgos en la extracción (`model_persona` se escribe una vez y se repite
 // literal en las 8 secciones: mismo rostro, mismo peinado, misma ropa, mismos accesorios).
 export const DEMOGRAPHIC_PERSONA: Record<DemographicId, string> = {
-  female_18_30: 'Mujer peruana de 18-30 años, piel real con textura natural, cabello recogido, camiseta blanca de tirantes, aretes dorados discretos, expresión serena y segura',
-  female_30_45: 'Mujer peruana de 30-45 años, piel real con textura natural, cabello suelto con ondas suaves, blusa neutra sencilla, sin joyería llamativa, expresión cálida y confiada',
-  female_45_plus: 'Mujer peruana de 45 años o más, piel real con textura natural, canas visibles o cabello entrecano, ropa cómoda y neutra, expresión de bienestar y alivio sereno',
-  male_20_35: 'Hombre peruano de 20-35 años, piel real con textura natural, cabello corto prolijo, camiseta deportiva ajustada de color neutro, expresión de confianza física',
-  male_35_55: 'Hombre peruano de 35-55 años, piel real con textura natural, barba corta prolija, camisa casual de color neutro, expresión de autoridad tranquila',
-  senior_55_plus: 'Persona peruana mayor de 55 años, piel real con textura natural, cabello canoso, ropa cómoda y neutra, expresión cálida y estable',
+  female_18_30: 'Mujer peruana de 18-30 años, piel real con textura natural, cabello recogido, aretes dorados discretos, expresión serena y segura',
+  female_30_45: 'Mujer peruana de 30-45 años, piel real con textura natural, cabello suelto con ondas suaves, sin joyería llamativa, expresión cálida y confiada',
+  female_45_plus: 'Mujer peruana de 45 años o más, piel real con textura natural, canas visibles o cabello entrecano, expresión de bienestar y alivio sereno',
+  male_20_35: 'Hombre peruano de 20-35 años, piel real con textura natural, cabello corto prolijo, expresión de confianza física',
+  male_35_55: 'Hombre peruano de 35-55 años, piel real con textura natural, barba corta prolija, expresión de autoridad tranquila',
+  senior_55_plus: 'Persona peruana mayor de 55 años, piel real con textura natural, cabello canoso, expresión cálida y estable',
   no_talent: '',
+}
+
+// ─── Vestuario (2026-08-15) ─────────────────────────────────────────────────
+// La ROPA salió de `DEMOGRAPHIC_PERSONA`, donde estaba incrustada y era ciega al producto: una
+// `female_18_30` iba con "camiseta blanca de tirantes" tanto para un sérum como para una creatina
+// de glúteos, y el modelo rellenaba lo que faltaba abajo — en un caso real, un short de jean para
+// un producto cuya promesa es el tren inferior. El vestuario no es un rasgo de la persona: es una
+// función del NICHO (qué registro) y de la ZONA (qué tiene que dejarse ver).
+//
+// Tabla y no LLM, por la misma razón que la tipografía, el halo y los props: hay ~20 respuestas
+// posibles, la decisión es estable y pedírsela a un modelo agrega una variable que después hay que
+// auditar en cada corrida.
+export const NICHE_WARDROBE: Record<NicheId, string> = {
+  supplement_skin_female: 'top o camiseta lisa de tono neutro, look limpio de cuidado personal',
+  skincare_topical: 'top o camiseta lisa de tono neutro, hombros descubiertos, look limpio de skincare',
+  haircare: 'camiseta lisa de tono neutro que no compita con el cabello',
+  fitness_weightloss: 'ropa deportiva de entrenamiento ajustada — licra y top deportivo',
+  supplement_male_performance: 'camiseta deportiva ajustada o musculosa de color neutro',
+  joint_mobility: 'ropa deportiva cómoda de entrenamiento suave, tejido elástico',
+  intimate_wellness: 'ropa de casa cómoda y discreta, tonos suaves, nada sugerente',
+  herbal_natural: 'prendas de fibras naturales en tonos tierra, look sereno',
+  baby_maternity: 'ropa de casa suave y cómoda en tonos claros',
+  pets: 'ropa casual de diario, cómoda',
+  home_cleaning: 'ropa casual de estar en casa, mangas remangadas',
+  tech_gadgets: 'ropa urbana minimalista de tonos neutros',
+  kitchen_tools: 'ropa casual con delantal de cocina liso',
+  jewelry_fashion: 'prenda elegante y sobria que no compita con la pieza',
+  automotive: 'ropa de trabajo casual, resistente',
+  generic: 'ropa casual sencilla de tono neutro',
+}
+
+// Restricción de la ZONA: la prenda tiene que DEJAR VER la parte que el producto cambia. Sin esto,
+// una rodillera con "ropa deportiva cómoda" sale con pantalón largo y la rodilla tapada — el mismo
+// fallo que el short de jean, en otra zona. Solo llevan entrada las zonas que lo necesitan; el
+// resto usa el vestuario del nicho tal cual.
+export const WARDROBE_FOR_FOCUS: Partial<Record<BodyFocus, string>> = {
+  torso: 'la prenda superior deja ver la línea del torso',
+  abdomen: 'la prenda deja el abdomen y la cintura a la vista',
+  gluteos_piernas: 'la prenda inferior es ceñida y de cintura alta (licra o calza), y deja ver la forma de glúteos y piernas — nunca jean, pantalón suelto ni falda',
+  rodilla: 'la prenda inferior es corta (short) y deja la rodilla completamente descubierta — nunca pantalón largo',
+  articulacion: 'la prenda deja la articulación descubierta — sin manga o manga corta',
+  pies: 'pies descalzos o con sandalia simple, tobillos a la vista',
+}
+
+// Arma la persona completa: rasgos (demografía) + vestuario (nicho + zona). Es lo que se guarda
+// como `model_persona` y viaja LITERAL a las dos placas y a las 8 secciones, así que tiene que
+// resolverse UNA vez acá y no re-derivarse en cada consumidor.
+export function personaFor(
+  demographic: DemographicId,
+  niche: NicheId,
+  focus?: BodyFocus | null,
+): string {
+  const base = DEMOGRAPHIC_PERSONA[demographic]
+  if (!base) return base // no_talent: el carril lo llena el sustituto por nicho, sin persona
+  const zona = focus ? WARDROBE_FOR_FOCUS[focus] : undefined
+  return [base, `viste ${NICHE_WARDROBE[niche]}${zona ? `, y ${zona}` : ''}`].join(', ')
 }
 
 // Anexo B.7 — sustituto del carril de talento cuando `demographic_id` es `no_talent`. Cinco
@@ -133,19 +291,37 @@ export const NO_TALENT_SUBSTITUTE: Record<NicheId, string> = {
 // del pool restante en orden, ciclando si `order` tiene más secciones que poses disponibles.
 // Banco vacío (`no_talent`) → toda sección mapea a cadena vacía (el carril lo llena el
 // sustituto de Anexo B.7, resuelto por nicho fuera de esta función).
-export function assignPoses(order: SectionType[], demographic: DemographicId): Record<string, string> {
+// `focus` reparte entre DOS bancos (2026-08-15): el HERO conserva la pose demográfica —muestra la
+// cara, que es lo que construye confianza al abrir la landing— y el resto de las secciones con
+// protagonista toman la pose de la ZONA donde el producto actúa. Con `rostro`/`cabello` el banco de
+// zona está vacío y todo sale del demográfico: comportamiento histórico exacto.
+export function assignPoses(
+  order: SectionType[],
+  demographic: DemographicId,
+  focus?: BodyFocus | null,
+): Record<string, string> {
   const bank = DEMOGRAPHIC_POSES[demographic]
   const out: Record<string, string> = {}
   if (bank.length === 0) {
     for (const s of order) out[s] = ''
     return out
   }
+  const zone = focus ? ZONE_POSES[focus] : []
   const reserved = bank[bank.length - 1]
   const pool = bank.slice(0, -1)
+  const zonePool = zone.slice(0, -1)
+  // Dos cursores: cada banco recorre el suyo, así ninguna sección repite pose dentro de su pool
+  // (QA#6) aunque el reparto entre bancos sea desparejo.
   let i = 0
+  let z = 0
   for (const s of order) {
     if (s === 'cta-final') {
-      out[s] = reserved
+      out[s] = zonePool.length ? zone[zone.length - 1] : reserved
+      continue
+    }
+    if (zonePool.length && s !== 'hero') {
+      out[s] = zonePool[z % zonePool.length]
+      z++
       continue
     }
     out[s] = pool[i % pool.length]

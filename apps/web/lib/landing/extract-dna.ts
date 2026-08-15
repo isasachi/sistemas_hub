@@ -4,7 +4,7 @@ import { callStructured } from '@/lib/gemini'
 import { fetchAsBase64 } from '@/lib/storage'
 import { hslToHex, derivePalette, paletteFromBrand } from './palette-derive'
 import { NICHE_TYPOGRAPHY, NICHE_FALLBACK } from './niches'
-import { DEMOGRAPHIC_PERSONA, NO_TALENT_SUBSTITUTE, assignPoses } from './demographics'
+import { personaFor, NO_TALENT_SUBSTITUTE, assignPoses } from './demographics'
 import {
   Polarity,
   LandingDnaSchema,
@@ -12,6 +12,7 @@ import {
   type LandingDna,
   type NicheId,
   type DemographicId,
+  type BodyFocus,
   type SectionType,
   type LandingSessionResponse,
 } from './types'
@@ -83,6 +84,8 @@ export async function extractDna(
   niche: NicheId,
   demographic: DemographicId,
   order: SectionType[],
+  // Zona del producto: reparte las poses entre el banco demográfico (hero) y el de zona (resto).
+  focus?: BodyFocus | null,
 ): Promise<LandingDna> {
   const fallback = NICHE_FALLBACK[niche]
   const brand = session.brand_system
@@ -123,8 +126,13 @@ export async function extractDna(
     ? { font_family: brand.font_family, font_accent: brand.font_accent }
     : NICHE_TYPOGRAPHY[niche]
   const halo = brand ? brand.halo : fallback.halo
-  const model_persona = demographic === 'no_talent' ? NO_TALENT_SUBSTITUTE[niche] : DEMOGRAPHIC_PERSONA[demographic]
-  const poses = assignPoses(order, demographic)
+  // Dirección de arte: la manda la MARCA y solo la marca. Sin board de identidad no hay identidad
+  // que leer, así que un producto suelto sale con el acabado histórico (`styleOf(undefined)`).
+  const style = brand?.style
+  // El vestuario ya NO viene incrustado en la persona: se compone del nicho (qué registro) y de
+  // la zona (qué tiene que dejarse ver). Ver `personaFor`.
+  const model_persona = demographic === 'no_talent' ? NO_TALENT_SUBSTITUTE[niche] : personaFor(demographic, niche, focus)
+  const poses = assignPoses(order, demographic, focus)
 
   const dna: LandingDna = {
     brand_base,
@@ -136,6 +144,7 @@ export async function extractDna(
     font_family,
     font_accent,
     halo,
+    style,
     model_persona,
     poses,
   }
