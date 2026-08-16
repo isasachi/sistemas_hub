@@ -34,7 +34,12 @@ La prueba no es si el anuncio MENCIONA el nicho, sino si el producto está hecho
 - Un filtro de ducha que entre sus diez beneficios nombra el acné NO pertenece: está hecho para filtrar agua.
 - Un suplemento digestivo que dice mejorar la piel NO pertenece: está hecho para el intestino.
 - Un producto para manchas o despigmentación NO pertenece al nicho "acné" aunque lo compre el mismo público.
-Ante la duda razonable, responde que SÍ pertenece: perder un producto legítimo es peor que dejar pasar uno dudoso.
+
+⚠️ DOS FORMAS DE NO PERTENECER QUE HAY QUE RECHAZAR SIEMPRE:
+a) OTRA CATEGORÍA DE NECESIDAD. Si el producto resuelve un problema distinto, no pertenece — aunque el público se solape y aunque comparta el rubro. Un suplemento de remolacha para la circulación NO pertenece al nicho "calcio". Unas cápsulas para dormir NO pertenecen al nicho "colágeno". Si tu propia explicación necesita empezar con "aunque", la respuesta es NO.
+b) COINCIDENCIA DE PALABRA. Si el nombre del nicho aparece con OTRO significado, no pertenece. Un short de baño con corte "taper" NO pertenece al nicho "taper"; unas plantillas que alivian el dolor de "espinillas" (el hueso) NO pertenecen al nicho de las espinillas de la piel.
+
+Fuera de esos dos casos, ante la duda razonable responde que SÍ pertenece: perder un producto legítimo es peor que dejar pasar uno dudoso.
 
 3. CITA: copia TEXTUAL un fragmento corto del texto que te dieron y que justifique tu decisión sobre el nicho. Cópialo carácter por carácter, sin reescribirlo. Si no hay ninguno, deja la cita vacía.
 
