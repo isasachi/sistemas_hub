@@ -353,6 +353,8 @@ npx tsx scripts/scan-nicho.ts --niche acne --paises MX,EC,CO,CL,AR --limit 60
 
 **Es reanudable y el diseño se apoya en eso:** una fila verificada deja de estar `pendiente`, así que ante un block persistente o un fallo de API el script **corta limpio informando el avance** en vez de morir a mitad de lote. Volver a correr el mismo comando retoma la cola.
 
+**Barrido largo: `~/chamba/scan-base-loop.sh`** (fuera del repo a propósito, para que sobreviva al worktree). Corre `scan-base --todo` en loop: el script sale con código 2 cuando corta por un block de Meta o un fallo de la API, y como la cola es reanudable basta reinvocarlo. Entre reintentos **duerme 15 min**, que es lo único que des-bloquea una IP caliente — re-sondear enseguida escala el soft-block a hard-block (lección del daemon, 2026-06-18). Termina cuando ve el centinela `PH_SCAN_QUEUE_EMPTY`. Se lanza con `setsid nohup` para que no muera con la terminal: un barrido de la base entera son ~14 h a ~83 filas/min.
+
 **Qué falta medir antes de jubilar el pipeline viejo:** el share determinista de `product-key.ts` **no está comparado contra `classifyShare`** (el del verificador viejo) sobre las mismas filas. `classifyShare` lleva adentro fallos ya corregidos que este camino no vivió — el índice base-0/base-1 que hundía a Revitalegs de 100% a 27%, y el sesgo de 40 puntos de `sort_data`. De ese segundo sí se hizo cargo: `advertiserUrl` va sin `sort_data` y con `country=ALL`, igual que el viejo.
 
 **⚠️ REGLAS DE COSTO — no romper (esto fue requisito explícito del usuario):**
