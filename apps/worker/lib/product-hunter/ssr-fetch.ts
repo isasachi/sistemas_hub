@@ -120,15 +120,24 @@ export async function readConnection(page: Page, url: string): Promise<SsrResult
 }
 
 /**
- * Página del anunciante: `country=ALL` y SIN `sort_data`.
+ * Página del anunciante. SIN `sort_data` siempre: ordenar por impresiones
+ * muestra primero los anuncios más gastados, donde el producto estrella está
+ * sobrerrepresentado, y eso sesga la proporción hasta 40 puntos (medido en
+ * verify-product.ts).
  *
- * Las dos cosas son deliberadas y vienen medidas de verify-product.ts: ordenar
- * por impresiones muestra primero los anuncios más gastados, donde el producto
- * estrella está sobrerrepresentado, y eso sesga la proporción hasta 40 puntos.
+ * ⚠️ EL PAÍS CAMBIA LO QUE SE MIDE, y hay que elegirlo según la pregunta:
+ * - `ALL` (default) → todos los mercados. Es lo correcto para el SHARE, que
+ *   necesita muestra.
+ * - un país → solo ese mercado. Es lo correcto para el RANGO, que es la promesa
+ *   que lee el usuario ("100 a más anuncios del anunciante").
+ *
+ * Confundirlos infla el rango con volumen mundial: medido, InvigorFate tiene
+ * 685 anuncios en el mundo y **47 en México**, así que con `ALL` figuraba en
+ * "100+" cuando en el mercado donde se lo encontró es un "0-50".
  */
-export function advertiserUrl(pageId: string): string {
+export function advertiserUrl(pageId: string, country = 'ALL'): string {
   const p = new URLSearchParams({
-    active_status: 'active', ad_type: 'all', country: 'ALL',
+    active_status: 'active', ad_type: 'all', country,
     is_targeted_country: 'false', media_type: 'all', search_type: 'page',
     view_all_page_id: pageId,
   })

@@ -119,7 +119,9 @@ async function descubrir(
 // scan-base.ts, que verifica lo ya scrapeado en vez de descubrir.
 async function medir(page: Page, cand: Candidato, terminos: string[]): Promise<Medicion | null> {
   await esperarTurno()
-  const m = await medirAnunciante(page, cand.pageId, terminos)
+  // El rango se mide en el país donde se encontró el producto, no en el mundo:
+  // la tool busca lo que pauta en LATAM, no volumen global.
+  const m = await medirAnunciante(page, cand.pageId, terminos, cand.country)
   noteNavResult(m ? m.muestra : 0)
   return m
 }

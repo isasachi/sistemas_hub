@@ -685,6 +685,30 @@ export async function getRawProductsByVolume(
   return (data as RawProductRow[]) ?? []
 }
 
+/** Filas que ya verificó el pipeline scan-* (las únicas con `senal_nicho`). */
+export async function getRawVerificadas(soloAprobados = false): Promise<RawProductRow[]> {
+  let q = getDb().from('ph_raw_products')
+    .select('niche,page_id,name,country,ad_count,status')
+    .not('senal_nicho', 'is', null)
+    .not('country', 'is', null)
+  if (soloAprobados) q = q.eq('status', 'monoproducto')
+  const { data, error } = await q.order('ad_count', { ascending: false })
+  if (error) throw new Error(error.message)
+  return (data as RawProductRow[]) ?? []
+}
+
+/**
+ * Corrige SOLO el conteo de anuncios (y con él, el rango). No toca el veredicto:
+ * que un producto sea físico y del nicho no cambia porque se cuente en otro
+ * mercado.
+ */
+export async function updateRawAdCount(niche: string, pageId: string, adCount: number): Promise<void> {
+  const { error } = await getDb().from('ph_raw_products')
+    .update({ ad_count: adCount })
+    .eq('niche', niche).eq('page_id', pageId)
+  if (error) throw new Error(error.message)
+}
+
 export async function countRawPending(): Promise<number> {
   const { count, error } = await getDb()
     .from('ph_raw_products')
