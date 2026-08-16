@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { calcular, normalizarPct, precioSugerido, type CalcInputs } from "./model";
+import { calcular, precioSugerido, type CalcInputs } from "./model";
 
 // Inputs y outputs tomados literalmente de las hojas del archivo fuente.
 const leads: CalcInputs = {
@@ -93,14 +93,25 @@ describe("precioSugerido", () => {
   });
 });
 
-describe("normalizarPct", () => {
-  it("reescala a 100% manteniendo proporciones", () => {
-    const out = normalizarPct([{ pctCompra: 0.6 }, { pctCompra: 0.3 }]); // suma 0.9
-    expect(out[0].pctCompra).toBeCloseTo(2 / 3, 5);
-    expect(out[1].pctCompra).toBeCloseTo(1 / 3, 5);
+describe("cpaMaximo = N30 (sobre entregas, la misma base que cpaReal)", () => {
+  it("LEADS: (profitNeto + inversión) / entregas", () => {
+    const r = calcular(leads);
+    expect(r.pg.cpaMaximo).toBeCloseTo(87.402, 3); // (22091.6+30000)/596
+    expect(r.pg.cpaMaximo).toBeGreaterThan(r.embudo.cpaReal); // 87.40 > 50.34: la campaña está en verde
   });
-  it("todo cero queda en cero", () => {
-    const out = normalizarPct([{ pctCompra: 0 }, { pctCompra: 0 }]);
-    expect(out[0].pctCompra).toBe(0);
+  it("MENSAJES: igual fórmula", () => {
+    expect(calcular(mensajes).pg.cpaMaximo).toBeCloseTo(89.85, 2); // (16748.7+20000)/409
+  });
+});
+
+describe("los %compra NO se normalizan (el Excel tampoco)", () => {
+  it("un reparto que suma 0.9 factura 0.9, no 1.0", () => {
+    const r = calcular({ ...leads, cantidad: [
+      { pctCompra: 0.6, precio: 149, costo: 48 },
+      { pctCompra: 0, precio: 289, costo: 96 },
+      { pctCompra: 0.3, precio: 299, costo: 144 },
+    ] });
+    // 596 entregas → 0.6*149 + 0.3*299 = 106743.6 (no los 118604 que daba al reescalar)
+    expect(r.ofertas.ventasCantidad).toBeCloseTo(106743.6, 1);
   });
 });

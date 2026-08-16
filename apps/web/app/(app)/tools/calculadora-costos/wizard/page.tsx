@@ -270,12 +270,12 @@ function CalculadoraWizard() {
       : []),
     {
       label: "Ofertas", title: "Ofertas por cantidad",
-      intro: "Muchos venden más de una unidad por pedido (lleva 2, lleva 3…). Reparte a tus compradores entre tus 3 ofertas. Si los % no suman 100%, los ajustamos solos.",
+      intro: "Muchos venden más de una unidad por pedido (lleva 2, lleva 3…). Reparte a tus compradores entre tus 3 ofertas. Los 3 % deben sumar 100%.",
       body: (
         <div className="flex flex-col gap-3">
           {Math.abs(pctOfertas - 1) > 0.001 && (
             <div className="rounded-lg border border-white/[0.1] bg-white/[0.03] px-3 py-2 text-[12px] text-[#cfcfcf]">
-              Tus % suman {fmtPct(pctOfertas)} — los normalizamos a 100% automáticamente.
+              Tus % suman {fmtPct(pctOfertas)}, no 100%. {pctOfertas < 1 ? "Estás dejando compradores sin oferta, así que las ventas salen más bajas de lo real." : "Estás contando más compradores de los que tienes, así que las ventas salen infladas."}
             </div>
           )}
           {form.cantidad.map((t, i) => (

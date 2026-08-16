@@ -57,14 +57,6 @@ function round(n: number, digits = 0): number {
   return Math.sign(n) * Math.round(Math.abs(n) * f) / f;
 }
 
-// Normaliza los %compra de una lista de tiers para que sumen 1 (como espera el SUMPRODUCT).
-// Si todo es 0, los deja en 0 (sin ventas). Devuelve copia.
-export function normalizarPct<T extends { pctCompra: number }>(tiers: T[]): T[] {
-  const total = tiers.reduce((s, t) => s + t.pctCompra, 0);
-  if (total === 0) return tiers.map((t) => ({ ...t }));
-  return tiers.map((t) => ({ ...t, pctCompra: t.pctCompra / total }));
-}
-
 export function calcular(input: CalcInputs): CalcResult {
   const op = input.operacion;
   const e: Record<string, number> = {};
@@ -91,9 +83,9 @@ export function calcular(input: CalcInputs): CalcResult {
   }
 
   // --- Ofertas (base = entregas) ---
-  // Las 3 ofertas por cantidad se normalizan a 100% (cada comprador elige UNA).
-  // Los upsells son tasas de attach independientes (no suman 100%): NO se normalizan.
-  const cant = normalizarPct(input.cantidad);
+  // Los %compra entran crudos, como en el Excel (C23=C22*J22 a secas): la nota "deben sumar
+  // 100%" es informal, no una fórmula. Reescalarlos inflaba los ingresos cuando no sumaban 1.
+  const cant = input.cantidad;
   const ups = input.upsells;
   const unidadesCant = cant.map((t) => t.pctCompra * e.entregas);
   const unidadesUps = ups.map((t) => t.pctCompra * e.entregas);
@@ -134,10 +126,9 @@ export function calcular(input: CalcInputs): CalcResult {
       : e.cantidadMensajes ? e.entregas / e.cantidadMensajes : 0;
   pg.aovReal = e.entregas ? pg.ingresosTotales / e.entregas : 0;
   const profitMasInv = pg.profitNeto + e.inversion;
-  pg.cpaMaximo =
-    input.funnel === "leads"
-      ? e.ventas ? profitMasInv / e.ventas : 0
-      : e.entregas ? profitMasInv / e.entregas : 0;
+  // N30 "CPA Máximo Real": sobre ENTREGAS en ambos embudos, que es la misma base de cpaReal
+  // (lo que la UI compara). El Excel también trae N28 sobre ventas brutas, que no se muestra.
+  pg.cpaMaximo = e.entregas ? profitMasInv / e.entregas : 0;
   pg.roasMinimo = profitMasInv ? pg.ingresosReales / profitMasInv : 0;
   pg.capitalMinimo =
     (pg.costoProductoPrincipal + pg.costoProductoOferta + pg.costosEnvio + e.inversion) /
