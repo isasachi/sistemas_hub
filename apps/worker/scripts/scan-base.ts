@@ -189,6 +189,9 @@ async function main() {
     `${tally.descartado} descartados · ${tally.sin_verificar} sin verificar · ` +
     `${tally.inconcluso} inconclusos · ${tally.errores} errores ═══`,
   )
+  // Centinela para el runner de shell: distingue "no queda nada por verificar"
+  // de "me cortaron a mitad". Sin esto el loop no sabe cuándo parar.
+  if (motivoCorte === 'cola vacía') console.log('PH_SCAN_QUEUE_EMPTY')
   if (motivoCorte && motivoCorte !== 'cola vacía') {
     console.log(`CORTE: ${motivoCorte}`)
     console.log('Volvé a correr el mismo comando: la cola retoma donde quedó.')
