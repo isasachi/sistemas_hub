@@ -50,3 +50,7 @@ supabase/.temp/
 
 # graphify knowledge graph artifacts
 graphify-out/
+
+# Salidas temporales del navegador (Playwright MCP): logs y snapshots de
+# depuración, nunca contenido del proyecto.
+.playwright-mcp/
