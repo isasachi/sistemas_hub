@@ -305,6 +305,41 @@ VPS daemon (systemd, 24/7)              Supabase                Vercel (Next.js)
 
 Los anunciantes PE van a la tabla **`ph_pe_pool`** (migración `20260611_ph_pe_pool.sql`), nunca a `ph_products`: alimentan el matching de competencia (`getPeCompetitors`) pero no se analizan con LLM ni llegan a la UI.
 
+### Pipeline `scan-nicho` — descubrir, medir y verificar en una corrida (2026-08-16)
+
+`apps/worker/scripts/scan-nicho.ts` hace en un solo paso lo que hoy reparten `scrape-raw.ts` + `verify-products.ts`. **Convive con ellos, no los reemplaza** (ver "Qué falta medir" abajo). Escribe en las MISMAS tablas y con los mismos estados, así que el front lo muestra sin cambios.
+
+```
+npx tsx scripts/scan-nicho.ts --niche acne --paises MX,EC,CO,CL,AR --limit 60
+                                           [--sin-llm] [--dry-run]
+```
+
+**El reparto es la idea central: TODO es determinista menos una pregunta.**
+
+| Paso | Cómo se resuelve |
+|---|---|
+| Keywords | cache de `ph_niches` → seed estático → el nicho. Sin LLM |
+| Descubrimiento | fetch SSR, keywords × países |
+| Rango (0-50/50-100/100+) | conteo real del anunciante, aritmética |
+| Monoproducto | clustering por clave de producto (`product-key.ts`) |
+| **¿Es un producto físico DEL nicho?** | **Haiku, 1 llamada por candidato medido** |
+
+⚠️ **SE LEE POR `fetch` SAME-ORIGIN, NO NAVEGANDO — y solo funciona DENTRO de una página abierta.** Meta imprime los resultados en el HTML del servidor, así que basta pedir la URL y leer `search_results_connection`: no hacen falta los 8s de espera ni los 3 scrolls de `navigateAndCapture`, que existen para juntar creativos. Medido acá: **2,3s una búsqueda y 1,9s la página de un anunciante**, contra ~15s por navegación. Un fetch plano desde Node recibe **403** (ya lo documenta `ad-count.ts`): lo que lo hace pasar son las cookies y headers que el browser ya tiene, por eso `openSsrSession` navega UNA vez por página y después todo son fetches internos. Dos trampas medidas: Meta reescribe la URL del lado del cliente y esa navegación destruye el contexto (hay que esperar a que asiente, si no el primer `evaluate` falla), y **`page.evaluate` hay que pasarlo como STRING** porque tsx/esbuild inyecta `__name` en las funciones que compila y el browser revienta con *"__name is not defined"*.
+
+⚠️ **EL LINK DE CHAT NO IDENTIFICA UN PRODUCTO.** `productKey` usa el path del link, pero si el destino es WhatsApp/Instagram/Messenger cae al título. Sin eso, cualquier anunciante que mande todos sus anuncios al mismo WhatsApp da monoproducto 1.00: medido, **Pistache pasó de 0.80 a 0.07** y SkinVital de 1.00 a 0.38 — los dos entraban a la vitrina como monoproducto perfecto. `share` se mide sobre la MUESTRA (la primera página de anuncios del anunciante, ~30), no sobre su total: para un anunciante grande es muestra, no censo.
+
+⚠️ **MENCIONAR EL NICHO NO ES PERTENECER A ÉL, y por eso este paso no se puede escribir en código.** Medido sobre acné: buscar el término solo en la URL del producto recupera 3 de 15; incluyendo el cuerpo del anuncio recupera 12 pero devuelve 56 candidatos, entre ellos **un curso de idiomas y unas plantillas de pádel** (matchearon "espinillas" en sentido anatómico). Ningún umbral da recall y precisión a la vez. El prompt pregunta explícitamente si el producto está **formulado para** el problema o solo lo nombra entre sus beneficios. Casos de aceptación, todos verificados en la corrida real: un **cabezal de ducha con 263 anuncios y share 100%** que dice "evita caída de pelo, irritación de piel, acné" → descartado (*"está diseñado para filtrar agua"*); una crema **con 83% de share** para manchas solares y melasma → descartada; un **jabón despigmentante** → descartado. Si tocás ese prompt, esos tres tienen que seguir cayendo.
+
+**El modelo no ve números y no puede cambiarlos.** Recibe texto y devuelve un enum de 3 valores + una **cita textual**, y `citaRespaldada` verifica en código que esa cita exista literal en el texto que se le pasó. Sin respaldo el producto va a `sin_verificar`, no a la vitrina. Es el mismo patrón de "el modelo redacta, el código verifica" de video-ads.
+
+**`senal_nicho` (`path` | `titulo` | `cuerpo` | `ninguna`) es la CONFIANZA, no un filtro.** Registra dónde apareció el término: en la URL del producto es casi certeza, en el cuerpo del anuncio necesita ojos. Viaja hasta la card, en el tooltip del sello.
+
+**Cableado al front:** las filas aprobadas salen con `status='monoproducto'` y la card les pone el sello *"Monoproducto NN%"* (`verificado` en `toEntry`). ⚠️ **El serving NO exige `monoproducto`**, y no puede: medido, el **95% del inventario está `pendiente`** (65.822 filas contra 122 aprobadas), así que filtrar por eso dejaría la vitrina en 8 nichos. Lo que sí se agregó es excluir `descartado` junto a `inactivo` — medido antes de aplicarlo: 2.878 filas en 15 nichos y el más golpeado conserva 82 productos, así que no vacía ninguna vitrina.
+
+**Países:** el default es `MX,EC,CO,CL,AR` — PE queda fuera porque se busca lo que aún NO está pautado en Perú. Va como parámetro y **no toca `COUNTRIES` de `@ph/shared`**, del que dependen los demás scripts.
+
+**Qué falta medir antes de jubilar el pipeline viejo:** el share determinista de `product-key.ts` **no está comparado contra `classifyShare`** (el del verificador viejo) sobre las mismas filas. `classifyShare` lleva adentro fallos ya corregidos que este camino no vivió — el índice base-0/base-1 que hundía a Revitalegs de 100% a 27%, y el sesgo de 40 puntos de `sort_data`. De ese segundo sí se hizo cargo: `advertiserUrl` va sin `sort_data` y con `country=ALL`, igual que el viejo.
+
 **⚠️ REGLAS DE COSTO — no romper (esto fue requisito explícito del usuario):**
 
 1. **Anthropic SOLO en los workers del VPS, NUNCA en Vercel.** `anthropic.ts`/`analysis-runner.ts`/`keyword-expansion.ts` viven en `apps/worker` y solo los importan sus scripts (`pipeline.ts`/`analyze.ts`/`resolve.ts`). El split del monorepo lo blinda por construcción: `apps/web` no declara `@anthropic-ai/sdk` ni `playwright` como dep y físicamente no puede importarlos. Análisis en el path de request = costo x100.

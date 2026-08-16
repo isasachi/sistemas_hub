@@ -266,6 +266,11 @@ export interface RawProductRow {
   product_name?: string | null
   verdict_note?: string | null
   verified_at?: string | null
+  // Los escribe scan-nicho.ts. `senal_nicho` dice DÓNDE apareció el término del
+  // nicho (path del producto > título > cuerpo) y es la confianza del veredicto;
+  // `product_path` es la clave sobre la que se calculó el share.
+  senal_nicho?: 'path' | 'titulo' | 'cuerpo' | 'ninguna' | null
+  product_path?: string | null
   // Última vez que se comprobó que el anunciante sigue pautando (script de 48h).
   checked_at?: string | null
 }
@@ -280,6 +285,12 @@ export interface RawProductEntry {
   country: string | null
   adCount: number
   adsUrl: string
+  // Confianza del veredicto, para que la card distinga lo verificado de lo que
+  // solo está scrapeado. null = la fila viene del pipeline viejo, que no los
+  // escribe; la card no muestra nada en ese caso.
+  verificado: boolean
+  share: number | null
+  senal: 'path' | 'titulo' | 'cuerpo' | 'ninguna' | null
 }
 
 // Respuesta del buscador: UN rango a la vez, 10 productos. `groups` sigue

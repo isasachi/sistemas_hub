@@ -30,5 +30,11 @@ export function toEntry(r: RawProductRow): RawProductEntry {
       'sort_data[mode]': 'total_impressions', 'sort_data[direction]': 'desc',
       view_all_page_id: r.page_id,
     })}`,
+    // Solo scan-nicho.ts aprueba con evidencia (share medido + cita textual
+    // respaldada). Las filas 'pendiente' del inventario viejo se siguen
+    // sirviendo, pero sin sello.
+    verificado: r.status === 'monoproducto',
+    share: typeof r.share === 'number' ? r.share : null,
+    senal: r.senal_nicho ?? null,
   }
 }

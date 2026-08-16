@@ -1,7 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ExternalLink, Loader2, PackageSearch, Flame, ChevronDown } from "lucide-react";
+import { ExternalLink, Loader2, PackageSearch, Flame, ChevronDown, BadgeCheck } from "lucide-react";
+
+// Dónde apareció el término del nicho, en palabras. Es la confianza del
+// veredicto: en la URL del producto es casi certeza; solo en el cuerpo del
+// anuncio, mucho menos.
+const SENAL_TEXTO: Record<string, string> = {
+  path: "la dirección del producto",
+  titulo: "el titular del anuncio",
+  cuerpo: "el texto del anuncio",
+  ninguna: "ningún campo directo",
+};
 import ToolShell from "@/components/tools/ui/ToolShell";
 import {
   RAW_BUCKETS, RAW_BUCKET_LABEL, CATEGORIES,
@@ -63,12 +73,15 @@ function PageBtn({ label, active, disabled, title, onClick }: {
   );
 }
 
-// ⚠️ Los productos NO llegan verificados por las tres reglas. El serving
-// (`getApprovedByCategory`, @ph/shared) filtra producto físico y agrupa por
-// rango de anuncios, pero la regla de anunciante monoproducto solo PRIORIZA:
-// detrás de los verificados va relleno sin verificar. Tampoco hay validación de
-// competencia en Perú — el inventario incluye avisos peruanos. No prometas
-// ninguna de esas dos cosas en el texto de esta pantalla.
+// ⚠️ La mayoría de los productos NO llega verificada, así que la pantalla no
+// puede prometerlo. El serving descarta lo que el verificador ya probó que no
+// sirve y agrupa por rango de anuncios, pero el grueso del inventario sigue en
+// 'pendiente' y se sirve igual. Tampoco hay validación de competencia en Perú:
+// el inventario incluye avisos peruanos.
+//
+// Lo que SÍ se puede afirmar es por producto: los que pasaron scan-nicho.ts
+// llevan `verificado` y muestran el sello con su share medido. Esa promesa vive
+// en la card, una por una — nunca en el encabezado de la pantalla.
 
 function ProductCard({ p }: { p: RawProductEntry }) {
   // Sin nombre ni titular (los anuncios de catálogo llegan con la plantilla sin
@@ -84,6 +97,18 @@ function ProductCard({ p }: { p: RawProductEntry }) {
         <p className="text-[12px] text-[#bebebe] mt-0.5">
           {[titulo ? p.advertiser : null, p.country].filter(Boolean).join(" · ")}
         </p>
+        {p.verificado && (
+          <span
+            title={
+              `Verificado: ${Math.round((p.share ?? 0) * 100)}% de los anuncios de este anunciante son del mismo producto` +
+              (p.senal ? ` · el término del nicho aparece en ${SENAL_TEXTO[p.senal]}` : "")
+            }
+            className="inline-flex items-center gap-1 mt-2 text-[10px] font-bold uppercase tracking-[0.5px] rounded-full px-2 py-0.5 border border-emerald-400/30 text-emerald-300 bg-emerald-400/10"
+          >
+            <BadgeCheck className="w-3 h-3" />
+            Monoproducto {Math.round((p.share ?? 0) * 100)}%
+          </span>
+        )}
       </div>
 
       {p.body && (

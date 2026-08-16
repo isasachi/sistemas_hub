@@ -637,6 +637,9 @@ export interface RawVerdictInput {
   share: number | null
   product_name: string | null
   verdict_note: string | null
+  // Los escribe el pipeline scan-nicho; el verificador viejo los deja sin tocar.
+  senal_nicho?: 'path' | 'titulo' | 'cuerpo' | 'ninguna' | null
+  product_path?: string | null
 }
 
 // Cola de verificación: productos scrapeados a los que todavía no se les
@@ -668,6 +671,10 @@ export async function saveRawVerdict(v: RawVerdictInput): Promise<void> {
       status: v.status, kind: v.kind, share: v.share,
       product_name: v.product_name ? cleanJsonText(v.product_name) : null,
       verdict_note: v.verdict_note ? cleanJsonText(v.verdict_note).slice(0, 400) : null,
+      // Se omiten si vienen undefined para no pisar con null lo que ya haya
+      // escrito el otro verificador sobre la misma fila.
+      ...(v.senal_nicho !== undefined ? { senal_nicho: v.senal_nicho } : {}),
+      ...(v.product_path !== undefined ? { product_path: v.product_path } : {}),
       verified_at: new Date().toISOString(),
     })
     .eq('niche', v.niche)
@@ -687,11 +694,21 @@ export async function saveRawVerdict(v: RawVerdictInput): Promise<void> {
 // datos — solo dejó de leerse y de escribirse.
 const SOBRE_PEDIDO = 4   // se piden 4× filas porque la lista negra recorta después
 
+// Lo que NO llega a la vitrina, por estado:
+//   'inactivo'   — refresh-active marca así lo que dejó de pautar.
+//   'descartado' — el verificador ya probó que no es un producto físico del
+//                  nicho (servicios, cursos, apps, marketplaces, off-topic).
+// El resto SÍ se sirve, incluido 'pendiente': el 95% del inventario está sin
+// verificar, así que exigir 'monoproducto' dejaría la vitrina en 122 filas.
+// Medido antes de excluir 'descartado': 2.878 filas en 15 nichos, y el nicho
+// más golpeado conserva 82 productos.
+const NO_SERVIBLES = '(inactivo,descartado)'
+
 function bucketQuery(niche: string, bucket: RawBucket) {
   const { min, max } = bucketRange(bucket)
   let q = getDb().from('ph_raw_products').select('*')
     .eq('niche', niche)
-    .neq('status', 'inactivo')     // refresh-active marca así lo que dejó de pautar
+    .not('status', 'in', NO_SERVIBLES)
     .gte('ad_count', min)
   if (max !== null) q = q.lt('ad_count', max)
   return q.order('ad_count', { ascending: false }).order('page_id')
@@ -709,9 +726,9 @@ function bucketQuery(niche: string, bucket: RawBucket) {
 function categoriaQuery(niches: string[], bucket: RawBucket) {
   const { min, max } = bucketRange(bucket)
   let q = getDb().from('ph_raw_products')
-    .select('niche,page_id,name,product_name,country,ad_count,raw_data,status')
+    .select('niche,page_id,name,product_name,country,ad_count,raw_data,status,share,senal_nicho')
     .in('niche', niches)
-    .neq('status', 'inactivo')
+    .not('status', 'in', NO_SERVIBLES)
     .gte('ad_count', min)
   if (max !== null) q = q.lt('ad_count', max)
   return q.order('ad_count', { ascending: false }).order('page_id')
@@ -929,7 +946,7 @@ export async function countApproved(niche: string): Promise<number> {
     .from('ph_raw_products')
     .select('page_id', { count: 'exact', head: true })
     .eq('niche', niche)
-    .neq('status', 'inactivo')
+    .not('status', 'in', NO_SERVIBLES)
   if (error) throw new Error(error.message)
   return count ?? 0
 }
