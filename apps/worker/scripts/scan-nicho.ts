@@ -34,9 +34,10 @@ import {
   launchScraperContext, runPool, searchUrl, noteNavResult, rateGateMs,
   isPersistentlyBlocked, PersistentBlockError, CONCURRENCY,
 } from '../lib/product-hunter/scraper'
-import { openSsrSession, readConnection, advertiserUrl, type SsrAd } from '../lib/product-hunter/ssr-fetch'
-import { shareOf, senalNicho, productKey, type SenalNicho } from '../lib/product-hunter/product-key'
-import { juzgarNicho } from '../lib/product-hunter/nicho-verdict'
+import { openSsrSession, readConnection } from '../lib/product-hunter/ssr-fetch'
+import {
+  medirAnunciante, juzgarAnunciante, esFalloDeApi, type Medicion,
+} from '../lib/product-hunter/scan-verify'
 import { isLikelyService } from '../lib/product-hunter/competitors'
 import {
   seedKeywords, getNicheStatus, upsertRawProducts, saveRawVerdict, upsertRawNiche,
@@ -52,15 +53,8 @@ const KEYWORD_LIMIT = Math.max(0, Number(process.env.PH_SCAN_KEYWORDS ?? 12))
 // búsquedas. Cada uno cuesta un fetch (~2s) y, si pasa, una llamada Haiku.
 const MEDIR_LIMIT = Math.max(1, Number(process.env.PH_SCAN_MEDIR ?? 60))
 const JITTER_MS = Math.max(0, Number(process.env.PH_JITTER_MS ?? 500))
-const SHARE_MIN = Number(process.env.PH_SCAN_SHARE_MIN ?? 0.5)
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
-
-// Igual que en verify-products: un fallo de la API no es un veredicto sobre el
-// producto. Marcar la fila por esto sería mentir y quemar navegaciones al pedo.
-function esFalloDeApi(msg: string): boolean {
-  return /credit balance|rate_limit|overloaded|429|5\d\d \{|authentication_error|permission_error/i.test(msg)
-}
 
 interface Candidato {
   pageId: string
@@ -121,36 +115,13 @@ async function descubrir(
 }
 
 // ── Fase 3: medición (determinista) ──────────────────────────────────────────
-interface Medicion {
-  cand: Candidato
-  adCount: number
-  share: number
-  dominante: string | null
-  distintos: number
-  muestra: number
-  senal: SenalNicho
-  textos: string[]
-}
-
+// La medición y el veredicto viven en scan-verify.ts: los comparte con
+// scan-base.ts, que verifica lo ya scrapeado en vez de descubrir.
 async function medir(page: Page, cand: Candidato, terminos: string[]): Promise<Medicion | null> {
   await esperarTurno()
-  const res = await readConnection(page, advertiserUrl(cand.pageId))
-  // Inconcluso: no se inventa un rango ni un share. La fila queda sin tocar.
-  if (!res || typeof res.count !== 'number') { noteNavResult(0); return null }
-  noteNavResult(res.ads.length)
-
-  const s = shareOf(res.ads)
-  const delDominante = res.ads.filter((a: SsrAd) => productKey(a) === s.dominante)
-  const textos = (delDominante.length ? delDominante : res.ads)
-    .map((a) => [a.title, a.body].filter(Boolean).join(' — '))
-    .filter((t) => t.trim().length > 0)
-
-  return {
-    cand, adCount: res.count, share: s.share, dominante: s.dominante,
-    distintos: s.distintos, muestra: s.muestra,
-    senal: senalNicho(terminos, s.dominante, delDominante.length ? delDominante : res.ads),
-    textos,
-  }
+  const m = await medirAnunciante(page, cand.pageId, terminos)
+  noteNavResult(m ? m.muestra : 0)
+  return m
 }
 
 async function main() {
@@ -205,53 +176,16 @@ async function main() {
       const m = await medir(page, cand, terminos)
       if (!m) return { cand, estado: 'inconcluso' as const }
 
-      // Regla de rango: sale del conteo real, sin modelo.
-      // Regla de monoproducto: share determinista sobre la muestra.
-      if (m.share < SHARE_MIN) {
-        if (!dryRun) await saveRawVerdict({
-          niche, page_id: cand.pageId, ad_count: m.adCount, status: 'descartado',
-          kind: 'indeterminado', share: m.share, product_name: null,
-          verdict_note: `no es monoproducto: ${Math.round(m.share * 100)}% del dominante entre ${m.distintos} productos`,
-          senal_nicho: m.senal, product_path: m.dominante,
-        })
-        return { cand, m, estado: 'descartado' as const, motivo: 'share' }
-      }
-
-      // Sin LLM el pipeline llega hasta acá: mide y marca 'sin_verificar'.
-      // ⚠️ Esas filas SE SIRVEN igual (el serving solo excluye 'descartado' e
-      // 'inactivo') pero sin sello, así que en la vitrina no se distinguen de
-      // las 'pendiente'. Es para medir sin gastar Haiku, no el modo por defecto.
-      if (!ai) {
-        if (!dryRun) await saveRawVerdict({
-          niche, page_id: cand.pageId, ad_count: m.adCount, status: 'sin_verificar',
-          kind: 'indeterminado', share: m.share, product_name: null,
-          verdict_note: 'medido sin verificación de nicho (--sin-llm)',
-          senal_nicho: m.senal, product_path: m.dominante,
-        })
-        return { cand, m, estado: 'sin_verificar' as const }
-      }
-
-      const v = await juzgarNicho(ai, {
-        niche, advertiser: cand.pageName, productPath: m.dominante, textos: m.textos,
-      })
-      const fisico = v.kind === 'fisico'
-      const status = !fisico ? 'descartado'
-        : !v.perteneceAlNicho ? 'descartado'
-        // La cita es la verificación en código del veredicto: sin respaldo no se
-        // publica, se manda a revisión.
-        : !v.citaVerificada ? 'sin_verificar'
-        : 'monoproducto'
-      const nota = !fisico ? `no es producto físico (${v.kind}): ${v.motivo}`
-        : !v.perteneceAlNicho ? `fuera del nicho: ${v.motivo}`
-        : !v.citaVerificada ? `sin cita textual que respalde el veredicto: ${v.motivo}`
-        : v.motivo
-
+      // El rango sale del conteo real y el monoproducto del share determinista;
+      // solo lo que pasa ese filtro gasta una llamada a Haiku. La regla vive en
+      // scan-verify.ts, compartida con scan-base.ts.
+      const v = await juzgarAnunciante(ai, niche, cand.pageName, m)
       if (!dryRun) await saveRawVerdict({
-        niche, page_id: cand.pageId, ad_count: m.adCount, status,
-        kind: v.kind, share: m.share, product_name: v.productName || null,
-        verdict_note: nota, senal_nicho: m.senal, product_path: m.dominante,
+        niche, page_id: cand.pageId, ad_count: m.adCount, status: v.status,
+        kind: v.kind, share: m.share, product_name: v.productName,
+        verdict_note: v.nota, senal_nicho: m.senal, product_path: m.dominante,
       })
-      return { cand, m, estado: status, motivo: v.motivo }
+      return { cand, m, estado: v.status, motivo: v.nota }
     })
 
     for (const s of settled) {

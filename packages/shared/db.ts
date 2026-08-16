@@ -654,6 +654,37 @@ export async function getRawProductsToVerify(limit = 50, niche?: string): Promis
   return (data as RawProductRow[]) ?? []
 }
 
+/**
+ * Cola de verificación ordenada por VOLUMEN de anuncios, no por antigüedad.
+ * Cruza nichos a propósito: un anunciante con 1.900 anuncios vale más que uno
+ * con 3, esté en el nicho que esté.
+ *
+ * `minAds` filtra el tramo: el grueso del pendiente vive en 1-49 anuncios, donde
+ * la muestra es tan chica que el share casi no informa (5 anuncios del mismo
+ * producto dan 1.00). Empezar por arriba pone primero lo que se puede medir.
+ */
+export async function getRawProductsByVolume(
+  limit = 60, minAds = 0, maxAds?: number, niche?: string, todo = false,
+): Promise<RawProductRow[]> {
+  let q = getDb().from('ph_raw_products').select('*')
+  // `todo` = toda la base, no solo la cola de pendientes: incluye lo que
+  // verificó el motor viejo (que no escribe `senal_nicho`) y lo marcado
+  // 'inactivo'. `senal_nicho` es el marcador de "ya pasó por scan-*": lo escribe
+  // SIEMPRE ese camino (aunque sea 'ninguna') y nunca el viejo, así que sirve de
+  // cola reanudable sin una columna extra. Las filas inconclusas no lo escriben,
+  // así que vuelven a salir solas.
+  q = todo ? q.is('senal_nicho', null) : q.eq('status', 'pendiente')
+  q = q.gte('ad_count', minAds)
+  if (typeof maxAds === 'number') q = q.lt('ad_count', maxAds)
+  if (niche) q = q.eq('niche', niche)
+  const { data, error } = await q
+    .order('ad_count', { ascending: false })
+    .order('page_id')
+    .limit(limit)
+  if (error) throw new Error(error.message)
+  return (data as RawProductRow[]) ?? []
+}
+
 export async function countRawPending(): Promise<number> {
   const { count, error } = await getDb()
     .from('ph_raw_products')
