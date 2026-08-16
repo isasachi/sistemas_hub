@@ -2,7 +2,7 @@
 // celdas de input con los valores del wizard (preservando estilos y fórmulas), borra
 // la hoja del embudo no usado, y fuerza recálculo al abrir. JSZip = read-modify-write del zip.
 import JSZip from "jszip";
-import { normalizarPct, type CalcInputs } from "./model";
+import { type CalcInputs } from "./model";
 
 // LEADS → sheet3.xml (rId3) · MENSAJES → sheet4.xml (rId4). Hoja1=1, ESTABLECIENDO PRECIOS=2.
 const SHEET = {
@@ -20,11 +20,11 @@ function setCell(xml: string, ref: string, value: number): string {
   });
 }
 
-// Mapa celda→valor para la hoja del funnel elegido. Los % de cantidad se escriben
-// NORMALIZADOS para que la hoja calcule lo mismo que la pantalla; los upsells van crudos.
+// Mapa celda→valor para la hoja del funnel elegido. Los % van crudos, igual que en pantalla:
+// la hoja calcula lo mismo porque el Excel tampoco los normaliza.
 function cellMap(input: CalcInputs): Record<string, number> {
   const op = input.operacion;
-  const cant = normalizarPct(input.cantidad);
+  const cant = input.cantidad;
   const ups = input.upsells;
   const m: Record<string, number> = {
     C4: op.precioVenta, C5: op.costoProducto, C6: op.flete, C7: op.fullfillment,
