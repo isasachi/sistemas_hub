@@ -338,6 +338,14 @@ npx tsx scripts/scan-nicho.ts --niche acne --paises MX,EC,CO,CL,AR --limit 60
 
 **Países:** el default es `MX,EC,CO,CL,AR` — PE queda fuera porque se busca lo que aún NO está pautado en Perú. Va como parámetro y **no toca `COUNTRIES` de `@ph/shared`**, del que dependen los demás scripts.
 
+**`scan-base.ts` — la misma verificación, pero sobre lo que YA está en la base.** No descubre: recorre `ph_raw_products` (`status='pendiente'`) ordenado por `ad_count desc`, cruzando nichos. Comparte con `scan-nicho` la medición y el veredicto, extraídos a `scan-verify.ts` para no tener dos copias de la misma regla.
+
+⚠️ **UN ANUNCIANTE SE LEE UNA SOLA VEZ, aunque esté en 40 nichos.** Medido 2026-08-16: las **66.005 filas pendientes son solo 26.743 anunciantes** (2,47 cada uno). El caso extremo no es teórico — las primeras 20 filas por volumen eran **el mismo Shoptemu** (50.001 anuncios) en 20 nichos, o sea 20 llamadas a Haiku para responder lo mismo. Como `advertiserUrl` va con `country=ALL`, la lectura de un anunciante es idéntica en todos sus nichos: se cachea por `page_id` y saca ~60% de los fetches. Se cachea **la promesa, no el resultado**, porque `runPool` corre en paralelo y dos filas del mismo anunciante llegan juntas a pedir el mismo fetch. Lo mismo con el veredicto **"no es físico"**, que tampoco depende del nicho. Medido tras el cambio: 40 filas en 0,2 min contra 20 en 0,6 min. ⚠️ Lo que **NO** se cachea es `senal_nicho` ni la pertenencia al nicho: esas sí dependen del nicho, por eso `leerAnunciante` (cacheable) está separada de `medicionDe` (por fila).
+
+⚠️ **El orden por volumen no es cosmético.** De las 66.005 pendientes, **31.397 están por debajo de 50 anuncios**, donde la muestra es tan chica que el share casi no informa: 5 anuncios del mismo producto dan 1.00 y no prueban nada. Empezar por arriba pone primero lo medible y deja el tramo flojo para el final, donde cortar cuesta poco.
+
+**Es reanudable y el diseño se apoya en eso:** una fila verificada deja de estar `pendiente`, así que ante un block persistente o un fallo de API el script **corta limpio informando el avance** en vez de morir a mitad de lote. Volver a correr el mismo comando retoma la cola.
+
 **Qué falta medir antes de jubilar el pipeline viejo:** el share determinista de `product-key.ts` **no está comparado contra `classifyShare`** (el del verificador viejo) sobre las mismas filas. `classifyShare` lleva adentro fallos ya corregidos que este camino no vivió — el índice base-0/base-1 que hundía a Revitalegs de 100% a 27%, y el sesgo de 40 puntos de `sort_data`. De ese segundo sí se hizo cargo: `advertiserUrl` va sin `sort_data` y con `country=ALL`, igual que el viejo.
 
 **⚠️ REGLAS DE COSTO — no romper (esto fue requisito explícito del usuario):**
