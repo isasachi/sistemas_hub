@@ -1,0 +1,76 @@
+- generic [ref=f1e12]:
+  - generic [ref=f1e15]:
+    - link "Meta Ad Library" [ref=f1e18] [cursor=pointer]:
+      - /url: /ads/library/?source=fb-logo
+    - generic [ref=f1e21]: Ad Library
+    - menuitem "Ad Library Report" [ref=f1e24] [cursor=pointer]
+    - menuitem "Ad Library API" [ref=f1e27] [cursor=pointer]
+    - menuitem "Branded Content" [ref=f1e30] [cursor=pointer]
+    - menuitem "Open navigation panel" [ref=f1e33] [cursor=pointer]
+  - generic [ref=f1e40]:
+    - combobox "Mexico" [ref=f1e44] [cursor=pointer]
+    - combobox "All ads" [ref=f1e57] [cursor=pointer]
+    - generic [ref=f1e77]:
+      - generic [ref=f1e78]: Search by keyword or advertiser
+      - generic [ref=f1e89]:
+        - searchbox "Search by keyword or advertiser" [ref=f1e95]: skincare
+        - button "Clear" [ref=f1e97] [cursor=pointer]
+  - dialog [ref=f1e99]:
+    - generic [ref=f1e100]:
+      - link [ref=f1e101] [cursor=pointer]:
+        - /url: /
+        - heading [level=4] [ref=f1e102]: Log in
+      - menuitem [ref=f1e103] [cursor=pointer]
+    - generic [ref=f1e105]:
+      - generic [ref=f1e106]:
+        - heading [level=4] [ref=f1e108]: Ad Library
+        - menuitem [ref=f1e110] [cursor=pointer]:
+          - heading [level=4] [ref=f1e112]: Ad Library Report
+        - menuitem [ref=f1e114] [cursor=pointer]:
+          - heading [level=4] [ref=f1e116]: Ad Library API
+        - menuitem [ref=f1e118] [cursor=pointer]:
+          - heading [level=4] [ref=f1e120]: Branded Content
+      - separator [ref=f1e121]
+      - generic [ref=f1e122]:
+        - menuitem [ref=f1e124] [cursor=pointer]:
+          - heading [level=4] [ref=f1e126]: System status
+        - menuitem [ref=f1e128] [cursor=pointer]:
+          - heading [level=4] [ref=f1e130]: Subscribe to email updates
+        - menuitem [ref=f1e132] [cursor=pointer]:
+          - heading [level=4] [ref=f1e134]: FAQ
+        - menuitem [ref=f1e136] [cursor=pointer]:
+          - heading [level=4] [ref=f1e138]: About ads and data use
+        - menuitem [ref=f1e140] [cursor=pointer]:
+          - heading [level=4] [ref=f1e142]: Privacy
+        - menuitem [ref=f1e144] [cursor=pointer]:
+          - heading [level=4] [ref=f1e146]: Terms
+        - menuitem [ref=f1e148] [cursor=pointer]:
+          - heading [level=4] [ref=f1e150]: Cookies
+  - generic [ref=f1e153]:
+    - generic [ref=f1e154]: System status
+    - generic [ref=f1e165]:
+      - list [ref=f1e166]:
+        - listitem [ref=f1e167]:
+          - heading [level=3] [ref=f1e168]:
+            - link "Ad Library API" [ref=f1e169] [cursor=pointer]:
+              - /url: /ads/library/api/?source=archive-landing-page
+        - listitem [ref=f1e170]:
+          - heading [level=3] [ref=f1e171]:
+            - link "About ads and data use" [ref=f1e172] [cursor=pointer]:
+              - /url: /ads/about/?entry_product=ad_library
+        - listitem [ref=f1e173]:
+          - heading [level=3] [ref=f1e174]:
+            - link "Privacy" [ref=f1e175] [cursor=pointer]:
+              - /url: /privacy/center/?entry_point=privacy_basics_redirect
+        - listitem [ref=f1e176]:
+          - heading [level=3] [ref=f1e177]:
+            - link "Terms" [ref=f1e178] [cursor=pointer]:
+              - /url: /policies/
+        - listitem [ref=f1e179]:
+          - heading [level=3] [ref=f1e180]:
+            - link "Cookies" [ref=f1e181] [cursor=pointer]:
+              - /url: /policies/cookies/
+      - heading [level=3] [ref=f1e183]:
+        - text: Meta © 2026 |
+        - link "English (US)" [ref=f1e184] [cursor=pointer]:
+          - /url: /language/

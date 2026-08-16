@@ -57,6 +57,19 @@ export function productKey(ad: KeyableAd): string | null {
   return textKey(ad)
 }
 
+// ⚠️ LIMITACIÓN CONOCIDA, VERIFICADA CONTRA UN ANUNCIANTE REAL: el share se
+// SUBESTIMA cuando un mismo producto se promociona desde varias landings.
+// VivaCuerpo México (1.078 anuncios) reparte sus leggings entre
+// /collections/edicion-vivacuerpo-colores-deseo (17 anuncios),
+// /pages/5-razones (12) y /pages/leggings (1) — un solo producto en tres URLs,
+// que acá cuentan como tres. Su share sale 0.57 cuando el real ronda 0.97.
+//
+// No se corrigió a propósito: agrupar landings por heurística (mismo dominio,
+// prefijos comunes) uniría productos DISTINTOS de una tienda de catálogo, que es
+// justo lo que este cálculo existe para separar. El sesgo actual descarta
+// monoproductos legítimos, no publica basura — que es el lado seguro para
+// equivocarse. Si algún día molesta, la salida es medir cuántos aprobados se
+// pierden, no aflojar la clave.
 export interface ShareResult {
   dominante: string | null
   dominanteN: number
