@@ -2,7 +2,7 @@
 //
 //   npx tsx scripts/scan-nicho.ts --niche acne
 //   npx tsx scripts/scan-nicho.ts --niche acne --paises MX,EC,CO,CL,AR --limit 60
-//   npx tsx scripts/scan-nicho.ts --niche acne --sin-llm     (deja todo pendiente)
+//   npx tsx scripts/scan-nicho.ts --niche acne --sin-llm     (mide, no verifica el nicho)
 //   npx tsx scripts/scan-nicho.ts --niche acne --dry-run     (no escribe en la base)
 //
 // ── Reparto del trabajo ──────────────────────────────────────────────────────
@@ -217,7 +217,10 @@ async function main() {
         return { cand, m, estado: 'descartado' as const, motivo: 'share' }
       }
 
-      // Sin LLM el pipeline llega hasta acá: mide y deja la fila pendiente.
+      // Sin LLM el pipeline llega hasta acá: mide y marca 'sin_verificar'.
+      // ⚠️ Esas filas SE SIRVEN igual (el serving solo excluye 'descartado' e
+      // 'inactivo') pero sin sello, así que en la vitrina no se distinguen de
+      // las 'pendiente'. Es para medir sin gastar Haiku, no el modo por defecto.
       if (!ai) {
         if (!dryRun) await saveRawVerdict({
           niche, page_id: cand.pageId, ad_count: m.adCount, status: 'sin_verificar',
