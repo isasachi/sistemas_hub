@@ -1,9 +1,15 @@
 // Verifica lo que YA está en la base, del más pautado al menos.
 //
-//   npx tsx scripts/scan-base.ts --min-ads 100            (tramo de más volumen)
+//   npx tsx scripts/scan-base.ts --todo                   (TODA la base, por volumen)
+//   npx tsx scripts/scan-base.ts --min-ads 100            (solo el tramo de más volumen)
 //   npx tsx scripts/scan-base.ts --min-ads 50 --max-ads 100
 //   npx tsx scripts/scan-base.ts --total 500 --lote 60
 //   npx tsx scripts/scan-base.ts --sin-llm                (mide, no verifica nicho)
+//
+// `--todo` barre la base entera —no solo `status='pendiente'`— incluyendo lo que
+// dejó el motor viejo y las filas 'inactivo'. La cola son las filas sin
+// `senal_nicho`, que solo escribe este camino: por eso es reanudable sin
+// columna extra y no re-procesa lo ya hecho.
 //
 // A diferencia de scan-nicho.ts NO descubre nada: la cola sale de
 // ph_raw_products (status='pendiente') y cruza todos los nichos, ordenada por
@@ -84,10 +90,15 @@ async function main() {
   const total = Number(val('--total') ?? Infinity)
   const niche = val('--niche')
   const sinLlm = args.includes('--sin-llm')
+  // --todo: TODA la base, no solo la cola de pendientes. Incluye lo que verificó
+  // el motor viejo y lo marcado 'inactivo' (que revive si volvió a pautar: el
+  // conteo se relee en vivo).
+  const todo = args.includes('--todo')
 
   const pendientes = await countRawPending()
   console.log(
-    `Cola por volumen · ${pendientes} pendientes en total · tramo ${minAds}${maxAds ? `-${maxAds}` : '+'} anuncios · ` +
+    `Cola por volumen · ${todo ? 'TODA la base' : `${pendientes} pendientes`} · ` +
+    `tramo ${minAds}${maxAds ? `-${maxAds}` : '+'} anuncios · ` +
     `lote ${lote} · conc ${CONCURRENCY}${sinLlm ? ' · SIN LLM' : ''}`,
   )
 
@@ -103,7 +114,7 @@ async function main() {
 
     while (procesados < total && !motivoCorte) {
       const cuantos = Math.min(lote, total - procesados)
-      const filas = await getRawProductsByVolume(cuantos, minAds, maxAds, niche)
+      const filas = await getRawProductsByVolume(cuantos, minAds, maxAds, niche, todo)
       if (!filas.length) { motivoCorte = 'cola vacía'; break }
 
       const settled = await runPool(filas, pages, async (row: RawProductRow, page: Page) => {

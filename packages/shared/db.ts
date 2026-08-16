@@ -664,11 +664,17 @@ export async function getRawProductsToVerify(limit = 50, niche?: string): Promis
  * producto dan 1.00). Empezar por arriba pone primero lo que se puede medir.
  */
 export async function getRawProductsByVolume(
-  limit = 60, minAds = 0, maxAds?: number, niche?: string,
+  limit = 60, minAds = 0, maxAds?: number, niche?: string, todo = false,
 ): Promise<RawProductRow[]> {
   let q = getDb().from('ph_raw_products').select('*')
-    .eq('status', 'pendiente')
-    .gte('ad_count', minAds)
+  // `todo` = toda la base, no solo la cola de pendientes: incluye lo que
+  // verificó el motor viejo (que no escribe `senal_nicho`) y lo marcado
+  // 'inactivo'. `senal_nicho` es el marcador de "ya pasó por scan-*": lo escribe
+  // SIEMPRE ese camino (aunque sea 'ninguna') y nunca el viejo, así que sirve de
+  // cola reanudable sin una columna extra. Las filas inconclusas no lo escriben,
+  // así que vuelven a salir solas.
+  q = todo ? q.is('senal_nicho', null) : q.eq('status', 'pendiente')
+  q = q.gte('ad_count', minAds)
   if (typeof maxAds === 'number') q = q.lt('ad_count', maxAds)
   if (niche) q = q.eq('niche', niche)
   const { data, error } = await q
