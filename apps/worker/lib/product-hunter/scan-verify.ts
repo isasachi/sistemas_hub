@@ -7,6 +7,7 @@ import type { Page } from 'playwright'
 import { readConnection, advertiserUrl, type SsrAd } from './ssr-fetch'
 import { shareOf, senalNicho, productKey, type SenalNicho } from './product-key'
 import { juzgarNicho } from './nicho-verdict'
+import { nonPhysicalSignal } from '@ph/shared'
 
 export const SHARE_MIN = Number(process.env.PH_SCAN_SHARE_MIN ?? 0.5)
 
@@ -92,6 +93,24 @@ export async function juzgarAnunciante(
       nota: `no es monoproducto: ${Math.round(m.share * 100)}% del dominante entre ${m.distintos} productos`,
     }
   }
+  // ⚠️ LA LISTA NEGRA VA ANTES QUE EL MODELO, y no solo por ahorrar la llamada.
+  // `nonPhysicalSignal` (@ph/shared) ya está medida sobre 4.492 anuncios
+  // etiquetados y reconoce marketplaces, clínicas, cursos y apps por el nombre
+  // del anunciante. Sin este gate el modelo aprobó **Temu Argentina** como
+  // monoproducto: con 44 anuncios activos y 96% del mismo organizador, los
+  // textos que le llegan describen un producto concreto y nada delata que la
+  // página es un marketplace. Sus hermanas con miles de anuncios (Shoptemu,
+  // Temu México, TemuColombia) sí cayeron, porque ahí la variedad se nota — o
+  // sea que el fallo aparece justo cuando el marketplace parece un producto.
+  const negra = nonPhysicalSignal(m.textos.join(' ').slice(0, 600), advertiser)
+  if (negra) {
+    return {
+      status: 'descartado', kind: negra.cluster === 'marketplace' || negra.cluster === 'plataforma' ? 'servicio' : 'indeterminado',
+      productName: null, medicion: m,
+      nota: `no es producto físico (${negra.cluster}): "${negra.match}" en el anunciante`,
+    }
+  }
+
   if (!ai) {
     return {
       status: 'sin_verificar', kind: 'indeterminado', productName: null, medicion: m,
