@@ -65,13 +65,18 @@ function terminosDe(niche: string): string[] {
   return t
 }
 
-// ⚠️ UN ANUNCIANTE SE LEE UNA SOLA VEZ, aunque esté en 40 nichos.
+// ⚠️ UN ANUNCIANTE SE LEE UNA SOLA VEZ POR PAÍS.
 // Medido 2026-08-16: 66.005 filas pendientes son 26.743 anunciantes (2,47 filas
 // cada uno), y el caso extremo es real — Shoptemu tiene 50.001 anuncios y
-// aparece en decenas de nichos. Como `advertiserUrl` va con country=ALL, su
-// lectura es idéntica en todos: cachearla saca ~60% de los fetches. Se guarda la
-// PROMESA, no el resultado, porque runPool corre en paralelo y dos filas del
-// mismo anunciante llegarían juntas a pedir el mismo fetch.
+// aparece en decenas de nichos. Se guarda la PROMESA, no el resultado, porque
+// runPool corre en paralelo y dos filas del mismo anunciante llegan juntas a
+// pedir el mismo fetch.
+//
+// ⚠️ La clave lleva el PAÍS desde que el rango se mide por mercado. Antes era
+// solo `page_id` (la lectura global servía para todos sus nichos) y eso ahorraba
+// ~60% de los fetches; ese ahorro se recorta cuando un anunciante aparece en
+// varios países, que es el precio de que el rango deje de contar volumen
+// mundial. Dentro de un mismo país el ahorro se conserva entero.
 const cacheLectura = new Map<string, Promise<Lectura | null>>()
 
 // Que algo NO sea un producto físico tampoco depende del nicho: un marketplace
@@ -118,16 +123,20 @@ async function main() {
       if (!filas.length) { motivoCorte = 'cola vacía'; break }
 
       const settled = await runPool(filas, pages, async (row: RawProductRow, page: Page) => {
-        let pendiente = cacheLectura.get(row.page_id)
+        const clave = `${row.page_id}|${row.country ?? 'ALL'}`
+        let pendiente = cacheLectura.get(clave)
         if (!pendiente) {
-          pendiente = (async () => { await esperarTurno(); return leerAnunciante(page, row.page_id) })()
-          cacheLectura.set(row.page_id, pendiente)
+          pendiente = (async () => {
+            await esperarTurno()
+            return leerAnunciante(page, row.page_id, row.country)
+          })()
+          cacheLectura.set(clave, pendiente)
         }
         const l = await pendiente
         // Inconcluso: la fila queda 'pendiente' y vuelve a salir en otra corrida.
         // Se saca del cache para que un fallo transitorio no se propague al
         // resto de los nichos del mismo anunciante.
-        if (!l) { cacheLectura.delete(row.page_id); return { row, estado: 'inconcluso' as const } }
+        if (!l) { cacheLectura.delete(clave); return { row, estado: 'inconcluso' as const } }
 
         const m = medicionDe(l, terminosDe(row.niche))
         // Ya se sabe que este anunciante no vende un objeto: se descarta sin

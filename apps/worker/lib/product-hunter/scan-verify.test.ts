@@ -2,7 +2,10 @@ import { describe, it, expect } from 'vitest'
 import { juzgarAnunciante, type Medicion } from './scan-verify'
 
 const medicion = (extra: Partial<Medicion> = {}): Medicion => ({
-  adCount: 44, share: 0.96, dominante: 'temu.com/organizador', distintos: 2,
+  // adCount es el del PAÍS (define el rango); adCountGlobal, el de todos los
+  // mercados. Se separan desde que medir en global inflaba el rango.
+  adCount: 44, adCountGlobal: 44,
+  share: 0.96, dominante: 'temu.com/organizador', distintos: 2,
   muestra: 25, senal: 'ninguna',
   textos: ['Organizador de closet plegable — Envío gratis a todo el país'],
   ...extra,
