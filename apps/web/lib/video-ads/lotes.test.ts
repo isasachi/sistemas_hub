@@ -363,3 +363,71 @@ describe('buildLotePrompt', () => {
       .toThrow(new RegExp(String(KIE_PROMPT_MAX)))
   })
 })
+
+/**
+ * El plano POR TOMA y el presupuesto que lo paga.
+ *
+ * `camaraDeLote` deduplica y concatena los planos del lote en un solo string; con dos
+ * planos distintos esa línea no dice cuál va con cuál, y de ahí sale "no copió el plano
+ * en el que aparece la persona". Pero cada carácter que gasta se lo quita a
+ * `accionVisual`, que es lo ÚNICO que se trunca bajo presión de presupuesto y la otra
+ * mitad de la misma queja ("que se copien los movimientos exactos").
+ */
+describe('buildLotePrompt — plano por toma', () => {
+  const DOS_PLANOS = [
+    { tiempo: 't1', camara: 'Plano medio frontal, estático' },
+    { tiempo: 't2', camara: 'Plano medio frontal, estático' },
+    { tiempo: 't3', camara: 'Primer plano del rostro' },
+  ]
+  const conT = (n: number, dur: number, tiempo: string): TomaFinal => ({ ...toma(n, dur), tiempoOriginal: tiempo })
+  const lote = groupIntoLotes([conT(1, 4, 't1'), conT(2, 4, 't2'), conT(3, 4, 't3')])[0]
+
+  it('anuncia el plano solo cuando CAMBIA — no en cada toma', () => {
+    const p = buildLotePrompt({ lote, ...ARGS, cortes: DOS_PLANOS })
+    expect([...p.matchAll(/^Cámara: /gm)]).toHaveLength(2)
+    expect(p).toContain('Cámara: Plano medio frontal, estático')
+    expect(p).toContain('Cámara: Primer plano del rostro')
+  })
+
+  it('no gasta presupuesto cuando todo el lote comparte un plano — la línea global ya lo dice', () => {
+    const unSoloPlano = DOS_PLANOS.map((c) => ({ ...c, camara: 'Plano medio' }))
+    const p = buildLotePrompt({ lote, ...ARGS, cortes: unSoloPlano })
+    expect(p).not.toMatch(/^Cámara: /m)
+    // La línea global (que viene por `camara`, ya deduplicada por `camaraDeLote`) sigue ahí.
+    expect(p).toContain(`CÁMARA: ${ARGS.camara}`)
+  })
+
+  it('sin cortes se comporta como antes (sesiones y callers que no los pasan)', () => {
+    expect(buildLotePrompt({ lote, ...ARGS })).not.toMatch(/^Cámara: /m)
+  })
+})
+
+describe('buildLotePrompt — presupuesto de la coreografía', () => {
+  // `duracionSeg` sale de un reparto proporcional: llegaba cruda al prompt como
+  // "Toma 1 — 0.8854477611940298 s" (medido en la sesión 30ff55d6). Es ruido en un
+  // presupuesto que ya trunca movimiento, y una precisión que el render no tiene.
+  it('no imprime la duración con la basura del float', () => {
+    const [l] = groupIntoLotes([toma(1, 0.8854477611940298, 'Probé.')])
+    const p = buildLotePrompt({ lote: l, ...ARGS })
+    expect(p).toContain('### Toma 1 — 0.9 s')
+    expect(p).not.toContain('0.8854477611940298')
+  })
+
+  // El párrafo de overlay son quince sinónimos de la misma orden; `accionVisual`
+  // describe qué hace el cuerpo. Bajo presión se comprime el primero ANTES de cortar
+  // el segundo — antes se cortaba el movimiento con el párrafo largo intacto.
+  it('comprime el párrafo de overlay antes de truncar el movimiento', () => {
+    const coreografia = 'Levanta el frasco con la mano derecha hasta la altura del mentón, lo gira un cuarto de vuelta para que la etiqueta quede al frente y mira a la cámara. '.repeat(3)
+    const lote = groupIntoLotes(Array.from({ length: 6 }, (_, i) => ({
+      ...toma(i + 1, 2, `Frase ${i + 1} del guión adaptado que dice bastante.`),
+      accionVisual: coreografia,
+    })))[0]
+    const p = buildLotePrompt({ lote, ...ARGS })
+    expect(p.length).toBeLessThanOrEqual(KIE_PROMPT_MAX)
+    // La versión comprimida está, la larga no.
+    expect(p).toContain('TEXTO / OVERLAY: NINGUNO.')
+    expect(p).not.toContain('lower thirds')
+    // …y ese espacio fue a parar a la coreografía: sigue habiendo movimiento real.
+    expect(p).toContain('Levanta el frasco con la mano derecha')
+  })
+})

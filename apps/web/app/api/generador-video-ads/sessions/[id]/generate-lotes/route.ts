@@ -289,6 +289,10 @@ export async function POST(
           camara: camaras[i],
           voz: session.voice_profile,
           images,
+          // Para el plano POR TOMA cuando el lote mezcla más de uno: `camaras[i]` ya
+          // viene deduplicado y concatenado, así que solo desde los cortes se puede
+          // saber cuál corresponde a cuál (ver `buildLotePrompt`).
+          cortes,
         })
       } catch (err) {
         // `buildLotePrompt` administra su propio presupuesto de caracteres (arma el

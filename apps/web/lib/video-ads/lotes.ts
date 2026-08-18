@@ -227,6 +227,39 @@ export function camaraDeLote(
 const NIVEL_COMPLETO = 0
 const NIVEL_SIN_OVERLAY_POR_TOMA = 1
 const NIVEL_SIN_GUION_GLOBAL = 2
+/**
+ * Comprime el párrafo de prohibición de overlay a dos líneas antes de tocar la
+ * coreografía. Es el último escalón que se puede bajar sin perder información: la lista
+ * larga ("captions, subtítulos, títulos, lower thirds, banners, stickers, emojis,
+ * flechas, callouts, gráficos, watermarks, interfaces…") son quince sinónimos de la
+ * misma orden, mientras que `accionVisual` es el único texto del prompt que describe
+ * QUÉ HACE EL CUERPO — justo lo que el usuario reportó que no se copia.
+ *
+ * Medido sobre los lotes guardados: las dos sesiones más recientes (`30ff55d6`,
+ * `6a1e6157`) truncan la coreografía en TODOS sus lotes. En el lote 1 de `30ff55d6` las
+ * cinco tomas necesitaban 1332 caracteres de acción y recibieron ~78 cada una, cortadas
+ * a mitad de palabra ("…con ambas manos,…"): se tiraba el 70 % del movimiento.
+ */
+const NIVEL_OVERLAY_COMPACTO = 3
+
+/** El párrafo de overlay, largo o comprimido. Dice lo mismo; el largo lo dice 15 veces. */
+function bloqueOverlay(nivel: number): string[] {
+  if (nivel >= NIVEL_OVERLAY_COMPACTO)
+    return [
+      'TEXTO / OVERLAY: NINGUNO. Sin captions, subtítulos, texto en pantalla, gráficos,',
+      'watermarks ni UI. Solo el texto impreso en el producto o en objetos reales del',
+      'escenario. No inventes diálogo para rellenar.',
+    ]
+  return [
+    'TEXTO / OVERLAY: NINGUNO.',
+    'No generes captions, subtítulos, texto en pantalla, títulos, lower thirds, banners,',
+    'stickers, emojis, flechas, callouts, gráficos, watermarks, interfaces ni elementos',
+    'de UI. El plano queda visualmente limpio, centrado en el personaje y el producto.',
+    'Solo puede aparecer el texto físicamente impreso en el producto o en objetos reales',
+    'del escenario, como parte de su apariencia.',
+    'No inventes diálogo para rellenar: el clip termina cuando termina la locución.',
+  ]
+}
 
 /**
  * Prompt de un lote. Es autosuficiente por obligación: el generador no recuerda el
@@ -251,8 +284,44 @@ export function buildLotePrompt(args: {
   camara: string
   voz: VoiceProfile
   images: LoteImage[]
+  /** Los cortes del forense, para poder decir QUÉ plano va con QUÉ toma (ver abajo). */
+  cortes?: { tiempo: string; camara: string }[]
 }): string {
-  const { lote, consistencyBlock, productDesc, escenario, camara, voz, images } = args
+  const { lote, consistencyBlock, productDesc, escenario, camara, voz, images, cortes } = args
+
+  /**
+   * EL PLANO, POR TOMA — solo cuando el lote mezcla más de uno.
+   *
+   * `camaraDeLote` deduplica y concatena los planos de las tomas del lote en UN string,
+   * y esa línea es todo lo que el render sabía del encuadre. Con un solo plano alcanza;
+   * con dos es ambigua por construcción. Caso real (`30ff55d6`, lote 1): las tomas 1–2
+   * son "Plano medio frontal" y las 3–4 "Primer plano frontal del rostro y parte del
+   * pecho", y al generador le llegaba `Plano medio frontal, estático. · Primer plano…`
+   * sin ninguna forma de saber cuál corresponde a cuál. De ahí sale "no copió el plano
+   * en el que aparece la persona".
+   *
+   * El emparejamiento va por `tiempoOriginal` y NO por `n`, por el mismo motivo que en
+   * `camaraDeLote`: `groupIntoLotes` renumera después de `splitLongToma`.
+   *
+   * Dos recortes, los dos medidos, porque este presupuesto se lo quita a la coreografía
+   * — que es la OTRA mitad de la misma queja ("que se copien los movimientos exactos"):
+   *
+   *  1. Solo si hay ≥2 planos distintos en el lote. Con uno solo la línea global
+   *     `CÁMARA:` ya lo dice sin ambigüedad y repetirla por toma no agrega nada.
+   *  2. Solo cuando el plano CAMBIA respecto de la toma anterior. Un shot list se lee
+   *     así: el plano vale hasta que se anuncia otro. Medido sobre el lote 1 de
+   *     `30ff55d6` (5 tomas, 2 planos), emitirlo en las cinco costaba ~285 caracteres y
+   *     hundía la coreografía del 54 % al 33 %; emitirlo en los dos cambios cuesta ~115
+   *     y conserva la misma información.
+   *
+   * Cuando se emite no se suelta en ningún nivel de degradación — es alineación, no
+   * contenido, el mismo argumento que la línea `Locución:`.
+   */
+  const porTiempo = new Map((cortes ?? []).map((c) => [c.tiempo, c.camara.trim()]))
+  const planos = lote.tomas.map((t) => porTiempo.get(t.tiempoOriginal) ?? '')
+  const mezclaPlanos = new Set(planos.filter(Boolean)).size >= 2
+  const planoPorToma = (i: number) =>
+    mezclaPlanos && planos[i] && planos[i] !== planos[i - 1] ? planos[i] : ''
 
   const legend = images.map((img, i) => `@image(${i + 1}) = ${img.role}`).join('\n')
   const locucionFinal = lote.tomas.map((t) => t.locucion).filter(Boolean).join(' ')
@@ -268,13 +337,20 @@ export function buildLotePrompt(args: {
    */
   const renderAcciones = (nivel: number, capAccion: number | null) =>
     lote.tomas
-      .map((t) => {
+      .map((t, i) => {
         const accionVisual =
           capAccion != null && t.accionVisual.length > capAccion
             ? `${t.accionVisual.slice(0, capAccion).trimEnd()}…`
             : t.accionVisual
+        const plano = planoPorToma(i)
         return [
-          `### Toma ${t.n} — ${t.duracionSeg} s`,
+          // r1: `duracionSeg` sale de un reparto proporcional y llegaba cruda al prompt
+          // ("Toma 1 — 0.8854477611940298 s", medido). Son ~14 caracteres de ruido por
+          // toma en un presupuesto que ya trunca la coreografía, y además una precisión
+          // que el render no tiene: `clampDuration` le pide a KIE un entero.
+          `### Toma ${t.n} — ${r1(t.duracionSeg)} s`,
+          // Ver `planoPorToma`: nunca se degrada, por el mismo motivo que `Locución:`.
+          plano ? `Cámara: ${plano}` : '',
           accionVisual,
           // NUNCA se suelta, en ningún nivel de degradación. Esta línea es lo único que
           // le dice al generador QUÉ FRASE va con QUÉ ACCIÓN y en cuántos segundos: es
@@ -324,7 +400,7 @@ export function buildLotePrompt(args: {
       // Rotularla es gratis; sacarla a un campo aparte del forense costaría una
       // re-corrida del análisis —el paso caro— para cada sesión ya guardada.
       `ESCENARIO E ILUMINACIÓN: ${escenario}`,
-      `CÁMARA: ${camara}. Formato vertical 9:16, estable, enfoque en el personaje y el producto.`,
+      `CÁMARA: ${camara.replace(/\.\s*$/, '')}. Formato vertical 9:16, estable, enfoque en el personaje y el producto.`,
       // Bloque "Continuidad" del spec: qué NO puede cambiar dentro del clip. Una línea,
       // no un párrafo — todo lo que describe ya está arriba, acá solo se declara que es
       // invariante, y cada carácter que ocupa sale del presupuesto de la coreografía.
@@ -360,16 +436,15 @@ export function buildLotePrompt(args: {
             '',
           ]
         : []),
-      'TEXTO / OVERLAY: NINGUNO.',
-      'No generes captions, subtítulos, texto en pantalla, títulos, lower thirds, banners,',
-      'stickers, emojis, flechas, callouts, gráficos, watermarks, interfaces ni elementos',
-      'de UI. El plano queda visualmente limpio, centrado en el personaje y el producto.',
-      'Solo puede aparecer el texto físicamente impreso en el producto o en objetos reales',
-      'del escenario, como parte de su apariencia.',
-      'No inventes diálogo para rellenar: el clip termina cuando termina la locución.',
+      ...bloqueOverlay(nivel),
     ].join('\n')
 
-  for (const nivel of [NIVEL_COMPLETO, NIVEL_SIN_OVERLAY_POR_TOMA, NIVEL_SIN_GUION_GLOBAL]) {
+  for (const nivel of [
+    NIVEL_COMPLETO,
+    NIVEL_SIN_OVERLAY_POR_TOMA,
+    NIVEL_SIN_GUION_GLOBAL,
+    NIVEL_OVERLAY_COMPACTO,
+  ]) {
     const prompt = render(nivel, null)
     if (prompt.length <= KIE_PROMPT_MAX) return prompt
   }
@@ -386,7 +461,7 @@ export function buildLotePrompt(args: {
   let mejor: string | null = null
   while (lo <= hi) {
     const cap = Math.floor((lo + hi) / 2)
-    const prompt = render(NIVEL_SIN_GUION_GLOBAL, cap)
+    const prompt = render(NIVEL_OVERLAY_COMPACTO, cap)
     if (prompt.length <= KIE_PROMPT_MAX) {
       mejor = prompt
       lo = cap + 1
@@ -396,7 +471,7 @@ export function buildLotePrompt(args: {
   }
   if (mejor) return mejor
 
-  const piso = render(NIVEL_SIN_GUION_GLOBAL, 0)
+  const piso = render(NIVEL_OVERLAY_COMPACTO, 0)
   throw new Error(
     `El prompt del Lote ${lote.n} no entra en el tope de KIE (${KIE_PROMPT_MAX} caracteres) ` +
     `ni truncando la acción de cada toma al mínimo (${piso.length} caracteres resultantes). ` +
