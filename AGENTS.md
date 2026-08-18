@@ -284,6 +284,31 @@ Se apoya en `alignSlots`, que reconstruye qué texto del diálogo ocupaba cada h
 
 **Descarga y miniatura.** Cada clip en `Section6Lotes` se descarga con `?download=lote-N.mp4` sobre la URL de Supabase, no con el atributo `download` nativo a solas: el mp4 vive en el bucket (cross-origin) y el browser lo ignora, así que abría el video en otra pestaña. Supabase responde `content-disposition: attachment` con el query param (verificado por `curl -I`). En el dashboard, la card de una sesión usa **`video_url`** como miniatura — que ya NO es "el video final" sino **el primer lote que terminó de renderizar** (`lote-status/route.ts` lo estampa apenas hay un `videoUrl` en `lotes`, sea el primero, el segundo o cualquiera que termine antes) — y el browser pinta su primer frame (`#t=0.1`, porque muchos mp4 abren en negro); no hay póster generado, no hay ffmpeg en `apps/web`. `ProjectHistory` distingue video de imagen por `.mp4` en la URL; si `video_url` es null (nada terminó aún, o el mirror al bucket propio falló y sigue siendo una URL de KIE que no matchea `.mp4`) cae al still del personaje o del producto. `done` en el GET de `/sessions` es `!!r.render_done` (**no** `!!r.video_url`, que solo dice "al menos un lote terminó"): `render_done` es una columna cacheada con la MISMA fórmula que usa `lote-status` (`renderDone`, `lib/video-ads/render-lotes.ts` — "TODOS los lotes tienen video o fallaron explícito"), escrita en el mismo `update` que ya toca `lotes` cada vez que `lote-status` o `generate-lotes` persisten. Se cachea (en vez de que `listVideoSessions` seleccione `lotes` y calcule ahí mismo) para no arrastrar el jsonb de `lotes` —con el `prompt` de cada uno, miles de caracteres— en una lista de 24 filas.
 
+### Nichos (`lib/video-ads/niches.ts`) — ropa y zapatos
+
+⚠️ **EN ROPA Y ZAPATOS EL PRODUCTO Y EL VESTUARIO SON EL MISMO OBJETO, y hoy eran dos campos que se contradecían dentro del mismo prompt.** El pipeline nació asumiendo un producto que el personaje SOSTIENE. Con una prenda: (1) `bloqueConsistencia` describe el vestuario —copiado del video original— y viaja íntegro a cada lote junto a `productDesc`, o sea el prompt afirma *"viste camiseta rosa"* y *"el producto es una blusa crema"* en el mismo texto; (2) el prompt que genera el avatar pide explícitamente *"sin el producto en el encuadre"*, que para ropa es justo al revés.
+
+Por eso `NicheSpec.wornProduct` es el ÚNICO eje que conoce el código, y no una lista de features por nicho: es la diferencia que el pipeline necesita saber. Lo demás (rótulo del bloque de producto, nota del avatar, hint de la UI) cuelga de ese eje.
+
+- **La prenda entra por el slot de producto que ya existe** (decisión del dueño del repo): en ropa esa foto ES la prenda. Cero UI nueva salvo el chip, cero columna nueva salvo `niche`.
+- **El nicho se elige, no se detecta** (chip en `Section1Product`, persistido en el mismo POST de `analyze-product`): cuando una detección automática se equivoca, el video sale mal y el usuario no tiene dónde corregirlo.
+- **El avatar NACE con la prenda puesta.** `character/route.ts` manda la foto del producto como imagen tanto al análisis de identidad como a `openaiGenerateImage` (que usa `images.edit` cuando hay imágenes, así que genera A PARTIR de la prenda real). Así `@image(1)` ya la trae y el bloque de consistencia la describe: **el mismo mecanismo que mantiene la identidad entre lotes mantiene la ropa**. La alternativa —vestirlo en cada lote— es virtual try-on repetido N veces sin memoria, o sea una prenda distinta por clip.
+- `toNiche` normaliza todo lo desconocido a `'suplementos'`, y la columna nació con ese default: **toda sesión anterior se comporta exactamente igual**. Cubierto por tests.
+- `scriptFingerprint` incluye `niche`: cambia la plantilla del prompt y el bloque de consistencia, así que sin él cambiar el chip y re-renderizar dejaría la misma huella con otro prompt.
+
+⚠️ **EL FORMATO DE ROPA ES UN MONTAJE RÁPIDO, y eso choca de frente con la frontera de plano.** Medido sobre un UGC de ropa real de 28 s (`ssstik.io_@micasilva.ph`): el forense reporta **29 cortes de ~1 s**, con **9 planos distintos que se repiten** (cuerpo entero → plano medio → macro de puño → detalle de cintura → plano cenital → trasero…) y la secuencia se repite entera para la segunda variante de color de la prenda. `ffmpeg` con detección de escena encuentra **cero** cortes a umbral 0.3 y 0.15: misma pared, misma persona, mismo encuadre-familia entre cortes. O sea el corte es real y no se detecta por delta de píxeles — el forense sí lo ve.
+
+Con eso, `groupIntoLotes` da:
+
+| | lotes | qué pasa |
+|---|---|---|
+| sin frontera de plano | **2** (15 s + 14 s) | ~14 planos por clip: el encuadre no se copia (medido en el render del serum) |
+| con frontera de plano | **24** (1–2 s cada uno) | fiel al montaje, **12× llamadas pagadas**, y clips de 1 s |
+
+**Sin resolver — es una decisión de costo del dueño del repo.** Las dos puntas son malas por motivos distintos y la del medio (permitir N planos por lote, apuntando a 4–6 clips) todavía no está medida. NO elijas por defecto: el delta es 12× en la llamada más cara del hub.
+
+⚠️ **Y el `vestuario` del forense se le queda chico a la ropa.** `ForensicReportSchema.vestuario` es `z.string()`, pero con este video Gemini devolvió espontáneamente un **array de objetos** (`{prenda, colores, tejidosVisibles, joyeria, maquillaje, detalles}` ×4, incluidas las DOS variantes de color de la misma camisa). El schema lo coacciona a string, así que no rompe — pero la estructura que el modelo quiere dar existe y hoy se aplana. Relacionado: `CONTINUIDAD` congela `producto` y `vestuario` por clip, así que una referencia que muestra la misma prenda en dos colores necesita que cada variante caiga en su propio lote (hoy ocurre por accidente, porque son tramos distintos del video, no por una regla).
+
 **Schema:** `supabase/migrations/20260810000001_video_sessions.sql` (base de video_sessions) + `20260812000001_video_spec_rewire.sql` (columnas de INPUTS y VALIDATION) + `20260812000002_video_lotes.sql` (columnas de FASE 3/4/4.5/5: `adapted`, `character_prompt`, `consistency_block`, `voice_profile`, `lotes` jsonb) + `20260812000003_video_render_done.sql` (columna `render_done`, cacheada para el dashboard).
 
 ## Tool: Buscador de Productos (`buscador-productos`)

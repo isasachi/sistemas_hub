@@ -2,6 +2,7 @@ import { z } from 'zod'
 import type { TomaFinal } from './adapt'
 import type { VoiceProfile } from './character'
 import { KIE_PROMPT_MAX } from './kie'
+import { nicheSpec } from './niches'
 
 /**
  * FASE 5 del prompt maestro — agrupación de tomas en lotes de generación.
@@ -352,8 +353,12 @@ export function buildLotePrompt(args: {
   images: LoteImage[]
   /** Los cortes del forense, para poder decir QUÉ plano va con QUÉ toma (ver abajo). */
   cortes?: { tiempo: string; camara: string }[]
+  /** Nicho de la sesión: en ropa/zapatos el producto se LLEVA PUESTO, y el bloque que
+   *  lo describe como "un objeto" contradice al bloque de consistencia. Ver niches.ts. */
+  niche?: unknown
 }): string {
   const { lote, consistencyBlock, productDesc, escenario, camara, voz, images, cortes } = args
+  const spec = nicheSpec(args.niche)
 
   /**
    * EL PLANO, POR TOMA — solo cuando el lote mezcla más de uno.
@@ -456,8 +461,7 @@ export function buildLotePrompt(args: {
       'PERSONAJE (descripción completa, sin referencias externas):',
       consistencyBlock,
       '',
-      'PRODUCTO (debe verse idéntico a su imagen de referencia — misma forma, etiqueta,',
-      'colores y texto; nunca lo rediseñes):',
+      spec.productBlock,
       nivel >= NIVEL_PRODUCTO_FISICO ? productoFisico(productDesc) : productDesc,
       '',
       // "ESCENARIO E ILUMINACIÓN" y no "ESCENARIO" a secas porque el spec pide la

@@ -129,6 +129,7 @@ export async function POST(
   // llamada pueda comprobar, sin adivinar, si está reanudando el MISMO video o
   // empezando otro distinto (ver `isPaidResume`).
   const huella = scriptFingerprint({
+    niche: session.niche,
     lotes: agrupados, consistencyBlock: session.consistency_block, productDesc,
     escenario, camaras, voz: session.voice_profile, images,
   })
@@ -295,6 +296,7 @@ export async function POST(
           camara: camaras[i],
           voz: session.voice_profile,
           images,
+          niche: session.niche,
           // Para el plano POR TOMA cuando el lote mezcla más de uno: `camaras[i]` ya
           // viene deduplicado y concatenado, así que solo desde los cortes se puede
           // saber cuál corresponde a cuál (ver `buildLotePrompt`).

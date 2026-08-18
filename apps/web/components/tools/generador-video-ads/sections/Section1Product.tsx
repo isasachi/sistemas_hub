@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useVideoStore } from '@/store/video'
 import { FileUpload } from '@/components/tools/ui/FileUpload'
 import { STEP } from '@/lib/video-ads/steps'
+import { NICHES, NICHE_SPEC, NICHE_DEFAULT, type Niche } from '@/lib/video-ads/niches'
 import type { ProductScan } from '@/lib/video-ads/types'
 import { btnPrimary, errorBox, spinner } from './shared'
 
@@ -15,6 +16,10 @@ export default function Section1Product() {
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // El nicho decide si el producto es un objeto que se sostiene o algo que el personaje
+  // LLEVA PUESTO. Se pregunta acá y no se adivina del scan: cuando la detección se
+  // equivoca el video sale mal y el usuario no tiene dónde corregirlo.
+  const [niche, setNiche] = useState<Niche>(NICHE_DEFAULT)
 
   const set = (k: keyof typeof inputs, v: string) => patch({ inputs: { ...inputs, [k]: v } })
   const ready = !!file && !!inputs.productName.trim() && !!inputs.productDescription.trim()
@@ -34,6 +39,7 @@ export default function Section1Product() {
       // obligaba a re-subir la foto y pagar de nuevo el análisis de Gemini.
       fd.append('angle', inputs.angle)
       fd.append('problem', inputs.problem)
+      fd.append('niche', niche)
       const res = await fetch(`/api/generador-video-ads/sessions/${sessionId}/analyze-product`, { method: 'POST', body: fd })
       const data = (await res.json()) as { scan?: ProductScan; productUrl?: string; error?: string }
       if (!res.ok) throw new Error(data.error ?? 'No se pudo analizar el producto')
@@ -61,11 +67,29 @@ export default function Section1Product() {
 
   return (
     <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-1.5">
+        <span className="text-[13px] font-semibold text-[#ededed]">Tipo de producto</span>
+        <div className="flex flex-wrap gap-2">
+          {NICHES.map((n) => (
+            <button key={n} type="button" onClick={() => setNiche(n)}
+              className={`rounded-full border px-3.5 py-1.5 text-[12.5px] transition ${
+                niche === n
+                  ? 'border-white/25 bg-white/[0.10] text-[#f1f5f9]'
+                  : 'border-white/[0.08] text-[#8b8b8b] hover:text-[#cfcfcf]'
+              }`}>
+              {NICHE_SPEC[n].label}
+            </button>
+          ))}
+        </div>
+      </div>
       <FileUpload label="Foto del producto" accept="image/*" preview={preview}
         onFile={(f) => { setFile(f); setPreview(URL.createObjectURL(f)) }} />
       <p className="text-[12px] leading-relaxed text-[#8b8b8b]">
-        Esta foto es la fuente de verdad visual del producto: forma, envase, etiqueta,
-        colores y tipografía se conservan tal cual. No hace falta que sea vertical.
+        {NICHE_SPEC[niche].productHint}. Es la fuente de verdad visual: forma, color,
+        {NICHE_SPEC[niche].wornProduct
+          ? ' tejido y detalles se conservan tal cual, y el personaje aparece usándolo.'
+          : ' envase, etiqueta y tipografía se conservan tal cual.'}
+        {' '}No hace falta que sea vertical.
       </p>
       {field('Producto', 'productName', 'Serum Eunoia')}
       {field('¿Qué es?', 'productDescription', 'Suero de niacinamida para marcas de acné')}

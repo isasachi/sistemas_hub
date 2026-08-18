@@ -6,6 +6,7 @@ import { uploadToStorage, fetchAsBase64 } from '@/lib/storage'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 import { CharacterIdentitySchema, buildIdentityInstruction, buildCharacterParts } from '@/lib/video-ads/character'
+import { nicheSpec } from '@/lib/video-ads/niches'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -40,6 +41,15 @@ export async function POST(
       ? await fetchAsBase64(session.character_url)
       : undefined
 
+    // En ropa/zapatos el producto se LLEVA PUESTO, así que la prenda tiene que estar
+    // delante del modelo dos veces: al describir la identidad (para que el bloque de
+    // consistencia detalle la prenda del usuario y no el vestuario del video original)
+    // y al generar el avatar (para que salga vistiéndola de verdad, no una parecida).
+    const spec = nicheSpec(session.niche)
+    const prenda = spec.wornProduct && session.product_url
+      ? await fetchAsBase64(session.product_url)
+      : null
+
     const instruction = buildIdentityInstruction(
       {
         productName: session.product_name ?? '', productDescription: session.what_it_does ?? '',
@@ -50,18 +60,30 @@ export async function POST(
       },
       session.forensic_analysis,
       !!session.character_url,
+      session.niche,
     )
 
     const identity = await callVideoAds(
       'character_identity',
       CharacterIdentitySchema,
-      buildCharacterParts(instruction, image),
+      buildCharacterParts(instruction, image, prenda),
     )
 
     // Con imagen de referencia del usuario no se regenera nada: ES la fuente de verdad.
     let characterUrl = session.character_url
     if (!characterUrl) {
-      const b64 = await openaiGenerateImage([{ text: identity.promptCreacion }], 2, { aspectRatio: '2:3' })
+      // La prenda va como imagen de entrada: `openaiGenerateImage` usa `images.edit`
+      // cuando hay imágenes, así que el avatar se genera A PARTIR de la prenda real en
+      // vez de una descrita en palabras. Es lo que sostiene que la ropa sea la misma en
+      // todos los lotes: el avatar ya la trae puesta y el bloque de consistencia la
+      // describe (mismo mecanismo que mantiene la identidad de la persona).
+      const b64 = await openaiGenerateImage(
+        prenda
+          ? [{ inlineData: { mimeType: prenda.mimeType, data: prenda.data } }, { text: identity.promptCreacion }]
+          : [{ text: identity.promptCreacion }],
+        2,
+        { aspectRatio: '2:3' },
+      )
       characterUrl = await uploadToStorage(id, Buffer.from(b64, 'base64'), 'image/png', 'character')
     }
 

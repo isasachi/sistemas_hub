@@ -63,6 +63,10 @@ export interface VideoSessionResponse {
   forensic_analysis: ForensicReport | null
   character_url: string | null
   product_url: string | null
+  // Nicho del ad (migración 20260818000001_video_niche.sql). Decide si el producto es
+  // un objeto que se sostiene o algo que el personaje LLEVA PUESTO — ver niches.ts.
+  // Las filas anteriores a la migración traen el default 'suplementos'.
+  niche: string
   product_scan: ProductScan | null
   product_name: string | null
   what_it_does: string | null

@@ -107,6 +107,9 @@ export function scriptFingerprint(input: {
   camaras: string[]
   voz: VoiceProfile
   images: LoteImage[]
+  /** Nicho: cambia el rótulo del bloque de producto y el bloque de consistencia. Sin
+   *  esto, cambiar el chip y re-renderizar deja la huella igual con otro prompt. */
+  niche?: unknown
 }): string {
   const { lotes, consistencyBlock, productDesc, escenario, camaras, voz, images } = input
   const campos: string[] = [
@@ -127,6 +130,7 @@ export function scriptFingerprint(input: {
     // lote mezcla más de uno, la duración de la toma redondeada a 1 decimal y el nivel
     // de degradación que comprime el párrafo de overlay antes de truncar la coreografía.
     'v3',
+    String(input.niche ?? ''),
     consistencyBlock, productDesc, escenario,
     voz.idioma, voz.varianteRegional, voz.acento, voz.pronunciacion, voz.ritmo,
     voz.velocidad, voz.entonacion, voz.energia, voz.pausas, voz.tono, voz.timbre,
