@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { z } from 'zod'
-import { clampTooBigStrings } from './gemini'
+import { clampTooBigStrings, refinePrompt } from './gemini'
 
 // callStructured recorta los strings 'too_big' (Gemini ignora maxLength) en vez de 500-ear /copy.
 describe('clampTooBigStrings', () => {
@@ -46,5 +46,30 @@ describe('sliceToWord (recorte en límite de palabra)', () => {
     expect(out.endsWith('Sié') || out.endsWith('Siént')).toBe(false) // nunca palabra parcial
     expect(/[\s,;:.–—-]$/.test(out)).toBe(false) // sin separador final
     expect(out).toBe('Elimina las manchas en tu piel, Hidrata profundamente')
+  })
+})
+
+// La regeneración perdía la adaptación demográfica: refine no ve el instructivo de STEP5 y
+// las dos ramas enumeraban "product, logo, copy" sin nombrar a las personas, así que el modelo
+// volvía al sujeto de la referencia (medido 2/2 con targetAudience "Mujeres de 20-40").
+describe('refinePrompt', () => {
+  for (const [caso, feedback] of [['sin feedback', ''], ['con feedback', 'titular en blanco']] as const) {
+    it(`${caso}: ancla las personas a la imagen actual y prohíbe volver a la referencia`, () => {
+      const p = refinePrompt(4, feedback)
+      expect(p).toContain('exactly as they are in image 4')
+      expect(p).toMatch(/NEVER revert them to the person shown in image 1/)
+    })
+  }
+
+  it('sin feedback la imagen 1 sigue mandando el layout, pero solo el layout', () => {
+    const p = refinePrompt(3, '')
+    expect(p).toContain('layout, composition and format of')
+    expect(p).toContain('copy ONLY the layout, never who appears in it')
+  })
+
+  it('con feedback el cambio sigue siendo exclusivo', () => {
+    const p = refinePrompt(3, 'titular en blanco')
+    expect(p).toContain('Change request: titular en blanco')
+    expect(p).toContain('pixel-identical')
   })
 })
