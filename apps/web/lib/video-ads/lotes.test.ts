@@ -431,3 +431,29 @@ describe('buildLotePrompt — presupuesto de la coreografía', () => {
     expect(p).toContain('Levanta el frasco con la mano derecha')
   })
 })
+
+// El plano por toma vive en el mismo array que `Locución:` y `capAccion` solo recorta
+// `accionVisual`, así que debería sobrevivir al piso — pero eso es un razonamiento sobre
+// el código, no una medición. Este test lo fuerza: coreografía enorme, presupuesto al
+// límite, y el prompt igual tiene que entrar Y conservar los dos anuncios de plano.
+describe('buildLotePrompt — el plano sobrevive a la degradación', () => {
+  it('conserva los anuncios de plano incluso cuando la coreografía se trunca al piso', () => {
+    const conT = (n: number, dur: number, tiempo: string): TomaFinal => ({
+      ...toma(n, dur, `Frase ${n} del guión adaptado, con su parte de la locución.`),
+      tiempoOriginal: tiempo,
+      accionVisual: 'Levanta el frasco con la mano derecha hasta la altura del mentón, lo gira un cuarto de vuelta para que la etiqueta quede al frente, mira al producto y después a la cámara. '.repeat(4),
+    })
+    const cortes = [
+      { tiempo: 't1', camara: 'Plano medio frontal, estático, a la altura de los ojos' },
+      { tiempo: 't2', camara: 'Plano medio frontal, estático, a la altura de los ojos' },
+      { tiempo: 't3', camara: 'Primer plano del rostro y parte del pecho, estático' },
+      { tiempo: 't4', camara: 'Primer plano del rostro y parte del pecho, estático' },
+    ]
+    const lote = groupIntoLotes([conT(1, 3, 't1'), conT(2, 3, 't2'), conT(3, 3, 't3'), conT(4, 3, 't4')])[0]
+    const p = buildLotePrompt({ lote, ...ARGS, cortes })
+
+    expect(p.length).toBeLessThanOrEqual(KIE_PROMPT_MAX)
+    expect(p).toContain('…')                                   // el piso disparó de verdad
+    expect([...p.matchAll(/^Cámara: /gm)]).toHaveLength(2)      // …y el plano no se soltó
+  })
+})
