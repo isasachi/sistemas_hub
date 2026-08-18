@@ -539,3 +539,45 @@ describe('groupIntoLotes — frontera de plano', () => {
     expect(groupIntoLotes(tomas)).toEqual(groupIntoLotes(tomas, undefined))
   })
 })
+
+/**
+ * `maxPlanos` — el eje costo/fidelidad, medido sobre dos videos reales.
+ *
+ * Con 1 el original manda el corte. Con más, el clip puede contener varios encuadres,
+ * lo que baja el número de llamadas pagadas… y devuelve el problema que la frontera
+ * existe para arreglar: un clip con dos planos se renderiza con uno solo (comprobado
+ * con renders reales). Medido sobre un UGC de ropa de 29 cortes: K=2 deja 11 de 12
+ * lotes con encuadre ambiguo, K=3 deja 7 de 7. O sea K>1 compra costo con encuadre.
+ *
+ * Se queda en 1 por defecto: cambiarlo es una decisión de plata, no un default.
+ */
+describe('groupIntoLotes — maxPlanos', () => {
+  const conT = (n: number, dur: number, tiempo: string): TomaFinal => ({ ...toma(n, dur), tiempoOriginal: tiempo })
+  const MAPA = new Map([['a', 'Plano medio'], ['b', 'Primer plano'], ['c', 'Plano general']])
+  const TOMAS = [conT(1, 2, 'a'), conT(2, 2, 'b'), conT(3, 2, 'c'), conT(4, 2, 'a')]
+
+  it('el default es 1: un encuadre por clip', () => {
+    expect(groupIntoLotes(TOMAS, MAPA)).toEqual(groupIntoLotes(TOMAS, MAPA, 1))
+    expect(groupIntoLotes(TOMAS, MAPA)).toHaveLength(4)
+  })
+
+  it('K=2 admite dos encuadres por clip y nunca un tercero', () => {
+    const lotes = groupIntoLotes(TOMAS, MAPA, 2)
+    expect(lotes).toHaveLength(2)
+    for (const l of lotes) {
+      expect(new Set(l.tomas.map((t) => MAPA.get(t.tiempoOriginal))).size).toBeLessThanOrEqual(2)
+    }
+  })
+
+  // Un plano que YA está en el lote no consume cupo: lo que se cuenta son encuadres
+  // distintos, no cortes. Si no, "a b a" gastaría tres.
+  it('repetir un encuadre ya presente no consume cupo', () => {
+    const lotes = groupIntoLotes([conT(1, 2, 'a'), conT(2, 2, 'b'), conT(3, 2, 'a')], MAPA, 2)
+    expect(lotes).toHaveLength(1)
+  })
+
+  it('el tope de 15 s sigue mandando por encima de maxPlanos', () => {
+    const largo = Array.from({ length: 6 }, (_, i) => conT(i + 1, 4, 'a'))
+    for (const l of groupIntoLotes(largo, MAPA, 9)) expect(l.duracionSeg).toBeLessThanOrEqual(LOTE_MAX_SEC)
+  })
+})

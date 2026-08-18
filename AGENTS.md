@@ -305,7 +305,26 @@ Con eso, `groupIntoLotes` da:
 | sin frontera de plano | **2** (15 s + 14 s) | ~14 planos por clip: el encuadre no se copia (medido en el render del serum) |
 | con frontera de plano | **24** (1–2 s cada uno) | fiel al montaje, **12× llamadas pagadas**, y clips de 1 s |
 
-**Sin resolver — es una decisión de costo del dueño del repo.** Las dos puntas son malas por motivos distintos y la del medio (permitir N planos por lote, apuntando a 4–6 clips) todavía no está medida. NO elijas por defecto: el delta es 12× en la llamada más cara del hub.
+⚠️ **LA DEL MEDIO SE MIDIÓ Y NO EXISTE PARA EL ENCUADRE.** `groupIntoLotes` acepta `maxPlanos` (default 1) para admitir K encuadres por clip. Medido sobre los dos videos reales:
+
+| K | ropa: lotes | ropa: lotes con encuadre ambiguo | ropa: coreografía | suero: lotes |
+|---|---|---|---|---|
+| sin frontera | 2 | 2 de 2 | **25 %** | 2 |
+| **1** | **24** | **0** | **100 %** | **5** |
+| 2 | 12 | 11 de 12 | 100 % | 3 |
+| 3 | 7 | 7 de 7 | 100 % | 3 |
+| 4 | 6 | 5 de 6 | 100 % | 2 |
+| 6 | 4 | 4 de 4 | 74 % | 2 |
+
+Con K=2 **once de doce lotes vuelven a tener dos encuadres**, y ya está comprobado con renders reales que un clip con dos planos se renderiza con uno solo. O sea K>1 no es un punto medio del encuadre: es la opción barata con pasos de más. Lo que K sí compra de verdad es la **coreografía en ropa**: sin frontera cae a 25 % (15 tomas en un solo prompt), y con K=3–4 se mantiene en 100 % a 3,5× de costo en vez de 12×.
+
+El menú real, entonces, es de dos ejes y no de uno:
+
+- **K=1** — 24 clips, encuadre y coreografía perfectos, **12× llamadas pagadas**.
+- **K=3** — 7 clips, coreografía 100 %, **encuadre perdido**, 3,5×.
+- **sin frontera** — 2 clips, encuadre perdido Y coreografía al 25 %: peor que las dos anteriores en todo salvo el precio.
+
+`maxPlanos` se queda en **1** por defecto: cambiarlo es una decisión de plata, no un default.
 
 ⚠️ **Y el `vestuario` del forense se le queda chico a la ropa.** `ForensicReportSchema.vestuario` es `z.string()`, pero con este video Gemini devolvió espontáneamente un **array de objetos** (`{prenda, colores, tejidosVisibles, joyeria, maquillaje, detalles}` ×4, incluidas las DOS variantes de color de la misma camisa). El schema lo coacciona a string, así que no rompe — pero la estructura que el modelo quiere dar existe y hoy se aplana. Relacionado: `CONTINUIDAD` congela `producto` y `vestuario` por clip, así que una referencia que muestra la misma prenda en dos colores necesita que cada variante caiga en su propio lote (hoy ocurre por accidente, porque son tramos distintos del video, no por una regla).
 

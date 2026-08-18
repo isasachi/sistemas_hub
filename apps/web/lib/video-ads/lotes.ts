@@ -157,6 +157,9 @@ function splitLongToma(t: TomaFinal): TomaFinal[] {
 export function groupIntoLotes(
   tomas: TomaFinal[],
   planoPorTiempo?: Map<string, string>,
+  /** Cuántos encuadres distintos puede contener UN clip. 1 = el original manda el corte
+   *  (máxima fidelidad, máximo costo). Ver la nota de costo en la cabecera. */
+  maxPlanos = 1,
 ): Lote[] {
   // Renumeramos TODA la secuencia expandida en orden: si una toma se divide, sus
   // fragmentos no pueden compartir el `n` original (colisionarían al rotular "Toma N"
@@ -201,9 +204,16 @@ export function groupIntoLotes(
     // cabecera). Solo se compara contra la toma anterior DEL LOTE ABIERTO, así que un
     // plano que vuelve más adelante abre su propio lote, igual que en el original.
     else if (actual.length && planoPorTiempo) {
-      const previo = planoPorTiempo.get(actual[actual.length - 1].tiempoOriginal)
       const ahora = planoPorTiempo.get(t.tiempoOriginal)
-      if (previo && ahora && previo !== ahora) cerrar()
+      if (ahora) {
+        const yaEnLote = new Set(
+          actual.map((x) => planoPorTiempo.get(x.tiempoOriginal)).filter(Boolean),
+        )
+        // Cierra si este encuadre es nuevo Y el lote ya llegó a su cupo. Con
+        // `maxPlanos = 1` es "cierra en cuanto cambie el plano"; con 2 o 3 el clip
+        // puede contener ese número de encuadres distintos.
+        if (!yaEnLote.has(ahora) && yaEnLote.size >= maxPlanos) cerrar()
+      }
     }
     actual.push(t)
     acumulado += t.duracionSeg
