@@ -457,3 +457,40 @@ describe('buildLotePrompt — el plano sobrevive a la degradación', () => {
     expect([...p.matchAll(/^Cámara: /gm)]).toHaveLength(2)      // …y el plano no se soltó
   })
 })
+
+/**
+ * El bloque de PRODUCTO transcribe la etiqueta entera, y el envase va como `@image(2)`
+ * en TODOS los lotes: le cuenta en palabras lo que el modelo ve en píxeles, a costa del
+ * único texto que describe qué hace el cuerpo. Medido en `30ff55d6`: 677 caracteres de
+ * scan, y recortarlo a su parte física sube la coreografía conservada de 46 % a 84 %.
+ */
+describe('buildLotePrompt — el producto cede antes que la coreografía', () => {
+  const SCAN = 'Frasco cilíndrico de vidrio verde esmeralda oscuro de 30 ml. Tiene una banda dorada en el cuello y tapa gotero blanca. La etiqueta blanca muestra la marca "LUMINA" en dorado, seguida de "SÉRUM FACIAL CON VITAMINA C" en verde oscuro. Debajo dice "PARA PIEL GRASA" en naranja claro. Más abajo lista "Ilumina · Unifica · Antioxidante" y "Fórmula de rápida absorción". El volumen "30 ml / 1.01 fl oz" va al pie en verde oscuro.'
+  const coreografia = 'Levanta el frasco con la mano derecha hasta la altura del mentón, lo gira un cuarto de vuelta para que la etiqueta quede al frente y mira a la cámara. '.repeat(3)
+  const apretado = groupIntoLotes(Array.from({ length: 5 }, (_, i) => ({
+    ...toma(i + 1, 2.5, `Frase ${i + 1} del guión adaptado, con lo suyo de locución.`),
+    accionVisual: coreografia,
+  })))[0]
+
+  it('con espacio de sobra manda la descripción completa', () => {
+    const [corto] = groupIntoLotes([toma(1, 4, 'Una sola frase.')])
+    expect(buildLotePrompt({ lote: corto, ...ARGS, productDesc: SCAN })).toContain('30 ml / 1.01 fl oz')
+  })
+
+  it('bajo presión recorta la etiqueta —que se ve en la imagen— y no el movimiento', () => {
+    const p = buildLotePrompt({ lote: apretado, ...ARGS, productDesc: SCAN })
+    expect(p.length).toBeLessThanOrEqual(KIE_PROMPT_MAX)
+    // La forma del envase sobrevive; la transcripción de la etiqueta no.
+    expect(p).toContain('Frasco cilíndrico de vidrio verde esmeralda oscuro')
+    expect(p).not.toContain('PARA PIEL GRASA')
+    expect(p).toContain('se lee de su imagen')
+    // …y la coreografía llega entera, que es de lo que se trataba.
+    expect(p).toContain('mira a la cámara.')
+  })
+
+  it('no parte una descripción que ya es corta', () => {
+    const p = buildLotePrompt({ lote: apretado, ...ARGS, productDesc: 'Frasco verde con gotero.' })
+    expect(p).toContain('Frasco verde con gotero.')
+    expect(p).not.toContain('se lee de su imagen')
+  })
+})

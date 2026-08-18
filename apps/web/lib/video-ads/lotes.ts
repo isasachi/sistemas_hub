@@ -242,6 +242,38 @@ const NIVEL_SIN_GUION_GLOBAL = 2
  */
 const NIVEL_OVERLAY_COMPACTO = 3
 
+/**
+ * Recorta la descripción del producto a su parte FÍSICA. Es el último escalón antes de
+ * tocar la coreografía, y el que más presupuesto libera.
+ *
+ * `productDescription` viene del scan y transcribe la etiqueta entera — medido en
+ * `30ff55d6`: 677 caracteres, en inglés, listando *"SÉRUM FACIAL CON VITAMINA C"*,
+ * *"PARA PIEL GRASA"*, *"Ilumina • Unifica • Antioxidante"* y *"30 ml / 1.01 fl oz"*.
+ * El envase va como `@image(2)` en TODOS los lotes y el prompt ya ordena reproducirlo
+ * idéntico: esa transcripción le cuenta en palabras lo que el modelo está viendo en
+ * píxeles, y lo hace a costa del único texto que describe qué hace el cuerpo.
+ *
+ * Medido sobre esa sesión, con el resto igual: la coreografía conservada pasa de 46 % a
+ * 80 % en el lote 1 y de 34 % a 66 % en el lote 2.
+ *
+ * ponytail: el corte es por frases, no por longitud — cortar prosa a mitad de palabra es
+ * justo lo que este nivel existe para evitarle a la coreografía. Se queda con las dos
+ * primeras oraciones porque el scan describe la forma antes que la etiqueta (el prompt
+ * de `analyze-product` pide "forma, envase, colores, etiqueta, texto legible" en ese
+ * orden), pero es una heurística sobre texto de un LLM, no un contrato: si algún día el
+ * scan cambia de orden, esto recorta lo que no debe. El techo real está en pedirle al
+ * scan una descripción física corta aparte de la transcripción — eso es un campo nuevo
+ * y una re-corrida del análisis en cada sesión guardada.
+ */
+const NIVEL_PRODUCTO_FISICO = 4
+
+/** Las dos primeras oraciones: la forma del envase, sin la transcripción de la etiqueta. */
+function productoFisico(desc: string): string {
+  const frases = desc.match(/[^.!?]+[.!?]+/g)
+  if (!frases || frases.length <= 2) return desc
+  return `${frases.slice(0, 2).join('').trim()} El resto de la etiqueta se lee de su imagen: reprodúcela idéntica.`
+}
+
 /** El párrafo de overlay, largo o comprimido. Dice lo mismo; el largo lo dice 15 veces. */
 function bloqueOverlay(nivel: number): string[] {
   if (nivel >= NIVEL_OVERLAY_COMPACTO)
@@ -392,7 +424,7 @@ export function buildLotePrompt(args: {
       '',
       'PRODUCTO (debe verse idéntico a su imagen de referencia — misma forma, etiqueta,',
       'colores y texto; nunca lo rediseñes):',
-      productDesc,
+      nivel >= NIVEL_PRODUCTO_FISICO ? productoFisico(productDesc) : productDesc,
       '',
       // "ESCENARIO E ILUMINACIÓN" y no "ESCENARIO" a secas porque el spec pide la
       // iluminación como bloque propio dentro de cada lote, y el `fondo` del forense ya
@@ -444,6 +476,7 @@ export function buildLotePrompt(args: {
     NIVEL_SIN_OVERLAY_POR_TOMA,
     NIVEL_SIN_GUION_GLOBAL,
     NIVEL_OVERLAY_COMPACTO,
+    NIVEL_PRODUCTO_FISICO,
   ]) {
     const prompt = render(nivel, null)
     if (prompt.length <= KIE_PROMPT_MAX) return prompt
@@ -461,7 +494,7 @@ export function buildLotePrompt(args: {
   let mejor: string | null = null
   while (lo <= hi) {
     const cap = Math.floor((lo + hi) / 2)
-    const prompt = render(NIVEL_OVERLAY_COMPACTO, cap)
+    const prompt = render(NIVEL_PRODUCTO_FISICO, cap)
     if (prompt.length <= KIE_PROMPT_MAX) {
       mejor = prompt
       lo = cap + 1
@@ -471,7 +504,7 @@ export function buildLotePrompt(args: {
   }
   if (mejor) return mejor
 
-  const piso = render(NIVEL_OVERLAY_COMPACTO, 0)
+  const piso = render(NIVEL_PRODUCTO_FISICO, 0)
   throw new Error(
     `El prompt del Lote ${lote.n} no entra en el tope de KIE (${KIE_PROMPT_MAX} caracteres) ` +
     `ni truncando la acción de cada toma al mínimo (${piso.length} caracteres resultantes). ` +

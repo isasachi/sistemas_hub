@@ -191,6 +191,24 @@ El corrector debe nombrar el `idHueco` que no se puede rellenar, y código verif
 
 ⚠️ **Esto bumpea `scriptFingerprint` a `'v3'`** (v2 → v3): la huella hashea los INSUMOS de `buildLotePrompt`, no el texto que produce, así que un cambio de plantilla es invisible para ella y reanudar a través del cambio pegaría un lote con el prompt viejo a uno con el nuevo. Los parciales anteriores pasan a contar como generación nueva, fail-closed.
 
+⚠️ **EL TOPE DE 4096 NO ERA EL CUELLO DE BOTELLA — el 85 % del prompt son bloques fijos, y el más grande describe algo que el modelo ya ve.** Verificado contra el schema del modelo (`docs.kie.ai/market/grok-imagine/1-5-preview`): 4096 es tope duro y no se sube. Pero medido sobre `30ff55d6`, de 4096 caracteres la coreografía recibía 608 y los bloques fijos 3488. El más caro es **PRODUCTO: 677 caracteres del scan transcribiendo la etiqueta entera** (*"SÉRUM FACIAL CON VITAMINA C"*, *"PARA PIEL GRASA"*, *"Ilumina • Unifica • Antioxidante"*, *"30 ml / 1.01 fl oz"*) mientras el envase viaja como `@image(2)` en TODOS los lotes y el prompt ya ordena reproducirlo idéntico. Es contarle en palabras lo que está viendo en píxeles, y se paga con el único texto que dice qué hace el cuerpo.
+
+`NIVEL_PRODUCTO_FISICO` es el escalón que recorta esa descripción a su parte física (las dos primeras oraciones + *"el resto de la etiqueta se lee de su imagen"*) justo antes de truncar la coreografía. Medido, mismo contenido: **lote 1 46 % → 84 %, lote 2 34 % → 69 %**.
+
+Palancas medidas sobre esa misma sesión, para cuando haga falta más:
+
+| palanca | lote 1 | lote 2 | costo |
+|---|---|---|---|
+| antes de todo esto | 29 % | ~29 % | — |
+| overlay compacto + `r1` + plano por toma | 46 % | 34 % | $0 |
+| **+ producto físico (hoy)** | **84 %** | **69 %** | $0 |
+| + bloque de personaje recortado | 96 % | 77 % | riesgo de deriva de identidad |
+| mitad de tomas por lote | 85 % | 100 % | **2× llamadas pagadas** |
+
+⚠️ El recorte del **personaje** NO se aplicó aunque mide bien: el bloque de consistencia es lo único que sostiene que el lote 1 y el lote 3 sean la misma persona (REGLA DE CONTEXTO ABSOLUTO), y su imagen va adjunta pero la deriva de identidad es el fallo que este diseño entero existe para evitar. Recortarlo es cambiar el seguro por 12 puntos de coreografía; hace falta medirlo en renders reales antes, no en caracteres.
+
+⚠️ **El otro modelo del marketplace acepta 5000 caracteres, y la nota de arriba sobre por qué se descartó está mal.** `grok-imagine/image-to-video` admite prompt de 5000 (+22 %) y **duración 6–30 s**, no 15 — o sea la línea *"se descartó porque topa en 15s por llamada"* no describe a este modelo. Que acepte 30 s no ayuda a la fidelidad por sí solo (un lote más largo mete más tomas compitiendo por el mismo prompt), pero los 5000 caracteres sí, y el reparto en lotes cambiaría de forma. Cambiar `MODEL` obliga a revisar el bloque entero de reglas de `kie.ts` — no es un cambio de string.
+
 ⚠️ **Y el encuadre NO queda cerrado del todo: `camaraFallback` sigue mandando el plano del corte 1 a todos los lotes.** En `generate-lotes/route.ts`, `camaraFallback = cortes[0]?.camara` es lo que se usa cuando ningún `tiempoOriginal` empareja — o sea exactamente el bug que `camaraDeLote` existe para arreglar, entrando por la puerta del fallback. El plano por toma degrada bien ahí (sin emparejamiento no hay planos, no se emite ninguna línea), pero la línea global `CÁMARA:` sigue afirmando algo falso. Es previo a este cambio y no se tocó.
 
 ⚠️ **Lo que esto NO arregla: 4096 caracteres siguen siendo pocos para 5 tomas de detalle forense.** Aun con las tres mejoras el lote 1 conserva el 46 % de la coreografía. El resto del margen no está en el prompt sino en el REPARTO: `groupIntoLotes` llena hasta 15 s sin mirar cuánta coreografía implica, y un lote de 3 tomas entraría entero. Bajar el tope significa más lotes y **cada lote es una llamada pagada** — es decisión del dueño del repo, no un efecto colateral que se pueda tomar acá.
