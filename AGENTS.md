@@ -209,6 +209,21 @@ Palancas medidas sobre esa misma sesión, para cuando haga falta más:
 
 ⚠️ **El otro modelo del marketplace acepta 5000 caracteres, y la nota de arriba sobre por qué se descartó está mal.** `grok-imagine/image-to-video` admite prompt de 5000 (+22 %) y **duración 6–30 s**, no 15 — o sea la línea *"se descartó porque topa en 15s por llamada"* no describe a este modelo. Que acepte 30 s no ayuda a la fidelidad por sí solo (un lote más largo mete más tomas compitiendo por el mismo prompt), pero los 5000 caracteres sí, y el reparto en lotes cambiaría de forma. Cambiar `MODEL` obliga a revisar el bloque entero de reglas de `kie.ts` — no es un cambio de string.
 
+⚠️ **UN LOTE ES UN CLIP CONTINUO Y NO PUEDE CONTENER UN CAMBIO DE PLANO — esa era la causa real de "no copia el encuadre", y no el prompt.** Se llegó por descarte, con renders reales. Primero se anunció el plano POR TOMA (arriba): la información llegaba correcta al prompt y **el clip salió igual entero en plano medio**. El lote 1 de `30ff55d6` pedía "Plano medio" en las tomas 1–2 y "Primer plano del rostro" en la 3; el lote 2 era peor, **cuatro encuadres** (primer plano rostro+pecho → rostro+cuello → plano medio → plano general) en un solo clip de 15 s. Cada lote se renderiza de una sola pasada: pedirle dos encuadres es pedirle un corte de montaje dentro de un plano-secuencia, y devuelve uno de los dos.
+
+`groupIntoLotes` acepta ahora un `planoPorTiempo` OPCIONAL y cierra el lote donde cambia el encuadre, además de donde se pasa de 15 s. Sin el mapa se comporta exactamente como antes — quien llama decide, porque **esto cuesta plata**. Y no es una regla nueva: FASE 1 ya define la unidad como el CORTE REAL y el entregable son N clips independientes, así que el corte cae naturalmente ENTRE clips, que es donde el montaje lo pone. Un lote que abarca dos planos no es un lote de menos, es un corte perdido.
+
+**Verificado con un render real** del lote de "Primer plano frontal del rostro y cuello": encuadre cerrado de rostro y cuello, contra el plano medio (de cintura para arriba, con todo el fondo) que devolvía el mismo contenido dentro del lote de cuatro planos.
+
+Efecto medido sobre `30ff55d6`, el mismo contenido:
+
+| | lotes | planos por lote | coreografía |
+|---|---|---|---|
+| sin frontera | 2 | 2 y 4 | 85 % |
+| **con frontera** | **5** | **1** | **100 %** |
+
+⚠️ **El costo es 2,5× llamadas pagadas en ESE video** y depende del original: uno sin cortes sigue dando un lote. La cuota per-step no cambia (`video-generation` topa por VIDEO, no por lote), pero cada lote sigue registrando `video-render` y contando al backstop diario global. La huella no necesita bump: el número de lotes y las tomas de cada uno ya entran en `scriptFingerprint`, así que un reparto distinto da huella distinta y `isPaidResume` falla cerrado solo.
+
 ⚠️ **Y el encuadre NO queda cerrado del todo: `camaraFallback` sigue mandando el plano del corte 1 a todos los lotes.** En `generate-lotes/route.ts`, `camaraFallback = cortes[0]?.camara` es lo que se usa cuando ningún `tiempoOriginal` empareja — o sea exactamente el bug que `camaraDeLote` existe para arreglar, entrando por la puerta del fallback. El plano por toma degrada bien ahí (sin emparejamiento no hay planos, no se emite ninguna línea), pero la línea global `CÁMARA:` sigue afirmando algo falso. Es previo a este cambio y no se tocó.
 
 ⚠️ **Lo que esto NO arregla: 4096 caracteres siguen siendo pocos para 5 tomas de detalle forense.** Aun con las tres mejoras el lote 1 conserva el 46 % de la coreografía. El resto del margen no está en el prompt sino en el REPARTO: `groupIntoLotes` llena hasta 15 s sin mirar cuánta coreografía implica, y un lote de 3 tomas entraría entero. Bajar el tope significa más lotes y **cada lote es una llamada pagada** — es decisión del dueño del repo, no un efecto colateral que se pueda tomar acá.

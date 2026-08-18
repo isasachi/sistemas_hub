@@ -130,7 +130,33 @@ function splitLongToma(t: TomaFinal): TomaFinal[] {
   )
 }
 
-export function groupIntoLotes(tomas: TomaFinal[]): Lote[] {
+/**
+ * UN LOTE ES UN CLIP CONTINUO, ASÍ QUE NO PUEDE CONTENER UN CAMBIO DE PLANO.
+ * ---------------------------------------------------------------------------
+ * Cada lote se renderiza de una sola pasada: el generador produce una toma continua a
+ * partir de las imágenes. Meterle dos encuadres adentro es pedirle un corte de montaje
+ * dentro de un plano-secuencia, y lo que devuelve es uno solo de los dos.
+ *
+ * Medido en un render real del lote 1 de `30ff55d6`: el prompt anunciaba "Plano medio"
+ * en las tomas 1–2 y "Primer plano del rostro" en la 3, y el clip salió entero en plano
+ * medio. La información llegaba bien; el pedido era imposible. El lote 2 era peor —
+ * TRES cambios de encuadre (primer plano rostro+pecho → rostro+cuello → plano medio →
+ * plano general) en un solo clip de 15 s.
+ *
+ * Cerrar el lote donde el original corta el plano es, además, lo que ya dice el spec:
+ * FASE 1 define la unidad como el CORTE REAL, y el entregable son N clips
+ * independientes — o sea que el corte cae naturalmente ENTRE clips, que es donde el
+ * montaje lo pone. Un lote que abarca dos planos no es un lote de más, es un corte
+ * perdido.
+ *
+ * ⚠️ CUESTA PLATA: más lotes son más llamadas pagadas a KIE, y el número depende del
+ * original (uno sin cortes sigue dando un lote). Por eso `planoPorTiempo` es OPCIONAL y
+ * sin él la función se comporta exactamente como antes: quien llama decide.
+ */
+export function groupIntoLotes(
+  tomas: TomaFinal[],
+  planoPorTiempo?: Map<string, string>,
+): Lote[] {
   // Renumeramos TODA la secuencia expandida en orden: si una toma se divide, sus
   // fragmentos no pueden compartir el `n` original (colisionarían al rotular "Toma N"
   // en el prompt de Task 5 — dos "Toma 1" en el mismo guión). Numerar secuencial y
@@ -170,6 +196,14 @@ export function groupIntoLotes(tomas: TomaFinal[]): Lote[] {
     // (recursivamente), así que una toma sola SIEMPRE entra en un lote propio aunque
     // el lote esté vacío — el guard de abajo solo protege la SUMA con lo ya acumulado.
     if (actual.length && excedeTope(acumulado + t.duracionSeg)) cerrar()
+    // …y también si cambia el encuadre: el clip que sale de acá es continuo (ver la
+    // cabecera). Solo se compara contra la toma anterior DEL LOTE ABIERTO, así que un
+    // plano que vuelve más adelante abre su propio lote, igual que en el original.
+    else if (actual.length && planoPorTiempo) {
+      const previo = planoPorTiempo.get(actual[actual.length - 1].tiempoOriginal)
+      const ahora = planoPorTiempo.get(t.tiempoOriginal)
+      if (previo && ahora && previo !== ahora) cerrar()
+    }
     actual.push(t)
     acumulado += t.duracionSeg
   }

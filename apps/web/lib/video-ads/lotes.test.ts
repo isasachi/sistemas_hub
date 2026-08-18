@@ -494,3 +494,48 @@ describe('buildLotePrompt — el producto cede antes que la coreografía', () =>
     expect(p).not.toContain('se lee de su imagen')
   })
 })
+
+/**
+ * Un lote es un clip continuo: dos encuadres adentro es pedirle un corte de montaje
+ * dentro de un plano-secuencia. Medido en un render real del lote 1 de `30ff55d6` —
+ * el prompt anunciaba "Plano medio" en las tomas 1–2 y "Primer plano" en la 3, y el
+ * clip salió entero en plano medio. Cerrar el lote donde el original corta el plano
+ * pone el corte donde el montaje lo pone: entre clips.
+ */
+describe('groupIntoLotes — frontera de plano', () => {
+  const conT = (n: number, dur: number, tiempo: string): TomaFinal => ({ ...toma(n, dur), tiempoOriginal: tiempo })
+  const MAPA = new Map([
+    ['t1', 'Plano medio frontal'], ['t2', 'Plano medio frontal'],
+    ['t3', 'Primer plano del rostro'], ['t4', 'Plano general'],
+  ])
+
+  it('cierra el lote cuando cambia el encuadre, aunque sobre tiempo', () => {
+    const tomas = [conT(1, 2, 't1'), conT(2, 2, 't2'), conT(3, 2, 't3'), conT(4, 2, 't4')]
+    // Sin el mapa los 8 s entran holgados en un solo lote.
+    expect(groupIntoLotes(tomas)).toHaveLength(1)
+    // Con el mapa: un lote por encuadre, y las dos tomas del mismo plano siguen juntas.
+    const lotes = groupIntoLotes(tomas, MAPA)
+    expect(lotes.map((l) => l.tomas.length)).toEqual([2, 1, 1])
+  })
+
+  it('cada lote queda con un solo encuadre', () => {
+    const lotes = groupIntoLotes([conT(1, 2, 't1'), conT(2, 2, 't3'), conT(3, 2, 't2')], MAPA)
+    for (const l of lotes) {
+      expect(new Set(l.tomas.map((t) => MAPA.get(t.tiempoOriginal))).size).toBe(1)
+    }
+    // Un plano que vuelve más adelante abre su propio lote, igual que en el original.
+    expect(lotes).toHaveLength(3)
+  })
+
+  it('sigue respetando el tope de 15 s dentro de un mismo encuadre', () => {
+    const mismo = new Map([['t', 'Plano medio']])
+    const lotes = groupIntoLotes(Array.from({ length: 5 }, (_, i) => conT(i + 1, 4, 't')), mismo)
+    expect(lotes.length).toBeGreaterThan(1)
+    for (const l of lotes) expect(l.duracionSeg).toBeLessThanOrEqual(LOTE_MAX_SEC)
+  })
+
+  it('sin mapa se comporta exactamente como antes', () => {
+    const tomas = [conT(1, 2, 't1'), conT(2, 2, 't3'), conT(3, 2, 't4')]
+    expect(groupIntoLotes(tomas)).toEqual(groupIntoLotes(tomas, undefined))
+  })
+})

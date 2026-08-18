@@ -108,7 +108,13 @@ export async function POST(
   const cortes = session.forensic_analysis?.cortes ?? []
   const camaraFallback = cortes[0]?.camara?.trim() || 'primer plano, cámara en mano'
 
-  const agrupados = groupIntoLotes(adapted.tomas)
+  // Un lote es un clip CONTINUO: si abarca dos encuadres le estamos pidiendo un corte
+  // de montaje dentro de un plano-secuencia, y el render devuelve uno solo de los dos
+  // (medido). Cerrar el lote donde el original corta el plano es además donde el montaje
+  // pone el corte — el entregable son N clips independientes. Cuesta más lotes, o sea
+  // más llamadas pagadas, y por eso está acá y no escondido en `groupIntoLotes`.
+  const planoPorTiempo = new Map(cortes.map((c) => [c.tiempo, c.camara.trim()]))
+  const agrupados = groupIntoLotes(adapted.tomas, planoPorTiempo)
   if (!agrupados.length) return NextResponse.json({ error: 'El guión no tiene tomas' }, { status: 409 })
 
   // Una cámara por lote, con los planos de SUS cortes: el spec pide replicar el
