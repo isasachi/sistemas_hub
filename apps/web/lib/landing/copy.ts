@@ -189,36 +189,49 @@ function recomputeSavings(offer: Offer): Offer {
 }
 
 // ⚠️ EL MODELO REDACTA, EL CÓDIGO VERIFICA — el precio del usuario es un DATO, no una sugerencia.
-// El prompt lo pide, pero nada comprobaba que llegara a los tiers, y el fallo es caro: una landing
-// que anuncia un precio que el vendedor no cobra. Se acota al caso INEQUÍVOCO — el input trae UN
-// solo número ("119", "S/ 89") — y ahí se pinta el tier de menor cantidad con esa cifra. Con cero
-// números no hay nada que pinar; con varios ("1xS/89 2xS/169 3xS/199", "S/89 · Envío gratis · 2x1")
-// el orden es ambiguo y adivinarlo es peor que el prompt: esos quedan en manos del modelo, que sí
-// puede leer la estructura 1x/2x/3x. Lo pinado vuelve a pasar por recomputeSavings (el % de ahorro
-// se recalcula sobre el precio nuevo, si no el ancla quedaría mintiendo).
+// El prompt lo pide (y medido contra la API real lo cumple: "S/ 89" → tier de 1 unidad "S/ 89"),
+// pero nada lo comprobaba y el fallo es caro: una landing que anuncia una cifra que el vendedor no
+// cobra. Se acota al caso INEQUÍVOCO — el input trae UN solo número ("119", "S/ 89"). Con cero no
+// hay nada que fijar; con varios ("1xS/89 2xS/169 3xS/199", "S/89 · Envío gratis · 2x1") el orden
+// es ambiguo y adivinarlo es peor que el prompt, que sí lee la estructura 1x/2x/3x.
+//
+// ⚠️ SE ESCALA LA ESCALERA ENTERA, NO SE PISA UN TIER SUELTO. Pisar solo el barato deja
+// "1x S/ 89 · 2x S/ 350 · 3x S/ 450": el volumen pasa a ser un CASTIGO y los perUnit de los otros
+// tiers siguen con la aritmética vieja — una card visiblemente rota, peor que el precio inventado
+// que reemplaza, y que `validateSet` no ve (todos esos precios SÍ existen en los tiers). Con un
+// factor único todo queda coherente sin leer la cantidad de ningún label: los descuentos por
+// volumen, las anclas y los % de ahorro son proporciones, y una proporción sobrevive la escala.
+function scalePrice(s: string | undefined, ratio: number): string | undefined {
+  return s?.replace(/\d[\d.,]*/, (m) => {
+    const v = parseFloat(m.replace(/,/g, '')) * ratio
+    if (!Number.isFinite(v)) return m
+    return v >= 10 ? String(Math.round(v)) : v.toFixed(2).replace(/\.?0+$/, '')
+  })
+}
+
 export function pinUserPrice(offer: Offer, userPrice?: string | null): Offer {
   const nums = userPrice?.match(/\d[\d.,]*/g) ?? []
   if (nums.length !== 1) return offer
   const want = parsePrice(nums[0])
   if (!want) return offer
   if (offer.tiers.some((t) => parsePrice(t.price) === want)) return offer
-  // El tier más barato = el de 1 unidad (los tiers vienen ordenados por cantidad creciente, y si no,
-  // el precio es el criterio correcto igual).
-  let cheapest = 0
-  for (let i = 1; i < offer.tiers.length; i++)
-    if ((parsePrice(offer.tiers[i].price) ?? Infinity) < (parsePrice(offer.tiers[cheapest].price) ?? Infinity)) cheapest = i
-  console.warn(`[landing-offer] el modelo ignoró el precio del usuario (${userPrice}); se fija el tier ${cheapest} en S/ ${want}`)
-  return {
-    ...offer,
-    tiers: offer.tiers.map((t, i) => {
-      if (i !== cheapest) return t
-      // El ancla del modelo se calculó sobre SU precio: si ya no queda por encima del real, se cae
-      // (un "Antes" tachado MENOR que el precio actual es una card visiblemente rota, y
-      // recomputeSavings solo limpia el %, no el ancla).
-      const before = parsePrice(t.priceBefore)
-      return { ...t, price: `S/ ${want}`, perUnit: `S/ ${want} c/u`, priceBefore: before && before > want ? t.priceBefore : undefined }
-    }),
-  }
+  // El tier más barato es el de 1 unidad, que es al que apunta un precio suelto.
+  const base = Math.min(...offer.tiers.map((t) => parsePrice(t.price) ?? Infinity))
+  if (!Number.isFinite(base) || base <= 0) return offer
+  const ratio = want / base
+  const tiers = offer.tiers.map((t) => {
+    const price = scalePrice(t.price, ratio) ?? t.price
+    const priceBefore = scalePrice(t.priceBefore, ratio)
+    // Un ancla que no quedó por encima del precio es una card rota (recomputeSavings solo limpia
+    // el %, no el ancla). Solo puede pasar si el modelo ya la había dado mal: la escala es uniforme.
+    const validBefore = (parsePrice(priceBefore) ?? 0) > (parsePrice(price) ?? 0)
+    return { ...t, price, priceBefore: validBefore ? priceBefore : undefined, perUnit: scalePrice(t.perUnit, ratio) }
+  })
+  // Los strings los genera este código, así que los topes del schema (price 12, perUnit 28) no los
+  // valida nadie más: si la escala se pasa de largo, se deja lo del modelo antes que romper el parse.
+  if (tiers.some((t) => t.price.length > 12 || (t.perUnit?.length ?? 0) > 28 || (t.priceBefore?.length ?? 0) > 12)) return offer
+  console.warn(`[landing-offer] el modelo ignoró el precio del usuario (${userPrice}); se reescala la oferta a S/ ${want}`)
+  return { ...offer, tiers }
 }
 
 export async function generateOfferCopy(

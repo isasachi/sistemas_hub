@@ -88,13 +88,18 @@ describe('sectionCopySchema (conteo exacto de arrays por ADN)', () => {
 // anuncia una cifra que el vendedor no cobra.
 describe('pinUserPrice', () => {
   const tiers = (...p: string[]) =>
-    p.map((price, i) => ({ label: `${i + 1}x`, price, priceBefore: 'S/ 300', cta: 'Compra', featured: i === 1 }))
+    p.map((price, i) => ({ label: `${i + 1}x`, price, priceBefore: 'S/ 300', perUnit: 'S/ 60 c/u', cta: 'Compra', featured: i === 1 }))
 
-  it('pisa el tier de 1 unidad con el precio del usuario cuando el modelo lo ignoró', () => {
+  it('reescala la ESCALERA ENTERA al precio del usuario (pisar un tier suelto invierte el descuento)', () => {
     const out = pinUserPrice({ tiers: tiers('S/ 199', 'S/ 350', 'S/ 450') } as any, 'S/ 89')
-    expect(out.tiers[0].price).toBe('S/ 89')
-    expect(out.tiers[0].perUnit).toBe('S/ 89 c/u')
-    expect(out.tiers.slice(1).map((t) => t.price)).toEqual(['S/ 350', 'S/ 450'])
+    // ratio = 89/199 ≈ 0.447
+    expect(out.tiers.map((t) => t.price)).toEqual(['S/ 89', 'S/ 157', 'S/ 201'])
+    // el volumen sigue siendo un descuento, no un castigo
+    const unit = out.tiers.map((t, i) => (parseFloat(t.price.slice(2)) / (i + 1)))
+    expect(unit[1]).toBeLessThan(unit[0])
+    expect(unit[2]).toBeLessThan(unit[1])
+    // el perUnit del modelo también se escala: no puede quedar con la aritmética vieja
+    expect(out.tiers[0].perUnit).toBe('S/ 27 c/u')
   })
 
   it('no toca nada si el modelo ya usó el precio del usuario', () => {
@@ -102,8 +107,8 @@ describe('pinUserPrice', () => {
     expect(pinUserPrice(base, '119')).toBe(base)
   })
 
-  it('un ancla que quedó por DEBAJO del precio real se cae (card rota si no)', () => {
-    const out = pinUserPrice({ tiers: [{ label: '1x', price: 'S/ 50', priceBefore: 'S/ 70', cta: 'c', featured: true }] } as any, 'S/ 149')
+  it('un ancla que no quedó por encima del precio se cae (card rota si no)', () => {
+    const out = pinUserPrice({ tiers: [{ label: '1x', price: 'S/ 50', priceBefore: 'S/ 40', cta: 'c', featured: true }] } as any, 'S/ 149')
     expect(out.tiers[0].price).toBe('S/ 149')
     expect(out.tiers[0].priceBefore).toBeUndefined()
   })
