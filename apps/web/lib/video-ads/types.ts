@@ -10,6 +10,7 @@ import type { ValidationMatrix } from './validation'
 // — es la rotura esperada de esta tarea, documentada en el reporte.
 import type { AdaptedScript } from './adapt'
 import type { MotionProfile, VoiceProfile } from './character'
+import type { Personaje } from './personajes'
 import type { Lote } from './lotes'
 
 // ─── INPUTS DEL USUARIO (spec: "INPUTS DEL USUARIO") ─────────────────────────
@@ -93,6 +94,12 @@ export interface VideoSessionResponse {
   voice_profile: VoiceProfile | null
   /** Cómo se MUEVE (FASE 4.6). Null en sesiones anteriores a la columna. */
   motion_profile: MotionProfile | null
+  /**
+   * Varios personajes (hasta 4). Null en toda sesión anterior a la migración: ahí
+   * `personajesDe` arma uno solo con las columnas singulares de arriba. NO leas esta
+   * columna directo — pasa siempre por ese accesor (lib/video-ads/personajes.ts).
+   */
+  personajes: Personaje[] | null
   // FASE 5
   lotes: Lote[] | null
   video_url: string | null   // primer lote listo: sirve de miniatura en el dashboard
