@@ -1,6 +1,6 @@
 import { createHash } from 'crypto'
 import type { Lote, LoteImage } from './lotes'
-import type { VoiceProfile } from './character'
+import type { MotionProfile, VoiceProfile } from './character'
 
 /**
  * Lógica pura de orquestación del render por lotes (Task 6, fix rounds 1 a 4).
@@ -106,6 +106,8 @@ export function scriptFingerprint(input: {
   /** Una por lote, en el mismo orden que `lotes` (ver `camaraDeLote`, lotes.ts). */
   camaras: string[]
   voz: VoiceProfile
+  /** Cómo se mueve. Cambia el prompt de cada lote, así que cambia el render. */
+  movimiento?: MotionProfile | null
   images: LoteImage[]
   /** Nicho: cambia el rótulo del bloque de producto y el bloque de consistencia. Sin
    *  esto, cambiar el chip y re-renderizar deja la huella igual con otro prompt. */
@@ -141,12 +143,18 @@ export function scriptFingerprint(input: {
     // cada corrida, y meterlas haría que `isPaidResume` no reanudara nunca. Lo que sí
     // entra —el avatar y el producto de los que salen, más las tomas— es lo que decide
     // si las poses serían las mismas.
-    'v5',
+    // v5 → v6: el perfil de movimiento entra al prompt de cada lote. Cambia el render
+    // sin que ninguno de los otros insumos se mueva, así que sin el bump un resume
+    // pegaría un clip con perfil y otro sin él.
+    'v6',
     String(input.niche ?? ''),
     consistencyBlock, productDesc, escenario,
     voz.idioma, voz.varianteRegional, voz.acento, voz.pronunciacion, voz.ritmo,
     voz.velocidad, voz.entonacion, voz.energia, voz.pausas, voz.tono, voz.timbre,
     voz.edadVocal, voz.estilo,
+    // Opcional: las sesiones anteriores a FASE 4.6 no lo tienen, y una cadena vacía las
+    // deja con la misma huella que antes en vez de invalidarlas.
+    input.movimiento?.calidadMovimiento ?? '', input.movimiento?.manerismos ?? '',
     String(images.length),
   ]
   for (const img of images) campos.push(img.url, img.role)

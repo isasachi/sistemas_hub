@@ -147,7 +147,7 @@ export async function POST(
   const huella = scriptFingerprint({
     niche: session.niche,
     lotes: agrupados, consistencyBlock: session.consistency_block, productDesc,
-    escenario, camaras, voz: session.voice_profile, images,
+    escenario, camaras, voz: session.voice_profile, movimiento: session.motion_profile, images,
   })
   const base: Lote[] = agrupados.map((l) => ({ ...l, scriptHash: huella }))
 
@@ -351,6 +351,7 @@ export async function POST(
           escenario,
           camara: camaras[i],
           voz: session.voice_profile,
+          movimiento: session.motion_profile,
           images: [
             { url: pares[i].inicio, role: 'el primer fotograma' },
             { url: pares[i].fin, role: 'el último fotograma' },

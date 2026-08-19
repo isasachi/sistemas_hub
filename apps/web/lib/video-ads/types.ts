@@ -9,7 +9,7 @@ import type { ValidationMatrix } from './validation'
 // esos archivos aparezcan; tsc SÍ marcará estos tres imports como error mientras tanto
 // — es la rotura esperada de esta tarea, documentada en el reporte.
 import type { AdaptedScript } from './adapt'
-import type { VoiceProfile } from './character'
+import type { MotionProfile, VoiceProfile } from './character'
 import type { Lote } from './lotes'
 
 // ─── INPUTS DEL USUARIO (spec: "INPUTS DEL USUARIO") ─────────────────────────
@@ -91,6 +91,8 @@ export interface VideoSessionResponse {
   character_prompt: string | null
   consistency_block: string | null
   voice_profile: VoiceProfile | null
+  /** Cómo se MUEVE (FASE 4.6). Null en sesiones anteriores a la columna. */
+  motion_profile: MotionProfile | null
   // FASE 5
   lotes: Lote[] | null
   video_url: string | null   // primer lote listo: sirve de miniatura en el dashboard

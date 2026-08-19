@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import type { TomaFinal } from './adapt'
-import type { VoiceProfile } from './character'
+import type { MotionProfile, VoiceProfile } from './character'
 import { KIE_PROMPT_MAX } from './kie'
 import { nicheSpec } from './niches'
 
@@ -298,6 +298,8 @@ export function buildLotePrompt(args: {
   escenario: string
   camara: string
   voz: VoiceProfile
+  /** Cómo se mueve. Null en sesiones anteriores a FASE 4.6: el bloque no se emite. */
+  movimiento?: MotionProfile | null
   images: LoteImage[]
   /** Los cortes del forense, para poder decir QUÉ plano va con QUÉ toma (ver abajo). */
   cortes?: { tiempo: string; camara: string }[]
@@ -308,7 +310,7 @@ export function buildLotePrompt(args: {
    *  referencia — la leyenda `@image(n)` no aplica y confunde. Ver kie.ts. */
   mode?: 'frames' | 'reference'
 }): string {
-  const { lote, consistencyBlock, productDesc, escenario, camara, voz, images, cortes } = args
+  const { lote, consistencyBlock, productDesc, escenario, camara, voz, movimiento, images, cortes } = args
   const spec = nicheSpec(args.niche)
 
   /**
@@ -441,6 +443,22 @@ export function buildLotePrompt(args: {
       `  Entonación: ${voz.entonacion} · Energía: ${voz.energia} · Pausas: ${voz.pausas}`,
       `  Tono: ${voz.tono} · Timbre: ${voz.timbre} · Edad vocal: ${voz.edadVocal} · Estilo: ${voz.estilo}`,
       '',
+      // ⚠️ Va SIEMPRE que exista, íntegro y en cada lote, por la misma REGLA DE CONTEXTO
+      // ABSOLUTO que el bloque de consistencia: el generador no recuerda el lote
+      // anterior, así que un personaje que se mueve distinto en el lote 3 que en el 1 es
+      // el mismo fallo que uno que cambia de cara.
+      //
+      // `accionVisual` describe solo movimientos CON PROPÓSITO narrativo. Esto describe
+      // lo otro: cómo se mueve el cuerpo entre gesto y gesto, que es lo que separa a una
+      // persona de un maniquí ejecutando instrucciones.
+      ...(movimiento
+        ? [
+            'CÓMO SE MUEVE (vale durante todo el clip, también entre gesto y gesto):',
+            `  Calidad del movimiento: ${movimiento.calidadMovimiento}`,
+            `  Manerismos: ${movimiento.manerismos}`,
+            '',
+          ]
+        : []),
       'SECUENCIA DE ACCIONES VISUALES:',
       renderAcciones(),
       '',

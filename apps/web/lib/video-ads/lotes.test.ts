@@ -381,6 +381,31 @@ describe('buildLotePrompt', () => {
  * `accionVisual`, que es lo ÚNICO que se trunca bajo presión de presupuesto y la otra
  * mitad de la misma queja ("que se copien los movimientos exactos").
  */
+// El tercer artefacto bloqueado, junto al bloque de consistencia y la voz. Va en CADA
+// lote por la misma REGLA DE CONTEXTO ABSOLUTO: un personaje que se mueve distinto en el
+// lote 3 que en el 1 es el mismo fallo que uno que cambia de cara.
+describe('buildLotePrompt — cómo se mueve', () => {
+  const movimiento = {
+    calidadMovimiento: 'Movimientos lentos y continuos, sin pausas bruscas entre gestos.',
+    manerismos: 'Se acomoda el pelo detrás de la oreja al empezar cada frase.',
+  }
+  const lote = groupIntoLotes([toma(1, 4, 'Hola.')])[0]
+
+  it('repite el perfil íntegro, los dos campos', () => {
+    const p = buildLotePrompt({ lote, ...ARGS, movimiento })
+    expect(p).toContain(movimiento.calidadMovimiento)
+    expect(p).toContain(movimiento.manerismos)
+    // Y dice que vale ENTRE gesto y gesto, que es justo lo que `accionVisual` no cubre.
+    expect(p).toMatch(/entre gesto y gesto/)
+  })
+
+  it('sin perfil no emite el bloque — las sesiones anteriores se comportan igual', () => {
+    const p = buildLotePrompt({ lote, ...ARGS })
+    expect(p).not.toMatch(/CÓMO SE MUEVE/)
+    expect(buildLotePrompt({ lote, ...ARGS, movimiento: null })).toBe(p)
+  })
+})
+
 describe('buildLotePrompt — plano por toma', () => {
   const DOS_PLANOS = [
     { tiempo: 't1', camara: 'Plano medio frontal, estático' },

@@ -101,12 +101,14 @@ export async function POST(
       character_prompt: identity.promptCreacion,
       consistency_block: identity.bloqueConsistencia,
       voice_profile: identity.voz,
+      motion_profile: identity.movimiento,
     })
     await recordGenQuota(id, 'video-character', userId)
     return NextResponse.json({
       characterUrl: avatarUrl,
       consistencyBlock: identity.bloqueConsistencia,
       voiceProfile: identity.voz,
+      motionProfile: identity.movimiento,
     })
   } catch (err) {
     console.error('[video-ads/character]', err)

@@ -74,6 +74,42 @@ describe('buildIdentityInstruction', () => {
   })
 })
 
+/**
+ * FASE 4.6 — el tercer artefacto. El fallo que existe para arreglar es que los renders
+ * salían "robóticos", y la trampa es leer eso como falta de energía: un video sereno
+ * también tiene movimiento fluido. Por eso son dos campos y no uno.
+ */
+describe('buildIdentityInstruction — perfil de movimiento', () => {
+  const conMovimiento = {
+    ...FORENSIC,
+    edicion: { ritmo: 'Rápido y dinámico, cortes cada dos segundos' },
+    cortes: [{ accion: 'la mujer levanta el frasco y lo gira' }],
+  } as ForensicReport
+
+  it('pide los DOS campos por separado', () => {
+    const p = buildIdentityInstruction(INPUTS, conMovimiento, false)
+    expect(p).toMatch(/calidadMovimiento/)
+    expect(p).toMatch(/manerismos/)
+  })
+
+  it('separa explícitamente fluidez de energía — es la corrección que originó el campo', () => {
+    const p = buildIdentityInstruction(INPUTS, conMovimiento, false)
+    expect(p).toMatch(/FLUIDEZ Y ENERG[IÍ]A SON EJES DISTINTOS/)
+    // El anti-ejemplo importa: "energía baja" es justo lo que devolvía un campo único.
+    expect(p).toMatch(/"energía baja" NO lo es/)
+  })
+
+  it('le pasa el ritmo de edición y el movimiento de los cortes, que antes se tiraban', () => {
+    const p = buildIdentityInstruction(INPUTS, conMovimiento, false)
+    expect(p).toContain('Rápido y dinámico, cortes cada dos segundos')
+    expect(p).toContain('la mujer levanta el frasco y lo gira')
+  })
+
+  it('sin ritmo medido lo dice, no lo inventa', () => {
+    expect(buildIdentityInstruction(INPUTS, FORENSIC, false)).toContain('[no medido]')
+  })
+})
+
 describe('buildCharacterParts', () => {
   it('sin imagen: un único part de texto', () => {
     const parts = buildCharacterParts('instrucción')
@@ -98,6 +134,10 @@ describe('CharacterIdentitySchema', () => {
         pronunciacion: 'Clara, seseo', ritmo: 'Conversacional', velocidad: 'Media',
         entonacion: 'Ascendente en preguntas', energia: 'Media-alta', pausas: 'Naturales',
         tono: 'Cálido', timbre: 'Claro', edadVocal: '25 años', estilo: 'Amiga que recomienda',
+      },
+      movimiento: {
+        calidadMovimiento: 'Movimientos continuos y pausados, sin cortes bruscos entre gestos; el peso se desplaza de una pierna a la otra al hablar y las manos siguen vivas cuando no señalan nada.',
+        manerismos: 'Se acomoda el pelo detrás de la oreja al empezar cada frase y ladea la cabeza al escuchar.',
       },
     })
     expect(ok.success).toBe(true)

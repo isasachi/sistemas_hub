@@ -37,10 +37,34 @@ export const VoiceProfileSchema = z.object({
 })
 export type VoiceProfile = z.infer<typeof VoiceProfileSchema>
 
+/**
+ * FASE 4.6 — CÓMO SE MUEVE. El tercer artefacto bloqueado, junto al bloque de
+ * consistencia (cómo se ve) y el perfil de voz (cómo suena).
+ *
+ * ⚠️ SON DOS CAMPOS SEPARADOS Y NO SE PUEDEN COLAPSAR EN UNO. El fallo que esto existe
+ * para arreglar es que los renders salían "robóticos", y la trampa es leer eso como
+ * falta de energía: un video sereno también tiene movimiento fluido. La fluidez y la
+ * energía son ejes independientes, y un solo campo hace que el modelo devuelva
+ * "energía media" donde hacía falta "movimientos lentos y continuos".
+ *
+ *  - `calidadMovimiento`: la FÍSICA del cuerpo — continuo o entrecortado, velocidad,
+ *    desplazamiento de peso, qué hacen las manos cuando no hacen nada, dónde descansa
+ *    la mirada entre frases.
+ *  - `manerismos`: los tics involuntarios de esa persona, que no cumplen ninguna
+ *    función narrativa. Un cuerpo que solo hace movimientos con propósito es un robot,
+ *    y `accionVisual` solo describe movimientos con propósito.
+ */
+export const MotionProfileSchema = z.object({
+  calidadMovimiento: z.string(),
+  manerismos: z.string(),
+})
+export type MotionProfile = z.infer<typeof MotionProfileSchema>
+
 export const CharacterIdentitySchema = z.object({
   promptCreacion: z.string(),
   bloqueConsistencia: z.string(),
   voz: VoiceProfileSchema,
+  movimiento: MotionProfileSchema,
 })
 export type CharacterIdentity = z.infer<typeof CharacterIdentitySchema>
 
@@ -73,6 +97,13 @@ export function buildIdentityInstruction(
     // "el producto es una blusa crema" en el mismo texto. La prenda del usuario gana.
     spec.avatarNote,
     `  Fondo observado: ${forensic.fondo}`,
+    // El ritmo de edición lo mide el forense y hasta ahora no llegaba a ningún prompt:
+    // se generaba, se persistía y nadie lo leía. Es la evidencia objetiva de cómo se
+    // mueve el original, así que es lo primero que necesita el perfil de movimiento.
+    `  Ritmo de edición observado: ${forensic.edicion?.ritmo ?? '[no medido]'}`,
+    forensic.cortes?.length
+      ? `  Movimiento observado en los cortes: ${forensic.cortes.slice(0, 6).map((c) => c.accion).join(' | ')}`
+      : '',
     '',
     hasImage
       ? [
@@ -129,6 +160,28 @@ export function buildIdentityInstruction(
     acento === ACENTO_PENDIENTE
       ? 'NO lo sustituyas por un acento genérico ni "neutro": propaga el marcador.'
       : '',
+    '',
+    '`movimiento`: CÓMO SE MUEVE el personaje, leído del video original. Son DOS campos',
+    'separados y no se pueden mezclar:',
+    '',
+    '  `calidadMovimiento` — la física del cuerpo. Describe si el movimiento es continuo',
+    '  o entrecortado, su velocidad, cómo desplaza el peso de una pierna a otra, qué',
+    '  hacen las manos y los brazos MIENTRAS NO HACEN NADA, y dónde descansa la mirada',
+    '  entre una frase y la siguiente.',
+    '',
+    '  `manerismos` — los gestos involuntarios y repetidos de esa persona, los que no',
+    '  cumplen ninguna función en el guión: acomodarse el pelo, tocarse la cara,',
+    '  parpadear fuerte, encogerse de hombros, ladear la cabeza al escuchar.',
+    '',
+    '⚠️ FLUIDEZ Y ENERGÍA SON EJES DISTINTOS, y confundirlos es el error a evitar. Un',
+    'video sereno puede tener un movimiento perfectamente fluido; uno enérgico puede ser',
+    'entrecortado. En `calidadMovimiento` describe CÓMO se mueve el cuerpo, no CUÁNTA',
+    'energía tiene: "movimientos lentos y continuos, sin pausas bruscas entre gestos" es',
+    'la clase de respuesta correcta; "energía baja" NO lo es, no dice nada sobre el',
+    'movimiento y ya está cubierto por el perfil de voz.',
+    '',
+    'Los dos campos describen al personaje NUEVO, pero se leen del video original: es su',
+    'lenguaje corporal lo que hay que replicar, no su apariencia.',
     '',
     'Todo el output va en español.',
   ].filter(Boolean).join('\n')
