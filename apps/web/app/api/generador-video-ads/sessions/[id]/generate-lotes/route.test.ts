@@ -21,6 +21,15 @@ vi.mock('@/lib/gen-quota', async (importOriginal) => ({
   recordGenQuota: vi.fn().mockResolvedValue(undefined),
 }))
 
+// Los frames frontera son imágenes PAGADAS de Nano Banana Pro: si no se mockean, cada
+// test intentaría generarlas de verdad. Se devuelve una URL por lote, que es la
+// invariante que `pairFrames` necesita (frames[i] cierra el lote i y abre el i+1).
+vi.mock('@/lib/video-ads/nano-banana', () => ({
+  generateImage: vi.fn(async () => Buffer.from('png')),
+}))
+vi.mock('@/lib/storage', () => ({
+  uploadToStorage: vi.fn(async (_id: string, _b: Buffer, _m: string, nombre: string) => `https://cdn.test/${nombre}.png`),
+}))
 vi.mock('@/lib/product-hunter/session', () => ({
   readUserId: vi.fn().mockResolvedValue('user-1'),
 }))
@@ -29,6 +38,7 @@ import { NextRequest } from 'next/server'
 import { POST } from './route'
 import { getVideoSession, updateVideoSession, claimFreshLotes } from '@/lib/video-ads/db'
 import { createVideoTask } from '@/lib/video-ads/kie'
+import { generateImage } from '@/lib/video-ads/nano-banana'
 import { checkGenQuota, checkGlobalBackstop, recordGenQuota } from '@/lib/gen-quota'
 import type { VideoSessionResponse } from '@/lib/video-ads/types'
 import type { Lote } from '@/lib/video-ads/lotes'
@@ -195,6 +205,47 @@ describe('POST generate-lotes — fix round 2: cuota por video, no por lote', ()
 
     const generationCalls = vi.mocked(recordGenQuota).mock.calls.filter((c) => c[1] === 'video-generation')
     expect(generationCalls).toHaveLength(0)
+  })
+
+  // ⚠️ EL FALLO SILENCIOSO QUE ESTE MODO PUEDE TENER. `frames[i]` cierra el lote i y
+  // ABRE el i+1. Si al reanudar se regeneraran, el clip pendiente arrancaría en una pose
+  // distinta de donde terminó el que ya se pagó — y nada lo reportaría: los dos clips
+  // existen, los dos tienen video, y el corte entre ellos salta.
+  it('reanudar REUSA los frames guardados en vez de regenerarlos', async () => {
+    const guardados = await renderInicial()
+    const framesGuardados = ['https://cdn.test/viejo-1.png', 'https://cdn.test/viejo-2.png']
+    vi.mocked(getVideoSession).mockResolvedValue(
+      session({
+        lotes: conPendiente(guardados) as unknown as VideoSessionResponse['lotes'],
+        frames: framesGuardados,
+      } as never),
+    )
+    vi.mocked(generateImage).mockClear()
+
+    const res = await POST(req({ resume: true }), ctx())
+    expect(res.status).toBe(200)
+    // Ni una sola imagen nueva: son llamadas pagadas Y romperían la continuidad.
+    expect(generateImage).not.toHaveBeenCalled()
+    // Y el lote pendiente (el 2) arranca exactamente donde cerró el 1.
+    const [creado] = vi.mocked(createVideoTask).mock.calls.slice(-1)
+    expect(creado[0].images.map((i) => i.url)).toEqual([framesGuardados[0], framesGuardados[1]])
+  })
+
+  it('si el guión cambió, los frames NO se reusan aunque estén guardados', async () => {
+    // Huella distinta = otro contenido = otras poses. Reusar los frames viejos pegaría
+    // el video nuevo a los fotogramas del anterior.
+    vi.mocked(getVideoSession).mockResolvedValue(
+      session({
+        adapted: ADAPTED_2_LOTES_OTRO_TEXTO,
+        lotes: [{ n: 1, tomas: [], duracionSeg: 8, prompt: 'v', taskId: 't-old', status: 'waiting', videoUrl: null, failMsg: null, scriptHash: 'huella-vieja' }],
+        frames: ['https://cdn.test/viejo-1.png'],
+      } as never),
+    )
+    vi.mocked(generateImage).mockClear()
+
+    const res = await POST(req({ resume: true }), ctx())
+    expect(res.status).toBe(200)
+    expect(generateImage).toHaveBeenCalled()
   })
 
   it('resume:true SIN ningún taskId pagado se trata como intento nuevo: SÍ cobra', async () => {

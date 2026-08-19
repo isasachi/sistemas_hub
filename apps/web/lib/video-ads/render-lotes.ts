@@ -134,7 +134,14 @@ export function scriptFingerprint(input: {
     // legal ({4,6,8}) y la plantilla del prompt (sin escalera de degradación, sin
     // "estable", con el bloque de toma continua). Un resume a través de este cambio
     // pegaría un clip de grok a uno de Veo jurando que es el mismo contenido.
-    'v4',
+    // v4 → v5: el render pasa al modo de keyframes. Cambia el `generationType` que se
+    // le manda a Veo y cambia la plantilla del prompt (la leyenda `@image(n)` se
+    // reemplaza por la instrucción de interpolar entre el primer y el último fotograma).
+    // Las URLs de los frames NO entran en la huella a propósito: son salida, cambian en
+    // cada corrida, y meterlas haría que `isPaidResume` no reanudara nunca. Lo que sí
+    // entra —el avatar y el producto de los que salen, más las tomas— es lo que decide
+    // si las poses serían las mismas.
+    'v5',
     String(input.niche ?? ''),
     consistencyBlock, productDesc, escenario,
     voz.idioma, voz.varianteRegional, voz.acento, voz.pronunciacion, voz.ritmo,

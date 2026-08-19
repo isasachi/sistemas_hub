@@ -304,6 +304,9 @@ export function buildLotePrompt(args: {
   /** Nicho de la sesión: en ropa/zapatos el producto se LLEVA PUESTO, y el bloque que
    *  lo describe como "un objeto" contradice al bloque de consistencia. Ver niches.ts. */
   niche?: unknown
+  /** `frames`: las imágenes son el primer y el último fotograma del clip, no material de
+   *  referencia — la leyenda `@image(n)` no aplica y confunde. Ver kie.ts. */
+  mode?: 'frames' | 'reference'
 }): string {
   const { lote, consistencyBlock, productDesc, escenario, camara, voz, images, cortes } = args
   const spec = nicheSpec(args.niche)
@@ -342,7 +345,17 @@ export function buildLotePrompt(args: {
   const planoPorToma = (i: number) =>
     mezclaPlanos && planos[i] && planos[i] !== planos[i - 1] ? planos[i] : ''
 
-  const legend = images.map((img, i) => `@image(${i + 1}) = ${img.role}`).join('\n')
+  // En modo `frames` las dos imágenes NO son referencias que el prompt cite: son los
+  // fotogramas inicial y final que el modelo tiene que unir. Mandarles la leyenda
+  // `@image(n)` le pide que las trate como material de consulta, que es otra cosa.
+  const legend = args.mode === 'frames'
+    ? [
+        'La primera imagen es el PRIMER FOTOGRAMA del clip y la segunda es el ÚLTIMO.',
+        'El movimiento va de una a la otra: interpólalo completo, continuo y natural,',
+        'sin saltos ni poses congeladas. La persona, la ropa y el escenario de esos dos',
+        'fotogramas son la verdad — la descripción de abajo solo explica qué ocurre entre ellos.',
+      ].join('\n')
+    : images.map((img, i) => `@image(${i + 1}) = ${img.role}`).join('\n')
   const locucionFinal = lote.tomas.map((t) => t.locucion).filter(Boolean).join(' ')
 
   /**
