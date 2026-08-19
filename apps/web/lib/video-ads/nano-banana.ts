@@ -95,6 +95,11 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
  */
 export async function generateImage(
   input: ImageTaskInput,
+  // ⚠️ El tiempo VARÍA mucho: lo típico medido son ~56 s, pero una corrida se pasó de
+  // 240 s y la siguiente con el mismo prompt volvió a 56 s. Como los frames se generan
+  // en paralelo, el tope de la ruta lo marca el más lento, así que 240 s es lo máximo
+  // que cabe bajo el `maxDuration = 300` dejando margen para crear las tareas de video.
+  // Un timeout acá no cuesta ningún render: falla antes de tocar Veo.
   { timeoutMs = 240_000, pollMs = 5_000 } = {},
 ): Promise<Buffer> {
   if (input.prompt.length > NANO_PROMPT_MAX) {

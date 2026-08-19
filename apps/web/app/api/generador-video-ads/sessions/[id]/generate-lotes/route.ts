@@ -287,9 +287,13 @@ export async function POST(
    * arrancaría en una pose distinta de donde terminó el que ya se pagó, y la continuidad
    * —el motivo entero de usar keyframes— se rompería sin que nada lo reporte.
    */
+  // `jobs` incluye un frame de cierre por lote MÁS uno de apertura en cada lote cuya
+  // escena no continúa la del anterior (ver `frameSpecs`), así que puede haber más
+  // frames que lotes. Por eso la comprobación de reutilización va contra `jobs.length`.
+  const jobs = frameSpecs(seed)
   let cierres: string[]
   const guardados = session.frames
-  if (reanuda && Array.isArray(guardados) && guardados.length === seed.length) {
+  if (reanuda && Array.isArray(guardados) && guardados.length === jobs.length) {
     cierres = guardados
   } else {
     try {
@@ -297,7 +301,7 @@ export async function POST(
         avatarUrl: personaUrl,
         productUrl: session.product_url,
         productDesc,
-        specs: frameSpecs(seed),
+        specs: jobs,
         generate: (input) => generateImage({ ...input, aspectRatio: '9:16' }),
         upload: (bytes, nombre) => uploadToStorage(id, bytes, 'image/png', nombre),
       })
@@ -308,7 +312,7 @@ export async function POST(
       return NextResponse.json({ error: 'No se pudieron generar los fotogramas del video.' }, { status: 502 })
     }
   }
-  const pares = pairFrames(personaUrl, cierres)
+  const pares = pairFrames(personaUrl, jobs, cierres)
 
   const lotes: Lote[] = []
   // Distinto de un fallo de red/KIE (500): un prompt que no entra ni al piso es un

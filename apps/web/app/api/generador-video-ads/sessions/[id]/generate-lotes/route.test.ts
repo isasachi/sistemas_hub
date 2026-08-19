@@ -63,7 +63,7 @@ const VOZ = {
 
 const toma = (n: number, duracionSeg: number) => ({
   n, tiempoOriginal: '00:00-00:10', duracionSeg,
-  accionVisual: `acción ${n}`, personaje: 'Mujer 25', producto: 'Frasco', locucion: `línea ${n}`,
+  accionVisual: `la mujer hace la acción ${n}`, personaje: 'Mujer 25', producto: 'Frasco', locucion: `línea ${n}`,
 })
 
 // Dos tomas de 10 s: juntas suman 20 s (>15), así que `groupIntoLotes` las separa en
@@ -81,8 +81,8 @@ const ADAPTED_2_LOTES = {
 const ADAPTED_2_LOTES_OTRO_TEXTO = {
   ...ADAPTED_2_LOTES,
   tomas: [
-    { ...toma(1, 8), accionVisual: 'otra acción distinta', locucion: 'otro guión completamente distinto' },
-    { ...toma(2, 8), accionVisual: 'segunda acción distinta', locucion: 'segunda línea distinta' },
+    { ...toma(1, 8), accionVisual: 'la mujer hace otra acción distinta', locucion: 'otro guión completamente distinto' },
+    { ...toma(2, 8), accionVisual: 'la mujer hace la segunda acción distinta', locucion: 'segunda línea distinta' },
   ],
 }
 
