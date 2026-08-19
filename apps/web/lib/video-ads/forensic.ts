@@ -254,12 +254,28 @@ const EPS = 1e-9
  */
 export function repairCutTiming(
   report: ForensicReport,
+  /**
+   * Piso de duración VISIBLE de un corte, además del que impone su diálogo.
+   *
+   * ⚠️ Sin esto, un corte SIN diálogo tiene mínimo 0 y por tanto es holgura pura: el
+   * reparto lo puede vaciar entero para financiar a los que no entran. Medido en una
+   * sesión real de ropa, después de fusionar los micro-cortes a 3 s: las dos tomas de
+   * cierre —las únicas mudas— quedaron en **0.91 s y 1.27 s**, o sea el reparto
+   * deshizo justo lo que la fusión acababa de garantizar, y esos dos clips de 1 s son
+   * dos llamadas pagadas por un plano congelado.
+   *
+   * El default es 0 para no cambiar el comportamiento de ningún caller existente:
+   * quien fusiona es quien tiene un piso que defender y quien lo pasa.
+   */
+  minVisibleSeg = 0,
 ): { report: ForensicReport; ajustes: AjusteTiempo[] } {
   const cortes = report.cortes ?? []
   if (!cortes.length) return { report, ajustes: [] }
 
   const dur = cortes.map((c) => (Number.isFinite(c.duracionSeg) && c.duracionSeg > 0 ? c.duracionSeg : 0))
-  const min = cortes.map((c) => (c.dialogo ?? '').length / CPS_MAX)
+  const min = cortes.map((c) =>
+    Math.max((c.dialogo ?? '').length / CPS_MAX, Math.max(0, minVisibleSeg)),
+  )
 
   const deficit = cortes.reduce((n, _, i) => n + Math.max(0, min[i] - dur[i]), 0)
   if (deficit <= EPS) return { report, ajustes: [] }

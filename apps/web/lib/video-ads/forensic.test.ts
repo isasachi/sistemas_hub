@@ -313,3 +313,53 @@ describe('mergeMicroCortes', () => {
     for (const c of fin.cortes) expect(c.dialogo.length / c.duracionSeg).toBeLessThanOrEqual(CPS_MAX + 1e-9)
   })
 })
+
+/**
+ * Un corte SIN diálogo tiene mínimo de cps 0, o sea es holgura pura, y el reparto lo
+ * puede vaciar entero para financiar a los que no entran. Medido en una sesión real de
+ * ropa, después de fusionar los micro-cortes a 3 s: las dos tomas de cierre —las únicas
+ * mudas— quedaron en 0.91 s y 1.27 s, deshaciendo justo lo que la fusión garantizaba.
+ * Dos clips de 1 s son dos llamadas pagadas por un plano congelado.
+ */
+describe('repairCutTiming — piso de duración visible', () => {
+  const c = (n: number, dur: number, dialogo: string) => ({
+    n, tiempo: `t${n}`, duracionSeg: dur, accion: 'a', camara: 'A', dialogo,
+    textoOverlay: 'No aparece', transicion: 'corte',
+  })
+  const rep = (cortes: ReturnType<typeof c>[]): ForensicReport => ({
+    duracionTotalSeg: cortes.reduce((a, x) => a + x.duracionSeg, 0), caracteresGuion: 0,
+    guionOriginal: 'x', sujeto: 'x', vestuario: 'x', producto: 'x', fondo: 'x', elementosGraficos: 'x',
+    cortes,
+    tomas: cortes.map((x) => ({ n: x.n, encuadre: 'A', posicion: 'x', accionFisica: 'a', objeto: 'x', dialogo: x.dialogo, duracionSeg: x.duracionSeg })),
+    edicion: { sincronizacion: 'x', textoOverlay: 'x', escalaZoom: 'x', cortes: 'x', ritmo: 'x', corteFinal: 'x' },
+    resumenParaUsuario: 'x',
+  })
+  // Un corte hablado que no entra (200 caracteres necesitan 10s y tiene 2) junto a dos
+  // mudos de 4s: la holgura de los mudos es lo único que puede financiar el déficit.
+  const roto = () => rep([c(1, 2, 'x'.repeat(200)), c(2, 4, ''), c(3, 4, '')])
+
+  it('sin piso los cortes mudos se vacían — comportamiento de siempre, default 0', () => {
+    const { report } = repairCutTiming(roto())
+    expect(Math.min(...report.cortes.map((x) => x.duracionSeg))).toBeLessThan(3)
+    expect(repairCutTiming(roto(), 0).report).toEqual(report)
+  })
+
+  it('con piso ningún corte baja de él, ni siquiera los mudos', () => {
+    const { report } = repairCutTiming(roto(), 3)
+    for (const x of report.cortes) expect(x.duracionSeg).toBeGreaterThanOrEqual(3 - 1e-9)
+  })
+
+  // Si los pisos no caben en la duración original, el total crece: es el mismo caso que
+  // "el texto entero no entra", el único en que `duracionTotalSeg` se mueve.
+  it('el total solo crece cuando los pisos no caben', () => {
+    const r = roto()
+    const original = r.cortes.reduce((a, x) => a + x.duracionSeg, 0)
+    const { report } = repairCutTiming(r, 3)
+    expect(report.cortes.reduce((a, x) => a + x.duracionSeg, 0)).toBeGreaterThanOrEqual(original - 1e-9)
+  })
+
+  it('sigue siendo idempotente con piso', () => {
+    const una = repairCutTiming(roto(), 3).report
+    expect(repairCutTiming(una, 3).report).toBe(una)
+  })
+})

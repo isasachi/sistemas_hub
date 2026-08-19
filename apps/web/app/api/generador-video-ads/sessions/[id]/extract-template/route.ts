@@ -7,7 +7,7 @@ import { readUserId } from '@/lib/product-hunter/session'
 import { TemplateDraftSchema, buildTemplateInstruction } from '@/lib/video-ads/template'
 import { validateTemplate, assembleTemplate, normalizeSlots } from '@/lib/video-ads/fill'
 import { canProceed } from '@/lib/video-ads/validation'
-import { repairCutTiming, mergeMicroCortes } from '@/lib/video-ads/forensic'
+import { repairCutTiming, mergeMicroCortes, MIN_TOMA_SEG } from '@/lib/video-ads/forensic'
 import { resyncTomaDurations } from '@/lib/video-ads/adapt'
 import { STEP } from '@/lib/video-ads/steps'
 
@@ -81,7 +81,12 @@ export async function POST(
   // Fusionar une los diálogos con un espacio: suma un carácter sin sumar duración, así
   // que un corte que estaba justo en el techo de cps queda apenas por encima. Recronometrar
   // después lo devuelve al techo (medido: 20.6 → 20.0 cps).
-  const { report: forensic, ajustes } = repairCutTiming(base)
+  // El piso de la fusión se le pasa a la reparación: un corte MUDO tiene mínimo de
+  // diálogo 0, o sea es holgura pura, y el reparto lo vaciaría para financiar a los que
+  // no entran — deshaciendo justo lo que la fusión acababa de garantizar. Medido en una
+  // sesión real de ropa: las dos tomas de cierre, las únicas mudas, quedaban en 0.91 s
+  // y 1.27 s después de fusionar a 3 s.
+  const { report: forensic, ajustes } = repairCutTiming(base, MIN_TOMA_SEG)
   if (ajustes.length || base !== session.forensic_analysis) {
     if (ajustes.length)
       console.warn(
