@@ -93,6 +93,33 @@ export const CPS_MAX = 20
  */
 export const MIN_TOMA_SEG = 3
 
+/**
+ * ¿Este corte muestra a la PERSONA, o solo al producto?
+ *
+ * Es la única distinción que la fusión necesita conocer, y viene de un fallo medido: el
+ * lote 1 de la sesión de ropa `430c5961` encadenó cuatro cortes con "Luego," e incluía
+ * un **flat-lay** —la blusa extendida sobre el suelo, sin nadie— entre dos planos de la
+ * modelo. El render lo reprodujo con fidelidad: tres sub-tomas con fondos distintos
+ * (pared, baldosas, sala con sofá) dentro de un mismo clip que el bloque `CONTINUIDAD`
+ * declaraba invariante. El modelo hizo lo que se le pidió; lo que estaba mal era pedirle
+ * un montaje dentro de un plano continuo.
+ *
+ * Un plano de producto y uno de persona no se pueden encadenar sin un corte, así que la
+ * fusión no los mezcla: cada clase se fusiona con la suya.
+ *
+ * ponytail: detección por palabras, no por LLM. Un falso negativo (no reconocer a la
+ * persona) solo hace que ese corte no se fusione —o sea el comportamiento anterior a la
+ * fusión, que es seguro—, así que la lista puede quedarse corta sin romper nada. Un
+ * clasificador que hay que pagar y que puede alucinar sería peor en las dos puntas.
+ */
+export function muestraPersona(accion: string): boolean {
+  const t = accion
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+  return /\b(mujer|hombre|chica|chico|muchacha|muchacho|modelo|persona|sujeto|joven|senor|senora|ella|el sujeto|protagonista)\b/.test(t)
+}
+
 /** Un corte que se fusionó con su vecino, para poder mostrar qué se juntó. */
 export interface Fusion {
   tiempo: string
@@ -153,16 +180,27 @@ export function mergeMicroCortes(
     return `${ini} - ${fin}`
   }
 
+  // Un corte solo puede fusionarse con un vecino de SU MISMA CLASE (ver `muestraPersona`):
+  // encadenar un plano de producto con uno de persona obliga a un corte dentro del clip.
+  const clase = (k: number) => muestraPersona(actual[k].accion)
+  const compatible = (k: number, v: number) =>
+    v >= 0 && v < actual.length && clase(k) === clase(v)
+
   while (actual.length > 1) {
-    // El más corto que todavía no llega al piso.
+    // El corte más corto que todavía no llega al piso Y TIENE con quién fusionarse. Un
+    // flat-lay rodeado de planos de persona se queda solo y corto: es lo correcto — es
+    // una toma distinta, y meterla dentro de otra corrompe las dos.
     let i = -1
-    for (let k = 0; k < actual.length; k++)
-      if (actual[k].duracionSeg < minSeg && (i < 0 || actual[k].duracionSeg < actual[i].duracionSeg)) i = k
+    for (let k = 0; k < actual.length; k++) {
+      if (actual[k].duracionSeg >= minSeg) continue
+      if (!compatible(k, k - 1) && !compatible(k, k + 1)) continue
+      if (i < 0 || actual[k].duracionSeg < actual[i].duracionSeg) i = k
+    }
     if (i < 0) break
 
-    // Vecino más corto de los dos disponibles.
-    const izq = i > 0 ? actual[i - 1] : null
-    const der = i < actual.length - 1 ? actual[i + 1] : null
+    // Vecino más corto de los COMPATIBLES.
+    const izq = compatible(i, i - 1) ? actual[i - 1] : null
+    const der = compatible(i, i + 1) ? actual[i + 1] : null
     const usarIzq = izq && (!der || izq.duracionSeg <= der.duracionSeg)
     const j = usarIzq ? i - 1 : i + 1
     const [a, b] = i < j ? [actual[i], actual[j]] : [actual[j], actual[i]]
@@ -273,8 +311,17 @@ export function repairCutTiming(
   if (!cortes.length) return { report, ajustes: [] }
 
   const dur = cortes.map((c) => (Number.isFinite(c.duracionSeg) && c.duracionSeg > 0 ? c.duracionSeg : 0))
-  const min = cortes.map((c) =>
-    Math.max((c.dialogo ?? '').length / CPS_MAX, Math.max(0, minVisibleSeg)),
+  // ⚠️ El piso se acota a la duración que el corte YA tiene: es un suelo contra el
+  // vaciado, no un empujón hacia arriba. Sin ese `Math.min`, un corte que la fusión
+  // dejó corto a propósito —un flat-lay aislado, que no puede fusionarse con planos de
+  // persona— se inflaba hasta el piso, y el anuncio entero crecía con él: medido en la
+  // sesión de ropa, 28 s de original pasaban a 41,8 s. Con el acote, un corte por
+  // encima del piso puede donar hasta el piso y uno por debajo simplemente no se toca.
+  const min = cortes.map((c, i) =>
+    Math.max(
+      (c.dialogo ?? '').length / CPS_MAX,
+      Math.min(Math.max(0, minVisibleSeg), dur[i]),
+    ),
   )
 
   const deficit = cortes.reduce((n, _, i) => n + Math.max(0, min[i] - dur[i]), 0)

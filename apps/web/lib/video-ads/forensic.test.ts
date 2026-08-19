@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildForensicInstruction, ForensicReportSchema, repairCutTiming, mergeMicroCortes, CPS_MAX, type ForensicReport } from './forensic'
+import { buildForensicInstruction, ForensicReportSchema, repairCutTiming, mergeMicroCortes, muestraPersona, CPS_MAX, type ForensicReport } from './forensic'
 
 // El prompt es el contrato con Gemini. Estos asserts fijan las reglas del spec que,
 // si se caen, producen el bug que ya vimos en producción: cortes inventados por
@@ -361,5 +361,97 @@ describe('repairCutTiming — piso de duración visible', () => {
   it('sigue siendo idempotente con piso', () => {
     const una = repairCutTiming(roto(), 3).report
     expect(repairCutTiming(una, 3).report).toBe(una)
+  })
+})
+
+/**
+ * NO SE FUSIONA A TRAVÉS DE UN PLANO SIN PERSONA.
+ *
+ * Medido en el render real de ropa (`430c5961`): el lote 1 encadenó cuatro cortes con
+ * "Luego," e incluía un flat-lay —la blusa extendida sobre el suelo, sin nadie— entre
+ * dos planos de la modelo. El render lo reprodujo con fidelidad: tres sub-tomas con
+ * fondos distintos dentro de un clip que `CONTINUIDAD` declaraba invariante. El modelo
+ * hizo lo pedido; lo que estaba mal era pedirle un montaje dentro de un plano continuo.
+ */
+describe('muestraPersona', () => {
+  it('reconoce a la persona aunque el texto venga sin acentos o con otra palabra', () => {
+    for (const t of ['La mujer, de pie, mira a la camara', 'Primer plano de las manos de la MUJER',
+                     'El hombre sostiene el frasco', 'La modelo posa de perfil', 'La joven señora sonríe'])
+      expect(muestraPersona(t)).toBe(true)
+  })
+
+  it('un flat-lay no cuenta como persona aunque aparezca una mano suelta', () => {
+    expect(muestraPersona('La camisa crema está extendida sobre un suelo de baldosas claras. Una mano de piel clara entra por la parte superior derecha del cuadro.')).toBe(false)
+    expect(muestraPersona('Plano cenital del producto sobre una mesa de madera.')).toBe(false)
+  })
+})
+
+describe('mergeMicroCortes — no cruza la frontera persona/producto', () => {
+  const c = (n: number, dur: number, accion: string) => ({
+    n, tiempo: `t${n}`, duracionSeg: dur, accion, camara: `C${n}`, dialogo: '',
+    textoOverlay: 'No aparece', transicion: 'corte',
+  })
+  const rep = (cortes: ReturnType<typeof c>[]): ForensicReport => ({
+    duracionTotalSeg: cortes.reduce((a, x) => a + x.duracionSeg, 0), caracteresGuion: 0,
+    guionOriginal: 'x', sujeto: 'x', vestuario: 'x', producto: 'x', fondo: 'x', elementosGraficos: 'x',
+    cortes,
+    tomas: cortes.map((x) => ({ n: x.n, encuadre: 'A', posicion: 'x', accionFisica: x.accion, objeto: 'x', dialogo: '', duracionSeg: x.duracionSeg })),
+    edicion: { sincronizacion: 'x', textoOverlay: 'x', escalaZoom: 'x', cortes: 'x', ritmo: 'x', corteFinal: 'x' },
+    resumenParaUsuario: 'x',
+  })
+  const P = 'La mujer muestra la prenda'
+  const F = 'La prenda está extendida sobre el suelo'
+
+  it('un flat-lay corto queda SOLO en vez de meterse dentro de un plano de persona', () => {
+    const { report } = mergeMicroCortes(rep([c(1, 1, P), c(2, 1, F), c(3, 1, P), c(4, 1, P)]), 3)
+    const conFlat = report.cortes.filter((x) => x.accion.includes('extendida'))
+    expect(conFlat).toHaveLength(1)
+    // …y no arrastró la acción de ningún plano de persona.
+    expect(conFlat[0].accion).not.toContain('La mujer')
+  })
+
+  it('sí fusiona dos planos de producto contiguos entre sí', () => {
+    const { report } = mergeMicroCortes(rep([c(1, 1, F), c(2, 1, F), c(3, 1, F), c(4, 5, P)]), 3)
+    expect(report.cortes).toHaveLength(2)
+    expect(report.cortes[0].duracionSeg).toBeCloseTo(3, 6)
+  })
+
+  // Sin vecino compatible no hay fusión posible: el corte se queda corto, que es lo
+  // correcto —es una toma distinta— y el bucle tiene que TERMINAR en vez de girar.
+  it('termina aunque queden cortes bajo el piso sin con quién fusionarse', () => {
+    const { report } = mergeMicroCortes(rep([c(1, 1, P), c(2, 1, F), c(3, 5, P)]), 3)
+    expect(report.cortes).toHaveLength(3)
+    expect(report.cortes[0].duracionSeg).toBe(1)
+  })
+})
+
+/**
+ * El piso de `repairCutTiming` es un suelo contra el vaciado, NO un empujón hacia
+ * arriba: un corte que la fusión dejó corto a propósito (un flat-lay aislado) no debe
+ * inflarse hasta el piso. Medido en la sesión de ropa: sin acotar, los 28 s del
+ * original se iban a 41,8 s.
+ */
+describe('repairCutTiming — el piso no infla', () => {
+  const c = (n: number, dur: number, dialogo: string) => ({
+    n, tiempo: `t${n}`, duracionSeg: dur, accion: 'a', camara: 'A', dialogo,
+    textoOverlay: 'No aparece', transicion: 'corte',
+  })
+  const rep = (cortes: ReturnType<typeof c>[]): ForensicReport => ({
+    duracionTotalSeg: cortes.reduce((a, x) => a + x.duracionSeg, 0), caracteresGuion: 0,
+    guionOriginal: 'x', sujeto: 'x', vestuario: 'x', producto: 'x', fondo: 'x', elementosGraficos: 'x',
+    cortes,
+    tomas: cortes.map((x) => ({ n: x.n, encuadre: 'A', posicion: 'x', accionFisica: 'a', objeto: 'x', dialogo: x.dialogo, duracionSeg: x.duracionSeg })),
+    edicion: { sincronizacion: 'x', textoOverlay: 'x', escalaZoom: 'x', cortes: 'x', ritmo: 'x', corteFinal: 'x' },
+    resumenParaUsuario: 'x',
+  })
+
+  it('un corte más corto que el piso se queda como está — no crece', () => {
+    const { report } = repairCutTiming(rep([c(1, 1.2, ''), c(2, 6, 'x'.repeat(60))]), 3)
+    expect(report.cortes[0].duracionSeg).toBeCloseTo(1.2, 6)
+  })
+
+  it('pero tampoco se lo vacía para financiar a otro', () => {
+    const { report } = repairCutTiming(rep([c(1, 1.2, ''), c(2, 2, 'x'.repeat(200))]), 3)
+    expect(report.cortes[0].duracionSeg).toBeCloseTo(1.2, 6)
   })
 })
