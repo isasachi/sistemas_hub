@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildForensicInstruction, ForensicReportSchema, repairCutTiming, mergeMicroCortes, muestraPersona, CPS_MAX, type ForensicReport } from './forensic'
+import { buildForensicInstruction, ForensicReportSchema, repairCutTiming, mergeMicroCortes, muestraPersona, CPS_MAX, type ForensicReport, enProsa } from './forensic'
 
 // El prompt es el contrato con Gemini. Estos asserts fijan las reglas del spec que,
 // si se caen, producen el bug que ya vimos en producción: cortes inventados por
@@ -453,5 +453,54 @@ describe('repairCutTiming — el piso no infla', () => {
   it('pero tampoco se lo vacía para financiar a otro', () => {
     const { report } = repairCutTiming(rep([c(1, 1.2, ''), c(2, 2, 'x'.repeat(200))]), 3)
     expect(report.cortes[0].duracionSeg).toBeCloseTo(1.2, 6)
+  })
+})
+
+/**
+ * Gemini devuelve objetos y arrays en campos declarados `z.string()` y el schema los
+ * coacciona a un string con JSON adentro. Eso viajaba crudo al prompt de render.
+ */
+describe('enProsa', () => {
+  it('aplana un objeto a prosa, sin llaves ni nombres de campo', () => {
+    const fondo = JSON.stringify({
+      localizacionAparente: 'Interior, habitación con pared lisa',
+      paredes: 'Lisas, color crema',
+      iluminacion: 'Luz suave y uniforme',
+    })
+    const p = enProsa(fondo)
+    expect(p).toBe('Interior, habitación con pared lisa. Lisas, color crema. Luz suave y uniforme.')
+    expect(p).not.toMatch(/[{}"]|localizacionAparente/)
+  })
+
+  it('aplana un array de objetos — la forma real de `vestuario`', () => {
+    const vestuario = JSON.stringify([
+      { prenda: 'Camisa de manga larga', colores: 'Crema' },
+      { prenda: 'Pantalón', colores: 'Negro' },
+    ])
+    expect(enProsa(vestuario)).toBe('Camisa de manga larga. Crema. Pantalón. Negro.')
+  })
+
+  // ⚠️ El defecto grave. En un prompt de UN clip, una descripción que empieza "En un
+  // corte…" es una lista de escenarios alternativos, y el modelo elige uno: de ahí salió
+  // el sillón que apareció en un clip de la prueba de ropa.
+  it('descarta lo que describe OTROS cortes', () => {
+    const fondo = JSON.stringify({
+      paredes: 'Lisas, color crema',
+      muebles: 'En un corte, se observa un sillón tapizado en tela gris claro',
+      superficies: 'En algunos cortes se ve un suelo de baldosas',
+    })
+    const p = enProsa(fondo)
+    expect(p).toBe('Lisas, color crema.')
+    expect(p).not.toMatch(/sillón|baldosas/)
+  })
+
+  it('un texto que ya es prosa vuelve intacto, y lo vacío se queda vacío', () => {
+    expect(enProsa('Dormitorio con luz natural.')).toBe('Dormitorio con luz natural.')
+    expect(enProsa('')).toBe('')
+    expect(enProsa(null)).toBe('')
+  })
+
+  it('un JSON corrupto se devuelve tal cual en vez de perderse', () => {
+    expect(enProsa('{no es json')).toBe('{no es json')
   })
 })

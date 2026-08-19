@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import type { Part } from '@google/genai'
 import type { UserInputs } from './types'
-import type { ForensicReport } from './forensic'
+import { enProsa, type ForensicReport } from './forensic'
 import { nicheSpec } from './niches'
 
 /**
@@ -89,14 +89,14 @@ export function buildIdentityInstruction(
     spec.wornProduct
       ? 'CONTEXTO DEL VIDEO ORIGINAL (solo para encuadre; el vestuario NO se copia):'
       : 'CONTEXTO DEL VIDEO ORIGINAL (solo para encuadre y vestuario equivalente):',
-    `  Sujeto observado: ${forensic.sujeto}`,
-    `  Vestuario observado: ${forensic.vestuario}`,
+    `  Sujeto observado: ${enProsa(forensic.sujeto)}`,
+    `  Vestuario observado: ${enProsa(forensic.vestuario)}`,
     // ⚠️ En ropa/zapatos el PRODUCTO Y EL VESTUARIO SON EL MISMO OBJETO. Sin esta
     // nota el bloque de consistencia describe la ropa del video original y viaja a
     // cada lote junto a `productDesc`, o sea el prompt afirma "viste camiseta rosa" y
     // "el producto es una blusa crema" en el mismo texto. La prenda del usuario gana.
     spec.avatarNote,
-    `  Fondo observado: ${forensic.fondo}`,
+    `  Fondo observado: ${enProsa(forensic.fondo)}`,
     // El ritmo de edición lo mide el forense y hasta ahora no llegaba a ningún prompt:
     // se generaba, se persistía y nadie lo leía. Es la evidencia objetiva de cómo se
     // mueve el original, así que es lo primero que necesita el perfil de movimiento.

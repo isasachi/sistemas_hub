@@ -466,3 +466,44 @@ export function buildForensicInstruction(): string {
     'Todo el output va en español.',
   ].join('\n')
 }
+
+/**
+ * Un campo del forense, en prosa y acotado a UN clip.
+ *
+ * ⚠️ DOS DEFECTOS MEDIDOS, Y EL SEGUNDO ES EL GRAVE. Gemini devuelve espontáneamente
+ * objetos y arrays en campos declarados `z.string()`, y el schema los coacciona a un
+ * string con JSON adentro. Medido en la sesión `430c5961`: `fondo` viajaba al prompt de
+ * render como 731 caracteres de `{"localizacionAparente": "...", "paredes": "..."}`, con
+ * llaves y nombres de campo en camelCase; `sujeto` y `vestuario` igual, hacia el prompt
+ * de identidad.
+ *
+ * Lo grave no es la sintaxis: es que el texto describe el VIDEO ENTERO dentro de un
+ * prompt de un solo clip — *"muebles: En un corte, se observa un sillón tapizado en tela
+ * gris claro"* — mientras el bloque `CONTINUIDAD` promete que nada cambia. De ahí salió
+ * el sillón que apareció en un clip de la prueba de ropa, que se reportó como deriva del
+ * modelo y no lo era: el prompt lo ofrecía.
+ *
+ * ponytail: el filtro de "en un corte" es una heurística sobre texto de un LLM, no un
+ * contrato. Si el forense cambia de redacción deja de filtrar — y el modo de fallo es
+ * volver al comportamiento anterior (una descripción de más), no romper nada.
+ */
+export function enProsa(campo: string | null | undefined): string {
+  const crudo = (campo ?? '').trim()
+  if (!crudo) return ''
+  let valor: unknown = crudo
+  if (crudo.startsWith('{') || crudo.startsWith('[')) {
+    try { valor = JSON.parse(crudo) } catch { return crudo }
+  }
+  const aplanar = (v: unknown): string[] =>
+    Array.isArray(v) ? v.flatMap(aplanar)
+    : v && typeof v === 'object' ? Object.values(v).flatMap(aplanar)
+    : [String(v)]
+  return aplanar(valor)
+    .map((x) => x.trim())
+    .filter(Boolean)
+    // Fuera lo que describe OTROS cortes: en un prompt de un solo clip es una lista de
+    // escenarios alternativos, y el modelo elige uno.
+    .filter((x) => !/^en (un|algunos|otros?|ciertos) cortes?\b/i.test(x))
+    .map((x) => (/[.!?]$/.test(x) ? x : `${x}.`))
+    .join(' ')
+}

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getVideoSession, updateVideoSession, claimFreshLotes } from '@/lib/video-ads/db'
 import { createVideoTask, snapDuration, KIE_PROMPT_MAX, type VideoImage } from '@/lib/video-ads/kie'
 import { frameSpecs, pairFrames, generateBoundaryFrames } from '@/lib/video-ads/frames'
+import { enProsa } from '@/lib/video-ads/forensic'
 import { generateImage } from '@/lib/video-ads/nano-banana'
 import { uploadToStorage } from '@/lib/storage'
 import { groupIntoLotes, buildLotePrompt, camaraDeLote, type Lote } from '@/lib/video-ads/lotes'
@@ -120,7 +121,7 @@ export async function POST(
   const productDesc = session.product_scan?.productDescription ?? adapted.tomas[0]?.producto ?? 'el producto'
   // El `fondo` del forense incluye la iluminación (su prompt la pide ahí dentro), por
   // eso el prompt del lote lo rotula "ESCENARIO E ILUMINACIÓN".
-  const escenario = session.forensic_analysis?.fondo ?? 'interior con luz natural'
+  const escenario = enProsa(session.forensic_analysis?.fondo) || 'interior con luz natural'
   const cortes = session.forensic_analysis?.cortes ?? []
   const camaraFallback = cortes[0]?.camara?.trim() || 'primer plano, cámara en mano'
 
