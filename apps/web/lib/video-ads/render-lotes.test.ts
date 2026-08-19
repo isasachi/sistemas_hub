@@ -270,3 +270,37 @@ describe('isPaidResume', () => {
     expect(isPaidResume(true, [pagado(1), pagado(2), pendiente(3)], [lote(1), lote(2)], H)).toBe(false)
   })
 })
+
+/**
+ * ⚠️ Veo falla de forma TRANSITORIA. Medido: "The Google model was unable to generate
+ * audio for this request. Please try a different prompt." en 1 de 5 lotes, y el MISMO
+ * prompt salió bien al reintentarlo. Reintentar es la respuesta correcta — pero antes de
+ * esto no se podía, porque un lote fallido conservaba su `taskId` y por tanto quedaba
+ * fuera de `pendientes`.
+ */
+describe('resumeSeed — un lote fallido se vuelve a intentar', () => {
+  const lote = (n: number, over: Partial<Lote> = {}): Lote => ({
+    n, tomas: [], duracionSeg: 6, prompt: `p${n}`, taskId: null,
+    status: 'idle', videoUrl: null, failMsg: null, scriptHash: 'h', ...over,
+  })
+
+  it('conserva los lotes con video y RECREA el que falló', () => {
+    const base = [lote(1), lote(2), lote(3)]
+    const existentes = [
+      lote(1, { taskId: 't1', status: 'success', videoUrl: 'https://cdn/1.mp4' }),
+      lote(2, { taskId: 't2', status: 'fail', failMsg: 'unable to generate audio' }),
+      lote(3, { taskId: 't3', status: 'success', videoUrl: 'https://cdn/3.mp4' }),
+    ]
+    const seed = resumeSeed(base, existentes)
+    expect(seed[0].taskId).toBe('t1')
+    expect(seed[2].taskId).toBe('t3')
+    // El fallido vuelve a `base`: sin taskId, así que entra en `pendientes` y se recrea.
+    expect(seed[1].taskId).toBeNull()
+    expect(seed[1].status).toBe('idle')
+  })
+
+  it('un lote en curso NO se recrea — todavía puede terminar bien', () => {
+    const seed = resumeSeed([lote(1)], [lote(1, { taskId: 't1', status: 'generating' })])
+    expect(seed[0].taskId).toBe('t1')
+  })
+})

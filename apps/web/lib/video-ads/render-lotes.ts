@@ -57,7 +57,20 @@ export function renderDone(lotes: Lote[]): boolean {
  * lotes que ya se pagaron la primera vez.
  */
 export function resumeSeed(base: Lote[], existentes: Lote[]): Lote[] {
-  return base.map((lote, i) => (existentes[i]?.taskId ? existentes[i] : lote))
+  return base.map((lote, i) => {
+    const previo = existentes[i]
+    // ⚠️ UN LOTE QUE FALLÓ NO SE CONSERVA, aunque tenga `taskId`. Ese id apunta a una
+    // tarea muerta: no hay video detrás y no lo va a haber. Conservarlo lo dejaba fuera
+    // de `pendientes` (`filter(l => !l.taskId)`), así que "reintentar" no recreaba nada
+    // y —si era el único que faltaba— la ruta salía por el early return de "nada por
+    // crear". El lote quedaba irrecuperable desde la UI: el usuario podía darle a
+    // reintentar para siempre sin que pasara nada.
+    //
+    // Pasó de verdad: Veo devolvió "The Google model was unable to generate audio for
+    // this request" en 1 de 5 lotes, y el MISMO prompt funcionó al reintentarlo. O sea
+    // el fallo es transitorio y reintentar es exactamente lo correcto.
+    return previo?.taskId && previo.status !== 'fail' ? previo : lote
+  })
 }
 
 /** Separador de campos del texto canónico de `scriptFingerprint`. Un carácter de
