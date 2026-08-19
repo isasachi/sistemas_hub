@@ -326,6 +326,37 @@ El menú real, entonces, es de dos ejes y no de uno:
 
 `maxPlanos` se queda en **1** por defecto: cambiarlo es una decisión de plata, no un default.
 
+⚠️ **LA SALIDA REAL NO ERA AGRUPAR MEJOR, ERA FUSIONAR LOS MICRO-CORTES (`mergeMicroCortes`, forensic.ts).** El costo del video de ropa no venía del agrupamiento sino de la granularidad del original: 29 cortes de ~1 s, y con la frontera de plano cada corte abre su propio lote, o sea su propia llamada pagada. Un corte de 1 s tampoco es una toma que el generador pueda producir con sentido — `MIN_DURATION` de KIE es 1 s y ahí sale una pose congelada, no una acción.
+
+`mergeMicroCortes` fusiona cada micro-corte con su vecino hasta que toda toma llega a `MIN_TOMA_SEG` (3 s). **Domina a `maxPlanos` en el mismo presupuesto**, medido sobre el mismo video:
+
+| estrategia | clips | encuadre | coreografía |
+|---|---|---|---|
+| `maxPlanos = 3`, sin fusión | 7 | **perdido** (7 de 7 ambiguos) | 100 % |
+| **fusión a 3 s + `maxPlanos = 1`** | **7** | **1 encuadre por clip** | **92 %** |
+
+Mismo número de clips, mismo costo, y el encuadre funciona. La diferencia es la honestidad del prompt: con `maxPlanos > 1` el clip recibe dos encuadres y el modelo renderiza uno —el otro se pierde en silencio—; con la fusión los dos cortes se vuelven UNA toma con UN encuadre declarado y la acción de ambos encadenada, o sea el prompt describe algo que el modelo sí puede hacer. Lo que se descarta (el encuadre del corte más corto) queda en `Fusion`, no desaparece.
+
+Umbral medido sobre los dos videos (cortes → lotes · coreografía):
+
+| `minSeg` | ropa (29 cortes) | suero (10 cortes) |
+|---|---|---|
+| sin fusión | 29 → **24** lotes · 100 % | 10 → 5 lotes · 100 % |
+| 2 s | 8 → 8 · 92 % | 9 → 5 · 100 % |
+| **3 s (default)** | **7 → 7 · 92 %** | **5 → 4 · 100 %** |
+| 4 s | 5 → 5 · 92 % | 5 → 4 · 100 % |
+| 5 s | 3 → 3 · **82 %** | 3 → 3 · 100 % |
+
+Reglas, todas deliberadas: se fusiona el corte **más corto del video** (no de izquierda a derecha, así el resultado no depende del recorrido); lo absorbe el **vecino más corto** (para no terminar con una toma gigante y varias en el piso); el encuadre y la transición que sobreviven son los del **corte más largo** (un flash de 0,5 s no debe decidir el plano de toda la toma); diálogo y acción se **concatenan**, así que no se pierde texto y el ritmo en caracteres por segundo no se altera. Idempotente por construcción — sin eso, dos pasadas darían dos listas de cortes y por tanto dos huellas distintas para el mismo contenido.
+
+⚠️ **Se compone con `repairCutTiming`, y en ese orden.** Unir dos diálogos mete un espacio: suma un carácter sin sumar duración, así que un corte que estaba justo en el techo queda apenas por encima (medido: 20,6 cps). Recronometrar después lo devuelve a 20,0.
+
+⚠️ **Corre en `extract-template` y SOLO si la sesión no tiene guión adaptado todavía.** A diferencia de `repairCutTiming`, fusionar **sí cambia `tiempo`** — el tramo abarca los dos cortes — y `tiempo` es lo que `adapt-script` copió a `tiempoOriginal`, con lo que `camaraDeLote` empareja y lo que entra en `scriptFingerprint`. Hacerlo sobre una sesión ya adaptada desalinearía el guión con los cortes en silencio, que es exactamente lo que la reparación evita por no tocar ese campo. Si ya hay guión, la lista de cortes está comprometida.
+
+⚠️ **No está atado al nicho a propósito.** Un corte de 1 s es igual de irrenderizable en suplementos, y en el video de suero la fusión baja de 5 a 4 lotes conservando el 100 % de la coreografía — o sea es más barato sin costar fidelidad. Atarlo a `ropa` sería suponer que el problema es del nicho cuando es de la granularidad.
+
+⚠️ **Sin verificar con un render real.** Los números de arriba son de prompt y agrupamiento, no de video generado: falta comprobar que una toma fusionada —con la acción de dos cortes encadenada por "Luego,"— se lea como una toma continua y no como dos cosas pegadas.
+
 ⚠️ **Y el `vestuario` del forense se le queda chico a la ropa.** `ForensicReportSchema.vestuario` es `z.string()`, pero con este video Gemini devolvió espontáneamente un **array de objetos** (`{prenda, colores, tejidosVisibles, joyeria, maquillaje, detalles}` ×4, incluidas las DOS variantes de color de la misma camisa). El schema lo coacciona a string, así que no rompe — pero la estructura que el modelo quiere dar existe y hoy se aplana. Relacionado: `CONTINUIDAD` congela `producto` y `vestuario` por clip, así que una referencia que muestra la misma prenda en dos colores necesita que cada variante caiga en su propio lote (hoy ocurre por accidente, porque son tramos distintos del video, no por una regla).
 
 **Schema:** `supabase/migrations/20260810000001_video_sessions.sql` (base de video_sessions) + `20260812000001_video_spec_rewire.sql` (columnas de INPUTS y VALIDATION) + `20260812000002_video_lotes.sql` (columnas de FASE 3/4/4.5/5: `adapted`, `character_prompt`, `consistency_block`, `voice_profile`, `lotes` jsonb) + `20260812000003_video_render_done.sql` (columna `render_done`, cacheada para el dashboard).

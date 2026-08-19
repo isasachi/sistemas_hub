@@ -7,7 +7,7 @@ import { readUserId } from '@/lib/product-hunter/session'
 import { TemplateDraftSchema, buildTemplateInstruction } from '@/lib/video-ads/template'
 import { validateTemplate, assembleTemplate, normalizeSlots } from '@/lib/video-ads/fill'
 import { canProceed } from '@/lib/video-ads/validation'
-import { repairCutTiming } from '@/lib/video-ads/forensic'
+import { repairCutTiming, mergeMicroCortes } from '@/lib/video-ads/forensic'
 import { resyncTomaDurations } from '@/lib/video-ads/adapt'
 import { STEP } from '@/lib/video-ads/steps'
 
@@ -51,12 +51,43 @@ export async function POST(
   // Es seguro justamente porque la reparación NO toca `tiempo`: `adapt-script` lo copia
   // a `tiempoOriginal` y `camaraDeLote` empareja por él, así que reparar acá no puede
   // desalinear el guión ya adaptado con los cortes.
-  const { report: forensic, ajustes } = repairCutTiming(session.forensic_analysis)
-  if (ajustes.length) {
-    console.warn(
-      `[video-ads/extract-template] sesión ${id}: ${ajustes.length} cortes recronometrados sobre un análisis ya guardado:`,
-      ajustes.map((a) => `corte ${a.n}: ${a.de.toFixed(1)}s → ${a.a.toFixed(1)}s`),
-    )
+  // FUSIÓN DE MICRO-CORTES, antes de recronometrar.
+  //
+  // Un corte de ~1 s no es una toma que el generador pueda producir con sentido, y con
+  // la frontera de plano cada corte abre su propio lote —o sea su propia llamada
+  // pagada—, así que un montaje muy granular multiplica el costo por la granularidad
+  // del original y no por su duración. Medido sobre un UGC de ropa de 29 cortes: 24
+  // lotes de 1 s → 7 lotes de 3-5 s, conservando UN encuadre por clip y el 92 % de la
+  // coreografía.
+  //
+  // ⚠️ SOLO SI LA SESIÓN NO TIENE GUIÓN ADAPTADO TODAVÍA. A diferencia de
+  // `repairCutTiming`, fusionar SÍ cambia `tiempo` (el tramo abarca los dos cortes), y
+  // `tiempo` es lo que `adapt-script` copió a `tiempoOriginal` y con lo que
+  // `camaraDeLote` empareja. Hacerlo sobre una sesión ya adaptada desalinearía el guión
+  // con los cortes en silencio — justo lo que la nota de abajo dice que la reparación
+  // evita por no tocar ese campo. Si ya hay guión, la lista de cortes está comprometida.
+  let base = session.forensic_analysis
+  if (!session.adapted) {
+    const { report: fusionado, fusiones } = mergeMicroCortes(base)
+    if (fusiones.length) {
+      console.info(
+        `[video-ads/extract-template] sesión ${id}: ${base.cortes.length} cortes → ${fusionado.cortes.length} tras fusionar micro-cortes:`,
+        fusiones.map((f) => `${f.tiempo} (${f.deCortes} cortes, ${f.duracionSeg.toFixed(1)}s)`),
+      )
+      base = fusionado
+    }
+  }
+
+  // Fusionar une los diálogos con un espacio: suma un carácter sin sumar duración, así
+  // que un corte que estaba justo en el techo de cps queda apenas por encima. Recronometrar
+  // después lo devuelve al techo (medido: 20.6 → 20.0 cps).
+  const { report: forensic, ajustes } = repairCutTiming(base)
+  if (ajustes.length || base !== session.forensic_analysis) {
+    if (ajustes.length)
+      console.warn(
+        `[video-ads/extract-template] sesión ${id}: ${ajustes.length} cortes recronometrados sobre un análisis ya guardado:`,
+        ajustes.map((a) => `corte ${a.n}: ${a.de.toFixed(1)}s → ${a.a.toFixed(1)}s`),
+      )
     // Y se bajan las duraciones nuevas al guión YA adaptado, si lo hay. `generate-lotes`
     // agrupa sobre `adapted.tomas`, no sobre el forense: sin esto la reparación no
     // llegaría al render y el video seguiría saliendo con los tiempos rotos, en

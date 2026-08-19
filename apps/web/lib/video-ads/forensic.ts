@@ -80,6 +80,136 @@ export type ForensicReport = z.infer<typeof ForensicReportSchema>
  */
 export const CPS_MAX = 20
 
+/**
+ * Piso de duración de una TOMA, en segundos.
+ *
+ * Por debajo de esto un corte no es una toma que un generador de video pueda producir
+ * con sentido: `MIN_DURATION` de KIE es 1 s, y un clip de 1 s renderiza una pose
+ * congelada, no una acción. Además cada corte es una llamada PAGADA — la frontera de
+ * plano abre un lote por encuadre, así que un montaje de micro-cortes multiplica el
+ * costo por la granularidad del original, no por su duración.
+ *
+ * El número es discutible y por eso está acá arriba y no enterrado en la función.
+ */
+export const MIN_TOMA_SEG = 3
+
+/** Un corte que se fusionó con su vecino, para poder mostrar qué se juntó. */
+export interface Fusion {
+  tiempo: string
+  deCortes: number
+  duracionSeg: number
+}
+
+/**
+ * Fusiona los micro-cortes con su vecino hasta que toda toma llegue al piso.
+ * ---------------------------------------------------------------------------
+ * Nace del UGC de ropa: 29 cortes en 28 s, ~1 s cada uno, y 9 encuadres que se
+ * alternan sin repetirse dos veces seguidas. Con la frontera de plano eso da 24 lotes
+ * de un segundo — 12× el costo del video de suero, y clips que el modelo no puede
+ * llenar con nada.
+ *
+ * ⚠️ ESTO NO ES `maxPlanos`, Y LA DIFERENCIA ES LA HONESTIDAD DEL PROMPT. Con
+ * `maxPlanos > 1` un clip recibe dos encuadres y el generador renderiza uno solo: el
+ * otro se pierde en silencio. Acá los dos cortes se vuelven UNA toma con UN encuadre
+ * declarado y la acción de ambos encadenada — el prompt describe algo que el modelo sí
+ * puede hacer, y lo que se descarta (el encuadre del corte más corto) queda registrado
+ * en `Fusion` en vez de desaparecer.
+ *
+ * Reglas, todas deliberadas:
+ *  - Se fusiona el corte MÁS CORTO del video, no de izquierda a derecha: así se
+ *    sacrifica primero lo que menos contenido tiene, y el resultado no depende de por
+ *    dónde se empezó a recorrer.
+ *  - Se lo absorbe el vecino MÁS CORTO de los dos (el anterior o el siguiente), para
+ *    que el video no termine con una toma gigante y varias en el piso.
+ *  - El encuadre y la transición que sobreviven son los del corte MÁS LARGO de los dos:
+ *    es el que aporta más segundos de imagen.
+ *  - El diálogo y la acción se CONCATENAN — nada de texto se pierde, que es lo que
+ *    permite que el ritmo (caracteres por segundo) no se altere: suma texto y suma
+ *    duración en la misma proporción.
+ *  - `tiempo` abarca de un extremo al otro. Es la clave con la que `camaraDeLote`
+ *    empareja y la que entra en `scriptFingerprint`, así que tiene que ser única y
+ *    estable; el formato "MM:SS - MM:SS" se conserva tomando el inicio del primero y
+ *    el final del último.
+ *
+ * Es idempotente: al salir todo corte cumple el piso, así que una segunda pasada no
+ * encuentra nada que fusionar y devuelve el MISMO objeto.
+ */
+export function mergeMicroCortes(
+  report: ForensicReport,
+  minSeg = MIN_TOMA_SEG,
+): { report: ForensicReport; fusiones: Fusion[] } {
+  const cortes = report.cortes ?? []
+  // Con un solo corte no hay vecino: un video sin cortes se queda como está.
+  if (cortes.length < 2 || !cortes.some((c) => c.duracionSeg < minSeg))
+    return { report, fusiones: [] }
+
+  // `origen` cuenta de cuántos cortes originales viene cada tramo, para poder reportarlo.
+  let actual = cortes.map((c) => ({ ...c }))
+  const origen = new Map<string, number>(actual.map((c) => [c.tiempo, 1]))
+
+  const unirTiempo = (a: string, b: string) => {
+    const ini = a.split('-')[0]?.trim() ?? a
+    const fin = b.split('-').slice(1).join('-').trim() || b
+    return `${ini} - ${fin}`
+  }
+
+  while (actual.length > 1) {
+    // El más corto que todavía no llega al piso.
+    let i = -1
+    for (let k = 0; k < actual.length; k++)
+      if (actual[k].duracionSeg < minSeg && (i < 0 || actual[k].duracionSeg < actual[i].duracionSeg)) i = k
+    if (i < 0) break
+
+    // Vecino más corto de los dos disponibles.
+    const izq = i > 0 ? actual[i - 1] : null
+    const der = i < actual.length - 1 ? actual[i + 1] : null
+    const usarIzq = izq && (!der || izq.duracionSeg <= der.duracionSeg)
+    const j = usarIzq ? i - 1 : i + 1
+    const [a, b] = i < j ? [actual[i], actual[j]] : [actual[j], actual[i]]
+
+    // El más largo aporta encuadre y transición: es el que pone más segundos de imagen.
+    const dominante = a.duracionSeg >= b.duracionSeg ? a : b
+    const tiempo = unirTiempo(a.tiempo, b.tiempo)
+    const fundido = {
+      ...dominante,
+      n: a.n,
+      tiempo,
+      duracionSeg: a.duracionSeg + b.duracionSeg,
+      accion: [a.accion, b.accion].map((x) => x.trim()).filter(Boolean).join(' Luego, '),
+      dialogo: [a.dialogo, b.dialogo].map((x) => x.trim()).filter(Boolean).join(' '),
+      textoOverlay: [a.textoOverlay, b.textoOverlay].find((x) => x && x !== 'No aparece') ?? a.textoOverlay,
+    }
+    origen.set(tiempo, (origen.get(a.tiempo) ?? 1) + (origen.get(b.tiempo) ?? 1))
+    const lo = Math.min(i, j)
+    actual = [...actual.slice(0, lo), fundido, ...actual.slice(lo + 2)]
+  }
+
+  // Renumerar: `n` tiene que seguir siendo 1..N consecutivo.
+  actual = actual.map((c, k) => ({ ...c, n: k + 1 }))
+
+  const fusiones: Fusion[] = actual
+    .filter((c) => (origen.get(c.tiempo) ?? 1) > 1)
+    .map((c) => ({ tiempo: c.tiempo, deCortes: origen.get(c.tiempo) ?? 1, duracionSeg: c.duracionSeg }))
+
+  // `tomas` empareja 1-a-1 con `cortes` (el prompt lo exige y `resyncTomaDurations`
+  // depende de eso), así que se reconstruye desde los cortes fusionados en vez de
+  // dejarla apuntando a una lista que ya no existe.
+  const tomas = actual.map((c, k) => {
+    const previa = report.tomas?.[k]
+    return {
+      n: k + 1,
+      encuadre: previa?.encuadre ?? c.camara,
+      posicion: previa?.posicion ?? '',
+      accionFisica: c.accion,
+      objeto: previa?.objeto ?? '',
+      dialogo: c.dialogo,
+      duracionSeg: c.duracionSeg,
+    }
+  })
+
+  return { report: { ...report, cortes: actual, tomas }, fusiones }
+}
+
 /** Un corte cuya duración se movió, para poder loguear qué se tocó. */
 export interface AjusteTiempo {
   n: number
