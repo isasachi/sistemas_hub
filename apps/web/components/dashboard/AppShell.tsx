@@ -105,7 +105,7 @@ export function AppShell({ user, children }: AppShellProps) {
       // Dorado = dónde estás (igual que el riel del asistente). El naranja queda
       // libre para las acciones, que es lo que el usuario debe encontrar rápido.
       soon
-        ? "text-[#8f7570] cursor-default"
+        ? "text-[#967b76] cursor-default"
         : active
           ? "bg-[rgba(246,242,235,0.12)] text-[#e8dcd6]"
           : "text-[#a98c88] hover:text-[#f6f2eb] hover:bg-[rgba(255,255,255,0.05)]",
@@ -212,7 +212,7 @@ export function AppShell({ user, children }: AppShellProps) {
                   "flex items-center gap-3 rounded-xl px-3 py-2.5 font-[Archivo] text-[13px] font-medium no-underline transition-all duration-200";
                 if (soon) {
                   return (
-                    <span key={tool.slug} className={`${cls} text-[#8f7570]`}>
+                    <span key={tool.slug} className={`${cls} text-[#967b76]`}>
                       <Icon className="h-[18px] w-[18px] flex-shrink-0" />
                       <span className="flex-1">{label}</span>
                       {soonBadge}

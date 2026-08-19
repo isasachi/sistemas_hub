@@ -268,7 +268,7 @@ function ProjectCard({
       ) : (
         // Sin miniatura (calculadora / sesión a medio wizard): tile de datos, no un hueco.
         <div className="relative z-[1] flex aspect-[4/3] items-center justify-center border-b border-white/[0.06] bg-white/[0.02]">
-          <Icon className="h-9 w-9 text-[#8f7570]" />
+          <Icon className="h-9 w-9 text-[#967b76]" />
         </div>
       )}
       <div className="relative z-[1] p-2.5">

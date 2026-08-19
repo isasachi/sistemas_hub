@@ -159,7 +159,7 @@ function SectionSkeleton({ type, status }: { type: SectionType; status: GenStatu
     <div className={`relative w-full aspect-[9/16] bg-[#2a0f1a] border-t border-white/[0.06] flex flex-col items-center justify-center gap-2 ${status === 'generating' ? 'animate-pulse' : ''}`}>
       <span className="text-[12px] text-[#a98c88] font-medium">{SECTION_LABELS[type]}</span>
       {status === 'generating' && <span className="flex items-center gap-1.5 text-[11px] text-[#e8467a]"><Loader2 className="w-3.5 h-3.5 animate-spin" />Generando…</span>}
-      {status === 'pending' && <span className="text-[11px] text-[#8f7570]">En cola</span>}
+      {status === 'pending' && <span className="text-[11px] text-[#967b76]">En cola</span>}
       {status === 'error' && <span className="flex items-center gap-1.5 text-[11px] text-red-400"><AlertCircle className="w-3.5 h-3.5" />Falló · usa Reanudar</span>}
     </div>
   )

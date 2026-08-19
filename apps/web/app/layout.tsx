@@ -1,14 +1,20 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
-// El ráster del logotipo (granate pleno, sin alfa) sirve tal cual como favicon
-// y como og:image: ahí el cuadrado ES el formato. En el chrome no se usa —
-// el lockup se compone con <Wordmark> (BRANDBOOK.md §1).
+// El ráster del logotipo (granate pleno, sin alfa) sirve tal cual como icono y
+// como og:image: ahí el cuadrado ES el formato. En el chrome no se usa — el
+// lockup se compone con <Wordmark> (BRANDBOOK.md §1).
+//
+// ⚠️ El icono NO se declara acá: `app/icon.png` y `app/apple-icon.png` son
+// convenciones de archivo del App Router y Next emite sus <link> solo. Había
+// un `app/favicon.ico` del logo anterior y esa convención GANA sobre
+// `metadata.icons`, así que declararlo en metadata no habría cambiado la
+// pestaña. Se borró el .ico y los dos PNG se generaron del logo nuevo.
 export const metadata: Metadata = {
+  metadataBase: new URL("https://jr-ai-hub.vercel.app"),
   title: "JR AI Hub — Herramientas de Marketing con IA",
   description:
     "Genera anuncios, videos, branding y landing pages en minutos. Herramientas de IA diseñadas para marcas peruanas.",
-  icons: { icon: "/brand/logo.png", apple: "/brand/logo.png" },
   openGraph: {
     images: [{ url: "/brand/logo.png", width: 1101, height: 1100 }],
   },

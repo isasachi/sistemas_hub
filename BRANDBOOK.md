@@ -82,6 +82,7 @@ Usar `--brand` como color de texto es el error a vigilar en este sistema.
 | `#F6F2EB` crema | 17.14 | todo |
 | `#C9B4AE` ash | 9.67 | texto secundario |
 | `#A98C88` subtle | 6.19 | metadata, labels |
+| `#967B76` faint | 4.91 | el piso — nada más tenue que esto |
 | `#E8467A` carmesí claro | 5.09 | texto de acción |
 | `#BD1347` carmesí | 3.05 | **solo relleno y borde** |
 

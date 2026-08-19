@@ -87,7 +87,7 @@
   --text-head: #efe7e0;   /* 15.5:1  */
   --text-muted: #c9b4ae;  /*  9.67:1 */
   --text-subtle: #a98c88; /*  6.19:1 */
-  --text-faint: #8f7570;  /*  4.55:1 — el piso legible */
+  --text-faint: #967b76;  /*  4.91:1 — el piso legible */
 
   /* ── Acento único: carmesí. RELLENO = acción, LUZ crema = prestigio.
        --brand NUNCA como color de texto (3.05:1): usa --brand-bright. ── */
