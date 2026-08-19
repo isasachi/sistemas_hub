@@ -129,7 +129,12 @@ export function scriptFingerprint(input: {
     // v2 → v3: misma razón. La plantilla cambió otra vez — el plano por toma cuando el
     // lote mezcla más de uno, la duración de la toma redondeada a 1 decimal y el nivel
     // de degradación que comprime el párrafo de overlay antes de truncar la coreografía.
-    'v3',
+    // v3 → v4: migración a Veo 3.1. Cambia TODO lo que la huella cubre sin que ella pueda
+    // verlo — el modelo, el tope de lote (15 s → 8 s, o sea otro reparto), la duración
+    // legal ({4,6,8}) y la plantilla del prompt (sin escalera de degradación, sin
+    // "estable", con el bloque de toma continua). Un resume a través de este cambio
+    // pegaría un clip de grok a uno de Veo jurando que es el mismo contenido.
+    'v4',
     String(input.niche ?? ''),
     consistencyBlock, productDesc, escenario,
     voz.idioma, voz.varianteRegional, voz.acento, voz.pronunciacion, voz.ritmo,

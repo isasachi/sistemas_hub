@@ -11,9 +11,11 @@ import { nicheSpec } from './niches'
  * un LLM, y pedírselo lo volvería no determinista justo donde importa que no lo sea
  * (el tope de 15 s es también el techo duro del modelo de KIE).
  *
- * El 15 aparece dos veces por razones distintas que coinciden: es la regla del spec
- * y es `MAX_DURATION` de grok-imagine-video-1-5-preview. Si el modelo cambiara, hay
- * que revisar si el spec sigue queriendo 15.
+ * ⚠️ EL TOPE LO PONE EL MODELO, NO EL SPEC. El spec dice 15 s; `veo3_fast` acepta
+ * EXACTAMENTE 4, 6 u 8 segundos, así que el techo real es 8 y el 15 del spec ya no se
+ * puede cumplir aunque se quiera. Consecuencia directa: un guión da ~2x lotes que con
+ * grok, y cada lote es una llamada PAGADA. La duración final de cada lote la fija
+ * `snapDuration` (kie.ts), que es donde se decide qué se pierde al ajustar.
  *
  * INVARIANTE QUE ESTE MÓDULO EXISTE PARA GARANTIZAR: ningún `Lote` devuelto por
  * `groupIntoLotes` puede tener `duracionSeg > LOTE_MAX_SEC`. Cada lote es una llamada
@@ -24,7 +26,7 @@ import { nicheSpec } from './niches'
  * en el caso feliz.
  */
 
-export const LOTE_MAX_SEC = 15
+export const LOTE_MAX_SEC = 8
 
 export const LoteSchema = z.object({
   n: z.number(),
@@ -260,83 +262,19 @@ export function camaraDeLote(
 }
 
 /**
- * Niveles de detalle del prompt, de más a menos detallado. Lo que se suelta primero es
- * lo que DUPLICA información que ya está en otro lado; la línea `Locución:` de cada toma
- * no está en esa categoría y nunca se suelta (ver el comentario en `renderAcciones`).
- *
- * Niveles de detalle de la sección "SECUENCIA DE ACCIONES VISUALES", de más a menos
- * detallado. `buildLotePrompt` prueba cada uno en orden y usa el primero que entra en
- * `KIE_PROMPT_MAX` — ver el comentario grande sobre `render` más abajo para el porqué
- * de este orden específico (viene de un incidente real, documentado en AGENTS.md).
+ * El párrafo que prohíbe overlay. Con grok existió en dos versiones —larga y comprimida—
+ * porque los 4096 caracteres obligaban a elegir entre repetir la prohibición y describir
+ * el movimiento. Veo acepta 60.000: se usa siempre la larga.
  */
-const NIVEL_COMPLETO = 0
-const NIVEL_SIN_OVERLAY_POR_TOMA = 1
-const NIVEL_SIN_GUION_GLOBAL = 2
-/**
- * Comprime el párrafo de prohibición de overlay a dos líneas antes de tocar la
- * coreografía. Es el último escalón que se puede bajar sin perder información: la lista
- * larga ("captions, subtítulos, títulos, lower thirds, banners, stickers, emojis,
- * flechas, callouts, gráficos, watermarks, interfaces…") son quince sinónimos de la
- * misma orden, mientras que `accionVisual` es el único texto del prompt que describe
- * QUÉ HACE EL CUERPO — justo lo que el usuario reportó que no se copia.
- *
- * Medido sobre los lotes guardados: las dos sesiones más recientes (`30ff55d6`,
- * `6a1e6157`) truncan la coreografía en TODOS sus lotes. En el lote 1 de `30ff55d6` las
- * cinco tomas necesitaban 1332 caracteres de acción y recibieron ~78 cada una, cortadas
- * a mitad de palabra ("…con ambas manos,…"): se tiraba el 70 % del movimiento.
- */
-const NIVEL_OVERLAY_COMPACTO = 3
-
-/**
- * Recorta la descripción del producto a su parte FÍSICA. Es el último escalón antes de
- * tocar la coreografía, y el que más presupuesto libera.
- *
- * `productDescription` viene del scan y transcribe la etiqueta entera — medido en
- * `30ff55d6`: 677 caracteres, en inglés, listando *"SÉRUM FACIAL CON VITAMINA C"*,
- * *"PARA PIEL GRASA"*, *"Ilumina • Unifica • Antioxidante"* y *"30 ml / 1.01 fl oz"*.
- * El envase va como `@image(2)` en TODOS los lotes y el prompt ya ordena reproducirlo
- * idéntico: esa transcripción le cuenta en palabras lo que el modelo está viendo en
- * píxeles, y lo hace a costa del único texto que describe qué hace el cuerpo.
- *
- * Medido sobre esa sesión, con el resto igual: la coreografía conservada pasa de 46 % a
- * 80 % en el lote 1 y de 34 % a 66 % en el lote 2.
- *
- * ponytail: el corte es por frases, no por longitud — cortar prosa a mitad de palabra es
- * justo lo que este nivel existe para evitarle a la coreografía. Se queda con las dos
- * primeras oraciones porque el scan describe la forma antes que la etiqueta (el prompt
- * de `analyze-product` pide "forma, envase, colores, etiqueta, texto legible" en ese
- * orden), pero es una heurística sobre texto de un LLM, no un contrato: si algún día el
- * scan cambia de orden, esto recorta lo que no debe. El techo real está en pedirle al
- * scan una descripción física corta aparte de la transcripción — eso es un campo nuevo
- * y una re-corrida del análisis en cada sesión guardada.
- */
-const NIVEL_PRODUCTO_FISICO = 4
-
-/** Las dos primeras oraciones: la forma del envase, sin la transcripción de la etiqueta. */
-function productoFisico(desc: string): string {
-  const frases = desc.match(/[^.!?]+[.!?]+/g)
-  if (!frases || frases.length <= 2) return desc
-  return `${frases.slice(0, 2).join('').trim()} El resto de la etiqueta se lee de su imagen: reprodúcela idéntica.`
-}
-
-/** El párrafo de overlay, largo o comprimido. Dice lo mismo; el largo lo dice 15 veces. */
-function bloqueOverlay(nivel: number): string[] {
-  if (nivel >= NIVEL_OVERLAY_COMPACTO)
-    return [
-      'TEXTO / OVERLAY: NINGUNO. Sin captions, subtítulos, texto en pantalla, gráficos,',
-      'watermarks ni UI. Solo el texto impreso en el producto o en objetos reales del',
-      'escenario. No inventes diálogo para rellenar.',
-    ]
-  return [
-    'TEXTO / OVERLAY: NINGUNO.',
-    'No generes captions, subtítulos, texto en pantalla, títulos, lower thirds, banners,',
-    'stickers, emojis, flechas, callouts, gráficos, watermarks, interfaces ni elementos',
-    'de UI. El plano queda visualmente limpio, centrado en el personaje y el producto.',
-    'Solo puede aparecer el texto físicamente impreso en el producto o en objetos reales',
-    'del escenario, como parte de su apariencia.',
-    'No inventes diálogo para rellenar: el clip termina cuando termina la locución.',
-  ]
-}
+const BLOQUE_OVERLAY = [
+  'TEXTO / OVERLAY: NINGUNO.',
+  'No generes captions, subtítulos, texto en pantalla, títulos, lower thirds, banners,',
+  'stickers, emojis, flechas, callouts, gráficos, watermarks, interfaces ni elementos',
+  'de UI. El plano queda visualmente limpio, centrado en el personaje y el producto.',
+  'Solo puede aparecer el texto físicamente impreso en el producto o en objetos reales',
+  'del escenario, como parte de su apariencia.',
+  'No inventes diálogo para rellenar: el clip termina cuando termina la locución.',
+]
 
 /**
  * Prompt de un lote. Es autosuficiente por obligación: el generador no recuerda el
@@ -416,53 +354,33 @@ export function buildLotePrompt(args: {
    * duplicaría contenido y se comería justo el presupuesto que esta función
    * administra, sin agregar nada que el modelo no tenga ya.
    */
-  const renderAcciones = (nivel: number, capAccion: number | null) =>
+  const renderAcciones = () =>
     lote.tomas
       .map((t, i) => {
-        const accionVisual =
-          capAccion != null && t.accionVisual.length > capAccion
-            ? `${t.accionVisual.slice(0, capAccion).trimEnd()}…`
-            : t.accionVisual
         const plano = planoPorToma(i)
         return [
           // r1: `duracionSeg` sale de un reparto proporcional y llegaba cruda al prompt
-          // ("Toma 1 — 0.8854477611940298 s", medido). Son ~14 caracteres de ruido por
-          // toma en un presupuesto que ya trunca la coreografía, y además una precisión
-          // que el render no tiene: `clampDuration` le pide a KIE un entero.
+          // ("Toma 1 — 0.8854477611940298 s", medido). Es ruido, y además una precisión
+          // que el render no tiene: `snapDuration` le pide a KIE 4, 6 u 8.
           `### Toma ${t.n} — ${r1(t.duracionSeg)} s`,
-          // Ver `planoPorToma`: nunca se degrada, por el mismo motivo que `Locución:`.
           plano ? `Cámara: ${plano}` : '',
-          accionVisual,
-          // NUNCA se suelta, en ningún nivel de degradación. Esta línea es lo único que
-          // le dice al generador QUÉ FRASE va con QUÉ ACCIÓN y en cuántos segundos: es
-          // la sincronización audio↔imagen, no una copia del guion global.
-          //
-          // La versión anterior la soltaba primero, razonando que "duplica, no informa"
-          // porque el texto ya estaba abajo en GUION DE LOCUCIÓN FINAL. Se comprobó en
-          // una sesión real que eso es falso: el lote 1 (4095/4096 caracteres) la perdió
-          // y los lotes 2–4 la conservaron, así que el primer clip recibió un párrafo de
-          // 263 caracteres sin ninguna pista de cómo repartirlo entre sus cuatro tomas y
-          // el resto sí la tuvo. El usuario lo describió como "una habla muy rápido y la
-          // otra muy lento, no hay consistencia" — que es exactamente lo que produce
-          // degradar un lote sí y otro no en la única señal de ritmo del prompt.
+          // ⚠️ COMPLETA, SIN TRUNCAR. Con grok esto se cortaba a mitad de palabra para
+          // caber en 4096 (medido: 78 de 266 caracteres por toma, el 71 % del movimiento
+          // tirado) y era la causa mecánica de "no copia los movimientos". Veo acepta
+          // 60.000, así que ya no hay nada que recortar.
+          t.accionVisual,
+          // Esta línea es lo único que le dice al generador QUÉ FRASE va con QUÉ ACCIÓN
+          // y en cuántos segundos: es la sincronización audio↔imagen, no una copia del
+          // guion global. Con el tope viejo llegó a perderse en un lote y no en los
+          // otros, y el resultado fue "una habla muy rápido y la otra muy lento".
           t.locucion ? `Locución: “${t.locucion}”` : '',
-          // Se solapa con el párrafo global "TEXTO / OVERLAY: NINGUNO" de más abajo,
-          // que ya prohíbe overlay para TODO el lote — igual de redundante por toma.
-          nivel < NIVEL_SIN_OVERLAY_POR_TOMA ? 'Texto / Overlay: NINGUNO.' : '',
+          'Texto / Overlay: NINGUNO.',
         ].filter(Boolean).join('\n')
       })
       .join('\n\n')
 
-  /**
-   * Todo lo que NO es la sección de acciones es fijo en los tres niveles: el bloque
-   * de consistencia, el producto, el escenario y la cámara son la identidad del lote
-   * (Task 5 existe para que NUNCA se recorten) y el guion de locución final y el
-   * párrafo de overlay son las dos reglas de seguridad del render — comprimirlas para
-   * ganar espacio sería ahorrar presupuesto rompiendo el propósito de la función.
-   * La cámara en particular sobrevive intacta hasta el piso por regla de AGENTS.md:
-   * es corta y es lo que sostiene el encuadre cuando todo lo demás se degrada.
-   */
-  const render = (nivel: number, capAccion: number | null) =>
+  /** Un solo armado, sin niveles: con 60.000 caracteres no hay nada que recortar. */
+  const render = () =>
     [
       `Video UGC vertical 9:16. Duración total del clip: ${lote.duracionSeg} segundos.`,
       '',
@@ -472,7 +390,7 @@ export function buildLotePrompt(args: {
       consistencyBlock,
       '',
       spec.productBlock,
-      nivel >= NIVEL_PRODUCTO_FISICO ? productoFisico(productDesc) : productDesc,
+      productDesc,
       '',
       // "ESCENARIO E ILUMINACIÓN" y no "ESCENARIO" a secas porque el spec pide la
       // iluminación como bloque propio dentro de cada lote, y el `fondo` del forense ya
@@ -480,7 +398,12 @@ export function buildLotePrompt(args: {
       // Rotularla es gratis; sacarla a un campo aparte del forense costaría una
       // re-corrida del análisis —el paso caro— para cada sesión ya guardada.
       `ESCENARIO E ILUMINACIÓN: ${escenario}`,
-      `CÁMARA: ${camara.replace(/\.\s*$/, '')}. Formato vertical 9:16, estable, enfoque en el personaje y el producto.`,
+      // ⚠️ NO digas "estable". Durante mucho tiempo esta línea inyectaba esa palabra en
+      // todos los prompts mientras el formato UGC se define por lo contrario: teléfono
+      // en mano o apoyado, ángulo bajo, micro-temblor. Era pedirle trípode a un lenguaje
+      // visual que no lo tiene, y suma al aspecto de render que el usuario reportó.
+      `CÁMARA: ${camara.replace(/\.\s*$/, '')}. Formato vertical 9:16, grabado con teléfono en mano`,
+      'con micro-temblor natural, enfoque en el personaje y el producto.',
       // Bloque "Continuidad" del spec: qué NO puede cambiar dentro del clip. Una línea,
       // no un párrafo — todo lo que describe ya está arriba, acá solo se declara que es
       // invariante, y cada carácter que ocupa sale del presupuesto de la coreografía.
@@ -490,6 +413,11 @@ export function buildLotePrompt(args: {
       // literalmente las frases que el spec prohíbe y que el test de referencias a
       // lotes anteriores vigila. Un generador que las lee no distingue las dos
       // intenciones — busca un contexto anterior que no existe y devuelve otra persona.
+      // Una sola toma continua: el spec lo pide y la guía de UGC lo pone explícito ("no
+      // cuts, one long continuous video"). `CONTINUIDAD` solo prometía que el ESCENARIO
+      // no cambia, y un lote fusionado salió con tres sub-tomas y tres fondos distintos.
+      'TOMA CONTINUA: un solo plano de principio a fin, sin cortes internos, sin jump',
+      'cuts y sin cambios de escena dentro del clip.',
       'CONTINUIDAD: personaje, producto, vestuario, escenario e iluminación permanecen',
       'idénticos de principio a fin del clip, tal como se describen arriba. Lo único que',
       'avanza es la acción detallada abajo.',
@@ -501,7 +429,7 @@ export function buildLotePrompt(args: {
       `  Tono: ${voz.tono} · Timbre: ${voz.timbre} · Edad vocal: ${voz.edadVocal} · Estilo: ${voz.estilo}`,
       '',
       'SECUENCIA DE ACCIONES VISUALES:',
-      renderAcciones(nivel, capAccion),
+      renderAcciones(),
       '',
       // El guion completo de una vez. Es lo PRIMERO que se suelta bajo presión de
       // presupuesto (antes era lo último): sale del mismo texto que las líneas
@@ -509,55 +437,21 @@ export function buildLotePrompt(args: {
       // de repetirlas juntas. La regla de diálogo del spec ("exacto: no resumir, no
       // extender…") se sigue cumpliendo, distribuida por toma, y de paso el modelo
       // conserva la correspondencia frase↔toma↔segundos que este bloque no da.
-      ...(nivel < NIVEL_SIN_GUION_GLOBAL
-        ? [
-            'GUION DE LOCUCIÓN FINAL (exacto: no resumir, no extender, no corregir, no añadir frases, no eliminar frases):',
-            `“${locucionFinal}”`,
-            '',
-          ]
-        : []),
-      ...bloqueOverlay(nivel),
+      'GUION DE LOCUCIÓN FINAL (exacto: no resumir, no extender, no corregir, no añadir frases, no eliminar frases):',
+      `“${locucionFinal}”`,
+      '',
+      ...BLOQUE_OVERLAY,
     ].join('\n')
 
-  for (const nivel of [
-    NIVEL_COMPLETO,
-    NIVEL_SIN_OVERLAY_POR_TOMA,
-    NIVEL_SIN_GUION_GLOBAL,
-    NIVEL_OVERLAY_COMPACTO,
-    NIVEL_PRODUCTO_FISICO,
-  ]) {
-    const prompt = render(nivel, null)
-    if (prompt.length <= KIE_PROMPT_MAX) return prompt
+  const prompt = render()
+  // Última red, no un presupuesto. Con 60.000 caracteres esto no se dispara con contenido
+  // real (el detalle forense de un lote llega a ~6.300), pero pasarse costaría un 422 con
+  // la cuota ya gastada, así que se falla acá antes de llamar a KIE.
+  if (prompt.length > KIE_PROMPT_MAX) {
+    throw new Error(
+      `El prompt del Lote ${lote.n} no entra en el tope de KIE (${prompt.length} de ` +
+      `${KIE_PROMPT_MAX} caracteres). Crear la tarea así fallaría con 422 y la cuota ya gastada.`,
+    )
   }
-
-  // Piso: el nivel más bajo sin truncar accionVisual sigue sin entrar. Se busca el cap
-  // de caracteres por toma más grande que sí entra (binary search — el largo total es
-  // monótono no-decreciente en el cap, así que la búsqueda es válida). Con cap 0 cada
-  // accionVisual queda reducida a "…"; si ni así entra, el exceso vive en las partes
-  // fijas (consistencyBlock/productDesc/escenario/cámara/voz) y no hay nada más que
-  // este nivel pueda recortar sin violar el propio propósito de la función.
-  const maxAccionLen = Math.max(0, ...lote.tomas.map((t) => t.accionVisual.length))
-  let lo = 0
-  let hi = maxAccionLen
-  let mejor: string | null = null
-  while (lo <= hi) {
-    const cap = Math.floor((lo + hi) / 2)
-    const prompt = render(NIVEL_PRODUCTO_FISICO, cap)
-    if (prompt.length <= KIE_PROMPT_MAX) {
-      mejor = prompt
-      lo = cap + 1
-    } else {
-      hi = cap - 1
-    }
-  }
-  if (mejor) return mejor
-
-  const piso = render(NIVEL_PRODUCTO_FISICO, 0)
-  throw new Error(
-    `El prompt del Lote ${lote.n} no entra en el tope de KIE (${KIE_PROMPT_MAX} caracteres) ` +
-    `ni truncando la acción de cada toma al mínimo (${piso.length} caracteres resultantes). ` +
-    'El bloque de consistencia, la descripción del producto, el escenario o la cámara son ' +
-    'demasiado largos por sí solos y hay que acortarlos antes de reintentar — crear la tarea ' +
-    'así fallaría con 422 y la cuota de KIE ya gastada.',
-  )
+  return prompt
 }

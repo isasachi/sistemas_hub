@@ -83,15 +83,17 @@ export const CPS_MAX = 20
 /**
  * Piso de duración de una TOMA, en segundos.
  *
- * Por debajo de esto un corte no es una toma que un generador de video pueda producir
- * con sentido: `MIN_DURATION` de KIE es 1 s, y un clip de 1 s renderiza una pose
- * congelada, no una acción. Además cada corte es una llamada PAGADA — la frontera de
- * plano abre un lote por encuadre, así que un montaje de micro-cortes multiplica el
- * costo por la granularidad del original, no por su duración.
+ * Ya NO es un número discutible: 4 es `MIN_DURATION` de Veo 3.1, la duración más corta
+ * que el modelo acepta. Una toma más corta que eso no se puede renderizar tal cual —
+ * `snapDuration` la subiría a 4 s igual, o sea el clip duraría más que la toma y el
+ * anuncio se alargaría solo. Fusionar antes es lo que evita esa inflación.
  *
- * El número es discutible y por eso está acá arriba y no enterrado en la función.
+ * Con grok esto era 3 y sí era discutible (su piso era 1 s, y un clip de 1 s renderiza
+ * una pose congelada, no una acción). El argumento de costo sigue valiendo igual: cada
+ * corte es una llamada PAGADA y la frontera de plano abre un lote por encuadre, así que
+ * un montaje de micro-cortes multiplica el costo por la granularidad del original.
  */
-export const MIN_TOMA_SEG = 3
+export const MIN_TOMA_SEG = 4
 
 /**
  * ¿Este corte muestra a la PERSONA, o solo al producto?

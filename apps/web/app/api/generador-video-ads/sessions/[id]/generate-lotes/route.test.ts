@@ -60,7 +60,7 @@ const toma = (n: number, duracionSeg: number) => ({
 // 2 lotes reales — es el caso que prueba que la cuota nueva cobra 1 vez, no 2.
 const ADAPTED_2_LOTES = {
   guionFinal: 'x', caracteresAdaptado: 1, diferenciaCaracteres: 0,
-  tomas: [toma(1, 10), toma(2, 10)],
+  tomas: [toma(1, 8), toma(2, 8)],
   variablesPendientes: [] as string[],
 }
 
@@ -71,8 +71,8 @@ const ADAPTED_2_LOTES = {
 const ADAPTED_2_LOTES_OTRO_TEXTO = {
   ...ADAPTED_2_LOTES,
   tomas: [
-    { ...toma(1, 10), accionVisual: 'otra acción distinta', locucion: 'otro guión completamente distinto' },
-    { ...toma(2, 10), accionVisual: 'segunda acción distinta', locucion: 'segunda línea distinta' },
+    { ...toma(1, 8), accionVisual: 'otra acción distinta', locucion: 'otro guión completamente distinto' },
+    { ...toma(2, 8), accionVisual: 'segunda acción distinta', locucion: 'segunda línea distinta' },
   ],
 }
 
@@ -268,9 +268,11 @@ describe('POST generate-lotes — fix round 2: cuota por video, no por lote', ()
   })
 
   it('fallo total en el primer lote (prompt que nunca cabe): NO cobra video-generation y guarda placeholders', async () => {
-    // consistency_block absurdamente largo: ni el nivel mínimo de buildLotePrompt
-    // entra en KIE_PROMPT_MAX, así que lanza antes de llamar a KIE por primera vez.
-    vi.mocked(getVideoSession).mockResolvedValue(session({ consistency_block: 'x'.repeat(6000) }))
+    // consistency_block absurdamente largo: el prompt no entra en KIE_PROMPT_MAX, así
+    // que `buildLotePrompt` lanza antes de llamar a KIE por primera vez. El bloque de
+    // consistencia no se recorta nunca — es lo único que sostiene la identidad entre
+    // lotes — así que la única salida es fallar, no mandar una tarea que daría 422.
+    vi.mocked(getVideoSession).mockResolvedValue(session({ consistency_block: 'x'.repeat(70_000) }))
 
     const res = await POST(req(), ctx())
     expect(res.status).toBe(400)

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getVideoSession, updateVideoSession, claimFreshLotes } from '@/lib/video-ads/db'
-import { createVideoTask, clampDuration, KIE_PROMPT_MAX, type VideoImage } from '@/lib/video-ads/kie'
+import { createVideoTask, snapDuration, KIE_PROMPT_MAX, type VideoImage } from '@/lib/video-ads/kie'
 import { groupIntoLotes, buildLotePrompt, camaraDeLote, type Lote } from '@/lib/video-ads/lotes'
 import { totalDuration, resumeSeed, mergeRescue, isPaidResume, scriptFingerprint, renderDone } from '@/lib/video-ads/render-lotes'
 import { AdaptedScriptSchema, type AdaptedScript } from '@/lib/video-ads/adapt'
@@ -283,7 +283,11 @@ export async function POST(
       // desincroniza lo que el prompt promete de lo que el modelo renderiza, y el
       // audio sale cortado a mitad de frase — justo lo que advierte la cabecera de
       // lotes.ts sobre "alguien río abajo lo clampea".
-      const durationSec = clampDuration(lote.duracionSeg)
+      // Los caracteres de la locución entran en la decisión: `snapDuration` nunca elige
+      // una duración legal en la que el texto no quepa a CPS_MAX, porque eso sale como
+      // diálogo atropellado o cortado a mitad de frase.
+      const locucionChars = lote.tomas.reduce((n, t) => n + (t.locucion ?? '').length, 0)
+      const durationSec = snapDuration(lote.duracionSeg, locucionChars)
       const loteParaPrompt = durationSec === lote.duracionSeg ? lote : { ...lote, duracionSeg: durationSec }
 
       let prompt: string
@@ -320,7 +324,7 @@ export async function POST(
         break
       }
 
-      const taskId = await createVideoTask({ images, prompt, durationSec })
+      const taskId = await createVideoTask({ images, prompt, durationSec, locucionChars })
       creados++
       lotes.push({ ...lote, duracionSeg: durationSec, prompt, taskId, status: 'waiting', videoUrl: null, failMsg: null })
       // Fila por lote: visibilidad del costo real y backstop global diario. Ya NO topa
