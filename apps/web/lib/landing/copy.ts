@@ -188,6 +188,39 @@ function recomputeSavings(offer: Offer): Offer {
   }
 }
 
+// ⚠️ EL MODELO REDACTA, EL CÓDIGO VERIFICA — el precio del usuario es un DATO, no una sugerencia.
+// El prompt lo pide, pero nada comprobaba que llegara a los tiers, y el fallo es caro: una landing
+// que anuncia un precio que el vendedor no cobra. Se acota al caso INEQUÍVOCO — el input trae UN
+// solo número ("119", "S/ 89") — y ahí se pinta el tier de menor cantidad con esa cifra. Con cero
+// números no hay nada que pinar; con varios ("1xS/89 2xS/169 3xS/199", "S/89 · Envío gratis · 2x1")
+// el orden es ambiguo y adivinarlo es peor que el prompt: esos quedan en manos del modelo, que sí
+// puede leer la estructura 1x/2x/3x. Lo pinado vuelve a pasar por recomputeSavings (el % de ahorro
+// se recalcula sobre el precio nuevo, si no el ancla quedaría mintiendo).
+export function pinUserPrice(offer: Offer, userPrice?: string | null): Offer {
+  const nums = userPrice?.match(/\d[\d.,]*/g) ?? []
+  if (nums.length !== 1) return offer
+  const want = parsePrice(nums[0])
+  if (!want) return offer
+  if (offer.tiers.some((t) => parsePrice(t.price) === want)) return offer
+  // El tier más barato = el de 1 unidad (los tiers vienen ordenados por cantidad creciente, y si no,
+  // el precio es el criterio correcto igual).
+  let cheapest = 0
+  for (let i = 1; i < offer.tiers.length; i++)
+    if ((parsePrice(offer.tiers[i].price) ?? Infinity) < (parsePrice(offer.tiers[cheapest].price) ?? Infinity)) cheapest = i
+  console.warn(`[landing-offer] el modelo ignoró el precio del usuario (${userPrice}); se fija el tier ${cheapest} en S/ ${want}`)
+  return {
+    ...offer,
+    tiers: offer.tiers.map((t, i) => {
+      if (i !== cheapest) return t
+      // El ancla del modelo se calculó sobre SU precio: si ya no queda por encima del real, se cae
+      // (un "Antes" tachado MENOR que el precio actual es una card visiblemente rota, y
+      // recomputeSavings solo limpia el %, no el ancla).
+      const before = parsePrice(t.priceBefore)
+      return { ...t, price: `S/ ${want}`, perUnit: `S/ ${want} c/u`, priceBefore: before && before > want ? t.priceBefore : undefined }
+    }),
+  }
+}
+
 export async function generateOfferCopy(
   session: LandingSessionResponse,
   feedback?: string,
@@ -206,10 +239,14 @@ export async function generateOfferCopy(
         feedback?.trim() ? `\nAjustes pedidos por el usuario: ${feedback.trim()}` : '',
         ``,
         `Reglas de la oferta:`,
-        `- Preferentemente 3 tiers de cantidad (1 / 2 / 3 unidades). Precios en soles ("S/ 199").`,
+        `- EL PRECIO DEL USUARIO ES LA FUENTE DE VERDAD. Si arriba hay un precio, el tier de 1 unidad`,
+        `  DEBE costar EXACTAMENTE esa cifra, y los demás tiers se derivan de ella (2 y 3 unidades con`,
+        `  descuento por volumen). Si el usuario ya dio precios por cantidad, cópialos tal cual. Solo`,
+        `  cuando no haya ningún precio inventás uno plausible para el producto y el mercado peruano.`,
+        `- Preferentemente 3 tiers de cantidad (1 / 2 / 3 unidades). Precios en soles, con el símbolo "S/" delante.`,
         `- Exactamente UN tier con featured:true — el mediano-alto (el decoy que querés vender).`,
         `- TODOS los tiers llevan priceBefore (precio ancla tachado), savingsPct y perUnit —`,
-        `  las cards deben verse pobladas. perUnit = costo por unidad ("S/ 66 c/u").`,
+        `  las cards deben verse pobladas. perUnit = costo por unidad, con el formato "S/ N c/u".`,
         `- badge corto solo en el featured ("Mejor valor" / "Recomendado").`,
         `- urgency solo si aplica ("Solo hoy", "Stock limitado"). cta corto por tier ("Compra ya").`,
       ].join('\n'),
@@ -217,7 +254,7 @@ export async function generateOfferCopy(
   ]
   const gen = await callStructured('landing_offer_copy', OfferGenSchema, parts, 3, LANDING_SYSTEM_PROMPT)
   return {
-    offer: recomputeSavings({ tiers: gen.tiers, urgency: gen.urgency }),
+    offer: recomputeSavings(pinUserPrice({ tiers: gen.tiers, urgency: gen.urgency }, session.price)),
     copy: { type: 'oferta', headline: gen.headline, subheadline: gen.subheadline },
   }
 }

@@ -130,7 +130,14 @@ function masterLayoutBlock(
   const pose = dna.poses[section] ?? ''
   const talentText = NO_TALENT_SECTIONS.has(section)
     ? section === 'testimonios'
-      ? `Talento: esta sección NO muestra al protagonista de la campaña. Las únicas personas son los CLIENTES de las tarjetas — rostros DISTINTOS entre sí, gente común peruana${demographicLabel ? `, TODOS coherentes con la demografía objetivo (${demographicLabel}): mismo género y rango de edad, aunque el nombre del testimonio sugiera otra cosa` : ''}.`
+      // ⚠️ "ROSTROS DISTINTOS ENTRE SÍ" NO ALCANZA — salían tres clones. Es una restricción de
+      // comparación, y el modelo la satisface con tres variaciones mínimas de la misma cara: mismo
+      // tono de piel, mismo pelo, misma edad, misma ropa. Lo que separa las caras es nombrar EJES
+      // CONCRETOS Y ORTOGONALES tarjeta por tarjeta (tono de piel, pelo, forma de cara, ropa), que
+      // es lo mismo que ya se aprendió en video-ads: un pedido vago se cumple de la forma más barata.
+      // La edad varía DENTRO del rango de la demografía: fuera de él se reintroduce justo el fallo
+      // que la restricción demográfica existe para evitar.
+      ? `Talento: esta sección NO muestra al protagonista de la campaña. Las únicas personas son los CLIENTES de las tarjetas${demographicLabel ? `, TODOS coherentes con la demografía objetivo (${demographicLabel}): mismo género y el mismo rango de edad, aunque el nombre del testimonio sugiera otra cosa` : ''}. Gente común peruana, NO modelos. Las 3 caras deben ser de TRES PERSONAS CLARAMENTE DISTINTAS, no la misma cara retocada: tarjeta 1 = piel trigueña, cabello oscuro y liso, cara ovalada, prenda de tono claro; tarjeta 2 = piel más clara que la 1, cabello castaño y más corto, cara redonda y ancha, prenda de tono medio; tarjeta 3 = piel más oscura que las otras dos, cabello ondulado, cara alargada de rasgos marcados, prenda de tono oscuro. Cada una con distinta edad dentro del rango, distinto peinado y distinta ropa; NUNCA repitas el mismo rostro, el mismo peinado ni el mismo color de prenda en dos tarjetas.`
       : 'Talento: esta sección NO lleva persona alguna. El carril lo ocupan el producto, sus props y la atmósfera.'
     : hasTalent
     // Con placa de zona el ENCUADRE se nombra además de venir en la imagen: la imagen es la que
@@ -246,6 +253,12 @@ export const PAYMENT_SECTIONS: Set<SectionType> = new Set(['oferta', 'garantia']
 // Secciones que muestran un PACK de varias unidades (no un solo frasco). La ruta les pasa el pack
 // pre-compuesto (buildProductPack) como Image 1 y este builder inyecta packNote.
 export const MULTI_UNIT_SECTIONS: Set<SectionType> = new Set(['oferta', 'cta-final'])
+
+// Secciones que CONSUMEN los tiers de la oferta: `oferta` los pinta enteros (offerText) y
+// hero/cta-final el destacado (featuredPriceText + urgencyText). El route se apoya en este set para
+// asegurar que `session.offer` exista ANTES de renderizarlas — sin tiers la difusión inventa el
+// precio, y siempre el mismo.
+export const OFFER_SECTIONS: Set<SectionType> = new Set(['oferta', 'hero', 'cta-final'])
 
 // Secciones que llevan la barra de confianza inferior (mismas 4 filas, composición idéntica; solo
 // cambia el color de fondo). Oferta y antes-despues NO la llevan (payment_row / closing_strip).

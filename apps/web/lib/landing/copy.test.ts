@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { shareBullets } from './copy'
+import { shareBullets, pinUserPrice } from './copy'
 
 describe('shareBullets (decisión #3)', () => {
   it('hero y cta-final comparten los mismos 4 bullets; beneficios los incluye', () => {
@@ -81,5 +81,37 @@ describe('sectionCopySchema (conteo exacto de arrays por ADN)', () => {
   it('oferta (sin requires) usa el schema base sin exigir arrays', () => {
     const sc = sectionCopySchema('oferta')
     expect(sc.safeParse({ type: 'oferta', headline: 'h' }).success).toBe(true)
+  })
+})
+
+// El precio del usuario es un dato, no una sugerencia: el fallo que esto cubre es una landing que
+// anuncia una cifra que el vendedor no cobra.
+describe('pinUserPrice', () => {
+  const tiers = (...p: string[]) =>
+    p.map((price, i) => ({ label: `${i + 1}x`, price, priceBefore: 'S/ 300', cta: 'Compra', featured: i === 1 }))
+
+  it('pisa el tier de 1 unidad con el precio del usuario cuando el modelo lo ignoró', () => {
+    const out = pinUserPrice({ tiers: tiers('S/ 199', 'S/ 350', 'S/ 450') } as any, 'S/ 89')
+    expect(out.tiers[0].price).toBe('S/ 89')
+    expect(out.tiers[0].perUnit).toBe('S/ 89 c/u')
+    expect(out.tiers.slice(1).map((t) => t.price)).toEqual(['S/ 350', 'S/ 450'])
+  })
+
+  it('no toca nada si el modelo ya usó el precio del usuario', () => {
+    const base = { tiers: tiers('S/ 119', 'S/ 220', 'S/ 300') } as any
+    expect(pinUserPrice(base, '119')).toBe(base)
+  })
+
+  it('un ancla que quedó por DEBAJO del precio real se cae (card rota si no)', () => {
+    const out = pinUserPrice({ tiers: [{ label: '1x', price: 'S/ 50', priceBefore: 'S/ 70', cta: 'c', featured: true }] } as any, 'S/ 149')
+    expect(out.tiers[0].price).toBe('S/ 149')
+    expect(out.tiers[0].priceBefore).toBeUndefined()
+  })
+
+  it('con cero o varios números no adivina: deja el precio del modelo', () => {
+    const base = { tiers: tiers('S/ 199', 'S/ 350', 'S/ 450') } as any
+    expect(pinUserPrice(base, '')).toBe(base)
+    expect(pinUserPrice(base, '1xS/89  2xS/169  3xS/199')).toBe(base)
+    expect(pinUserPrice(base, 'S/89 · Envío gratis · 2x1')).toBe(base)
   })
 })
