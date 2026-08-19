@@ -273,6 +273,11 @@ const BLOQUE_OVERLAY = [
   'de UI. El plano queda visualmente limpio, centrado en el personaje y el producto.',
   'Solo puede aparecer el texto físicamente impreso en el producto o en objetos reales',
   'del escenario, como parte de su apariencia.',
+  // La contraparte FÍSICA de la regla de overlay: lo de arriba prohíbe gráficos añadidos,
+  // esto prohíbe el equipo con el que se grabó el original. Un micrófono en cuadro
+  // delata que es una grabación y no un video casero, que es lo contrario del formato.
+  'Tampoco aparece equipo de grabación: ni micrófonos de mano o corbateros, ni cañas,',
+  'ni trípodes, ni aros de luz, ni cámaras o teléfonos a la vista.',
   'No inventes diálogo para rellenar: el clip termina cuando termina la locución.',
 ]
 
