@@ -384,6 +384,27 @@ describe('buildLotePrompt', () => {
 // El tercer artefacto bloqueado, junto al bloque de consistencia y la voz. Va en CADA
 // lote por la misma REGLA DE CONTEXTO ABSOLUTO: un personaje que se mueve distinto en el
 // lote 3 que en el 1 es el mismo fallo que uno que cambia de cara.
+// ⚠️ `forensic.fondo` describe el VIDEO ENTERO y ninguna limpieza de texto lo acota a un
+// clip: filtrar los valores que empiezan describiendo otro corte deja pasar los que lo
+// mencionan a mitad de frase — medido, el campo `texturas` de la sesión de ropa decía
+// "Paredes lisas, tela suave del sillón, baldosas pulidas". Con keyframes el escenario
+// son las dos imágenes, así que describirlo otra vez solo puede contradecirlas.
+describe('buildLotePrompt — el escenario en modo frames', () => {
+  const lote = groupIntoLotes([toma(1, 4, 'Hola.')])[0]
+  const conSillon = 'Pared lisa. Paredes lisas, tela suave del sillón, baldosas pulidas.'
+
+  it('con keyframes NO manda la descripción del fondo — la mandan los fotogramas', () => {
+    const p = buildLotePrompt({ lote, ...ARGS, escenario: conSillon, mode: 'frames' })
+    expect(p).not.toContain('sillón')
+    expect(p).toMatch(/exactamente los del primer y el último fotograma/)
+  })
+
+  it('sin keyframes sigue mandándola: ahí es lo único que define la escena', () => {
+    const p = buildLotePrompt({ lote, ...ARGS, escenario: conSillon })
+    expect(p).toContain(conSillon)
+  })
+})
+
 describe('buildLotePrompt — cómo se mueve', () => {
   const movimiento = {
     calidadMovimiento: 'Movimientos lentos y continuos, sin pausas bruscas entre gestos.',

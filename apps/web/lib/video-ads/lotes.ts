@@ -412,7 +412,21 @@ export function buildLotePrompt(args: {
       // la trae dentro (su prompt la pide junto a paredes, superficies y profundidad).
       // Rotularla es gratis; sacarla a un campo aparte del forense costaría una
       // re-corrida del análisis —el paso caro— para cada sesión ya guardada.
-      `ESCENARIO E ILUMINACIÓN: ${escenario}`,
+      // ⚠️ EN MODO FRAMES EL ESCENARIO LO DEFINEN LOS DOS FOTOGRAMAS, NO ESTE TEXTO.
+      //
+      // `forensic.fondo` describe el VIDEO ENTERO, y ninguna limpieza de texto lo acota a
+      // un clip de forma fiable: se probó filtrar los valores que empiezan describiendo
+      // otro corte y sobrevivió igual —medido sobre la sesión `430c5961`, el campo
+      // `texturas` decía "Paredes lisas, tela suave del sillón, baldosas pulidas", con el
+      // sillón a mitad de frase. Mientras ese texto esté, el prompt le ofrece al modelo
+      // muebles que no están en el clip, contra lo que promete `CONTINUIDAD`.
+      //
+      // Con keyframes el problema desaparece por construcción: la habitación, la luz y
+      // los muebles son los que se ven en las dos imágenes. Describirlos otra vez en
+      // palabras solo puede contradecirlas.
+      args.mode === 'frames'
+        ? 'ESCENARIO E ILUMINACIÓN: exactamente los del primer y el último fotograma. No agregues, quites ni cambies muebles, objetos, paredes ni luz.'
+        : `ESCENARIO E ILUMINACIÓN: ${escenario}`,
       // ⚠️ NO digas "estable". Durante mucho tiempo esta línea inyectaba esa palabra en
       // todos los prompts mientras el formato UGC se define por lo contrario: teléfono
       // en mano o apoyado, ángulo bajo, micro-temblor. Era pedirle trípode a un lenguaje
