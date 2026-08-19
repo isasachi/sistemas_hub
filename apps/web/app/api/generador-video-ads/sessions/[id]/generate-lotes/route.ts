@@ -63,7 +63,11 @@ export async function POST(
   if (!session) return NextResponse.json({ error: 'No se encontró la sesión' }, { status: 404 })
   if (!session.adapted || !session.consistency_block || !session.voice_profile)
     return NextResponse.json({ error: 'Completa los pasos anteriores' }, { status: 409 })
-  if (!session.character_url || !session.product_url)
+  // El personaje del render es el avatar GENERADO. `character_url` es la foto de
+  // referencia que subió el usuario; se conserva como fallback para las sesiones
+  // anteriores a `avatar_url`, que guardaban las dos cosas en la misma columna.
+  const personaUrl = session.avatar_url ?? session.character_url
+  if (!personaUrl || !session.product_url)
     return NextResponse.json({ error: 'Faltan las imágenes de personaje y producto' }, { status: 409 })
 
   // El guión guardado pasa por schema en cada escritura previa y debería llegar
@@ -93,7 +97,7 @@ export async function POST(
   // Orden = numeración @image(n) del prompt. Siempre dos imágenes → modo multi-imagen,
   // que es donde `aspect_ratio: 9:16` sí se respeta.
   const images: VideoImage[] = [
-    { url: session.character_url, role: 'la persona' },
+    { url: personaUrl, role: 'la persona' },
     { url: session.product_url, role: 'el producto' },
   ]
 

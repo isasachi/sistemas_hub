@@ -30,7 +30,7 @@ export async function GET() {
     // se manda si es el mp4 que copiamos al bucket: si la copia falló, `video_url` es
     // de KIE y puede no terminar en .mp4, que es lo que el board usa para distinguir
     // video de imagen. En ese caso, y a media sesión, cae al still que ya exista.
-    thumb: r.video_url?.includes('.mp4') ? r.video_url : (r.character_url ?? r.product_url ?? null),
+    thumb: r.video_url?.includes('.mp4') ? r.video_url : (r.avatar_url ?? r.character_url ?? r.product_url ?? null),
     // Fix round 5: `!!r.video_url` marcaba "listo" apenas el PRIMER lote terminaba
     // (es lo que `video_url` guarda) — un render de 4 lotes con solo el primero OK
     // ya mostraba el check verde. `render_done` (columna cacheada, ver db.ts /

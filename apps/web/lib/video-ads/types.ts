@@ -62,6 +62,9 @@ export interface VideoSessionResponse {
   reference_video_url: string | null
   forensic_analysis: ForensicReport | null
   character_url: string | null
+  /** Avatar GENERADO (Nano Banana Pro, 9:16). `character_url` es la foto que subió
+   *  el usuario, que es la referencia de identidad — no el personaje del render. */
+  avatar_url: string | null
   product_url: string | null
   // Nicho del ad (migración 20260818000001_video_niche.sql). Decide si el producto es
   // un objeto que se sostiene o algo que el personaje LLEVA PUESTO — ver niches.ts.

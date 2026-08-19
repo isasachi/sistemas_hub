@@ -1,0 +1,12 @@
+-- El avatar GENERADO se separa de la foto de referencia que sube el usuario.
+--
+-- Antes compartían `character_url`: si el usuario subía una foto, esa foto se usaba tal
+-- cual como personaje y no se generaba nada. El spec (FASE 4) pide lo contrario — la
+-- foto es la fuente de verdad de la IDENTIDAD y a partir de ella se genera un avatar
+-- base — y con el modo de frames de Veo eso pasa a ser obligatorio: el avatar ya no es
+-- una referencia más, es el primer fotograma del clip y tiene que ser 9:16.
+--
+-- `character_url` conserva su significado (la foto del usuario, si la subió) y no se
+-- migra nada: las sesiones viejas quedan con `avatar_url` en null y el render cae a
+-- `character_url`, o sea se comportan exactamente como antes.
+alter table video_sessions add column if not exists avatar_url text;

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getVideoSession, updateVideoSession } from '@/lib/video-ads/db'
 import { callVideoAds } from '@/lib/video-ads/llm'
-import { openaiGenerateImage } from '@/lib/llm-openai'
+import { generateImage } from '@/lib/video-ads/nano-banana'
 import { uploadToStorage, fetchAsBase64 } from '@/lib/storage'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
@@ -12,10 +12,22 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 export const maxDuration = 300
 
-// FASE 4 + 4.5. La imagen la genera gpt-image-2 SIN fallback (decisión explícita del
-// usuario). Solo hace portrait 1024x1536 (2:3), y no pasa nada: en el render el
-// personaje siempre va acompañado del producto — modo multi-imagen — donde
-// `aspect_ratio: 9:16` sí manda.
+// FASE 4 + 4.5. La imagen la genera **Nano Banana Pro** (Gemini 3 Pro Image) en 9:16,
+// sin fallback. Reemplaza a gpt-image-2 por dos motivos medidos:
+//
+//  1. Conserva la identidad y la prenda desde una sola foto de referencia con una
+//     fidelidad muy superior (probado sobre el avatar real de la sesión de ropa).
+//  2. Hace 9:16 nativo, y eso pasa a ser obligatorio: con el modo de frames de Veo el
+//     avatar deja de ser "una referencia más" y se convierte en el primer fotograma
+//     del clip. El 2:3 de gpt-image-2 se justificaba con que el personaje nunca iba
+//     solo en el render — con frames, va solo y define el encuadre.
+//
+// ⚠️ CAMBIO DE COMPORTAMIENTO: la foto que sube el usuario ya NO se usa como personaje.
+// Es la fuente de verdad de la IDENTIDAD y el avatar se GENERA a partir de ella, que es
+// lo que pide la FASE 4 del spec ("genera un prompt autónomo para crear una imagen base
+// del personaje"). Antes, con foto, no se generaba nada — así que el render recibía una
+// foto de encuadre y luz arbitrarios como primer plano del anuncio. La foto queda en
+// `character_url` y el avatar generado en `avatar_url`.
 export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -69,33 +81,30 @@ export async function POST(
       buildCharacterParts(instruction, image, prenda),
     )
 
-    // Con imagen de referencia del usuario no se regenera nada: ES la fuente de verdad.
-    let characterUrl = session.character_url
-    if (!characterUrl) {
-      // La prenda va como imagen de entrada: `openaiGenerateImage` usa `images.edit`
-      // cuando hay imágenes, así que el avatar se genera A PARTIR de la prenda real en
-      // vez de una descrita en palabras. Es lo que sostiene que la ropa sea la misma en
-      // todos los lotes: el avatar ya la trae puesta y el bloque de consistencia la
-      // describe (mismo mecanismo que mantiene la identidad de la persona).
-      const b64 = await openaiGenerateImage(
-        prenda
-          ? [{ inlineData: { mimeType: prenda.mimeType, data: prenda.data } }, { text: identity.promptCreacion }]
-          : [{ text: identity.promptCreacion }],
-        2,
-        { aspectRatio: '2:3' },
-      )
-      characterUrl = await uploadToStorage(id, Buffer.from(b64, 'base64'), 'image/png', 'character')
-    }
+    // Referencias que el generador de imagen recibe POR URL (Nano Banana Pro las toma
+    // así, no en base64): la foto del usuario cuando existe —fuente de verdad de la
+    // identidad— y la prenda cuando el producto se lleva puesto, para que el avatar
+    // nazca vistiéndola de verdad en vez de una parecida descrita en palabras. Es lo
+    // mismo que sostiene que la ropa sea la misma en todos los lotes.
+    const referencias = [session.character_url, spec.wornProduct ? session.product_url : null]
+      .filter((u): u is string => !!u)
+
+    const bytes = await generateImage({
+      prompt: identity.promptCreacion,
+      imageUrls: referencias,
+      aspectRatio: '9:16',
+    })
+    const avatarUrl = await uploadToStorage(id, bytes, 'image/png', 'avatar')
 
     await updateVideoSession(id, {
-      character_url: characterUrl,
+      avatar_url: avatarUrl,
       character_prompt: identity.promptCreacion,
       consistency_block: identity.bloqueConsistencia,
       voice_profile: identity.voz,
     })
     await recordGenQuota(id, 'video-character', userId)
     return NextResponse.json({
-      characterUrl,
+      characterUrl: avatarUrl,
       consistencyBlock: identity.bloqueConsistencia,
       voiceProfile: identity.voz,
     })

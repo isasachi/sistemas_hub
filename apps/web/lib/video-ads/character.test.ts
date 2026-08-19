@@ -55,10 +55,22 @@ describe('buildIdentityInstruction', () => {
     expect(p).toMatch(/sin texto|no text/i)
   })
 
-  it('pide 2:3 en el prompt de creación, no 9:16 — coincide con la llamada a gpt-image-2', () => {
+  // El ratio del prompt tiene que coincidir con el de la llamada a Nano Banana Pro
+  // (`aspectRatio: '9:16'` en character/route.ts). Antes era 2:3 porque gpt-image-2 solo
+  // hacía retrato y el avatar era "una referencia más"; con el modo de frames de Veo esta
+  // imagen ES el primer fotograma del clip, así que su encuadre es el del anuncio.
+  it('pide 9:16 en el prompt de creación, no 2:3', () => {
     const p = buildIdentityInstruction(INPUTS, FORENSIC, false)
-    expect(p).toMatch(/2:3/)
-    expect(p).not.toMatch(/9:16/)
+    expect(p).toMatch(/9:16/)
+    expect(p).not.toMatch(/2:3/)
+  })
+
+  it('encuadra como foto de teléfono y prohíbe que se vea el teléfono', () => {
+    // Medido con Nano Banana Pro: pedir "ángulo bajo como un teléfono apoyado en un
+    // escritorio" hace que dibuje el teléfono en trípode dentro del cuadro.
+    const p = buildIdentityInstruction(INPUTS, FORENSIC, false)
+    expect(p).toMatch(/tel[eé]fono/i)
+    expect(p).toMatch(/Sin tel[eé]fonos, c[aá]maras ni tr[ií]podes a la vista/i)
   })
 })
 

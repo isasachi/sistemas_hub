@@ -98,10 +98,14 @@ export function buildIdentityInstruction(
     'presentación, rasgos faciales visibles, forma del rostro, ojos, cejas, nariz,',
     'labios, piel, cabello (corte, color, textura), complexión, proporciones corporales',
     'observables, vestuario, accesorios, postura neutra, expresión neutra, iluminación',
-    'neutra, fondo neutro, encuadre de referencia, relación de aspecto retrato 2:3 y',
-    'nivel de realismo fotográfico. (El generador de imagen solo produce retrato 2:3;',
-    'el ratio vertical final del video lo impone después el modelo de video, porque',
-    'el personaje nunca va solo en el render.)',
+    'neutra, fondo neutro, encuadre de referencia, relación de aspecto VERTICAL 9:16 y',
+    'nivel de realismo fotográfico.',
+    // 9:16 y no el 2:3 de antes: con el modo de frames de Veo esta imagen no es "una
+    // referencia más", es el PRIMER FOTOGRAMA del clip. El encuadre que tenga es el
+    // encuadre con el que abre el anuncio.
+    'La imagen es el primer fotograma de un video vertical de redes: encuádrala como una',
+    'foto de teléfono real (plano medio, ángulo levemente bajo), no como un retrato de',
+    'estudio. Sin teléfonos, cámaras ni trípodes a la vista.',
     spec.wornProduct
       ? 'Sin texto, sin logos y sin watermarks. El producto SÍ va en el encuadre: el personaje lo lleva puesto, tal como se ve en su imagen.'
       : 'Sin texto, sin logos, sin watermarks y sin el producto en el encuadre.',
