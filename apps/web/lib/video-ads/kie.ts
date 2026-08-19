@@ -1,4 +1,4 @@
-import { CPS_MAX } from './forensic'
+import { CPS_MAX, CPS_MIN } from './forensic'
 
 /**
  * Cliente de KIE AI (Veo 3.1) para el render de video.
@@ -74,20 +74,37 @@ export const KIE_PROMPT_MAX = 60000
  * atropellarse (inteligibilidad). Redondear siempre hacia arriba mete silencio; siempre
  * hacia abajo corta diálogo a mitad de frase, que es mucho peor.
  *
- * La regla: de las duraciones donde la locución SÍ entra a `CPS_MAX`, se elige la más
- * cercana a la duración original — con empate hacia la más corta, para no inflar el
- * anuncio. Si el texto no entra ni en 8 s, devuelve 8: es el techo de la API y significa
- * que la toma tendría que haberse partido antes (`splitLongToma`), no que acá se pueda
- * arreglar.
+ * Dos condiciones, en orden de prioridad:
+ *
+ *  1. DURA (`>= chars / CPS_MAX`): el texto tiene que poder decirse. Violarla corta
+ *     diálogo a mitad de frase.
+ *  2. BLANDA (`<= chars / CPS_MIN`): el texto no puede quedar tan suelto que el modelo
+ *     rellene. ⚠️ Medido: 23 caracteres en 6 s (3,8 car/s) hicieron que Veo dijera la
+ *     frase DOS VECES para llenar el audio. Antes solo existía la condición dura, así
+ *     que un clip largo con una línea corta pasaba sin que nada lo mirara.
+ *
+ * Entre las que cumplen las dos se elige la más cercana a la duración original, para
+ * conservar el ritmo del anuncio. Si ninguna cumple la blanda se toma la MÁS CORTA de
+ * las que cumplen la dura: es la que menos silencio deja para rellenar.
+ *
+ * Una toma MUDA no entra en esto: sin habla no hay nada que repetir, y su duración es un
+ * beat visual que conviene respetar tal cual.
+ *
+ * Si el texto no entra ni en 8 s, devuelve 8: es el techo de la API y significa que la
+ * toma tendría que haberse partido antes (`splitLongToma`), no que acá se pueda arreglar.
  */
 export function snapDuration(sec: number, locucionChars = 0): number {
   const objetivo = Number.isFinite(sec) && sec > 0 ? sec : MAX_DURATION
-  const minimo = locucionChars / CPS_MAX
-  const caben = DURATIONS.filter((d) => d >= minimo)
+  const cercana = (ds: readonly number[]) =>
+    ds.reduce((mejor, d) => (Math.abs(d - objetivo) < Math.abs(mejor - objetivo) ? d : mejor))
+
+  const caben = DURATIONS.filter((d) => d >= locucionChars / CPS_MAX)
   if (caben.length === 0) return MAX_DURATION
-  return caben.reduce((mejor, d) =>
-    Math.abs(d - objetivo) < Math.abs(mejor - objetivo) ? d : mejor,
-  )
+  // Sin locución no aplica el piso: el clip es un beat visual, no audio que rellenar.
+  if (locucionChars === 0) return cercana(caben)
+
+  const sinHuecos = caben.filter((d) => d <= locucionChars / CPS_MIN)
+  return sinHuecos.length ? cercana(sinHuecos) : Math.min(...caben)
 }
 
 /** 720p fijo: el entregable es un feed vertical y 1080p multiplica el costo del render. */

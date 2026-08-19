@@ -3,7 +3,7 @@ import {
   buildTaskBody, snapDuration, resolutionFor, parseTaskDetail, createVideoTask,
   DURATIONS, KIE_PROMPT_MAX,
 } from './kie'
-import { CPS_MAX } from './forensic'
+import { CPS_MAX, CPS_MIN } from './forensic'
 
 // Sin API key no se puede probar el render en vivo, así que lo que se verifica acá es el
 // CONTRATO con Veo 3.1 — las reglas que, si se rompen, devuelven 422 con la cuota ya
@@ -45,6 +45,39 @@ describe('snapDuration', () => {
     expect(snapDuration(4, texto)).toBe(8)
   })
 
+  // ⚠️ EL OTRO LADO DEL MISMO PROBLEMA, medido en un render real. El lote 2 de la sesión
+  // `02fa1205` tenía 23 caracteres en 6 s (3,8 car/s) y Veo dijo la frase DOS VECES para
+  // llenar el audio: "Y es nuestro mural y es nuestro top mural". Antes solo se
+  // comprobaba que el texto CUPIERA, nunca que no sobrara demasiado.
+  it('una locución muy corta baja a la duración legal más chica en vez de dejar hueco', () => {
+    // El caso real, con sus números: 23 car, toma de 5.4 s → antes daba 6.
+    expect(snapDuration(5.4, 23)).toBe(4)
+    expect(23 / 4).toBeGreaterThan(23 / 6) // y queda más densa que antes
+  })
+
+  it('no toca las locuciones de densidad normal — no pelea con la variación real', () => {
+    // Los otros cuatro lotes de esa misma sesión, que salieron bien.
+    expect(snapDuration(5.1, 65)).toBe(6)
+    expect(snapDuration(5.2, 83)).toBe(6)
+    expect(snapDuration(6.0, 84)).toBe(6)
+  })
+
+  it('una toma MUDA conserva su duración: no hay audio que rellenar', () => {
+    // Sin habla no hay nada que repetir, y la duración es un beat visual del original.
+    expect(snapDuration(5.3, 0)).toBe(6)
+    expect(snapDuration(7.8, 0)).toBe(8)
+  })
+
+  it('la densidad resultante nunca queda por debajo del piso, salvo que sea imposible', () => {
+    // 60 car: el rango bueno es [3, 6.67] → 4 y 6 sirven.
+    for (const [sec, chars] of [[5.4, 60], [7.5, 90], [4.2, 40]] as const) {
+      const d = snapDuration(sec, chars)
+      const cps = chars / d
+      expect(cps).toBeLessThanOrEqual(CPS_MAX)
+      expect(cps).toBeGreaterThanOrEqual(CPS_MIN)
+    }
+  })
+
   it('con empate se queda con la más corta, para no inflar el anuncio', () => {
     expect(snapDuration(5)).toBe(4)
     expect(snapDuration(7)).toBe(6)
@@ -56,11 +89,20 @@ describe('snapDuration', () => {
     expect(snapDuration(8, 400)).toBe(8)
   })
 
-  it('es idempotente: re-ajustar un valor ya legal no lo mueve', () => {
-    // `generate-lotes` ajusta una vez para el texto del prompt y `buildTaskBody` vuelve
-    // a ajustar para el body. Si no coincidieran, el prompt prometería una duración y
-    // el modelo renderizaría otra, y el audio saldría cortado.
-    for (const d of DURATIONS) expect(snapDuration(d, 30)).toBe(d)
+  // `generate-lotes` ajusta una vez para el texto del prompt y `buildTaskBody` vuelve a
+  // ajustar para el body. Si no coincidieran, el prompt prometería una duración y el
+  // modelo renderizaría otra, y el audio saldría cortado.
+  //
+  // Ojo: la propiedad es que ajustar DOS VECES da lo mismo que una, no que una duración
+  // ya legal quede intacta — con el piso de densidad, una duración legal pero demasiado
+  // larga para su texto SÍ tiene que bajar, y ese es justamente el arreglo.
+  it('aplicarla dos veces da lo mismo que una', () => {
+    for (const sec of [0.6, 4, 5.4, 6, 7.9, 11.2]) {
+      for (const chars of [0, 23, 30, 65, 84, 140, 400]) {
+        const una = snapDuration(sec, chars)
+        expect(snapDuration(una, chars)).toBe(una)
+      }
+    }
   })
 })
 

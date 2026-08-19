@@ -65,6 +65,23 @@ describe('buildIdentityInstruction', () => {
     expect(p).not.toMatch(/2:3/)
   })
 
+  // ⚠️ El avatar es el primer fotograma del clip y de él salen todos los frames, así que
+  // su fondo es el fondo del anuncio entero. Con "fondo neutro" —lo que pide la FASE 4
+  // del spec para una foto de referencia— los cinco clips de la sesión `02fa1205`
+  // salieron en un estudio blanco, siendo que el original transcurre en una tienda.
+  it('sitúa al personaje en el escenario del original, no en fondo neutro', () => {
+    const conTienda = { ...FORENSIC, fondo: 'Una tienda de ropa con maniquíes y estantes de vidrio.' } as ForensicReport
+    const p = buildIdentityInstruction(INPUTS, conTienda, false)
+    expect(p).toContain('Una tienda de ropa con maniquíes y estantes de vidrio.')
+    expect(p).toMatch(/primer fotograma del anuncio, no un retrato de estudio/)
+    expect(p).not.toMatch(/fondo neutro/)
+  })
+
+  it('sin fondo observado cae a algo genérico en vez de romperse', () => {
+    const p = buildIdentityInstruction(INPUTS, { ...FORENSIC, fondo: '' } as ForensicReport, false)
+    expect(p).toContain('interior con luz natural')
+  })
+
   it('encuadra como foto de teléfono y prohíbe que se vea el teléfono', () => {
     // Medido con Nano Banana Pro: pedir "ángulo bajo como un teléfono apoyado en un
     // escritorio" hace que dibuje el teléfono en trípode dentro del cuadro.

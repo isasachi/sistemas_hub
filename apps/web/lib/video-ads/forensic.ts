@@ -81,6 +81,20 @@ export type ForensicReport = z.infer<typeof ForensicReportSchema>
 export const CPS_MAX = 20
 
 /**
+ * Piso de caracteres por segundo, para el otro lado del mismo problema.
+ *
+ * ⚠️ MEDIDO: una locución demasiado corta para su clip hace que Veo la REPITA para
+ * rellenar el audio. En la sesión `02fa1205` el lote 2 tenía 23 caracteres en 6 s
+ * (3,8 car/s) y el video salió diciendo *"Y es nuestro mural y es nuestro top mural"* —
+ * la frase dos veces. Ese mismo lote fue además el que falló con "unable to generate
+ * audio" en el primer intento, así que la escasez de texto también le cuesta al modelo.
+ *
+ * 9 es permisivo a propósito: el español conversacional va a 14–17, así que esto no
+ * pelea con la variación normal, solo ataca el caso patológico.
+ */
+export const CPS_MIN = 9
+
+/**
  * Piso de duración de una TOMA, en segundos.
  *
  * Ya NO es un número discutible: 4 es `MIN_DURATION` de Veo 3.1, la duración más corta

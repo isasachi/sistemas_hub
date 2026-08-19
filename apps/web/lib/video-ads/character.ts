@@ -128,9 +128,31 @@ export function buildIdentityInstruction(
     'la foto base del personaje. Debe incluir identidad visual, edad aparente, sexo /',
     'presentación, rasgos faciales visibles, forma del rostro, ojos, cejas, nariz,',
     'labios, piel, cabello (corte, color, textura), complexión, proporciones corporales',
-    'observables, vestuario, accesorios, postura neutra, expresión neutra, iluminación',
-    'neutra, fondo neutro, encuadre de referencia, relación de aspecto VERTICAL 9:16 y',
-    'nivel de realismo fotográfico.',
+    'observables, vestuario, accesorios, postura neutra, expresión neutra,',
+    'relación de aspecto VERTICAL 9:16 y nivel de realismo fotográfico.',
+    '',
+    // ⚠️ EL AVATAR YA NO PUEDE NACER EN FONDO NEUTRO, y esto es una desviación
+    // deliberada de la FASE 4 del spec ("fondo neutro", "iluminación neutra").
+    //
+    // Esa regla es correcta cuando el avatar es una FOTO DE REFERENCIA. Con el modo de
+    // frames de Veo dejó de serlo: el avatar es el primer fotograma del clip, y de él
+    // salen todos los frames frontera. Un avatar sobre pared blanca hace que el anuncio
+    // ENTERO transcurra sobre una pared blanca — medido en la sesión `02fa1205`, cuyo
+    // original es una tienda con maniquíes, estantes de vidrio y un letrero "NOVATA", y
+    // cuyos cinco clips salieron en un estudio vacío.
+    //
+    // En modo frames el prompt del lote ya no manda descripción de escenario (no hay
+    // manera fiable de acotar a un clip un texto que describe el video entero), así que
+    // si la escena no está EN LA IMAGEN no está en ningún lado.
+    'ESCENARIO — la imagen es el primer fotograma del anuncio, no un retrato de estudio:',
+    'sitúa al personaje EN EL MISMO TIPO DE LUGAR que el video original, con su misma',
+    `iluminación. Lugar observado: ${enProsa(forensic.fondo) || 'interior con luz natural'}`,
+    'Reproduce el TIPO de espacio y su luz, no los objetos concretos de una toma suelta.',
+    // ⚠️ Sin esto el modelo abre el plano para "mostrar" el lugar: medido, el avatar
+    // pasó de plano medio a cuerpo entero en cuanto se le nombró la tienda. El escenario
+    // va DETRÁS y desenfocado; el encuadre lo manda el original, no el decorado.
+    'El lugar va DETRÁS del personaje y desenfocado — es contexto, no el tema de la foto.',
+    'NO abras el plano para mostrarlo: el encuadre manda sobre el escenario.',
     // 9:16 y no el 2:3 de antes: con el modo de frames de Veo esta imagen no es "una
     // referencia más", es el PRIMER FOTOGRAMA del clip. El encuadre que tenga es el
     // encuadre con el que abre el anuncio.
