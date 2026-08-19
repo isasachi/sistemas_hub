@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ExternalLink, Loader2, PackageSearch, Flame, ChevronDown, BadgeCheck } from "lucide-react";
+import { ExternalLink, Loader2, ChevronDown, BadgeCheck } from "lucide-react";
 
 // Dónde apareció el término del nicho, en palabras. Es la confianza del
 // veredicto: en la URL del producto es casi certeza; solo en el cuerpo del
@@ -135,11 +135,10 @@ export default function BuscadorProductosPage() {
   const [result, setResult] = useState<RawSearchResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [topPicks, setTopPicks] = useState<RawProductEntry[]>([]);
   // La categoría elegida, no la que devuelve la respuesta: así el chip se
-  // enciende en el click, antes de que llegue el fetch. null = "Todos" (la
-  // portada). Los chips salen de `CATEGORIES`, que es data del código — no hay
-  // ninguna llamada para pintarlos.
+  // enciende en el click, antes de que llegue el fetch. null = "Todos" (todo el
+  // inventario). Los chips salen de `CATEGORIES`, que es data del código — no
+  // hay ninguna llamada para pintarlos.
   const [sel, setSel] = useState<CategoryId | null>(null);
   const [expandido, setExpandido] = useState(false);
   // Página dentro del rango servido. Se resetea en `search`, que es por donde
@@ -147,19 +146,14 @@ export default function BuscadorProductosPage() {
   // 4 al cambiar de chip mostraría el final de una lista que recién llega.
   const [pagina, setPagina] = useState(0);
 
-  // Lo más pautado del rango más alto, de todos los nichos. Se refresca solo:
-  // la ruta lee en vivo lo que el daemon de vigencia acaba de escribir.
-  useEffect(() => {
-    fetch("/api/buscador-productos/top-picks")
-      .then((r) => r.json())
-      .then((d: { products?: RawProductEntry[] }) => setTopPicks(d.products ?? []))
-      .catch(() => {});
-  }, []);
 
   // `cat` y `bucket` van por parámetro y no desde el estado: el chip busca en el
   // mismo click en que se marca seleccionado, y el estado todavía no llegó.
   // bucket null = que el servidor elija el primer rango con stock.
-  const search = useCallback(async (cat: CategoryId, bucket: RawBucket | null) => {
+  const search = useCallback(async (cat: CategoryId | null, bucket: RawBucket | null) => {
+    // cat null = "Todos": el servidor sirve sobre TODOS los nichos con
+    // inventario, sin filtrar por categoría.
+    const clave = cat ?? "todos";
     if (loading) return;
     setLoading(true);
     setError(null);
@@ -167,12 +161,12 @@ export default function BuscadorProductosPage() {
     // Cambiar de RANGO no borra lo que hay en pantalla: si se limpiara, el filtro
     // desaparecería a media transición y no habría dónde volver a hacer click.
     // Cambiar de CATEGORÍA sí limpia.
-    setResult((prev) => (prev?.niche === cat ? prev : null));
+    setResult((prev) => (prev?.niche === clave ? prev : null));
     try {
       const res = await fetch("/api/buscador-productos/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ category: cat, bucket }),
+        body: JSON.stringify({ category: clave, bucket }),
       });
       const data = (await res.json()) as RawSearchResponse & { error?: string };
       if (!res.ok) throw new Error(data.error ?? "Error en la búsqueda");
@@ -189,13 +183,17 @@ export default function BuscadorProductosPage() {
     search(id, null);
   }, [search]);
 
-  // "Todos": vuelve a la portada (top picks de todos los nichos). No pega a la
-  // API — el marquee ya está cargado desde el mount.
+  // "Todos": el inventario entero, sin filtro de categoría. Es lo que se ve al
+  // abrir la herramienta.
   const verTodos = useCallback(() => {
     setSel(null);
-    setResult(null);
-    setError(null);
-  }, []);
+    search(null, null);
+  }, [search]);
+
+  // Carga inicial. `search` cambia de identidad con `loading`, así que la
+  // dependencia sería un bucle: esto corre una sola vez, al montar.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { search(null, null); }, []);
 
   // El rango activo lo dicta la respuesta, no el click: sin filtro explícito el
   // servidor autoelige, y el chip encendido tiene que ser el que de verdad salió.
@@ -210,8 +208,7 @@ export default function BuscadorProductosPage() {
             Buscador de Productos
           </h1>
           <p className="text-[14px] text-[#cfcfcf] leading-[1.6]">
-            Elige una categoría y te mostramos productos físicos que se están pautando.
-            Se ve un rango de anuncios a la vez — el filtro lo cambia.
+            Elige una categoría y encuentra los productos que más están pautando.
           </p>
         </div>
 
@@ -232,7 +229,7 @@ export default function BuscadorProductosPage() {
               className="flex-1 flex flex-wrap gap-2 overflow-hidden"
               style={expandido ? undefined : { maxHeight: 75 }}
             >
-              <Chip label="Todos" active={sel === null} disabled={loading} onClick={verTodos} />
+              <Chip label="Todos" active={sel === null} busy={loading && sel === null} disabled={loading} onClick={verTodos} />
               {CATEGORIES.map((c) => (
                 <Chip
                   key={c.id}
@@ -262,40 +259,9 @@ export default function BuscadorProductosPage() {
 
         {error && <p className="text-[13px] text-[#fca5a5] mb-4">{error}</p>}
 
-        {/* Cambiar de categoría vacía el cuerpo (y esconde el marquee): sin esta
-            línea la pantalla queda en blanco hasta que responde la API. */}
+        {/* Cambiar de categoría vacía el cuerpo: sin esta línea la pantalla
+            queda en blanco hasta que responde la API. */}
         {loading && !result && <p className="text-[13px] text-[#bebebe] mb-4">Buscando…</p>}
-
-        {/* Portada: mientras no haya búsqueda, lo más pautado de todo el inventario.
-            Con resultados en pantalla desaparece — no compite con lo que se buscó. */}
-        {!result && !loading && topPicks.length > 0 && (
-          <section className="mb-10">
-            <div className="flex items-baseline gap-2.5 mb-1">
-              <h2 className="flex items-center gap-2 text-[15px] font-extrabold text-[#ededed]">
-                <Flame className="w-4 h-4" style={{ color: ACCENT }} /> Lo más pautado
-              </h2>
-              <span className="text-[12px] text-[#bebebe]">{topPicks.length} productos</span>
-            </div>
-            <p className="text-[12px] text-[#bebebe] mb-3">
-              Los de más anuncios activos del rango más alto (100+), de todos los nichos.
-              <span className="text-[#6b6b6b]"> · pasa el cursor por encima para detener la cinta</span>
-            </p>
-            {/* La lista va DOS veces: la animación desplaza -50%, o sea justo una
-                copia, y el salto al reiniciar cae en un punto idéntico. */}
-            {/* mask-x-*: laterales difuminados con las utilidades de máscara de
-                Tailwind 4. Escrita a mano en globals.css, lightningcss se comía la
-                regla entera. */}
-            <div className="jr-marquee-hover overflow-hidden -mx-8 px-8 mask-x-from-92% mask-x-to-100%">
-              <div className="jr-marquee flex w-max gap-3" style={{ animationDuration: "70s" }}>
-                {[...topPicks, ...topPicks].map((p, i) => (
-                  <div key={`${p.id}-${i}`} className="w-[300px] shrink-0" aria-hidden={i >= topPicks.length}>
-                    <ProductCard p={p} />
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
-        )}
 
         {/* No hay estado `pending` por categoría: las categorías son fijas y sus
             nichos ya tienen inventario. El cold start ("lo encolamos") vivía en
@@ -318,7 +284,7 @@ export default function BuscadorProductosPage() {
                   label={RAW_BUCKET_LABEL[b]}
                   active={grupo.bucket === b}
                   disabled={loading}
-                  onClick={() => search(sel!, b)}
+                  onClick={() => search(sel, b)}
                 />
               ))}
             </div>
