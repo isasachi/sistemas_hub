@@ -6,7 +6,7 @@ import { geminiCallStructured } from '@/lib/gemini'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 import { ForensicReportSchema } from '@/lib/video-ads/types'
-import { buildForensicInstruction, repairCutTiming } from '@/lib/video-ads/forensic'
+import { buildForensicInstruction, repairCutTiming, limpiarDialogos } from '@/lib/video-ads/forensic'
 import { MAX_VIDEO_MB } from '@/lib/video-ads/limits'
 import { STEP } from '@/lib/video-ads/steps'
 import type { Part } from '@google/genai'
@@ -64,7 +64,10 @@ export async function POST(
     // piden a KIE). Un solo lugar que la corrija es la única forma de que las tres
     // etapas vean el mismo número. Nota: las sesiones YA analizadas conservan sus
     // duraciones viejas — hay que re-correr el análisis para repararlas.
-    const { report: reparado, ajustes } = repairCutTiming(analysis)
+    // Antes de recronometrar: un marcador de campo vacío en `dialogo` cuenta caracteres
+    // que nadie va a decir, así que limpiarlo después daría duraciones calculadas sobre
+    // texto fantasma.
+    const { report: reparado, ajustes } = repairCutTiming(limpiarDialogos(analysis))
     if (ajustes.length)
       console.warn(
         `[video-ads/analyze-reference] sesión ${id}: ${ajustes.length} cortes con diálogo indecible en su duración, recronometrados:`,

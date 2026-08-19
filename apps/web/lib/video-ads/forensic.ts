@@ -439,6 +439,12 @@ export function buildForensicInstruction(): string {
     '  límite del corte está mal puesto, no es que la persona hable rapidísimo — corrige',
     '  el límite. La suma de las duraciones tiene que dar la duración total del video.',
     '',
+    '⚠️ UN CORTE SIN HABLA LLEVA `dialogo` VACÍO (""), NUNCA UN MARCADOR.',
+    '  "No aparece" es el marcador de `textoOverlay` y SOLO de ese campo. Si en un corte',
+    '  nadie habla —música, silencio, una toma de producto— `dialogo` es la cadena vacía.',
+    '  Escribir ahí "No aparece" hace que el generador de video lo LEA EN VOZ ALTA: es',
+    '  texto hablado, y todo lo que esté en ese campo se pronuncia.',
+    '',
     'CORTES (`cortes`): uno por corte real, en orden. Para cada uno:',
     '  `tiempo` "MM:SS - MM:SS", `duracionSeg`, `accion` (descripción literal de lo',
     '  que sucede), `camara` (plano, posición, movimiento, zoom), `dialogo` (texto',
@@ -506,4 +512,56 @@ export function enProsa(campo: string | null | undefined): string {
     .filter((x) => !/^en (un|algunos|otros?|ciertos) cortes?\b/i.test(x))
     .map((x) => (/[.!?]$/.test(x) ? x : `${x}.`))
     .join(' ')
+}
+
+/** Frases que son un marcador de "acá no hay nada", no diálogo. */
+const MARCADORES_VACIO = ['no aparece', 'no hay dialogo', 'sin dialogo', 'no se escucha', 'silencio']
+
+const norm = (x: string) =>
+  x.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[.!?¡¿]+$/g, '').trim()
+
+/**
+ * Saca del diálogo las frases que en realidad son marcadores de campo vacío.
+ *
+ * ⚠️ FALLO MEDIDO EN UNA SESIÓN REAL (`02fa1205`). El prompt de FASE 1 pide
+ * `textoOverlay` "(o 'No aparece')" y el modelo generaliza ese marcador a `dialogo`
+ * cuando el corte es mudo: el corte 3 quedó con `dialogo: "No aparece. No aparece."` y
+ * el corte 2 con la frase real más el marcador pegado al final. FASE 2 y FASE 3 lo
+ * copian literal —que es exactamente lo que tienen que hacer— y termina en el prompt
+ * del lote como `Locución:`, o sea el generador de video LO DICE EN VOZ ALTA. En el
+ * guión final del usuario salieron tres "No aparece." seguidas.
+ *
+ * El `guionOriginal` de esa misma sesión está limpio, así que el forense sí sabía que
+ * el tramo era mudo: lo contaminado es solo el campo por corte.
+ *
+ * Se limpia en CÓDIGO además de arreglar el prompt porque el prompt no es garantía y
+ * porque esto repara también las sesiones ya guardadas, que es donde está el problema
+ * ahora mismo. Mismo patrón que el resto del pipeline: el modelo redacta, el código
+ * verifica.
+ *
+ * ponytail: solo se descartan frases COMPLETAS que son el marcador; un diálogo real que
+ * contenga "no aparece" dentro de una oración más larga ("la mancha ya no aparece") no
+ * se toca. El modo de fallo del acote es dejar pasar un marcador raro, no comerse
+ * diálogo legítimo.
+ */
+export function limpiarDialogo(texto: string): string {
+  return (texto ?? '')
+    .split(/(?<=[.!?])\s+/)
+    .filter((frase) => frase.trim() && !MARCADORES_VACIO.includes(norm(frase)))
+    .join(' ')
+    .trim()
+}
+
+/** `limpiarDialogo` sobre todo el reporte: los cortes y sus tomas. */
+export function limpiarDialogos(report: ForensicReport): ForensicReport {
+  // Dato de DB, no de este request: una fila legada puede no traer los arrays. Sin este
+  // guard un `.map` sobre undefined tira un 500 en la ruta que solo iba a limpiar texto.
+  if (!Array.isArray(report?.cortes) || !Array.isArray(report?.tomas)) return report
+  const cortes = report.cortes.map((c) => ({ ...c, dialogo: limpiarDialogo(c.dialogo) }))
+  const tomas = report.tomas.map((t) => ({ ...t, dialogo: limpiarDialogo(t.dialogo) }))
+  // Sin cambios devuelve el MISMO objeto: así no se ensucia una fila que ya estaba bien
+  // ni se mueve la huella por una reescritura idéntica.
+  const igual = cortes.every((c, i) => c.dialogo === report.cortes[i].dialogo)
+    && tomas.every((t, i) => t.dialogo === report.tomas[i].dialogo)
+  return igual ? report : { ...report, cortes, tomas }
 }

@@ -388,7 +388,14 @@ export function buildLotePrompt(args: {
           // y en cuántos segundos: es la sincronización audio↔imagen, no una copia del
           // guion global. Con el tope viejo llegó a perderse en un lote y no en los
           // otros, y el resultado fue "una habla muy rápido y la otra muy lento".
-          t.locucion ? `Locución: “${t.locucion}”` : '',
+          // ⚠️ Una toma muda tiene que DECLARARSE muda. El silencio por omisión es
+          // ambiguo: el modelo genera audio, y ante una toma sin línea rellena con habla
+          // inventada. Esto es la contraparte del marcador "No aparece" que el forense
+          // metía en `dialogo` y que el render terminaba pronunciando (ver
+          // `limpiarDialogo`): sacarlo no alcanza si después nadie dice que ahí no habla.
+          t.locucion
+            ? `Locución: “${t.locucion}”`
+            : 'Sin diálogo: la persona NO habla en esta toma. Solo acción y sonido ambiente; no inventes frases ni muevas la boca como si hablara.',
           'Texto / Overlay: NINGUNO.',
         ].filter(Boolean).join('\n')
       })

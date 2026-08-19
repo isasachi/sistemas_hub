@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildForensicInstruction, ForensicReportSchema, repairCutTiming, mergeMicroCortes, muestraPersona, CPS_MAX, type ForensicReport, enProsa } from './forensic'
+import { buildForensicInstruction, ForensicReportSchema, repairCutTiming, mergeMicroCortes, muestraPersona, CPS_MAX, type ForensicReport, enProsa, limpiarDialogo } from './forensic'
 
 // El prompt es el contrato con Gemini. Estos asserts fijan las reglas del spec que,
 // si se caen, producen el bug que ya vimos en producción: cortes inventados por
@@ -502,5 +502,40 @@ describe('enProsa', () => {
 
   it('un JSON corrupto se devuelve tal cual en vez de perderse', () => {
     expect(enProsa('{no es json')).toBe('{no es json')
+  })
+})
+
+/**
+ * ⚠️ FALLO MEDIDO EN LA SESIÓN `02fa1205`. El prompt de FASE 1 pide `textoOverlay` "(o
+ * 'No aparece')" y el modelo generaliza ese marcador a `dialogo` en los cortes mudos.
+ * FASE 2 y 3 lo copian literal —que es lo que deben hacer— y llega al prompt del lote
+ * como `Locución:`, o sea el generador de video LO DICE EN VOZ ALTA. En el guión final
+ * del usuario salieron tres "No aparece." seguidas.
+ */
+describe('limpiarDialogo', () => {
+  it('vacía un corte mudo cuyo diálogo es solo el marcador, repetido', () => {
+    expect(limpiarDialogo('No aparece. No aparece.')).toBe('')
+    expect(limpiarDialogo('No aparece.')).toBe('')
+  })
+
+  it('quita el marcador pegado al final de una frase real y conserva la frase', () => {
+    expect(limpiarDialogo('Y es nuestro Top Mei. No aparece.')).toBe('Y es nuestro Top Mei.')
+  })
+
+  it('NO se come diálogo legítimo que contenga esas palabras dentro de una oración', () => {
+    // El acote es a frases COMPLETAS: el modo de fallo es dejar pasar un marcador raro,
+    // no borrar algo que el personaje sí dice.
+    const real = 'Después de dos semanas la mancha ya no aparece.'
+    expect(limpiarDialogo(real)).toBe(real)
+  })
+
+  it('tolera acentos, mayúsculas y las otras formas del marcador', () => {
+    expect(limpiarDialogo('SIN DIÁLOGO.')).toBe('')
+    expect(limpiarDialogo('Silencio. Hola a todas.')).toBe('Hola a todas.')
+  })
+
+  it('un diálogo limpio vuelve intacto', () => {
+    const t = 'La tendencia asiática llegó y este es el nuevo ingreso.'
+    expect(limpiarDialogo(t)).toBe(t)
   })
 })
