@@ -69,22 +69,22 @@ export default function Section2Product() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <p className="text-[11px] font-bold uppercase tracking-widest text-[#bebebe] mb-2">Imagen del producto *</p>
+        <p className="text-[11px] font-bold uppercase tracking-widest text-[#a98c88] mb-2">Imagen del producto *</p>
         <FileUpload label="Subir producto" onFile={(f) => { setProductFile(f); setProductPreview(URL.createObjectURL(f)) }} preview={productPreview} />
       </div>
       <div>
-        <p className="text-[11px] font-bold uppercase tracking-widest text-[#bebebe] mb-2">Logo (opcional)</p>
+        <p className="text-[11px] font-bold uppercase tracking-widest text-[#a98c88] mb-2">Logo (opcional)</p>
         <FileUpload label="Subir logo" onFile={(f) => { setLogoFile(f); setLogoPreview(URL.createObjectURL(f)) }} preview={logoPreview} variant="ghost" />
       </div>
       <div className="flex flex-col gap-3 pt-1">
-        <p className="text-[12px] text-[#cfcfcf]">Tres preguntas rápidas:</p>
+        <p className="text-[12px] text-[#c9b4ae]">Tres preguntas rápidas:</p>
         {[
           { key: 'productName', placeholder: '¿Cómo se llama tu producto?' },
           { key: 'whatItDoes', placeholder: '¿Qué hace? (una frase corta)' },
           { key: 'targetAudience', placeholder: '¿Para quién es?' },
         ].map(({ key, placeholder }, i) => (
           <div key={key} className="flex items-center gap-2">
-            <span className="w-5 h-5 rounded-full bg-white/[0.05] text-[#bebebe] text-[10px] font-bold flex items-center justify-center shrink-0">{i + 1}</span>
+            <span className="w-5 h-5 rounded-full bg-white/[0.05] text-[#a98c88] text-[10px] font-bold flex items-center justify-center shrink-0">{i + 1}</span>
             <input
               type="text"
               placeholder={placeholder}

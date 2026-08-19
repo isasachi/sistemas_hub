@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { Tool } from "@/lib/tools";
 import { toolIcon } from "@/lib/tool-icons";
 
-const ACCENT = "#ff9b4a";
+const ACCENT = "#e8467a";
 
 const RATIO_CLASS: Record<string, string> = {
   "9/16": "aspect-[9/16]",
@@ -103,12 +103,12 @@ export function ToolPreview({ tool, ratio }: { tool: Tool; ratio?: string }) {
           izquierdo, más chico y sin envolver. */}
       <div className="absolute inset-x-0 top-0 flex items-center justify-between px-3.5 pt-2.5">
         <span
-          className={`spec-label whitespace-nowrap !text-[#bebebe]${narrow ? " !text-[9px]" : ""}`}
+          className={`spec-label whitespace-nowrap !text-[#a98c88]${narrow ? " !text-[9px]" : ""}`}
         >
           {metaLeft}
         </span>
         {!narrow && (
-          <span className="spec-label whitespace-nowrap !text-[#bebebe]">{metaRight}</span>
+          <span className="spec-label whitespace-nowrap !text-[#a98c88]">{metaRight}</span>
         )}
       </div>
     </div>

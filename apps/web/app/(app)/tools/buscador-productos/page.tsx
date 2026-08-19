@@ -18,7 +18,7 @@ import {
   type CategoryId, type RawBucket, type RawProductEntry, type RawSearchResponse,
 } from "@ph/shared";
 
-const ACCENT = "#ff9b4a";
+const ACCENT = "#e8467a";
 
 // La respuesta trae 50 productos por rango y se muestran de a 10.
 const POR_PAGINA = 10;
@@ -41,7 +41,7 @@ function Chip({ label, active, busy, disabled, onClick }: {
       style={
         active
           ? { borderColor: ACCENT, color: ACCENT, background: `${ACCENT}1a` }
-          : { borderColor: "rgba(255,255,255,0.12)", color: "#cfcfcf" }
+          : { borderColor: "rgba(255,255,255,0.12)", color: "#c9b4ae" }
       }
     >
       {busy && <Loader2 className="w-3 h-3 animate-spin" />}
@@ -65,7 +65,7 @@ function PageBtn({ label, active, disabled, title, onClick }: {
       style={
         active
           ? { borderColor: ACCENT, color: "#0b0b12", background: ACCENT }
-          : { borderColor: "rgba(255,255,255,0.12)", color: "#cfcfcf" }
+          : { borderColor: "rgba(255,255,255,0.12)", color: "#c9b4ae" }
       }
     >
       {label}
@@ -91,10 +91,10 @@ function ProductCard({ p }: { p: RawProductEntry }) {
   return (
     <div className="h-full bg-white/[0.04] border border-white/[0.06] rounded-2xl p-4 flex flex-col gap-3">
       <div>
-        <h3 className="text-[15px] font-extrabold text-[#ededed] tracking-[-0.2px] leading-tight">
+        <h3 className="text-[15px] font-extrabold text-[#efe7e0] tracking-[-0.2px] leading-tight">
           {titulo || p.advertiser}
         </h3>
-        <p className="text-[12px] text-[#bebebe] mt-0.5">
+        <p className="text-[12px] text-[#a98c88] mt-0.5">
           {[titulo ? p.advertiser : null, p.country].filter(Boolean).join(" · ")}
         </p>
         {p.verificado && (
@@ -112,18 +112,18 @@ function ProductCard({ p }: { p: RawProductEntry }) {
       </div>
 
       {p.body && (
-        <p className="text-[12px] text-[#cfcfcf] leading-[1.5] line-clamp-3">{p.body}</p>
+        <p className="text-[12px] text-[#c9b4ae] leading-[1.5] line-clamp-3">{p.body}</p>
       )}
 
       <div className="mt-auto flex items-center justify-between gap-3 pt-1">
         <span className="readout text-[13px] font-extrabold" style={{ color: ACCENT }}>
           {p.adCount.toLocaleString("es-PE")}
-          <span className="text-[10px] text-[#bebebe] uppercase tracking-[1px] font-bold ml-1.5">
+          <span className="text-[10px] text-[#a98c88] uppercase tracking-[1px] font-bold ml-1.5">
             anuncios
           </span>
         </span>
         <a href={p.adsUrl} target="_blank" rel="noopener noreferrer"
-          className="flex items-center gap-1.5 text-[12px] font-bold rounded-xl px-3 py-2 no-underline border border-white/[0.12] text-[#ededed] transition-colors hover:bg-white/[0.04]">
+          className="flex items-center gap-1.5 text-[12px] font-bold rounded-xl px-3 py-2 no-underline border border-white/[0.12] text-[#efe7e0] transition-colors hover:bg-white/[0.04]">
           Ads Library <ExternalLink className="w-3.5 h-3.5" />
         </a>
       </div>
@@ -206,10 +206,10 @@ export default function BuscadorProductosPage() {
     <ToolShell name="Buscador de Productos" slug="buscador-productos">
       <main className="flex-1 max-w-[1000px] w-full mx-auto px-8 py-10">
         <div className="mb-6">
-          <h1 className="text-[26px] font-extrabold text-[#ededed] tracking-[-0.5px] mb-1.5">
+          <h1 className="text-[26px] font-extrabold text-[#efe7e0] tracking-[-0.5px] mb-1.5">
             Buscador de Productos
           </h1>
-          <p className="text-[14px] text-[#cfcfcf] leading-[1.6]">
+          <p className="text-[14px] text-[#c9b4ae] leading-[1.6]">
             Elige una categoría y te mostramos productos físicos que se están pautando.
             Se ve un rango de anuncios a la vez — el filtro lo cambia.
           </p>
@@ -221,7 +221,7 @@ export default function BuscadorProductosPage() {
             lista no cabe en chips. Van fijas y en código — pintarlas no cuesta
             ninguna llamada. */}
         <div className="flex items-start gap-3 mb-8">
-            <span className="text-[12px] text-[#bebebe] shrink-0 py-1.5">Categorías</span>
+            <span className="text-[12px] text-[#a98c88] shrink-0 py-1.5">Categorías</span>
             {/* ponytail: colapsado = dos filas por altura fija. El chip mide
                 33.2px renderizado (12px de texto + line-height del navegador +
                 py-1.5 + borde) y el gap es 8 → dos filas = 74.4, la tercera
@@ -264,19 +264,19 @@ export default function BuscadorProductosPage() {
 
         {/* Cambiar de categoría vacía el cuerpo (y esconde el marquee): sin esta
             línea la pantalla queda en blanco hasta que responde la API. */}
-        {loading && !result && <p className="text-[13px] text-[#bebebe] mb-4">Buscando…</p>}
+        {loading && !result && <p className="text-[13px] text-[#a98c88] mb-4">Buscando…</p>}
 
         {/* Portada: mientras no haya búsqueda, lo más pautado de todo el inventario.
             Con resultados en pantalla desaparece — no compite con lo que se buscó. */}
         {!result && !loading && topPicks.length > 0 && (
           <section className="mb-10">
             <div className="flex items-baseline gap-2.5 mb-1">
-              <h2 className="flex items-center gap-2 text-[15px] font-extrabold text-[#ededed]">
+              <h2 className="flex items-center gap-2 text-[15px] font-extrabold text-[#efe7e0]">
                 <Flame className="w-4 h-4" style={{ color: ACCENT }} /> Lo más pautado
               </h2>
-              <span className="text-[12px] text-[#bebebe]">{topPicks.length} productos</span>
+              <span className="text-[12px] text-[#a98c88]">{topPicks.length} productos</span>
             </div>
-            <p className="text-[12px] text-[#bebebe] mb-3">
+            <p className="text-[12px] text-[#a98c88] mb-3">
               Los de más anuncios activos del rango más alto (100+), de todos los nichos.
               <span className="text-[#6b6b6b]"> · pasa el cursor por encima para detener la cinta</span>
             </p>
@@ -301,7 +301,7 @@ export default function BuscadorProductosPage() {
             nichos ya tienen inventario. El cold start ("lo encolamos") vivía en
             la búsqueda libre por nicho, que ya no existe en la UI. */}
         {result?.status === "empty" && (
-          <p className="text-[13px] text-[#cfcfcf]">
+          <p className="text-[13px] text-[#c9b4ae]">
             No encontramos productos físicos que cumplan los criterios en esta categoría.
           </p>
         )}
@@ -311,7 +311,7 @@ export default function BuscadorProductosPage() {
         {grupo && (
           <section className="mb-10">
             <div className="flex flex-wrap items-center gap-2 mb-4">
-              <span className="text-[12px] text-[#bebebe] mr-1">Rango de anuncios</span>
+              <span className="text-[12px] text-[#a98c88] mr-1">Rango de anuncios</span>
               {RAW_BUCKETS.map((b) => (
                 <Chip
                   key={b}
@@ -326,8 +326,8 @@ export default function BuscadorProductosPage() {
             {grupo.products.length > 0 ? (
               <>
                 <div className="flex items-baseline gap-2.5 mb-3">
-                  <h2 className="text-[15px] font-extrabold text-[#ededed]">{grupo.label}</h2>
-                  <span className="text-[12px] text-[#bebebe]">
+                  <h2 className="text-[15px] font-extrabold text-[#efe7e0]">{grupo.label}</h2>
+                  <span className="text-[12px] text-[#a98c88]">
                     {grupo.products.length} productos
                     {paginas > 1 && ` · página ${pagina + 1} de ${paginas}`}
                   </span>
@@ -366,8 +366,8 @@ export default function BuscadorProductosPage() {
                 )}
               </>
             ) : (
-              <p className="text-[13px] text-[#cfcfcf]">
-                Esta categoría no tiene productos en el rango <span className="text-[#ededed]">{grupo.label}</span>.
+              <p className="text-[13px] text-[#c9b4ae]">
+                Esta categoría no tiene productos en el rango <span className="text-[#efe7e0]">{grupo.label}</span>.
                 Prueba otro rango.
               </p>
             )}

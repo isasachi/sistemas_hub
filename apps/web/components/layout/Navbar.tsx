@@ -1,16 +1,15 @@
 import Link from "next/link";
+import { Wordmark } from "./Wordmark";
 
 // Navbar de la landing pública (no autenticada). El área privada usa AppShell.
-// ADN "JR Studio": barra transparente, logo serif con tracking amplio,
-// links Poppins y CTA en pastilla blanca (como jrconsulting.com.pe).
+// Barra granate translúcida, el lockup de dos líneas del logotipo y CTA en
+// pastilla crema — el carmesí queda para la acción del hero (BRANDBOOK §2).
 export function Navbar() {
   return (
-    <div className="sticky top-0 z-40 border-b border-[rgba(255,255,255,0.06)] bg-[#0b0b0c]/80 backdrop-blur-xl">
+    <div className="sticky top-0 z-40 border-b border-[rgba(255,255,255,0.06)] bg-[#14050a]/80 backdrop-blur-xl">
       <nav className="relative mx-auto flex h-[68px] max-w-[1160px] items-center justify-between px-6">
         <Link href="/" className="no-underline">
-          <span className="jr-wordmark text-[20px] text-[#ededed]">
-            JR <span className="text-[#d6a860]">AI HUB</span>
-          </span>
+          <Wordmark size={19} />
         </Link>
 
         {/* Center nav — centrado absoluto */}
@@ -18,7 +17,7 @@ export function Navbar() {
           <li>
             <a
               href="#herramientas"
-              className="font-[Poppins] text-[14px] font-medium text-[#cfcfcf] no-underline transition-colors duration-200 hover:text-[#ffffff]"
+              className="font-[Archivo] text-[14px] font-medium text-[#c9b4ae] no-underline transition-colors duration-200 hover:text-[#f6f2eb]"
             >
               Herramientas
             </a>
@@ -26,7 +25,7 @@ export function Navbar() {
           <li>
             <a
               href="#precios"
-              className="font-[Poppins] text-[14px] font-medium text-[#cfcfcf] no-underline transition-colors duration-200 hover:text-[#ffffff]"
+              className="font-[Archivo] text-[14px] font-medium text-[#c9b4ae] no-underline transition-colors duration-200 hover:text-[#f6f2eb]"
             >
               Precios
             </a>
@@ -36,7 +35,7 @@ export function Navbar() {
               href="https://jrconsulting.com.pe"
               target="_blank"
               rel="noopener noreferrer"
-              className="font-[Poppins] text-[14px] font-medium text-[#cfcfcf] no-underline transition-colors duration-200 hover:text-[#ffffff]"
+              className="font-[Archivo] text-[14px] font-medium text-[#c9b4ae] no-underline transition-colors duration-200 hover:text-[#f6f2eb]"
             >
               Sobre JR
             </a>
@@ -56,7 +55,7 @@ export function Navbar() {
             <>
               <Link
                 href="/login"
-                className="hidden font-[Poppins] text-[14px] font-medium text-[#cfcfcf] no-underline transition-colors duration-200 hover:text-[#ffffff] sm:inline"
+                className="hidden font-[Archivo] text-[14px] font-medium text-[#c9b4ae] no-underline transition-colors duration-200 hover:text-[#f6f2eb] sm:inline"
               >
                 Iniciar sesión
               </Link>

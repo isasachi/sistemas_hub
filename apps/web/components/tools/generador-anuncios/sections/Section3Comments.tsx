@@ -40,8 +40,8 @@ export default function Section3Comments() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="rounded-xl border border-white/[0.06] bg-[#0a0a0a] px-4 py-4">
-        <pre className="text-[12px] text-[#cfcfcf] whitespace-pre-wrap font-sans leading-relaxed">{TIKTOK_SCRIPT}</pre>
+      <div className="rounded-xl border border-white/[0.06] bg-[#14050a] px-4 py-4">
+        <pre className="text-[12px] text-[#c9b4ae] whitespace-pre-wrap font-sans leading-relaxed">{TIKTOK_SCRIPT}</pre>
       </div>
       <textarea
         value={comments}
@@ -52,7 +52,7 @@ export default function Section3Comments() {
       />
       {isLoading && (
         <div className="flex flex-col gap-1.5">
-          <div className="flex justify-between text-[11px] text-[#cfcfcf]">
+          <div className="flex justify-between text-[11px] text-[#c9b4ae]">
             <span>Generando copy A/B...</span>
           </div>
           <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">

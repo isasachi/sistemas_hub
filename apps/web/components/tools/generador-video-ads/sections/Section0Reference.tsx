@@ -68,7 +68,7 @@ export default function Section0Reference() {
         preview={null}
       />
       <p className="text-[12px] leading-relaxed text-[#8b8b8b]">
-        Tiene que ser <strong className="font-semibold text-[#cfcfcf]">vertical</strong> (9:16).
+        Tiene que ser <strong className="font-semibold text-[#c9b4ae]">vertical</strong> (9:16).
         De este video sale toda la estructura: cortes, ritmo, cámara y orden de las frases.
       </p>
       {notVertical && <div className={warnBox}>{notVertical}</div>}

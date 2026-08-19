@@ -2,10 +2,10 @@ export function Footer() {
   return (
     <footer className="border-t border-[rgba(255,255,255,0.06)] px-8 py-7">
       <div className="mx-auto flex max-w-[1160px] flex-col items-center justify-between gap-2 text-center sm:flex-row sm:text-left">
-        <span className="font-[Lato] text-[12px] text-[#bebebe]">
-          © 2026 <span className="font-semibold tracking-[0.06em] text-[#cfcfcf]">JR CONSULTING</span> · Todos los derechos reservados
+        <span className="font-[Archivo] text-[12px] text-[#a98c88]">
+          © 2026 <span className="font-semibold tracking-[0.06em] text-[#c9b4ae]">JR CONSULTING</span> · Todos los derechos reservados
         </span>
-        <span className="font-[Lato] text-[12px] text-[#bebebe]">
+        <span className="font-[Archivo] text-[12px] text-[#a98c88]">
           Hecho en Perú 🇵🇪
         </span>
       </div>

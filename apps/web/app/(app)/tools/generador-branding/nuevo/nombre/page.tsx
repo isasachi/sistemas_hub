@@ -71,24 +71,24 @@ export default function NombrePage() {
           onChange={(e) => update({ brandName: e.target.value })}
           onBlur={() => { setTouched(true); update({ brandName: brandName.trim() }) }}
           onKeyDown={(e) => { if (e.key === 'Enter') next() }}
-          className="h-12 rounded-xl bg-white/[0.04] border-white/[0.08] text-[14px] text-[#ededed]"
+          className="h-12 rounded-xl bg-white/[0.04] border-white/[0.08] text-[14px] text-[#efe7e0]"
         />
         <div className="flex items-center justify-between">
           {error ? <p className="text-[12px] text-red-400">{error}</p> : <span />}
-          <span className="text-[11px] text-[#bebebe]">{brandName.trim().length}/{BRAND_NAME_MAX}</span>
+          <span className="text-[11px] text-[#a98c88]">{brandName.trim().length}/{BRAND_NAME_MAX}</span>
         </div>
         <button
           type="button"
           onClick={suggest}
           disabled={loading}
-          className="self-start inline-flex items-center gap-1.5 text-[12px] font-semibold text-[#ff9b4a] bg-transparent border-0 cursor-pointer disabled:opacity-40"
+          className="self-start inline-flex items-center gap-1.5 text-[12px] font-semibold text-[#e8467a] bg-transparent border-0 cursor-pointer disabled:opacity-40"
         >
           {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
           {ideas.length ? 'Otras opciones' : 'Generar opciones'}
         </button>
 
         {failed && (
-          <p className="text-[12px] text-[#bebebe]">No salieron propuestas. Intenta otra vez o escribe el nombre.</p>
+          <p className="text-[12px] text-[#a98c88]">No salieron propuestas. Intenta otra vez o escribe el nombre.</p>
         )}
 
         {ideas.length > 0 && (
@@ -100,8 +100,8 @@ export default function NombrePage() {
                 onClick={() => { update({ brandName: n }); setTouched(true) }}
                 className={`h-9 px-3 rounded-full border text-[13px] cursor-pointer transition-colors ${
                   brandName.trim() === n
-                    ? 'border-[#ff9b4a] text-[#ff9b4a] bg-[#ff9b4a]/[0.08]'
-                    : 'border-white/[0.1] text-[#cfcfcf] bg-white/[0.03] hover:text-[#ededed]'
+                    ? 'border-[#e8467a] text-[#e8467a] bg-[#e8467a]/[0.08]'
+                    : 'border-white/[0.1] text-[#c9b4ae] bg-white/[0.03] hover:text-[#efe7e0]'
                 }`}
               >
                 {n}
@@ -114,8 +114,8 @@ export default function NombrePage() {
       {/* Eslogan: opcional a propósito. Vacío = lo inventa el modelo, como en el
           board de referencia ("FUEL YOUR EDGE" no salió de ninguna casilla). */}
       <div className="flex flex-col gap-2">
-        <label htmlFor="tagline" className="text-[13px] text-[#cfcfcf]">
-          Eslogan <span className="text-[#bebebe]">— opcional. Si lo dejas vacío, lo proponemos nosotros.</span>
+        <label htmlFor="tagline" className="text-[13px] text-[#c9b4ae]">
+          Eslogan <span className="text-[#a98c88]">— opcional. Si lo dejas vacío, lo proponemos nosotros.</span>
         </label>
         <Input
           id="tagline"
@@ -124,7 +124,7 @@ export default function NombrePage() {
           value={brief.tagline ?? ''}
           onChange={(e) => update({ tagline: e.target.value || undefined })}
           onBlur={() => update({ tagline: brief.tagline?.trim() || undefined })}
-          className="h-12 rounded-xl bg-white/[0.04] border-white/[0.08] text-[14px] text-[#ededed]"
+          className="h-12 rounded-xl bg-white/[0.04] border-white/[0.08] text-[14px] text-[#efe7e0]"
         />
       </div>
     </BriefShell>

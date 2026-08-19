@@ -32,20 +32,20 @@ function Artifact({ stage, url, busy, onRegen, big, wide, tall, regenLabel }: {
           // eslint-disable-next-line @next/next/no-img-element -- URL pública de Supabase con cache-bust
           <img src={url} alt={STAGE_LABELS[stage]} className="w-full h-full object-contain" />
         ) : (
-          <div className="w-full h-full flex items-center justify-center bg-[#0c0c0d] text-[12px] text-[#bebebe] px-4 text-center">
+          <div className="w-full h-full flex items-center justify-center bg-[#0c0c0d] text-[12px] text-[#a98c88] px-4 text-center">
             No salió. Puedes reintentar solo esta pieza.
           </div>
         )}
         {busy && (
           <div className="absolute inset-0 bg-black/70 flex items-center justify-center">
-            <span className="w-7 h-7 border-2 border-white/20 border-t-[#ff9b4a] rounded-full animate-spin" />
+            <span className="w-7 h-7 border-2 border-white/20 border-t-[#e8467a] rounded-full animate-spin" />
           </div>
         )}
       </div>
       <div className="flex items-center justify-between">
-        <span className="text-[12px] font-semibold text-[#ededed]">{STAGE_LABELS[stage]}</span>
+        <span className="text-[12px] font-semibold text-[#efe7e0]">{STAGE_LABELS[stage]}</span>
         <button type="button" onClick={onRegen} disabled={busy}
-                className="h-8 px-2.5 rounded-lg text-[11px] text-[#cfcfcf] hover:text-[#ededed] bg-transparent border border-white/[0.1] cursor-pointer disabled:opacity-40 flex items-center gap-1.5">
+                className="h-8 px-2.5 rounded-lg text-[11px] text-[#c9b4ae] hover:text-[#efe7e0] bg-transparent border border-white/[0.1] cursor-pointer disabled:opacity-40 flex items-center gap-1.5">
           <RefreshCw className="w-3 h-3" /> {regenLabel ?? 'Regenerar'}
         </button>
       </div>
@@ -137,19 +137,19 @@ function Resultado() {
   if (!sessionId) return null
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#0a0a0a]">
+    <div className="min-h-screen flex flex-col bg-[#14050a]">
       <div className="px-6 py-4">
-        <Link href="/tools/generador-branding" className="inline-flex items-center gap-2 h-9 px-3 rounded-xl border border-white/[0.1] text-[13px] font-semibold text-[#ededed] no-underline hover:bg-white/[0.05] transition-colors">
+        <Link href="/tools/generador-branding" className="inline-flex items-center gap-2 h-9 px-3 rounded-xl border border-white/[0.1] text-[13px] font-semibold text-[#efe7e0] no-underline hover:bg-white/[0.05] transition-colors">
           <ArrowLeft className="w-4 h-4" /> Generador de branding
         </Link>
       </div>
 
       <div className="flex-1 w-full max-w-[880px] mx-auto px-6 pb-12 flex flex-col gap-6">
         <div className="flex flex-col gap-1.5">
-          <h1 className="text-[26px] font-bold text-[#ededed] leading-tight">
+          <h1 className="text-[26px] font-bold text-[#efe7e0] leading-tight">
             La marca de {row?.brand_name ?? '...'} está lista
           </h1>
-          <p className="text-[13px] text-[#cfcfcf]">
+          <p className="text-[13px] text-[#c9b4ae]">
             {row?.generation_status === 'running'
               ? 'Todavía se está generando alguna pieza...'
               : 'Regenera la pieza que no te convenza; el resto queda igual.'}
@@ -169,7 +169,7 @@ function Resultado() {
           <Artifact stage="mockup" url={row?.container_url ?? null} busy={busy === 'mockup' || busy === 'todo'} onRegen={() => regen('mockup')} tall />
         </div>
 
-        <p className="text-[12px] text-[#bebebe]">
+        <p className="text-[12px] text-[#a98c88]">
           El kit incluye además el logo en negro y en blanco, derivados del principal.
         </p>
 
@@ -186,16 +186,16 @@ function Resultado() {
             <Download className="w-4 h-4" /> Descargar kit
           </a>
           <button type="button" onClick={crearLanding} disabled={landing}
-                  className="h-12 px-6 rounded-xl border border-white/[0.14] text-[13px] font-semibold text-[#ededed] hover:bg-white/[0.05] transition-colors cursor-pointer bg-transparent disabled:opacity-40 flex items-center gap-2">
+                  className="h-12 px-6 rounded-xl border border-white/[0.14] text-[13px] font-semibold text-[#efe7e0] hover:bg-white/[0.05] transition-colors cursor-pointer bg-transparent disabled:opacity-40 flex items-center gap-2">
             <LayoutTemplate className="w-4 h-4" />
             {landing ? 'Creando...' : 'Crear la landing con esta marca'}
           </button>
           <button type="button" onClick={() => router.push(STEPS[4].path)}
-                  className="h-12 px-6 rounded-xl border border-white/[0.14] text-[13px] font-semibold text-[#ededed] hover:bg-white/[0.05] transition-colors cursor-pointer bg-transparent">
+                  className="h-12 px-6 rounded-xl border border-white/[0.14] text-[13px] font-semibold text-[#efe7e0] hover:bg-white/[0.05] transition-colors cursor-pointer bg-transparent">
             Cambiar estilo
           </button>
           <button type="button" onClick={otraMarca}
-                  className="h-12 px-6 rounded-xl text-[13px] font-semibold text-[#cfcfcf] hover:text-[#ededed] transition-colors cursor-pointer bg-transparent border-0 flex items-center gap-2">
+                  className="h-12 px-6 rounded-xl text-[13px] font-semibold text-[#c9b4ae] hover:text-[#efe7e0] transition-colors cursor-pointer bg-transparent border-0 flex items-center gap-2">
             <Sparkles className="w-4 h-4" /> Crear otra marca
           </button>
           <BackToDashboard className="h-12 px-6" />

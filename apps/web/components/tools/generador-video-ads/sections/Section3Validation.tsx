@@ -16,7 +16,7 @@ export default function Section3Validation() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="overflow-x-auto rounded-2xl border border-white/[0.06] bg-[#121214]">
+      <div className="overflow-x-auto rounded-2xl border border-white/[0.06] bg-[#2a0f1a]">
         <table className="w-full min-w-[520px] text-left text-[12.5px]">
           <thead>
             <tr className="border-b border-white/[0.06] text-[11px] uppercase tracking-wide text-[#8b8b8b]">
@@ -29,11 +29,11 @@ export default function Section3Validation() {
           <tbody>
             {validation.rows.map((r) => (
               <tr key={r.variable} className="border-b border-white/[0.04] last:border-0">
-                <td className="px-4 py-3 text-[#ededed]">{r.variable}</td>
-                <td className="px-4 py-3 text-[#cfcfcf]">{r.valor}</td>
+                <td className="px-4 py-3 text-[#efe7e0]">{r.variable}</td>
+                <td className="px-4 py-3 text-[#c9b4ae]">{r.valor}</td>
                 <td className="px-4 py-3 text-[#8b8b8b]">{r.fuente}</td>
                 <td className="px-4 py-3">
-                  <span className={r.estado === 'CONFIRMADA' ? 'text-[#2ccf6f]' : 'text-amber-300'}>
+                  <span className={r.estado === 'CONFIRMADA' ? 'text-[#3ed88a]' : 'text-amber-300'}>
                     {r.estado}
                   </span>
                 </td>

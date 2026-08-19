@@ -72,14 +72,14 @@ export function PricingSection() {
     <section id="precios" className="mx-auto max-w-[1160px] px-8 py-16">
       <div className="mb-12 text-center">
         <div className="mb-4 flex items-center justify-center gap-2">
-          <span aria-hidden className="text-[11px] leading-none text-[#d6a860] opacity-70">✦</span>
+          <span aria-hidden className="text-[11px] leading-none text-[#e8dcd6] opacity-70">✦</span>
           <span className="lp-eyebrow">Precios</span>
-          <span aria-hidden className="text-[11px] leading-none text-[#d6a860] opacity-70">✦</span>
+          <span aria-hidden className="text-[11px] leading-none text-[#e8dcd6] opacity-70">✦</span>
         </div>
         <h2 className="lp-serif lp-metal mx-auto max-w-[720px] text-[clamp(30px,4vw,46px)] leading-[1.12]">
           Un plan por cada etapa
         </h2>
-        <p className="mx-auto mt-4 max-w-[480px] font-[Lato] text-[15px] leading-[1.6] text-[#bebebe]">
+        <p className="mx-auto mt-4 max-w-[480px] font-[Archivo] text-[15px] leading-[1.6] text-[#a98c88]">
           Empieza gratis. Sube de plan cuando el volumen lo pida.
         </p>
       </div>
@@ -89,11 +89,11 @@ export function PricingSection() {
           <div
             key={plan.name}
             className={`lp-card flex flex-col p-8 ${
-              plan.featured ? "border-[rgba(255,155,74,0.45)] lg:-mt-4 lg:pb-10" : ""
+              plan.featured ? "border-[rgba(232,70,122,0.45)] lg:-mt-4 lg:pb-10" : ""
             }`}
           >
             <div className="flex items-center justify-between">
-              <span className="lp-label !text-[10px] !text-[#cfcfcf]">{plan.name}</span>
+              <span className="lp-label !text-[10px] !text-[#c9b4ae]">{plan.name}</span>
               {plan.featured && (
                 <span className="lp-eyebrow !text-[10px] !tracking-[0.16em]">
                   Más popular
@@ -102,15 +102,15 @@ export function PricingSection() {
             </div>
 
             <div className="mt-5 flex items-baseline gap-2">
-              <span className="readout text-[40px] font-bold leading-none text-[#ffffff]">
+              <span className="readout text-[40px] font-bold leading-none text-[#f6f2eb]">
                 {plan.price}
               </span>
-              <span className="font-[Lato] text-[13px] text-[#8f8f8f]">
+              <span className="font-[Archivo] text-[13px] text-[#8f8f8f]">
                 {plan.period}
               </span>
             </div>
 
-            <p className="mt-3 font-[Lato] text-[14px] leading-[1.6] text-[#bebebe]">
+            <p className="mt-3 font-[Archivo] text-[14px] leading-[1.6] text-[#a98c88]">
               {plan.pitch}
             </p>
 
@@ -119,9 +119,9 @@ export function PricingSection() {
                 <li key={f} className="flex items-start gap-2.5">
                   <Check
                     aria-hidden
-                    className="mt-[3px] h-4 w-4 shrink-0 text-[#d6a860]"
+                    className="mt-[3px] h-4 w-4 shrink-0 text-[#e8dcd6]"
                   />
-                  <span className="font-[Lato] text-[14px] leading-[1.5] text-[#cfcfcf]">
+                  <span className="font-[Archivo] text-[14px] leading-[1.5] text-[#c9b4ae]">
                     {f}
                   </span>
                 </li>
@@ -149,7 +149,7 @@ export function PricingSection() {
         ))}
       </div>
 
-      <p className="mt-8 text-center font-[Lato] text-[13px] text-[#8f8f8f]">
+      <p className="mt-8 text-center font-[Archivo] text-[13px] text-[#8f8f8f]">
         Precios referenciales en proceso de definición. Incluyen IGV. Cancelas cuando quieras.
       </p>
     </section>

@@ -122,7 +122,7 @@ export function ProjectHistory() {
         <button
           type="button"
           onClick={() => setSort((s) => (s === 'recent' ? 'old' : 'recent'))}
-          className="mr-1 inline-flex items-center gap-1.5 rounded-full border border-white/[0.1] bg-white/[0.03] px-3 py-1.5 font-[Poppins] text-[12px] font-medium text-[#cfcfcf] transition-colors duration-200 hover:text-[#ffffff] cursor-pointer"
+          className="mr-1 inline-flex items-center gap-1.5 rounded-full border border-white/[0.1] bg-white/[0.03] px-3 py-1.5 font-[Archivo] text-[12px] font-medium text-[#c9b4ae] transition-colors duration-200 hover:text-[#f6f2eb] cursor-pointer"
         >
           <ArrowUpDown className="h-3.5 w-3.5" />
           {sort === 'recent' ? 'Más reciente' : 'Más antiguo'}
@@ -167,21 +167,21 @@ export function ProjectHistory() {
 function EmptyState({ filtered = false }: { filtered?: boolean }) {
   return (
     <div className="flex min-h-[58vh] flex-col items-center justify-center px-6 py-16 text-center">
-      <div className="relative mb-6 flex h-20 w-20 items-center justify-center rounded-3xl border border-[rgba(214,168,96,0.25)] bg-[rgba(214,168,96,0.06)] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
-        <FolderOpen className="h-9 w-9 text-[#d6a860]" strokeWidth={1.5} />
+      <div className="relative mb-6 flex h-20 w-20 items-center justify-center rounded-3xl border border-[rgba(246,242,235,0.25)] bg-[rgba(246,242,235,0.06)] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+        <FolderOpen className="h-9 w-9 text-[#e8dcd6]" strokeWidth={1.5} />
         <span
           aria-hidden
           className="pointer-events-none absolute inset-0 rounded-3xl"
           style={{
             background:
-              'radial-gradient(120% 100% at 50% 0%, rgba(214,168,96,0.18), rgba(0,0,0,0) 60%)',
+              'radial-gradient(120% 100% at 50% 0%, rgba(246,242,235,0.18), rgba(0,0,0,0) 60%)',
           }}
         />
       </div>
-      <h2 className="lp-serif text-[20px] text-[#ededed]">
+      <h2 className="lp-serif text-[20px] text-[#efe7e0]">
         {filtered ? 'Nada de esta herramienta todavía' : 'Aquí aparece todo lo que generes'}
       </h2>
-      <p className="mt-2.5 max-w-[420px] font-[Lato] text-[14px] leading-[1.6] text-[#bebebe]">
+      <p className="mt-2.5 max-w-[420px] font-[Archivo] text-[14px] leading-[1.6] text-[#a98c88]">
         {filtered
           ? 'Todavía no has usado esta herramienta. Ábrela desde la barra de arriba y tu primer proyecto aparecerá aquí.'
           : 'Cada anuncio, video, marca, landing y cálculo que generes queda guardado en este tablero. Elige una herramienta de la barra de arriba para empezar.'}
@@ -204,10 +204,10 @@ function FilterChip({
       type="button"
       onClick={onClick}
       className={[
-        'rounded-full px-3 py-1.5 font-[Poppins] text-[12px] font-medium transition-colors duration-200 cursor-pointer',
+        'rounded-full px-3 py-1.5 font-[Archivo] text-[12px] font-medium transition-colors duration-200 cursor-pointer',
         active
-          ? 'bg-[rgba(255,106,0,0.14)] text-[rgb(255,155,74)]'
-          : 'border border-white/[0.08] bg-white/[0.02] text-[#bebebe] hover:text-[#ffffff]',
+          ? 'bg-[rgba(189,19,71,0.14)] text-[rgb(232,70,122)]'
+          : 'border border-white/[0.08] bg-white/[0.02] text-[#a98c88] hover:text-[#f6f2eb]',
       ].join(' ')}
     >
       {label}
@@ -240,7 +240,7 @@ function ProjectCard({
           e.stopPropagation()
           onDelete()
         }}
-        className="absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full border-0 bg-black/50 text-[#cfcfcf] opacity-0 backdrop-blur transition-opacity duration-200 hover:text-[#e93d3d] focus-visible:opacity-100 group-hover:opacity-100 disabled:opacity-40 cursor-pointer"
+        className="absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full border-0 bg-black/50 text-[#c9b4ae] opacity-0 backdrop-blur transition-opacity duration-200 hover:text-[#ff5a3c] focus-visible:opacity-100 group-hover:opacity-100 disabled:opacity-40 cursor-pointer"
       >
         <Trash2 className="h-4 w-4" />
       </button>
@@ -268,19 +268,19 @@ function ProjectCard({
       ) : (
         // Sin miniatura (calculadora / sesión a medio wizard): tile de datos, no un hueco.
         <div className="relative z-[1] flex aspect-[4/3] items-center justify-center border-b border-white/[0.06] bg-white/[0.02]">
-          <Icon className="h-9 w-9 text-[#6a6a6a]" />
+          <Icon className="h-9 w-9 text-[#8f7570]" />
         </div>
       )}
       <div className="relative z-[1] p-2.5">
-        <p className="truncate font-[Poppins] text-[9px] font-semibold uppercase tracking-[0.12em] text-[#d6a860]">
+        <p className="truncate font-[Archivo] text-[9px] font-semibold uppercase tracking-[0.12em] text-[#e8dcd6]">
           {p.toolName}
         </p>
-        <h3 className="mt-0.5 truncate text-[12.5px] font-semibold text-[#ededed]">{p.title}</h3>
-        <div className="mt-1 flex items-center gap-1.5 font-[Lato] text-[10.5px] text-[#cfcfcf]">
+        <h3 className="mt-0.5 truncate text-[12.5px] font-semibold text-[#efe7e0]">{p.title}</h3>
+        <div className="mt-1 flex items-center gap-1.5 font-[Archivo] text-[10.5px] text-[#c9b4ae]">
           {p.done ? (
-            <CheckCircle2 className="h-3 w-3 text-[#2ccf6f]" />
+            <CheckCircle2 className="h-3 w-3 text-[#3ed88a]" />
           ) : (
-            <Clock className="h-3 w-3 text-[rgb(255,155,74)]" />
+            <Clock className="h-3 w-3 text-[rgb(232,70,122)]" />
           )}
           <span>{fmtDate(p.created_at)}</span>
         </div>
