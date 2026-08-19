@@ -19,6 +19,8 @@
  *   - `aspect_ratio` incluye 9:16 y 2:3; `resolution` 1K | 2K | 4K; `output_format` png | jpg.
  */
 
+import { fetchKie, KIE_HTTP_TIMEOUT_MS } from './kie'
+
 const KIE_BASE = 'https://api.kie.ai/api/v1/jobs'
 const MODEL = 'nano-banana-pro'
 
@@ -109,7 +111,7 @@ export async function generateImage(
     )
   }
 
-  const res = await fetch(`${KIE_BASE}/createTask`, {
+  const res = await fetchKie(`${KIE_BASE}/createTask`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey()}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(buildImageTaskBody(input)),
@@ -126,14 +128,23 @@ export async function generateImage(
   const limite = Date.now() + timeoutMs
   for (;;) {
     await sleep(pollMs)
-    const r = await fetch(`${KIE_BASE}/recordInfo?taskId=${encodeURIComponent(taskId)}`, {
-      headers: { Authorization: `Bearer ${apiKey()}` },
-    })
+    // ⚠️ El presupuesto se comprueba ANTES del fetch, no después. Al revés —como estaba—
+    // un fetch colgado impide que la comprobación llegue a correr nunca: el tope no se
+    // evalúa y el await no vuelve. Colgó el dev server de verdad, con 0 % de CPU y una
+    // conexión ESTAB a api.kie.ai. `fetchKie` cierra la otra mitad del agujero poniéndole
+    // timeout a la petición.
+    if (Date.now() > limite) throw new Error(`Nano Banana no devolvió la imagen en ${timeoutMs / 1000} s.`)
+    // El timeout de la petición se acota además por lo que queda del presupuesto: una
+    // petición no puede sobrevivir al plazo total que se supone que respeta.
+    const r = await fetchKie(
+      `${KIE_BASE}/recordInfo?taskId=${encodeURIComponent(taskId)}`,
+      { headers: { Authorization: `Bearer ${apiKey()}` } },
+      Math.max(1_000, Math.min(KIE_HTTP_TIMEOUT_MS, limite - Date.now())),
+    )
     const body = (await r.json().catch(() => null)) as { data?: unknown } | null
     const detail = parseImageTask(body?.data)
-    if (detail.state === 'success' && detail.imageUrl) return downloadImage(detail.imageUrl)
+    if (detail.state === 'success' && detail.imageUrl) return downloadImage(detail.imageUrl, limite)
     if (detail.state === 'fail') throw new Error(`Nano Banana falló: ${detail.failMsg ?? 'sin motivo'}`)
-    if (Date.now() > limite) throw new Error(`Nano Banana no devolvió la imagen en ${timeoutMs / 1000} s.`)
   }
 }
 
@@ -142,9 +153,11 @@ export async function generateImage(
  * igual: es el guard barato contra que una respuesta manipulada convierta esto en un
  * fetch a un recurso interno (`file:`, `http://` a la red privada).
  */
-async function downloadImage(url: string): Promise<Buffer> {
+async function downloadImage(url: string, limite = Date.now() + 60_000): Promise<Buffer> {
   if (!url.startsWith('https://')) throw new Error(`URL de imagen no es https: ${url}`)
-  const res = await fetch(url)
+  // La imagen pesa varios MB, así que se le da más margen que a una respuesta JSON — pero
+  // acotado por lo que quede del presupuesto, nunca sin tope.
+  const res = await fetchKie(url, {}, Math.max(5_000, Math.min(60_000, limite - Date.now())))
   if (!res.ok) throw new Error(`No se pudo descargar la imagen de KIE (${res.status})`)
   return Buffer.from(await res.arrayBuffer())
 }

@@ -110,6 +110,34 @@ export function buildTaskBody(input: VideoTaskInput) {
   }
 }
 
+/**
+ * Tope por petición HTTP. Crear una tarea o consultar su estado son respuestas JSON
+ * chicas: si una tarda más que esto, está colgada, no lenta.
+ */
+export const KIE_HTTP_TIMEOUT_MS = 30_000
+
+/**
+ * `fetch` con timeout. NO es una precaución teórica: `fetch` en Node no tiene timeout por
+ * defecto, y una conexión que el proveedor deja abierta sin responder cuelga el await
+ * para siempre.
+ *
+ * ⚠️ Lo rompió de verdad. El bucle de polling de `nano-banana.ts` comprobaba su
+ * presupuesto DESPUÉS del `await fetch`, así que un fetch colgado impedía que el tope de
+ * 240 s se evaluara nunca: el dev server quedó bloqueado con 0 % de CPU y una conexión
+ * ESTAB a api.kie.ai. En Vercel el síntoma sería distinto y peor de diagnosticar — la
+ * función muere en `maxDuration` con las tareas ya creadas y pagadas.
+ */
+export async function fetchKie(url: string, init: RequestInit = {}, timeoutMs = KIE_HTTP_TIMEOUT_MS): Promise<Response> {
+  try {
+    return await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) })
+  } catch (err) {
+    if (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')) {
+      throw new Error(`KIE no respondió en ${Math.round(timeoutMs / 1000)} s (${url.split('?')[0]})`)
+    }
+    throw err
+  }
+}
+
 function apiKey(): string {
   const key = process.env.KIE_API_KEY
   if (!key) throw new Error('KIE_API_KEY no está configurada')
@@ -118,7 +146,7 @@ function apiKey(): string {
 
 /** Crea la tarea de render. Devuelve el taskId; NO espera al video. */
 export async function createVideoTask(input: VideoTaskInput): Promise<string> {
-  const res = await fetch(`${VEO_BASE}/generate`, {
+  const res = await fetchKie(`${VEO_BASE}/generate`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey()}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(buildTaskBody(input)),
@@ -164,7 +192,7 @@ export function parseTaskDetail(data: unknown): TaskDetail {
 }
 
 export async function getTaskDetail(taskId: string): Promise<TaskDetail> {
-  const res = await fetch(`${VEO_BASE}/record-info?taskId=${encodeURIComponent(taskId)}`, {
+  const res = await fetchKie(`${VEO_BASE}/record-info?taskId=${encodeURIComponent(taskId)}`, {
     headers: { Authorization: `Bearer ${apiKey()}` },
   })
   const json = (await res.json().catch(() => null)) as { data?: unknown; msg?: string } | null

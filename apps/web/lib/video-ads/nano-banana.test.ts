@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { buildImageTaskBody, parseImageTask, generateImage, NANO_PROMPT_MAX } from './nano-banana'
 
 // Contrato con Nano Banana Pro (docs.kie.ai/market/google/pro-image-to-image). Va por el
@@ -59,3 +59,41 @@ describe('generateImage', () => {
       .rejects.toThrow(new RegExp(String(NANO_PROMPT_MAX)))
   })
 })
+
+/**
+ * ⚠️ COLGÓ EL DEV SERVER DE VERDAD. El bucle comprobaba su presupuesto DESPUÉS del
+ * `await fetch`, y `fetch` en Node no tiene timeout: una conexión que KIE dejó abierta
+ * sin responder impidió que el tope de 240 s se evaluara nunca. Proceso al 0 % de CPU,
+ * dormido, con una conexión ESTAB a api.kie.ai y el request del navegador colgado.
+ */
+describe('generateImage — no se puede colgar', () => {
+  it('el presupuesto se agota aunque KIE nunca conteste', async () => {
+    process.env.KIE_API_KEY = 'k'
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).includes('createTask')) {
+        return new Response(JSON.stringify({ code: 200, data: { taskId: 't1' } }), { status: 200 })
+      }
+      // recordInfo que no responde nunca — salvo por el AbortSignal que le pone `fetchKie`.
+      return new Promise<Response>((_res, rej) => {
+        init?.signal?.addEventListener('abort', () => rej(Object.assign(new Error('abort'), { name: 'TimeoutError' })))
+      })
+    }))
+    // Presupuesto corto para que el test sea rápido: lo que se prueba es que TERMINA.
+    await expect(generateImage({ prompt: 'x' }, { timeoutMs: 300, pollMs: 10 }))
+      .rejects.toThrow(/no devolvió la imagen|no respondió/)
+  })
+
+  it('un estado `fail` corta el bucle sin esperar al presupuesto', async () => {
+    process.env.KIE_API_KEY = 'k'
+    vi.stubGlobal('fetch', vi.fn(async (url: string) =>
+      new Response(JSON.stringify(
+        String(url).includes('createTask')
+          ? { code: 200, data: { taskId: 't1' } }
+          : { data: { state: 'fail', failMsg: 'content rejected' } },
+      ), { status: 200 })))
+    await expect(generateImage({ prompt: 'x' }, { timeoutMs: 60_000, pollMs: 5 }))
+      .rejects.toThrow(/content rejected/)
+  })
+})
+
+afterEach(() => vi.unstubAllGlobals())
