@@ -24,6 +24,17 @@ const FEATURES = [
 export function PricingSection() {
   // Sin link de Whop configurado la card no puede cobrar: manda a signup en vez
   // de dejar un botón muerto en producción.
+  //
+  // ⚠️ ponytail: PAGAR TODAVÍA NO DA ACCESO. El único gate del hub es
+  // LOGIN_ALLOWLIST (lista de emails por env var, en proxy.ts): nada escucha a
+  // Whop, así que un pago exitoso no habilita nada. NO pegues un
+  // WHOP_CHECKOUT_URL real en producción hasta que exista el webhook
+  // (payment.succeeded → tabla de entitlements) y que proxy.ts consulte esa
+  // tabla en vez de la allowlist. Nota de diseño para ese webhook: proxy.ts
+  // saca de "/" a los usuarios logueados, así que quien compra desde la landing
+  // es anónimo y NO tiene user_id de Supabase — la única clave de unión es el
+  // email que Whop recoge, y el flujo es pagar y después registrarse con ese
+  // mismo email.
   const checkoutUrl = process.env.WHOP_CHECKOUT_URL;
   const href =
     checkoutUrl ??
