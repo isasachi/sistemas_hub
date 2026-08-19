@@ -181,6 +181,53 @@ El corrector debe nombrar el `idHueco` que no se puede rellenar, y código verif
 
 ⚠️ **REGLA DE CONTEXTO ABSOLUTO.** El generador no recuerda el lote anterior, así que `buildLotePrompt` (mismo archivo, `lotes.ts`) repite ÍNTEGRAMENTE en cada lote el bloque de consistencia del personaje (`consistencyBlock`), la descripción del producto, el escenario, la iluminación y la cámara. Escribir "el mismo personaje" o "igual que en el Lote 1" produce otra persona — es exactamente el fallo que este diseño evita. `lotes.test.ts` (`'nunca usa referencias a lotes anteriores'`) verifica que frases como "el mismo personaje", "igual que en el Lote" o "mantener lo anterior" nunca aparezcan en el prompt final. El presupuesto de caracteres (`KIE_PROMPT_MAX = 4096`, y el detalle forense de un lote real puede llegar a ~6300 sin recortar) se administra DENTRO de `buildLotePrompt`, probando niveles de detalle decrecientes: primero sin repetir el overlay por toma, luego **sin el bloque global `GUION DE LOCUCIÓN FINAL`**, luego truncando `accionVisual`. El bloque de consistencia, el producto, el escenario, la cámara y **la línea `Locución:` de cada toma** nunca se recortan.
 
+⚠️ **EL PRESUPUESTO DE PROMPT SE ESTABA COMIENDO LA COREOGRAFÍA, que es justo lo que el usuario pidió que se copie.** Reportado como *"necesitamos que sea excesivamente detallado con los movimientos"* y *"que se copie el plano en el que aparece la persona"*. Medido sobre los `lotes` guardados: las dos sesiones más recientes (`30ff55d6`, `6a1e6157`) truncan `accionVisual` en **todos** sus lotes — en el lote 1 de `30ff55d6` las cinco tomas pedían 1332 caracteres de acción y recibían ~78 cada una, cortadas a mitad de palabra (*"…con ambas manos,…"*): se tiraba el 71 % del movimiento. El prompt de FASE 1 ya pide la coreografía con todo el detalle (qué mano, cómo agarra, cuándo entra y sale el producto del cuadro); el problema no era pedirla, era que no cabía. Tres cambios, medidos sobre esa sesión real (coreografía conservada en el lote 1: **29 % → 46 %**):
+
+1. **`NIVEL_OVERLAY_COMPACTO`**, un escalón de degradación nuevo que comprime el párrafo de overlay a tres líneas ANTES de truncar `accionVisual`. Ese párrafo son quince sinónimos de la misma orden (*captions, subtítulos, títulos, lower thirds, banners, stickers, emojis, flechas, callouts…*); `accionVisual` es el único texto del prompt que dice qué hace el cuerpo. La búsqueda binaria del piso corre ahora sobre este nivel, no sobre `NIVEL_SIN_GUION_GLOBAL`.
+2. **La duración de la toma se imprime con `r1`.** Llegaba cruda: `### Toma 1 — 0.8854477611940298 s`. Son ~14 caracteres de ruido por toma en un presupuesto que ya trunca movimiento, y además una precisión que el render no tiene (`clampDuration` le pide a KIE un entero).
+3. **El plano se anuncia POR TOMA cuando el lote mezcla más de uno.** `camaraDeLote` deduplica y concatena los planos del lote en UN string, y esa línea era todo lo que el render sabía del encuadre. Con un plano alcanza; con dos es ambigua por construcción: en el lote 1 de `30ff55d6` las tomas 1–2 son *"Plano medio frontal"* y las 3–5 *"Primer plano del rostro y parte del pecho"*, y al generador le llegaba `Plano medio frontal · Primer plano…` sin forma de saber cuál va con cuál. `buildLotePrompt` recibe ahora `cortes` (opcional) y empareja por `tiempoOriginal`, **no por `n`**, por el mismo motivo que `camaraDeLote`.
+
+⚠️ **Los dos recortes de la regla 3 son obligatorios y están medidos, porque este presupuesto se lo quita a la coreografía.** Emitir el plano en las cinco tomas costaba ~285 caracteres y hundía la coreografía del 54 % al 33 % — o sea arreglaba el encuadre rompiendo el movimiento, las dos mitades de la misma queja. Por eso: (a) solo si hay ≥2 planos distintos en el lote, y (b) solo cuando el plano **cambia** respecto de la toma anterior — un shot list se lee así, el plano vale hasta que se anuncia otro. Cuando se emite no se suelta en ningún nivel de degradación, mismo argumento que la `Locución:`.
+
+⚠️ **Esto bumpea `scriptFingerprint` a `'v3'`** (v2 → v3): la huella hashea los INSUMOS de `buildLotePrompt`, no el texto que produce, así que un cambio de plantilla es invisible para ella y reanudar a través del cambio pegaría un lote con el prompt viejo a uno con el nuevo. Los parciales anteriores pasan a contar como generación nueva, fail-closed.
+
+⚠️ **EL TOPE DE 4096 NO ERA EL CUELLO DE BOTELLA — el 85 % del prompt son bloques fijos, y el más grande describe algo que el modelo ya ve.** Verificado contra el schema del modelo (`docs.kie.ai/market/grok-imagine/1-5-preview`): 4096 es tope duro y no se sube. Pero medido sobre `30ff55d6`, de 4096 caracteres la coreografía recibía 608 y los bloques fijos 3488. El más caro es **PRODUCTO: 677 caracteres del scan transcribiendo la etiqueta entera** (*"SÉRUM FACIAL CON VITAMINA C"*, *"PARA PIEL GRASA"*, *"Ilumina • Unifica • Antioxidante"*, *"30 ml / 1.01 fl oz"*) mientras el envase viaja como `@image(2)` en TODOS los lotes y el prompt ya ordena reproducirlo idéntico. Es contarle en palabras lo que está viendo en píxeles, y se paga con el único texto que dice qué hace el cuerpo.
+
+`NIVEL_PRODUCTO_FISICO` es el escalón que recorta esa descripción a su parte física (las dos primeras oraciones + *"el resto de la etiqueta se lee de su imagen"*) justo antes de truncar la coreografía. Medido, mismo contenido: **lote 1 46 % → 84 %, lote 2 34 % → 69 %**.
+
+Palancas medidas sobre esa misma sesión, para cuando haga falta más:
+
+| palanca | lote 1 | lote 2 | costo |
+|---|---|---|---|
+| antes de todo esto | 29 % | ~29 % | — |
+| overlay compacto + `r1` + plano por toma | 46 % | 34 % | $0 |
+| **+ producto físico (hoy)** | **84 %** | **69 %** | $0 |
+| + bloque de personaje recortado | 96 % | 77 % | riesgo de deriva de identidad |
+| mitad de tomas por lote | 85 % | 100 % | **2× llamadas pagadas** |
+
+⚠️ El recorte del **personaje** NO se aplicó aunque mide bien: el bloque de consistencia es lo único que sostiene que el lote 1 y el lote 3 sean la misma persona (REGLA DE CONTEXTO ABSOLUTO), y su imagen va adjunta pero la deriva de identidad es el fallo que este diseño entero existe para evitar. Recortarlo es cambiar el seguro por 12 puntos de coreografía; hace falta medirlo en renders reales antes, no en caracteres.
+
+⚠️ **El otro modelo del marketplace acepta 5000 caracteres, y la nota de arriba sobre por qué se descartó está mal.** `grok-imagine/image-to-video` admite prompt de 5000 (+22 %) y **duración 6–30 s**, no 15 — o sea la línea *"se descartó porque topa en 15s por llamada"* no describe a este modelo. Que acepte 30 s no ayuda a la fidelidad por sí solo (un lote más largo mete más tomas compitiendo por el mismo prompt), pero los 5000 caracteres sí, y el reparto en lotes cambiaría de forma. Cambiar `MODEL` obliga a revisar el bloque entero de reglas de `kie.ts` — no es un cambio de string.
+
+⚠️ **UN LOTE ES UN CLIP CONTINUO Y NO PUEDE CONTENER UN CAMBIO DE PLANO — esa era la causa real de "no copia el encuadre", y no el prompt.** Se llegó por descarte, con renders reales. Primero se anunció el plano POR TOMA (arriba): la información llegaba correcta al prompt y **el clip salió igual entero en plano medio**. El lote 1 de `30ff55d6` pedía "Plano medio" en las tomas 1–2 y "Primer plano del rostro" en la 3; el lote 2 era peor, **cuatro encuadres** (primer plano rostro+pecho → rostro+cuello → plano medio → plano general) en un solo clip de 15 s. Cada lote se renderiza de una sola pasada: pedirle dos encuadres es pedirle un corte de montaje dentro de un plano-secuencia, y devuelve uno de los dos.
+
+`groupIntoLotes` acepta ahora un `planoPorTiempo` OPCIONAL y cierra el lote donde cambia el encuadre, además de donde se pasa de 15 s. Sin el mapa se comporta exactamente como antes — quien llama decide, porque **esto cuesta plata**. Y no es una regla nueva: FASE 1 ya define la unidad como el CORTE REAL y el entregable son N clips independientes, así que el corte cae naturalmente ENTRE clips, que es donde el montaje lo pone. Un lote que abarca dos planos no es un lote de menos, es un corte perdido.
+
+**Verificado con un render real** del lote de "Primer plano frontal del rostro y cuello": encuadre cerrado de rostro y cuello, contra el plano medio (de cintura para arriba, con todo el fondo) que devolvía el mismo contenido dentro del lote de cuatro planos.
+
+Efecto medido sobre `30ff55d6`, el mismo contenido:
+
+| | lotes | planos por lote | coreografía |
+|---|---|---|---|
+| sin frontera | 2 | 2 y 4 | 85 % |
+| **con frontera** | **5** | **1** | **100 %** |
+
+⚠️ **El costo es 2,5× llamadas pagadas en ESE video** y depende del original: uno sin cortes sigue dando un lote. La cuota per-step no cambia (`video-generation` topa por VIDEO, no por lote), pero cada lote sigue registrando `video-render` y contando al backstop diario global. La huella no necesita bump: el número de lotes y las tomas de cada uno ya entran en `scriptFingerprint`, así que un reparto distinto da huella distinta y `isPaidResume` falla cerrado solo.
+
+⚠️ **Y el encuadre NO queda cerrado del todo: `camaraFallback` sigue mandando el plano del corte 1 a todos los lotes.** En `generate-lotes/route.ts`, `camaraFallback = cortes[0]?.camara` es lo que se usa cuando ningún `tiempoOriginal` empareja — o sea exactamente el bug que `camaraDeLote` existe para arreglar, entrando por la puerta del fallback. El plano por toma degrada bien ahí (sin emparejamiento no hay planos, no se emite ninguna línea), pero la línea global `CÁMARA:` sigue afirmando algo falso. Es previo a este cambio y no se tocó.
+
+⚠️ **Lo que esto NO arregla: 4096 caracteres siguen siendo pocos para 5 tomas de detalle forense.** Aun con las tres mejoras el lote 1 conserva el 46 % de la coreografía. El resto del margen no está en el prompt sino en el REPARTO: `groupIntoLotes` llena hasta 15 s sin mirar cuánta coreografía implica, y un lote de 3 tomas entraría entero. Bajar el tope significa más lotes y **cada lote es una llamada pagada** — es decisión del dueño del repo, no un efecto colateral que se pueda tomar acá.
+
 ⚠️ **La `Locución:` por toma NO se suelta jamás, y el orden de degradación existe por eso.** La versión anterior la soltaba primero, razonando que duplicaba el bloque global. Es falso: el bloque global trae el TEXTO, la línea por toma trae la ALINEACIÓN — qué frase va con qué acción y en cuántos segundos. Se comprobó en la sesión `79b94ab9`: el lote 1 llegó a 4095/4096 caracteres y perdió la línea por toma; los lotes 2–4 la conservaron. El primer clip recibió un párrafo de 263 caracteres sin ninguna pista de cómo repartirlo entre sus cuatro tomas y el resto sí la tuvo — el dueño del repo lo describió como *"una habla muy rápido y la otra muy lento, no hay consistencia"*. Ahora se suelta primero el bloque global, que sale del mismo texto que las líneas por toma (soltarlo no pierde ni una palabra, solo deja de repetirlas juntas). Cada prompt también incluye `TEXTO / OVERLAY: NINGUNO` explícito (nada de subtítulos, watermarks ni UI) — la contraparte de render de la regla de FASE 1 que separó `elementosGraficos`.
 
 ⚠️ **Huella de contenido al reanudar (`lib/video-ads/render-lotes.ts`): `resume` es la intención del cliente, no el permiso para saltarse la cuota.** `Section6Lotes` manda `resume: true` tanto para "reintentar" un render que quedó a medias (lote falló, la llamada se cortó) como para "generar de nuevo" después de volver a un paso anterior y re-adaptar el guión, el personaje o la voz — el mismo flag para dos intenciones distintas. El servidor, no el cliente, decide con la huella si eso es realmente una reanudación gratis: `scriptFingerprint` (SHA-256 sobre un texto canónico, no `JSON.stringify` porque Postgres reordena claves jsonb) hashea TODO lo que entra en el prompt — bloque de consistencia, descripción del producto, escenario, **la cámara de cada lote** (una por lote, con su largo delante: dos repartos distintos de los mismos planos tienen que dar huellas distintas), perfil de voz completo, URLs+roles de las imágenes, y cada toma de cada lote — deliberadamente más ancho que "el guión adaptado": re-hacer FASE 4/4.5 cambia la persona que el modelo genera, y un resume a través de ese cambio pegaría un lote con la identidad vieja y otro con la nueva. `isPaidResume(resume, existentes, base, huella)` solo devuelve `true` si `resume` es true, ya hay al menos un `taskId` pagado, el número de lotes no cambió, y **todos** los lotes guardados llevan la huella actual — sesiones legadas sin `scriptHash` (`null`) fail-closed: nunca se reanudan gratis. ⚠️ La huella hashea los **insumos** de `buildLotePrompt`, no el texto que produce: un cambio en la plantilla del prompt es invisible para ella, y reanudar a través de ese cambio pegaría un lote renderizado con el prompt viejo a uno con el nuevo mientras `isPaidResume` jura que es el mismo contenido. Por eso el texto canónico arranca con una **versión** (`'v2'` hoy; v1 → v2 al agregar continuidad, el rótulo de iluminación y la cámara por lote) — **tocar la plantilla del prompt obliga a bumpearla**, y los parciales viejos pasan a contar como generación nueva, fail-closed igual que las sesiones sin `scriptHash`. Cuando NO es una reanudación real, `generate-lotes/route.ts` responde **409** (`existentes.some(taskId) && !resume`, o el claim atómico `claimFreshLotes` que falla) en vez de dejar crear tareas duplicadas sobre lotes ya pagados.
@@ -236,6 +283,96 @@ Se apoya en `alignSlots`, que reconstruye qué texto del diálogo ocupaba cada h
 **Gate de assets verticales (bloqueante, `upload-client.ts` + `Section0Reference`).** El video de referencia se mide en el browser antes de subir y el wizard **no deja continuar** si es apaisado — el output es 9:16 y una fuente horizontal lo arruina río abajo. El criterio es `alto > ancho`, **no** 9:16 exacto: si la medición falla (HEIC, códec raro) **pasa igual** — dejar al usuario encerrado por un formato que el browser no decodifica es peor que un video horizontal. La foto de personaje en `Section2Character` pasa por el mismo chequeo de verticalidad; el product image NO se valida por ratio.
 
 **Descarga y miniatura.** Cada clip en `Section6Lotes` se descarga con `?download=lote-N.mp4` sobre la URL de Supabase, no con el atributo `download` nativo a solas: el mp4 vive en el bucket (cross-origin) y el browser lo ignora, así que abría el video en otra pestaña. Supabase responde `content-disposition: attachment` con el query param (verificado por `curl -I`). En el dashboard, la card de una sesión usa **`video_url`** como miniatura — que ya NO es "el video final" sino **el primer lote que terminó de renderizar** (`lote-status/route.ts` lo estampa apenas hay un `videoUrl` en `lotes`, sea el primero, el segundo o cualquiera que termine antes) — y el browser pinta su primer frame (`#t=0.1`, porque muchos mp4 abren en negro); no hay póster generado, no hay ffmpeg en `apps/web`. `ProjectHistory` distingue video de imagen por `.mp4` en la URL; si `video_url` es null (nada terminó aún, o el mirror al bucket propio falló y sigue siendo una URL de KIE que no matchea `.mp4`) cae al still del personaje o del producto. `done` en el GET de `/sessions` es `!!r.render_done` (**no** `!!r.video_url`, que solo dice "al menos un lote terminó"): `render_done` es una columna cacheada con la MISMA fórmula que usa `lote-status` (`renderDone`, `lib/video-ads/render-lotes.ts` — "TODOS los lotes tienen video o fallaron explícito"), escrita en el mismo `update` que ya toca `lotes` cada vez que `lote-status` o `generate-lotes` persisten. Se cachea (en vez de que `listVideoSessions` seleccione `lotes` y calcule ahí mismo) para no arrastrar el jsonb de `lotes` —con el `prompt` de cada uno, miles de caracteres— en una lista de 24 filas.
+
+### Nichos (`lib/video-ads/niches.ts`) — ropa y zapatos
+
+⚠️ **EN ROPA Y ZAPATOS EL PRODUCTO Y EL VESTUARIO SON EL MISMO OBJETO, y hoy eran dos campos que se contradecían dentro del mismo prompt.** El pipeline nació asumiendo un producto que el personaje SOSTIENE. Con una prenda: (1) `bloqueConsistencia` describe el vestuario —copiado del video original— y viaja íntegro a cada lote junto a `productDesc`, o sea el prompt afirma *"viste camiseta rosa"* y *"el producto es una blusa crema"* en el mismo texto; (2) el prompt que genera el avatar pide explícitamente *"sin el producto en el encuadre"*, que para ropa es justo al revés.
+
+Por eso `NicheSpec.wornProduct` es el ÚNICO eje que conoce el código, y no una lista de features por nicho: es la diferencia que el pipeline necesita saber. Lo demás (rótulo del bloque de producto, nota del avatar, hint de la UI) cuelga de ese eje.
+
+- **La prenda entra por el slot de producto que ya existe** (decisión del dueño del repo): en ropa esa foto ES la prenda. Cero UI nueva salvo el chip, cero columna nueva salvo `niche`.
+- **El nicho se elige, no se detecta** (chip en `Section1Product`, persistido en el mismo POST de `analyze-product`): cuando una detección automática se equivoca, el video sale mal y el usuario no tiene dónde corregirlo.
+- **El avatar NACE con la prenda puesta.** `character/route.ts` manda la foto del producto como imagen tanto al análisis de identidad como a `openaiGenerateImage` (que usa `images.edit` cuando hay imágenes, así que genera A PARTIR de la prenda real). Así `@image(1)` ya la trae y el bloque de consistencia la describe: **el mismo mecanismo que mantiene la identidad entre lotes mantiene la ropa**. La alternativa —vestirlo en cada lote— es virtual try-on repetido N veces sin memoria, o sea una prenda distinta por clip.
+- `toNiche` normaliza todo lo desconocido a `'suplementos'`, y la columna nació con ese default: **toda sesión anterior se comporta exactamente igual**. Cubierto por tests.
+- `scriptFingerprint` incluye `niche`: cambia la plantilla del prompt y el bloque de consistencia, así que sin él cambiar el chip y re-renderizar dejaría la misma huella con otro prompt.
+
+⚠️ **EL FORMATO DE ROPA ES UN MONTAJE RÁPIDO, y eso choca de frente con la frontera de plano.** Medido sobre un UGC de ropa real de 28 s (`ssstik.io_@micasilva.ph`): el forense reporta **29 cortes de ~1 s**, con **9 planos distintos que se repiten** (cuerpo entero → plano medio → macro de puño → detalle de cintura → plano cenital → trasero…) y la secuencia se repite entera para la segunda variante de color de la prenda. `ffmpeg` con detección de escena encuentra **cero** cortes a umbral 0.3 y 0.15: misma pared, misma persona, mismo encuadre-familia entre cortes. O sea el corte es real y no se detecta por delta de píxeles — el forense sí lo ve.
+
+Con eso, `groupIntoLotes` da:
+
+| | lotes | qué pasa |
+|---|---|---|
+| sin frontera de plano | **2** (15 s + 14 s) | ~14 planos por clip: el encuadre no se copia (medido en el render del serum) |
+| con frontera de plano | **24** (1–2 s cada uno) | fiel al montaje, **12× llamadas pagadas**, y clips de 1 s |
+
+⚠️ **LA DEL MEDIO SE MIDIÓ Y NO EXISTE PARA EL ENCUADRE.** `groupIntoLotes` acepta `maxPlanos` (default 1) para admitir K encuadres por clip. Medido sobre los dos videos reales:
+
+| K | ropa: lotes | ropa: lotes con encuadre ambiguo | ropa: coreografía | suero: lotes |
+|---|---|---|---|---|
+| sin frontera | 2 | 2 de 2 | **25 %** | 2 |
+| **1** | **24** | **0** | **100 %** | **5** |
+| 2 | 12 | 11 de 12 | 100 % | 3 |
+| 3 | 7 | 7 de 7 | 100 % | 3 |
+| 4 | 6 | 5 de 6 | 100 % | 2 |
+| 6 | 4 | 4 de 4 | 74 % | 2 |
+
+Con K=2 **once de doce lotes vuelven a tener dos encuadres**, y ya está comprobado con renders reales que un clip con dos planos se renderiza con uno solo. O sea K>1 no es un punto medio del encuadre: es la opción barata con pasos de más. Lo que K sí compra de verdad es la **coreografía en ropa**: sin frontera cae a 25 % (15 tomas en un solo prompt), y con K=3–4 se mantiene en 100 % a 3,5× de costo en vez de 12×.
+
+El menú real, entonces, es de dos ejes y no de uno:
+
+- **K=1** — 24 clips, encuadre y coreografía perfectos, **12× llamadas pagadas**.
+- **K=3** — 7 clips, coreografía 100 %, **encuadre perdido**, 3,5×.
+- **sin frontera** — 2 clips, encuadre perdido Y coreografía al 25 %: peor que las dos anteriores en todo salvo el precio.
+
+`maxPlanos` se queda en **1** por defecto: cambiarlo es una decisión de plata, no un default.
+
+⚠️ **LA SALIDA REAL NO ERA AGRUPAR MEJOR, ERA FUSIONAR LOS MICRO-CORTES (`mergeMicroCortes`, forensic.ts).** El costo del video de ropa no venía del agrupamiento sino de la granularidad del original: 29 cortes de ~1 s, y con la frontera de plano cada corte abre su propio lote, o sea su propia llamada pagada. Un corte de 1 s tampoco es una toma que el generador pueda producir con sentido — `MIN_DURATION` de KIE es 1 s y ahí sale una pose congelada, no una acción.
+
+`mergeMicroCortes` fusiona cada micro-corte con su vecino hasta que toda toma llega a `MIN_TOMA_SEG` (3 s). **Domina a `maxPlanos` en el mismo presupuesto**, medido sobre el mismo video:
+
+| estrategia | clips | encuadre | coreografía |
+|---|---|---|---|
+| `maxPlanos = 3`, sin fusión | 7 | **perdido** (7 de 7 ambiguos) | 100 % |
+| **fusión a 3 s + `maxPlanos = 1`** | **7** | **1 encuadre por clip** | **92 %** |
+
+Mismo número de clips, mismo costo, y el encuadre funciona. La diferencia es la honestidad del prompt: con `maxPlanos > 1` el clip recibe dos encuadres y el modelo renderiza uno —el otro se pierde en silencio—; con la fusión los dos cortes se vuelven UNA toma con UN encuadre declarado y la acción de ambos encadenada, o sea el prompt describe algo que el modelo sí puede hacer. Lo que se descarta (el encuadre del corte más corto) queda en `Fusion`, no desaparece.
+
+Umbral medido sobre los dos videos (cortes → lotes · coreografía):
+
+| `minSeg` | ropa (29 cortes) | suero (10 cortes) |
+|---|---|---|
+| sin fusión | 29 → **24** lotes · 100 % | 10 → 5 lotes · 100 % |
+| 2 s | 8 → 8 · 92 % | 9 → 5 · 100 % |
+| **3 s (default)** | **7 → 7 · 92 %** | **5 → 4 · 100 %** |
+| 4 s | 5 → 5 · 92 % | 5 → 4 · 100 % |
+| 5 s | 3 → 3 · **82 %** | 3 → 3 · 100 % |
+
+Reglas, todas deliberadas: se fusiona el corte **más corto del video** (no de izquierda a derecha, así el resultado no depende del recorrido); lo absorbe el **vecino más corto** (para no terminar con una toma gigante y varias en el piso); el encuadre y la transición que sobreviven son los del **corte más largo** (un flash de 0,5 s no debe decidir el plano de toda la toma); diálogo y acción se **concatenan**, así que no se pierde texto y el ritmo en caracteres por segundo no se altera. Idempotente por construcción — sin eso, dos pasadas darían dos listas de cortes y por tanto dos huellas distintas para el mismo contenido.
+
+⚠️ **Se compone con `repairCutTiming`, y en ese orden.** Unir dos diálogos mete un espacio: suma un carácter sin sumar duración, así que un corte que estaba justo en el techo queda apenas por encima (medido: 20,6 cps). Recronometrar después lo devuelve a 20,0.
+
+⚠️ **NO SE FUSIONA A TRAVÉS DE UN PLANO SIN PERSONA (`muestraPersona`).** Un plano de producto y uno de persona no se pueden encadenar sin un corte, así que cada clase se fusiona solo con la suya. La detección es por palabras y no por LLM a propósito: un falso negativo (no reconocer a la persona) solo hace que ese corte no se fusione — o sea el comportamiento anterior a la fusión, que es seguro—, mientras que un clasificador cuesta plata y puede alucinar. **Verificado con un render real**: el lote de persona fusionado (11 s, dos cortes encadenados) salió como **una toma continua**, mismo fondo y misma luz, con la modelo girando de frente → perfil → espalda → frente y el plumeti intacto todo el clip. Cero cortes internos, cero flat-lay intruso.
+
+Efecto sobre la sesión de ropa: **29 cortes → 7 lotes**, dos de ellos los flat-lays aislados (1,18 s y 1,06 s, que rinden clips de 1 s). Un flat-lay solo entre planos de persona se queda corto y solo, y eso es lo correcto: es una toma distinta, y meterla dentro de otra corrompe las dos.
+
+⚠️ **El piso de `repairCutTiming` es un SUELO contra el vaciado, no un empujón hacia arriba.** El mínimo se acota a la duración que el corte ya tiene (`Math.min(minVisibleSeg, dur[i])`). Sin ese acote, un corte que la fusión dejó corto a propósito —justamente un flat-lay aislado— se inflaba hasta el piso y el anuncio entero crecía con él: medido, los 28 s del original se iban a **41,8 s**. Con el acote quedan 35,6 s, y lo que queda de crecimiento es el caso legítimo (diálogo que no entra en su corte).
+
+⚠️ **UN CORTE MUDO ES HOLGURA PURA, Y EL REPARTO LO VACIABA.** `repairCutTiming` calculaba el mínimo de cada corte solo desde su diálogo, así que un corte sin diálogo tenía mínimo 0 y podía donar TODA su duración para financiar a los que no entran. Medido en la sesión real de ropa, después de fusionar a 3 s: las dos tomas de cierre —las únicas mudas— quedaron en **0,91 s y 1,27 s**, o sea el reparto deshizo justo lo que la fusión acababa de garantizar, y esos dos clips de 1 s son dos llamadas pagadas por un plano congelado. Ahora acepta `minVisibleSeg` (default **0**, para no cambiar el comportamiento de ningún caller existente) y `extract-template` le pasa `MIN_TOMA_SEG` después de fusionar. Post-fix, misma sesión: 3,21 s y 4,49 s.
+
+⚠️ **Corre en `extract-template` y SOLO si la sesión no tiene guión adaptado todavía.** A diferencia de `repairCutTiming`, fusionar **sí cambia `tiempo`** — el tramo abarca los dos cortes — y `tiempo` es lo que `adapt-script` copió a `tiempoOriginal`, con lo que `camaraDeLote` empareja y lo que entra en `scriptFingerprint`. Hacerlo sobre una sesión ya adaptada desalinearía el guión con los cortes en silencio, que es exactamente lo que la reparación evita por no tocar ese campo. Si ya hay guión, la lista de cortes está comprometida.
+
+⚠️ **No está atado al nicho a propósito.** Un corte de 1 s es igual de irrenderizable en suplementos, y en el video de suero la fusión baja de 5 a 4 lotes conservando el 100 % de la coreografía — o sea es más barato sin costar fidelidad. Atarlo a `ropa` sería suponer que el problema es del nicho cuando es de la granularidad.
+
+✅ **VERIFICADO CON UN RENDER REAL end-to-end de ropa** (sesión `430c5961`, blusa de plumeti de ARTURO CALLE sobre el UGC de `@micasilva.ph`): 29 cortes → **6 lotes**, los 6 renderizaron 720×1280 9:16. Lo que funcionó y lo que no:
+
+- ✅ **El avatar nació con la blusa puesta**, y con la prenda exacta: mismo celeste, mismo plumeti azul marino, escote en V y mangas de doble volante, con pantalón neutro. El `bloqueConsistencia` describe la blusa como vestuario (*"Viste una blusa celeste de cuello en V con pequeños puntos cuadrados irregulares…"*), que es lo que la sostiene entre lotes.
+- ✅ **La fusión bajó el render de 24 a 6 llamadas pagadas.**
+- ⚠️ **Una toma fusionada de acciones HETEROGÉNEAS salía con cortes internos — ARREGLADO.** El lote 1 encadenó cuatro cortes con "Luego," e incluía un **flat-lay** (la blusa extendida, sin persona) entre dos planos de la modelo; el render hizo exactamente eso: tres sub-tomas con fondos distintos (pared, suelo de baldosas, sala con sofá). **El render era fiel al prompt — el problema era el prompt**, que pedía un montaje dentro de un clip mientras el bloque `CONTINUIDAD` promete que nada cambia. Ver `muestraPersona` abajo.
+- ⚠️ **En 1 de 6 clips (el lote 4) la blusa perdió el plumeti** y salió celeste lisa. Deriva del modelo, no del prompt.
+
+⚠️ **El piso de la fusión obliga a que la reparación de tiempos también lo respete, y eso ALARGA el anuncio.** Ver `repairCutTiming(report, minVisibleSeg)` abajo: en esta sesión el total pasó de 28 s a 34,6 s porque las dos tomas mudas de cierre no cabían en su duración original una vez impuesto el piso de 3 s. Es el mismo caso que "el texto entero no entra": el único en que `duracionTotalSeg` crece.
+
+⚠️ **Y el `vestuario` del forense se le queda chico a la ropa.** `ForensicReportSchema.vestuario` es `z.string()`, pero con este video Gemini devolvió espontáneamente un **array de objetos** (`{prenda, colores, tejidosVisibles, joyeria, maquillaje, detalles}` ×4, incluidas las DOS variantes de color de la misma camisa). El schema lo coacciona a string, así que no rompe — pero la estructura que el modelo quiere dar existe y hoy se aplana. Relacionado: `CONTINUIDAD` congela `producto` y `vestuario` por clip, así que una referencia que muestra la misma prenda en dos colores necesita que cada variante caiga en su propio lote (hoy ocurre por accidente, porque son tramos distintos del video, no por una regla).
 
 **Schema:** `supabase/migrations/20260810000001_video_sessions.sql` (base de video_sessions) + `20260812000001_video_spec_rewire.sql` (columnas de INPUTS y VALIDATION) + `20260812000002_video_lotes.sql` (columnas de FASE 3/4/4.5/5: `adapted`, `character_prompt`, `consistency_block`, `voice_profile`, `lotes` jsonb) + `20260812000003_video_render_done.sql` (columna `render_done`, cacheada para el dashboard).
 

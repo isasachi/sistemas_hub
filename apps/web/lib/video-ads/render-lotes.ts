@@ -107,6 +107,9 @@ export function scriptFingerprint(input: {
   camaras: string[]
   voz: VoiceProfile
   images: LoteImage[]
+  /** Nicho: cambia el rótulo del bloque de producto y el bloque de consistencia. Sin
+   *  esto, cambiar el chip y re-renderizar deja la huella igual con otro prompt. */
+  niche?: unknown
 }): string {
   const { lotes, consistencyBlock, productDesc, escenario, camaras, voz, images } = input
   const campos: string[] = [
@@ -122,7 +125,12 @@ export function scriptFingerprint(input: {
     // incoherencia que la huella existe para evitar, entrando por una puerta que no
     // vigila. Con el bump, esos parciales cuentan como generación nueva: fail-closed,
     // igual que las sesiones legadas sin `scriptHash`.
-    'v2',
+    //
+    // v2 → v3: misma razón. La plantilla cambió otra vez — el plano por toma cuando el
+    // lote mezcla más de uno, la duración de la toma redondeada a 1 decimal y el nivel
+    // de degradación que comprime el párrafo de overlay antes de truncar la coreografía.
+    'v3',
+    String(input.niche ?? ''),
     consistencyBlock, productDesc, escenario,
     voz.idioma, voz.varianteRegional, voz.acento, voz.pronunciacion, voz.ritmo,
     voz.velocidad, voz.entonacion, voz.energia, voz.pausas, voz.tono, voz.timbre,

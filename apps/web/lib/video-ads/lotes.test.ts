@@ -363,3 +363,221 @@ describe('buildLotePrompt', () => {
       .toThrow(new RegExp(String(KIE_PROMPT_MAX)))
   })
 })
+
+/**
+ * El plano POR TOMA y el presupuesto que lo paga.
+ *
+ * `camaraDeLote` deduplica y concatena los planos del lote en un solo string; con dos
+ * planos distintos esa línea no dice cuál va con cuál, y de ahí sale "no copió el plano
+ * en el que aparece la persona". Pero cada carácter que gasta se lo quita a
+ * `accionVisual`, que es lo ÚNICO que se trunca bajo presión de presupuesto y la otra
+ * mitad de la misma queja ("que se copien los movimientos exactos").
+ */
+describe('buildLotePrompt — plano por toma', () => {
+  const DOS_PLANOS = [
+    { tiempo: 't1', camara: 'Plano medio frontal, estático' },
+    { tiempo: 't2', camara: 'Plano medio frontal, estático' },
+    { tiempo: 't3', camara: 'Primer plano del rostro' },
+  ]
+  const conT = (n: number, dur: number, tiempo: string): TomaFinal => ({ ...toma(n, dur), tiempoOriginal: tiempo })
+  const lote = groupIntoLotes([conT(1, 4, 't1'), conT(2, 4, 't2'), conT(3, 4, 't3')])[0]
+
+  it('anuncia el plano solo cuando CAMBIA — no en cada toma', () => {
+    const p = buildLotePrompt({ lote, ...ARGS, cortes: DOS_PLANOS })
+    expect([...p.matchAll(/^Cámara: /gm)]).toHaveLength(2)
+    expect(p).toContain('Cámara: Plano medio frontal, estático')
+    expect(p).toContain('Cámara: Primer plano del rostro')
+  })
+
+  it('no gasta presupuesto cuando todo el lote comparte un plano — la línea global ya lo dice', () => {
+    const unSoloPlano = DOS_PLANOS.map((c) => ({ ...c, camara: 'Plano medio' }))
+    const p = buildLotePrompt({ lote, ...ARGS, cortes: unSoloPlano })
+    expect(p).not.toMatch(/^Cámara: /m)
+    // La línea global (que viene por `camara`, ya deduplicada por `camaraDeLote`) sigue ahí.
+    expect(p).toContain(`CÁMARA: ${ARGS.camara}`)
+  })
+
+  it('sin cortes se comporta como antes (sesiones y callers que no los pasan)', () => {
+    expect(buildLotePrompt({ lote, ...ARGS })).not.toMatch(/^Cámara: /m)
+  })
+})
+
+describe('buildLotePrompt — presupuesto de la coreografía', () => {
+  // `duracionSeg` sale de un reparto proporcional: llegaba cruda al prompt como
+  // "Toma 1 — 0.8854477611940298 s" (medido en la sesión 30ff55d6). Es ruido en un
+  // presupuesto que ya trunca movimiento, y una precisión que el render no tiene.
+  it('no imprime la duración con la basura del float', () => {
+    const [l] = groupIntoLotes([toma(1, 0.8854477611940298, 'Probé.')])
+    const p = buildLotePrompt({ lote: l, ...ARGS })
+    expect(p).toContain('### Toma 1 — 0.9 s')
+    expect(p).not.toContain('0.8854477611940298')
+  })
+
+  // El párrafo de overlay son quince sinónimos de la misma orden; `accionVisual`
+  // describe qué hace el cuerpo. Bajo presión se comprime el primero ANTES de cortar
+  // el segundo — antes se cortaba el movimiento con el párrafo largo intacto.
+  it('comprime el párrafo de overlay antes de truncar el movimiento', () => {
+    const coreografia = 'Levanta el frasco con la mano derecha hasta la altura del mentón, lo gira un cuarto de vuelta para que la etiqueta quede al frente y mira a la cámara. '.repeat(3)
+    const lote = groupIntoLotes(Array.from({ length: 6 }, (_, i) => ({
+      ...toma(i + 1, 2, `Frase ${i + 1} del guión adaptado que dice bastante.`),
+      accionVisual: coreografia,
+    })))[0]
+    const p = buildLotePrompt({ lote, ...ARGS })
+    expect(p.length).toBeLessThanOrEqual(KIE_PROMPT_MAX)
+    // La versión comprimida está, la larga no.
+    expect(p).toContain('TEXTO / OVERLAY: NINGUNO.')
+    expect(p).not.toContain('lower thirds')
+    // …y ese espacio fue a parar a la coreografía: sigue habiendo movimiento real.
+    expect(p).toContain('Levanta el frasco con la mano derecha')
+  })
+})
+
+// El plano por toma vive en el mismo array que `Locución:` y `capAccion` solo recorta
+// `accionVisual`, así que debería sobrevivir al piso — pero eso es un razonamiento sobre
+// el código, no una medición. Este test lo fuerza: coreografía enorme, presupuesto al
+// límite, y el prompt igual tiene que entrar Y conservar los dos anuncios de plano.
+describe('buildLotePrompt — el plano sobrevive a la degradación', () => {
+  it('conserva los anuncios de plano incluso cuando la coreografía se trunca al piso', () => {
+    const conT = (n: number, dur: number, tiempo: string): TomaFinal => ({
+      ...toma(n, dur, `Frase ${n} del guión adaptado, con su parte de la locución.`),
+      tiempoOriginal: tiempo,
+      accionVisual: 'Levanta el frasco con la mano derecha hasta la altura del mentón, lo gira un cuarto de vuelta para que la etiqueta quede al frente, mira al producto y después a la cámara. '.repeat(4),
+    })
+    const cortes = [
+      { tiempo: 't1', camara: 'Plano medio frontal, estático, a la altura de los ojos' },
+      { tiempo: 't2', camara: 'Plano medio frontal, estático, a la altura de los ojos' },
+      { tiempo: 't3', camara: 'Primer plano del rostro y parte del pecho, estático' },
+      { tiempo: 't4', camara: 'Primer plano del rostro y parte del pecho, estático' },
+    ]
+    const lote = groupIntoLotes([conT(1, 3, 't1'), conT(2, 3, 't2'), conT(3, 3, 't3'), conT(4, 3, 't4')])[0]
+    const p = buildLotePrompt({ lote, ...ARGS, cortes })
+
+    expect(p.length).toBeLessThanOrEqual(KIE_PROMPT_MAX)
+    expect(p).toContain('…')                                   // el piso disparó de verdad
+    expect([...p.matchAll(/^Cámara: /gm)]).toHaveLength(2)      // …y el plano no se soltó
+  })
+})
+
+/**
+ * El bloque de PRODUCTO transcribe la etiqueta entera, y el envase va como `@image(2)`
+ * en TODOS los lotes: le cuenta en palabras lo que el modelo ve en píxeles, a costa del
+ * único texto que describe qué hace el cuerpo. Medido en `30ff55d6`: 677 caracteres de
+ * scan, y recortarlo a su parte física sube la coreografía conservada de 46 % a 84 %.
+ */
+describe('buildLotePrompt — el producto cede antes que la coreografía', () => {
+  const SCAN = 'Frasco cilíndrico de vidrio verde esmeralda oscuro de 30 ml. Tiene una banda dorada en el cuello y tapa gotero blanca. La etiqueta blanca muestra la marca "LUMINA" en dorado, seguida de "SÉRUM FACIAL CON VITAMINA C" en verde oscuro. Debajo dice "PARA PIEL GRASA" en naranja claro. Más abajo lista "Ilumina · Unifica · Antioxidante" y "Fórmula de rápida absorción". El volumen "30 ml / 1.01 fl oz" va al pie en verde oscuro.'
+  const coreografia = 'Levanta el frasco con la mano derecha hasta la altura del mentón, lo gira un cuarto de vuelta para que la etiqueta quede al frente y mira a la cámara. '.repeat(3)
+  const apretado = groupIntoLotes(Array.from({ length: 5 }, (_, i) => ({
+    ...toma(i + 1, 2.5, `Frase ${i + 1} del guión adaptado, con lo suyo de locución.`),
+    accionVisual: coreografia,
+  })))[0]
+
+  it('con espacio de sobra manda la descripción completa', () => {
+    const [corto] = groupIntoLotes([toma(1, 4, 'Una sola frase.')])
+    expect(buildLotePrompt({ lote: corto, ...ARGS, productDesc: SCAN })).toContain('30 ml / 1.01 fl oz')
+  })
+
+  it('bajo presión recorta la etiqueta —que se ve en la imagen— y no el movimiento', () => {
+    const p = buildLotePrompt({ lote: apretado, ...ARGS, productDesc: SCAN })
+    expect(p.length).toBeLessThanOrEqual(KIE_PROMPT_MAX)
+    // La forma del envase sobrevive; la transcripción de la etiqueta no.
+    expect(p).toContain('Frasco cilíndrico de vidrio verde esmeralda oscuro')
+    expect(p).not.toContain('PARA PIEL GRASA')
+    expect(p).toContain('se lee de su imagen')
+    // …y la coreografía llega entera, que es de lo que se trataba.
+    expect(p).toContain('mira a la cámara.')
+  })
+
+  it('no parte una descripción que ya es corta', () => {
+    const p = buildLotePrompt({ lote: apretado, ...ARGS, productDesc: 'Frasco verde con gotero.' })
+    expect(p).toContain('Frasco verde con gotero.')
+    expect(p).not.toContain('se lee de su imagen')
+  })
+})
+
+/**
+ * Un lote es un clip continuo: dos encuadres adentro es pedirle un corte de montaje
+ * dentro de un plano-secuencia. Medido en un render real del lote 1 de `30ff55d6` —
+ * el prompt anunciaba "Plano medio" en las tomas 1–2 y "Primer plano" en la 3, y el
+ * clip salió entero en plano medio. Cerrar el lote donde el original corta el plano
+ * pone el corte donde el montaje lo pone: entre clips.
+ */
+describe('groupIntoLotes — frontera de plano', () => {
+  const conT = (n: number, dur: number, tiempo: string): TomaFinal => ({ ...toma(n, dur), tiempoOriginal: tiempo })
+  const MAPA = new Map([
+    ['t1', 'Plano medio frontal'], ['t2', 'Plano medio frontal'],
+    ['t3', 'Primer plano del rostro'], ['t4', 'Plano general'],
+  ])
+
+  it('cierra el lote cuando cambia el encuadre, aunque sobre tiempo', () => {
+    const tomas = [conT(1, 2, 't1'), conT(2, 2, 't2'), conT(3, 2, 't3'), conT(4, 2, 't4')]
+    // Sin el mapa los 8 s entran holgados en un solo lote.
+    expect(groupIntoLotes(tomas)).toHaveLength(1)
+    // Con el mapa: un lote por encuadre, y las dos tomas del mismo plano siguen juntas.
+    const lotes = groupIntoLotes(tomas, MAPA)
+    expect(lotes.map((l) => l.tomas.length)).toEqual([2, 1, 1])
+  })
+
+  it('cada lote queda con un solo encuadre', () => {
+    const lotes = groupIntoLotes([conT(1, 2, 't1'), conT(2, 2, 't3'), conT(3, 2, 't2')], MAPA)
+    for (const l of lotes) {
+      expect(new Set(l.tomas.map((t) => MAPA.get(t.tiempoOriginal))).size).toBe(1)
+    }
+    // Un plano que vuelve más adelante abre su propio lote, igual que en el original.
+    expect(lotes).toHaveLength(3)
+  })
+
+  it('sigue respetando el tope de 15 s dentro de un mismo encuadre', () => {
+    const mismo = new Map([['t', 'Plano medio']])
+    const lotes = groupIntoLotes(Array.from({ length: 5 }, (_, i) => conT(i + 1, 4, 't')), mismo)
+    expect(lotes.length).toBeGreaterThan(1)
+    for (const l of lotes) expect(l.duracionSeg).toBeLessThanOrEqual(LOTE_MAX_SEC)
+  })
+
+  it('sin mapa se comporta exactamente como antes', () => {
+    const tomas = [conT(1, 2, 't1'), conT(2, 2, 't3'), conT(3, 2, 't4')]
+    expect(groupIntoLotes(tomas)).toEqual(groupIntoLotes(tomas, undefined))
+  })
+})
+
+/**
+ * `maxPlanos` — el eje costo/fidelidad, medido sobre dos videos reales.
+ *
+ * Con 1 el original manda el corte. Con más, el clip puede contener varios encuadres,
+ * lo que baja el número de llamadas pagadas… y devuelve el problema que la frontera
+ * existe para arreglar: un clip con dos planos se renderiza con uno solo (comprobado
+ * con renders reales). Medido sobre un UGC de ropa de 29 cortes: K=2 deja 11 de 12
+ * lotes con encuadre ambiguo, K=3 deja 7 de 7. O sea K>1 compra costo con encuadre.
+ *
+ * Se queda en 1 por defecto: cambiarlo es una decisión de plata, no un default.
+ */
+describe('groupIntoLotes — maxPlanos', () => {
+  const conT = (n: number, dur: number, tiempo: string): TomaFinal => ({ ...toma(n, dur), tiempoOriginal: tiempo })
+  const MAPA = new Map([['a', 'Plano medio'], ['b', 'Primer plano'], ['c', 'Plano general']])
+  const TOMAS = [conT(1, 2, 'a'), conT(2, 2, 'b'), conT(3, 2, 'c'), conT(4, 2, 'a')]
+
+  it('el default es 1: un encuadre por clip', () => {
+    expect(groupIntoLotes(TOMAS, MAPA)).toEqual(groupIntoLotes(TOMAS, MAPA, 1))
+    expect(groupIntoLotes(TOMAS, MAPA)).toHaveLength(4)
+  })
+
+  it('K=2 admite dos encuadres por clip y nunca un tercero', () => {
+    const lotes = groupIntoLotes(TOMAS, MAPA, 2)
+    expect(lotes).toHaveLength(2)
+    for (const l of lotes) {
+      expect(new Set(l.tomas.map((t) => MAPA.get(t.tiempoOriginal))).size).toBeLessThanOrEqual(2)
+    }
+  })
+
+  // Un plano que YA está en el lote no consume cupo: lo que se cuenta son encuadres
+  // distintos, no cortes. Si no, "a b a" gastaría tres.
+  it('repetir un encuadre ya presente no consume cupo', () => {
+    const lotes = groupIntoLotes([conT(1, 2, 'a'), conT(2, 2, 'b'), conT(3, 2, 'a')], MAPA, 2)
+    expect(lotes).toHaveLength(1)
+  })
+
+  it('el tope de 15 s sigue mandando por encima de maxPlanos', () => {
+    const largo = Array.from({ length: 6 }, (_, i) => conT(i + 1, 4, 'a'))
+    for (const l of groupIntoLotes(largo, MAPA, 9)) expect(l.duracionSeg).toBeLessThanOrEqual(LOTE_MAX_SEC)
+  })
+})

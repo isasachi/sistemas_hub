@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildForensicInstruction, ForensicReportSchema, repairCutTiming, CPS_MAX, type ForensicReport } from './forensic'
+import { buildForensicInstruction, ForensicReportSchema, repairCutTiming, mergeMicroCortes, muestraPersona, CPS_MAX, type ForensicReport } from './forensic'
 
 // El prompt es el contrato con Gemini. Estos asserts fijan las reglas del spec que,
 // si se caen, producen el bug que ya vimos en producción: cortes inventados por
@@ -214,5 +214,244 @@ describe('ForensicReportSchema', () => {
 
   it('rechaza un informe sin cortes', () => {
     expect(ForensicReportSchema.safeParse({ cortes: [] }).success).toBe(false)
+  })
+})
+
+/**
+ * FUSIÓN DE MICRO-CORTES.
+ *
+ * Nace del UGC de ropa: 29 cortes en 28 s, ~1 s cada uno. Con la frontera de plano eso
+ * da 24 lotes de un segundo — 12× el costo del video de suero, y clips que el generador
+ * no puede llenar con nada. Fusionar da 7 lotes de 3–5 s conservando UN encuadre por
+ * clip, que es lo que lo distingue de `maxPlanos > 1`: ahí el clip recibe dos encuadres
+ * y el modelo renderiza uno, perdiendo el otro en silencio.
+ */
+describe('mergeMicroCortes', () => {
+  const corte = (n: number, dur: number, camara: string, dialogo = `frase ${n}`) => ({
+    n, tiempo: `00:${String(n).padStart(2, '0')} - 00:${String(n + 1).padStart(2, '0')}`,
+    duracionSeg: dur, accion: `accion ${n}`, camara, dialogo, textoOverlay: 'No aparece', transicion: 'corte directo',
+  })
+  const rep = (cortes: ReturnType<typeof corte>[]): ForensicReport => ({
+    duracionTotalSeg: cortes.reduce((a, c) => a + c.duracionSeg, 0),
+    caracteresGuion: cortes.reduce((a, c) => a + c.dialogo.length, 0),
+    guionOriginal: cortes.map((c) => c.dialogo).join(' '),
+    sujeto: 'x', vestuario: 'x', producto: 'x', fondo: 'x', elementosGraficos: 'x',
+    cortes,
+    tomas: cortes.map((c) => ({ n: c.n, encuadre: c.camara, posicion: 'x', accionFisica: c.accion, objeto: 'x', dialogo: c.dialogo, duracionSeg: c.duracionSeg })),
+    edicion: { sincronizacion: 'x', textoOverlay: 'x', escalaZoom: 'x', cortes: 'x', ritmo: 'x', corteFinal: 'x' },
+    resumenParaUsuario: 'x',
+  })
+
+  it('no toca un video cuyos cortes ya llegan al piso — devuelve el MISMO objeto', () => {
+    const r = rep([corte(1, 5, 'A'), corte(2, 4, 'B')])
+    const out = mergeMicroCortes(r, 3)
+    expect(out.report).toBe(r)
+    expect(out.fusiones).toHaveLength(0)
+  })
+
+  // Un video sin cortes (cabeza parlante de una pasada) no tiene vecino con quien
+  // fusionar: se queda como está aunque sea corto.
+  it('un solo corte se queda solo', () => {
+    const r = rep([corte(1, 1, 'A')])
+    expect(mergeMicroCortes(r, 3).report).toBe(r)
+  })
+
+  it('fusiona hasta que todo llega al piso y conserva la duración total', () => {
+    const r = rep([corte(1, 1, 'A'), corte(2, 1, 'B'), corte(3, 1, 'C'), corte(4, 1, 'D'), corte(5, 4, 'E')])
+    const { report: out, fusiones } = mergeMicroCortes(r, 3)
+    expect(out.cortes.length).toBeLessThan(5)
+    for (const c of out.cortes) expect(c.duracionSeg).toBeGreaterThanOrEqual(3)
+    expect(out.cortes.reduce((a, c) => a + c.duracionSeg, 0)).toBeCloseTo(8, 6)
+    expect(fusiones.length).toBeGreaterThan(0)
+  })
+
+  // Nada de texto se pierde: es lo que hace que el ritmo (caracteres por segundo) no se
+  // altere, porque suma texto y suma duración en la misma proporción.
+  it('no pierde ni una palabra del diálogo ni de la acción', () => {
+    const r = rep([corte(1, 1, 'A'), corte(2, 1, 'B'), corte(3, 5, 'C')])
+    const { report: out } = mergeMicroCortes(r, 3)
+    const dicho = out.cortes.map((c) => c.dialogo).join(' ')
+    for (const n of [1, 2, 3]) {
+      expect(dicho).toContain(`frase ${n}`)
+      expect(out.cortes.map((c) => c.accion).join(' ')).toContain(`accion ${n}`)
+    }
+  })
+
+  // El encuadre que sobrevive es el del corte más LARGO: es el que aporta más segundos
+  // de imagen. Lo contrario haría que un flash de 0.5s decida el plano de toda la toma.
+  it('el encuadre que sobrevive es el del corte más largo', () => {
+    const { report: out } = mergeMicroCortes(rep([corte(1, 0.5, 'FLASH'), corte(2, 2.6, 'DOMINANTE')]), 3)
+    expect(out.cortes).toHaveLength(1)
+    expect(out.cortes[0].camara).toBe('DOMINANTE')
+  })
+
+  it('renumera y mantiene tomas emparejadas 1-a-1 con cortes', () => {
+    const { report: out } = mergeMicroCortes(rep([corte(1, 1, 'A'), corte(2, 1, 'B'), corte(3, 1, 'C'), corte(4, 4, 'D')]), 3)
+    expect(out.tomas).toHaveLength(out.cortes.length)
+    expect(out.cortes.map((c) => c.n)).toEqual(out.cortes.map((_, i) => i + 1))
+    for (const [i, t] of out.tomas.entries()) expect(t.duracionSeg).toBe(out.cortes[i].duracionSeg)
+  })
+
+  // Sin esto, dos pasadas darían dos listas de cortes distintas y por tanto dos huellas
+  // distintas para el mismo contenido (`scriptFingerprint` hashea `tiempo` por toma).
+  it('es idempotente', () => {
+    const { report: una } = mergeMicroCortes(rep([corte(1, 1, 'A'), corte(2, 1, 'B'), corte(3, 4, 'C')]), 3)
+    expect(mergeMicroCortes(una, 3).report).toBe(una)
+  })
+
+  // Fusionar une los diálogos con un espacio: suma un carácter sin sumar duración, así
+  // que un corte que estaba justo en el techo queda por encima. Componer con
+  // `repairCutTiming` lo devuelve al techo — medido, 20.6 → 20.0 cps.
+  it('compuesta con repairCutTiming ningún corte queda por encima del techo de cps', () => {
+    const r = rep([
+      { ...corte(1, 1, 'A'), dialogo: 'x'.repeat(20) },
+      { ...corte(2, 1, 'B'), dialogo: 'y'.repeat(20) },
+      { ...corte(3, 6, 'C'), dialogo: 'z'.repeat(10) },
+    ])
+    const { report: fus } = mergeMicroCortes(r, 3)
+    const { report: fin } = repairCutTiming(fus)
+    for (const c of fin.cortes) expect(c.dialogo.length / c.duracionSeg).toBeLessThanOrEqual(CPS_MAX + 1e-9)
+  })
+})
+
+/**
+ * Un corte SIN diálogo tiene mínimo de cps 0, o sea es holgura pura, y el reparto lo
+ * puede vaciar entero para financiar a los que no entran. Medido en una sesión real de
+ * ropa, después de fusionar los micro-cortes a 3 s: las dos tomas de cierre —las únicas
+ * mudas— quedaron en 0.91 s y 1.27 s, deshaciendo justo lo que la fusión garantizaba.
+ * Dos clips de 1 s son dos llamadas pagadas por un plano congelado.
+ */
+describe('repairCutTiming — piso de duración visible', () => {
+  const c = (n: number, dur: number, dialogo: string) => ({
+    n, tiempo: `t${n}`, duracionSeg: dur, accion: 'a', camara: 'A', dialogo,
+    textoOverlay: 'No aparece', transicion: 'corte',
+  })
+  const rep = (cortes: ReturnType<typeof c>[]): ForensicReport => ({
+    duracionTotalSeg: cortes.reduce((a, x) => a + x.duracionSeg, 0), caracteresGuion: 0,
+    guionOriginal: 'x', sujeto: 'x', vestuario: 'x', producto: 'x', fondo: 'x', elementosGraficos: 'x',
+    cortes,
+    tomas: cortes.map((x) => ({ n: x.n, encuadre: 'A', posicion: 'x', accionFisica: 'a', objeto: 'x', dialogo: x.dialogo, duracionSeg: x.duracionSeg })),
+    edicion: { sincronizacion: 'x', textoOverlay: 'x', escalaZoom: 'x', cortes: 'x', ritmo: 'x', corteFinal: 'x' },
+    resumenParaUsuario: 'x',
+  })
+  // Un corte hablado que no entra (200 caracteres necesitan 10s y tiene 2) junto a dos
+  // mudos de 4s: la holgura de los mudos es lo único que puede financiar el déficit.
+  const roto = () => rep([c(1, 2, 'x'.repeat(200)), c(2, 4, ''), c(3, 4, '')])
+
+  it('sin piso los cortes mudos se vacían — comportamiento de siempre, default 0', () => {
+    const { report } = repairCutTiming(roto())
+    expect(Math.min(...report.cortes.map((x) => x.duracionSeg))).toBeLessThan(3)
+    expect(repairCutTiming(roto(), 0).report).toEqual(report)
+  })
+
+  it('con piso ningún corte baja de él, ni siquiera los mudos', () => {
+    const { report } = repairCutTiming(roto(), 3)
+    for (const x of report.cortes) expect(x.duracionSeg).toBeGreaterThanOrEqual(3 - 1e-9)
+  })
+
+  // Si los pisos no caben en la duración original, el total crece: es el mismo caso que
+  // "el texto entero no entra", el único en que `duracionTotalSeg` se mueve.
+  it('el total solo crece cuando los pisos no caben', () => {
+    const r = roto()
+    const original = r.cortes.reduce((a, x) => a + x.duracionSeg, 0)
+    const { report } = repairCutTiming(r, 3)
+    expect(report.cortes.reduce((a, x) => a + x.duracionSeg, 0)).toBeGreaterThanOrEqual(original - 1e-9)
+  })
+
+  it('sigue siendo idempotente con piso', () => {
+    const una = repairCutTiming(roto(), 3).report
+    expect(repairCutTiming(una, 3).report).toBe(una)
+  })
+})
+
+/**
+ * NO SE FUSIONA A TRAVÉS DE UN PLANO SIN PERSONA.
+ *
+ * Medido en el render real de ropa (`430c5961`): el lote 1 encadenó cuatro cortes con
+ * "Luego," e incluía un flat-lay —la blusa extendida sobre el suelo, sin nadie— entre
+ * dos planos de la modelo. El render lo reprodujo con fidelidad: tres sub-tomas con
+ * fondos distintos dentro de un clip que `CONTINUIDAD` declaraba invariante. El modelo
+ * hizo lo pedido; lo que estaba mal era pedirle un montaje dentro de un plano continuo.
+ */
+describe('muestraPersona', () => {
+  it('reconoce a la persona aunque el texto venga sin acentos o con otra palabra', () => {
+    for (const t of ['La mujer, de pie, mira a la camara', 'Primer plano de las manos de la MUJER',
+                     'El hombre sostiene el frasco', 'La modelo posa de perfil', 'La joven señora sonríe'])
+      expect(muestraPersona(t)).toBe(true)
+  })
+
+  it('un flat-lay no cuenta como persona aunque aparezca una mano suelta', () => {
+    expect(muestraPersona('La camisa crema está extendida sobre un suelo de baldosas claras. Una mano de piel clara entra por la parte superior derecha del cuadro.')).toBe(false)
+    expect(muestraPersona('Plano cenital del producto sobre una mesa de madera.')).toBe(false)
+  })
+})
+
+describe('mergeMicroCortes — no cruza la frontera persona/producto', () => {
+  const c = (n: number, dur: number, accion: string) => ({
+    n, tiempo: `t${n}`, duracionSeg: dur, accion, camara: `C${n}`, dialogo: '',
+    textoOverlay: 'No aparece', transicion: 'corte',
+  })
+  const rep = (cortes: ReturnType<typeof c>[]): ForensicReport => ({
+    duracionTotalSeg: cortes.reduce((a, x) => a + x.duracionSeg, 0), caracteresGuion: 0,
+    guionOriginal: 'x', sujeto: 'x', vestuario: 'x', producto: 'x', fondo: 'x', elementosGraficos: 'x',
+    cortes,
+    tomas: cortes.map((x) => ({ n: x.n, encuadre: 'A', posicion: 'x', accionFisica: x.accion, objeto: 'x', dialogo: '', duracionSeg: x.duracionSeg })),
+    edicion: { sincronizacion: 'x', textoOverlay: 'x', escalaZoom: 'x', cortes: 'x', ritmo: 'x', corteFinal: 'x' },
+    resumenParaUsuario: 'x',
+  })
+  const P = 'La mujer muestra la prenda'
+  const F = 'La prenda está extendida sobre el suelo'
+
+  it('un flat-lay corto queda SOLO en vez de meterse dentro de un plano de persona', () => {
+    const { report } = mergeMicroCortes(rep([c(1, 1, P), c(2, 1, F), c(3, 1, P), c(4, 1, P)]), 3)
+    const conFlat = report.cortes.filter((x) => x.accion.includes('extendida'))
+    expect(conFlat).toHaveLength(1)
+    // …y no arrastró la acción de ningún plano de persona.
+    expect(conFlat[0].accion).not.toContain('La mujer')
+  })
+
+  it('sí fusiona dos planos de producto contiguos entre sí', () => {
+    const { report } = mergeMicroCortes(rep([c(1, 1, F), c(2, 1, F), c(3, 1, F), c(4, 5, P)]), 3)
+    expect(report.cortes).toHaveLength(2)
+    expect(report.cortes[0].duracionSeg).toBeCloseTo(3, 6)
+  })
+
+  // Sin vecino compatible no hay fusión posible: el corte se queda corto, que es lo
+  // correcto —es una toma distinta— y el bucle tiene que TERMINAR en vez de girar.
+  it('termina aunque queden cortes bajo el piso sin con quién fusionarse', () => {
+    const { report } = mergeMicroCortes(rep([c(1, 1, P), c(2, 1, F), c(3, 5, P)]), 3)
+    expect(report.cortes).toHaveLength(3)
+    expect(report.cortes[0].duracionSeg).toBe(1)
+  })
+})
+
+/**
+ * El piso de `repairCutTiming` es un suelo contra el vaciado, NO un empujón hacia
+ * arriba: un corte que la fusión dejó corto a propósito (un flat-lay aislado) no debe
+ * inflarse hasta el piso. Medido en la sesión de ropa: sin acotar, los 28 s del
+ * original se iban a 41,8 s.
+ */
+describe('repairCutTiming — el piso no infla', () => {
+  const c = (n: number, dur: number, dialogo: string) => ({
+    n, tiempo: `t${n}`, duracionSeg: dur, accion: 'a', camara: 'A', dialogo,
+    textoOverlay: 'No aparece', transicion: 'corte',
+  })
+  const rep = (cortes: ReturnType<typeof c>[]): ForensicReport => ({
+    duracionTotalSeg: cortes.reduce((a, x) => a + x.duracionSeg, 0), caracteresGuion: 0,
+    guionOriginal: 'x', sujeto: 'x', vestuario: 'x', producto: 'x', fondo: 'x', elementosGraficos: 'x',
+    cortes,
+    tomas: cortes.map((x) => ({ n: x.n, encuadre: 'A', posicion: 'x', accionFisica: 'a', objeto: 'x', dialogo: x.dialogo, duracionSeg: x.duracionSeg })),
+    edicion: { sincronizacion: 'x', textoOverlay: 'x', escalaZoom: 'x', cortes: 'x', ritmo: 'x', corteFinal: 'x' },
+    resumenParaUsuario: 'x',
+  })
+
+  it('un corte más corto que el piso se queda como está — no crece', () => {
+    const { report } = repairCutTiming(rep([c(1, 1.2, ''), c(2, 6, 'x'.repeat(60))]), 3)
+    expect(report.cortes[0].duracionSeg).toBeCloseTo(1.2, 6)
+  })
+
+  it('pero tampoco se lo vacía para financiar a otro', () => {
+    const { report } = repairCutTiming(rep([c(1, 1.2, ''), c(2, 2, 'x'.repeat(200))]), 3)
+    expect(report.cortes[0].duracionSeg).toBeCloseTo(1.2, 6)
   })
 })

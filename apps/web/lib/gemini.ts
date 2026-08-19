@@ -327,6 +327,42 @@ export async function editImage(
   return generateImage(parts, 3, aspectRatio ? { aspectRatio } : undefined)
 }
 
+// ⚠️ La gente sale de la imagen ACTUAL, nunca de la referencia. `generate-image` adapta el
+// sujeto al targetAudience (§10 de STEP5); refine no ve ese instructivo, y sin nombrar a las
+// personas en la lista de "conservar" el modelo volvía al hombre de la referencia — medido 2/2
+// con targetAudience "Mujeres de 20-40". La rama sin feedback es la peor porque ancla al layout
+// de la imagen 1: el ancla es el LAYOUT, no quién aparece.
+export function refinePrompt(resultImageNumber: number, feedback: string): string {
+  const identityLock =
+    `The people in image ${resultImageNumber} were already adapted to this ad's target audience: ` +
+    `keep their gender, age, skin tone, hair and appearance exactly as they are in image ` +
+    `${resultImageNumber}. NEVER revert them to the person shown in image 1.`
+  // Con feedback el cambio es SAGRADO y EXCLUSIVO: solo eso, el resto pixel-idéntico
+  // (no redibujar ni "mejorar" lo no pedido). Sin feedback, una variación fresca
+  // (el botón "Regenerar" sin texto debe dar algo distinto, no un eco de la misma).
+  return feedback.trim()
+    ? [
+        `Image ${resultImageNumber} above is the current ad. Apply ONLY the change requested below`,
+        `and treat it as exclusive: modify exactly what is asked and keep EVERYTHING else —`,
+        `product, logo, copy, text, layout, colors, background, composition and the people —`,
+        `pixel-identical to image ${resultImageNumber}. Do NOT redesign, re-render or "improve"`,
+        `anything not asked.`,
+        identityLock,
+        `Change request: ${feedback.trim()}`,
+      ].join(' ')
+    : [
+        // ⚠️ "variar la composición" era licencia para abandonar la plantilla, que es lo
+        // único que esta tool promete replicar. La variación se acota a tratamiento visual:
+        // el layout de la referencia (Image 1) sigue siendo la ley.
+        `Image ${resultImageNumber} above is the current ad. Produce a fresh alternative version:`,
+        `keep the same product, logo, copy and people, AND the layout, composition and format of`,
+        `image 1 (the reference ad) — from image 1 copy ONLY the layout, never who appears in it.`,
+        identityLock,
+        `Vary only the visual treatment — lighting, framing detail, background texture, color`,
+        `accents — so it reads as a different take of the same ad, never a redesign.`,
+      ].join(' ')
+}
+
 export async function refineImage(
   refBase64: string, refMime: string,
   productBase64: string, productMime: string,
@@ -342,28 +378,7 @@ export async function refineImage(
     { inlineData: { mimeType: productMime, data: productBase64 } },
     ...(logoBase64 && logoMime ? [{ inlineData: { mimeType: logoMime, data: logoBase64 } } as Part] : []),
     { inlineData: { mimeType: resultMime, data: resultBase64 } },
-    {
-      // Con feedback el cambio es SAGRADO y EXCLUSIVO: solo eso, el resto pixel-idéntico
-      // (no redibujar ni "mejorar" lo no pedido). Sin feedback, una variación fresca
-      // (el botón "Regenerar" sin texto debe dar algo distinto, no un eco de la misma).
-      text: feedback.trim()
-        ? [
-            `Image ${resultImageNumber} above is the current ad. Apply ONLY the change requested below`,
-            `and treat it as exclusive: modify exactly what is asked and keep EVERYTHING else —`,
-            `product, logo, copy, text, layout, colors, background and composition — pixel-identical`,
-            `to image ${resultImageNumber}. Do NOT redesign, re-render or "improve" anything not asked.`,
-            `Change request: ${feedback.trim()}`,
-          ].join(' ')
-        : [
-            // ⚠️ "variar la composición" era licencia para abandonar la plantilla, que es lo
-            // único que esta tool promete replicar. La variación se acota a tratamiento visual:
-            // el layout de la referencia (Image 1) sigue siendo la ley.
-            `Image ${resultImageNumber} above is the current ad. Produce a fresh alternative version:`,
-            `keep the same product, logo, copy AND the layout, composition and format of image 1`,
-            `(the reference ad). Vary only the visual treatment — lighting, framing detail, background`,
-            `texture, color accents — so it reads as a different take of the same ad, never a redesign.`,
-          ].join(' '),
-    },
+    { text: refinePrompt(resultImageNumber, feedback) },
   ]
   return generateImage(parts, 3, aspectRatio ? { aspectRatio } : undefined)
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getVideoSession, updateVideoSession } from '@/lib/video-ads/db'
+import { toNiche } from '@/lib/video-ads/niches'
 import { uploadToStorage } from '@/lib/storage'
 import { callVideoAds } from '@/lib/video-ads/llm'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
@@ -57,6 +58,9 @@ export async function POST(
   // Gemini por dos campos de texto. Ahora se mandan y persisten acá también.
   const angle = (formData.get('angle') as string | null)?.trim()
   const problem = (formData.get('problem') as string | null)?.trim()
+  // `toNiche` normaliza: lo que no sea un nicho conocido cae en 'suplementos', que es
+  // el comportamiento de siempre. El cliente no puede meter un valor raro en la fila.
+  const niche = toNiche(formData.get('niche'))
   if (!productName || !whatItDoes || !targetAudience || !angle || !problem)
     return NextResponse.json({ error: 'Faltan datos del producto' }, { status: 400 })
 
@@ -98,6 +102,7 @@ export async function POST(
       what_it_does: whatItDoes,
       angle,
       problem,
+      niche,
       target_audience: targetAudience,
     })
     await recordGenQuota(id, 'video-product', userId)

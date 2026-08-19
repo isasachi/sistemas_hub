@@ -2,6 +2,7 @@ import { z } from 'zod'
 import type { Part } from '@google/genai'
 import type { UserInputs } from './types'
 import type { ForensicReport } from './forensic'
+import { nicheSpec } from './niches'
 
 /**
  * FASE 4 + 4.5 del prompt maestro — identidad visual y vocal bloqueada.
@@ -47,7 +48,9 @@ export function buildIdentityInstruction(
   inputs: UserInputs,
   forensic: ForensicReport,
   hasImage: boolean,
+  niche?: unknown,
 ): string {
+  const spec = nicheSpec(niche)
   const acento = inputs.accent.trim() || ACENTO_PENDIENTE
   return [
     'Actúa como director creativo de anuncios UGC.',
@@ -59,9 +62,16 @@ export function buildIdentityInstruction(
     `  Acento: ${acento}`,
     inputs.voice ? `  Voz: ${inputs.voice}` : '',
     '',
-    'CONTEXTO DEL VIDEO ORIGINAL (solo para encuadre y vestuario equivalente):',
+    spec.wornProduct
+      ? 'CONTEXTO DEL VIDEO ORIGINAL (solo para encuadre; el vestuario NO se copia):'
+      : 'CONTEXTO DEL VIDEO ORIGINAL (solo para encuadre y vestuario equivalente):',
     `  Sujeto observado: ${forensic.sujeto}`,
     `  Vestuario observado: ${forensic.vestuario}`,
+    // ⚠️ En ropa/zapatos el PRODUCTO Y EL VESTUARIO SON EL MISMO OBJETO. Sin esta
+    // nota el bloque de consistencia describe la ropa del video original y viaja a
+    // cada lote junto a `productDesc`, o sea el prompt afirma "viste camiseta rosa" y
+    // "el producto es una blusa crema" en el mismo texto. La prenda del usuario gana.
+    spec.avatarNote,
     `  Fondo observado: ${forensic.fondo}`,
     '',
     hasImage
@@ -92,7 +102,9 @@ export function buildIdentityInstruction(
     'nivel de realismo fotográfico. (El generador de imagen solo produce retrato 2:3;',
     'el ratio vertical final del video lo impone después el modelo de video, porque',
     'el personaje nunca va solo en el render.)',
-    'Sin texto, sin logos, sin watermarks y sin el producto en el encuadre.',
+    spec.wornProduct
+      ? 'Sin texto, sin logos y sin watermarks. El producto SÍ va en el encuadre: el personaje lo lleva puesto, tal como se ve en su imagen.'
+      : 'Sin texto, sin logos, sin watermarks y sin el producto en el encuadre.',
     '',
     '`bloqueConsistencia`: la descripción EXACTA y reutilizable del personaje, pensada',
     'para copiarse íntegra dentro de cada lote de video. Trátala como una identidad',
@@ -102,6 +114,9 @@ export function buildIdentityInstruction(
     'anterior produce otra persona.',
     'Debe ser autosuficiente y describir edad, etnia (la del usuario), rostro, cabello,',
     'piel, ojos, complexión, vestuario y accesorios.',
+    spec.wornProduct
+      ? 'El vestuario que describas ES EL PRODUCTO: detalla la prenda del usuario (corte, color, tejido, cuello, mangas, puños, largo) como parte de la identidad bloqueada. Es lo único que mantiene la misma prenda en el lote 1 y en el 5.'
+      : '',
     '',
     '`voz`: perfil vocal completo — idioma, variante regional, acento, pronunciación,',
     'ritmo, velocidad, entonación, energía, pausas, tono, timbre, edad vocal aproximada',
@@ -126,9 +141,13 @@ export function buildIdentityInstruction(
 export function buildCharacterParts(
   instruction: string,
   image?: { data: string; mimeType: string },
+  /** La prenda / el calzado, cuando el producto se lleva puesto: sin verla, el modelo
+   *  describe un vestuario inventado y el avatar no sale con el producto del usuario. */
+  product?: { data: string; mimeType: string } | null,
 ): Part[] {
   const parts: Part[] = []
   if (image) parts.push({ inlineData: { mimeType: image.mimeType, data: image.data } })
+  if (product) parts.push({ inlineData: { mimeType: product.mimeType, data: product.data } })
   parts.push({ text: instruction })
   return parts
 }

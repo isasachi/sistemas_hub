@@ -108,7 +108,13 @@ export async function POST(
   const cortes = session.forensic_analysis?.cortes ?? []
   const camaraFallback = cortes[0]?.camara?.trim() || 'primer plano, cámara en mano'
 
-  const agrupados = groupIntoLotes(adapted.tomas)
+  // Un lote es un clip CONTINUO: si abarca dos encuadres le estamos pidiendo un corte
+  // de montaje dentro de un plano-secuencia, y el render devuelve uno solo de los dos
+  // (medido). Cerrar el lote donde el original corta el plano es además donde el montaje
+  // pone el corte — el entregable son N clips independientes. Cuesta más lotes, o sea
+  // más llamadas pagadas, y por eso está acá y no escondido en `groupIntoLotes`.
+  const planoPorTiempo = new Map(cortes.map((c) => [c.tiempo, c.camara.trim()]))
+  const agrupados = groupIntoLotes(adapted.tomas, planoPorTiempo)
   if (!agrupados.length) return NextResponse.json({ error: 'El guión no tiene tomas' }, { status: 409 })
 
   // Una cámara por lote, con los planos de SUS cortes: el spec pide replicar el
@@ -123,6 +129,7 @@ export async function POST(
   // llamada pueda comprobar, sin adivinar, si está reanudando el MISMO video o
   // empezando otro distinto (ver `isPaidResume`).
   const huella = scriptFingerprint({
+    niche: session.niche,
     lotes: agrupados, consistencyBlock: session.consistency_block, productDesc,
     escenario, camaras, voz: session.voice_profile, images,
   })
@@ -289,6 +296,11 @@ export async function POST(
           camara: camaras[i],
           voz: session.voice_profile,
           images,
+          niche: session.niche,
+          // Para el plano POR TOMA cuando el lote mezcla más de uno: `camaras[i]` ya
+          // viene deduplicado y concatenado, así que solo desde los cortes se puede
+          // saber cuál corresponde a cuál (ver `buildLotePrompt`).
+          cortes,
         })
       } catch (err) {
         // `buildLotePrompt` administra su propio presupuesto de caracteres (arma el
