@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ExternalLink, Loader2, ChevronDown, BadgeCheck } from "lucide-react";
+import { ExternalLink, Loader2, ChevronDown, BadgeCheck, Lock, Clock } from "lucide-react";
 
 // Dónde apareció el término del nicho, en palabras. Es la confianza del
 // veredicto: en la URL del producto es casi certeza; solo en el cuerpo del
@@ -14,8 +14,10 @@ const SENAL_TEXTO: Record<string, string> = {
 };
 import ToolShell from "@/components/tools/ui/ToolShell";
 import {
-  RAW_BUCKETS, RAW_BUCKET_LABEL, CATEGORIES,
+  RAW_BUCKETS, RAW_BUCKET_LABEL, CATEGORIES, isRawBucket,
+  PAISES, PAIS_LABEL, ANTIGUEDADES, ANTIGUEDAD_LABEL,
   type CategoryId, type RawBucket, type RawProductEntry, type RawSearchResponse,
+  type Pais, type Antiguedad,
 } from "@ph/shared";
 
 const ACCENT = "#e8467a";
@@ -47,6 +49,54 @@ function Chip({ label, active, busy, disabled, onClick }: {
       {busy && <Loader2 className="w-3 h-3 animate-spin" />}
       {label}
     </button>
+  );
+}
+
+// Rango que el plan del usuario no desbloquea. Se muestra igual que los otros
+// —el usuario tiene que ver qué le falta— pero lleva al paywall en vez de
+// buscar. Es un `<a>` y no un Chip con onClick: el destino es una página, y así
+// se puede abrir en otra pestaña.
+function ChipBloqueado({ label }: { label: string }) {
+  return (
+    <a
+      href="/suscripcion"
+      title="Este rango no está incluido en tu plan"
+      className="flex items-center gap-1.5 rounded-full border border-white/[0.10] px-3 py-1.5 text-[12px] font-bold text-[#8d7470] no-underline transition-colors hover:border-white/[0.2] hover:text-[#c9b4ae]"
+    >
+      <Lock className="h-3 w-3" />
+      {label}
+    </a>
+  );
+}
+
+// Selector de un filtro global (país, antigüedad). `<select>` nativo y no una
+// fila de chips: son 8 y 4 opciones respectivamente, y sumarlas a los chips de
+// categoría y de rango dejaría la pantalla en cuatro filas de píldoras.
+function Filtro<T extends string | number>({ label, value, options, disabled, onChange }: {
+  label: string;
+  value: T;
+  options: { value: T; label: string }[];
+  disabled?: boolean;
+  onChange: (v: T) => void;
+}) {
+  return (
+    <label className="flex items-center gap-2 text-[12px] text-[#a98c88]">
+      {label}
+      <select
+        value={String(value)}
+        disabled={disabled}
+        onChange={(e) => {
+          const raw = e.target.value;
+          const match = options.find((o) => String(o.value) === raw);
+          if (match) onChange(match.value);
+        }}
+        className="rounded-lg border border-white/[0.12] bg-[#1e0811] px-2.5 py-1.5 text-[12px] font-bold text-[#c9b4ae] disabled:opacity-40"
+      >
+        {options.map((o) => (
+          <option key={String(o.value)} value={String(o.value)}>{o.label}</option>
+        ))}
+      </select>
+    </label>
   );
 }
 
@@ -115,6 +165,16 @@ function ProductCard({ p }: { p: RawProductEntry }) {
         <p className="text-[12px] text-[#c9b4ae] leading-[1.5] line-clamp-3">{p.body}</p>
       )}
 
+      {/* Solo cuando se midió. La columna `ad_start_date` nace NULL y se llena a
+          medida que el worker re-scrapea, así que la mayoría de las cards
+          todavía no la trae — y una card que dijera "0 días" mentiría. */}
+      {p.diasCorriendo !== null && (
+        <span className="flex items-center gap-1.5 text-[11px] text-[#a98c88]">
+          <Clock className="h-3 w-3" />
+          {p.diasCorriendo} días corriendo
+        </span>
+      )}
+
       <div className="mt-auto flex items-center justify-between gap-3 pt-1">
         <span className="readout text-[13px] font-extrabold" style={{ color: ACCENT }}>
           {p.adCount.toLocaleString("es-PE")}
@@ -145,12 +205,22 @@ export default function BuscadorProductosPage() {
   // pasan TANTO el cambio de categoría como el de rango — quedarse en la página
   // 4 al cambiar de chip mostraría el final de una lista que recién llega.
   const [pagina, setPagina] = useState(0);
+  // Filtros globales: aplican tanto al cambio de categoría como al de rango.
+  const [pais, setPais] = useState<Pais | "">("");
+  const [dias, setDias] = useState<Antiguedad>(0);
 
 
   // `cat` y `bucket` van por parámetro y no desde el estado: el chip busca en el
   // mismo click en que se marca seleccionado, y el estado todavía no llegó.
   // bucket null = que el servidor elija el primer rango con stock.
-  const search = useCallback(async (cat: CategoryId | null, bucket: RawBucket | null) => {
+  // Los filtros viajan por parámetro (`f`) y no desde el estado por el mismo
+  // motivo que `cat`/`bucket`: el `<select>` busca en el mismo cambio en que se
+  // actualiza, y el estado todavía no llegó.
+  const search = useCallback(async (
+    cat: CategoryId | null,
+    bucket: RawBucket | null,
+    f?: { pais?: Pais | ""; dias?: Antiguedad },
+  ) => {
     // cat null = "Todos": el servidor sirve sobre TODOS los nichos con
     // inventario, sin filtrar por categoría.
     const clave = cat ?? "todos";
@@ -166,7 +236,12 @@ export default function BuscadorProductosPage() {
       const res = await fetch("/api/buscador-productos/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ category: clave, bucket }),
+        body: JSON.stringify({
+          category: clave,
+          bucket,
+          country: (f?.pais ?? pais) || undefined,
+          minDias: f?.dias ?? dias,
+        }),
       });
       const data = (await res.json()) as RawSearchResponse & { error?: string };
       if (!res.ok) throw new Error(data.error ?? "Error en la búsqueda");
@@ -176,7 +251,7 @@ export default function BuscadorProductosPage() {
     } finally {
       setLoading(false);
     }
-  }, [loading]);
+  }, [loading, pais, dias]);
 
   const elegirCategoria = useCallback((id: CategoryId) => {
     setSel(id);
@@ -199,6 +274,13 @@ export default function BuscadorProductosPage() {
   // servidor autoelige, y el chip encendido tiene que ser el que de verdad salió.
   const grupo = result?.status === "ready" ? result.groups[0] : undefined;
   const paginas = Math.ceil((grupo?.products.length ?? 0) / POR_PAGINA);
+  // Rangos que el plan del usuario no desbloquea. Los decide el SERVIDOR (viene
+  // en la respuesta): acá solo se pintan. El candado no es el gate — el servidor
+  // ya no mandó ni un producto de esos rangos.
+  const bloqueados: string[] = result?.locked ?? [];
+  // `RawBucketGroup.bucket` es `string` (el tipo deja lugar a rangos futuros);
+  // acá se estrecha para poder re-buscar el mismo rango al cambiar un filtro.
+  const bucketActual = isRawBucket(grupo?.bucket) ? grupo.bucket : null;
 
   return (
     <ToolShell name="Buscador de Productos" slug="buscador-productos">
@@ -257,6 +339,37 @@ export default function BuscadorProductosPage() {
             )}
         </div>
 
+        {/* Filtros globales. Van fuera del bloque del rango porque aplican también
+            cuando la búsqueda no devolvió nada — que es justo cuando el usuario
+            necesita poder aflojarlos. */}
+        <div className="mb-6 flex flex-wrap items-center gap-4">
+          <Filtro
+            label="País"
+            value={pais}
+            disabled={loading}
+            options={[
+              { value: "" as Pais | "", label: "Todos" },
+              ...PAISES.map((c) => ({ value: c as Pais | "", label: PAIS_LABEL[c] })),
+            ]}
+            onChange={(v) => { setPais(v); search(sel, bucketActual, { pais: v }); }}
+          />
+          <Filtro
+            label="Antigüedad"
+            value={dias}
+            disabled={loading}
+            options={ANTIGUEDADES.map((d) => ({ value: d, label: ANTIGUEDAD_LABEL[d] }))}
+            onChange={(v) => { setDias(v); search(sel, bucketActual, { dias: v }); }}
+          />
+          {dias > 0 && (
+            /* Sin esta línea el filtro promete algo que no cumple: `ad_start_date`
+               nace NULL y las filas sin medir pasan igual (ver la migración
+               20260820000001 y `applyFilters` en db.ts). */
+            <span className="text-[11px] text-[#8d7470]">
+              Incluye productos cuya antigüedad todavía no medimos.
+            </span>
+          )}
+        </div>
+
         {error && <p className="text-[13px] text-[#fca5a5] mb-4">{error}</p>}
 
         {/* Cambiar de categoría vacía el cuerpo: sin esta línea la pantalla
@@ -278,15 +391,19 @@ export default function BuscadorProductosPage() {
           <section className="mb-10">
             <div className="flex flex-wrap items-center gap-2 mb-4">
               <span className="text-[12px] text-[#a98c88] mr-1">Rango de anuncios</span>
-              {RAW_BUCKETS.map((b) => (
-                <Chip
-                  key={b}
-                  label={RAW_BUCKET_LABEL[b]}
-                  active={grupo.bucket === b}
-                  disabled={loading}
-                  onClick={() => search(sel, b)}
-                />
-              ))}
+              {RAW_BUCKETS.map((b) =>
+                bloqueados.includes(b) ? (
+                  <ChipBloqueado key={b} label={RAW_BUCKET_LABEL[b]} />
+                ) : (
+                  <Chip
+                    key={b}
+                    label={RAW_BUCKET_LABEL[b]}
+                    active={grupo.bucket === b}
+                    disabled={loading}
+                    onClick={() => search(sel, b)}
+                  />
+                ),
+              )}
             </div>
 
             {grupo.products.length > 0 ? (
@@ -333,8 +450,10 @@ export default function BuscadorProductosPage() {
               </>
             ) : (
               <p className="text-[13px] text-[#c9b4ae]">
-                Esta categoría no tiene productos en el rango <span className="text-[#efe7e0]">{grupo.label}</span>.
-                Prueba otro rango.
+                No hay productos en el rango <span className="text-[#efe7e0]">{grupo.label}</span>
+                {pais && ` en ${PAIS_LABEL[pais]}`}
+                {dias > 0 && ` con ${ANTIGUEDAD_LABEL[dias].toLowerCase()}`}.
+                Prueba otro rango o afloja los filtros.
               </p>
             )}
           </section>

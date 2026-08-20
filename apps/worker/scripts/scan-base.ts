@@ -153,6 +153,7 @@ async function main() {
           niche: row.niche, page_id: row.page_id, ad_count: m.adCount, status: v.status,
           kind: v.kind, share: m.share, product_name: v.productName,
           verdict_note: v.nota, senal_nicho: m.senal, product_path: m.dominante,
+          ad_start_date: m.masViejo,
         })
         return { row, estado: v.status, m }
       })

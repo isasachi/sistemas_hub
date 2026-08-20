@@ -1,4 +1,4 @@
-import type { RawProductRow, RawProductEntry } from '@ph/shared'
+import { diasCorriendo, type RawProductRow, type RawProductEntry } from '@ph/shared'
 
 // Los anuncios dinámicos de catálogo de Meta llegan con los placeholders sin
 // resolver ("{{product.name}}", "{{product.brand}}"): sin esto la card muestra
@@ -35,5 +35,6 @@ export function toEntry(r: RawProductRow): RawProductEntry {
     verificado: r.status === 'monoproducto',
     share: typeof r.share === 'number' ? r.share : null,
     senal: r.senal_nicho ?? null,
+    diasCorriendo: diasCorriendo(r.ad_start_date),
   }
 }

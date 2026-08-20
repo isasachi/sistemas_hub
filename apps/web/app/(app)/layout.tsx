@@ -1,10 +1,22 @@
 import { redirect } from "next/navigation";
 import { getUser } from "@/lib/supabase/server";
+import { hasAccess } from "@/lib/whop";
+import { getProfile } from "@/lib/user-settings";
 import { AppShell } from "@/components/dashboard/AppShell";
 
 // Gate de autenticación del área privada (/dashboard y /tools/*). El middleware
 // ya redirige a /login, pero esto es defensa en profundidad y nos da el user
 // para el shell.
+//
+// Y gate de SUSCRIPCIÓN: acá se lee `user_entitlements` (una query, sobre un
+// round-trip que este layout ya hacía). Va acá y no en el middleware porque el
+// middleware corre en cada request y hoy solo hace `getUser()`; sumarle una lectura
+// de DB por request para gatear lo mismo sería pagar de más.
+//
+// ⚠️ Esto gatea la UI. Las rutas de `/api/*` NO pasan por acá ni por el middleware
+// (ver el matcher de `proxy.ts`) — es un hueco previo a este cambio, no uno que el
+// paywall introduzca: esas rutas hoy no piden sesión de ninguna clase. Ver la nota
+// en AGENTS.md antes de asumir que el paywall las cubre.
 export default async function AppLayout({
   children,
 }: {
@@ -18,7 +30,13 @@ export default async function AppLayout({
   const user = await getUser();
   if (!user) redirect("/login");
 
-  const label = user.email ?? "Cuenta";
+  if (!(await hasAccess(user.id, user.email))) redirect("/suscripcion");
 
-  return <AppShell user={{ label }}>{children}</AppShell>;
+  // El nombre y la foto de la barra. Es una lectura por PK sobre una fila que ya
+  // se toca en /cuenta; va después del gate para no pagarla cuando el usuario ni
+  // siquiera va a ver el shell.
+  const perfil = await getProfile(user.id);
+  const label = perfil.fullName ?? user.email ?? "Cuenta";
+
+  return <AppShell user={{ label, avatarUrl: perfil.avatarUrl }}>{children}</AppShell>;
 }

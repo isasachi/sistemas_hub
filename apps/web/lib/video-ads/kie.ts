@@ -83,17 +83,26 @@ export function buildTaskBody(input: VideoTaskInput) {
   }
 }
 
-function apiKey(): string {
-  const key = process.env.KIE_API_KEY
-  if (!key) throw new Error('KIE_API_KEY no está configurada')
+/**
+ * La key con la que se llama a KIE. BYOK: el render lo paga el usuario con SU
+ * cuenta, así que la key sale de `user_settings` y se pasa por parámetro; el env
+ * `KIE_API_KEY` queda como respaldo del hub (dev, y las sesiones de quien todavía
+ * no cargó la suya).
+ *
+ * ⚠️ Se resuelve por parámetro y no leyendo la sesión acá adentro para que este
+ * módulo siga siendo el cliente HTTP puro que ya era — testeable sin cookies.
+ */
+export function resolveKey(userKey?: string | null): string {
+  const key = (userKey ?? '').trim() || process.env.KIE_API_KEY
+  if (!key) throw new Error('Falta la API key de KIE: cárgala en Ajustes.')
   return key
 }
 
 /** Crea la tarea de render. Devuelve el taskId; NO espera al video. */
-export async function createVideoTask(input: VideoTaskInput): Promise<string> {
+export async function createVideoTask(input: VideoTaskInput, userKey?: string | null): Promise<string> {
   const res = await fetch(`${KIE_BASE}/createTask`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey()}`, 'Content-Type': 'application/json' },
+    headers: { Authorization: `Bearer ${resolveKey(userKey)}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(buildTaskBody(input)),
   })
   const json = (await res.json().catch(() => null)) as
@@ -137,9 +146,9 @@ export function parseTaskDetail(data: unknown): TaskDetail {
   }
 }
 
-export async function getTaskDetail(taskId: string): Promise<TaskDetail> {
+export async function getTaskDetail(taskId: string, userKey?: string | null): Promise<TaskDetail> {
   const res = await fetch(`${KIE_BASE}/recordInfo?taskId=${encodeURIComponent(taskId)}`, {
-    headers: { Authorization: `Bearer ${apiKey()}` },
+    headers: { Authorization: `Bearer ${resolveKey(userKey)}` },
   })
   const json = (await res.json().catch(() => null)) as { data?: unknown; msg?: string } | null
   if (!res.ok) throw new Error(`KIE recordInfo falló (${res.status}): ${json?.msg ?? ''}`)
