@@ -53,6 +53,19 @@ describe('isGrandfathered', () => {
     expect(isGrandfathered('tres@jrhub.pe')).toBe(false)
     expect(isGrandfathered(null)).toBe(false)
   })
+
+  // El valor EXACTO que está cargado en Vercel (production y preview, 2026-08-20).
+  // Va como test y no como comentario porque es la única forma de comprobar el
+  // formato: la variable es sensitive en Vercel y no se puede volver a leer. Si
+  // alguien cambia el separador o mete espacios, se cae acá y no en producción con
+  // los tres usuarios afuera.
+  it('parsea el valor real de producción', () => {
+    vi.stubEnv('WHOP_GRANDFATHERED_EMAILS', 'demo1@jrhub.pe,demo2@jrhub.pe,demo3@jrhub.pe')
+    for (const e of ['demo1@jrhub.pe', 'demo2@jrhub.pe', 'demo3@jrhub.pe']) {
+      expect(isGrandfathered(e)).toBe(true)
+    }
+    expect(isGrandfathered('demo4@jrhub.pe')).toBe(false)
+  })
 })
 
 describe('entitlementFromEvent', () => {
