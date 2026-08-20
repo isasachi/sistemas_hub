@@ -449,6 +449,26 @@ Paywall del hub: **tres planes**, 3 días de prueba, desbloquean el ACCESO al á
 
 **Env:** `WHOP_API_KEY`, `WHOP_PLAN_ID_1`, `WHOP_PLAN_ID_2`, `WHOP_PLAN_ID_3`, `WHOP_WEBHOOK_SECRET`, `WHOP_GRANDFATHERED_EMAILS`, `CREDITS_EPOCH`, y `WHOP_API_BASE` **solo** para apuntar al sandbox (`https://sandbox-api.whop.com/api/v1`) — producción es el default del código, así que en prod la variable **se omite**. De `WHOP_API_BASE` también se deriva el host del checkout cuando `purchase_url` viene relativo. **Schema:** `20260819000002_whop_entitlements.sql` + `20260820000001_plan_tiers.sql`.
 
+### Mi cuenta (`app/cuenta`)
+
+Perfil (foto, nombre, teléfono), plan y créditos, datos de facturación y la API key de KIE, en una sola pantalla. Reemplaza a `/ajustes`, que fue su primera versión y nunca se desplegó.
+
+⚠️ **VIVE FUERA DEL GRUPO `(app)`, igual que el paywall y por el mismo motivo.** Ese layout rebota a `/suscripcion` a quien no tenga suscripción activa — así que un usuario en `past_due` (una tarjeta rechazada: pasa todos los meses) no podría entrar a ver ni corregir sus propios datos de facturación, que es exactamente lo que necesita hacer en ese momento. Acá se autentica sola y el bloque del plan sabe decir "sin plan activo" sin inventar un contador de créditos. Es el mismo bug que la guarda vieja de `/suscripcion`, un directorio más allá.
+
+**Las mutaciones son server actions (`app/cuenta/actions.ts`), no rutas de API** — el repo ya usa ese patrón en `app/actions/auth.ts`, y así los formularios no necesitan fetch ni JSON. ⚠️ **Cada action resuelve la sesión por su cuenta y escribe sobre `user.id`**: un action es un endpoint público, y si el usuario objetivo saliera del formulario cualquiera podría escribirle el perfil —o la API key de KIE— a otra cuenta. Cubierto por test.
+
+⚠️ **EL BUCKET NO VALIDA NADA, así que el avatar se valida antes de tocarlo.** `ad-uploads` es `public: true`, con `file_size_limit` null y `allowed_mime_types` null (verificado contra el proyecto), y `mimeToExt` cae a `.jpg` para cualquier tipo desconocido — o sea un archivo arbitrario terminaría servido como imagen en una URL pública. El allowlist (PNG/JPG/WEBP) y el tope de 2 MB viven en el action. El path es `avatars/<user.id>.<ext>` con upsert, y la URL guardada conserva el `?v=<ts>` de `uploadToStorage`: sin ese cache-bust el navegador sigue pintando la foto anterior, porque el path no cambia.
+
+⚠️ **La zona horaria de las fechas va FIJA.** Sin `timeZone`, `toLocaleDateString` usa la del SERVIDOR — UTC en Vercel, la del equipo en local — así que la misma renovación se veía en días distintos según dónde corriera. Se separan dos casos: `renewal_period_end` es un instante y se traduce a `America/Lima` (mismo criterio que `limaSearchDay`); `credits.desde` ya es un día de calendario en formato `YYYY-MM-DD`, que se parsea como medianoche UTC, así que se formatea en UTC — traducirlo a Lima lo correría un día hacia atrás.
+
+**Los tres formularios escriben sobre la MISMA fila**, así que `saveProfile` es un patch parcial: guardar facturación no puede vaciar el nombre del perfil.
+
+⚠️ **NO HAY HISTORIAL DE PAGOS, y es una decisión, no un olvido.** Mostrarlo de verdad exige capturar `payment.succeeded` del webhook, o sea una **segunda** suposición sobre la forma del sobre — la primera ya está documentada como no verificada. Si esa suposición falla, la tabla queda vacía para siempre y la pantalla muestra "aún no hay pagos" con toda naturalidad: éxito silencioso, el peor modo de fallo del proyecto. Mientras tanto se muestra lo que SÍ es dato real y ya está en `user_entitlements`: plan, estado de la membresía (los 9 de Whop, traducidos; uno desconocido dice "sin información" en vez de imprimir el string crudo) y fecha de renovación. Se agrega **después** del smoke que confirme el payload, y ahí es una función.
+
+**Los datos de facturación se piden pero hoy no los usa nadie** — el cobro lo hace Whop como merchant-of-record y el hub no emite comprobantes. La pantalla lo dice con esas palabras: pedir datos fiscales dando a entender que ya se factura es una promesa que el producto no cumple. Se guarda solo lo que pide un comprobante peruano (razón social/nombre, RUC o DNI, dirección); el documento se valida **solo si es todo dígitos** (8 = DNI, 11 = RUC), porque un cliente extranjero tiene identificadores con letras y exigirle el formato peruano sería inventar una regla que SUNAT no pide.
+
+**Schema:** `20260820000002_user_profile.sql` (columnas sobre `user_settings`).
+
 ### Créditos de imagen (`lib/credits.ts`)
 
 30 / 100 / 180 imágenes por período según el plan. Cada imagen generada consume 1.
@@ -479,7 +499,7 @@ El render de video lo paga el usuario con su cuenta de KIE — por eso el genera
 
 ⚠️ **`lote-status` también necesita la key**: en KIE una tarea solo la ve la cuenta que la creó, así que consultar el estado con otra key devolvería nada. Se lee una vez por request, no por lote.
 
-⚠️ **La key se guarda en claro** (RLS on sin políticas → solo el service role, el mismo blindaje que el resto del proyecto) y **nunca vuelve al cliente**: la pantalla muestra `maskKey` (los últimos 4 caracteres). Una key en el DOM es una key en el historial del navegador y en cualquier captura de pantalla.
+⚠️ **La key se guarda en claro** (RLS on sin políticas → solo el service role, el mismo blindaje que el resto del proyecto) y **nunca vuelve al cliente**: la pantalla muestra `maskKey` (los últimos 4 caracteres). Una key en el DOM es una key en el historial del navegador y en cualquier captura de pantalla. Por eso `UserProfile` —lo que sí viaja a la pantalla— no la incluye.
 
 ## Tool: Buscador de Productos (`buscador-productos`)
 

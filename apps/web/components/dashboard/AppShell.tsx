@@ -10,7 +10,7 @@ import { toolIcon } from "@/lib/tool-icons";
 import { signOut } from "@/app/actions/auth";
 
 interface AppShellProps {
-  user: { label: string };
+  user: { label: string; avatarUrl?: string | null };
   children: React.ReactNode;
 }
 
@@ -32,7 +32,7 @@ const NAV_LABEL: Record<string, string> = {
  * `mousedown` al pulsar sobre el otro — desmontando el <form> antes de que el
  * click llegara a ser un submit. Cerrar sesión no hacía nada.
  */
-function AccountMenu({ label }: { label: string }) {
+function AccountMenu({ label, avatarUrl }: { label: string; avatarUrl?: string | null }) {
   const [menu, setMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -59,8 +59,16 @@ function AccountMenu({ label }: { label: string }) {
         aria-expanded={menu}
         className="flex items-center gap-1.5 rounded-full border border-white/[0.08] py-1 pl-1 pr-2 transition-colors duration-200 hover:border-white/[0.2] cursor-pointer"
       >
-        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[rgba(246,242,235,0.12)] font-[Archivo] text-[12px] font-bold text-[#e8dcd6]">
-          {label.charAt(0).toUpperCase()}
+        <span className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-[rgba(246,242,235,0.12)] font-[Archivo] text-[12px] font-bold text-[#e8dcd6]">
+          {avatarUrl ? (
+            // La URL trae `?v=<ts>` de `uploadToStorage`: el path del bucket es
+            // determinista con upsert, así que sin ese cache-bust el navegador
+            // seguiría pintando la foto anterior.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
+          ) : (
+            label.charAt(0).toUpperCase()
+          )}
         </span>
         <ChevronDown className="h-3.5 w-3.5 text-[#a98c88]" />
       </button>
@@ -76,12 +84,12 @@ function AccountMenu({ label }: { label: string }) {
           {/* Plan, créditos y la API key de KIE. Va en el menú de cuenta y no en
               la barra de tools: es configuración, no una herramienta. */}
           <Link
-            href="/ajustes"
+            href="/cuenta"
             onClick={() => setMenu(false)}
             className="flex w-full items-center gap-2.5 px-4 py-3 text-[13px] font-medium text-[#a98c88] no-underline transition-colors duration-200 hover:bg-white/[0.05] hover:text-[#f6f2eb]"
           >
             <Settings className="h-[18px] w-[18px]" />
-            Ajustes
+            Mi cuenta
           </Link>
           <form action={signOut}>
             <button
@@ -168,12 +176,12 @@ export function AppShell({ user, children }: AppShellProps) {
 
           {/* Espaciador + cuenta a la derecha (desktop) */}
           <div className="ml-auto hidden items-center md:flex">
-            <AccountMenu label={user.label} />
+            <AccountMenu label={user.label} avatarUrl={user.avatarUrl} />
           </div>
 
           {/* Móvil: hamburguesa + cuenta */}
           <div className="ml-auto flex items-center gap-2 md:hidden">
-            <AccountMenu label={user.label} />
+            <AccountMenu label={user.label} avatarUrl={user.avatarUrl} />
             <button
               type="button"
               onClick={() => setOpen(true)}

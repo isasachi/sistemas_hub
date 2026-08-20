@@ -62,7 +62,7 @@ describe('/suscripcion', () => {
   // personas que podían cambiar de plan.
   it('con un plan activo NO redirige: muestra la grilla y marca el plan actual', async () => {
     vi.mocked(getAccess).mockResolvedValue({
-      tier: 1, renewalPeriodEnd: null, grandfathered: false,
+      tier: 1, status: 'active', renewalPeriodEnd: null, grandfathered: false,
     })
     const html = await render()
 
@@ -77,7 +77,7 @@ describe('/suscripcion', () => {
   // Sin salida, quien ya pagó queda encerrado en el paywall.
   it('con acceso ofrece volver al panel', async () => {
     vi.mocked(getAccess).mockResolvedValue({
-      tier: 2, renewalPeriodEnd: null, grandfathered: false,
+      tier: 2, status: 'active', renewalPeriodEnd: null, grandfathered: false,
     })
     expect(await render()).toContain('href="/dashboard"')
   })
@@ -86,14 +86,14 @@ describe('/suscripcion', () => {
   // Callarlo es cobrarle dos veces a alguien sin avisarle.
   it('avisa que contratar otro plan no cancela el anterior', async () => {
     vi.mocked(getAccess).mockResolvedValue({
-      tier: 1, renewalPeriodEnd: null, grandfathered: false,
+      tier: 1, status: 'active', renewalPeriodEnd: null, grandfathered: false,
     })
     expect(await render()).toMatch(/cancelar\s+la anterior/i)
   })
 
   it('a un grandfathered no le ofrece comprar nada', async () => {
     vi.mocked(getAccess).mockResolvedValue({
-      tier: 3, renewalPeriodEnd: null, grandfathered: true,
+      tier: 3, status: 'active', renewalPeriodEnd: null, grandfathered: true,
     })
     const html = await render()
     expect(html).not.toContain('/api/whop/checkout')
@@ -111,7 +111,7 @@ describe('/suscripcion', () => {
 
     it('con el webhook ya procesado, va al dashboard', async () => {
       vi.mocked(getAccess).mockResolvedValue({
-        tier: 3, renewalPeriodEnd: null, grandfathered: false,
+        tier: 3, status: 'active', renewalPeriodEnd: null, grandfathered: false,
       })
       expect(await render({ pago: 'ok' })).toBe('REDIRECT:/dashboard')
     })

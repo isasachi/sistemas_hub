@@ -1,9 +1,9 @@
 /**
- * Ajustes por usuario. Hoy son uno solo: la API key de KIE con la que se
- * renderiza el video (BYOK — el render lo paga el usuario, por eso el generador
+ * Ajustes y datos de la cuenta: perfil, facturación y la API key de KIE con la que
+ * se renderiza el video (BYOK — el render lo paga el usuario, por eso el generador
  * de video viene incluido en los tres planes).
  *
- * Tabla `user_settings` (migración 20260820000001_plan_tiers.sql), RLS on sin
+ * Tabla `user_settings` (migraciones 20260820000001 y 20260820000002), RLS on sin
  * políticas → solo el service role.
  */
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
@@ -19,6 +19,84 @@ function getDb(): SupabaseClient {
     )
   }
   return _db
+}
+
+/**
+ * Lo que se puede mostrar de la cuenta.
+ *
+ * ⚠️ NO incluye la API key de KIE. La key se lee por su propia función y nunca
+ * viaja al cliente: una key en el DOM es una key en el historial del navegador y
+ * en cualquier captura de pantalla. Para confirmar que está cargada alcanza con
+ * `maskKey`.
+ */
+export interface UserProfile {
+  fullName: string | null
+  phone: string | null
+  avatarUrl: string | null
+  billingName: string | null
+  taxId: string | null
+  billingAddress: string | null
+}
+
+const VACIO: UserProfile = {
+  fullName: null, phone: null, avatarUrl: null,
+  billingName: null, taxId: null, billingAddress: null,
+}
+
+/** Columna de DB → campo del perfil. Una sola tabla de nombres para leer y escribir. */
+const COLUMNA = {
+  fullName: 'full_name',
+  phone: 'phone',
+  avatarUrl: 'avatar_url',
+  billingName: 'billing_name',
+  taxId: 'tax_id',
+  billingAddress: 'billing_address',
+} as const satisfies Record<keyof UserProfile, string>
+
+export async function getProfile(userId: string): Promise<UserProfile> {
+  const { data, error } = await getDb()
+    .from('user_settings')
+    .select(Object.values(COLUMNA).join(','))
+    .eq('user_id', userId)
+    .maybeSingle()
+  if (error) {
+    // Fail-open a vacío: un perfil que no se pudo leer deja la pantalla en blanco,
+    // no la rompe. Nada de acceso ni de dinero depende de estos campos.
+    console.error('[settings] leyendo perfil:', error.message)
+    return VACIO
+  }
+  if (!data) return VACIO
+
+  const row = data as unknown as Record<string, string | null>
+  const leer = (k: keyof UserProfile) => (row[COLUMNA[k]] ?? null) || null
+  return {
+    fullName: leer('fullName'),
+    phone: leer('phone'),
+    avatarUrl: leer('avatarUrl'),
+    billingName: leer('billingName'),
+    taxId: leer('taxId'),
+    billingAddress: leer('billingAddress'),
+  }
+}
+
+/**
+ * Guarda SOLO los campos que vienen en `patch`.
+ *
+ * ⚠️ Parcial a propósito: la pantalla tiene tres formularios sobre la MISMA fila
+ * (perfil, facturación, avatar). Escribir el objeto entero desde cualquiera de
+ * ellos borraría lo que cargaron los otros — un guardado de facturación no puede
+ * vaciar el nombre.
+ */
+export async function saveProfile(userId: string, patch: Partial<UserProfile>): Promise<void> {
+  const fila: Record<string, unknown> = { user_id: userId, updated_at: new Date().toISOString() }
+  for (const [campo, valor] of Object.entries(patch)) {
+    const col = COLUMNA[campo as keyof UserProfile]
+    // Un string vacío es "borralo", y por eso se normaliza a null: así la lectura
+    // no tiene que distinguir '' de ausente en cada uso.
+    if (col) fila[col] = typeof valor === 'string' ? valor.trim() || null : valor ?? null
+  }
+  const { error } = await getDb().from('user_settings').upsert(fila, { onConflict: 'user_id' })
+  if (error) throw new Error(`guardando perfil: ${error.message}`)
 }
 
 export async function getKieKey(userId: string): Promise<string | null> {

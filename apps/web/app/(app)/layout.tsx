@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getUser } from "@/lib/supabase/server";
 import { hasAccess } from "@/lib/whop";
+import { getProfile } from "@/lib/user-settings";
 import { AppShell } from "@/components/dashboard/AppShell";
 
 // Gate de autenticación del área privada (/dashboard y /tools/*). El middleware
@@ -31,7 +32,11 @@ export default async function AppLayout({
 
   if (!(await hasAccess(user.id, user.email))) redirect("/suscripcion");
 
-  const label = user.email ?? "Cuenta";
+  // El nombre y la foto de la barra. Es una lectura por PK sobre una fila que ya
+  // se toca en /cuenta; va después del gate para no pagarla cuando el usuario ni
+  // siquiera va a ver el shell.
+  const perfil = await getProfile(user.id);
+  const label = perfil.fullName ?? user.email ?? "Cuenta";
 
-  return <AppShell user={{ label }}>{children}</AppShell>;
+  return <AppShell user={{ label, avatarUrl: perfil.avatarUrl }}>{children}</AppShell>;
 }

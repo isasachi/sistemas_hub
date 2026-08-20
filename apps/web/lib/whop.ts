@@ -101,7 +101,7 @@ export async function getAccess(
   // Grandfathered = el tier MÁS ALTO. Son los 3 usuarios previos al paywall: el
   // cambio no puede quitarles nada de lo que ya usaban.
   if (isGrandfathered(email)) {
-    return { tier: 3, renewalPeriodEnd: null, grandfathered: true }
+    return { tier: 3, status: null, renewalPeriodEnd: null, grandfathered: true }
   }
 
   const { data, error } = await getDb()
@@ -121,6 +121,7 @@ export async function getAccess(
   const mejor = vivas.reduce((a, b) => (toTier(b.tier) > toTier(a.tier) ? b : a))
   return {
     tier: toTier(mejor.tier),
+    status: (mejor.status as string | null) ?? null,
     renewalPeriodEnd: (mejor.renewal_period_end as string | null) ?? null,
     grandfathered: false,
   }
@@ -129,6 +130,8 @@ export async function getAccess(
 /** Lo que el hub sabe de la suscripción de un usuario. */
 export interface Access {
   tier: Tier
+  /** Estado de la membership en Whop. null = grandfathered (no hay fila). */
+  status: string | null
   /** Fin del período pagado — ancla del reinicio de créditos. */
   renewalPeriodEnd: string | null
   /** Usuario previo al paywall: acceso de por vida, sin fila en la tabla. */

@@ -27,7 +27,7 @@ vi.mock('@/lib/supabase/server', () => ({
   getUser: vi.fn().mockResolvedValue({ id: 'u1', email: 'u@jrhub.pe' }),
 }))
 vi.mock('@/lib/whop', () => ({
-  getAccess: vi.fn().mockResolvedValue({ tier: 3, renewalPeriodEnd: null, grandfathered: false }),
+  getAccess: vi.fn().mockResolvedValue({ tier: 3, status: 'active', renewalPeriodEnd: null, grandfathered: false }),
 }))
 
 import { NextRequest } from 'next/server'
@@ -41,7 +41,7 @@ import { getUser } from '@/lib/supabase/server'
 
 /** Corre el resto del test como si el usuario tuviera este plan. */
 function conPlan(tier: Tier) {
-  vi.mocked(getAccess).mockResolvedValue({ tier, renewalPeriodEnd: null, grandfathered: false })
+  vi.mocked(getAccess).mockResolvedValue({ tier, status: 'active', renewalPeriodEnd: null, grandfathered: false })
 }
 
 const req = (body: unknown) =>

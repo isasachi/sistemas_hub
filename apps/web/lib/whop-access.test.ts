@@ -35,7 +35,7 @@ describe('getAccess', () => {
   it('devuelve el tier de la membership viva', async () => {
     filas = [fila('active', 2, '2026-09-20T00:00:00Z')]
     expect(await getAccess('u1')).toEqual({
-      tier: 2, renewalPeriodEnd: '2026-09-20T00:00:00Z', grandfathered: false,
+      tier: 2, status: 'active', renewalPeriodEnd: '2026-09-20T00:00:00Z', grandfathered: false,
     })
   })
 
@@ -54,8 +54,10 @@ describe('getAccess', () => {
   // Los 3 usuarios previos al paywall no pueden perder nada con este cambio.
   it('grandfathered entra como plan 3, sin importar la tabla', async () => {
     errorDb = 'no debería consultarse'
+    // `status` null es la marca de que NO hay fila en la tabla: el grandfathering
+    // sale del env, no de una membership de Whop.
     expect(await getAccess('u1', 'VIEJO@jrhub.pe')).toEqual({
-      tier: 3, renewalPeriodEnd: null, grandfathered: true,
+      tier: 3, status: null, renewalPeriodEnd: null, grandfathered: true,
     })
   })
 
