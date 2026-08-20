@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { CheckCircle2, Clock, ArrowUpDown, Trash2, FolderOpen } from 'lucide-react'
-import { getToolBySlug } from '@/lib/tools'
+import { getToolBySlug, sessionHref } from '@/lib/tools'
 import { toolIcon } from '@/lib/tool-icons'
 
 // Tools con sesiones persistidas (GET /api/<slug>/sessions → shape uniforme).
@@ -227,7 +227,7 @@ function ProjectCard({
   const Icon = toolIcon(getToolBySlug(p.slug)?.icon ?? '')
   return (
     <Link
-      href={`/tools/${p.slug}/sesion/${p.id}`}
+      href={sessionHref(p.slug, p.id)}
       className="lp-card lp-leak group relative mb-3.5 block break-inside-avoid overflow-hidden no-underline transition-transform duration-200 hover:-translate-y-0.5 hover:border-[rgba(255,255,255,0.2)]"
     >
       <button
