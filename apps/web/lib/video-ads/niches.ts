@@ -72,7 +72,7 @@ export const NICHE_SPEC: Record<Niche, NicheSpec> = {
       'PRODUCTO — ES LA PRENDA QUE EL PERSONAJE LLEVA PUESTA, no un objeto que sostiene.\nDebe verse idéntica a su imagen de referencia (mismo corte, color, tejido y detalles):',
   },
   zapatos: {
-    label: 'Zapatos',
+    label: 'Calzado',
     wornProduct: true,
     productHint: 'Foto del par: de catálogo o sobre fondo limpio',
     avatarNote:
