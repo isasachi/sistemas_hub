@@ -2,15 +2,17 @@ import Link from "next/link";
 import { HeroShowcaseWall } from "./HeroShowcaseWall";
 import { HERO_COUNTER } from "@/lib/home/stats";
 
-// Hero: rejilla vertical tenue, badge "en vivo", el titular con LA FIRMA del
-// sistema (.lp-cut) y la pared de outputs (marquee de assets reales).
+// Hero: rejilla vertical tenue, badge "en vivo", titular crema con UNA sola
+// palabra de acento y la pared de outputs (marquee de assets reales).
 //
-// La firma es el mecanismo del logotipo: UN solo filo vertical corta las dos
-// líneas del titular, carmesí a la izquierda y crema a la derecha, cayendo
-// DENTRO de una palabra. Por eso .lp-cut va en el <h1> y no en cada línea —
-// una sola caja de degradado es lo que hace que el corte quede alineado entre
-// las dos, como LEG|ACY sobre BR|AND. Es el único gesto audaz de la pantalla:
-// el resto es crema y silencio (BRANDBOOK §5).
+// El titular llevaba `.lp-cut` —el filo del logotipo cortando las dos líneas a
+// mitad de palabra— y lo pidió cambiar el dueño del repo: ahora el acento es
+// solo "ecommerce", en carmesí legible (`.lp-gold-word` = --brand-bright).
+// El resto de la línea va en crema.
+//
+// ⚠️ Una sola palabra de acento por titular. El carmesí de esta pantalla ya lo
+// tiene el CTA; si el acento se reparte entre varias palabras deja de señalar
+// dónde mirar y compite con el botón (BRANDBOOK §2).
 export function HeroSection() {
   const ctaHref =
     process.env.AUTH_DISABLED === "true" ? "/dashboard" : "/signup";
@@ -33,14 +35,11 @@ export function HeroSection() {
         </span>
       </div>
 
-      {/* Title — LA FIRMA: el corte del logotipo sobre el titular */}
-      <h1
-        className="lp-serif lp-cut relative z-[1] mx-auto mb-6 w-fit max-w-[900px] text-[clamp(40px,6vw,64px)] leading-[1.08]"
-        style={{ "--cut-at": "43%" } as React.CSSProperties}
-      >
+      {/* Title — crema, con UNA sola palabra de acento */}
+      <h1 className="lp-serif relative z-[1] mx-auto mb-6 max-w-[900px] text-[clamp(40px,6vw,64px)] leading-[1.08] text-[#f6f2eb]">
         El poder de la IA
         <br />
-        al servicio de tu ecommerce
+        al servicio de tu <span className="lp-gold-word">ecommerce</span>
       </h1>
 
       {/* Subtitle */}
