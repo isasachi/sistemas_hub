@@ -135,7 +135,7 @@ describe('/cuenta', () => {
     vi.mocked(getAccess).mockResolvedValue(null)
     const html = await render()
     expect(vi.mocked(creditStatus)).not.toHaveBeenCalled()
-    expect(html).not.toContain('Créditos de imagen')
+    expect(html).not.toContain('Te quedan')
   })
 
   it('a un grandfathered no le ofrece cambiar de plan ni le habla de cobros', async () => {
