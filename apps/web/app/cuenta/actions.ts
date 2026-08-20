@@ -24,19 +24,9 @@ function largo(valor: string, max: number, nombre: string): string | null {
   return valor.length > max ? `${nombre} no puede pasar de ${max} caracteres.` : null
 }
 
-/**
- * RUC (11 dígitos) o DNI (8). Solo se valida cuando el valor es TODO dígitos: un
- * cliente extranjero tiene identificadores con letras y bloquearlo sería inventar
- * una regla que SUNAT no pide. Un RUC mal escrito, en cambio, es un comprobante
- * que no se puede emitir, así que ese caso sí se ataja.
- */
-function validarDocumento(valor: string): string | null {
-  if (!valor || !/^\d+$/.test(valor)) return null
-  if (valor.length !== 8 && valor.length !== 11) {
-    return 'Un DNI tiene 8 dígitos y un RUC 11. Revisa el número.'
-  }
-  return null
-}
+// No hay datos de facturación: los comprobantes los emite Whop como
+// merchant-of-record, así que el hub no tiene por qué pedir RUC ni dirección
+// fiscal. Se quitaron junto con sus columnas (migración 20260820000003).
 
 export async function guardarPerfil(_prev: FormState, fd: FormData): Promise<FormState> {
   const user = await getUser()
@@ -55,30 +45,6 @@ export async function guardarPerfil(_prev: FormState, fd: FormData): Promise<For
   }
   revalidatePath('/cuenta')
   return { ok: 'Datos guardados.' }
-}
-
-export async function guardarFacturacion(_prev: FormState, fd: FormData): Promise<FormState> {
-  const user = await getUser()
-  if (!user) return { error: 'Tu sesión expiró. Vuelve a iniciar sesión.' }
-
-  const billingName = texto(fd, 'billingName')
-  const taxId = texto(fd, 'taxId')
-  const billingAddress = texto(fd, 'billingAddress')
-  const problema =
-    largo(billingName, 120, 'La razón social') ??
-    largo(taxId, 20, 'El documento') ??
-    largo(billingAddress, 200, 'La dirección') ??
-    validarDocumento(taxId)
-  if (problema) return { error: problema }
-
-  try {
-    await saveProfile(user.id, { billingName, taxId, billingAddress })
-  } catch (err) {
-    console.error('[cuenta] facturación:', err instanceof Error ? err.message : String(err))
-    return { error: 'No pudimos guardar tus datos de facturación. Inténtalo de nuevo.' }
-  }
-  revalidatePath('/cuenta')
-  return { ok: 'Datos de facturación guardados.' }
 }
 
 export async function guardarKieKey(_prev: FormState, fd: FormData): Promise<FormState> {

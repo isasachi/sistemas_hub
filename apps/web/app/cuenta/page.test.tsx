@@ -23,7 +23,6 @@ vi.mock('@/lib/user-settings', () => ({
 vi.mock('./Formularios', () => ({
   PerfilForm: () => <div data-t="perfil" />,
   AvatarForm: () => <div data-t="avatar" />,
-  FacturacionForm: () => <div data-t="facturacion" />,
   KieKeyForm: () => <div data-t="kie" />,
 }))
 
@@ -33,10 +32,7 @@ import { getAccess } from '@/lib/whop'
 import { creditStatus } from '@/lib/credits'
 import { getProfile } from '@/lib/user-settings'
 
-const PERFIL_VACIO = {
-  fullName: null, phone: null, avatarUrl: null,
-  billingName: null, taxId: null, billingAddress: null,
-}
+const PERFIL_VACIO = { fullName: null, phone: null, avatarUrl: null }
 
 async function render(): Promise<string> {
   try {
@@ -78,11 +74,31 @@ describe('/cuenta', () => {
     expect(html).toContain('20 de agosto de 2026')
   })
 
-  it('trae los cuatro formularios', async () => {
+  it('trae los formularios de perfil, avatar y key', async () => {
     const html = await render()
-    for (const t of ['perfil', 'avatar', 'facturacion', 'kie']) {
-      expect(html).toContain(`data-t="${t}"`)
-    }
+    for (const t of ['perfil', 'avatar', 'kie']) expect(html).toContain(`data-t="${t}"`)
+  })
+
+  // Los pagos los hace Whop como merchant-of-record: el hub no pide datos fiscales.
+  it('no pide datos de facturación', async () => {
+    const html = await render()
+    expect(html).not.toMatch(/facturaci[óo]n/i)
+    expect(html).not.toMatch(/RUC/)
+  })
+
+  // El cambio de plan tiene que poder hacerse ACÁ, no solo desde el paywall.
+  it('ofrece cambiar a los otros dos planes, con su checkout', async () => {
+    const html = await render()   // el usuario está en el plan 2
+    expect(html).toContain('/api/whop/checkout?plan=1')
+    expect(html).toContain('/api/whop/checkout?plan=3')
+    expect(html).not.toContain('/api/whop/checkout?plan=2')
+    expect(html).toContain('Subir')
+    expect(html).toContain('Bajar')
+  })
+
+  // Un cambio crea una suscripción NUEVA en Whop y la vieja sigue cobrando.
+  it('avisa que el plan anterior hay que cancelarlo', async () => {
+    expect(await render()).toMatch(/cancelar\s+la anterior/i)
   })
 
   // ⚠️ LA RAZÓN POR LA QUE ESTA PÁGINA VIVE FUERA DEL GRUPO `(app)`. Ese layout
@@ -97,8 +113,10 @@ describe('/cuenta', () => {
     expect(html).toContain('No tienes un plan activo')
     expect(html).toContain('/suscripcion')
     // Lo suyo sigue accesible: es el motivo de entrar.
-    expect(html).toContain('data-t="facturacion"')
+    expect(html).toContain('data-t="perfil"')
     expect(html).toContain('data-t="kie"')
+    // Y sin plan no hay checkout de cambio: primero tiene que tener uno.
+    expect(html).not.toContain('/api/whop/checkout')
   })
 
   // "Volver al panel" rebotaría al paywall: el layout de `(app)` lo manda ahí.
@@ -127,6 +145,7 @@ describe('/cuenta', () => {
     const html = await render()
     expect(html).toContain('Acceso de por vida')
     expect(html).not.toContain('Cambiar de plan')
+    expect(html).not.toContain('/api/whop/checkout')
   })
 
   it('con la suscripción cancelada dice cuándo TERMINA, no cuándo se renueva', async () => {

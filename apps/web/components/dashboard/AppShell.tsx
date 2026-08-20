@@ -4,14 +4,50 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { Wordmark } from "@/components/layout/Wordmark";
 import { usePathname } from "next/navigation";
-import { LogOut, Menu, X, ChevronDown, Settings } from "lucide-react";
+import { LogOut, Menu, X, ChevronDown, Settings, ImageIcon } from "lucide-react";
+import { creditosBajos } from "@ph/shared";
 import { tools } from "@/lib/tools";
 import { toolIcon } from "@/lib/tool-icons";
 import { signOut } from "@/app/actions/auth";
 
 interface AppShellProps {
   user: { label: string; avatarUrl?: string | null };
+  /** Imágenes que le quedan en el período. null = sin plan (no se pinta). */
+  credits?: { restantes: number; limite: number } | null;
   children: React.ReactNode;
+}
+
+/**
+ * Contador de créditos de la barra. Es el número que decide si alcanza para
+ * terminar lo que el usuario está haciendo, así que vive al lado del avatar y no
+ * escondido en el menú.
+ *
+ * ⚠️ Se pinta en el render del servidor de CADA página, o sea que se actualiza al
+ * navegar, no en vivo. Generar una imagen sin cambiar de página deja el número
+ * viejo hasta la siguiente navegación. Es aceptable: el valor real lo impone el
+ * servidor en `checkGenQuota`, este contador solo informa. Si algún día molesta,
+ * el upgrade es que las rutas de generación devuelvan `credits` (ya lo hacen) y un
+ * client component lo refresque.
+ */
+export function CreditosPill({ restantes, limite }: { restantes: number; limite: number }) {
+  const bajo = creditosBajos(restantes, limite);
+  const sin = restantes <= 0;
+  const color = sin
+    ? "border-[rgba(233,61,61,0.35)] bg-[rgba(233,61,61,0.12)] text-[#fca5a5]"
+    : bajo
+      ? "border-amber-400/30 bg-amber-400/10 text-amber-300"
+      : "border-white/[0.08] text-[#c9b4ae] hover:border-white/[0.2] hover:text-[#f6f2eb]";
+  return (
+    <Link
+      href="/cuenta"
+      title={`Te quedan ${restantes} de ${limite} imágenes en este período`}
+      aria-label={`Créditos de imagen: quedan ${restantes} de ${limite}`}
+      className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-[Lato] text-[12px] font-bold no-underline transition-colors duration-200 ${color}`}
+    >
+      <ImageIcon className="h-3.5 w-3.5" aria-hidden />
+      {restantes}
+    </Link>
+  );
 }
 
 // Etiquetas cortas para la barra superior (los nombres completos no caben en fila).
@@ -109,7 +145,7 @@ function AccountMenu({ label, avatarUrl }: { label: string; avatarUrl?: string |
   );
 }
 
-export function AppShell({ user, children }: AppShellProps) {
+export function AppShell({ user, credits, children }: AppShellProps) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false); // drawer móvil
 
@@ -177,13 +213,15 @@ export function AppShell({ user, children }: AppShellProps) {
             })}
           </nav>
 
-          {/* Espaciador + cuenta a la derecha (desktop) */}
-          <div className="ml-auto hidden items-center md:flex">
+          {/* Espaciador + créditos y cuenta a la derecha (desktop) */}
+          <div className="ml-auto hidden items-center gap-2 md:flex">
+            {credits && <CreditosPill {...credits} />}
             <AccountMenu label={user.label} avatarUrl={user.avatarUrl} />
           </div>
 
           {/* Móvil: hamburguesa + cuenta */}
           <div className="ml-auto flex items-center gap-2 md:hidden">
+            {credits && <CreditosPill {...credits} />}
             <AccountMenu label={user.label} avatarUrl={user.avatarUrl} />
             <button
               type="button"

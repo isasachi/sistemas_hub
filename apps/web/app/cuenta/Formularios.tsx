@@ -3,12 +3,12 @@
 import { useActionState, useRef, useState } from "react";
 import { Loader2, Upload, User } from "lucide-react";
 import {
-  guardarPerfil, guardarFacturacion, guardarKieKey, subirAvatar, quitarAvatar,
+  guardarPerfil, guardarKieKey, subirAvatar, quitarAvatar,
   type FormState,
 } from "./actions";
 
-// Los cuatro formularios de la cuenta en un archivo: comparten el input, el botón
-// y el mensaje de estado, y separarlos serían cuatro archivos de doce líneas.
+// Los formularios de la cuenta en un archivo: comparten el input, el botón y el
+// mensaje de estado, y separarlos serían tres archivos de doce líneas.
 
 const INPUT =
   "w-full rounded-xl border border-white/[0.12] bg-[#1e0811] px-3.5 py-2.5 text-[13px] text-[#efe7e0] placeholder:text-[#8d7470]";
@@ -142,26 +142,6 @@ export function AvatarForm({ avatarUrl }: { avatarUrl: string | null }) {
       <p className="text-[11px] text-[#8d7470]">PNG, JPG o WEBP. Hasta 2 MB.</p>
       <Estado state={state} />
     </div>
-  );
-}
-
-export function FacturacionForm({ billingName, taxId, billingAddress }: {
-  billingName: string | null; taxId: string | null; billingAddress: string | null;
-}) {
-  const [state, action, pending] = useActionState(guardarFacturacion, INICIAL);
-  return (
-    <form action={action} className="flex flex-col gap-4">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Campo label="Razón social o nombre" name="billingName" defaultValue={billingName}
-          maxLength={120} placeholder="Mi Empresa S.A.C." />
-        <Campo label="RUC o DNI" name="taxId" defaultValue={taxId} maxLength={20}
-          placeholder="20123456789" hint="11 dígitos si es RUC, 8 si es DNI." />
-      </div>
-      <Campo label="Dirección fiscal" name="billingAddress" defaultValue={billingAddress}
-        maxLength={200} placeholder="Av. Siempre Viva 742, Lima" />
-      <Guardar pending={pending} />
-      <Estado state={state} />
-    </form>
   );
 }
 
