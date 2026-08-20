@@ -73,7 +73,7 @@ export function AuthForm({ mode, action, next, initialError }: AuthFormProps) {
   return (
     <div className="jr-card lp-leak jr-rise w-full max-w-[400px] rounded-2xl p-7">
       <h1 className="relative mb-1 text-[22px] text-[#f6f2eb]">{c.title}</h1>
-      <p className="relative mb-6 font-[Archivo] text-[13px] leading-[1.5] text-[#c9b4ae]">{c.subtitle}</p>
+      <p className="relative mb-6 font-[Lato] text-[13px] leading-[1.5] text-[#c9b4ae]">{c.subtitle}</p>
 
       {/* Google OAuth */}
       <button

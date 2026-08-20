@@ -27,7 +27,7 @@ export function HeroSection() {
       {/* Badge-contador "en vivo" */}
       <div className="relative z-[1] mb-8 inline-flex items-center gap-2 rounded-full border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.03)] px-4 py-1.5">
         <span className="lp-live-dot" aria-hidden />
-        <span className="font-[Archivo] text-[12px] font-medium text-[#a98c88]">
+        <span className="font-[Lato] text-[12px] font-medium text-[#a98c88]">
           <span className="font-semibold text-[#f6f2eb]">{HERO_COUNTER}</span>{" "}
           activos generados con IA
         </span>
@@ -44,7 +44,7 @@ export function HeroSection() {
       </h1>
 
       {/* Subtitle */}
-      <p className="relative z-[1] mx-auto mb-9 max-w-[560px] font-[Archivo] text-[17px] leading-[1.6] text-[#c9b4ae]">
+      <p className="relative z-[1] mx-auto mb-9 max-w-[560px] font-[Lato] text-[17px] leading-[1.6] text-[#c9b4ae]">
         Anuncios, branding, landings y productos ganadores — hechos con IA en
         minutos. Mira abajo lo que la plataforma genera.
       </p>

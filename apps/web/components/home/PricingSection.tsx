@@ -79,7 +79,7 @@ export function PricingSection() {
         <h2 className="lp-serif lp-metal mx-auto max-w-[720px] text-[clamp(30px,4vw,46px)] leading-[1.12]">
           Un plan por cada etapa
         </h2>
-        <p className="mx-auto mt-4 max-w-[480px] font-[Archivo] text-[15px] leading-[1.6] text-[#a98c88]">
+        <p className="mx-auto mt-4 max-w-[480px] font-[Lato] text-[15px] leading-[1.6] text-[#a98c88]">
           Empieza gratis. Sube de plan cuando el volumen lo pida.
         </p>
       </div>
@@ -105,12 +105,12 @@ export function PricingSection() {
               <span className="readout text-[40px] font-bold leading-none text-[#f6f2eb]">
                 {plan.price}
               </span>
-              <span className="font-[Archivo] text-[13px] text-[#8f8f8f]">
+              <span className="font-[Lato] text-[13px] text-[#8f8f8f]">
                 {plan.period}
               </span>
             </div>
 
-            <p className="mt-3 font-[Archivo] text-[14px] leading-[1.6] text-[#a98c88]">
+            <p className="mt-3 font-[Lato] text-[14px] leading-[1.6] text-[#a98c88]">
               {plan.pitch}
             </p>
 
@@ -121,7 +121,7 @@ export function PricingSection() {
                     aria-hidden
                     className="mt-[3px] h-4 w-4 shrink-0 text-[#e8dcd6]"
                   />
-                  <span className="font-[Archivo] text-[14px] leading-[1.5] text-[#c9b4ae]">
+                  <span className="font-[Lato] text-[14px] leading-[1.5] text-[#c9b4ae]">
                     {f}
                   </span>
                 </li>
@@ -149,7 +149,7 @@ export function PricingSection() {
         ))}
       </div>
 
-      <p className="mt-8 text-center font-[Archivo] text-[13px] text-[#8f8f8f]">
+      <p className="mt-8 text-center font-[Lato] text-[13px] text-[#8f8f8f]">
         Precios referenciales en proceso de definición. Incluyen IGV. Cancelas cuando quieras.
       </p>
     </section>

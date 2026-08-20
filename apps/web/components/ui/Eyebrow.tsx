@@ -16,7 +16,7 @@ export function Eyebrow({
       <span aria-hidden className="text-[11px] leading-none text-[#e8dcd6] opacity-70">
         ✦
       </span>
-      <span className="font-[Archivo] text-[11px] font-semibold uppercase tracking-[0.22em] text-[#e8dcd6]">
+      <span className="font-[Lato] text-[11px] font-semibold uppercase tracking-[0.22em] text-[#e8dcd6]">
         {label}
       </span>
       <span aria-hidden className="text-[11px] leading-none text-[#e8dcd6] opacity-70">

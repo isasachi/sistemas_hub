@@ -9,7 +9,7 @@ export default function NotFound() {
           <Compass className="h-7 w-7 text-[#e8dcd6]" />
         </div>
         <h1 className="relative mb-2.5 text-[22px] text-[#f6f2eb]">Esta página no existe</h1>
-        <p className="relative mb-7 font-[Archivo] text-[14px] leading-[1.6] text-[#c9b4ae]">
+        <p className="relative mb-7 font-[Lato] text-[14px] leading-[1.6] text-[#c9b4ae]">
           La herramienta que buscas cambió de dirección o todavía no está publicada. En el dashboard
           están todas las que puedes usar hoy.
         </p>

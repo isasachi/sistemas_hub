@@ -11,7 +11,7 @@ export default function AppError({ reset }: { error: Error; reset: () => void })
           <AlertTriangle className="h-7 w-7 text-[#e8dcd6]" />
         </div>
         <h1 className="relative mb-2.5 text-[22px] text-[#f6f2eb]">Algo salió mal</h1>
-        <p className="relative mb-7 font-[Archivo] text-[14px] leading-[1.6] text-[#c9b4ae]">
+        <p className="relative mb-7 font-[Lato] text-[14px] leading-[1.6] text-[#c9b4ae]">
           No pudimos cargar esta pantalla. Reintenta — si vuelve a fallar, desde el dashboard puedes
           entrar por otra herramienta.
         </p>

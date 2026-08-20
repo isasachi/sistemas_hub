@@ -45,24 +45,24 @@ export default function RootLayout({
             Un <link> además evita el encadenado de @import, que es
             render-blocking en serie. */}
 
-        {/* El chrome: Poppins (titulares), Archivo (UI y cuerpo) y Bodoni Moda,
-            que acá solo viste al logotipo.
-            ⚠️ Poppins vive en ESTE link y no en el del catálogo de abajo aunque
-            el contenido generado también la use: desde que los titulares
-            volvieron a Poppins es una fuente de render crítico, y colgarla del
-            link rotulado "no es del chrome" invita a que alguien la borre y se
-            lleve puestos todos los h1. */}
+        {/* El chrome: Poppins (titulares), Lato (cuerpo, UI, labels y cifras) y
+            Bodoni Moda, que acá solo viste al logotipo.
+            ⚠️ Poppins y Lato viven en ESTE link y no en el del catálogo de
+            abajo aunque el contenido generado también las use: son las dos
+            fuentes de render crítico del sitio, y colgarlas de un link
+            rotulado "no es del chrome" invita a que alguien lo borre y se
+            lleve puesta la tipografía entera. */}
         <link
           rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Bodoni+Moda:opsz,wght@6..96,700;6..96,800;6..96,900&family=Archivo:wght@400;500;600;700&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Lato:wght@400;700&family=Bodoni+Moda:opsz,wght@6..96,700;6..96,800;6..96,900&display=swap"
         />
         {/* NO es del chrome: es el catálogo tipográfico del CONTENIDO que se
             genera para el cliente. No lo borres al tocar la marca — rompe esas
-            previews. (Poppins también sale de este catálogo vía
-            lib/landing/niches.ts, pero la carga el link de arriba.) */}
+            previews. (Poppins y Lato también salen de este catálogo vía
+            lib/landing/niches.ts, pero las carga el link de arriba.) */}
         <link
           rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&family=Playfair+Display:ital,wght@0,500;0,600;1,500&family=Space+Grotesk:wght@500;700&family=Cormorant+Garamond:wght@400;600&family=Libre+Baskerville:wght@400;700&family=Nunito:wght@400;700;800&family=Oswald:wght@500;700&family=Bitter:wght@500;700&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;1,500&family=Space+Grotesk:wght@500;700&family=Cormorant+Garamond:wght@400;600&family=Libre+Baskerville:wght@400;700&family=Nunito:wght@400;700;800&family=Oswald:wght@500;700&family=Bitter:wght@500;700&display=swap"
         />
       </head>
       <body className="min-h-screen">{children}</body>

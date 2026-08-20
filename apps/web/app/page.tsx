@@ -58,7 +58,7 @@ export default function Home() {
             <h2 className="lp-serif lp-metal mx-auto max-w-[720px] text-[clamp(30px,4vw,46px)] leading-[1.12]">
               Seis herramientas, un solo flujo
             </h2>
-            <p className="mx-auto mt-4 max-w-[480px] font-[Archivo] text-[15px] leading-[1.6] text-[#a98c88]">
+            <p className="mx-auto mt-4 max-w-[480px] font-[Lato] text-[15px] leading-[1.6] text-[#a98c88]">
               Cada herramienta, con un ejemplo real de lo que genera.
             </p>
           </div>
@@ -88,7 +88,7 @@ export default function Home() {
             <h2 className="lp-serif relative mx-auto max-w-[640px] text-[clamp(30px,4.4vw,52px)] leading-[1.1] text-[#f6f2eb]">
               Tu próxima campaña empieza aquí
             </h2>
-            <p className="relative mx-auto mt-4 max-w-[440px] font-[Archivo] text-[16px] leading-[1.6] text-[#c9b4ae]">
+            <p className="relative mx-auto mt-4 max-w-[440px] font-[Lato] text-[16px] leading-[1.6] text-[#c9b4ae]">
               Crea tu cuenta y genera tu primer activo con IA en minutos.
             </p>
             <Link

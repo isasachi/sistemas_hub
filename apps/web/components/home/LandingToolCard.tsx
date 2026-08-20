@@ -48,7 +48,7 @@ export function LandingToolCard({ tool, wide = false }: { tool: Tool; wide?: boo
         )}
       </div>
 
-      <p className="relative z-[1] mt-2 px-2 font-[Archivo] text-[13px] leading-[1.55] text-[#a98c88]">
+      <p className="relative z-[1] mt-2 px-2 font-[Lato] text-[13px] leading-[1.55] text-[#a98c88]">
         {wide ? tool.description : pitch}
       </p>
 
@@ -60,7 +60,7 @@ export function LandingToolCard({ tool, wide = false }: { tool: Tool; wide?: boo
             className="inline-flex items-baseline gap-1 rounded-full border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.03)] px-2.5 py-1"
           >
             <span className="text-[12px] font-semibold text-[#efe7e0]">{s.value}</span>
-            <span className="font-[Archivo] text-[11px] text-[#c9b4ae]">{s.label}</span>
+            <span className="font-[Lato] text-[11px] text-[#c9b4ae]">{s.label}</span>
           </span>
         ))}
         <span className="lp-label ml-auto rounded-full border border-[rgba(246,242,235,0.35)] bg-[rgba(246,242,235,0.08)] px-2.5 py-1 !text-[10px] !text-[#e8dcd6]">
