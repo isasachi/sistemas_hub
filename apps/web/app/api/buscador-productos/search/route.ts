@@ -40,6 +40,9 @@ export async function POST(req: NextRequest) {
   // La UI busca por CATEGORÍA (los chips); el path por nicho sigue vivo para
   // quien pegue directo a la ruta y es el que conserva el cold start.
   const category = isCategoryId(body.category) ? body.category : null
+  // "Todos": mismo serving de categoría pero sobre TODOS los nichos con
+  // inventario. No es un CategoryId — es la ausencia de filtro.
+  const todos = body.category === 'todos'
   const niche = body.niche?.trim().toLowerCase().replace(/\s+/g, ' ')
   // Rango pedido por el filtro. Sin él (o inválido) se autoelige.
   const pedido = isRawBucket(body.bucket) ? body.bucket : null
@@ -51,8 +54,9 @@ export async function POST(req: NextRequest) {
   // inventario vivo (`categoryOf` clasifica por reglas, así que un nicho nuevo
   // del daemon entra solo) y se sirve el mismo rango sobre todos ellos.
   // Acá no hay cold start: los chips son categorías fijas, no consultas libres.
-  if (category) {
-    const niches = (await getNichesWithInventory()).filter((n) => categoryOf(n) === category)
+  if (category || todos) {
+    const inventario = await getNichesWithInventory()
+    const niches = todos ? inventario : inventario.filter((n) => categoryOf(n) === category)
     let servidoCat: RawBucket = pedido ?? ORDEN_AUTO[0]
     let productos: RawProductEntry[] = []
     for (const bucket of pedido ? [pedido] : ORDEN_AUTO) {
@@ -61,7 +65,7 @@ export async function POST(req: NextRequest) {
       if (productos.length) break
     }
     return responder({
-      niche: category,
+      niche: category ?? 'todos',
       // Con rango explícito se responde `ready` aunque venga vacío, para que la
       // UI deje el filtro a la vista y se pueda cambiar de rango.
       status: productos.length > 0 || pedido ? 'ready' : 'empty',

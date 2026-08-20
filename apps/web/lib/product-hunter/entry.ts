@@ -13,8 +13,7 @@ export function stripAdVars(t?: string | null): string | null {
   return s.length >= 3 ? s : null
 }
 
-// Fila de ph_raw_products → lo que ve el front. Lo comparten `search` y
-// `top-picks` para que una card sea idéntica en los dos lados.
+// Fila de ph_raw_products → lo que ve el front.
 export function toEntry(r: RawProductRow): RawProductEntry {
   return {
     id: `${r.niche}:${r.page_id}`,

@@ -27,8 +27,8 @@ export default function GeneradorBrandingEntrada() {
     <ToolIntro
       name="Generador de Branding"
       slug="generador-branding"
-      title="Tu marca lista en cinco respuestas"
-      description="Cuéntanos qué vendes, cómo se llama, para quién es y qué debe transmitir. Te proponemos una paleta y unas tipografías hechas para esa marca, las ajustas a tu gusto, y te devolvemos la identidad completa, el logo en tres versiones, la etiqueta lista para imprenta y el mockup del producto, todo en un archivo descargable."
+      title="Generador de Branding"
+      description="Cuéntanos qué vendes y para quién. Generamos la identidad visual de tu marca: colores, tipografías, logo, etiqueta y mockup de producto. Personaliza el resultado y descarga todos los archivos listos para usar."
       cta={lastSession ? 'Crear otra marca' : 'Crear mi marca'}
       onStart={() => { clearBrief(); router.push(STEPS[0].path) }}
       state={{
