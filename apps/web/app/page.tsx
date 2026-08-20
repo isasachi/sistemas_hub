@@ -51,8 +51,12 @@ export default function Home() {
               <span className="lp-eyebrow">Herramientas</span>
               <span aria-hidden className="text-[11px] leading-none text-[#e8dcd6] opacity-70">✦</span>
             </div>
+            {/* ⚠️ "Seis" cuenta las tools `status: "live"` de lib/tools.ts, que
+                son las que arma `liveTools` justo abajo. Al publicar la séptima
+                hay que cambiar la palabra acá: es el único número escrito a mano
+                sobre una grilla que se llena sola. */}
             <h2 className="lp-serif lp-metal mx-auto max-w-[720px] text-[clamp(30px,4vw,46px)] leading-[1.12]">
-              Todo lo que necesitas para vender
+              Seis herramientas, un solo flujo
             </h2>
             <p className="mx-auto mt-4 max-w-[480px] font-[Archivo] text-[15px] leading-[1.6] text-[#a98c88]">
               Cada herramienta, con un ejemplo real de lo que genera.
