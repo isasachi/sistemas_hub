@@ -620,3 +620,26 @@ describe('el prompt de FASE 1 pide personajes y atribución', () => {
     expect(p).toMatch(/SIN etiquetar etnia ni origen cultural/)
   })
 })
+
+/**
+ * ⚠️ FALSO POSITIVO MEDIDO con el anuncio de calzado. El forense describe un plano de
+ * producto como "Detalle del zapato, SIN PERSONA en cuadro" y la búsqueda por palabra lo
+ * leía como plano de PERSONA — al revés. Un flat-lay mal clasificado se fusiona con planos
+ * de persona y comparte fotograma con ellos, que es justo lo que esta función evita.
+ */
+describe('muestraPersona — la negación manda', () => {
+  it('no lee como persona lo que dice explícitamente que no la hay', () => {
+    expect(muestraPersona('Detalle del zapato beige con lazo, sin persona en cuadro')).toBe(false)
+    expect(muestraPersona('Plano cenital del producto, no aparece nadie')).toBe(false)
+    expect(muestraPersona('La prenda extendida, no se ve a la modelo')).toBe(false)
+  })
+
+  it('sigue reconociendo los planos de persona de siempre', () => {
+    expect(muestraPersona('Primer plano de los pies de la modelo calzando los tacones')).toBe(true)
+    expect(muestraPersona('La mujer levanta la mano y mira a la cámara')).toBe(true)
+  })
+
+  it('un plano sin personas mencionadas sigue siendo de producto', () => {
+    expect(muestraPersona('Placa final con el logotipo de la marca sobre fondo blanco')).toBe(false)
+  })
+})

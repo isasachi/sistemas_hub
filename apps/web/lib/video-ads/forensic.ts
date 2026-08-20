@@ -37,6 +37,20 @@ export const CorteSchema = z.object({
   camara: z.string(),          // plano, posición, movimiento, zoom
   dialogo: z.string(),         // texto hablado en este corte, COMPLETO
   hablantes: z.array(HablanteSchema).optional(), // su desglose por persona
+  /**
+   * ⚠️ VOZ EN OFF: se oye la narración pero QUIEN HABLA NO ESTÁ EN CUADRO.
+   *
+   * Todo el pipeline nació asumiendo un protagonista visible que habla a cámara —
+   * el bloque de consistencia, el avatar como primer fotograma, el perfil de
+   * movimiento. Pero un formato entero de UGC es voz en off sobre b-roll: medido con
+   * un anuncio real de calzado, 62 s de narración completa sobre planos de pies y de
+   * manos, sin que la cara aparezca ni una vez.
+   *
+   * Sin este campo el render pone a un avatar a hacer lip-sync de esa narración, que
+   * es exactamente lo que el original NO hace. Opcional: ausente o false significa
+   * "habla a cámara", que es el comportamiento de siempre.
+   */
+  vozEnOff: z.boolean().optional(),
   textoOverlay: z.string(),    // "No aparece" si no hay
   transicion: z.string(),      // jump cut / corte directo / continuidad / zoom digital
 })
@@ -160,6 +174,13 @@ export function muestraPersona(accion: string): boolean {
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
+  // ⚠️ LA NEGACIÓN PRIMERO. Medido con el anuncio de calzado: el forense describe un
+  // plano de producto como "Detalle del zapato, SIN PERSONA en cuadro" y la búsqueda por
+  // palabra lo leía como plano de persona — o sea justo al revés. Un flat-lay clasificado
+  // como persona se fusiona con planos de persona y comparte fotograma con ellos, que es
+  // el fallo que `muestraPersona` existe para evitar.
+  // El hueco tolera artículos y preposiciones: "no se ve A LA modelo", "sin NINGUNA persona".
+  if (/\b(sin|no hay|no aparece|no se ve|no se observa)\s+(a\s+)?(la|el|una|un|ninguna|ningun)?\s*(persona|personas|gente|modelo|nadie)\b/.test(t)) return false
   return /\b(mujer|hombre|chica|chico|muchacha|muchacho|modelo|persona|sujeto|joven|senor|senora|ella|el sujeto|protagonista)\b/.test(t)
 }
 
@@ -517,6 +538,17 @@ export function buildForensicInstruction(): string {
     `  lectura rápida llega a ~${CPS_MAX}. Si el texto que le asignaste necesita más que eso, el`,
     '  límite del corte está mal puesto, no es que la persona hable rapidísimo — corrige',
     '  el límite. La suma de las duraciones tiene que dar la duración total del video.',
+    '',
+    '⚠️ VOZ EN OFF: `vozEnOff`.',
+    '  Marca `true` cuando en ese corte SE OYE a alguien hablar pero QUIEN HABLA NO',
+    '  APARECE en cuadro — narración sobre planos de producto, de manos, de pies o de',
+    '  detalle. Es un formato entero de UGC, no una excepción rara.',
+    '  Marca `false` (o no lo pongas) cuando la persona que habla SÍ está en cuadro y se',
+    '  le ve la boca moverse.',
+    '  Un corte mudo no lleva `vozEnOff`: no hay voz que ubicar.',
+    '  ⚠️ Es la diferencia entre reconstruir el anuncio con alguien narrando por encima o',
+    '  con alguien hablándole a la cámara. Si te equivocás, el video generado pone a una',
+    '  persona a mover la boca donde el original solo mostraba el producto.',
     '',
     '⚠️ UN CORTE SIN HABLA LLEVA `dialogo` VACÍO (""), NUNCA UN MARCADOR.',
     '  "No aparece" es el marcador de `textoOverlay` y SOLO de ese campo. Si en un corte',

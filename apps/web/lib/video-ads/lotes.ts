@@ -320,6 +320,8 @@ export function buildLotePrompt(args: {
   personajes?: Personaje[]
   /** Quién habla en cada `tiempoOriginal` (ver `hablantesPorTiempo`). */
   quien?: Map<string, Personaje[]>
+  /** Qué `tiempoOriginal` son VOZ EN OFF: se oye la narración pero nadie habla en cuadro. */
+  vozEnOff?: Set<string>
 }): string {
   const { lote, consistencyBlock, productDesc, escenario, camara, voz, movimiento, images, cortes } = args
 
@@ -336,10 +338,21 @@ export function buildLotePrompt(args: {
     }
   }
   const varios = presentes.length > 1
+  const off = args.vozEnOff ?? new Set<string>()
+  /**
+   * ⚠️ EN VOZ EN OFF LA LÍNEA NO ES DE NADIE EN CUADRO. Rotularla `Locución:` o
+   * `P1 dice:` hace que el modelo le mueva la boca a alguien; el original solo mostraba
+   * el producto mientras una voz narraba por encima.
+   */
   const dice = (t: { tiempoOriginal: string }) => {
+    if (off.has(t.tiempoOriginal)) return 'VOZ EN OFF (nadie habla en cuadro)'
     const gente = quien.get(t.tiempoOriginal) ?? []
     return gente.length === 1 ? `${etiqueta(gente[0])} dice` : 'Locución'
   }
+  /** El lote entero es narración por encima: ninguna de sus tomas se dice en cuadro. */
+  const todoEnOff = lote.tomas.length > 0
+    && lote.tomas.every((t) => !t.locucion || off.has(t.tiempoOriginal))
+    && lote.tomas.some((t) => !!t.locucion)
 
   /** El bloque completo de un personaje: cómo se ve, cómo suena y cómo se mueve. */
   const bloqueDe = (p: Personaje) => [
@@ -528,6 +541,14 @@ export function buildLotePrompt(args: {
             '',
           ]
         : []),
+      ...(todoEnOff
+        ? [
+            'VOZ EN OFF: la narración se OYE pero quien la dice NO está en cuadro.',
+            'NINGUNA boca se mueve en este clip, nadie mira a la cámara para hablar y no',
+            'hay presentador: es el producto en pantalla mientras una voz narra por encima.',
+            '',
+          ]
+        : []),
       'SECUENCIA DE ACCIONES VISUALES:',
       renderAcciones(),
       '',
@@ -537,7 +558,9 @@ export function buildLotePrompt(args: {
       // de repetirlas juntas. La regla de diálogo del spec ("exacto: no resumir, no
       // extender…") se sigue cumpliendo, distribuida por toma, y de paso el modelo
       // conserva la correspondencia frase↔toma↔segundos que este bloque no da.
-      'GUION DE LOCUCIÓN FINAL (exacto: no resumir, no extender, no corregir, no añadir frases, no eliminar frases):',
+      todoEnOff
+        ? 'GUION DE LA VOZ EN OFF (exacto: no resumir, no extender, no corregir, no añadir frases, no eliminar frases). Se oye sobre la imagen; nadie lo pronuncia en cuadro:'
+        : 'GUION DE LOCUCIÓN FINAL (exacto: no resumir, no extender, no corregir, no añadir frases, no eliminar frases):',
       `“${locucionFinal}”`,
       '',
       ...BLOQUE_OVERLAY,

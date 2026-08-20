@@ -262,7 +262,7 @@ describe('generateBoundaryFrames — referencias por personaje', () => {
     const generate = vi.fn(async (_i: { prompt: string; imageUrls: string[] }) => Buffer.from('x'))
     await generateBoundaryFrames({
       avatarUrl: 'AVATAR-PROTA', productUrl: 'PROD', productDesc: 'x',
-      specs: [{ lote: 1, rol: 'fin', accionVisual: 'a', esCierre: true, personajes: [p2] }],
+      specs: [{ lote: 1, rol: 'fin', accionVisual: 'a', esCierre: true, personajes: [p2], vozEnOff: false }],
       generate, upload: async () => 'u',
     })
     expect(generate.mock.calls[0][0].imageUrls).toEqual(['https://cdn/P2.png', 'PROD'])
@@ -272,7 +272,7 @@ describe('generateBoundaryFrames — referencias por personaje', () => {
     const generate = vi.fn(async (_i: { prompt: string; imageUrls: string[] }) => Buffer.from('x'))
     await generateBoundaryFrames({
       avatarUrl: 'AVATAR-PROTA', productUrl: 'PROD', productDesc: 'x',
-      specs: [{ lote: 1, rol: 'fin', accionVisual: 'a', esCierre: true, personajes: [] }],
+      specs: [{ lote: 1, rol: 'fin', accionVisual: 'a', esCierre: true, personajes: [], vozEnOff: false }],
       generate, upload: async () => 'u',
     })
     expect(generate.mock.calls[0][0].imageUrls).toEqual(['AVATAR-PROTA', 'PROD'])

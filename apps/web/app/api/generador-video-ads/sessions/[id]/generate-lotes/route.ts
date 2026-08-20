@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getVideoSession, updateVideoSession, claimFreshLotes } from '@/lib/video-ads/db'
 import { createVideoTask, snapDuration, KIE_PROMPT_MAX, type VideoImage } from '@/lib/video-ads/kie'
 import { frameSpecs, pairFrames, generateBoundaryFrames } from '@/lib/video-ads/frames'
-import { personajesDe, hablantesPorTiempo } from '@/lib/video-ads/personajes'
+import { personajesDe, hablantesPorTiempo, vozEnOffPorTiempo } from '@/lib/video-ads/personajes'
 import { enProsa } from '@/lib/video-ads/forensic'
 import { generateImage } from '@/lib/video-ads/nano-banana'
 import { uploadToStorage } from '@/lib/storage'
@@ -298,7 +298,10 @@ export async function POST(
   // frames que lotes. Por eso la comprobación de reutilización va contra `jobs.length`.
   // Quién habla en cada toma, para saber a quién retrata cada frame y quién dice qué.
   const quien = hablantesPorTiempo(cortes, gente)
-  const jobs = frameSpecs(seed, quien)
+  // Qué tomas son narración por encima: sin esto el render le mueve la boca a alguien
+  // donde el original solo mostraba el producto.
+  const enOff = vozEnOffPorTiempo(cortes)
+  const jobs = frameSpecs(seed, quien, enOff)
   let cierres: string[]
   const guardados = session.frames
   if (reanuda && Array.isArray(guardados) && guardados.length === jobs.length) {
@@ -362,6 +365,7 @@ export async function POST(
           movimiento: session.motion_profile,
           personajes: gente,
           quien,
+          vozEnOff: enOff,
           images: [
             { url: pares[i].inicio, role: 'el primer fotograma' },
             { url: pares[i].fin, role: 'el último fotograma' },

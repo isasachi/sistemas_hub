@@ -607,3 +607,44 @@ describe('buildLotePrompt — varios personajes', () => {
     expect(p).not.toContain('P1 (hijo) dice:')
   })
 })
+
+/**
+ * VOZ EN OFF. Un formato entero de UGC narra por encima de b-roll sin que quien habla
+ * aparezca: medido con un anuncio real de calzado, 62 s de narración sobre planos de pies
+ * y de manos, sin que la cara salga ni una vez. Sin esto el render pone a un avatar a
+ * hacer lip-sync de esa narración, que es justo lo que el original NO hace.
+ */
+describe('buildLotePrompt — voz en off', () => {
+  const conT = (n: number, tiempo: string, loc: string) =>
+    ({ ...toma(n, 4, loc), tiempoOriginal: tiempo })
+
+  it('la línea no se le atribuye a nadie en cuadro', () => {
+    const l = groupIntoLotes([conT(1, 't1', 'Este modelo se agotó en un día.')])[0]
+    const p = buildLotePrompt({ lote: l, ...ARGS, vozEnOff: new Set(['t1']) })
+    expect(p).toContain('VOZ EN OFF (nadie habla en cuadro): “Este modelo se agotó en un día.”')
+    expect(p).not.toMatch(/^Locución:/m)
+  })
+
+  it('declara que ninguna boca se mueve — es lo que evita el lip-sync', () => {
+    const l = groupIntoLotes([conT(1, 't1', 'Hola.')])[0]
+    const p = buildLotePrompt({ lote: l, ...ARGS, vozEnOff: new Set(['t1']) })
+    expect(p).toMatch(/NINGUNA boca se mueve/)
+    expect(p).toMatch(/hay presentador/)
+    expect(p).toMatch(/GUION DE LA VOZ EN OFF/)
+  })
+
+  it('un lote MIXTO no se declara en off: alguien sí habla en cuadro', () => {
+    const l = groupIntoLotes([conT(1, 't1', 'Mirá esto.'), conT(2, 't2', 'Se agotó.')])[0]
+    const p = buildLotePrompt({ lote: l, ...ARGS, vozEnOff: new Set(['t2']) })
+    expect(p).not.toMatch(/NINGUNA boca se mueve/)
+    // …pero cada línea conserva su propio rótulo.
+    expect(p).toContain('Locución: “Mirá esto.”')
+    expect(p).toContain('VOZ EN OFF (nadie habla en cuadro): “Se agotó.”')
+  })
+
+  it('sin el set el prompt es IDÉNTICO al de antes', () => {
+    const l = groupIntoLotes([conT(1, 't1', 'Hola.')])[0]
+    expect(buildLotePrompt({ lote: l, ...ARGS, vozEnOff: new Set() }))
+      .toBe(buildLotePrompt({ lote: l, ...ARGS }))
+  })
+})

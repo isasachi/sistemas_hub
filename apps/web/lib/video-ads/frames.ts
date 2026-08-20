@@ -79,6 +79,8 @@ export function buildFramePrompt(args: {
   esCierre?: boolean
   /** Quiénes salen. Con varios, hay que decir cuál es cuál o el modelo los mezcla. */
   personajes?: Personaje[]
+  /** El clip es narración por encima: el fotograma NO tiene por qué mostrar una cara. */
+  vozEnOff?: boolean
 }): string {
   const gente = args.personajes ?? []
   return [
@@ -110,6 +112,18 @@ export function buildFramePrompt(args: {
     args.esCierre
       ? 'Es el último fotograma del anuncio: la pose de cierre de esa acción.'
       : 'Retrata el final de esa acción, no su inicio ni un punto intermedio.',
+    // ⚠️ En voz en off el encuadre lo manda la ACCIÓN, no la necesidad de ver una cara.
+    // El resto del prompt está escrito para un retrato de persona; sin esto el modelo
+    // sube el encuadre a la cara aunque la acción sea un plano de pies o de manos.
+    ...(args.vozEnOff
+      ? [
+          '',
+          '⚠️ ESTE CLIP ES NARRACIÓN POR ENCIMA: no hace falta que se vea la cara. Encuadra',
+          'lo que la acción describe —los pies, las manos, el producto, el detalle— aunque',
+          'eso deje a la persona fuera de cuadro o solo parcialmente visible. NO subas el',
+          'encuadre para mostrar el rostro y no pongas a nadie hablando.',
+        ]
+      : []),
     '',
     `Si el producto aparece en cuadro, tiene que verse idéntico a su imagen de referencia: ${args.productDesc}`,
     '',
@@ -170,6 +184,8 @@ export interface FrameJob {
   /** Quiénes salen en este fotograma. Vacío = no se sabe (sesión sin atribución) o es
    *  un plano sin persona; en los dos casos se usa el avatar del protagonista. */
   personajes: Personaje[]
+  /** El clip que este fotograma abre o cierra es voz en off. */
+  vozEnOff: boolean
 }
 
 /**
@@ -184,9 +200,12 @@ export function frameSpecs(
   /** Quién habla en cada `tiempoOriginal` (ver `hablantesPorTiempo`). Sin mapa se
    *  comporta igual que antes del soporte de varios personajes. */
   quien: Map<string, Personaje[]> = new Map(),
+  /** Los `tiempoOriginal` narrados por encima. Sin el set, todo es a cámara (como antes). */
+  vozEnOff: Set<string> = new Set(),
 ): FrameJob[] {
   const jobs: FrameJob[] = []
   const gente = (t: { tiempoOriginal?: string } | undefined) => quien.get(t?.tiempoOriginal ?? '') ?? []
+  const off = (t: { tiempoOriginal?: string } | undefined) => vozEnOff.has(t?.tiempoOriginal ?? '')
   lotes.forEach((l, i) => {
     const primera = l.tomas[0]
     const ultima = l.tomas[l.tomas.length - 1]
@@ -200,7 +219,7 @@ export function frameSpecs(
     if (!encadena) {
       jobs.push({
         lote: l.n, rol: 'inicio', accionVisual: primera?.accionVisual ?? '',
-        esCierre: false, personajes: gente(primera),
+        esCierre: false, personajes: gente(primera), vozEnOff: off(primera),
       })
     }
     jobs.push({
@@ -209,6 +228,7 @@ export function frameSpecs(
       accionVisual: ultima?.accionVisual ?? '',
       esCierre: i === lotes.length - 1,
       personajes: gente(ultima),
+      vozEnOff: off(ultima),
     })
   })
   return jobs
@@ -265,6 +285,7 @@ export async function generateBoundaryFrames(args: {
           productDesc: args.productDesc,
           esCierre: spec.esCierre,
           personajes: spec.personajes,
+          vozEnOff: spec.vozEnOff,
         }),
         // Las personas primero: son la escena y la identidad. El producto va detrás para
         // que no derive cuando la acción lo mete en cuadro.

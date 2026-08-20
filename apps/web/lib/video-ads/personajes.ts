@@ -150,3 +150,18 @@ export function hablantesPorTiempo(
 export function etiqueta(p: Personaje): string {
   return p.rol && p.rol !== p.id ? `${p.id} (${p.rol})` : p.id
 }
+
+/**
+ * Los `tiempo` de los cortes narrados POR ENCIMA (`vozEnOff`).
+ *
+ * Se empareja por `tiempo` y no por `n`, por el mismo motivo que `hablantesPorTiempo` y
+ * `camaraDeLote`: `groupIntoLotes` renumera después de `splitLongToma`.
+ *
+ * Un set vacío significa "todo se dice a cámara", que es el comportamiento de siempre y
+ * el de toda sesión analizada antes de que este campo existiera.
+ */
+export function vozEnOffPorTiempo(
+  cortes: { tiempo: string; vozEnOff?: boolean }[] | undefined,
+): Set<string> {
+  return new Set((cortes ?? []).filter((c) => c.vozEnOff).map((c) => c.tiempo))
+}
