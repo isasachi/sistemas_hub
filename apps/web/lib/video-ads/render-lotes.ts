@@ -1,6 +1,7 @@
 import { createHash } from 'crypto'
 import type { Lote, LoteImage } from './lotes'
 import type { MotionProfile, VoiceProfile } from './character'
+import type { Personaje } from './personajes'
 
 /**
  * Lógica pura de orquestación del render por lotes (Task 6, fix rounds 1 a 4).
@@ -121,6 +122,9 @@ export function scriptFingerprint(input: {
   voz: VoiceProfile
   /** Cómo se mueve. Cambia el prompt de cada lote, así que cambia el render. */
   movimiento?: MotionProfile | null
+  /** Todos los personajes: su identidad, su voz y su movimiento entran en el prompt, y
+   *  sus avatares son de donde salen los frames. Cambiar cualquiera cambia el video. */
+  personajes?: Personaje[]
   images: LoteImage[]
   /** Nicho: cambia el rótulo del bloque de producto y el bloque de consistencia. Sin
    *  esto, cambiar el chip y re-renderizar deja la huella igual con otro prompt. */
@@ -159,7 +163,10 @@ export function scriptFingerprint(input: {
     // v5 → v6: el perfil de movimiento entra al prompt de cada lote. Cambia el render
     // sin que ninguno de los otros insumos se mueva, así que sin el bump un resume
     // pegaría un clip con perfil y otro sin él.
-    'v6',
+    // v6 → v7: varios personajes. El prompt de cada lote pasa a llevar un bloque por
+    // persona presente y la locución atribuida (`P2 (padre) dice:`), y los frames salen
+    // de los avatares de quienes salen en cada toma. Nada de eso lo ve la huella sola.
+    'v7',
     String(input.niche ?? ''),
     consistencyBlock, productDesc, escenario,
     voz.idioma, voz.varianteRegional, voz.acento, voz.pronunciacion, voz.ritmo,
@@ -168,6 +175,14 @@ export function scriptFingerprint(input: {
     // Opcional: las sesiones anteriores a FASE 4.6 no lo tienen, y una cadena vacía las
     // deja con la misma huella que antes en vez de invalidarlas.
     input.movimiento?.calidadMovimiento ?? '', input.movimiento?.manerismos ?? '',
+    // Con su largo delante, como las demás listas: dos repartos distintos de los mismos
+    // personajes tienen que dar huellas distintas.
+    String(input.personajes?.length ?? 0),
+    ...(input.personajes ?? []).flatMap((p) => [
+      p.id, p.rol, p.avatarUrl ?? '', p.consistencyBlock ?? '',
+      p.voiceProfile?.acento ?? '', p.voiceProfile?.tono ?? '', p.voiceProfile?.edadVocal ?? '',
+      p.motionProfile?.calidadMovimiento ?? '', p.motionProfile?.manerismos ?? '',
+    ]),
     String(images.length),
   ]
   for (const img of images) campos.push(img.url, img.role)

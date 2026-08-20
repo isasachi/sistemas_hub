@@ -1,5 +1,6 @@
 import type { Lote } from './lotes'
 import { muestraPersona } from './forensic'
+import { etiqueta, type Personaje } from './personajes'
 
 /**
  * FRAMES FRONTERA — los keyframes que Veo interpola en el modo
@@ -76,9 +77,14 @@ export function buildFramePrompt(args: {
   productDesc: string
   /** true en el último frame del anuncio: no hay toma siguiente a la que encadenar. */
   esCierre?: boolean
+  /** Quiénes salen. Con varios, hay que decir cuál es cuál o el modelo los mezcla. */
+  personajes?: Personaje[]
 }): string {
+  const gente = args.personajes ?? []
   return [
-    'Toma esta imagen y cambia ÚNICAMENTE la POSE de la persona.',
+    gente.length > 1
+      ? `Toma estas imágenes y componé UN SOLO fotograma con las ${gente.length} personas juntas en la misma escena: ${gente.map(etiqueta).join(' y ')}. Cada una conserva EXACTAMENTE su cara, su pelo y su ropa de su imagen de referencia; no las mezcles ni las intercambies.`
+      : 'Toma esta imagen y cambia ÚNICAMENTE la POSE de la persona.',
     '',
     'Queda IDÉNTICO, sin excepción: la misma persona, la misma cara, el mismo peinado,',
     'la misma ropa completa (incluido el pantalón y el calzado), los mismos accesorios,',
@@ -129,11 +135,30 @@ export function buildFramePrompt(args: {
  * `mergeMicroCortes` decide qué cortes puede fusionar — por el mismo motivo y con el
  * mismo criterio. Cuando cambia, el lote siguiente recibe su PROPIO fotograma inicial.
  */
-function claseInicio(l: Lote): boolean {
-  return muestraPersona(l.tomas[0]?.accionVisual ?? '')
+/**
+ * La "clase" de un fotograma: qué se ve en él. La cadena solo puede compartirse entre dos
+ * lotes de la MISMA clase.
+ *
+ * Empezó siendo un booleano (persona sí / persona no). Con varios personajes hace falta
+ * más: **un plano del padre y uno del hijo tampoco pueden compartir frame** — es un corte
+ * de montaje igual que el flat-lay, y compartirlo obligaría a un clip a interpolar de una
+ * cara a otra. Por eso la clase incluye QUIÉNES están en cuadro.
+ *
+ * `'—'` es el plano sin persona. `'persona'` es el plano de persona sin atribución, o sea
+ * toda sesión anterior al slice 2: así se comporta exactamente como antes.
+ */
+function clase(accion: string, gente: Personaje[] | undefined): string {
+  if (!muestraPersona(accion)) return '—'
+  if (!gente?.length) return 'persona'
+  return gente.map((p) => p.id).sort().join('+')
 }
-function claseFin(l: Lote): boolean {
-  return muestraPersona(ultimaAccion(l.tomas[l.tomas.length - 1]?.accionVisual ?? ''))
+function claseInicio(l: Lote, quien: Map<string, Personaje[]>): string {
+  const t = l.tomas[0]
+  return clase(t?.accionVisual ?? '', quien.get(t?.tiempoOriginal ?? ''))
+}
+function claseFin(l: Lote, quien: Map<string, Personaje[]>): string {
+  const t = l.tomas[l.tomas.length - 1]
+  return clase(ultimaAccion(t?.accionVisual ?? ''), quien.get(t?.tiempoOriginal ?? ''))
 }
 
 export interface FrameJob {
@@ -142,6 +167,9 @@ export interface FrameJob {
   rol: 'inicio' | 'fin'
   accionVisual: string
   esCierre: boolean
+  /** Quiénes salen en este fotograma. Vacío = no se sabe (sesión sin atribución) o es
+   *  un plano sin persona; en los dos casos se usa el avatar del protagonista. */
+  personajes: Personaje[]
 }
 
 /**
@@ -151,18 +179,36 @@ export interface FrameJob {
  * El avatar es una foto de la persona, así que abre el lote 1 solo si el lote 1 es un
  * plano de persona; un anuncio que arranque con un flat-lay necesita su propia apertura.
  */
-export function frameSpecs(lotes: Lote[]): FrameJob[] {
+export function frameSpecs(
+  lotes: Lote[],
+  /** Quién habla en cada `tiempoOriginal` (ver `hablantesPorTiempo`). Sin mapa se
+   *  comporta igual que antes del soporte de varios personajes. */
+  quien: Map<string, Personaje[]> = new Map(),
+): FrameJob[] {
   const jobs: FrameJob[] = []
+  const gente = (t: { tiempoOriginal?: string } | undefined) => quien.get(t?.tiempoOriginal ?? '') ?? []
   lotes.forEach((l, i) => {
-    const anterior = i === 0 ? true /* el avatar es un plano de persona */ : claseFin(lotes[i - 1])
-    if (claseInicio(l) !== anterior) {
-      jobs.push({ lote: l.n, rol: 'inicio', accionVisual: l.tomas[0]?.accionVisual ?? '', esCierre: false })
+    const primera = l.tomas[0]
+    const ultima = l.tomas[l.tomas.length - 1]
+    // El avatar del protagonista abre el anuncio, así que la "clase anterior" del primer
+    // lote es un plano de persona sin atribución.
+    const anterior = i === 0 ? 'persona' : claseFin(lotes[i - 1], quien)
+    const propia = claseInicio(l, quien)
+    // Un lote de UNA sola persona puede encadenar con el avatar aunque el mapa diga quién
+    // es: el avatar ES esa persona cuando el anuncio tiene un solo protagonista.
+    const encadena = propia === anterior || (i === 0 && propia !== '—' && propia.split('+').length === 1)
+    if (!encadena) {
+      jobs.push({
+        lote: l.n, rol: 'inicio', accionVisual: primera?.accionVisual ?? '',
+        esCierre: false, personajes: gente(primera),
+      })
     }
     jobs.push({
       lote: l.n, rol: 'fin',
       // El frame de cierre del lote retrata el final de su ÚLTIMA toma.
-      accionVisual: l.tomas[l.tomas.length - 1]?.accionVisual ?? '',
+      accionVisual: ultima?.accionVisual ?? '',
       esCierre: i === lotes.length - 1,
+      personajes: gente(ultima),
     })
   })
   return jobs
@@ -199,6 +245,8 @@ export function pairFrames(
  * `upload` se inyecta para que esto sea probable sin tocar Storage ni la API.
  */
 export async function generateBoundaryFrames(args: {
+  /** Fallback: el avatar del protagonista. Se usa cuando el frame no tiene atribución
+   *  —toda sesión anterior al slice 2— o es un plano sin persona. */
   avatarUrl: string
   productUrl: string
   productDesc: string
@@ -208,15 +256,19 @@ export async function generateBoundaryFrames(args: {
 }): Promise<string[]> {
   return Promise.all(
     args.specs.map(async (spec) => {
+      // Las referencias son los avatares de QUIENES salen en ese fotograma, en el mismo
+      // orden en que el prompt los nombra: cambiarlo le da a uno la cara de otro.
+      const avatares = spec.personajes.map((p) => p.avatarUrl).filter((u): u is string => !!u)
       const bytes = await args.generate({
         prompt: buildFramePrompt({
           accionVisual: spec.accionVisual,
           productDesc: args.productDesc,
           esCierre: spec.esCierre,
+          personajes: spec.personajes,
         }),
-        // El avatar primero: es la escena y la identidad. El producto va detrás para que
-        // no derive cuando la acción lo mete en cuadro.
-        imageUrls: [args.avatarUrl, args.productUrl],
+        // Las personas primero: son la escena y la identidad. El producto va detrás para
+        // que no derive cuando la acción lo mete en cuadro.
+        imageUrls: [...(avatares.length ? avatares : [args.avatarUrl]), args.productUrl],
       })
       return args.upload(bytes, `frame-${spec.lote}-${spec.rol}`)
     }),

@@ -115,3 +115,38 @@ export function resolvePersonaje(personajes: Personaje[], ref: string): Personaj
     ?? personajes.find((p) => norm(p.rol) && r.includes(norm(p.rol)))
     ?? null
 }
+
+/**
+ * Quién habla en cada corte, resuelto a personajes reales y emparejado por `tiempo`.
+ *
+ * Es el puente entre la atribución del forense (`cortes[].hablantes`, slice 2) y el
+ * render. El emparejamiento va por `tiempo` y NO por `n` por el mismo motivo que
+ * `camaraDeLote`: `groupIntoLotes` renumera después de `splitLongToma`, así que en cuanto
+ * una toma se parte el `n` deja de ser el índice de su corte.
+ *
+ * Un corte sin atribución NO entra en el mapa. Quien consulta debe leer eso como "no se
+ * sabe quién habla" y comportarse como antes del slice 2 — no como "no habla nadie".
+ */
+export function hablantesPorTiempo(
+  cortes: { tiempo: string; hablantes?: { personaje: string }[] }[] | undefined,
+  personajes: Personaje[],
+): Map<string, Personaje[]> {
+  const mapa = new Map<string, Personaje[]>()
+  for (const c of cortes ?? []) {
+    if (!c.hablantes?.length) continue
+    const gente: Personaje[] = []
+    for (const h of c.hablantes) {
+      const p = resolvePersonaje(personajes, h.personaje)
+      // Lo que no resuelve se omite en vez de adivinar: adivinar le pondría la línea de
+      // un personaje a otro sin que nada lo reporte.
+      if (p && !gente.some((x) => x.id === p.id)) gente.push(p)
+    }
+    if (gente.length) mapa.set(c.tiempo, gente)
+  }
+  return mapa
+}
+
+/** Cómo se nombra un personaje dentro de un prompt: `P2 (padre)`. */
+export function etiqueta(p: Personaje): string {
+  return p.rol && p.rol !== p.id ? `${p.id} (${p.rol})` : p.id
+}

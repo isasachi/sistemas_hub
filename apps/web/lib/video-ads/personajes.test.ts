@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   personajesDe, resolvePersonaje, PersonajeSchema, MAX_PERSONAJES, ID_PRINCIPAL, nuevoId,
-  type Personaje,
+  hablantesPorTiempo, etiqueta, type Personaje,
 } from './personajes'
 
 const VOZ = {
@@ -113,5 +113,57 @@ describe('PersonajeSchema', () => {
   it('rechaza uno sin los campos que la FASE 0 exige', () => {
     const { etnia, ...sinEtnia } = p()
     expect(PersonajeSchema.safeParse(sinEtnia).success).toBe(false)
+  })
+})
+
+/**
+ * El puente entre la atribución del forense (slice 2) y el render (slice 4). Empareja por
+ * `tiempo` y NO por `n`, por el mismo motivo que `camaraDeLote`: `groupIntoLotes` renumera
+ * después de `splitLongToma`.
+ */
+describe('hablantesPorTiempo', () => {
+  const gente = [p({ id: 'P1', rol: 'hijo' }), p({ id: 'P2', rol: 'padre' })]
+
+  it('resuelve el reparto de cada corte a personajes reales', () => {
+    const mapa = hablantesPorTiempo([
+      { tiempo: '00:00 - 00:05', hablantes: [{ personaje: 'P2' }] },
+      { tiempo: '00:05 - 00:10', hablantes: [{ personaje: 'P1' }, { personaje: 'P2' }] },
+    ], gente)
+    expect(mapa.get('00:00 - 00:05')?.map((x) => x.rol)).toEqual(['padre'])
+    expect(mapa.get('00:05 - 00:10')?.map((x) => x.rol)).toEqual(['hijo', 'padre'])
+  })
+
+  it('un corte SIN atribución no entra en el mapa', () => {
+    // Quien consulta tiene que leer eso como "no se sabe", no como "no habla nadie" — es
+    // el caso de toda sesión anterior al slice 2.
+    const mapa = hablantesPorTiempo([{ tiempo: 'a' }, { tiempo: 'b', hablantes: [] }], gente)
+    expect(mapa.size).toBe(0)
+  })
+
+  it('omite lo que no resuelve en vez de adivinar', () => {
+    const mapa = hablantesPorTiempo([
+      { tiempo: 'a', hablantes: [{ personaje: 'P1' }, { personaje: 'la señora' }] },
+    ], gente)
+    expect(mapa.get('a')?.map((x) => x.id)).toEqual(['P1'])
+  })
+
+  it('no repite un personaje que habla dos veces en el mismo corte', () => {
+    const mapa = hablantesPorTiempo([
+      { tiempo: 'a', hablantes: [{ personaje: 'P1' }, { personaje: 'hijo' }] },
+    ], gente)
+    expect(mapa.get('a')).toHaveLength(1)
+  })
+
+  it('sin cortes devuelve un mapa vacío en vez de romper', () => {
+    expect(hablantesPorTiempo(undefined, gente).size).toBe(0)
+  })
+})
+
+describe('etiqueta', () => {
+  it('nombra al personaje por id y rol', () => {
+    expect(etiqueta(p({ id: 'P2', rol: 'padre' }))).toBe('P2 (padre)')
+  })
+  it('sin rol útil se queda con el id', () => {
+    expect(etiqueta(p({ id: 'P1', rol: 'P1' }))).toBe('P1')
   })
 })

@@ -3,6 +3,7 @@ import type { TomaFinal } from './adapt'
 import type { MotionProfile, VoiceProfile } from './character'
 import { KIE_PROMPT_MAX } from './kie'
 import { nicheSpec } from './niches'
+import { etiqueta, type Personaje } from './personajes'
 
 /**
  * FASE 5 del prompt maestro — agrupación de tomas en lotes de generación.
@@ -314,8 +315,43 @@ export function buildLotePrompt(args: {
   /** `frames`: las imágenes son el primer y el último fotograma del clip, no material de
    *  referencia — la leyenda `@image(n)` no aplica y confunde. Ver kie.ts. */
   mode?: 'frames' | 'reference'
+  /** Todos los personajes del anuncio. Con uno solo (o sin la lista) el prompt sale
+   *  exactamente igual que antes del soporte de varios. */
+  personajes?: Personaje[]
+  /** Quién habla en cada `tiempoOriginal` (ver `hablantesPorTiempo`). */
+  quien?: Map<string, Personaje[]>
 }): string {
   const { lote, consistencyBlock, productDesc, escenario, camara, voz, movimiento, images, cortes } = args
+
+  /**
+   * VARIOS PERSONAJES. Quiénes salen en ESTE lote: la unión de los hablantes de sus
+   * tomas. Con uno solo —o sin atribución, que es toda sesión anterior— el prompt se arma
+   * exactamente como antes: un bloque PERSONAJE, uno de voz y uno de movimiento.
+   */
+  const quien = args.quien ?? new Map<string, Personaje[]>()
+  const presentes: Personaje[] = []
+  for (const t of lote.tomas) {
+    for (const p of quien.get(t.tiempoOriginal) ?? []) {
+      if (!presentes.some((x) => x.id === p.id)) presentes.push(p)
+    }
+  }
+  const varios = presentes.length > 1
+  const dice = (t: { tiempoOriginal: string }) => {
+    const gente = quien.get(t.tiempoOriginal) ?? []
+    return gente.length === 1 ? `${etiqueta(gente[0])} dice` : 'Locución'
+  }
+
+  /** El bloque completo de un personaje: cómo se ve, cómo suena y cómo se mueve. */
+  const bloqueDe = (p: Personaje) => [
+    `PERSONAJE ${etiqueta(p)} — descripción completa, sin referencias externas:`,
+    p.consistencyBlock ?? '',
+    p.voiceProfile
+      ? `  VOZ: ${p.voiceProfile.idioma} · ${p.voiceProfile.varianteRegional} · acento ${p.voiceProfile.acento} · ${p.voiceProfile.tono} · ${p.voiceProfile.timbre} · edad vocal ${p.voiceProfile.edadVocal} · ritmo ${p.voiceProfile.ritmo} · energía ${p.voiceProfile.energia} · estilo ${p.voiceProfile.estilo}`
+      : '',
+    p.motionProfile
+      ? `  CÓMO SE MUEVE: ${p.motionProfile.calidadMovimiento} Manerismos: ${p.motionProfile.manerismos}`
+      : '',
+  ].filter(Boolean).join('\n')
   const spec = nicheSpec(args.niche)
 
   /**
@@ -399,7 +435,7 @@ export function buildLotePrompt(args: {
           // metía en `dialogo` y que el render terminaba pronunciando (ver
           // `limpiarDialogo`): sacarlo no alcanza si después nadie dice que ahí no habla.
           t.locucion
-            ? `Locución: “${t.locucion}”`
+            ? `${dice(t)}: “${t.locucion}”`
             : 'Sin diálogo: la persona NO habla en esta toma. Solo acción y sonido ambiente; no inventes frases ni muevas la boca como si hablara.',
           'Texto / Overlay: NINGUNO.',
         ].filter(Boolean).join('\n')
@@ -413,8 +449,15 @@ export function buildLotePrompt(args: {
       '',
       legend,
       '',
-      'PERSONAJE (descripción completa, sin referencias externas):',
-      consistencyBlock,
+      ...(varios
+        ? [
+            `EN ESTE CLIP SALEN ${presentes.length} PERSONAS. Son distintas entre sí y cada una`,
+            'conserva su propia cara, voz y forma de moverse durante todo el clip. No las',
+            'mezcles, no las intercambies y no le des a una la voz de otra.',
+            '',
+            ...presentes.map(bloqueDe),
+          ]
+        : ['PERSONAJE (descripción completa, sin referencias externas):', consistencyBlock]),
       '',
       spec.productBlock,
       productDesc,
@@ -463,11 +506,11 @@ export function buildLotePrompt(args: {
       'idénticos de principio a fin del clip, tal como se describen arriba. Lo único que',
       'avanza es la acción detallada abajo.',
       '',
-      'PERFIL DE VOZ Y ACENTO:',
-      `  Idioma: ${voz.idioma} · Variante: ${voz.varianteRegional} · Acento: ${voz.acento}`,
-      `  Pronunciación: ${voz.pronunciacion} · Ritmo: ${voz.ritmo} · Velocidad: ${voz.velocidad}`,
-      `  Entonación: ${voz.entonacion} · Energía: ${voz.energia} · Pausas: ${voz.pausas}`,
-      `  Tono: ${voz.tono} · Timbre: ${voz.timbre} · Edad vocal: ${voz.edadVocal} · Estilo: ${voz.estilo}`,
+      varios ? '' : 'PERFIL DE VOZ Y ACENTO:',
+      varios ? '' : `  Idioma: ${voz.idioma} · Variante: ${voz.varianteRegional} · Acento: ${voz.acento}`,
+      varios ? '' : `  Pronunciación: ${voz.pronunciacion} · Ritmo: ${voz.ritmo} · Velocidad: ${voz.velocidad}`,
+      varios ? '' : `  Entonación: ${voz.entonacion} · Energía: ${voz.energia} · Pausas: ${voz.pausas}`,
+      varios ? '' : `  Tono: ${voz.tono} · Timbre: ${voz.timbre} · Edad vocal: ${voz.edadVocal} · Estilo: ${voz.estilo}`,
       '',
       // ⚠️ Va SIEMPRE que exista, íntegro y en cada lote, por la misma REGLA DE CONTEXTO
       // ABSOLUTO que el bloque de consistencia: el generador no recuerda el lote
@@ -477,7 +520,7 @@ export function buildLotePrompt(args: {
       // `accionVisual` describe solo movimientos CON PROPÓSITO narrativo. Esto describe
       // lo otro: cómo se mueve el cuerpo entre gesto y gesto, que es lo que separa a una
       // persona de un maniquí ejecutando instrucciones.
-      ...(movimiento
+      ...(movimiento && !varios
         ? [
             'CÓMO SE MUEVE (vale durante todo el clip, también entre gesto y gesto):',
             `  Calidad del movimiento: ${movimiento.calidadMovimiento}`,

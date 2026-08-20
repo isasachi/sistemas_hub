@@ -535,3 +535,75 @@ describe('groupIntoLotes — maxPlanos', () => {
     for (const l of groupIntoLotes(largo, MAPA, 9)) expect(l.duracionSeg).toBeLessThanOrEqual(LOTE_MAX_SEC)
   })
 })
+
+/**
+ * VARIOS PERSONAJES en el render (slice 4). Un bloque por persona presente y la locución
+ * atribuida. Lo primero que se prueba es que el camino de UNO no cambió: si cambiara,
+ * cambiarían todas las sesiones guardadas a la vez.
+ */
+describe('buildLotePrompt — varios personajes', () => {
+  const pers = (id: string, rol: string) => ({
+    id, rol, desc: '', etnia: '', acento: '', voz: '', fotoUrl: null,
+    avatarUrl: `https://cdn/${id}.png`,
+    consistencyBlock: `Bloque de ${rol}`,
+    voiceProfile: { ...VOZ, acento: `acento de ${rol}` },
+    motionProfile: { calidadMovimiento: `movimiento de ${rol}`, manerismos: `tics de ${rol}` },
+  })
+  const hijo = pers('P1', 'hijo')
+  const padre = pers('P2', 'padre')
+  const conT = (n: number, dur: number, tiempo: string, loc: string) =>
+    ({ ...toma(n, dur, loc), tiempoOriginal: tiempo })
+
+  it('SIN atribución el prompt es IDÉNTICO al de antes — ninguna sesión guardada cambia', () => {
+    const l = groupIntoLotes([conT(1, 4, 't1', 'Hola.')])[0]
+    const antes = buildLotePrompt({ lote: l, ...ARGS })
+    const conLista = buildLotePrompt({ lote: l, ...ARGS, personajes: [hijo, padre] })
+    expect(conLista).toBe(antes)
+  })
+
+  it('con UN hablante atribuido nombra quién habla y no duplica bloques', () => {
+    const l = groupIntoLotes([conT(1, 4, 't1', 'Hola.')])[0]
+    const quien = new Map([['t1', [hijo]]])
+    const p = buildLotePrompt({ lote: l, ...ARGS, personajes: [hijo, padre], quien })
+    expect(p).toContain('P1 (hijo) dice: “Hola.”')
+    // Un solo presente: sigue el formato de siempre, sin el encabezado de varios.
+    expect(p).not.toMatch(/EN ESTE CLIP SALEN/)
+    expect(p).toContain('PERFIL DE VOZ Y ACENTO:')
+  })
+
+  it('con DOS presentes emite un bloque por persona y atribuye cada línea', () => {
+    const l = groupIntoLotes([conT(1, 4, 't1', 'Papá, lo logré.'), conT(2, 4, 't2', 'Estoy orgulloso.')])[0]
+    const quien = new Map([['t1', [hijo]], ['t2', [padre]]])
+    const p = buildLotePrompt({ lote: l, ...ARGS, personajes: [hijo, padre], quien })
+
+    expect(p).toMatch(/EN ESTE CLIP SALEN 2 PERSONAS/)
+    expect(p).toContain('PERSONAJE P1 (hijo)')
+    expect(p).toContain('PERSONAJE P2 (padre)')
+    expect(p).toContain('Bloque de hijo')
+    expect(p).toContain('Bloque de padre')
+    // Cada uno con SU voz y SU movimiento: darle a uno la voz del otro es el fallo.
+    expect(p).toContain('acento de hijo')
+    expect(p).toContain('acento de padre')
+    expect(p).toContain('movimiento de padre')
+    // Y cada línea dicha por quien corresponde.
+    expect(p).toContain('P1 (hijo) dice: “Papá, lo logré.”')
+    expect(p).toContain('P2 (padre) dice: “Estoy orgulloso.”')
+  })
+
+  it('con varios NO manda el bloque global de voz: cada uno lleva la suya', () => {
+    const l = groupIntoLotes([conT(1, 4, 't1', 'a'), conT(2, 4, 't2', 'b')])[0]
+    const quien = new Map([['t1', [hijo]], ['t2', [padre]]])
+    const p = buildLotePrompt({ lote: l, ...ARGS, personajes: [hijo, padre], quien })
+    // Un perfil global contradiría los dos de arriba: el modelo no sabría cuál usar.
+    expect(p).not.toContain('PERFIL DE VOZ Y ACENTO:')
+    expect(p).toMatch(/no le des a una la voz de otra/)
+  })
+
+  it('una toma con DOS hablantes no se atribuye a uno solo', () => {
+    const l = groupIntoLotes([conT(1, 4, 't1', 'Tome. No se preocupe.')])[0]
+    const quien = new Map([['t1', [hijo, padre]]])
+    const p = buildLotePrompt({ lote: l, ...ARGS, personajes: [hijo, padre], quien })
+    expect(p).toContain('Locución: “Tome. No se preocupe.”')
+    expect(p).not.toContain('P1 (hijo) dice:')
+  })
+})

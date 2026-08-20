@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getVideoSession, updateVideoSession, claimFreshLotes } from '@/lib/video-ads/db'
 import { createVideoTask, snapDuration, KIE_PROMPT_MAX, type VideoImage } from '@/lib/video-ads/kie'
 import { frameSpecs, pairFrames, generateBoundaryFrames } from '@/lib/video-ads/frames'
+import { personajesDe, hablantesPorTiempo } from '@/lib/video-ads/personajes'
 import { enProsa } from '@/lib/video-ads/forensic'
 import { generateImage } from '@/lib/video-ads/nano-banana'
 import { uploadToStorage } from '@/lib/storage'
@@ -76,7 +77,10 @@ export async function POST(
   // El personaje del render es el avatar GENERADO. `character_url` es la foto de
   // referencia que subió el usuario; se conserva como fallback para las sesiones
   // anteriores a `avatar_url`, que guardaban las dos cosas en la misma columna.
-  const personaUrl = session.avatar_url ?? session.character_url
+  // Los personajes del anuncio. Una sesión anterior da UNO, armado con las columnas
+  // singulares, así que todo lo de abajo se comporta igual que antes.
+  const gente = personajesDe(session)
+  const personaUrl = gente[0]?.avatarUrl ?? session.avatar_url ?? session.character_url
   if (!personaUrl || !session.product_url)
     return NextResponse.json({ error: 'Faltan las imágenes de personaje y producto' }, { status: 409 })
 
@@ -148,7 +152,8 @@ export async function POST(
   const huella = scriptFingerprint({
     niche: session.niche,
     lotes: agrupados, consistencyBlock: session.consistency_block, productDesc,
-    escenario, camaras, voz: session.voice_profile, movimiento: session.motion_profile, images,
+    escenario, camaras, voz: session.voice_profile, movimiento: session.motion_profile,
+    personajes: gente, images,
   })
   const base: Lote[] = agrupados.map((l) => ({ ...l, scriptHash: huella }))
 
@@ -291,7 +296,9 @@ export async function POST(
   // `jobs` incluye un frame de cierre por lote MÁS uno de apertura en cada lote cuya
   // escena no continúa la del anterior (ver `frameSpecs`), así que puede haber más
   // frames que lotes. Por eso la comprobación de reutilización va contra `jobs.length`.
-  const jobs = frameSpecs(seed)
+  // Quién habla en cada toma, para saber a quién retrata cada frame y quién dice qué.
+  const quien = hablantesPorTiempo(cortes, gente)
+  const jobs = frameSpecs(seed, quien)
   let cierres: string[]
   const guardados = session.frames
   if (reanuda && Array.isArray(guardados) && guardados.length === jobs.length) {
@@ -353,6 +360,8 @@ export async function POST(
           camara: camaras[i],
           voz: session.voice_profile,
           movimiento: session.motion_profile,
+          personajes: gente,
+          quien,
           images: [
             { url: pares[i].inicio, role: 'el primer fotograma' },
             { url: pares[i].fin, role: 'el último fotograma' },

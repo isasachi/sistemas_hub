@@ -191,3 +191,90 @@ describe('generateBoundaryFrames', () => {
     ])
   })
 })
+
+/**
+ * VARIOS PERSONAJES en los frames (slice 4). La cadena ya se rompía entre un plano de
+ * persona y uno de producto; con varios hace falta más: **un plano del padre y uno del
+ * hijo tampoco pueden compartir fotograma**. Es un corte de montaje igual que el flat-lay,
+ * y compartirlo obligaría a un clip a interpolar de una cara a otra.
+ */
+describe('frameSpecs — la cadena se rompe cuando cambia QUIÉN está en cuadro', () => {
+  const pers = (id: string, rol: string) => ({
+    id, rol, desc: '', etnia: '', acento: '', voz: '', fotoUrl: null,
+    avatarUrl: `https://cdn/${id}.png`, consistencyBlock: null,
+    voiceProfile: null, motionProfile: null,
+  })
+  const hijo = pers('P1', 'hijo')
+  const padre = pers('P2', 'padre')
+  const conT = (n: number, tiempo: string, accion: string) => ({
+    ...lote(n, [accion]),
+    tomas: [{ ...lote(n, [accion]).tomas[0], tiempoOriginal: tiempo }],
+  })
+
+  it('dos lotes de la MISMA persona encadenan', () => {
+    const quien = new Map([['t1', [hijo]], ['t2', [hijo]]])
+    const jobs = frameSpecs(
+      [conT(1, 't1', 'la mujer saluda'), conT(2, 't2', 'la mujer sonríe')] as never, quien,
+    )
+    expect(jobs.map((j) => `${j.lote}:${j.rol}`)).toEqual(['1:fin', '2:fin'])
+  })
+
+  it('un cambio de persona ROMPE la cadena y pide apertura propia', () => {
+    const quien = new Map([['t1', [hijo]], ['t2', [padre]]])
+    const jobs = frameSpecs(
+      [conT(1, 't1', 'el hombre joven habla'), conT(2, 't2', 'el hombre mayor responde')] as never, quien,
+    )
+    expect(jobs.map((j) => `${j.lote}:${j.rol}`)).toEqual(['1:fin', '2:inicio', '2:fin'])
+  })
+
+  it('pasar de uno solo a los dos juntos también rompe', () => {
+    const quien = new Map([['t1', [hijo]], ['t2', [hijo, padre]]])
+    const jobs = frameSpecs(
+      [conT(1, 't1', 'el hombre joven habla'), conT(2, 't2', 'los dos hombres se abrazan')] as never, quien,
+    )
+    expect(jobs.some((j) => j.lote === 2 && j.rol === 'inicio')).toBe(true)
+  })
+
+  it('cada job sabe a QUIÉN retrata: es de donde salen sus avatares de referencia', () => {
+    const quien = new Map([['t1', [hijo]], ['t2', [hijo, padre]]])
+    const jobs = frameSpecs(
+      [conT(1, 't1', 'el hombre joven habla'), conT(2, 't2', 'los dos hombres se abrazan')] as never, quien,
+    )
+    expect(jobs.find((j) => j.lote === 1)?.personajes.map((p) => p.id)).toEqual(['P1'])
+    expect(jobs.find((j) => j.lote === 2 && j.rol === 'fin')?.personajes.map((p) => p.id))
+      .toEqual(['P1', 'P2'])
+  })
+
+  it('SIN mapa se comporta exactamente como antes del soporte de varios', () => {
+    const lotes = [conT(1, 't1', 'la mujer saluda'), conT(2, 't2', 'la mujer sonríe')] as never
+    expect(frameSpecs(lotes).map((j) => `${j.lote}:${j.rol}`))
+      .toEqual(frameSpecs(lotes, new Map()).map((j) => `${j.lote}:${j.rol}`))
+  })
+})
+
+describe('generateBoundaryFrames — referencias por personaje', () => {
+  const p2 = {
+    id: 'P2', rol: 'padre', desc: '', etnia: '', acento: '', voz: '', fotoUrl: null,
+    avatarUrl: 'https://cdn/P2.png', consistencyBlock: null, voiceProfile: null, motionProfile: null,
+  }
+
+  it('usa el avatar de QUIEN sale, no el del protagonista', async () => {
+    const generate = vi.fn(async (_i: { prompt: string; imageUrls: string[] }) => Buffer.from('x'))
+    await generateBoundaryFrames({
+      avatarUrl: 'AVATAR-PROTA', productUrl: 'PROD', productDesc: 'x',
+      specs: [{ lote: 1, rol: 'fin', accionVisual: 'a', esCierre: true, personajes: [p2] }],
+      generate, upload: async () => 'u',
+    })
+    expect(generate.mock.calls[0][0].imageUrls).toEqual(['https://cdn/P2.png', 'PROD'])
+  })
+
+  it('sin personajes cae al avatar del protagonista — sesiones sin atribución', async () => {
+    const generate = vi.fn(async (_i: { prompt: string; imageUrls: string[] }) => Buffer.from('x'))
+    await generateBoundaryFrames({
+      avatarUrl: 'AVATAR-PROTA', productUrl: 'PROD', productDesc: 'x',
+      specs: [{ lote: 1, rol: 'fin', accionVisual: 'a', esCierre: true, personajes: [] }],
+      generate, upload: async () => 'u',
+    })
+    expect(generate.mock.calls[0][0].imageUrls).toEqual(['AVATAR-PROTA', 'PROD'])
+  })
+})
