@@ -9,8 +9,8 @@ export default function GeneradorAnuncios() {
       name="Generador de Anuncios"
       slug="generador-anuncios"
       sessionKey={SESSION_KEY}
-      title="Tu anuncio, construido sobre uno que ya funciona"
-      description="Sube el anuncio que quieres emular y la foto de tu producto. Leemos su formato, su composición y su lógica persuasiva, escribimos dos versiones de copy con comentarios reales de TikTok, eliges la tuya y te devolvemos la imagen final lista para pautar."
+      title="Genera anuncios ganadores"
+      description="Sube el anuncio que quieres replicar y una foto de tu producto. Analizamos qué hace que funcione, adaptamos su estructura y mensaje a tu oferta y generamos la nueva creatividad lista para pautar."
       cta="Crear mi anuncio"
     />
   );
