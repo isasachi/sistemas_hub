@@ -37,8 +37,34 @@ export const UserInputsSchema = z.object({
   // la sesión. Sin esto `character_url` se quedaba en null para siempre y la
   // fila "Personaje" de la matriz nunca podía confirmarse por imagen.
   characterUrl: z.string().url().optional(),
+  /**
+   * Varios personajes (hasta 4). Lo que el USUARIO define de cada uno; lo generado
+   * (avatar, bloque de consistencia, voz, movimiento) lo pone FASE 4 y la ruta de
+   * inputs lo conserva al mezclar por id.
+   *
+   * Opcional: sin esto el wizard manda los campos singulares de siempre y todo se
+   * comporta como antes.
+   */
+  personajes: z.array(z.object({
+    id: z.string(),
+    rol: z.string(),
+    desc: z.string(),
+    etnia: z.string(),
+    acento: z.string(),
+    voz: z.string(),
+    fotoUrl: z.string().url().nullable().optional(),
+  })).max(4).optional(),
 })
 export type UserInputs = z.infer<typeof UserInputsSchema>
+
+/**
+ * Las claves de `UserInputs` cuyo valor es TEXTO — las que un `<input>` puede editar.
+ * Existe porque al agregar `personajes` (un array) los helpers genéricos de campo del
+ * wizard empezaron a aceptarla como clave y a intentar renderizarla en un input.
+ */
+export type CampoTextoDeInputs = {
+  [K in keyof UserInputs]-?: NonNullable<UserInputs[K]> extends string ? K : never
+}[keyof UserInputs]
 
 // ─── Línea 1: análisis forense del video de referencia ───────────────────────
 

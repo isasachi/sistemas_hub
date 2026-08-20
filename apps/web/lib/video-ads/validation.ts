@@ -56,16 +56,38 @@ export function buildValidationMatrix(
     ? { variable: 'Personaje', valor: 'Imagen de referencia adjunta', fuente: 'REFERENCIA', estado: 'CONFIRMADA', critica: true }
     : row('Personaje', inputs.characterDesc, 'USUARIO')
 
+  /**
+   * ⚠️ CON VARIOS PERSONAJES LA FASE 0 BLOQUEA POR CADA UNO. Etnia y acento son los dos
+   * campos que el spec prohíbe inferir, y que uno los tenga no cubre al otro: un anuncio
+   * con el padre sin acento saldría con una voz genérica que nadie eligió. El nombre de
+   * cada fila lleva el rol para que el usuario sepa a quién le falta qué.
+   */
+  const varios = (inputs.personajes?.length ?? 0) > 1
+  const filasDePersonajes: ValidationRow[] = varios
+    ? inputs.personajes!.flatMap((p) => {
+        const quien = p.rol || p.id
+        return [
+          p.fotoUrl
+            ? { variable: `Personaje · ${quien}`, valor: 'Imagen de referencia adjunta', fuente: 'REFERENCIA' as const, estado: 'CONFIRMADA' as const, critica: true }
+            : row(`Personaje · ${quien}`, p.desc, 'USUARIO'),
+          // Fuente USUARIO aunque haya imagen: una foto no confirma origen cultural.
+          row(`Raza / etnia / origen cultural · ${quien}`, p.etnia, 'USUARIO'),
+          row(`Acento · ${quien}`, p.acento, 'USUARIO'),
+        ]
+      })
+    : [
+        personaje,
+        row('Raza / etnia / origen cultural', inputs.characterEthnicity, 'USUARIO'),
+        row('Acento', inputs.accent, 'USUARIO'),
+      ]
+
   const rows: ValidationRow[] = [
     row('Producto', inputs.productName, 'USUARIO'),
     row('Descripción del producto', inputs.productDescription, 'USUARIO'),
     row('Ángulo', inputs.angle, 'USUARIO'),
     row('Público objetivo', inputs.targetAudience, 'USUARIO'),
     row('Problema / deseo', inputs.problem, 'USUARIO'),
-    personaje,
-    // Fuente USUARIO aunque haya imagen: una foto no confirma origen cultural.
-    row('Raza / etnia / origen cultural', inputs.characterEthnicity, 'USUARIO'),
-    row('Acento', inputs.accent, 'USUARIO'),
+    ...filasDePersonajes,
     // La voz es el único campo que el spec marca "SOLO SI ES RELEVANTE".
     { variable: 'Voz', valor: filled(inputs.voice) ? inputs.voice : 'No especificada', fuente: 'USUARIO', estado: 'CONFIRMADA', critica: false },
   ]
