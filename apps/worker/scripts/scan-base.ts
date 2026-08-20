@@ -43,7 +43,7 @@ import {
 } from '../lib/product-hunter/scan-verify'
 import {
   getRawProductsByVolume, saveRawVerdict, countRawPending, seedKeywords,
-  type RawProductRow,
+  getAllNicheKeywords, type RawProductRow,
 } from '@ph/shared'
 
 const JITTER_MS = Math.max(0, Number(process.env.PH_JITTER_MS ?? 500))
@@ -56,12 +56,35 @@ async function esperarTurno(): Promise<void> {
   if (JITTER_MS) await sleep(Math.random() * JITTER_MS)
 }
 
-// Los términos con los que se decide `senal_nicho` salen del seed del nicho.
-// Se cachean por nicho: la cola cruza cientos y recalcularlo por fila es al pedo.
+// ⚠️ LAS KEYWORDS EXPANDIDAS VIVEN EN ph_niches, NO EN EL SEED ESTÁTICO.
+// `seedKeywords` (@ph/shared) solo cubre los 5 nichos fundadores, pero 660 de
+// los 1.104 nichos ya tienen su expansión cacheada en `ph_niches.keywords` —
+// y `scan-nicho.ts` sí la lee. Con solo el seed, `senal_nicho` de casi todo el
+// inventario se calculaba contra un diccionario de UNA palabra (el nombre del
+// nicho, que casi nunca aparece literal en el copy: "anticaída" no contiene
+// "caida del cabello") y salía 'ninguna'. O sea que los dos motores medían la
+// misma señal con vocabularios distintos.
+//
+// Mismo orden de preferencia que scan-nicho.ts (cache de la base → seed) para
+// que la señal signifique lo mismo venga por donde venga. Se traen TODOS de una
+// sola consulta: la cola cruza cientos de nichos y una consulta por nicho es
+// al pedo.
+const expandidas = new Map<string, string[]>()
+async function cargarKeywords(): Promise<void> {
+  for (const n of await getAllNicheKeywords()) {
+    if (n.keywords?.length) expandidas.set(n.id, n.keywords)
+  }
+}
+
+// Los términos con los que se decide `senal_nicho`. Se cachean por nicho: la
+// cola cruza cientos y recalcularlo por fila es al pedo.
 const cacheTerminos = new Map<string, string[]>()
 function terminosDe(niche: string): string[] {
   let t = cacheTerminos.get(niche)
-  if (!t) { t = [niche, ...(seedKeywords(niche) ?? [])]; cacheTerminos.set(niche, t) }
+  if (!t) {
+    t = [niche, ...(expandidas.get(niche) ?? seedKeywords(niche) ?? [])]
+    cacheTerminos.set(niche, t)
+  }
   return t
 }
 
@@ -100,6 +123,7 @@ async function main() {
   // conteo se relee en vivo).
   const todo = args.includes('--todo')
 
+  await cargarKeywords()
   const pendientes = await countRawPending()
   console.log(
     `Cola por volumen · ${todo ? 'TODA la base' : `${pendientes} pendientes`} · ` +
