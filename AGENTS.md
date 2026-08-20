@@ -391,6 +391,10 @@ Se apoya en `alignSlots`, que reconstruye qué texto del diálogo ocupaba cada h
 
 ✅ **Medido sobre ese video:** el forense marcó **16 de 17 cortes** como voz en off (el 17 es la placa final, que es muda) y describió al personaje como *"narradora… solo se muestran las manos y el torso superior en algunas tomas, o sus pies y piernas en otras"* — entendió que la cara nunca sale. El reparto da **17 cortes → 11 lotes**, 11 frames, y los 11 lotes salen declarados en off.
 
+✅ **VERIFICADO CON UN RENDER REAL, y la apuesta central del eje se sostiene.** Un lote de 8 s con `vozEnOff`, dos frames de Nano Banana generados desde la foto del producto y el prompt de lote real: **la narración se oye completa y palabra por palabra** (*"Este modelo nunca llegó a tienda y aún así se agotó…"*, byte-idéntica a la esperada, sin repeticiones) **y no aparece ninguna cara ni ninguna boca** — los 8 segundos son piernas y pies con la bota sobre una escalera de madera, que es el formato del original. O sea Veo sí acepta generar audio hablado sin poner a nadie a pronunciarlo, que era lo único que este eje no podía dar por sentado.
+
+Detalles medidos de esa corrida: 122 caracteres en 8 s = 15,25 car/s, dentro de la banda conversacional (`snapDuration` eligió bien); la bota se reprodujo fiel —cuero tan, elástico acanalado lateral, suela track, cierre trasero visible—; y el movimiento es real, no una foto animada: las piernas pasan de estar sentadas en el escalón a subir el peldaño. Archivos en `~/Downloads/probe-calzado/`.
+
 ⚠️ **BUG PRE-EXISTENTE QUE ESTO DESTAPÓ: `muestraPersona` leía las negaciones al revés.** El forense describe un plano de producto como *"Detalle del zapato, **sin persona** en cuadro"* y la búsqueda por palabra lo clasificaba como plano de PERSONA — o sea justo al revés. Un flat-lay mal clasificado se fusiona con planos de persona y comparte fotograma con ellos, que es el fallo que la función existe para evitar. Ahora la negación se comprueba primero, tolerando artículos (*"no se ve a la modelo"*). Afecta también a ropa y suplementos, no solo a calzado.
 
 ### Nichos (`lib/video-ads/niches.ts`) — ropa y zapatos
