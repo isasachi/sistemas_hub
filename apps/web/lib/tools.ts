@@ -155,6 +155,16 @@ export const tools: Tool[] = [
   },
 ];
 
+// Destino de la card de un proyecto en el historial del dashboard.
+// ponytail: branding nunca tuvo /sesion/[id] — su pantalla de detalle es la de
+// resultado, que ya carga la sesión por ?s=. Sin esta rama la card daba 404.
+// `lib/tools.test.ts` comprueba contra app/ que los cinco destinos existan.
+export function sessionHref(slug: string, id: string): string {
+  return slug === "generador-branding"
+    ? `/tools/generador-branding/nuevo/resultado?s=${id}`
+    : `/tools/${slug}/sesion/${id}`;
+}
+
 export function getToolBySlug(slug: string): Tool | undefined {
   return tools.find((t) => t.slug === slug);
 }
