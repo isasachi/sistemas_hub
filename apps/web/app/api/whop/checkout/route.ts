@@ -18,7 +18,14 @@ export async function GET(req: NextRequest) {
   if (!user) return NextResponse.redirect(new URL('/login', req.url))
 
   try {
-    const url = await createCheckout(user.id, new URL('/dashboard', req.url).toString())
+    // Vuelve a /suscripcion, NO a /dashboard: el redirect del navegador y la entrega
+    // del webhook compiten, así que el usuario puede llegar antes de que exista su
+    // fila. Cayendo en /dashboard sin entitlement, el gate lo rebota al paywall y
+    // alguien que acaba de pagar lee "Activa tu acceso" — o sea, "mi pago falló".
+    // En /suscripcion con `pago=ok` la página sabe distinguir ese caso; y si el
+    // webhook ya llegó, redirige sola a /dashboard.
+    const volver = new URL('/suscripcion?pago=ok', req.url).toString()
+    const url = await createCheckout(user.id, volver)
     return NextResponse.redirect(url)
   } catch (err) {
     console.error('[whop] creando checkout:', err instanceof Error ? err.message : String(err))

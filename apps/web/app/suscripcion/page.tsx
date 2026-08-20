@@ -21,7 +21,7 @@ const ERRORES: Record<string, string> = {
 export default async function SuscripcionPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; pago?: string }>;
 }) {
   const user = await getUser();
   if (!user) redirect("/login");
@@ -29,7 +29,36 @@ export default async function SuscripcionPage({
   // checkout con el webhook ya procesado).
   if (await hasAccess(user.id, user.email)) redirect("/dashboard");
 
-  const { error } = await searchParams;
+  const { error, pago } = await searchParams;
+
+  // Volvió del checkout pero su fila todavía no existe: el redirect del navegador y
+  // la entrega del webhook compiten. Mostrarle el paywall acá se lee como "mi pago
+  // falló" y termina en un pedido de reembolso.
+  //
+  // ponytail: refresco manual, sin polling ni client component. Un auto-refresh
+  // giraría para siempre si el webhook nunca llega. Si aparecen consultas de soporte
+  // por esta pantalla, el upgrade es un client component que reintenta N veces y
+  // después muestra un contacto.
+  if (pago === "ok") {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-6 py-10 bg-[#14050a]">
+        <div className="jr-card w-full max-w-[420px] rounded-2xl p-7 text-center">
+          <h1 className="relative mb-1 text-[22px] text-[#f6f2eb]">
+            Estamos confirmando tu pago
+          </h1>
+          <p className="relative mb-6 font-[Archivo] text-[13px] leading-[1.5] text-[#c9b4ae]">
+            Suele tardar unos segundos. Tu acceso se activa solo.
+          </p>
+          <a
+            href="/suscripcion?pago=ok"
+            className="jr-cta relative flex w-full items-center justify-center rounded-xl py-3 text-[14px] no-underline"
+          >
+            Actualizar
+          </a>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center px-6 py-10 bg-[#14050a]">
