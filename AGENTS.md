@@ -508,13 +508,27 @@ Efecto sobre la sesión de ropa: **29 cortes → 7 lotes**, dos de ellos los fla
 
 Paywall del hub: **tres planes**, 3 días de prueba, desbloquean el ACCESO al área privada (`/dashboard` y `/tools/*`) y, según el tier, cuánto sirve el buscador y cuántas imágenes entran en el período. Whop entra **solo como capa de pago/entitlement** — la identidad sigue siendo Supabase Auth. Se descartaron "Sign in with Whop" (OAuth 2.1 + PKCE) y la app embebida en el iframe de Whop: obligarían a migrar sesiones y no compran nada sobre el login que ya existe.
 
-| plan | precio | buscador | productos por rango | créditos de imagen |
-|---|---|---|---|---|
-| 1 | $29 | `0-50` | 10 | 30 |
-| 2 | $69 | `0-50` + `50-100` | 20 | 100 |
-| 3 | $89 | los tres rangos | 50 | 180 |
+| plan | nombre | precio | buscador | productos por rango | créditos de imagen |
+|---|---|---|---|---|---|
+| 1 | Legacy Start | $29 | `0-50` | 10 | 30 |
+| 2 | Legacy Scale | $69 | `0-50` + `50-100` | 20 | 100 |
+| 3 | Legacy Empire | $89 | los tres rangos | 50 | 180 |
 
 **La calculadora de costos y el generador de video vienen en los TRES planes**, sin tope por tier: el render de video lo paga el usuario con su propia API key de KIE (ver "BYOK" abajo), así que no hay costo del hub que racionar.
+
+### La tabla de precios (`components/planes/PlanesGrid.tsx`)
+
+**UN solo componente para la home y para `/suscripcion`.** Hasta el 2026-08-20 la home vendía **"Explorador S/ 0 · Operador S/ 149 · Agencia S/ 399"** con features inventadas ("marcas guardadas", "generaciones ilimitadas"): eran precios provisionales de antes de que existiera cobro, y quedaron publicados en la landing **después** de que el paywall real saliera a producción. Dos tablas de precios separadas = una miente. Ahora las dos pantallas pintan el mismo componente y todos los números salen de `PLANS`.
+
+**Los candados se DERIVAN de `unlocksBucket`**, no de una lista escrita a mano: si mañana un plan desbloquea otro rango, la card lo refleja sola.
+
+**La jerarquía visual sale del BRANDBOOK, no del gusto.** El sistema tiene dos ejes y acá caen justos: **carmesí = acción** ("un solo objeto carmesí pleno por pantalla") se lo lleva **Scale**, que es el plan que se quiere que se elija; **crema = prestigio** (`.jr-btn-gold`, "el único relleno crema del sistema") se lo lleva **Empire**, que tiene que leerse premium sin robarle el carmesí a Scale. Start queda en el botón secundario. Hay tests que fijan que haya exactamente UN `lp-cta` y UN `jr-btn-gold` en la grilla.
+
+⚠️ **Con un plan ya contratado, el destacado pasa a ser el del usuario, no Scale.** Resaltarle el plan que queremos vender por encima de la card del que ya pagó es venderle tapándole lo suyo.
+
+⚠️ **Los CTA son `<a>` nativos en los DOS contextos, nunca `<Link>`.** En `/suscripcion` ese href crea una checkout configuration en Whop y Next prefetchea los Link — se crearían con solo pasar el mouse. Se usa `<a>` también en la home (donde no haría falta) para que nadie pueda equivocarse al reutilizar el componente.
+
+**Iconos de `lucide-react` y no emoji** (`Star`, `Crown`, `Search`, `Sparkles`, `Check`, `Lock`), que es la convención del hub: el emoji se renderiza distinto en cada sistema operativo y desentona en un diseño oscuro.
 
 ⚠️ **`PLANS` (`packages/shared/plans.ts`) es la ÚNICA definición de qué incluye cada plan.** Lo leen el paywall, el serving del buscador, el contador de créditos y la pantalla de ajustes. Escribir "10 productos" a mano en la UI es cómo el paywall termina vendiendo algo que el servidor no entrega. Vive en `@ph/shared` y no en `apps/web/lib` porque el componente cliente del buscador también lo necesita para pintar los candados.
 

@@ -13,6 +13,7 @@ export type Tier = (typeof TIERS)[number]
 
 export interface Plan {
   tier: Tier
+  /** Nombre comercial. Se muestra tal cual en la tabla de precios y en Mi cuenta. */
   nombre: string
   /** USD al mes. */
   precio: number
@@ -28,9 +29,9 @@ export interface Plan {
 }
 
 export const PLANS: Record<Tier, Plan> = {
-  1: { tier: 1, nombre: 'Plan 1', precio: 29, buckets: ['0-50'], porRango: 10, creditos: 30 },
-  2: { tier: 2, nombre: 'Plan 2', precio: 69, buckets: ['0-50', '50-100'], porRango: 20, creditos: 100 },
-  3: { tier: 3, nombre: 'Plan 3', precio: 89, buckets: [...RAW_BUCKETS], porRango: 50, creditos: 180 },
+  1: { tier: 1, nombre: 'Legacy Start', precio: 29, buckets: ['0-50'], porRango: 10, creditos: 30 },
+  2: { tier: 2, nombre: 'Legacy Scale', precio: 69, buckets: ['0-50', '50-100'], porRango: 20, creditos: 100 },
+  3: { tier: 3, nombre: 'Legacy Empire', precio: 89, buckets: [...RAW_BUCKETS], porRango: 50, creditos: 180 },
 }
 
 export function isTier(v: unknown): v is Tier {

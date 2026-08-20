@@ -1,9 +1,8 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Check, Lock } from "lucide-react";
-import { PLANS, TIERS, RAW_BUCKET_LABEL, lockedBuckets, type Tier } from "@ph/shared";
 import { getUser } from "@/lib/supabase/server";
 import { getAccess, type Access } from "@/lib/whop";
+import { PlanesGrid, IncluidoEnTodos } from "@/components/planes/PlanesGrid";
 
 /**
  * Paywall Y página de cambio de plan. Vive FUERA del grupo `(app)` a propósito:
@@ -13,12 +12,12 @@ import { getAccess, type Access } from "@/lib/whop";
  * ⚠️ NO REDIRIGE A QUIEN YA PAGÓ, y eso es deliberado. Con un plan único, "ya
  * tiene acceso → al dashboard" era correcto: no había nada que hacer acá. Con
  * tres planes esa misma línea deja la página inalcanzable justo para quien
- * necesita verla — un usuario del plan 1 que quiere subir al 3 rebotaba al
+ * necesita verla — un usuario de Start que quiere subir a Empire rebotaba al
  * dashboard. La única redirección que queda es la de `pago=ok`.
  *
- * ⚠️ Lo que promete cada card sale de `PLANS` (@ph/shared), que es la misma
- * fuente que usa el servidor para servir. Escribir "10 productos" a mano acá es
- * cómo el paywall termina vendiendo algo que el buscador no entrega.
+ * ⚠️ La tabla la pinta `PlanesGrid`, el MISMO componente que usa la home. Dos
+ * tablas de precios separadas = una miente; ya pasó (la home vendía planes que
+ * no existían).
  */
 
 /**
@@ -29,107 +28,10 @@ import { getAccess, type Access } from "@/lib/whop";
  */
 const PRUEBA_DIAS = 3;
 
-/** Incluido en los tres planes, sin tope por tier. */
-const INCLUYE_TODOS = [
-  "Generador de anuncios estáticos",
-  "Generador de branding y landings",
-  "Calculadora de costos",
-  "Generador de video ads UGC (con tu propia API key de KIE)",
-];
-
 const ERRORES: Record<string, string> = {
   checkout: "No pudimos abrir el checkout. Intenta de nuevo en un momento.",
   plan: "Ese plan no existe. Elige uno de los tres.",
 };
-
-/** Lo que distingue a este plan de los otros, derivado de `PLANS`. */
-function ventajas(tier: Tier): string[] {
-  const p = PLANS[tier];
-  return [
-    `Buscador: ${p.buckets.map((b) => RAW_BUCKET_LABEL[b]).join(" · ")}`,
-    `${p.porRango} productos por rango`,
-    `${p.creditos} imágenes al mes`,
-  ];
-}
-
-function PlanCard({ tier, actual, bloqueado }: {
-  tier: Tier;
-  /** El plan que el usuario ya tiene. */
-  actual: boolean;
-  /** Tiene acceso de por vida: no hay nada que comprar. */
-  bloqueado: boolean;
-}) {
-  const p = PLANS[tier];
-  const destacado = tier === 3 && !actual;
-  return (
-    <div
-      className="jr-card relative flex flex-col rounded-2xl p-6"
-      style={
-        actual
-          ? { borderColor: "rgba(255,255,255,0.28)" }
-          : destacado
-            ? { borderColor: "rgba(232,70,122,0.45)" }
-            : undefined
-      }
-    >
-      {(actual || destacado) && (
-        <span
-          className="absolute -top-2.5 left-6 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.5px]"
-          style={
-            actual
-              ? { background: "rgba(246,242,235,0.16)", color: "#f6f2eb" }
-              : { background: "#bd1347", color: "#f6f2eb" }
-          }
-        >
-          {actual ? "Tu plan" : "Más completo"}
-        </span>
-      )}
-      <h2 className="relative text-[18px] text-[#f6f2eb]">{p.nombre}</h2>
-      <p className="relative mb-5 mt-1 text-[13px] text-[#c9b4ae]">
-        <span className="text-[28px] font-extrabold text-[#f6f2eb]">${p.precio}</span>
-        <span className="ml-1">/ mes</span>
-      </p>
-
-      <ul className="relative mb-5 flex flex-col gap-2">
-        {ventajas(tier).map((v) => (
-          <li key={v} className="flex items-start gap-2.5 text-[13px] text-[#e8dcd6]">
-            <Check className="mt-0.5 h-4 w-4 shrink-0 text-[#e8467a]" aria-hidden />
-            {v}
-          </li>
-        ))}
-        {/* Lo que este plan NO desbloquea se dice acá, no se esconde: el
-            buscador va a mostrar esos rangos con candado igual. */}
-        {lockedBuckets(tier).map((b) => (
-          <li key={b} className="flex items-start gap-2.5 text-[13px] text-[#8d7470]">
-            <Lock className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-            {RAW_BUCKET_LABEL[b]}
-          </li>
-        ))}
-      </ul>
-
-      {actual ? (
-        <p className="relative mt-auto rounded-xl border border-white/[0.12] py-3 text-center text-[14px] text-[#a98c88]">
-          Tu plan actual
-        </p>
-      ) : bloqueado ? (
-        <p className="relative mt-auto py-3 text-center text-[13px] text-[#8d7470]">
-          Ya incluido en tu acceso
-        </p>
-      ) : (
-        <a
-          href={`/api/whop/checkout?plan=${tier}`}
-          className={`relative mt-auto flex w-full items-center justify-center rounded-xl py-3 text-[14px] no-underline ${
-            destacado
-              ? "jr-cta"
-              : "border border-white/[0.14] text-[#efe7e0] transition-colors hover:bg-white/[0.05]"
-          }`}
-        >
-          {PRUEBA_DIAS > 0 ? "Empezar prueba gratis" : "Suscribirme"}
-        </a>
-      )}
-    </div>
-  );
-}
 
 export default async function SuscripcionPage({
   searchParams,
@@ -206,33 +108,13 @@ export default async function SuscripcionPage({
           </div>
         )}
 
-        {/* `<a>` y no `<Link>`: Next prefetchea los Link a páginas, y esas URLs crean
-            una checkout configuration en Whop. No queremos crear una al pasar el
-            mouse — y con tres planes serían tres. */}
-        <div className="grid gap-4 md:grid-cols-3">
-          {TIERS.map((t) => (
-            <PlanCard
-              key={t}
-              tier={t}
-              actual={!access?.grandfathered && access?.tier === t}
-              bloqueado={access?.grandfathered === true}
-            />
-          ))}
-        </div>
+        <PlanesGrid
+          hrefDe={(t) => `/api/whop/checkout?plan=${t}`}
+          actual={access?.grandfathered ? null : access?.tier ?? null}
+          bloqueado={access?.grandfathered === true}
+        />
 
-        <section className="mt-9 text-center">
-          <p className="mb-3 text-[12px] uppercase tracking-[1px] text-[#a98c88]">
-            En los tres planes
-          </p>
-          <ul className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
-            {INCLUYE_TODOS.map((item) => (
-              <li key={item} className="flex items-center gap-2 text-[13px] text-[#e8dcd6]">
-                <Check className="h-4 w-4 shrink-0 text-[#e8467a]" aria-hidden />
-                {item}
-              </li>
-            ))}
-          </ul>
-        </section>
+        <IncluidoEnTodos />
 
         <p className="mt-8 text-center text-[13px] text-[#a98c88]">
           Sesión iniciada como {user.email}

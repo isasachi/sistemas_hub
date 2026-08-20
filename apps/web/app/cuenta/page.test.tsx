@@ -65,7 +65,7 @@ describe('/cuenta', () => {
 
   it('muestra plan, estado, renovación y créditos', async () => {
     const html = await render()
-    expect(html).toContain('Plan 2')
+    expect(html).toContain('Legacy Scale')
     expect(html).toContain('Activa')
     expect(html).toContain('20 de setiembre de 2026')  // es-PE dice "setiembre"
     expect(html).toContain('60')       // créditos restantes
