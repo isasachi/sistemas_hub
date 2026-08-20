@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildForensicInstruction, ForensicReportSchema, repairCutTiming, mergeMicroCortes, muestraPersona, CPS_MAX, type ForensicReport, enProsa, limpiarDialogo } from './forensic'
+import { buildForensicInstruction, ForensicReportSchema, repairCutTiming, mergeMicroCortes, muestraPersona, CPS_MAX, type ForensicReport, enProsa, limpiarDialogo, verificarHablantes } from './forensic'
 
 // El prompt es el contrato con Gemini. Estos asserts fijan las reglas del spec que,
 // si se caen, producen el bug que ya vimos en producción: cortes inventados por
@@ -537,5 +537,86 @@ describe('limpiarDialogo', () => {
   it('un diálogo limpio vuelve intacto', () => {
     const t = 'La tendencia asiática llegó y este es el nuevo ingreso.'
     expect(limpiarDialogo(t)).toBe(t)
+  })
+})
+
+/**
+ * VARIOS PERSONAJES (slice 2). El desglose por hablante es texto libre del modelo: nada
+ * le impide resumir, reordenar o inventar. Lo único verificable en código es que las
+ * palabras concatenadas reproduzcan el diálogo del corte.
+ *
+ * Lo que NO se puede verificar es a QUIÉN se le asignó cada tramo — para eso hace falta
+ * el audio. Por eso el fallo se resuelve DESCARTANDO la atribución de ese corte: quedarse
+ * sin atribución es el comportamiento de siempre y es seguro; atribuir mal le pondría la
+ * línea de un personaje a otro sin que nada lo reporte.
+ */
+describe('verificarHablantes', () => {
+  const corte = (over: Record<string, unknown> = {}) => ({
+    n: 1, tiempo: '00:00 - 00:05', duracionSeg: 5, accion: 'a', camara: 'plano medio',
+    dialogo: 'Tome, doctorcito. No se preocupe por eso.',
+    textoOverlay: 'No aparece', transicion: 'corte', ...over,
+  })
+  const rep = (cortes: unknown[]) => ({ cortes, tomas: [] } as never)
+
+  it('acepta un reparto que reproduce el diálogo', () => {
+    const r = verificarHablantes(rep([corte({
+      hablantes: [
+        { personaje: 'P2', texto: 'Tome, doctorcito.' },
+        { personaje: 'P1', texto: 'No se preocupe por eso.' },
+      ],
+    })]))
+    expect(r.descartados).toEqual([])
+    expect(r.report.cortes[0].hablantes).toHaveLength(2)
+  })
+
+  it('tolera puntuación y acentos movidos al partir la frase', () => {
+    // El modelo suele mover una coma; rechazar por eso tiraría un reparto correcto.
+    const r = verificarHablantes(rep([corte({
+      hablantes: [
+        { personaje: 'P2', texto: 'Tome doctorcito' },
+        { personaje: 'P1', texto: '¡No se preocupe por eso!' },
+      ],
+    })]))
+    expect(r.descartados).toEqual([])
+  })
+
+  it('DESCARTA el reparto que inventa o pierde texto, y conserva el diálogo', () => {
+    const r = verificarHablantes(rep([corte({
+      hablantes: [{ personaje: 'P2', texto: 'Tome, doctorcito. Dios se lo pague.' }],
+    })]))
+    expect(r.descartados).toEqual([1])
+    expect(r.report.cortes[0].hablantes).toBeUndefined()
+    expect(r.report.cortes[0].dialogo).toBe('Tome, doctorcito. No se preocupe por eso.')
+  })
+
+  it('descarta también si se pierde una parte', () => {
+    const r = verificarHablantes(rep([corte({
+      hablantes: [{ personaje: 'P1', texto: 'Tome, doctorcito.' }],
+    })]))
+    expect(r.descartados).toEqual([1])
+  })
+
+  it('un corte sin atribución pasa intacto — es el caso de toda sesión anterior', () => {
+    const antes = rep([corte()])
+    expect(verificarHablantes(antes).report).toBe(antes)
+  })
+})
+
+describe('el prompt de FASE 1 pide personajes y atribución', () => {
+  const p = buildForensicInstruction()
+
+  it('pide la lista de personajes con id estable', () => {
+    expect(p).toMatch(/`personajes`/)
+    expect(p).toMatch(/hasta 4/)
+    expect(p).toMatch(/estable y no repetirse/)
+  })
+
+  it('exige que el reparto no cambie una palabra, y dice qué pasa si no', () => {
+    expect(p).toMatch(/NO cambies ni una palabra/)
+    expect(p).toMatch(/se descarta el reparto/)
+  })
+
+  it('mantiene la prohibición de etiquetar etnia también en los personajes', () => {
+    expect(p).toMatch(/SIN etiquetar etnia ni origen cultural/)
   })
 })

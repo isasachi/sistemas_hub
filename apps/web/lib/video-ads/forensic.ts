@@ -14,15 +14,39 @@ import { z } from 'zod'
  * a reproducir.
  */
 
+/**
+ * Quién dice qué dentro de un corte.
+ *
+ * ⚠️ `dialogo` SIGUE SIENDO EL TEXTO COMPLETO del corte y no cambia de significado: esto
+ * es su DESGLOSE, no su reemplazo. `repairCutTiming` mide `dialogo.length` para el
+ * cronometraje, `mergeMicroCortes` lo concatena y toda la FASE 2/3 lo copia — hacerlo
+ * estructurado habría tocado los ~12 sitios que lo leen como string plano. Sin
+ * `hablantes` se lee como siempre: un solo hablante y toda la línea es suya.
+ */
+export const HablanteSchema = z.object({
+  /** Referencia a `ForensicReport.personajes[].id`. Se resuelve con `resolvePersonaje`. */
+  personaje: z.string(),
+  texto: z.string(),
+})
+
 export const CorteSchema = z.object({
   n: z.number(),
   tiempo: z.string(),          // "00:00 - 00:03"
   duracionSeg: z.number(),
   accion: z.string(),          // qué sucede, literal
   camara: z.string(),          // plano, posición, movimiento, zoom
-  dialogo: z.string(),         // texto hablado en este corte
+  dialogo: z.string(),         // texto hablado en este corte, COMPLETO
+  hablantes: z.array(HablanteSchema).optional(), // su desglose por persona
   textoOverlay: z.string(),    // "No aparece" si no hay
   transicion: z.string(),      // jump cut / corte directo / continuidad / zoom digital
+})
+
+/** Una persona con voz propia en el video de referencia. */
+export const PersonajeForenseSchema = z.object({
+  id: z.string(),           // 'P1', 'P2'… estable; es lo que referencia `hablantes`
+  rol: z.string(),          // 'hijo', 'padre' — cómo lo nombra el anuncio
+  descripcion: z.string(),  // edad aparente, cabello, complexión…
+  vestuario: z.string(),
 })
 export type Corte = z.infer<typeof CorteSchema>
 
@@ -55,6 +79,9 @@ export const ForensicReportSchema = z.object({
   producto: z.string(),
   fondo: z.string(),
   elementosGraficos: z.string(),
+  /** Las personas con voz propia. Opcional: las sesiones anteriores no la tienen y se
+   *  leen como un solo personaje (ver `personajesDe`, personajes.ts). */
+  personajes: z.array(PersonajeForenseSchema).optional(),
   cortes: z.array(CorteSchema).min(1),
   tomas: z.array(TomaSchema).min(1),
   edicion: EdicionSchema,
@@ -231,6 +258,11 @@ export function mergeMicroCortes(
       duracionSeg: a.duracionSeg + b.duracionSeg,
       accion: [a.accion, b.accion].map((x) => x.trim()).filter(Boolean).join(' Luego, '),
       dialogo: [a.dialogo, b.dialogo].map((x) => x.trim()).filter(Boolean).join(' '),
+      // Los hablantes se concatenan en el mismo orden que el diálogo: si no, el desglose
+      // dejaría de reproducir el texto y `verificarHablantes` lo descartaría entero.
+      hablantes: [...(a.hablantes ?? []), ...(b.hablantes ?? [])].length
+        ? [...(a.hablantes ?? []), ...(b.hablantes ?? [])]
+        : undefined,
       textoOverlay: [a.textoOverlay, b.textoOverlay].find((x) => x && x !== 'No aparece') ?? a.textoOverlay,
     }
     origen.set(tiempo, (origen.get(a.tiempo) ?? 1) + (origen.get(b.tiempo) ?? 1))
@@ -401,6 +433,26 @@ export function buildForensicInstruction(): string {
     '  Conserva errores, repeticiones, muletillas, frases incompletas y la gramática',
     '  original. No resumir. No corregir. No parafrasear. Si una palabra no se puede',
     '  identificar con certeza, escribe [inaudible].',
+    '',
+    '⚠️ VARIOS PERSONAJES: `personajes`.',
+    '  Un anuncio puede tener más de una persona con voz propia. Lista CADA una que',
+    '  hable o tenga presencia propia, hasta 4, con:',
+    '    `id`: "P1", "P2"… en orden de aparición. Es lo que después referencia el',
+    '      diálogo, así que tiene que ser estable y no repetirse.',
+    '    `rol`: cómo lo nombra el anuncio ("hijo", "padre", "vendedora"). En minúsculas.',
+    '    `descripcion`: edad aparente, cabello, complexión, rasgos visibles.',
+    '    `vestuario`: lo que lleva puesto.',
+    '  Si habla una sola persona, `personajes` lleva un único elemento.',
+    '  ⚠️ Descríbelos SIN etiquetar etnia ni origen cultural, igual que `sujeto`.',
+    '',
+    '⚠️ QUIÉN DICE QUÉ: `hablantes`, dentro de cada corte.',
+    '  Un corte puede tener varias voces (dos personas conversando, o alguien fuera de',
+    '  cuadro). Reparte el `dialogo` de ese corte entre quienes lo dicen, en ORDEN, con el',
+    '  `id` del personaje y su `texto`.',
+    '  ⚠️ NO cambies ni una palabra: pegar los `texto` en orden tiene que dar exactamente',
+    '  el mismo `dialogo`. Se comprueba en código, y si no cuadra se descarta el reparto',
+    '  entero de ese corte — o sea el anuncio pierde la atribución.',
+    '  Un corte mudo no lleva `hablantes`. Un corte con una sola voz lleva uno.',
     '',
     'ELEMENTOS BASE (solo lo observable):',
     '  - `sujeto`: edad aparente, sexo aparente, cabello, barba si existe, expresión,',
@@ -584,11 +636,58 @@ export function limpiarDialogos(report: ForensicReport): ForensicReport {
   // Dato de DB, no de este request: una fila legada puede no traer los arrays. Sin este
   // guard un `.map` sobre undefined tira un 500 en la ruta que solo iba a limpiar texto.
   if (!Array.isArray(report?.cortes) || !Array.isArray(report?.tomas)) return report
-  const cortes = report.cortes.map((c) => ({ ...c, dialogo: limpiarDialogo(c.dialogo) }))
+  const cortes = report.cortes.map((c) => {
+    const hablantes = c.hablantes
+      ?.map((h) => ({ ...h, texto: limpiarDialogo(h.texto) }))
+      .filter((h) => h.texto)
+    return { ...c, dialogo: limpiarDialogo(c.dialogo), ...(hablantes ? { hablantes } : {}) }
+  })
   const tomas = report.tomas.map((t) => ({ ...t, dialogo: limpiarDialogo(t.dialogo) }))
   // Sin cambios devuelve el MISMO objeto: así no se ensucia una fila que ya estaba bien
   // ni se mueve la huella por una reescritura idéntica.
-  const igual = cortes.every((c, i) => c.dialogo === report.cortes[i].dialogo)
+  const igual = cortes.every((c, i) =>
+      c.dialogo === report.cortes[i].dialogo
+      && (c.hablantes ?? []).length === (report.cortes[i].hablantes ?? []).length
+      && (c.hablantes ?? []).every((h, k) => h.texto === report.cortes[i].hablantes?.[k]?.texto))
     && tomas.every((t, i) => t.dialogo === report.tomas[i].dialogo)
   return igual ? report : { ...report, cortes, tomas }
+}
+
+/** Solo las palabras, para comparar dos textos sin que la puntuación decida. */
+const soloPalabras = (x: string) =>
+  (x ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9ñ ]+/g, ' ').replace(/\s+/g, ' ').trim()
+
+/**
+ * Verifica que el desglose por hablante REPRODUZCA el diálogo del corte.
+ *
+ * El modelo reparte `dialogo` entre las personas que hablan, y ese reparto es texto libre:
+ * nada le impide resumir, reordenar o inventar una línea. Acá se comprueba en código lo
+ * único que se PUEDE comprobar — que las palabras concatenadas de `hablantes` sean las
+ * mismas y en el mismo orden que las de `dialogo`.
+ *
+ * ⚠️ Lo que esto NO verifica es a QUIÉN se le asignó cada tramo: eso no se puede saber sin
+ * el audio. Por eso el paso del guión tiene que MOSTRAR la atribución — es el usuario
+ * quien la valida.
+ *
+ * Cuando no cuadra se descarta el desglose de ESE corte y se conserva `dialogo`: el modo
+ * de fallo pasa a ser "sin atribución", que es exactamente el comportamiento anterior y
+ * es seguro. Atribuir mal sería peor que no atribuir: le pondría la línea de un personaje
+ * a otro sin que nada lo reporte.
+ *
+ * La comparación ignora puntuación y acentos: el modelo suele mover una coma al partir la
+ * frase, y rechazar por eso tiraría un reparto correcto.
+ */
+export function verificarHablantes(report: ForensicReport): { report: ForensicReport; descartados: number[] } {
+  if (!Array.isArray(report?.cortes)) return { report, descartados: [] }
+  const descartados: number[] = []
+  const cortes = report.cortes.map((c) => {
+    if (!c.hablantes?.length) return c
+    const junto = soloPalabras(c.hablantes.map((h) => h.texto).join(' '))
+    if (junto === soloPalabras(c.dialogo)) return c
+    descartados.push(c.n)
+    const { hablantes: _fuera, ...sinAtribucion } = c
+    return sinAtribucion
+  })
+  return descartados.length ? { report: { ...report, cortes }, descartados } : { report, descartados }
 }

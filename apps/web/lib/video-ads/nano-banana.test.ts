@@ -69,18 +69,19 @@ describe('generateImage', () => {
 describe('generateImage — no se puede colgar', () => {
   it('el presupuesto se agota aunque KIE nunca conteste', async () => {
     process.env.KIE_API_KEY = 'k'
-    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    // El stub REJECTA como lo haría `AbortSignal.timeout`, en vez de dejar una promesa
+    // colgada y esperar al temporizador real. Lo que se prueba es que el bucle TERMINA
+    // cuando la petición no devuelve nada, no la mecánica del AbortSignal — y así el test
+    // no deja timers vivos que se le atribuyan a otro archivo (la suite salió flaky por
+    // eso: dos fallos en tests ajenos que pasaban al correrlos aislados).
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
       if (String(url).includes('createTask')) {
         return new Response(JSON.stringify({ code: 200, data: { taskId: 't1' } }), { status: 200 })
       }
-      // recordInfo que no responde nunca — salvo por el AbortSignal que le pone `fetchKie`.
-      return new Promise<Response>((_res, rej) => {
-        init?.signal?.addEventListener('abort', () => rej(Object.assign(new Error('abort'), { name: 'TimeoutError' })))
-      })
+      throw Object.assign(new Error('timeout'), { name: 'TimeoutError' })
     }))
-    // Presupuesto corto para que el test sea rápido: lo que se prueba es que TERMINA.
-    await expect(generateImage({ prompt: 'x' }, { timeoutMs: 300, pollMs: 10 }))
-      .rejects.toThrow(/no devolvió la imagen|no respondió/)
+    await expect(generateImage({ prompt: 'x' }, { timeoutMs: 300, pollMs: 1 }))
+      .rejects.toThrow(/no respondió/)
   })
 
   it('un estado `fail` corta el bucle sin esperar al presupuesto', async () => {
