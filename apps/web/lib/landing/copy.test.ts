@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { shareBullets } from './copy'
+import { shareBullets, pinUserPrice } from './copy'
 
 describe('shareBullets (decisión #3)', () => {
   it('hero y cta-final comparten los mismos 4 bullets; beneficios los incluye', () => {
@@ -81,5 +81,42 @@ describe('sectionCopySchema (conteo exacto de arrays por ADN)', () => {
   it('oferta (sin requires) usa el schema base sin exigir arrays', () => {
     const sc = sectionCopySchema('oferta')
     expect(sc.safeParse({ type: 'oferta', headline: 'h' }).success).toBe(true)
+  })
+})
+
+// El precio del usuario es un dato, no una sugerencia: el fallo que esto cubre es una landing que
+// anuncia una cifra que el vendedor no cobra.
+describe('pinUserPrice', () => {
+  const tiers = (...p: string[]) =>
+    p.map((price, i) => ({ label: `${i + 1}x`, price, priceBefore: 'S/ 300', perUnit: 'S/ 60 c/u', cta: 'Compra', featured: i === 1 }))
+
+  it('reescala la ESCALERA ENTERA al precio del usuario (pisar un tier suelto invierte el descuento)', () => {
+    const out = pinUserPrice({ tiers: tiers('S/ 199', 'S/ 350', 'S/ 450') } as any, 'S/ 89')
+    // ratio = 89/199 ≈ 0.447
+    expect(out.tiers.map((t) => t.price)).toEqual(['S/ 89', 'S/ 157', 'S/ 201'])
+    // el volumen sigue siendo un descuento, no un castigo
+    const unit = out.tiers.map((t, i) => (parseFloat(t.price.slice(2)) / (i + 1)))
+    expect(unit[1]).toBeLessThan(unit[0])
+    expect(unit[2]).toBeLessThan(unit[1])
+    // el perUnit del modelo también se escala: no puede quedar con la aritmética vieja
+    expect(out.tiers[0].perUnit).toBe('S/ 27 c/u')
+  })
+
+  it('no toca nada si el modelo ya usó el precio del usuario', () => {
+    const base = { tiers: tiers('S/ 119', 'S/ 220', 'S/ 300') } as any
+    expect(pinUserPrice(base, '119')).toBe(base)
+  })
+
+  it('un ancla que no quedó por encima del precio se cae (card rota si no)', () => {
+    const out = pinUserPrice({ tiers: [{ label: '1x', price: 'S/ 50', priceBefore: 'S/ 40', cta: 'c', featured: true }] } as any, 'S/ 149')
+    expect(out.tiers[0].price).toBe('S/ 149')
+    expect(out.tiers[0].priceBefore).toBeUndefined()
+  })
+
+  it('con cero o varios números no adivina: deja el precio del modelo', () => {
+    const base = { tiers: tiers('S/ 199', 'S/ 350', 'S/ 450') } as any
+    expect(pinUserPrice(base, '')).toBe(base)
+    expect(pinUserPrice(base, '1xS/89  2xS/169  3xS/199')).toBe(base)
+    expect(pinUserPrice(base, 'S/89 · Envío gratis · 2x1')).toBe(base)
   })
 })

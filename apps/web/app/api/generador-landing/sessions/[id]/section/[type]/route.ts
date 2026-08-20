@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getLandingSession, updateLandingSession, upsertLandingSection } from '@/lib/landing/db'
 import { fetchAsBase64, uploadToStorage, storagePublicUrl } from '@/lib/storage'
 import { generateImage, editWithPrompt } from '@/lib/gemini'
-import { buildDiffusionInstruction, MULTI_UNIT_SECTIONS, NO_TALENT_SECTIONS } from '@/lib/landing/instructions'
+import { buildDiffusionInstruction, MULTI_UNIT_SECTIONS, NO_TALENT_SECTIONS, OFFER_SECTIONS } from '@/lib/landing/instructions'
 import { buildProductPack } from '@/lib/landing/product-box'
 import { NO_TALENT_SUBSTITUTE, DEMOGRAPHIC_LABELS, zoneNeedsOwnPlate } from '@/lib/landing/demographics'
 import { generateOfferCopy } from '@/lib/landing/copy'
@@ -60,17 +60,25 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const approved = (session.copy ?? []).find((c) => c.type === parsedType.data)
     if (approved) copy = SectionCopySchema.parse(approved)
   }
-  // Oferta: su texto vive en offer_copy + los tiers en session.offer (F5). Se arma el SectionCopy
-  // desde offer_copy (generando ambos si faltan) para que la difusión tenga headline/subheadline.
-  if (!copy && parsedType.data === 'oferta') {
-    let offerCopy = OfferCopySchema.safeParse(session.offer_copy).success ? OfferCopySchema.parse(session.offer_copy) : null
-    if (!offer || !offerCopy) {
-      const gen = await generateOfferCopy(session)
-      offer = gen.offer; offerCopy = gen.copy
-      await updateLandingSession(id, { offer, offer_copy: offerCopy })
-    }
-    copy = { type: 'oferta', headline: offerCopy.headline, subheadline: offerCopy.subheadline, cta: offer.tiers.find((t) => t.featured)?.cta }
+  // ⚠️ LOS TIERS SE GENERAN SI FALTAN, PASE LO QUE PASE CON EL COPY — y no era así.
+  // La guarda vieja era `if (!copy && type === 'oferta')`, pero `generateLandingCopy` YA emite un
+  // SectionCopy de tipo "oferta" (headline/kicker, ver SECTION_DNA.oferta), así que `copy` siempre
+  // llegaba lleno y `generateOfferCopy` NUNCA corría: medido, `offer` está en NULL en las 25
+  // sesiones de la base. Sin `offer` no se inyectan `offerText`/`featuredPriceText`, y la difusión
+  // INVENTA el precio — el mismo de sus priors en cada sesión, que es el bug reportado
+  // ("genera el mismo precio para todos siempre"). Alcanza a hero y cta-final por la misma vía:
+  // los dos consumen `featuredPriceText`/`urgencyText`, y una sesión puede llevarlos SIN sección de
+  // oferta (medido: la sesión 74edef72 es hero+cta-final a secas). Es una llamada de texto por
+  // sesión, cacheada en la fila: la alternativa es que el hero invente el precio.
+  let offerCopy = OfferCopySchema.safeParse(session.offer_copy).success ? OfferCopySchema.parse(session.offer_copy) : null
+  if (OFFER_SECTIONS.has(parsedType.data) && (!offer || (parsedType.data === 'oferta' && !offerCopy))) {
+    const gen = await generateOfferCopy(session)
+    offer = gen.offer; offerCopy = gen.copy
+    await updateLandingSession(id, { offer, offer_copy: offerCopy })
   }
+  // La sección Oferta arma su SectionCopy desde offer_copy si el copy general no la trajo.
+  if (!copy && parsedType.data === 'oferta' && offer && offerCopy)
+    copy = { type: 'oferta', headline: offerCopy.headline, subheadline: offerCopy.subheadline, cta: offer.tiers.find((t) => t.featured)?.cta }
   if (!copy || copy.type !== parsedType.data)
     return NextResponse.json({ error: 'Falta el copy de la sección' }, { status: 400 })
 
