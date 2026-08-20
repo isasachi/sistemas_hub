@@ -3,6 +3,7 @@ import { createBrandingSession, getBrandingSession, updateBrandingSession } from
 import { generateImage } from '@/lib/gemini'
 import { uploadToStorage } from '@/lib/storage'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
+import { currentCreditOwner } from '@/lib/credits'
 import { ensureUserId } from '@/lib/product-hunter/session'
 import { isFlagged } from '@/lib/branding/moderation'
 import { isComplete, type Brief, type PartialBrief } from '@/lib/branding/brief'
@@ -48,6 +49,13 @@ export async function POST(req: NextRequest) {
   // la respuesta, que ya salieron cuando corre `start()`. Acuñarla acá (y no solo
   // leerla) es lo que evita que la sesión nazca huérfana en un navegador sin ph_uid.
   const { uid: userId, setCookie } = await ensureUserId()
+
+  // Por el mismo motivo: los créditos de imagen dependen del plan, y el plan se
+  // resuelve leyendo la sesión (`getUser()` → cookies). Adentro de `start()` esas
+  // cookies ya no son legibles de forma confiable, así que se resuelve acá afuera y
+  // se le pasa a `checkGenQuota`. Es el OWNER, no el saldo: el saldo se recuenta en
+  // cada etapa, así que las 4 imágenes de una corrida sí se descuentan entre sí.
+  const creditOwner = await currentCreditOwner()
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -107,7 +115,7 @@ export async function POST(req: NextRequest) {
 
         for (const stage of stages) {
           const kind = `branding-${stage}`
-          const { blocked } = await checkGenQuota(sessionId, kind)
+          const { blocked } = await checkGenQuota(sessionId, kind, creditOwner)
           if (blocked) {
             send({ status: 'stage_failed', stage, message: 'Llegaste al límite de regeneraciones de este paso' })
             failed.push(stage)

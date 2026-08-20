@@ -1,4 +1,4 @@
-import type { RawProductRow, RawProductEntry } from '@ph/shared'
+import { diasCorriendo, type RawProductRow, type RawProductEntry } from '@ph/shared'
 
 // Los anuncios dinámicos de catálogo de Meta llegan con los placeholders sin
 // resolver ("{{product.name}}", "{{product.brand}}"): sin esto la card muestra
@@ -13,8 +13,7 @@ export function stripAdVars(t?: string | null): string | null {
   return s.length >= 3 ? s : null
 }
 
-// Fila de ph_raw_products → lo que ve el front. Lo comparten `search` y
-// `top-picks` para que una card sea idéntica en los dos lados.
+// Fila de ph_raw_products → lo que ve el front.
 export function toEntry(r: RawProductRow): RawProductEntry {
   return {
     id: `${r.niche}:${r.page_id}`,
@@ -36,5 +35,6 @@ export function toEntry(r: RawProductRow): RawProductEntry {
     verificado: r.status === 'monoproducto',
     share: typeof r.share === 'number' ? r.share : null,
     senal: r.senal_nicho ?? null,
+    diasCorriendo: diasCorriendo(r.ad_start_date),
   }
 }

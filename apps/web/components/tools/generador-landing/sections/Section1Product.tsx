@@ -48,24 +48,31 @@ export default function Section1Product() {
       <FieldGroup type="input" id="ld-name" label="Nombre del producto" required value={name} onChange={setName}
         placeholder="Ej: Serum facial de vitamina C" />
 
+      {/* El precio vivía dentro del acordeón "Afinar copy" y por eso llegaba VACÍO en casi todas las
+          sesiones (medido: `price=""` en 23 de 25). Sin precio, la sección de oferta lo inventa —
+          y siempre el mismo. Es el input que gobierna esa sección: va a la vista. */}
+      <FieldGroup type="input" id="ld-price" label="Precio de venta" helper="(opcional, pero la sección Oferta lo inventa si lo dejas vacío)"
+        value={priceV} onChange={setPriceV} placeholder="Ej: S/ 89" />
+
+      {/* Mismo motivo que el precio: es un DATO del producto (lo que dice el envase), no un afinado
+          de copy — dentro del acordeón nadie lo llenaba. El acordeón queda solo con lo que afina el
+          copy: beneficios, público y tono. */}
+      <FieldGroup type="textarea" id="ld-labels" label="Texto de las etiquetas del producto"
+        helper="(opcional — una etiqueta por línea; mejora la fidelidad del texto en el envase)"
+        value={labelsV} onChange={setLabelsV} rows={4}
+        placeholder={'Ej:\nEÚNOIA\nNiacinamida · Pantenol · Colágeno\nACNÉ + HIDRATACIÓN\n30ml / 1.85 fl oz'} />
+
       <details className="rounded-xl border border-white/[0.08] bg-white/[0.02] px-4 py-3">
-        <summary className="text-[13px] font-semibold text-[#ededed] cursor-pointer select-none">
-          Afinar copy y etiquetas <span className="text-[#bebebe] font-normal">(opcional)</span>
+        <summary className="text-[13px] font-semibold text-[#efe7e0] cursor-pointer select-none">
+          Afinar copy <span className="text-[#a98c88] font-normal">(opcional)</span>
         </summary>
         <div className="flex flex-col gap-4 pt-4">
-          <FieldGroup type="input" id="ld-price" label="Precio / oferta" helper="(opcional)" value={priceV} onChange={setPriceV}
-            placeholder="Ej: S/89 · Envío gratis · 2x1" />
           <FieldGroup type="textarea" id="ld-benefits" label="Beneficios clave" helper="(opcional)" value={benefitsV} onChange={setBenefitsV}
             rows={3} placeholder="Ej: Reduce manchas, hidrata, resultados en 2 semanas" />
           <FieldGroup type="input" id="ld-audience" label="Público objetivo" helper="(opcional)" value={audienceV} onChange={setAudienceV}
             placeholder="Ej: Mujeres 25-45 con piel sensible" />
-          <FieldGroup type="textarea" id="ld-labels" label="Texto de las etiquetas del producto"
-            helper="(opcional — una etiqueta por línea; mejora la fidelidad del texto en el envase)"
-            value={labelsV} onChange={setLabelsV} rows={4}
-            placeholder={'Ej:\nEÚNOIA\nNiacinamida · Pantenol · Colágeno\nACNÉ + HIDRATACIÓN\n30ml / 1.85 fl oz'} />
-
           <div className="flex flex-col gap-2">
-            <label className="text-[13px] font-semibold text-[#ededed]">Tono <span className="text-[#bebebe] font-normal ml-1.5">(opcional)</span></label>
+            <label className="text-[13px] font-semibold text-[#efe7e0]">Tono <span className="text-[#a98c88] font-normal ml-1.5">(opcional)</span></label>
             <ChipGroup options={TONE_OPTIONS} selected={toneV} multi onChange={(v) => setToneV(v as string[])} />
           </div>
         </div>

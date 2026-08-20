@@ -81,6 +81,7 @@ interface Candidate {
   body: string | null
   categories: string[]
   nodesSeen: number   // presencia acumulada en las búsquedas → ranking del enrich
+  startDate: number | null  // unix del anuncio más viejo visto de este anunciante
 }
 
 // Keywords SIN LLM: cache del nicho en ph_niches (solo lectura) → seed estático
@@ -121,8 +122,23 @@ async function scrapeRawNiche(niche: string): Promise<void> {
       for (const [pageId, group] of grouped) {
         const first = group[0]
         if (isLikelyService(first.pageName, first.pageCategories)) { services++; continue }
+        // Anuncio MÁS VIEJO del anunciante entre los que vimos: es la antigüedad
+        // que el buscador filtra. El menor unix timestamp, ignorando los nulos
+        // (un nodo sin fecha no es un anuncio de hoy, es un dato que falta).
+        const masViejo = group
+          .map((n) => n.startDate)
+          .filter((d): d is number => typeof d === 'number' && d > 0)
+          .reduce<number | null>((a, b) => (a === null || b < a ? b : a), null)
         const prev = byPage.get(pageId)
-        if (prev) { prev.nodesSeen += group.length; continue }
+        if (prev) {
+          prev.nodesSeen += group.length
+          // El mismo anunciante aparece en varias keyword×país: nos quedamos con
+          // la fecha más vieja de todas las pasadas, no con la de la primera.
+          if (masViejo !== null && (prev.startDate === null || masViejo < prev.startDate)) {
+            prev.startDate = masViejo
+          }
+          continue
+        }
         byPage.set(pageId, {
           pageId,
           pageName: first.pageName,
@@ -133,6 +149,7 @@ async function scrapeRawNiche(niche: string): Promise<void> {
           body: first.bodyText ? first.bodyText.slice(0, 300) : null,
           categories: first.pageCategories,
           nodesSeen: group.length,
+          startDate: masViejo,
         })
       }
       console.log(`  [${country}] "${keyword}" → ${grouped.size} páginas (${nodes.length} nodos)`)
@@ -168,6 +185,7 @@ async function scrapeRawNiche(niche: string): Promise<void> {
         name: c.pageName || null,
         ad_count: adCount,
         country: c.country,
+        ad_start_date: c.startDate,
         raw_data: { title: c.title, body: c.body, keyword: c.keyword, categories: c.categories },
       })
     }

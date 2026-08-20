@@ -48,16 +48,16 @@ export function FieldGroup(props: FieldGroupProps) {
     <div className="flex flex-col gap-2">
       <label
         htmlFor={props.id}
-        className="text-[13px] font-semibold text-[#ededed]"
+        className="text-[13px] font-semibold text-[#efe7e0]"
       >
         {props.label}
         {props.required && (
-          <span className="text-[#ff9b4a] ml-0.5" aria-hidden>
+          <span className="text-[#e8467a] ml-0.5" aria-hidden>
             *
           </span>
         )}
         {props.helper && (
-          <span className="text-[#bebebe] font-normal ml-1.5">
+          <span className="text-[#a98c88] font-normal ml-1.5">
             {props.helper}
           </span>
         )}
@@ -89,12 +89,12 @@ export function FieldGroup(props: FieldGroupProps) {
           <SelectTrigger id={props.id} className={fieldClass}>
             <SelectValue />
           </SelectTrigger>
-          <SelectContent className="bg-[#0c0c0d] border-white/[0.06] text-[#ededed]">
+          <SelectContent className="bg-[#0c0c0d] border-white/[0.06] text-[#efe7e0]">
             {props.options.map((opt) => (
               <SelectItem
                 key={opt.value}
                 value={opt.value}
-                className="focus:bg-white/[0.07] focus:text-[#ededed] cursor-pointer"
+                className="focus:bg-white/[0.07] focus:text-[#efe7e0] cursor-pointer"
               >
                 {opt.label}
               </SelectItem>

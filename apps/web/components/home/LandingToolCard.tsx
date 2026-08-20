@@ -41,14 +41,14 @@ export function LandingToolCard({ tool, wide = false }: { tool: Tool; wide?: boo
           <span className="lp-icon-chip h-9 w-9 shrink-0">
             <Icon className="h-[17px] w-[17px]" />
           </span>
-          <h3 className="text-[17px] font-semibold text-[#ededed]">{tool.name}</h3>
+          <h3 className="text-[17px] font-semibold text-[#efe7e0]">{tool.name}</h3>
         </div>
         {!isSoon && (
-          <ArrowUpRight className="mt-1 h-[18px] w-[18px] shrink-0 text-[#cfcfcf] transition-all duration-200 group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-[rgb(255,155,74)]" />
+          <ArrowUpRight className="mt-1 h-[18px] w-[18px] shrink-0 text-[#c9b4ae] transition-all duration-200 group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-[rgb(232,70,122)]" />
         )}
       </div>
 
-      <p className="relative z-[1] mt-2 px-2 font-[Lato] text-[13px] leading-[1.55] text-[#bebebe]">
+      <p className="relative z-[1] mt-2 px-2 font-[Lato] text-[13px] leading-[1.55] text-[#a98c88]">
         {wide ? tool.description : pitch}
       </p>
 
@@ -59,11 +59,11 @@ export function LandingToolCard({ tool, wide = false }: { tool: Tool; wide?: boo
             key={s.label}
             className="inline-flex items-baseline gap-1 rounded-full border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.03)] px-2.5 py-1"
           >
-            <span className="text-[12px] font-semibold text-[#ededed]">{s.value}</span>
-            <span className="font-[Lato] text-[11px] text-[#cfcfcf]">{s.label}</span>
+            <span className="text-[12px] font-semibold text-[#efe7e0]">{s.value}</span>
+            <span className="font-[Lato] text-[11px] text-[#c9b4ae]">{s.label}</span>
           </span>
         ))}
-        <span className="lp-label ml-auto rounded-full border border-[rgba(214,168,96,0.35)] bg-[rgba(214,168,96,0.08)] px-2.5 py-1 !text-[10px] !text-[#d6a860]">
+        <span className="lp-label ml-auto rounded-full border border-[rgba(246,242,235,0.35)] bg-[rgba(246,242,235,0.08)] px-2.5 py-1 !text-[10px] !text-[#e8dcd6]">
           {tool.tag}
         </span>
       </div>
@@ -88,7 +88,7 @@ export function LandingToolCard({ tool, wide = false }: { tool: Tool; wide?: boo
         "lp-card lp-leak group relative flex h-full flex-col overflow-hidden p-2.5 pb-4 no-underline",
         "transition-transform duration-200 ease-[cubic-bezier(0.29,0.63,0.44,1)]",
         "hover:-translate-y-1 hover:border-[rgba(255,255,255,0.2)]",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(255,255,255,0.25)] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0b0c]",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(255,255,255,0.25)] focus-visible:ring-offset-2 focus-visible:ring-offset-[#14050a]",
         spanClass,
       ].join(" ")}
     >

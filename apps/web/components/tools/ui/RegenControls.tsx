@@ -30,17 +30,17 @@ export function RegenControls({
         <button
           onClick={onRegenerate}
           disabled={disabled}
-          className="h-10 px-4 rounded-xl border border-white/[0.14] text-[#ededed] text-[13px] font-medium hover:bg-white/[0.05] transition-colors cursor-pointer bg-transparent disabled:opacity-40"
+          className="h-10 px-4 rounded-xl border border-white/[0.14] text-[#efe7e0] text-[13px] font-medium hover:bg-white/[0.05] transition-colors cursor-pointer bg-transparent disabled:opacity-40"
         >
           {busy ? 'Regenerando...' : label}
         </button>
         {showCounter && (
-          <span className="text-[12px] text-[#bebebe]">
+          <span className="text-[12px] text-[#a98c88]">
             Quedan {Math.max(0, regensLeft as number)} de 3 regeneraciones
           </span>
         )}
       </div>
-      {reason && <p className="text-[12px] text-[#cfcfcf]">{reason}</p>}
+      {reason && <p className="text-[12px] text-[#c9b4ae]">{reason}</p>}
     </div>
   )
 }

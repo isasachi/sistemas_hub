@@ -110,7 +110,7 @@ export default function Section2Character() {
 
   const field = (label: string, k: CampoTextoDeInputs, placeholder: string, hint?: string) => (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={k} className="text-[13px] font-semibold text-[#ededed]">{label}</label>
+      <label htmlFor={k} className="text-[13px] font-semibold text-[#efe7e0]">{label}</label>
       {hint && <span className="text-[11.5px] leading-relaxed text-[#8b8b8b]">{hint}</span>}
       <input id={k} value={inputs[k]} onChange={(e) => set(k, e.target.value)}
         placeholder={placeholder} className="jr-field h-11 rounded-lg px-3 text-[13px]" />

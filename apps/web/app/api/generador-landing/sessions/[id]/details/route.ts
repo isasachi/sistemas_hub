@@ -18,10 +18,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const productName = body.productName?.trim()
   if (!productName) return NextResponse.json({ error: 'Falta el nombre del producto' }, { status: 400 })
 
+  // ⚠️ CAMBIAR EL PRECIO INVALIDA LA OFERTA YA GENERADA. Los tiers se calculan UNA vez y se
+  // cachean en la sesión; sin esto, corregir el precio acá no movía nada río abajo (la sección
+  // Oferta y el hero seguían pintando los tiers viejos) y se leía como "el precio no se aplica" —
+  // el mismo síntoma que el bug original. Se borran, se regeneran solos al renderizar la sección.
+  const price = body.price?.trim() ?? null
+  const priceChanged = price !== (session.price ?? null)
+
   await updateLandingSession(id, {
     step: Math.max(session.step, 1),
     product_name: productName,
-    price: body.price?.trim() ?? null,
+    price,
+    ...(priceChanged ? { offer: null, offer_copy: null } : {}),
     benefits: body.benefits?.trim() ?? null,
     audience: body.audience?.trim() ?? null,
     tone: (body.tone ?? []).map((t) => t.trim()).filter(Boolean),

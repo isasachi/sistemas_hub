@@ -71,10 +71,10 @@ export default function ChipsCustom({
         onChange={(e) => commit(chips, e.target.value.replace(/,/g, ''))}
         // El valor definitivo se recorta acá, no al teclear (ver mergeCustom).
         onBlur={() => commit(chips, custom.trim())}
-        className="h-11 rounded-xl bg-white/[0.04] border-white/[0.08] text-[13px] text-[#ededed]"
+        className="h-11 rounded-xl bg-white/[0.04] border-white/[0.08] text-[13px] text-[#efe7e0]"
       />
 
-      <p className="text-[12px] text-[#bebebe]">
+      <p className="text-[12px] text-[#a98c88]">
         {chips.length} de {max} elegidos{custom.trim() ? ' · y el tuyo' : ''}
       </p>
     </>

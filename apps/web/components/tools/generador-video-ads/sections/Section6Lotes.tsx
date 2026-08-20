@@ -106,13 +106,13 @@ export default function Section6Lotes() {
   if (!lotes?.length) {
     return (
       <div className="flex flex-col gap-4">
-        <div className="rounded-2xl border border-white/[0.06] bg-[#121214] px-4 py-4">
+        <div className="rounded-2xl border border-white/[0.06] bg-[#2a0f1a] px-4 py-4">
           <div className="mb-2.5 text-[11px] font-semibold uppercase tracking-wide text-[#c9a227]">
             {preview.length} {preview.length === 1 ? 'lote' : 'lotes'} de máximo 15 s
           </div>
           <ol className="flex flex-col gap-1.5">
             {preview.map((l) => (
-              <li key={l.n} className="text-[12.5px] text-[#cfcfcf]">
+              <li key={l.n} className="text-[12.5px] text-[#c9b4ae]">
                 <span className="mr-2 font-mono text-[11px] text-[#8b8b8b]">Lote {l.n}</span>
                 Tomas {l.tomas[0].n}–{l.tomas[l.tomas.length - 1].n} · {seg(l.duracionSeg)}
               </li>
@@ -124,11 +124,11 @@ export default function Section6Lotes() {
                 sigue siendo una sola generación. Decir "consume N generaciones" era
                 literalmente falso y le hacía creer al usuario que un guión de varios
                 lotes no le iba a alcanzar la cuota. */}
-            Esto produce <strong className="text-[#cfcfcf]">
+            Esto produce <strong className="text-[#c9b4ae]">
             {preview.length} {preview.length === 1 ? 'clip' : 'clips'}</strong> en{' '}
-            <strong className="text-[#cfcfcf]">
+            <strong className="text-[#c9b4ae]">
             {preview.length === 1 ? 'un render' : `${preview.length} renders`}</strong>, pero
-            consume <strong className="text-[#cfcfcf]">una sola generación</strong> de tu cuota:
+            consume <strong className="text-[#c9b4ae]">una sola generación</strong> de tu cuota:
             se cuenta por video, no por lote. Los clips se descargan por separado y los unes
             en tu editor.
           </p>
@@ -182,7 +182,7 @@ export default function Section6Lotes() {
         </div>
       )}
       {lotes.map((l) => (
-        <div key={l.n} className="rounded-2xl border border-white/[0.06] bg-[#121214] p-3">
+        <div key={l.n} className="rounded-2xl border border-white/[0.06] bg-[#2a0f1a] p-3">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-[11px] font-semibold uppercase tracking-wide text-[#c9a227]">
               Lote {l.n} · {seg(l.duracionSeg)}
@@ -226,7 +226,7 @@ export default function Section6Lotes() {
               (la huella de contenido deja de coincidir). Si nada cambió, el servidor
               devuelve los mismos lotes sin gastar cuota — silencioso, no un error. */}
           <p className="text-[11.5px] leading-relaxed text-[#8b8b8b]">
-            ¿No te convence? Vuelve al paso <strong className="text-[#cfcfcf]">Guión</strong> y
+            ¿No te convence? Vuelve al paso <strong className="text-[#c9b4ae]">Guión</strong> y
             adáptalo otra vez antes de generar de nuevo — si no cambia nada, este botón
             no crea una versión distinta.
           </p>

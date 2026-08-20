@@ -30,6 +30,13 @@ vi.mock('@/lib/video-ads/nano-banana', () => ({
 vi.mock('@/lib/storage', () => ({
   uploadToStorage: vi.fn(async (_id: string, _b: Buffer, _m: string, nombre: string) => `https://cdn.test/${nombre}.png`),
 }))
+
+// BYOK: el render usa la API key de KIE del usuario. Los tests corren con una
+// cargada; el caso de la key ausente tiene su propio bloque al final.
+vi.mock('@/lib/user-settings', () => ({
+  currentKieKey: vi.fn().mockResolvedValue('kie-de-prueba'),
+}))
+
 vi.mock('@/lib/product-hunter/session', () => ({
   readUserId: vi.fn().mockResolvedValue('user-1'),
 }))
@@ -42,6 +49,7 @@ import { generateImage } from '@/lib/video-ads/nano-banana'
 import { checkGenQuota, checkGlobalBackstop, recordGenQuota } from '@/lib/gen-quota'
 import type { VideoSessionResponse } from '@/lib/video-ads/types'
 import type { Lote } from '@/lib/video-ads/lotes'
+import { currentKieKey } from '@/lib/user-settings'
 
 function req(body?: unknown): NextRequest {
   return new NextRequest('http://localhost/api/generador-video-ads/sessions/s1/generate-lotes', {
@@ -534,5 +542,48 @@ describe('POST generate-lotes — fix round 4: huella de contenido', () => {
     expect(updateVideoSession).not.toHaveBeenCalled() // nada se pisó: nada se abandonó
     expect(errSpy).not.toHaveBeenCalled()
     errSpy.mockRestore()
+  })
+})
+
+describe('POST generate-lotes — BYOK: la API key de KIE es del usuario', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getVideoSession).mockResolvedValue(session())
+    vi.mocked(claimFreshLotes).mockResolvedValue(true)
+    vi.mocked(checkGenQuota).mockResolvedValue({ blocked: null, regensLeft: 2 })
+    vi.mocked(currentKieKey).mockResolvedValue('kie-de-prueba')
+  })
+
+  it('la key del usuario llega a KIE', async () => {
+    await POST(req(), ctx())
+    expect(vi.mocked(createVideoTask).mock.calls[0][1]).toBe('kie-de-prueba')
+  })
+
+  // ⚠️ EL ORDEN IMPORTA Y ES LA RAZÓN DE ESTE TEST. Si la key se resolviera DESPUÉS
+  // del gate de cuota, `checkGenQuota` ya habría escrito la fila de
+  // `video-generation` y el primer `createVideoTask` moriría con un 401 de KIE: el
+  // usuario perdería una generación de su cuota por no haber cargado una key.
+  it('sin key: 400 sin cobrar cuota, sin llamar a KIE y sin tocar la sesión', async () => {
+    vi.mocked(currentKieKey).mockResolvedValue(null)
+    delete process.env.KIE_API_KEY
+
+    const res = await POST(req(), ctx())
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toMatch(/API key de KIE/i)
+    expect(vi.mocked(checkGenQuota)).not.toHaveBeenCalled()
+    expect(vi.mocked(createVideoTask)).not.toHaveBeenCalled()
+    expect(vi.mocked(recordGenQuota)).not.toHaveBeenCalled()
+    expect(vi.mocked(claimFreshLotes)).not.toHaveBeenCalled()
+  })
+
+  // El env sigue siendo el respaldo del hub (dev, y quien todavía no cargó la suya).
+  it('sin key del usuario pero con KIE_API_KEY en el entorno: renderiza igual', async () => {
+    vi.mocked(currentKieKey).mockResolvedValue(null)
+    vi.stubEnv('KIE_API_KEY', 'key-del-hub')
+
+    const res = await POST(req(), ctx())
+    expect(res.status).toBe(200)
+    expect(vi.mocked(createVideoTask)).toHaveBeenCalled()
+    vi.unstubAllEnvs()
   })
 })

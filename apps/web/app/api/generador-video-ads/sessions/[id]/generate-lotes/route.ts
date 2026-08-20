@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getVideoSession, updateVideoSession, claimFreshLotes } from '@/lib/video-ads/db'
-import { createVideoTask, snapDuration, KIE_PROMPT_MAX, type VideoImage } from '@/lib/video-ads/kie'
+import { createVideoTask, resolveKey, snapDuration, KIE_PROMPT_MAX, type VideoImage } from '@/lib/video-ads/kie'
+import { currentKieKey } from '@/lib/user-settings'
 import { frameSpecs, pairFrames, generateBoundaryFrames } from '@/lib/video-ads/frames'
 import { personajesDe, hablantesPorTiempo, vozEnOffPorTiempo } from '@/lib/video-ads/personajes'
 import { enProsa } from '@/lib/video-ads/forensic'
@@ -216,6 +217,21 @@ export async function POST(
   // que terminó justo antes — de cualquier modo, no hay nada pagado de más que hacer.
   if (!pendientes.length) return NextResponse.json({ lotes: seed })
 
+  // BYOK: el render lo paga el usuario con SU cuenta de KIE. La key se resuelve y se
+  // valida ACÁ, ANTES del gate de cuota: `checkGenQuota` escribiría la fila de
+  // `video-generation` y después el primer `createVideoTask` moriría con un 401 de
+  // KIE — o sea el usuario perdería una generación de su cuota por no haber cargado
+  // una key. El orden es la única forma de que eso no pase.
+  let kieKey: string
+  try {
+    kieKey = resolveKey(await currentKieKey())
+  } catch {
+    return NextResponse.json(
+      { error: 'Falta tu API key de KIE. Cárgala en Ajustes y vuelve a intentar.' },
+      { status: 400 },
+    )
+  }
+
   // El backstop global diario aplica SIEMPRE que se vaya a llamar a KIE — reanudar
   // también gasta (crea tarea para los lotes que quedaron pendientes). El gate
   // per-video (`video-generation`, la cuota real ahora) NO aplica al reanudar: esa
@@ -401,7 +417,7 @@ export async function POST(
           { url: pares[i].fin, role: 'el último fotograma' },
         ],
         prompt, durationSec, locucionChars, mode: 'frames',
-      })
+      }, kieKey)
       creados++
       lotes.push({ ...lote, duracionSeg: durationSec, prompt, taskId, status: 'waiting', videoUrl: null, failMsg: null })
       // Fila por lote: visibilidad del costo real y backstop global diario. Ya NO topa

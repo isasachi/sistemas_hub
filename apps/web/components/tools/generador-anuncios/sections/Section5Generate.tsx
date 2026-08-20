@@ -90,7 +90,7 @@ export default function Section5Generate() {
           />
           {/* gpt-image-2 mide 38-55 s (por eso la ruta lleva maxDuration = 300).
               El "15 a 40" era del render anterior con Gemini. */}
-          <p className="text-[13px] text-[#cfcfcf]">Esto puede tomar alrededor de un minuto.</p>
+          <p className="text-[13px] text-[#c9b4ae]">Esto puede tomar alrededor de un minuto.</p>
 
           {/* Momento de generación unificado (compartido con landing) */}
           <GenerationProgress
@@ -101,8 +101,8 @@ export default function Section5Generate() {
           />
 
           {/* Skeleton */}
-          <div className="aspect-[9/16] max-h-[300px] rounded-2xl bg-[#121214] animate-pulse border border-white/[0.06] flex items-center justify-center">
-            <span className="text-[#bebebe] text-[12px]">generando...</span>
+          <div className="aspect-[9/16] max-h-[300px] rounded-2xl bg-[#2a0f1a] animate-pulse border border-white/[0.06] flex items-center justify-center">
+            <span className="text-[#a98c88] text-[12px]">generando...</span>
           </div>
         </>
       )}
@@ -129,12 +129,12 @@ export default function Section5Generate() {
               </svg>
               Descargar
             </button>
-            <button onClick={startNewSession} className="h-11 px-4 rounded-xl border border-white/[0.14] text-[#ededed] text-[13px] font-medium hover:bg-white/[0.05] transition-colors cursor-pointer bg-transparent">
+            <button onClick={startNewSession} className="h-11 px-4 rounded-xl border border-white/[0.14] text-[#efe7e0] text-[13px] font-medium hover:bg-white/[0.05] transition-colors cursor-pointer bg-transparent">
               Nuevo anuncio
             </button>
           </div>
           <div className="border-t border-white/[0.06] pt-4">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-[#bebebe] mb-2">¿Quieres ajustar algo?</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-[#a98c88] mb-2">¿Quieres ajustar algo?</p>
             {error && <div className="mb-2 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-[11px] text-red-400">{error}</div>}
             <RegenControls
               regensLeft={regens['anuncios-image'] ?? 3}

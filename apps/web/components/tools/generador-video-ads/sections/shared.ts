@@ -4,7 +4,7 @@ export const btnPrimary =
   'h-11 w-full rounded-xl jr-cta text-[13px] font-bold disabled:opacity-40 transition-all duration-200 cursor-pointer border-0 font-sans flex items-center justify-center gap-2'
 
 export const btnGhost =
-  'h-11 w-full rounded-xl border border-white/[0.08] bg-white/[0.03] text-[13px] font-semibold text-[#cfcfcf] hover:border-white/20 hover:text-[#ededed] disabled:opacity-40 transition-all duration-200 cursor-pointer font-sans flex items-center justify-center gap-2'
+  'h-11 w-full rounded-xl border border-white/[0.08] bg-white/[0.03] text-[13px] font-semibold text-[#c9b4ae] hover:border-white/20 hover:text-[#efe7e0] disabled:opacity-40 transition-all duration-200 cursor-pointer font-sans flex items-center justify-center gap-2'
 
 export const errorBox =
   'rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-[12px] text-red-400'

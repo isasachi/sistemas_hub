@@ -72,15 +72,15 @@ export function AuthForm({ mode, action, next, initialError }: AuthFormProps) {
 
   return (
     <div className="jr-card lp-leak jr-rise w-full max-w-[400px] rounded-2xl p-7">
-      <h1 className="relative mb-1 text-[22px] text-[#ffffff]">{c.title}</h1>
-      <p className="relative mb-6 font-[Lato] text-[13px] leading-[1.5] text-[#cfcfcf]">{c.subtitle}</p>
+      <h1 className="relative mb-1 text-[22px] text-[#f6f2eb]">{c.title}</h1>
+      <p className="relative mb-6 font-[Lato] text-[13px] leading-[1.5] text-[#c9b4ae]">{c.subtitle}</p>
 
       {/* Google OAuth */}
       <button
         type="button"
         onClick={signInWithGoogle}
         disabled={googleLoading || pending}
-        className="relative w-full flex items-center justify-center gap-2.5 bg-white/[0.04] border border-white/[0.12] hover:bg-white/[0.07] hover:border-white/[0.2] rounded-xl py-2.5 text-[14px] font-semibold text-[#ededed] transition-all duration-200 cursor-pointer disabled:opacity-50"
+        className="relative w-full flex items-center justify-center gap-2.5 bg-white/[0.04] border border-white/[0.12] hover:bg-white/[0.07] hover:border-white/[0.2] rounded-xl py-2.5 text-[14px] font-semibold text-[#efe7e0] transition-all duration-200 cursor-pointer disabled:opacity-50"
       >
         {googleLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <GoogleIcon />}
         {c.google}
@@ -89,7 +89,7 @@ export function AuthForm({ mode, action, next, initialError }: AuthFormProps) {
       {/* Divisor */}
       <div className="relative flex items-center gap-3 my-5">
         <div className="flex-1 h-px bg-white/[0.08]" />
-        <span className="text-[11px] text-[#bebebe] uppercase tracking-[1px]">o con email</span>
+        <span className="text-[11px] text-[#a98c88] uppercase tracking-[1px]">o con email</span>
         <div className="flex-1 h-px bg-white/[0.08]" />
       </div>
 
@@ -98,7 +98,7 @@ export function AuthForm({ mode, action, next, initialError }: AuthFormProps) {
 
         {/* Email */}
         <div>
-          <label htmlFor="email" className="block text-[12px] font-semibold text-[#cfcfcf] mb-1.5">
+          <label htmlFor="email" className="block text-[12px] font-semibold text-[#c9b4ae] mb-1.5">
             Email
           </label>
           <input
@@ -117,7 +117,7 @@ export function AuthForm({ mode, action, next, initialError }: AuthFormProps) {
 
         {/* Contraseña */}
         <div>
-          <label htmlFor="password" className="block text-[12px] font-semibold text-[#cfcfcf] mb-1.5">
+          <label htmlFor="password" className="block text-[12px] font-semibold text-[#c9b4ae] mb-1.5">
             Contraseña
           </label>
           <div className="relative">
@@ -133,7 +133,7 @@ export function AuthForm({ mode, action, next, initialError }: AuthFormProps) {
               type="button"
               onClick={() => setShowPw((s) => !s)}
               aria-label={showPw ? "Ocultar contraseña" : "Mostrar contraseña"}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#bebebe] hover:text-[#ededed] transition-colors cursor-pointer"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#a98c88] hover:text-[#efe7e0] transition-colors cursor-pointer"
             >
               {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
@@ -150,7 +150,7 @@ export function AuthForm({ mode, action, next, initialError }: AuthFormProps) {
           </div>
         )}
         {state.notice && (
-          <div role="status" className="rounded-xl border border-[rgba(214,168,96,0.3)] bg-[rgba(214,168,96,0.08)] px-3.5 py-2.5 text-[12px] leading-[1.5] text-[#d6a860]">
+          <div role="status" className="rounded-xl border border-[rgba(246,242,235,0.3)] bg-[rgba(246,242,235,0.08)] px-3.5 py-2.5 text-[12px] leading-[1.5] text-[#e8dcd6]">
             {state.notice}
           </div>
         )}
@@ -164,9 +164,9 @@ export function AuthForm({ mode, action, next, initialError }: AuthFormProps) {
         </button>
       </form>
 
-      <p className="relative mt-5 text-center text-[13px] text-[#bebebe]">
+      <p className="relative mt-5 text-center text-[13px] text-[#a98c88]">
         {c.altText}{" "}
-        <Link href={c.altLink} className="text-[#ff9b4a] font-semibold no-underline hover:underline">
+        <Link href={c.altLink} className="text-[#e8467a] font-semibold no-underline hover:underline">
           {c.altCta}
         </Link>
       </p>

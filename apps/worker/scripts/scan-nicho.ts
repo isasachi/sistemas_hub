@@ -186,6 +186,7 @@ async function main() {
         niche, page_id: cand.pageId, ad_count: m.adCount, status: v.status,
         kind: v.kind, share: m.share, product_name: v.productName,
         verdict_note: v.nota, senal_nicho: m.senal, product_path: m.dominante,
+          ad_start_date: m.masViejo,
       })
       return { cand, m, estado: v.status, motivo: v.nota }
     })

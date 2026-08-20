@@ -156,7 +156,7 @@ export default function Section5Script() {
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="rounded-2xl border border-white/[0.06] bg-[#121214] px-4 py-4">
+      <div className="rounded-2xl border border-white/[0.06] bg-[#2a0f1a] px-4 py-4">
         <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[#c9a227]">
           Guión final adaptado
         </div>
@@ -261,11 +261,11 @@ export default function Section5Script() {
       )}
 
       {consistencyBlock && (
-        <div className="rounded-2xl border border-white/[0.06] bg-[#121214] px-4 py-4">
+        <div className="rounded-2xl border border-white/[0.06] bg-[#2a0f1a] px-4 py-4">
           <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#c9a227]">
             Identidad bloqueada del personaje
           </div>
-          <p className="text-[12.5px] leading-relaxed text-[#cfcfcf]">{consistencyBlock}</p>
+          <p className="text-[12.5px] leading-relaxed text-[#c9b4ae]">{consistencyBlock}</p>
         </div>
       )}
 

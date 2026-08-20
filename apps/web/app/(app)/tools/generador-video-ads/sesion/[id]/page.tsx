@@ -28,14 +28,14 @@ export default function VideoDetalle() {
   return (
     <ToolShell name="Generador de Video Ads" slug="generador-video-ads" trail="Sesión">
       <div className="max-w-[900px] w-full mx-auto px-6 md:px-10 py-10">
-        {s === undefined && <p className="text-[13px] text-[#bebebe]">Cargando…</p>}
-        {s === null && <p className="text-[13px] text-[#bebebe]">No se encontró la sesión.</p>}
+        {s === undefined && <p className="text-[13px] text-[#a98c88]">Cargando…</p>}
+        {s === null && <p className="text-[13px] text-[#a98c88]">No se encontró la sesión.</p>}
         {s && (
           <>
             <div className="flex items-start justify-between gap-4 mb-6">
               <div>
-                <h1 className="text-[22px] font-bold text-[#ededed]">{s.product_name || "Video sin nombre"}</h1>
-                <p className="text-[12px] text-[#bebebe] mt-1">
+                <h1 className="text-[22px] font-bold text-[#efe7e0]">{s.product_name || "Video sin nombre"}</h1>
+                <p className="text-[12px] text-[#a98c88] mt-1">
                   {new Date(s.created_at).toLocaleDateString("es-PE", { day: "numeric", month: "long", year: "numeric" })} · solo lectura
                 </p>
               </div>
@@ -51,22 +51,22 @@ export default function VideoDetalle() {
                 terminada se sienta parte de la misma tool, no una pantalla aparte. */}
             <div className="flex flex-col gap-4">
               {s.forensic_analysis?.resumenParaUsuario && (
-                <div className="rounded-2xl border border-white/[0.06] bg-[#121214] px-4 py-4">
+                <div className="rounded-2xl border border-white/[0.06] bg-[#2a0f1a] px-4 py-4">
                   <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#c9a227]">
                     Análisis del video original
                   </div>
-                  <p className="text-[12.5px] leading-relaxed text-[#cfcfcf]">
+                  <p className="text-[12.5px] leading-relaxed text-[#c9b4ae]">
                     {s.forensic_analysis.resumenParaUsuario}
                   </p>
                 </div>
               )}
 
               {s.adapted?.guionFinal && (
-                <div className="rounded-2xl border border-white/[0.06] bg-[#121214] px-4 py-4">
+                <div className="rounded-2xl border border-white/[0.06] bg-[#2a0f1a] px-4 py-4">
                   <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#c9a227]">
                     Guión final adaptado
                   </div>
-                  <p className="whitespace-pre-wrap text-[12.5px] leading-relaxed text-[#cfcfcf]">
+                  <p className="whitespace-pre-wrap text-[12.5px] leading-relaxed text-[#c9b4ae]">
                     {s.adapted.guionFinal}
                   </p>
                 </div>
@@ -75,7 +75,7 @@ export default function VideoDetalle() {
               {!!s.lotes?.length && (
                 <div className="flex flex-col gap-3">
                   {s.lotes.map((l) => (
-                    <div key={l.n} className="rounded-2xl border border-white/[0.06] bg-[#121214] p-3">
+                    <div key={l.n} className="rounded-2xl border border-white/[0.06] bg-[#2a0f1a] p-3">
                       <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#c9a227]">
                         Lote {l.n} · {seg(l.duracionSeg)}
                       </div>
@@ -90,7 +90,7 @@ export default function VideoDetalle() {
               )}
 
               {!s.forensic_analysis?.resumenParaUsuario && !s.adapted?.guionFinal && !s.lotes?.length && (
-                <p className="text-[13px] text-[#bebebe]">Esta sesión todavía no tiene resultados.</p>
+                <p className="text-[13px] text-[#a98c88]">Esta sesión todavía no tiene resultados.</p>
               )}
             </div>
           </>

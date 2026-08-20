@@ -60,25 +60,25 @@ function Field({
   const display = kind === "pct" ? value * 100 : value;
   return (
     <label className="flex flex-col gap-1.5 justify-between">
-      <span className="flex items-center gap-1.5 text-[13px] text-[#cfcfcf]">
+      <span className="flex items-center gap-1.5 text-[13px] text-[#c9b4ae]">
         {label}
         <Help text={help} />
         {estimated && (
-          <span className="rounded border border-white/[0.1] bg-white/[0.04] px-1.5 py-0.5 font-sans text-[10px] font-medium uppercase tracking-[0.06em] text-[#bebebe]">
+          <span className="rounded border border-white/[0.1] bg-white/[0.04] px-1.5 py-0.5 font-sans text-[10px] font-medium uppercase tracking-[0.06em] text-[#a98c88]">
             estimado
           </span>
         )}
       </span>
       <div className="jr-field flex items-center gap-1.5 rounded-lg px-2.5">
-        {kind === "money" && <span className="text-[13px] text-[#bebebe]">S/</span>}
+        {kind === "money" && <span className="text-[13px] text-[#a98c88]">S/</span>}
         <input
           type="number"
           step="any"
           value={Number.isFinite(display) ? +display.toFixed(4) : ""}
           onChange={(e) => onChange(kind === "pct" ? Number(e.target.value) / 100 : Number(e.target.value))}
-          className="h-10 w-full bg-transparent text-[15px] text-[#ededed] outline-none"
+          className="h-10 w-full bg-transparent text-[15px] text-[#efe7e0] outline-none"
         />
-        {kind === "pct" && <span className="text-[13px] text-[#bebebe]">%</span>}
+        {kind === "pct" && <span className="text-[13px] text-[#a98c88]">%</span>}
       </div>
     </label>
   );
@@ -178,10 +178,10 @@ function CalculadoraWizard() {
             <button key={ff} type="button" onClick={() => switchFunnel(ff)}
               className={[
                 "text-left rounded-xl border p-4 transition-all",
-                form.funnel === ff ? "border-[rgba(255,155,74,0.5)] bg-[rgba(255,155,74,0.06)]" : "border-white/[0.08] hover:border-white/[0.2]",
+                form.funnel === ff ? "border-[rgba(232,70,122,0.5)] bg-[rgba(232,70,122,0.06)]" : "border-white/[0.08] hover:border-white/[0.2]",
               ].join(" ")}>
-              <div className="text-[15px] font-semibold text-[#ededed]">{t}</div>
-              <div className="text-[13px] text-[#bebebe] mt-1 leading-relaxed">{d}</div>
+              <div className="text-[15px] font-semibold text-[#efe7e0]">{t}</div>
+              <div className="text-[13px] text-[#a98c88] mt-1 leading-relaxed">{d}</div>
             </button>
           ))}
         </div>
@@ -194,8 +194,8 @@ function CalculadoraWizard() {
         <div className="flex flex-col gap-4">
           {f("operacion.precioVenta", "Precio de venta", "money", "El precio al que le vendes una unidad a tu cliente final.")}
           <button type="button" onClick={() => set("operacion.precioVenta", precioSugerido(op, 0.35, result.embudo.cpaReal))}
-            className="self-start flex items-center gap-1.5 border-0 bg-transparent p-0 text-left font-sans text-[12px] text-[#cfcfcf] transition-colors hover:text-[#ffffff] cursor-pointer">
-            <Sparkles className="w-3.5 h-3.5 text-[#d6a860]" /> <span className="underline underline-offset-2 decoration-white/20">Sugerir un precio</span> — cubre costos + ads con 35% de margen
+            className="self-start flex items-center gap-1.5 border-0 bg-transparent p-0 text-left font-sans text-[12px] text-[#c9b4ae] transition-colors hover:text-[#f6f2eb] cursor-pointer">
+            <Sparkles className="w-3.5 h-3.5 text-[#e8dcd6]" /> <span className="underline underline-offset-2 decoration-white/20">Sugerir un precio</span> — cubre costos + ads con 35% de margen
           </button>
           {f("operacion.costoProducto", "Costo del producto", "money", "Lo que te cuesta a ti comprar o producir una unidad.")}
         </div>
@@ -274,13 +274,13 @@ function CalculadoraWizard() {
       body: (
         <div className="flex flex-col gap-3">
           {Math.abs(pctOfertas - 1) > 0.001 && (
-            <div className="rounded-lg border border-white/[0.1] bg-white/[0.03] px-3 py-2 text-[12px] text-[#cfcfcf]">
+            <div className="rounded-lg border border-white/[0.1] bg-white/[0.03] px-3 py-2 text-[12px] text-[#c9b4ae]">
               Tus % suman {fmtPct(pctOfertas)}, no 100%. {pctOfertas < 1 ? "Estás dejando compradores sin oferta, así que las ventas salen más bajas de lo real." : "Estás contando más compradores de los que tienes, así que las ventas salen infladas."}
             </div>
           )}
           {form.cantidad.map((t, i) => (
             <div key={i} className="rounded-xl border border-white/[0.08] p-3.5">
-              <div className="text-[13px] font-semibold text-[#ededed] mb-2.5">Oferta {i + 1}{i === 0 ? " (1 unidad)" : ""}</div>
+              <div className="text-[13px] font-semibold text-[#efe7e0] mb-2.5">Oferta {i + 1}{i === 0 ? " (1 unidad)" : ""}</div>
               <div className="grid grid-cols-3 gap-3">
                 {f(`cantidad.${i}.pctCompra`, "% de compradores", "pct", "De tus compradores, qué % elige esta oferta. Las 3 deben sumar 100%.")}
                 {f(`cantidad.${i}.precio`, "Precio", "money", "Precio de esta oferta (ej. 'llévate 2 por S/289').")}
@@ -298,7 +298,7 @@ function CalculadoraWizard() {
         <div className="flex flex-col gap-3">
           {form.upsells.map((t, i) => (
             <div key={i} className="rounded-xl border border-white/[0.08] p-3.5">
-              <div className="text-[13px] font-semibold text-[#ededed] mb-2.5">Upsell {i + 1}</div>
+              <div className="text-[13px] font-semibold text-[#efe7e0] mb-2.5">Upsell {i + 1}</div>
               <div className="grid grid-cols-3 gap-3">
                 {f(`upsells.${i}.pctCompra`, "% que lo agrega", "pct", "Qué % de tus compradores suma este extra al pedido.")}
                 {f(`upsells.${i}.precio`, "Precio", "money", "Precio del extra.")}
@@ -391,13 +391,13 @@ function CalculadoraWizard() {
         <aside className="w-full shrink-0 lg:sticky lg:top-[76px] lg:w-[340px]">
           <div className="lp-card lp-leak p-5">
             <p className="lp-label relative">Proyección en vivo</p>
-            <p className="relative mt-1 text-[12px] leading-snug text-[#bebebe]">
+            <p className="relative mt-1 text-[12px] leading-snug text-[#a98c88]">
               Se actualiza con tus datos y con los estimados que aún no tocaste.
             </p>
-            <div className="relative mt-5 text-[13px] text-[#bebebe]">Utilidad neta / mes</div>
+            <div className="relative mt-5 text-[13px] text-[#a98c88]">Utilidad neta / mes</div>
             <div
               className="readout relative mt-0.5 text-[32px] font-semibold"
-              style={{ color: result.pg.profitNeto >= 0 ? "#ffffff" : "#e93d3d" }}
+              style={{ color: result.pg.profitNeto >= 0 ? "#f6f2eb" : "#ff5a3c" }}
             >
               {fmtMoney(result.pg.profitNeto)}
             </div>

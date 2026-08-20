@@ -11,7 +11,7 @@ import BackToDashboard from '@/components/tools/ui/BackToDashboard'
 const btnPrimary =
   'rounded-xl jr-cta text-[13px] font-bold disabled:opacity-40 transition-all duration-200 cursor-pointer border-0 font-sans flex items-center justify-center gap-2 h-11 w-full'
 const btnGhost =
-  'h-9 px-3 rounded-lg border border-white/[0.14] text-[#ededed] text-[12px] font-medium hover:bg-white/[0.05] transition-colors cursor-pointer bg-transparent'
+  'h-9 px-3 rounded-lg border border-white/[0.14] text-[#efe7e0] text-[12px] font-medium hover:bg-white/[0.05] transition-colors cursor-pointer bg-transparent'
 const fieldClass = 'jr-field w-full rounded-lg px-3 py-2 text-[13px]'
 
 // Estado de generación por sección (cliente): 'pending' en cola, 'generating' en vuelo,
@@ -105,7 +105,7 @@ function SectionCard({ section }: { section: LandingSection }) {
       {section.imageUrl ? (
         <img src={section.imageUrl} alt={SECTION_LABELS[section.type]} className="w-full block" />
       ) : (
-        <div className="w-full aspect-[9/16] bg-[#121214] animate-pulse" />
+        <div className="w-full aspect-[9/16] bg-[#2a0f1a] animate-pulse" />
       )}
 
       <button onClick={() => setEditing((v) => !v)} className="absolute top-2 right-2 h-8 px-3 rounded-lg bg-black/60 backdrop-blur text-white text-[12px] font-medium hover:bg-black/80 cursor-pointer border-0">
@@ -114,7 +114,7 @@ function SectionCard({ section }: { section: LandingSection }) {
 
       {editing && (
         <div className="absolute inset-x-0 bottom-0 max-h-[80%] overflow-y-auto bg-black/85 backdrop-blur p-3 flex flex-col gap-2">
-          <p className="text-[11px] uppercase tracking-wide text-[#bebebe]">{SECTION_LABELS[section.type]}</p>
+          <p className="text-[11px] uppercase tracking-wide text-[#a98c88]">{SECTION_LABELS[section.type]}</p>
           <input className={fieldClass} value={copy.headline} maxLength={60}
             onChange={(e) => setCopy({ ...copy, headline: e.target.value })} placeholder="Titular" />
           <input className={fieldClass} value={copy.subheadline ?? ''} maxLength={90}
@@ -156,10 +156,10 @@ function SectionCard({ section }: { section: LandingSection }) {
 // Placeholder por sección aún no lista, con su estado (en cola / generando / falló).
 function SectionSkeleton({ type, status }: { type: SectionType; status: GenStatus }) {
   return (
-    <div className={`relative w-full aspect-[9/16] bg-[#121214] border-t border-white/[0.06] flex flex-col items-center justify-center gap-2 ${status === 'generating' ? 'animate-pulse' : ''}`}>
-      <span className="text-[12px] text-[#bebebe] font-medium">{SECTION_LABELS[type]}</span>
-      {status === 'generating' && <span className="flex items-center gap-1.5 text-[11px] text-[#ff9b4a]"><Loader2 className="w-3.5 h-3.5 animate-spin" />Generando…</span>}
-      {status === 'pending' && <span className="text-[11px] text-[#6a6a6a]">En cola</span>}
+    <div className={`relative w-full aspect-[9/16] bg-[#2a0f1a] border-t border-white/[0.06] flex flex-col items-center justify-center gap-2 ${status === 'generating' ? 'animate-pulse' : ''}`}>
+      <span className="text-[12px] text-[#a98c88] font-medium">{SECTION_LABELS[type]}</span>
+      {status === 'generating' && <span className="flex items-center gap-1.5 text-[11px] text-[#e8467a]"><Loader2 className="w-3.5 h-3.5 animate-spin" />Generando…</span>}
+      {status === 'pending' && <span className="text-[11px] text-[#967b76]">En cola</span>}
       {status === 'error' && <span className="flex items-center gap-1.5 text-[11px] text-red-400"><AlertCircle className="w-3.5 h-3.5" />Falló · usa Reanudar</span>}
     </div>
   )
@@ -266,10 +266,10 @@ export default function Section4Preview() {
       {(sections.length > 0 || generating) && (
         <>
           <div className="flex items-center justify-between">
-            <p className="text-[12px] text-[#bebebe]">Vista previa</p>
-            <div className="flex gap-1 bg-[#121214] rounded-lg p-1 border border-white/[0.06]">
-              <button onClick={() => setDevice('mobile')} className={`h-7 w-8 rounded flex items-center justify-center cursor-pointer border-0 ${device === 'mobile' ? 'bg-[rgba(255,155,74,0.15)] text-[#ff9b4a]' : 'bg-transparent text-[#bebebe]'}`}><Smartphone className="w-4 h-4" /></button>
-              <button onClick={() => setDevice('desktop')} className={`h-7 w-8 rounded flex items-center justify-center cursor-pointer border-0 ${device === 'desktop' ? 'bg-[rgba(255,155,74,0.15)] text-[#ff9b4a]' : 'bg-transparent text-[#bebebe]'}`}><Monitor className="w-4 h-4" /></button>
+            <p className="text-[12px] text-[#a98c88]">Vista previa</p>
+            <div className="flex gap-1 bg-[#2a0f1a] rounded-lg p-1 border border-white/[0.06]">
+              <button onClick={() => setDevice('mobile')} className={`h-7 w-8 rounded flex items-center justify-center cursor-pointer border-0 ${device === 'mobile' ? 'bg-[rgba(232,70,122,0.15)] text-[#e8467a]' : 'bg-transparent text-[#a98c88]'}`}><Smartphone className="w-4 h-4" /></button>
+              <button onClick={() => setDevice('desktop')} className={`h-7 w-8 rounded flex items-center justify-center cursor-pointer border-0 ${device === 'desktop' ? 'bg-[rgba(232,70,122,0.15)] text-[#e8467a]' : 'bg-transparent text-[#a98c88]'}`}><Monitor className="w-4 h-4" /></button>
             </div>
           </div>
 

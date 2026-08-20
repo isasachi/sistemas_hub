@@ -273,6 +273,11 @@ export interface RawProductRow {
   product_path?: string | null
   // Última vez que se comprobó que el anunciante sigue pautando (script de 48h).
   checked_at?: string | null
+  // Unix seconds del anuncio MÁS VIEJO del anunciante en este nicho — la
+  // antigüedad real del anuncio, distinta de `scraped_at` (cuándo scrapeamos
+  // nosotros). Nace NULL: la columna se agregó el 2026-08-20 y la rellena el
+  // worker al re-scrapear.
+  ad_start_date?: number | null
 }
 
 // Lo que ve el front del buscador.
@@ -291,6 +296,9 @@ export interface RawProductEntry {
   verificado: boolean
   share: number | null
   senal: 'path' | 'titulo' | 'cuerpo' | 'ninguna' | null
+  // Días que lleva corriendo el anuncio más viejo del anunciante. null = todavía
+  // sin medir (la columna se llena a medida que el worker re-scrapea).
+  diasCorriendo: number | null
 }
 
 // Respuesta del buscador: UN rango a la vez, 10 productos. `groups` sigue
@@ -307,4 +315,13 @@ export interface RawSearchResponse {
   queued?: boolean
   groups: RawBucketGroup[]
   total: number
+  // Plan del usuario y rangos que NO desbloquea. La UI los pinta con candado en
+  // vez de esconderlos: el usuario tiene que ver qué le falta para subir de plan.
+  // El servidor NO manda los productos de un rango bloqueado — el candado es la
+  // consecuencia visible de un recorte que ya ocurrió en el servidor, no el gate.
+  tier?: number
+  locked?: string[]
+  // Cuántos productos sirve su plan por rango, para que la UI pueda decir
+  // "10 de 50 con el Plan 3" sin duplicar la tabla de planes.
+  porRango?: number
 }

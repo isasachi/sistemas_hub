@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getVideoSession, updateVideoSession } from '@/lib/video-ads/db'
 import { getTaskDetail } from '@/lib/video-ads/kie'
+import { currentKieKey } from '@/lib/user-settings'
 import { uploadToStorage } from '@/lib/storage'
 import { renderDone } from '@/lib/video-ads/render-lotes'
 import type { Lote } from '@/lib/video-ads/lotes'
@@ -52,6 +53,10 @@ export async function GET(
   const lotes: Lote[] = []
   let changed = false
 
+  // La misma key con la que se crearon las tareas: en KIE una tarea solo la ve la
+  // cuenta que la creó. Se lee una vez para todo el bucle.
+  const kieKey = await currentKieKey()
+
   for (const l of session.lotes) {
     if (l.videoUrl && isMirrored(l.videoUrl)) { lotes.push(l); continue }
 
@@ -67,7 +72,7 @@ export async function GET(
     if (!l.taskId) { lotes.push(l); continue }
 
     try {
-      const d = await getTaskDetail(l.taskId)
+      const d = await getTaskDetail(l.taskId, kieKey)
       const videoUrl = d.videoUrl ? await mirror(id, `lote-${l.n}`, d.videoUrl) : null
       if (d.state !== l.status || videoUrl || d.failMsg !== l.failMsg) changed = true
       lotes.push({ ...l, status: d.state, videoUrl, failMsg: d.failMsg })

@@ -2,9 +2,17 @@ import Link from "next/link";
 import { HeroShowcaseWall } from "./HeroShowcaseWall";
 import { HERO_COUNTER } from "@/lib/home/stats";
 
-// Hero ADN "JR Studio": rejilla vertical tenue, badge "en vivo", titular
-// serif metálico con palabra dorada en itálica, CTA naranja con glow y la
-// pared de outputs (marquee de assets reales).
+// Hero: rejilla vertical tenue, badge "en vivo", titular crema con UNA sola
+// palabra de acento y la pared de outputs (marquee de assets reales).
+//
+// El titular llevaba `.lp-cut` —el filo del logotipo cortando las dos líneas a
+// mitad de palabra— y lo pidió cambiar el dueño del repo: ahora el acento es
+// solo "ecommerce", en carmesí legible (`.lp-gold-word` = --brand-bright).
+// El resto de la línea va en crema.
+//
+// ⚠️ Una sola palabra de acento por titular. El carmesí de esta pantalla ya lo
+// tiene el CTA; si el acento se reparte entre varias palabras deja de señalar
+// dónde mirar y compite con el botón (BRANDBOOK §2).
 export function HeroSection() {
   const ctaHref =
     process.env.AUTH_DISABLED === "true" ? "/dashboard" : "/signup";
@@ -21,22 +29,21 @@ export function HeroSection() {
       {/* Badge-contador "en vivo" */}
       <div className="relative z-[1] mb-8 inline-flex items-center gap-2 rounded-full border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.03)] px-4 py-1.5">
         <span className="lp-live-dot" aria-hidden />
-        <span className="font-[Poppins] text-[12px] font-medium text-[#bebebe]">
-          <span className="font-semibold text-[#ffffff]">{HERO_COUNTER}</span>{" "}
+        <span className="font-[Lato] text-[12px] font-medium text-[#a98c88]">
+          <span className="font-semibold text-[#f6f2eb]">{HERO_COUNTER}</span>{" "}
           activos generados con IA
         </span>
       </div>
 
-      {/* Title — serif metálico; "ecommerce" dorado en itálica */}
-      <h1 className="lp-serif relative z-[1] mx-auto mb-6 max-w-[900px] text-[clamp(40px,6vw,64px)] leading-[1.08] text-[#ffffff]">
-        <span className="lp-metal">El poder de la IA</span>
+      {/* Title — crema, con UNA sola palabra de acento */}
+      <h1 className="lp-serif relative z-[1] mx-auto mb-6 max-w-[900px] text-[clamp(40px,6vw,64px)] leading-[1.08] text-[#f6f2eb]">
+        El poder de la IA
         <br />
-        al servicio de tu{" "}
-        <span className="lp-gold-word">ecommerce</span>
+        al servicio de tu <span className="lp-gold-word">ecommerce</span>
       </h1>
 
       {/* Subtitle */}
-      <p className="relative z-[1] mx-auto mb-9 max-w-[560px] font-[Lato] text-[17px] leading-[1.6] text-[#cfcfcf]">
+      <p className="relative z-[1] mx-auto mb-9 max-w-[560px] font-[Lato] text-[17px] leading-[1.6] text-[#c9b4ae]">
         Anuncios, branding, landings y productos ganadores — hechos con IA en
         minutos. Mira abajo lo que la plataforma genera.
       </p>
@@ -54,7 +61,7 @@ export function HeroSection() {
       {/* Pared de outputs auto-scroll (el "trusted by" de la plataforma) */}
       <div className="relative z-[1] -mx-6">
         <p className="lp-label relative mb-5 !text-[10px]">
-          Generado por la plataforma — ejemplos reales, sin humo
+          Generado por la plataforma
         </p>
         <HeroShowcaseWall />
       </div>

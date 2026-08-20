@@ -2,14 +2,15 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import { Wordmark } from "@/components/layout/Wordmark";
 import { usePathname } from "next/navigation";
-import { LogOut, Menu, X, ChevronDown } from "lucide-react";
+import { LogOut, Menu, X, ChevronDown, Settings } from "lucide-react";
 import { tools } from "@/lib/tools";
 import { toolIcon } from "@/lib/tool-icons";
 import { signOut } from "@/app/actions/auth";
 
 interface AppShellProps {
-  user: { label: string };
+  user: { label: string; avatarUrl?: string | null };
   children: React.ReactNode;
 }
 
@@ -31,7 +32,7 @@ const NAV_LABEL: Record<string, string> = {
  * `mousedown` al pulsar sobre el otro — desmontando el <form> antes de que el
  * click llegara a ser un submit. Cerrar sesión no hacía nada.
  */
-function AccountMenu({ label }: { label: string }) {
+function AccountMenu({ label, avatarUrl }: { label: string; avatarUrl?: string | null }) {
   const [menu, setMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -58,24 +59,45 @@ function AccountMenu({ label }: { label: string }) {
         aria-expanded={menu}
         className="flex items-center gap-1.5 rounded-full border border-white/[0.08] py-1 pl-1 pr-2 transition-colors duration-200 hover:border-white/[0.2] cursor-pointer"
       >
-        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[rgba(214,168,96,0.12)] font-[Poppins] text-[12px] font-bold text-[#d6a860]">
-          {label.charAt(0).toUpperCase()}
+        {/* Lato viene del cambio de tipografía de main (#77); el avatar, de
+            "Mi cuenta". La inicial es el fallback cuando no hay foto, y por eso
+            la clase de fuente sigue haciendo falta. */}
+        <span className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-[rgba(246,242,235,0.12)] font-[Lato] text-[12px] font-bold text-[#e8dcd6]">
+          {avatarUrl ? (
+            // La URL trae `?v=<ts>` de `uploadToStorage`: el path del bucket es
+            // determinista con upsert, así que sin ese cache-bust el navegador
+            // seguiría pintando la foto anterior.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
+          ) : (
+            label.charAt(0).toUpperCase()
+          )}
         </span>
-        <ChevronDown className="h-3.5 w-3.5 text-[#bebebe]" />
+        <ChevronDown className="h-3.5 w-3.5 text-[#a98c88]" />
       </button>
 
       {menu && (
         <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-[240px] overflow-hidden rounded-2xl border border-white/[0.08] bg-[#101012] shadow-[0_16px_40px_rgba(0,0,0,0.5)]">
           <div className="border-b border-white/[0.06] px-4 py-3">
-            <p className="font-[Poppins] text-[10px] font-semibold uppercase tracking-[0.12em] text-[#cfcfcf]">
+            <p className="font-[Lato] text-[10px] font-semibold uppercase tracking-[0.12em] text-[#c9b4ae]">
               Sesión
             </p>
-            <p className="mt-0.5 truncate text-[13px] text-[#ededed]">{label}</p>
+            <p className="mt-0.5 truncate text-[13px] text-[#efe7e0]">{label}</p>
           </div>
+          {/* Plan, créditos y la API key de KIE. Va en el menú de cuenta y no en
+              la barra de tools: es configuración, no una herramienta. */}
+          <Link
+            href="/cuenta"
+            onClick={() => setMenu(false)}
+            className="flex w-full items-center gap-2.5 px-4 py-3 text-[13px] font-medium text-[#a98c88] no-underline transition-colors duration-200 hover:bg-white/[0.05] hover:text-[#f6f2eb]"
+          >
+            <Settings className="h-[18px] w-[18px]" />
+            Mi cuenta
+          </Link>
           <form action={signOut}>
             <button
               type="submit"
-              className="flex w-full items-center gap-2.5 border-0 bg-transparent px-4 py-3 text-[13px] font-medium text-[#bebebe] transition-colors duration-200 hover:bg-white/[0.05] hover:text-[#ffffff] cursor-pointer"
+              className="flex w-full items-center gap-2.5 border-0 bg-transparent px-4 py-3 text-[13px] font-medium text-[#a98c88] transition-colors duration-200 hover:bg-white/[0.05] hover:text-[#f6f2eb] cursor-pointer"
             >
               <LogOut className="h-[18px] w-[18px]" />
               Cerrar sesión
@@ -100,34 +122,32 @@ export function AppShell({ user, children }: AppShellProps) {
 
   const toolLink = (href: string, active: boolean, soon: boolean) =>
     [
-      "flex items-center gap-2 rounded-xl px-3.5 py-2 font-[Poppins] text-[14px] font-medium no-underline transition-all duration-200",
+      "flex items-center gap-2 rounded-xl px-3.5 py-2 font-[Lato] text-[14px] font-medium no-underline transition-all duration-200",
       // Dorado = dónde estás (igual que el riel del asistente). El naranja queda
       // libre para las acciones, que es lo que el usuario debe encontrar rápido.
       soon
-        ? "text-[#6a6a6a] cursor-default"
+        ? "text-[#967b76] cursor-default"
         : active
-          ? "bg-[rgba(214,168,96,0.12)] text-[#d6a860]"
-          : "text-[#bebebe] hover:text-[#ffffff] hover:bg-[rgba(255,255,255,0.05)]",
+          ? "bg-[rgba(246,242,235,0.12)] text-[#e8dcd6]"
+          : "text-[#a98c88] hover:text-[#f6f2eb] hover:bg-[rgba(255,255,255,0.05)]",
     ].join(" ");
 
   const logo = (
     <Link href="/dashboard" onClick={() => setOpen(false)} className="no-underline">
-      <span className="jr-wordmark text-[20px] text-[#ededed]">
-        JR <span className="text-[#d6a860]">AI HUB</span>
-      </span>
+      <Wordmark size={18} />
     </Link>
   );
 
   const soonBadge = (
-    <span className="rounded-full bg-[rgba(255,255,255,0.05)] px-1.5 py-0.5 font-[Poppins] text-[9px] font-semibold uppercase tracking-[0.08em] text-[#cfcfcf]">
+    <span className="rounded-full bg-[rgba(255,255,255,0.05)] px-1.5 py-0.5 font-[Lato] text-[9px] font-semibold uppercase tracking-[0.08em] text-[#c9b4ae]">
       Pronto
     </span>
   );
 
   return (
-    <div className="min-h-screen bg-[#0b0b0c]">
+    <div className="min-h-screen bg-[#14050a]">
       {/* Barra superior */}
-      <header className="sticky top-0 z-40 border-b border-[rgba(255,255,255,0.06)] bg-[#0b0b0c]/80 backdrop-blur-xl">
+      <header className="sticky top-0 z-40 border-b border-[rgba(255,255,255,0.06)] bg-[#14050a]/80 backdrop-blur-xl">
         <div className="flex h-[64px] items-center gap-4 px-4 md:px-8">
           {logo}
 
@@ -159,17 +179,17 @@ export function AppShell({ user, children }: AppShellProps) {
 
           {/* Espaciador + cuenta a la derecha (desktop) */}
           <div className="ml-auto hidden items-center md:flex">
-            <AccountMenu label={user.label} />
+            <AccountMenu label={user.label} avatarUrl={user.avatarUrl} />
           </div>
 
           {/* Móvil: hamburguesa + cuenta */}
           <div className="ml-auto flex items-center gap-2 md:hidden">
-            <AccountMenu label={user.label} />
+            <AccountMenu label={user.label} avatarUrl={user.avatarUrl} />
             <button
               type="button"
               onClick={() => setOpen(true)}
               aria-label="Abrir menú"
-              className="text-[#bebebe] hover:text-[#ffffff] cursor-pointer"
+              className="text-[#a98c88] hover:text-[#f6f2eb] cursor-pointer"
             >
               <Menu className="h-5 w-5" />
             </button>
@@ -197,7 +217,7 @@ export function AppShell({ user, children }: AppShellProps) {
                 type="button"
                 onClick={() => setOpen(false)}
                 aria-label="Cerrar menú"
-                className="text-[#bebebe] hover:text-[#ffffff] cursor-pointer"
+                className="text-[#a98c88] hover:text-[#f6f2eb] cursor-pointer"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -210,10 +230,10 @@ export function AppShell({ user, children }: AppShellProps) {
                 const active = pathname.startsWith(href);
                 const label = NAV_LABEL[tool.slug] ?? tool.name;
                 const cls =
-                  "flex items-center gap-3 rounded-xl px-3 py-2.5 font-[Poppins] text-[13px] font-medium no-underline transition-all duration-200";
+                  "flex items-center gap-3 rounded-xl px-3 py-2.5 font-[Lato] text-[13px] font-medium no-underline transition-all duration-200";
                 if (soon) {
                   return (
-                    <span key={tool.slug} className={`${cls} text-[#6a6a6a]`}>
+                    <span key={tool.slug} className={`${cls} text-[#967b76]`}>
                       <Icon className="h-[18px] w-[18px] flex-shrink-0" />
                       <span className="flex-1">{label}</span>
                       {soonBadge}
@@ -227,8 +247,8 @@ export function AppShell({ user, children }: AppShellProps) {
                     onClick={() => setOpen(false)}
                     className={`${cls} ${
                       active
-                        ? "bg-[rgba(214,168,96,0.12)] text-[#d6a860]"
-                        : "text-[#bebebe] hover:bg-[rgba(255,255,255,0.05)] hover:text-[#ffffff]"
+                        ? "bg-[rgba(246,242,235,0.12)] text-[#e8dcd6]"
+                        : "text-[#a98c88] hover:bg-[rgba(255,255,255,0.05)] hover:text-[#f6f2eb]"
                     }`}
                   >
                     <Icon className="h-[18px] w-[18px] flex-shrink-0" />

@@ -34,7 +34,7 @@ export default function ToolShell({
             Volver al dashboard
           </Link>
           <span className="hidden h-4 w-px shrink-0 bg-white/[0.1] sm:block" />
-          <span className="hidden truncate font-sans text-[13px] font-semibold text-[#ededed] sm:block">
+          <span className="hidden truncate font-sans text-[13px] font-semibold text-[#efe7e0] sm:block">
             {trail ? `${name} · ${trail}` : name}
           </span>
         </div>
