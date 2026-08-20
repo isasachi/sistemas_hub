@@ -19,7 +19,13 @@
      tenían antes del rebranding y a la que se volvió por decisión del
      dueño del repo: la didona daba un titular demasiado editorial para
      una herramienta de trabajo.
-   · Archivo  — UI, cuerpo, labels y cifras.
+   · Lato     — cuerpo, UI, labels y cifras. Humanista y de bajo
+     contraste: contrasta en CONSTRUCCIÓN con la geometría de Poppins
+     (por eso la jerarquía se lee) pero comparte su trazo monolineal y
+     su tono abierto, así que no chocan. Y es más angosta, con lo que un
+     párrafo largo en español ocupa menos. Reemplazó a Archivo, una
+     grotesca de formas cuadradas que peleaba con los círculos anchos de
+     Poppins.
    · Bodoni Moda — SOLO el logotipo (`.jr-wordmark`). Es la letra del
      archivo de marca, así que se queda ahí y en ningún otro lado; si
      aparece en un titular, el logotipo deja de ser lo único que la usa
@@ -30,10 +36,13 @@
    hoja, y el sitio se servía sin un solo @font-face (medido: todo caía
    a la serif por defecto del navegador). No devuelvas el @import.
 
-   Poppins y Lato siguen cargándose, pero ya no son del chrome: son del
-   catálogo del CONTENIDO que se genera para el cliente
-   (`lib/landing/niches.ts` asigna Poppins ahí). El editor de branding
-   inyecta además su propio <link> con 34 familias.
+   ⚠️ Poppins y Lato son AHORA del chrome y viven en el primer <link>.
+   Las dos aparecen además en el catálogo del CONTENIDO que se genera
+   para el cliente (`lib/landing/niches.ts`), pero no se piden desde
+   ahí: si alguien borrara ese segundo <link> —está rotulado como "no
+   es del chrome"— se llevaría puesta la tipografía de todo el sitio.
+   El editor de branding inyecta además su propio <link> con 34
+   familias.
    ══════════════════════════════════════════════════════════════════ */
 @import "tailwindcss";
 @import "tw-animate-css";
@@ -44,14 +53,14 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  /* Archivo es la voz de UI Y de cuerpo: `font-sans` en el código
-     significa "texto de interfaz". Una familia para las dos funciones. */
-  --font-sans: 'Archivo', 'Segoe UI', system-ui, sans-serif;
+  /* Lato es la voz de UI Y de cuerpo: `font-sans` en el código significa
+     "texto de interfaz". Una familia para las dos funciones. */
+  --font-sans: 'Lato', 'Segoe UI', system-ui, sans-serif;
   --font-display: 'Poppins', 'Segoe UI', system-ui, sans-serif;
-  --font-heading: 'Archivo', 'Segoe UI', system-ui, sans-serif;
-  --font-body: 'Archivo', system-ui, Arial, sans-serif;
-  /* Sin voz mono: los números viven en Archivo con tabular-nums (.readout). */
-  --font-mono: 'Archivo', 'Segoe UI', system-ui, sans-serif;
+  --font-heading: 'Poppins', 'Segoe UI', system-ui, sans-serif;
+  --font-body: 'Lato', system-ui, Arial, sans-serif;
+  /* Sin voz mono: los números viven en Lato con tabular-nums (.readout). */
+  --font-mono: 'Lato', 'Segoe UI', system-ui, sans-serif;
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -216,7 +225,7 @@
   body {
     background: var(--bg);
     color: var(--text-muted);
-    font-family: 'Archivo', system-ui, Arial, sans-serif;
+    font-family: 'Lato', system-ui, Arial, sans-serif;
     font-size: 16px;
     line-height: 1.6;
     letter-spacing: 0;
@@ -319,7 +328,7 @@
 /* Eyebrow: eje de PRESTIGIO, o sea crema — nunca carmesí, que compite
    con el CTA y deja la pantalla sin un solo foco de acción. */
 .lp-eyebrow {
-  font-family: 'Archivo', sans-serif;
+  font-family: 'Lato', sans-serif;
   font-weight: 600;
   font-size: 11px;
   letter-spacing: 0.22em;
@@ -328,7 +337,7 @@
 }
 .lp-label,
 .spec-label {
-  font-family: 'Archivo', sans-serif;
+  font-family: 'Lato', sans-serif;
   font-weight: 600;
   font-size: 11px;
   letter-spacing: 0.14em;
@@ -336,9 +345,9 @@
   color: var(--text-faint);
 }
 
-/* Todo número/dato: Archivo con cifras de ancho fijo (no salta al cambiar). */
+/* Todo número/dato: Lato con cifras de ancho fijo (no salta al cambiar). */
 .readout {
-  font-family: 'Archivo', sans-serif;
+  font-family: 'Lato', sans-serif;
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum";
   letter-spacing: -0.01em;
@@ -373,7 +382,7 @@
   gap: 8px;
   background: var(--brand);
   color: var(--text);
-  font-family: 'Archivo', sans-serif;
+  font-family: 'Lato', sans-serif;
   font-weight: 600;
   border: 0;
   border-radius: var(--r-sm, 8px);
@@ -408,7 +417,7 @@
 .jr-btn-gold {
   background: var(--gold);
   color: #1e0811;
-  font-family: 'Archivo', sans-serif;
+  font-family: 'Lato', sans-serif;
   font-weight: 600;
   border: 0;
   box-shadow: var(--sh-card);
@@ -430,7 +439,7 @@
   background: var(--glass-hi);
   border: 1px solid var(--line-08);
   color: var(--text-head);
-  font-family: 'Archivo', sans-serif;
+  font-family: 'Lato', sans-serif;
   font-weight: 500;
   transition: background var(--t-fast) var(--ease),
     border-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
@@ -453,7 +462,7 @@
   background: transparent;
   color: var(--text-subtle);
   border: 1px solid var(--line-08);
-  font-family: 'Archivo', sans-serif;
+  font-family: 'Lato', sans-serif;
   font-weight: 500;
   transition: background var(--t-fast) var(--ease),
     border-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
@@ -472,7 +481,7 @@
   justify-content: center;
   background: var(--text);
   color: #1e0811;
-  font-family: 'Archivo', sans-serif;
+  font-family: 'Lato', sans-serif;
   font-weight: 600;
   border-radius: 100px;
   box-shadow: 0 2px 14px rgba(0, 0, 0, 0.35);
@@ -562,7 +571,7 @@
   border: 1px solid var(--line-06);
   border-radius: 100px;
   color: var(--text-muted);
-  font-family: 'Archivo', sans-serif;
+  font-family: 'Lato', sans-serif;
   font-size: 12px;
   padding: 5px 12px;
 }
@@ -576,7 +585,7 @@
   background: rgba(246, 242, 235, 0.08);
   border: 1px solid rgba(246, 242, 235, 0.32);
   border-radius: 100px;
-  font-family: 'Archivo', sans-serif;
+  font-family: 'Lato', sans-serif;
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -590,7 +599,7 @@
   gap: 4px;
   background: var(--success-deep);
   color: var(--success-mint);
-  font-family: 'Archivo', sans-serif;
+  font-family: 'Lato', sans-serif;
   font-weight: 600;
   border-radius: 50px;
 }
@@ -611,7 +620,7 @@
   background: var(--surface);
   border: 1px solid var(--line-08);
   color: var(--text-head);
-  font-family: 'Archivo', system-ui, sans-serif;
+  font-family: 'Lato', system-ui, sans-serif;
   transition: border-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
 }
 .jr-field::placeholder { color: var(--text-subtle); opacity: 0.7; }

@@ -116,11 +116,23 @@ h1–h6        → 600 / −0.01em
 la didona estaba dimensionado para sus finos de pelo; en una geométrica como
 Poppins sale pesado y apretado.
 
-### UI y cuerpo — **Archivo**
+### Cuerpo y UI — **Lato**
 
-Grotesca de apertura cerrada. Aguanta el `0.22em` de tracking en mayúsculas de
-11px de los eyebrows sin deshacerse. Cubre interfaz, cuerpo y cifras
-(`.readout`, con `tabular-nums`): una sola familia para las tres funciones.
+Elegida **por cómo se lleva con Poppins**, que es el criterio con el que se
+reemplazó a Archivo:
+
+- **Contrasta en construcción.** Lato es humanista; Poppins es geométrica. Esa
+  diferencia estructural es la que hace que un titular se lea como titular sin
+  necesidad de subir el tamaño.
+- **Coincide en tono.** Las dos son monolineales y de contraste bajo, así que
+  se leen de la misma época. Archivo, grotesca de formas cuadradas, peleaba
+  con los círculos anchos de Poppins.
+- **Es más angosta**, con lo que un párrafo largo en español ocupa menos —
+  importa en los wizards, que son pantallas de texto denso a 13–14px.
+
+Cubre interfaz, cuerpo y cifras. ⚠️ **Sus dígitos ya son de ancho uniforme**
+(medido: `1111111111` y `0000000000` miden exactamente lo mismo, con `tnum` y
+sin él), así que `.readout` sigue sin saltar al cambiar un número.
 
 ### Logotipo — **Bodoni Moda**
 
@@ -138,15 +150,20 @@ la letra se ve rota. Por eso no toca ni labels ni cifras.
 | Display (`.lp-serif`) | Poppins | 600 | −0.02em |
 | Titular (h1–h6) | Poppins | 600 | −0.01em |
 | Logotipo | Bodoni Moda | 900 | −0.01em |
-| Cuerpo | Archivo | 400 | 0 |
-| Eyebrow / label | Archivo | 600, 11px, mayúsculas | 0.22em / 0.14em |
-| Cifras | Archivo | tabular-nums | −0.01em |
+| Cuerpo | Lato | 400 | 0 |
+| Eyebrow / label | Lato | 700, 11px, mayúsculas | 0.22em / 0.14em |
+| Cifras | Lato | tabular-nums | −0.01em |
 
-⚠️ **Poppins es de render crítico y se pide en el `<link>` del chrome**, no en
-el del catálogo, aunque el contenido generado para el cliente también la use
-(`lib/landing/niches.ts`). Colgarla del link rotulado "no es del chrome" es
-invitar a que alguien lo borre y se lleve puestos todos los titulares. Lato sí
-vive solo en el catálogo: la UI no la usa.
+⚠️ **Poppins y Lato son de render crítico y se piden en el PRIMER `<link>`**,
+el del chrome — no en el del catálogo, aunque el contenido generado para el
+cliente también las use (`lib/landing/niches.ts`). Colgarlas de un link
+rotulado "no es del chrome" es invitar a que alguien lo borre y se lleve puesta
+la tipografía entera del sitio.
+
+⚠️ Lato no tiene peso 600 (va 400 → 700). Los eyebrows y labels piden 600 en el
+CSS y el navegador resuelve a 700, que es el que se carga: no hay negrita
+sintética, pero si algún día hace falta un semibold real hay que cambiar de
+familia, no subir el número.
 
 ---
 
@@ -205,7 +222,7 @@ Reglas de uso:
    `SectionTrust` y `BriefShell` son chrome del wizard (spinners, chips,
    toggles) y sí se repintan; el lienzo del preview del cliente lo define la
    paleta extraída de SU marca y no se toca nunca.
-3. **`--font-mono` y `.readout`** — van en Archivo. Las cifras necesitan ancho
-   fijo (`tabular-nums`), que ni Poppins ni la didona del logotipo aportan.
+3. **`--font-mono` y `.readout`** — van en Lato, cuyos dígitos ya son de ancho
+   uniforme (medido). No los pongas en la didona del logotipo.
 4. **Los alias heredados** (`--lp-*`, `.gradient-text`, `.lp-serif`) — los
    nombran decenas de archivos. Cambiaron de valor, no de nombre.

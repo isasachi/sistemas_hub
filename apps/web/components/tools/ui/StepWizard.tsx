@@ -134,7 +134,7 @@ export default function StepWizard({
               {step.title}
             </h1>
             {step.hint && (
-              <p className="max-w-[60ch] font-[Archivo] text-[15px] leading-[1.6] text-[#c9b4ae]">
+              <p className="max-w-[60ch] font-[Lato] text-[15px] leading-[1.6] text-[#c9b4ae]">
                 {step.hint}
               </p>
             )}

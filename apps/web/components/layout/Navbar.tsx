@@ -17,7 +17,7 @@ export function Navbar() {
           <li>
             <a
               href="#herramientas"
-              className="font-[Archivo] text-[14px] font-medium text-[#c9b4ae] no-underline transition-colors duration-200 hover:text-[#f6f2eb]"
+              className="font-[Lato] text-[14px] font-medium text-[#c9b4ae] no-underline transition-colors duration-200 hover:text-[#f6f2eb]"
             >
               Herramientas
             </a>
@@ -25,7 +25,7 @@ export function Navbar() {
           <li>
             <a
               href="#precios"
-              className="font-[Archivo] text-[14px] font-medium text-[#c9b4ae] no-underline transition-colors duration-200 hover:text-[#f6f2eb]"
+              className="font-[Lato] text-[14px] font-medium text-[#c9b4ae] no-underline transition-colors duration-200 hover:text-[#f6f2eb]"
             >
               Precios
             </a>
@@ -35,7 +35,7 @@ export function Navbar() {
               href="https://jrconsulting.com.pe"
               target="_blank"
               rel="noopener noreferrer"
-              className="font-[Archivo] text-[14px] font-medium text-[#c9b4ae] no-underline transition-colors duration-200 hover:text-[#f6f2eb]"
+              className="font-[Lato] text-[14px] font-medium text-[#c9b4ae] no-underline transition-colors duration-200 hover:text-[#f6f2eb]"
             >
               Sobre JR
             </a>
@@ -55,7 +55,7 @@ export function Navbar() {
             <>
               <Link
                 href="/login"
-                className="hidden font-[Archivo] text-[14px] font-medium text-[#c9b4ae] no-underline transition-colors duration-200 hover:text-[#f6f2eb] sm:inline"
+                className="hidden font-[Lato] text-[14px] font-medium text-[#c9b4ae] no-underline transition-colors duration-200 hover:text-[#f6f2eb] sm:inline"
               >
                 Iniciar sesión
               </Link>

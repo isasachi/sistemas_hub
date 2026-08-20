@@ -92,7 +92,7 @@ export default function ToolIntro({
           <h1 className="lp-serif text-[clamp(28px,3.8vw,38px)] leading-[1.15] text-[#f6f2eb]">
             {title}
           </h1>
-          <p className="font-[Archivo] text-[15px] leading-[1.65] text-[#c9b4ae]">{description}</p>
+          <p className="font-[Lato] text-[15px] leading-[1.65] text-[#c9b4ae]">{description}</p>
         </div>
 
         {/* 1 — lo terminado. */}
