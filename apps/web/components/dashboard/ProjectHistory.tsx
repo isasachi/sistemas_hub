@@ -225,9 +225,15 @@ function ProjectCard({
   deleting: boolean
 }) {
   const Icon = toolIcon(getToolBySlug(p.slug)?.icon ?? '')
+  // ponytail: branding nunca tuvo /sesion/[id]; su pantalla de detalle es la de
+  // resultado, que ya carga la sesión por ?s=. Sin esto la card daba 404.
+  const href =
+    p.slug === 'generador-branding'
+      ? `/tools/generador-branding/nuevo/resultado?s=${p.id}`
+      : `/tools/${p.slug}/sesion/${p.id}`
   return (
     <Link
-      href={`/tools/${p.slug}/sesion/${p.id}`}
+      href={href}
       className="lp-card lp-leak group relative mb-3.5 block break-inside-avoid overflow-hidden no-underline transition-transform duration-200 hover:-translate-y-0.5 hover:border-[rgba(255,255,255,0.2)]"
     >
       <button
