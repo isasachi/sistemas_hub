@@ -389,6 +389,38 @@ Efecto sobre la sesión de ropa: **29 cortes → 7 lotes**, dos de ellos los fla
 
 ⚠️ **"ROSTROS DISTINTOS ENTRE SÍ" NO ALCANZA: salían tres clones en testimonios.** Es una restricción de comparación, y el modelo la satisface con tres variaciones mínimas de la misma cara (mismo tono de piel, mismo pelo, misma edad, misma ropa). Lo que separa las caras es nombrar **ejes concretos y ortogonales tarjeta por tarjeta** — tono de piel, pelo, forma de cara, color de prenda — en `masterLayoutBlock` (instructions.ts). Los rasgos son relativos entre tarjetas y sin género, para que valgan en cualquier demografía; **la edad varía DENTRO del rango** de `DEMOGRAPHIC_LABELS`, porque salirse reintroduce justo el fallo que la restricción demográfica existe para evitar. ⚠️ `lib/landing/avatars.ts` (`generateAvatars`, 3 retratos sueltos por `VARIANT_TRAITS`) era **código muerto** — nada lo importaba — y era un sitio-señuelo: su encabezado dice "avatares de testimonios", así que el arreglo natural era editar el archivo que no hace nada. Borrado. La columna `testimonial_avatars` sigue en la base sin migración.
 
+## Suscripción — Whop (`lib/whop.ts`)
+
+Paywall del hub: **plan único, $29/mes, 3 días de prueba, desbloquea ACCESO** al área privada (`/dashboard` y `/tools/*`). Whop entra **solo como capa de pago/entitlement** — la identidad sigue siendo Supabase Auth. Se descartaron "Sign in with Whop" (OAuth 2.1 + PKCE) y la app embebida en el iframe de Whop: obligarían a migrar sesiones y no compran nada sobre el login que ya existe.
+
+**Flujo:** `GET /api/whop/checkout` crea una *checkout configuration* server-side → el usuario paga en Whop → Whop llama a `POST /api/whop/webhook` → el webhook escribe `user_entitlements` → el gate del layout la lee. **La API de Whop nunca se consulta en el path de request**: el webhook es la única escritura y el hub solo lee su propia tabla (mismo criterio que la regla de costo de buscador-productos).
+
+⚠️ **EL ENTITLEMENT CUELGA DEL MEMBERSHIP, NO DEL PAGO — y esa es la decisión que sostiene el trial.** El plan tiene 3 días de prueba, así que durante esos días **no existe ningún `payment.succeeded`**: un gate colgado de los eventos de pago dejaría al usuario afuera exactamente durante la prueba que lo trajo. Los estados de membership son nueve (`trialing`, `active`, `past_due`, `completed`, `canceled`, `expired`, `unresolved`, `drafted`, `canceling`) y `grantsAccess` otorga en tres: `trialing`, `active` y `canceling` (canceló pero el período pagado sigue corriendo — quitárselo antes sería cobrarle por algo que no puede usar). `past_due` **no** da acceso: Whop reintenta el cobro y al recuperarlo manda `membership.activated`, que lo devuelve a `active`.
+
+⚠️ **El estado sale SIEMPRE del payload (`data.status`), nunca del nombre del evento.** Un `membership.activated` de una membership que ya está `past_due` no puede otorgar acceso por el solo hecho de llamarse "activated". Cubierto por test.
+
+⚠️ **`metadata.supabase_user_id` es la llave que ata el pago a la cuenta, y por eso el checkout se crea server-side.** Whop lo documenta explícito: *"Payments and memberships created from a checkout session inherit its metadata"*. Un link de plan pelado (`plan_XXX`, o `<WhopCheckoutEmbed planId>`) es más barato de implementar pero **no tiene dónde poner el `user.id`**, y deja mapear solo por email — que se rompe la primera vez que alguien paga con un correo distinto al de su cuenta. `checkout_configuration_id` queda como llave de respaldo en el objeto membership si algún día hace falta.
+
+⚠️ **La firma se verifica sobre el CUERPO CRUDO.** `await req.text()`, nunca `req.json()`: volver a serializar cambia bytes (orden de claves, espacios) y la verificación falla. Se usa **`standardwebhooks@1.0.0`** y no `@whop/sdk`: Whop implementa el spec de Standard Webhooks, y su SDK propio está en **0.0.42** — pre-1.0 en un path de dinero. Lo único que el SDK aportaría además es el POST de checkout, que es un `fetch` de diez líneas.
+
+⚠️ **La idempotencia sale de la TABLA, no del handler.** La entrega es at-least-once con reintentos ~3 días y el mismo `webhook-id`, así que el evento llega repetido. `whop_membership_id` es la **PK** de `user_entitlements` y el handler es un upsert — no hay lógica de deduplicación que se pueda olvidar en un refactor.
+
+⚠️ **Un evento desconocido o incompleto se responde 200 igual.** Un no-2xx dispara reintentos por ~3 días y termina **desactivando el endpoint** (72 h + 10 fallos). Solo se devuelve 500 cuando el evento era bueno y la escritura falló — ahí el reintento sí es lo que se quiere. Whop además exige responder en <5 s; un upsert de una fila no necesita cola.
+
+⚠️ **La ruta del webhook tiene que quedar FUERA del gate de auth, y hoy lo está gratis** porque el matcher de `proxy.ts` excluye `/api/*`. Si alguien cubre las rutas de API con ese matcher, tiene que exceptuar `/api/whop/webhook` explícitamente: Whop llama sin cookie y un redirect a `/login` le devolvería un no-2xx.
+
+**`hasAccess` fail-CLOSED ante error de DB**, al revés que `gen-quota.ts`. Ese módulo fail-abre a propósito porque es un backstop de **costo**; esto es un paywall. Y el modo de fallo casi no existe: si Supabase no responde, `getUser()` ya falló antes y el usuario no llega al chequeo.
+
+**El gate vive en `app/(app)/layout.tsx`**, no en el middleware: ese layout ya hacía un round-trip para el `user`, mientras que el middleware corre en cada request y hoy solo hace `getUser()` — sumarle una lectura de DB por request para gatear lo mismo sería pagar de más. `app/suscripcion/page.tsx` vive **fuera** del grupo `(app)` a propósito: adentro, el propio gate la bloquearía y sería un loop de redirects.
+
+⚠️ **ESTO GATEA LA UI Y NADA MÁS — hueco PREVIO, no introducido por el paywall.** `/api/*` no pasa por `proxy.ts` ni por el layout, así que un `curl` a `/api/generador-anuncios/sessions/[id]/generate-image` no ve el paywall. **Esas rutas hoy no piden sesión de ninguna clase**, pagada o no; lo único que las protege es `checkGenQuota`, que es límite de costo y no autorización. El choke point natural para cerrarlo es `checkGenQuota` (lo llaman las 17 rutas caras), pero **hoy no recibe `userId`** — solo `recordGenQuota` lo recibe —, así que cerrarlo es un cambio de firma en 17 archivos y quedó fuera de este alcance.
+
+**Grandfathering por env (`WHOP_GRANDFATHERED_EMAILS`)**, no por filas sembradas. Son los 3 correos de `LOGIN_ALLOWLIST`, fijos y conocidos; una migración que los inserte tendría que resolver sus `auth.users.id` por email y quedaría desincronizada si alguno se recrea.
+
+**Costos reales (primera parte, `docs.whop.com/fees`):** 2.7% + $0.30 tarjeta doméstica, +1.5% internacional, +1% conversión de moneda — un cobro en PEN liquidado a USD cae en ~5.2% + $0.30. Disputa $15. Payout: ACH next-day $2.50, wire $23, crypto 5% + $1. **Banco local en Perú confirmado disponible** en el modal de Withdraw (2026-08-19). ⚠️ Pendiente de producto, no técnico: una empresa peruana vendiendo a compradores peruanos necesita boleta/factura SUNAT, y Whop es merchant-of-record US-céntrico (su add-on "Tax & remittance" cuesta 2% y no cubre SUNAT).
+
+**Env:** `WHOP_API_KEY`, `WHOP_PLAN_ID`, `WHOP_WEBHOOK_SECRET`, `WHOP_GRANDFATHERED_EMAILS`, y `WHOP_API_BASE` para apuntar al sandbox (`https://sandbox-api.whop.com/api/v1`). **Schema:** `supabase/migrations/20260819000002_whop_entitlements.sql`.
+
 ## Tool: Buscador de Productos (`buscador-productos`)
 
 Encuentra productos ganadores validados en LATAM que aún no están saturados en Perú, usando Meta Ads Library. Migrado desde el proyecto Python standalone `~/chamba/product-hunter` (dejado como referencia).
