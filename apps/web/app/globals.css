@@ -14,9 +14,16 @@
    y de borde, NO de texto. Todo carmesí que sea texto o icono usa
    --brand-bright #E8467A (5.09:1). Es el error a vigilar acá.
 
-   Dos voces: Bodoni Moda (display — la didona del logotipo, nunca por
-   debajo de 20px) y Archivo (UI, cuerpo y cifras). Syne se retiró: el
-   logotipo lo compone ahora la voz de display.
+   Tres voces, cada una con UN trabajo:
+   · Poppins  — TODOS los titulares (h1–h6 y `.lp-serif`). Es la voz que
+     tenían antes del rebranding y a la que se volvió por decisión del
+     dueño del repo: la didona daba un titular demasiado editorial para
+     una herramienta de trabajo.
+   · Archivo  — UI, cuerpo, labels y cifras.
+   · Bodoni Moda — SOLO el logotipo (`.jr-wordmark`). Es la letra del
+     archivo de marca, así que se queda ahí y en ningún otro lado; si
+     aparece en un titular, el logotipo deja de ser lo único que la usa
+     y deja de marcar nada. Syne, que cumplía ese rol, se retiró.
 
    ⚠️ LAS FUENTES NO SE PIDEN ACÁ. Están como <link> en app/layout.tsx:
    Turbopack ELIMINA los `@import url(...)` externos al compilar esta
@@ -40,7 +47,7 @@
   /* Archivo es la voz de UI Y de cuerpo: `font-sans` en el código
      significa "texto de interfaz". Una familia para las dos funciones. */
   --font-sans: 'Archivo', 'Segoe UI', system-ui, sans-serif;
-  --font-display: 'Bodoni Moda', 'Times New Roman', serif;
+  --font-display: 'Poppins', 'Segoe UI', system-ui, sans-serif;
   --font-heading: 'Archivo', 'Segoe UI', system-ui, sans-serif;
   --font-body: 'Archivo', system-ui, Arial, sans-serif;
   /* Sin voz mono: los números viven en Archivo con tabular-nums (.readout). */
@@ -216,11 +223,11 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
-  /* Los titulares de UI van en Archivo, NO en la didona: a tamaño de
-     interfaz los finos de pelo de Bodoni desaparecen. El display se
-     pide explícitamente con .lp-serif. */
+  /* Todos los titulares van en Poppins — el default de h1–h6 y el display
+     de `.lp-serif` comparten voz, como antes del rebranding. Bodoni queda
+     reservada al logotipo. */
   h1, h2, h3, h4, h5, h6 {
-    font-family: 'Archivo', 'Segoe UI', system-ui, sans-serif;
+    font-family: 'Poppins', 'Segoe UI', system-ui, sans-serif;
     font-weight: 600;
     letter-spacing: -0.01em;
     color: var(--text-head);
@@ -237,15 +244,18 @@
    TIPOGRAFÍA — tratamientos
    ══════════════════════════════════════════════════════════════════ */
 
-/* El display del sistema: la didona del logotipo. Bloque cerrado —
-   tracking negativo y line-height corto, como el lockup, donde LEGACY y
-   BRAND están justificadas al mismo ancho con las letras casi tocándose.
-   ⚠️ Nunca por debajo de 20px: a tamaño chico los finos de pelo se
-   rompen. El nombre `.lp-serif` se conserva porque lo usan 8 archivos. */
+/* El display del sistema. Vuelve a Poppins 600 —exactamente lo que era
+   antes del rebranding— por decisión del dueño del repo. El peso y el
+   tracking vuelven CON la familia: el 800/-0.03em anterior estaba
+   dimensionado para una didona y en una geométrica sale pesado y
+   apretado.
+   El nombre `.lp-serif` ya no describe nada (no es serif desde 2026-08)
+   pero se conserva porque lo usan 8 archivos y renombrarlo no cambiaría
+   un pixel. La única serif del sistema es la del logotipo. */
 .lp-serif {
-  font-family: 'Bodoni Moda', 'Times New Roman', serif;
-  font-weight: 800;
-  letter-spacing: -0.03em;
+  font-family: 'Poppins', 'Segoe UI', system-ui, sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 
 /* ── LA FIRMA: el corte a mitad de palabra ────────────────────────
@@ -291,9 +301,11 @@
 }
 
 /* ── EL LOGOTIPO ──────────────────────────────────────────────────
-   Ya no hay una familia aparte para la marca: el logotipo ES la didona
-   del display, en su peso más pesado y apretada como en el archivo
-   original. Syne se retiró con el rebranding.
+   La didona del archivo de marca, en su peso más pesado y apretada como
+   en el original. Es la ÚNICA cosa del sistema que la usa: los titulares
+   volvieron a Poppins, así que Bodoni no aparece en ningún otro lado —
+   y por eso el logotipo se distingue. Syne, que ocupaba este papel antes
+   del rebranding, se retiró.
    El componente <Wordmark> le pone encima el corte de color. */
 .jr-wordmark {
   font-family: 'Bodoni Moda', 'Times New Roman', serif;

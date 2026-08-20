@@ -97,47 +97,56 @@ Verde y azul de estado no cambian de rol, solo de calibración.
 
 ## 3. Tipografía
 
-Dos voces. El sistema anterior tenía tres (Poppins, Lato y Syne solo para el
-logotipo); acá el logotipo lo compone la voz de display, así que Syne se retira.
+Tres voces, cada una con un solo trabajo. Syne, que antes existía únicamente
+para el logotipo, se retira: ese papel lo cumple ahora Bodoni Moda.
 
-### Display — **Bodoni Moda**
+### Titulares — **Poppins**
 
-El logotipo es una didona: astas gruesas, finos de pelo, remates planos sin
-bracket. Bodoni Moda es esa letra. Se usa **con restricción**: titulares de
-marketing, el logotipo y nada más.
+Todos los titulares del sistema, tanto el default de `h1–h6` como el display
+de `.lp-serif`. Es la voz que tenían **antes del rebranding** y a la que se
+volvió por decisión del dueño del repo: un titular en didona se lee editorial,
+y esto es una herramienta de trabajo, no una revista.
 
 ```
-.lp-serif    → titulares (8 usos, todos display)
-.jr-wordmark → el logotipo
+h1–h6        → 600 / −0.01em
+.lp-serif    → 600 / −0.02em (8 usos, todos display)
 ```
 
-Siempre en peso 700–900, `letter-spacing` negativo y `line-height` cerrado —
-el bloque compacto del logo. **Nunca por debajo de 20px**: a 11px los finos de
-pelo de una didona desaparecen y la letra se ve rota.
+⚠️ El peso y el tracking vuelven **con** la familia. El 800 / −0.03em que tuvo
+la didona estaba dimensionado para sus finos de pelo; en una geométrica como
+Poppins sale pesado y apretado.
 
 ### UI y cuerpo — **Archivo**
 
-Grotesca de apertura cerrada y ejes verticales, que es lo que rima con la
-didona (misma verticalidad, misma tensión). Aguanta el `0.22em` de tracking en
-mayúsculas de 11px de los eyebrows sin deshacerse, cosa que la didona no hace.
+Grotesca de apertura cerrada. Aguanta el `0.22em` de tracking en mayúsculas de
+11px de los eyebrows sin deshacerse. Cubre interfaz, cuerpo y cifras
+(`.readout`, con `tabular-nums`): una sola familia para las tres funciones.
 
-Cubre interfaz, cuerpo y cifras (`.readout`, con `tabular-nums`). Una sola
-familia para las tres funciones: menos CSS y menos archivos que cargar.
+### Logotipo — **Bodoni Moda**
+
+La didona del archivo de marca: astas gruesas, finos de pelo, remates planos
+sin bracket. **Solo `.jr-wordmark`, y en ningún otro lado.** Si aparece en un
+titular deja de ser exclusiva del logotipo, y entonces deja de marcarlo.
+
+**Nunca por debajo de 20px**: a tamaño chico los finos de pelo desaparecen y
+la letra se ve rota. Por eso no toca ni labels ni cifras.
 
 ### Jerarquía
 
 | rol | familia | peso | tracking |
 |---|---|---|---|
-| Display | Bodoni Moda | 700–900 | −0.03em |
-| Titular de UI (h1–h6) | Archivo | 600 | −0.01em |
+| Display (`.lp-serif`) | Poppins | 600 | −0.02em |
+| Titular (h1–h6) | Poppins | 600 | −0.01em |
+| Logotipo | Bodoni Moda | 900 | −0.01em |
 | Cuerpo | Archivo | 400 | 0 |
 | Eyebrow / label | Archivo | 600, 11px, mayúsculas | 0.22em / 0.14em |
 | Cifras | Archivo | tabular-nums | −0.01em |
 
-⚠️ **Poppins y Lato siguen cargadas, pero ya no son del chrome.** `lib/landing/niches.ts`
-asigna Poppins como tipografía del **contenido que se genera para el
-cliente**; sacarla del `@import` rompería esas previews. Por eso viajaron al
-segundo `@import`, el del catálogo de contenido generado. No las uses en la UI.
+⚠️ **Poppins es de render crítico y se pide en el `<link>` del chrome**, no en
+el del catálogo, aunque el contenido generado para el cliente también la use
+(`lib/landing/niches.ts`). Colgarla del link rotulado "no es del chrome" es
+invitar a que alguien lo borre y se lleve puestos todos los titulares. Lato sí
+vive solo en el catálogo: la UI no la usa.
 
 ---
 
@@ -148,9 +157,9 @@ segundo `@import`, el del catálogo de contenido generado. No las uses en la UI.
 - **La fuga de luz (`.lp-leak`) ahora es crema**, no dorada. Es el eje de
   prestigio haciendo su trabajo: una barra de 1px que se apaga al cruzar el
   borde superior más un halo difuso desde la esquina.
-- **Radio:** `--radius: 1rem`. La didona es una letra de bordes rectos, pero un
-  sitio de herramientas necesita superficies amables; el contraste entre la
-  letra dura y la card blanda es intencional.
+- **Radio:** `--radius: 1rem`. Superficies amables, que es lo que pide una
+  herramienta de trabajo — y lo que hizo que los titulares volvieran a una
+  geométrica en vez de quedarse en la didona.
 - **Sin degradados de marca.** El logo no tiene ninguno. El CTA es carmesí
   plano. `--brand-gradient` sobrevive solo como alias para no romper archivos.
 
@@ -196,7 +205,7 @@ Reglas de uso:
    `SectionTrust` y `BriefShell` son chrome del wizard (spinners, chips,
    toggles) y sí se repintan; el lienzo del preview del cliente lo define la
    paleta extraída de SU marca y no se toca nunca.
-3. **`--font-mono` y `.readout`** — no llevan didona. Las cifras necesitan
-   ancho fijo, y los finos de pelo se rompen a tamaño de dato.
+3. **`--font-mono` y `.readout`** — van en Archivo. Las cifras necesitan ancho
+   fijo (`tabular-nums`), que ni Poppins ni la didona del logotipo aportan.
 4. **Los alias heredados** (`--lp-*`, `.gradient-text`, `.lp-serif`) — los
    nombran decenas de archivos. Cambiaron de valor, no de nombre.
