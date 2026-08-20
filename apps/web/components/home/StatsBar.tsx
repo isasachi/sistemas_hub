@@ -20,7 +20,7 @@ export function StatsBar() {
       <div className="mx-auto mt-14 flex max-w-[880px] flex-col items-stretch justify-center gap-8 sm:flex-row sm:gap-0 sm:divide-x sm:divide-[rgba(255,255,255,0.08)]">
         {PLATFORM_STATS.map((stat) => (
           <div key={stat.label} className="flex-1 px-8 text-center">
-            <div className="font-[Archivo] text-[36px] font-bold leading-none text-[#f6f2eb]">
+            <div className="font-[Lato] text-[36px] font-bold leading-none text-[#f6f2eb]">
               {stat.value}
             </div>
             <div className="lp-label mt-3 !text-[10px]">{stat.label}</div>

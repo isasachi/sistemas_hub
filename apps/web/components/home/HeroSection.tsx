@@ -2,15 +2,17 @@ import Link from "next/link";
 import { HeroShowcaseWall } from "./HeroShowcaseWall";
 import { HERO_COUNTER } from "@/lib/home/stats";
 
-// Hero: rejilla vertical tenue, badge "en vivo", el titular con LA FIRMA del
-// sistema (.lp-cut) y la pared de outputs (marquee de assets reales).
+// Hero: rejilla vertical tenue, badge "en vivo", titular crema con UNA sola
+// palabra de acento y la pared de outputs (marquee de assets reales).
 //
-// La firma es el mecanismo del logotipo: UN solo filo vertical corta las dos
-// líneas del titular, carmesí a la izquierda y crema a la derecha, cayendo
-// DENTRO de una palabra. Por eso .lp-cut va en el <h1> y no en cada línea —
-// una sola caja de degradado es lo que hace que el corte quede alineado entre
-// las dos, como LEG|ACY sobre BR|AND. Es el único gesto audaz de la pantalla:
-// el resto es crema y silencio (BRANDBOOK §5).
+// El titular llevaba `.lp-cut` —el filo del logotipo cortando las dos líneas a
+// mitad de palabra— y lo pidió cambiar el dueño del repo: ahora el acento es
+// solo "ecommerce", en carmesí legible (`.lp-gold-word` = --brand-bright).
+// El resto de la línea va en crema.
+//
+// ⚠️ Una sola palabra de acento por titular. El carmesí de esta pantalla ya lo
+// tiene el CTA; si el acento se reparte entre varias palabras deja de señalar
+// dónde mirar y compite con el botón (BRANDBOOK §2).
 export function HeroSection() {
   const ctaHref =
     process.env.AUTH_DISABLED === "true" ? "/dashboard" : "/signup";
@@ -27,24 +29,21 @@ export function HeroSection() {
       {/* Badge-contador "en vivo" */}
       <div className="relative z-[1] mb-8 inline-flex items-center gap-2 rounded-full border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.03)] px-4 py-1.5">
         <span className="lp-live-dot" aria-hidden />
-        <span className="font-[Archivo] text-[12px] font-medium text-[#a98c88]">
+        <span className="font-[Lato] text-[12px] font-medium text-[#a98c88]">
           <span className="font-semibold text-[#f6f2eb]">{HERO_COUNTER}</span>{" "}
           activos generados con IA
         </span>
       </div>
 
-      {/* Title — LA FIRMA: el corte del logotipo sobre el titular */}
-      <h1
-        className="lp-serif lp-cut relative z-[1] mx-auto mb-6 w-fit max-w-[900px] text-[clamp(40px,6vw,64px)] leading-[1.08]"
-        style={{ "--cut-at": "43%" } as React.CSSProperties}
-      >
+      {/* Title — crema, con UNA sola palabra de acento */}
+      <h1 className="lp-serif relative z-[1] mx-auto mb-6 max-w-[900px] text-[clamp(40px,6vw,64px)] leading-[1.08] text-[#f6f2eb]">
         El poder de la IA
         <br />
-        al servicio de tu ecommerce
+        al servicio de tu <span className="lp-gold-word">ecommerce</span>
       </h1>
 
       {/* Subtitle */}
-      <p className="relative z-[1] mx-auto mb-9 max-w-[560px] font-[Archivo] text-[17px] leading-[1.6] text-[#c9b4ae]">
+      <p className="relative z-[1] mx-auto mb-9 max-w-[560px] font-[Lato] text-[17px] leading-[1.6] text-[#c9b4ae]">
         Anuncios, branding, landings y productos ganadores — hechos con IA en
         minutos. Mira abajo lo que la plataforma genera.
       </p>

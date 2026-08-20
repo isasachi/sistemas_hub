@@ -59,7 +59,10 @@ function AccountMenu({ label, avatarUrl }: { label: string; avatarUrl?: string |
         aria-expanded={menu}
         className="flex items-center gap-1.5 rounded-full border border-white/[0.08] py-1 pl-1 pr-2 transition-colors duration-200 hover:border-white/[0.2] cursor-pointer"
       >
-        <span className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-[rgba(246,242,235,0.12)] font-[Archivo] text-[12px] font-bold text-[#e8dcd6]">
+        {/* Lato viene del cambio de tipografía de main (#77); el avatar, de
+            "Mi cuenta". La inicial es el fallback cuando no hay foto, y por eso
+            la clase de fuente sigue haciendo falta. */}
+        <span className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-[rgba(246,242,235,0.12)] font-[Lato] text-[12px] font-bold text-[#e8dcd6]">
           {avatarUrl ? (
             // La URL trae `?v=<ts>` de `uploadToStorage`: el path del bucket es
             // determinista con upsert, así que sin ese cache-bust el navegador
@@ -76,7 +79,7 @@ function AccountMenu({ label, avatarUrl }: { label: string; avatarUrl?: string |
       {menu && (
         <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-[240px] overflow-hidden rounded-2xl border border-white/[0.08] bg-[#101012] shadow-[0_16px_40px_rgba(0,0,0,0.5)]">
           <div className="border-b border-white/[0.06] px-4 py-3">
-            <p className="font-[Archivo] text-[10px] font-semibold uppercase tracking-[0.12em] text-[#c9b4ae]">
+            <p className="font-[Lato] text-[10px] font-semibold uppercase tracking-[0.12em] text-[#c9b4ae]">
               Sesión
             </p>
             <p className="mt-0.5 truncate text-[13px] text-[#efe7e0]">{label}</p>
@@ -119,7 +122,7 @@ export function AppShell({ user, children }: AppShellProps) {
 
   const toolLink = (href: string, active: boolean, soon: boolean) =>
     [
-      "flex items-center gap-2 rounded-xl px-3.5 py-2 font-[Archivo] text-[14px] font-medium no-underline transition-all duration-200",
+      "flex items-center gap-2 rounded-xl px-3.5 py-2 font-[Lato] text-[14px] font-medium no-underline transition-all duration-200",
       // Dorado = dónde estás (igual que el riel del asistente). El naranja queda
       // libre para las acciones, que es lo que el usuario debe encontrar rápido.
       soon
@@ -136,7 +139,7 @@ export function AppShell({ user, children }: AppShellProps) {
   );
 
   const soonBadge = (
-    <span className="rounded-full bg-[rgba(255,255,255,0.05)] px-1.5 py-0.5 font-[Archivo] text-[9px] font-semibold uppercase tracking-[0.08em] text-[#c9b4ae]">
+    <span className="rounded-full bg-[rgba(255,255,255,0.05)] px-1.5 py-0.5 font-[Lato] text-[9px] font-semibold uppercase tracking-[0.08em] text-[#c9b4ae]">
       Pronto
     </span>
   );
@@ -227,7 +230,7 @@ export function AppShell({ user, children }: AppShellProps) {
                 const active = pathname.startsWith(href);
                 const label = NAV_LABEL[tool.slug] ?? tool.name;
                 const cls =
-                  "flex items-center gap-3 rounded-xl px-3 py-2.5 font-[Archivo] text-[13px] font-medium no-underline transition-all duration-200";
+                  "flex items-center gap-3 rounded-xl px-3 py-2.5 font-[Lato] text-[13px] font-medium no-underline transition-all duration-200";
                 if (soon) {
                   return (
                     <span key={tool.slug} className={`${cls} text-[#967b76]`}>

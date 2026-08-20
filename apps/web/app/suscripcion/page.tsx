@@ -85,7 +85,7 @@ function PlanCard({ tier, actual, bloqueado }: {
         </span>
       )}
       <h2 className="relative text-[18px] text-[#f6f2eb]">{p.nombre}</h2>
-      <p className="relative mb-5 mt-1 font-[Archivo] text-[13px] text-[#c9b4ae]">
+      <p className="relative mb-5 mt-1 text-[13px] text-[#c9b4ae]">
         <span className="text-[28px] font-extrabold text-[#f6f2eb]">${p.precio}</span>
         <span className="ml-1">/ mes</span>
       </p>
@@ -158,7 +158,7 @@ export default async function SuscripcionPage({
           <h1 className="relative mb-1 text-[22px] text-[#f6f2eb]">
             Estamos confirmando tu pago
           </h1>
-          <p className="relative mb-6 font-[Archivo] text-[13px] leading-[1.5] text-[#c9b4ae]">
+          <p className="relative mb-6 text-[13px] leading-[1.5] text-[#c9b4ae]">
             Suele tardar unos segundos. Tu acceso se activa solo.
           </p>
           <a
@@ -179,7 +179,7 @@ export default async function SuscripcionPage({
           <h1 className="mb-1.5 text-[26px] text-[#f6f2eb]">
             {access ? "Planes" : "Activa tu acceso"}
           </h1>
-          <p className="font-[Archivo] text-[14px] leading-[1.6] text-[#c9b4ae]">
+          <p className="text-[14px] leading-[1.6] text-[#c9b4ae]">
             {access
               ? "Tu plan actual está marcado abajo."
               : `Prueba ${PRUEBA_DIAS} días gratis en cualquier plan. Cancelas cuando quieras.`}

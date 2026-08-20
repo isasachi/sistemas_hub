@@ -20,7 +20,7 @@ export function ComingSoon({ tool }: { tool: Tool }) {
         </span>
 
         <h1 className="relative mb-2.5 text-[22px] text-[#f6f2eb]">{tool.name}</h1>
-        <p className="relative mb-7 font-[Archivo] text-[14px] leading-[1.6] text-[#c9b4ae]">
+        <p className="relative mb-7 font-[Lato] text-[14px] leading-[1.6] text-[#c9b4ae]">
           {tool.longDescription}
         </p>
 

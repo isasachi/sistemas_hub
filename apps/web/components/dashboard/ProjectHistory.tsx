@@ -122,7 +122,7 @@ export function ProjectHistory() {
         <button
           type="button"
           onClick={() => setSort((s) => (s === 'recent' ? 'old' : 'recent'))}
-          className="mr-1 inline-flex items-center gap-1.5 rounded-full border border-white/[0.1] bg-white/[0.03] px-3 py-1.5 font-[Archivo] text-[12px] font-medium text-[#c9b4ae] transition-colors duration-200 hover:text-[#f6f2eb] cursor-pointer"
+          className="mr-1 inline-flex items-center gap-1.5 rounded-full border border-white/[0.1] bg-white/[0.03] px-3 py-1.5 font-[Lato] text-[12px] font-medium text-[#c9b4ae] transition-colors duration-200 hover:text-[#f6f2eb] cursor-pointer"
         >
           <ArrowUpDown className="h-3.5 w-3.5" />
           {sort === 'recent' ? 'Más reciente' : 'Más antiguo'}
@@ -181,7 +181,7 @@ function EmptyState({ filtered = false }: { filtered?: boolean }) {
       <h2 className="lp-serif text-[20px] text-[#efe7e0]">
         {filtered ? 'Nada de esta herramienta todavía' : 'Aquí aparece todo lo que generes'}
       </h2>
-      <p className="mt-2.5 max-w-[420px] font-[Archivo] text-[14px] leading-[1.6] text-[#a98c88]">
+      <p className="mt-2.5 max-w-[420px] font-[Lato] text-[14px] leading-[1.6] text-[#a98c88]">
         {filtered
           ? 'Todavía no has usado esta herramienta. Ábrela desde la barra de arriba y tu primer proyecto aparecerá aquí.'
           : 'Cada anuncio, video, marca, landing y cálculo que generes queda guardado en este tablero. Elige una herramienta de la barra de arriba para empezar.'}
@@ -204,7 +204,7 @@ function FilterChip({
       type="button"
       onClick={onClick}
       className={[
-        'rounded-full px-3 py-1.5 font-[Archivo] text-[12px] font-medium transition-colors duration-200 cursor-pointer',
+        'rounded-full px-3 py-1.5 font-[Lato] text-[12px] font-medium transition-colors duration-200 cursor-pointer',
         active
           ? 'bg-[rgba(189,19,71,0.14)] text-[rgb(232,70,122)]'
           : 'border border-white/[0.08] bg-white/[0.02] text-[#a98c88] hover:text-[#f6f2eb]',
@@ -272,11 +272,11 @@ function ProjectCard({
         </div>
       )}
       <div className="relative z-[1] p-2.5">
-        <p className="truncate font-[Archivo] text-[9px] font-semibold uppercase tracking-[0.12em] text-[#e8dcd6]">
+        <p className="truncate font-[Lato] text-[9px] font-semibold uppercase tracking-[0.12em] text-[#e8dcd6]">
           {p.toolName}
         </p>
         <h3 className="mt-0.5 truncate text-[12.5px] font-semibold text-[#efe7e0]">{p.title}</h3>
-        <div className="mt-1 flex items-center gap-1.5 font-[Archivo] text-[10.5px] text-[#c9b4ae]">
+        <div className="mt-1 flex items-center gap-1.5 font-[Lato] text-[10.5px] text-[#c9b4ae]">
           {p.done ? (
             <CheckCircle2 className="h-3 w-3 text-[#3ed88a]" />
           ) : (

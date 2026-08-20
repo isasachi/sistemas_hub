@@ -14,19 +14,35 @@
    y de borde, NO de texto. Todo carmesí que sea texto o icono usa
    --brand-bright #E8467A (5.09:1). Es el error a vigilar acá.
 
-   Dos voces: Bodoni Moda (display — la didona del logotipo, nunca por
-   debajo de 20px) y Archivo (UI, cuerpo y cifras). Syne se retiró: el
-   logotipo lo compone ahora la voz de display.
+   Tres voces, cada una con UN trabajo:
+   · Poppins  — TODOS los titulares (h1–h6 y `.lp-serif`). Es la voz que
+     tenían antes del rebranding y a la que se volvió por decisión del
+     dueño del repo: la didona daba un titular demasiado editorial para
+     una herramienta de trabajo.
+   · Lato     — cuerpo, UI, labels y cifras. Humanista y de bajo
+     contraste: contrasta en CONSTRUCCIÓN con la geometría de Poppins
+     (por eso la jerarquía se lee) pero comparte su trazo monolineal y
+     su tono abierto, así que no chocan. Y es más angosta, con lo que un
+     párrafo largo en español ocupa menos. Reemplazó a Archivo, una
+     grotesca de formas cuadradas que peleaba con los círculos anchos de
+     Poppins.
+   · Bodoni Moda — SOLO el logotipo (`.jr-wordmark`). Es la letra del
+     archivo de marca, así que se queda ahí y en ningún otro lado; si
+     aparece en un titular, el logotipo deja de ser lo único que la usa
+     y deja de marcar nada. Syne, que cumplía ese rol, se retiró.
 
    ⚠️ LAS FUENTES NO SE PIDEN ACÁ. Están como <link> en app/layout.tsx:
    Turbopack ELIMINA los `@import url(...)` externos al compilar esta
    hoja, y el sitio se servía sin un solo @font-face (medido: todo caía
    a la serif por defecto del navegador). No devuelvas el @import.
 
-   Poppins y Lato siguen cargándose, pero ya no son del chrome: son del
-   catálogo del CONTENIDO que se genera para el cliente
-   (`lib/landing/niches.ts` asigna Poppins ahí). El editor de branding
-   inyecta además su propio <link> con 34 familias.
+   ⚠️ Poppins y Lato son AHORA del chrome y viven en el primer <link>.
+   Las dos aparecen además en el catálogo del CONTENIDO que se genera
+   para el cliente (`lib/landing/niches.ts`), pero no se piden desde
+   ahí: si alguien borrara ese segundo <link> —está rotulado como "no
+   es del chrome"— se llevaría puesta la tipografía de todo el sitio.
+   El editor de branding inyecta además su propio <link> con 34
+   familias.
    ══════════════════════════════════════════════════════════════════ */
 @import "tailwindcss";
 @import "tw-animate-css";
@@ -37,14 +53,14 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  /* Archivo es la voz de UI Y de cuerpo: `font-sans` en el código
-     significa "texto de interfaz". Una familia para las dos funciones. */
-  --font-sans: 'Archivo', 'Segoe UI', system-ui, sans-serif;
-  --font-display: 'Bodoni Moda', 'Times New Roman', serif;
-  --font-heading: 'Archivo', 'Segoe UI', system-ui, sans-serif;
-  --font-body: 'Archivo', system-ui, Arial, sans-serif;
-  /* Sin voz mono: los números viven en Archivo con tabular-nums (.readout). */
-  --font-mono: 'Archivo', 'Segoe UI', system-ui, sans-serif;
+  /* Lato es la voz de UI Y de cuerpo: `font-sans` en el código significa
+     "texto de interfaz". Una familia para las dos funciones. */
+  --font-sans: 'Lato', 'Segoe UI', system-ui, sans-serif;
+  --font-display: 'Poppins', 'Segoe UI', system-ui, sans-serif;
+  --font-heading: 'Poppins', 'Segoe UI', system-ui, sans-serif;
+  --font-body: 'Lato', system-ui, Arial, sans-serif;
+  /* Sin voz mono: los números viven en Lato con tabular-nums (.readout). */
+  --font-mono: 'Lato', 'Segoe UI', system-ui, sans-serif;
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -209,18 +225,18 @@
   body {
     background: var(--bg);
     color: var(--text-muted);
-    font-family: 'Archivo', system-ui, Arial, sans-serif;
+    font-family: 'Lato', system-ui, Arial, sans-serif;
     font-size: 16px;
     line-height: 1.6;
     letter-spacing: 0;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
-  /* Los titulares de UI van en Archivo, NO en la didona: a tamaño de
-     interfaz los finos de pelo de Bodoni desaparecen. El display se
-     pide explícitamente con .lp-serif. */
+  /* Todos los titulares van en Poppins — el default de h1–h6 y el display
+     de `.lp-serif` comparten voz, como antes del rebranding. Bodoni queda
+     reservada al logotipo. */
   h1, h2, h3, h4, h5, h6 {
-    font-family: 'Archivo', 'Segoe UI', system-ui, sans-serif;
+    font-family: 'Poppins', 'Segoe UI', system-ui, sans-serif;
     font-weight: 600;
     letter-spacing: -0.01em;
     color: var(--text-head);
@@ -237,18 +253,29 @@
    TIPOGRAFÍA — tratamientos
    ══════════════════════════════════════════════════════════════════ */
 
-/* El display del sistema: la didona del logotipo. Bloque cerrado —
-   tracking negativo y line-height corto, como el lockup, donde LEGACY y
-   BRAND están justificadas al mismo ancho con las letras casi tocándose.
-   ⚠️ Nunca por debajo de 20px: a tamaño chico los finos de pelo se
-   rompen. El nombre `.lp-serif` se conserva porque lo usan 8 archivos. */
+/* El display del sistema. Vuelve a Poppins 600 —exactamente lo que era
+   antes del rebranding— por decisión del dueño del repo. El peso y el
+   tracking vuelven CON la familia: el 800/-0.03em anterior estaba
+   dimensionado para una didona y en una geométrica sale pesado y
+   apretado.
+   El nombre `.lp-serif` ya no describe nada (no es serif desde 2026-08)
+   pero se conserva porque lo usan 8 archivos y renombrarlo no cambiaría
+   un pixel. La única serif del sistema es la del logotipo. */
 .lp-serif {
-  font-family: 'Bodoni Moda', 'Times New Roman', serif;
-  font-weight: 800;
-  letter-spacing: -0.03em;
+  font-family: 'Poppins', 'Segoe UI', system-ui, sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 
-/* ── LA FIRMA: el corte a mitad de palabra ────────────────────────
+/* ── EL CORTE A MITAD DE PALABRA — device SIN USO HOY ─────────────
+   ⚠️ Ninguna pantalla lo aplica. Estuvo en el titular del hero y se
+   retiró a pedido del dueño del repo, que prefirió una sola palabra de
+   acento (`.lp-gold-word`). Se conserva porque el device es correcto y
+   está probado, pero NO lo llames "la firma del sitio" mientras no esté
+   puesto en ningún lado. Si vuelve, que no conviva con un
+   `.lp-gold-word` en el mismo titular: son dos acentos peleando por la
+   misma línea.
+
    El logotipo no es "texto en dos colores": el color cambia en una
    línea vertical que ignora dónde terminan las palabras (LEG|ACY,
    BR|AND). Esto es ese filo, aplicado a un titular.
@@ -263,7 +290,7 @@
    vez. El corte se mueve con --cut-at (por defecto 58% desde la
    izquierda); ponlo donde caiga DENTRO de una palabra.
 
-   Una sola vez por pantalla: es la firma, no una decoración. */
+   Una sola vez por pantalla: es un acento, no una decoración. */
 .lp-cut {
   background-image: linear-gradient(
     90deg,
@@ -291,9 +318,11 @@
 }
 
 /* ── EL LOGOTIPO ──────────────────────────────────────────────────
-   Ya no hay una familia aparte para la marca: el logotipo ES la didona
-   del display, en su peso más pesado y apretada como en el archivo
-   original. Syne se retiró con el rebranding.
+   La didona del archivo de marca, en su peso más pesado y apretada como
+   en el original. Es la ÚNICA cosa del sistema que la usa: los titulares
+   volvieron a Poppins, así que Bodoni no aparece en ningún otro lado —
+   y por eso el logotipo se distingue. Syne, que ocupaba este papel antes
+   del rebranding, se retiró.
    El componente <Wordmark> le pone encima el corte de color. */
 .jr-wordmark {
   font-family: 'Bodoni Moda', 'Times New Roman', serif;
@@ -307,7 +336,7 @@
 /* Eyebrow: eje de PRESTIGIO, o sea crema — nunca carmesí, que compite
    con el CTA y deja la pantalla sin un solo foco de acción. */
 .lp-eyebrow {
-  font-family: 'Archivo', sans-serif;
+  font-family: 'Lato', sans-serif;
   font-weight: 600;
   font-size: 11px;
   letter-spacing: 0.22em;
@@ -316,7 +345,7 @@
 }
 .lp-label,
 .spec-label {
-  font-family: 'Archivo', sans-serif;
+  font-family: 'Lato', sans-serif;
   font-weight: 600;
   font-size: 11px;
   letter-spacing: 0.14em;
@@ -324,9 +353,9 @@
   color: var(--text-faint);
 }
 
-/* Todo número/dato: Archivo con cifras de ancho fijo (no salta al cambiar). */
+/* Todo número/dato: Lato con cifras de ancho fijo (no salta al cambiar). */
 .readout {
-  font-family: 'Archivo', sans-serif;
+  font-family: 'Lato', sans-serif;
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum";
   letter-spacing: -0.01em;
@@ -361,7 +390,7 @@
   gap: 8px;
   background: var(--brand);
   color: var(--text);
-  font-family: 'Archivo', sans-serif;
+  font-family: 'Lato', sans-serif;
   font-weight: 600;
   border: 0;
   border-radius: var(--r-sm, 8px);
@@ -396,7 +425,7 @@
 .jr-btn-gold {
   background: var(--gold);
   color: #1e0811;
-  font-family: 'Archivo', sans-serif;
+  font-family: 'Lato', sans-serif;
   font-weight: 600;
   border: 0;
   box-shadow: var(--sh-card);
@@ -418,7 +447,7 @@
   background: var(--glass-hi);
   border: 1px solid var(--line-08);
   color: var(--text-head);
-  font-family: 'Archivo', sans-serif;
+  font-family: 'Lato', sans-serif;
   font-weight: 500;
   transition: background var(--t-fast) var(--ease),
     border-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
@@ -441,7 +470,7 @@
   background: transparent;
   color: var(--text-subtle);
   border: 1px solid var(--line-08);
-  font-family: 'Archivo', sans-serif;
+  font-family: 'Lato', sans-serif;
   font-weight: 500;
   transition: background var(--t-fast) var(--ease),
     border-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
@@ -460,7 +489,7 @@
   justify-content: center;
   background: var(--text);
   color: #1e0811;
-  font-family: 'Archivo', sans-serif;
+  font-family: 'Lato', sans-serif;
   font-weight: 600;
   border-radius: 100px;
   box-shadow: 0 2px 14px rgba(0, 0, 0, 0.35);
@@ -550,7 +579,7 @@
   border: 1px solid var(--line-06);
   border-radius: 100px;
   color: var(--text-muted);
-  font-family: 'Archivo', sans-serif;
+  font-family: 'Lato', sans-serif;
   font-size: 12px;
   padding: 5px 12px;
 }
@@ -564,7 +593,7 @@
   background: rgba(246, 242, 235, 0.08);
   border: 1px solid rgba(246, 242, 235, 0.32);
   border-radius: 100px;
-  font-family: 'Archivo', sans-serif;
+  font-family: 'Lato', sans-serif;
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -578,7 +607,7 @@
   gap: 4px;
   background: var(--success-deep);
   color: var(--success-mint);
-  font-family: 'Archivo', sans-serif;
+  font-family: 'Lato', sans-serif;
   font-weight: 600;
   border-radius: 50px;
 }
@@ -599,7 +628,7 @@
   background: var(--surface);
   border: 1px solid var(--line-08);
   color: var(--text-head);
-  font-family: 'Archivo', system-ui, sans-serif;
+  font-family: 'Lato', system-ui, sans-serif;
   transition: border-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
 }
 .jr-field::placeholder { color: var(--text-subtle); opacity: 0.7; }
