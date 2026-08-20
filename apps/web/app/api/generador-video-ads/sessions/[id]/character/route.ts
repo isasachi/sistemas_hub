@@ -5,7 +5,8 @@ import { generateImage } from '@/lib/video-ads/nano-banana'
 import { uploadToStorage, fetchAsBase64 } from '@/lib/storage'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
-import { CharacterIdentitySchema, buildIdentityInstruction, buildCharacterParts } from '@/lib/video-ads/character'
+import { IdentidadesSchema, buildIdentityInstruction, buildCharacterParts } from '@/lib/video-ads/character'
+import { personajesDe, resolvePersonaje } from '@/lib/video-ads/personajes'
 import { nicheSpec } from '@/lib/video-ads/niches'
 
 export const dynamic = 'force-dynamic'
@@ -49,9 +50,11 @@ export async function POST(
     // analyze-product) para que el modelo la observe en vez de fabricar el bloque
     // de consistencia a ciegas. `fetchAsBase64` valida que el host sea el del
     // bucket, que es lo que queremos acá porque la URL viene de la fila.
-    const image = session.character_url
-      ? await fetchAsBase64(session.character_url)
-      : undefined
+    // Una foto por personaje, en el MISMO orden en que el prompt los lista. Los que no
+    // tienen foto simplemente no aportan imagen — el prompt ya distingue ese caso.
+    const gente = personajesDe(session)
+    const fotos = (await Promise.all(gente.map((p) => (p.fotoUrl ? fetchAsBase64(p.fotoUrl) : null))))
+      .filter((f): f is NonNullable<typeof f> => !!f)
 
     // En ropa/zapatos el producto se LLEVA PUESTO, así que la prenda tiene que estar
     // delante del modelo dos veces: al describir la identidad (para que el bloque de
@@ -71,14 +74,14 @@ export async function POST(
         voice: session.voice ?? '', constraints: session.constraints ?? '',
       },
       session.forensic_analysis,
-      !!session.character_url,
+      gente,
       session.niche,
     )
 
-    const identity = await callVideoAds(
+    const identidades = await callVideoAds(
       'character_identity',
-      CharacterIdentitySchema,
-      buildCharacterParts(instruction, image, prenda),
+      IdentidadesSchema,
+      buildCharacterParts(instruction, fotos, prenda),
     )
 
     // Referencias que el generador de imagen recibe POR URL (Nano Banana Pro las toma
@@ -86,29 +89,58 @@ export async function POST(
     // identidad— y la prenda cuando el producto se lleva puesto, para que el avatar
     // nazca vistiéndola de verdad en vez de una parecida descrita en palabras. Es lo
     // mismo que sostiene que la ropa sea la misma en todos los lotes.
-    const referencias = [session.character_url, spec.wornProduct ? session.product_url : null]
-      .filter((u): u is string => !!u)
+    // Un avatar POR PERSONAJE, en paralelo. El modelo resolvió las identidades juntas
+    // (para que no se parezcan), pero cada imagen es independiente.
+    // Qué identidad devolvió el modelo para cada personaje. `resolvePersonaje` tolera
+    // que reescriba el id al citarlo (`p1`, `P1 (hijo)`, `hijo`); si aun así no resuelve
+    // se cae al orden, que es el mismo en que se le pidieron.
+    const conIdentidad = gente.map((p, i) => ({
+      personaje: p,
+      identidad:
+        identidades.personajes.find((x) => resolvePersonaje([p], x.id))
+        ?? identidades.personajes[i]
+        ?? identidades.personajes[0],
+    }))
 
-    const bytes = await generateImage({
-      prompt: identity.promptCreacion,
-      imageUrls: referencias,
-      aspectRatio: '9:16',
-    })
-    const avatarUrl = await uploadToStorage(id, bytes, 'image/png', 'avatar')
+    const avatares = await Promise.all(conIdentidad.map(async ({ personaje, identidad }) => {
+      const referencias = [personaje.fotoUrl, spec.wornProduct ? session.product_url : null]
+        .filter((u): u is string => !!u)
+      const bytes = await generateImage({
+        prompt: identidad.promptCreacion,
+        imageUrls: referencias,
+        aspectRatio: '9:16',
+      })
+      return uploadToStorage(id, bytes, 'image/png', `avatar-${personaje.id}`)
+    }))
+
+    const personajes = conIdentidad.map(({ personaje, identidad }, i) => ({
+      ...personaje,
+      avatarUrl: avatares[i],
+      consistencyBlock: identidad.bloqueConsistencia,
+      voiceProfile: identidad.voz,
+      motionProfile: identidad.movimiento,
+    }))
+    const [principal] = personajes
+    const avatarUrl = principal.avatarUrl
 
     await updateVideoSession(id, {
+      personajes,
+      // ⚠️ Las columnas singulares se siguen escribiendo con los datos del PROTAGONISTA.
+      // El render todavía las lee (eso cambia en el slice 4), así que dejar de escribirlas
+      // acá dejaría el video sin personaje entre un slice y el otro.
       avatar_url: avatarUrl,
-      character_prompt: identity.promptCreacion,
-      consistency_block: identity.bloqueConsistencia,
-      voice_profile: identity.voz,
-      motion_profile: identity.movimiento,
+      character_prompt: conIdentidad[0].identidad.promptCreacion,
+      consistency_block: principal.consistencyBlock,
+      voice_profile: principal.voiceProfile,
+      motion_profile: principal.motionProfile,
     })
     await recordGenQuota(id, 'video-character', userId)
     return NextResponse.json({
       characterUrl: avatarUrl,
-      consistencyBlock: identity.bloqueConsistencia,
-      voiceProfile: identity.voz,
-      motionProfile: identity.movimiento,
+      personajes,
+      consistencyBlock: principal.consistencyBlock,
+      voiceProfile: principal.voiceProfile,
+      motionProfile: principal.motionProfile,
     })
   } catch (err) {
     console.error('[video-ads/character]', err)

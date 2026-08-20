@@ -3,6 +3,7 @@ import type { Part } from '@google/genai'
 import type { UserInputs } from './types'
 import { enProsa, type ForensicReport } from './forensic'
 import { nicheSpec } from './niches'
+import type { Personaje } from './personajes'
 
 /**
  * FASE 4 + 4.5 del prompt maestro — identidad visual y vocal bloqueada.
@@ -66,26 +67,62 @@ export const CharacterIdentitySchema = z.object({
   voz: VoiceProfileSchema,
   movimiento: MotionProfileSchema,
 })
+
+/**
+ * Las identidades de TODOS los personajes, resueltas en UNA sola llamada.
+ *
+ * Una llamada por personaje sería más simple de escribir y peor de resultado: el modelo
+ * no vería a los demás y devolvería cuatro personas que se parecen entre sí. Acá los ve
+ * juntos y puede diferenciarlos, que es justamente el trabajo.
+ */
+export const IdentidadesSchema = z.object({
+  personajes: z.array(CharacterIdentitySchema.extend({
+    /** El `id` del personaje del usuario al que corresponde esta identidad. */
+    id: z.string(),
+  })).min(1),
+})
+export type Identidades = z.infer<typeof IdentidadesSchema>
 export type CharacterIdentity = z.infer<typeof CharacterIdentitySchema>
 
 export function buildIdentityInstruction(
   inputs: UserInputs,
   forensic: ForensicReport,
-  hasImage: boolean,
+  personajes: Personaje[],
   niche?: unknown,
 ): string {
   const spec = nicheSpec(niche)
-  const acento = inputs.accent.trim() || ACENTO_PENDIENTE
+  const varios = personajes.length > 1
+  const hasImage = personajes.some((p) => !!p.fotoUrl)
+  const datos = (p: Personaje) => [
+    `  Personaje: ${p.desc || '[VARIABLE PENDIENTE]'}`,
+    `  Raza / etnia / origen cultural: ${p.etnia || '[VARIABLE PENDIENTE]'}`,
+    `  Acento: ${p.acento.trim() || ACENTO_PENDIENTE}`,
+    p.voz ? `  Voz: ${p.voz}` : '',
+  ].filter(Boolean).join('\n')
   return [
     'Actúa como director creativo de anuncios UGC.',
-    'Construye la identidad visual maestra del personaje y su perfil vocal.',
+    varios
+      ? `Construye la identidad visual y el perfil vocal de LOS ${personajes.length} PERSONAJES de este anuncio.`
+      : 'Construye la identidad visual maestra del personaje y su perfil vocal.',
     '',
     'DATOS DEL USUARIO (fuente de verdad, no los contradigas):',
-    `  Personaje: ${inputs.characterDesc || '[VARIABLE PENDIENTE]'}`,
-    `  Raza / etnia / origen cultural: ${inputs.characterEthnicity || '[VARIABLE PENDIENTE]'}`,
-    `  Acento: ${acento}`,
-    inputs.voice ? `  Voz: ${inputs.voice}` : '',
+    varios
+      ? personajes.map((p) => `[${p.id}] ${p.rol}\n${datos(p)}`).join('\n\n')
+      : datos(personajes[0]),
     '',
+    // ⚠️ Con varios personajes lo que hay que evitar es que se parezcan entre sí. Por eso
+    // se resuelven todos en la MISMA llamada: el modelo los ve juntos y puede
+    // diferenciarlos. Una llamada por personaje devolvería cuatro variantes del mismo.
+    varios
+      ? [
+          '⚠️ SON PERSONAS DISTINTAS Y TIENEN QUE VERSE DISTINTAS. Diferéncialos en rasgos',
+          'CONCRETOS —edad, complexión, forma del rostro, cabello, piel, vestuario— y no en',
+          'adjetivos vagos. Y también tienen que SONAR distinto: dos perfiles de voz',
+          'idénticos hacen que el anuncio parezca doblado por la misma persona.',
+          'Respeta el acento que el usuario dio a CADA UNO: no los uniformes.',
+          '',
+        ].join('\n')
+      : '',
     spec.wornProduct
       ? 'CONTEXTO DEL VIDEO ORIGINAL (solo para encuadre; el vestuario NO se copia):'
       : 'CONTEXTO DEL VIDEO ORIGINAL (solo para encuadre y vestuario equivalente):',
@@ -123,6 +160,10 @@ export function buildIdentityInstruction(
           'usuario. No inventes rasgos que el usuario no mencionó ni los deduzcas del',
           'video original — el personaje del original NO es el personaje nuevo.',
         ].join('\n'),
+    '',
+    varios
+      ? `Devuelve \`personajes\`: UNA entrada por cada personaje de arriba, con su \`id\` exacto (${personajes.map((p) => p.id).join(', ')}) y los cuatro campos de abajo. No inventes personajes que no estén en la lista ni omitas ninguno.`
+      : `Devuelve \`personajes\` con UNA sola entrada, \`id\`: "${personajes[0].id}".`,
     '',
     '`promptCreacion`: un prompt autónomo, listo para un generador de imagen, que cree',
     'la foto base del personaje. Debe incluir identidad visual, edad aparente, sexo /',
@@ -178,9 +219,13 @@ export function buildIdentityInstruction(
     '`voz`: perfil vocal completo — idioma, variante regional, acento, pronunciación,',
     'ritmo, velocidad, entonación, energía, pausas, tono, timbre, edad vocal aproximada',
     'y estilo conversacional.',
-    `El acento debe ser explícito y estable: usa "${acento}" tal cual.`,
-    acento === ACENTO_PENDIENTE
-      ? 'NO lo sustituyas por un acento genérico ni "neutro": propaga el marcador.'
+    // El acento es POR PERSONAJE: uniformarlos borraría justamente el dato que la FASE 0
+    // exige confirmar uno por uno.
+    varios
+      ? 'El acento de cada uno es el que su bloque de DATOS DEL USUARIO indica, tal cual. No los uniformes.'
+      : `El acento debe ser explícito y estable: usa "${personajes[0].acento.trim() || ACENTO_PENDIENTE}" tal cual.`,
+    personajes.some((p) => !p.acento.trim())
+      ? 'NO sustituyas un acento pendiente por uno genérico ni "neutro": propaga el marcador.'
       : '',
     '',
     '`movimiento`: CÓMO SE MUEVE el personaje, leído del video original. Son DOS campos',
@@ -219,13 +264,17 @@ export function buildIdentityInstruction(
  */
 export function buildCharacterParts(
   instruction: string,
-  image?: { data: string; mimeType: string },
+  /** Las fotos de referencia, en el ORDEN de `personajes`. El prompt las cita por ese
+   *  orden, así que mezclarlas le da a un personaje la cara de otro. */
+  image?: { data: string; mimeType: string } | { data: string; mimeType: string }[],
   /** La prenda / el calzado, cuando el producto se lleva puesto: sin verla, el modelo
    *  describe un vestuario inventado y el avatar no sale con el producto del usuario. */
   product?: { data: string; mimeType: string } | null,
 ): Part[] {
   const parts: Part[] = []
-  if (image) parts.push({ inlineData: { mimeType: image.mimeType, data: image.data } })
+  for (const img of image ? (Array.isArray(image) ? image : [image]) : []) {
+    parts.push({ inlineData: { mimeType: img.mimeType, data: img.data } })
+  }
   if (product) parts.push({ inlineData: { mimeType: product.mimeType, data: product.data } })
   parts.push({ text: instruction })
   return parts
