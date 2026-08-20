@@ -22,7 +22,7 @@ export interface Tool {
   // mudo). Mismo marco y mismo recorte que la imagen.
   preview?: {
     kind: "image" | "video";
-    ratio?: "9/16" | "2/3" | "1/1" | "4/3" | "16/10";
+    ratio?: "9/16" | "2/3" | "1/1" | "4/3" | "3/2" | "16/10";
   };
   // stats: chips hardcodeados por tool. TODO wire: ver lib/home/stats.ts
   stats?: { value: string; label: string }[];
@@ -103,7 +103,10 @@ export const tools: Tool[] = [
     tagStyle: "new",
     status: "live",
     pitch: "De una idea a logo, etiqueta y mockup del producto final.",
-    preview: { kind: "image", ratio: "9/16" },
+    // 3/2 y no 9/16: el asset pasó de un mockup vertical al board de identidad
+    // (LUMINA, 1536x1024). El ratio tiene que describir el archivo — de él
+    // salen el ancho del tile del marquee y el encuadre del frame.
+    preview: { kind: "image", ratio: "3/2" },
     stats: [
       { value: "340+", label: "marcas creadas" },
       { value: "4 logos", label: "por dirección" },

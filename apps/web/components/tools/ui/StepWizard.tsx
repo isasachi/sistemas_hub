@@ -72,7 +72,7 @@ export default function StepWizard({
       <div className="h-[2px] bg-white/[0.06]">
         <div
           className="h-full transition-[width] duration-500 ease-[cubic-bezier(0.29,0.63,0.44,1)]"
-          style={{ width: `${pct}%`, background: 'linear-gradient(90deg, rgba(214,168,96,0.35), #d6a860)' }}
+          style={{ width: `${pct}%`, background: 'linear-gradient(90deg, rgba(246,242,235,0.35), #e8dcd6)' }}
         />
       </div>
 
@@ -105,7 +105,7 @@ export default function StepWizard({
             <button
               type="button"
               onClick={onReset}
-              className="ml-auto flex shrink-0 items-center gap-1.5 rounded-lg border-0 bg-transparent px-2 py-1 font-sans text-[12px] font-medium text-[#bebebe] transition-colors hover:bg-white/[0.05] hover:text-[#ffffff] cursor-pointer"
+              className="ml-auto flex shrink-0 items-center gap-1.5 rounded-lg border-0 bg-transparent px-2 py-1 font-sans text-[12px] font-medium text-[#a98c88] transition-colors hover:bg-white/[0.05] hover:text-[#f6f2eb] cursor-pointer"
             >
               <RotateCcw className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Reiniciar</span>
@@ -130,11 +130,11 @@ export default function StepWizard({
             <p className="lp-label">
               Paso {current + 1} de {steps.length}
             </p>
-            <h1 className="lp-serif text-[clamp(26px,3.4vw,34px)] leading-[1.15] text-[#ffffff]">
+            <h1 className="lp-serif text-[clamp(26px,3.4vw,34px)] leading-[1.15] text-[#f6f2eb]">
               {step.title}
             </h1>
             {step.hint && (
-              <p className="max-w-[60ch] font-[Lato] text-[15px] leading-[1.6] text-[#cfcfcf]">
+              <p className="max-w-[60ch] font-[Archivo] text-[15px] leading-[1.6] text-[#c9b4ae]">
                 {step.hint}
               </p>
             )}
@@ -190,7 +190,7 @@ function StepRail({
               <span
                 aria-hidden
                 className="h-px w-3 shrink-0 sm:w-6"
-                style={{ background: i <= maxReached ? 'rgba(214,168,96,0.4)' : 'rgba(255,255,255,0.08)' }}
+                style={{ background: i <= maxReached ? 'rgba(246,242,235,0.4)' : 'rgba(255,255,255,0.08)' }}
               />
             )}
             <Dot
@@ -200,9 +200,9 @@ function StepRail({
               aria-current={active ? 'step' : undefined}
               className={[
                 'flex items-center gap-2 rounded-full border px-1 transition-all duration-300',
-                reachable ? 'cursor-pointer bg-transparent hover:border-[rgba(214,168,96,0.55)]' : 'bg-transparent',
+                reachable ? 'cursor-pointer bg-transparent hover:border-[rgba(246,242,235,0.55)]' : 'bg-transparent',
                 active
-                  ? 'border-[rgba(214,168,96,0.5)] pr-3 shadow-[0_0_0_3px_rgba(214,168,96,0.10)]'
+                  ? 'border-[rgba(246,242,235,0.5)] pr-3 shadow-[0_0_0_3px_rgba(246,242,235,0.10)]'
                   : 'border-transparent',
               ].join(' ')}
             >
@@ -210,16 +210,16 @@ function StepRail({
                 className={[
                   'flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border font-sans text-[11px] font-semibold transition-colors duration-300',
                   active
-                    ? 'border-[rgba(214,168,96,0.6)] bg-[rgba(214,168,96,0.14)] text-[#d6a860]'
+                    ? 'border-[rgba(246,242,235,0.6)] bg-[rgba(246,242,235,0.14)] text-[#e8dcd6]'
                     : done
-                      ? 'border-[rgba(214,168,96,0.35)] bg-[rgba(214,168,96,0.08)] text-[#d6a860]'
-                      : 'border-white/[0.1] bg-white/[0.02] text-[#bebebe]',
+                      ? 'border-[rgba(246,242,235,0.35)] bg-[rgba(246,242,235,0.08)] text-[#e8dcd6]'
+                      : 'border-white/[0.1] bg-white/[0.02] text-[#a98c88]',
                 ].join(' ')}
               >
                 {done ? <Check className="h-3 w-3" strokeWidth={3} /> : i + 1}
               </span>
               {active && (
-                <span className="hidden truncate font-sans text-[12px] font-semibold tracking-[0.02em] text-[#ededed] md:inline">
+                <span className="hidden truncate font-sans text-[12px] font-semibold tracking-[0.02em] text-[#efe7e0] md:inline">
                   {s.label}
                 </span>
               )}

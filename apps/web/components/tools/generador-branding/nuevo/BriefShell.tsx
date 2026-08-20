@@ -23,9 +23,9 @@ export const btnPrimary = 'jr-cta rounded-xl text-[14px] font-semibold font-sans
 export const chipBase =
   'px-4 h-10 rounded-xl text-[13px] font-semibold font-sans border transition-all duration-200 cursor-pointer text-left'
 export const chipOff =
-  'bg-white/[0.03] border-white/[0.08] text-[#cfcfcf] hover:text-[#ffffff] hover:border-[rgba(255,155,74,0.35)] hover:bg-[rgba(255,155,74,0.06)]'
+  'bg-white/[0.03] border-white/[0.08] text-[#c9b4ae] hover:text-[#f6f2eb] hover:border-[rgba(232,70,122,0.35)] hover:bg-[rgba(232,70,122,0.06)]'
 export const chipOn =
-  'bg-[rgba(255,155,74,0.12)] border-[rgba(255,155,74,0.5)] text-[#ff9b4a]'
+  'bg-[rgba(232,70,122,0.12)] border-[rgba(232,70,122,0.5)] text-[#e8467a]'
 
 const WIZARD_STEPS = STEPS.map((s) => ({ label: s.label, title: s.title }))
 

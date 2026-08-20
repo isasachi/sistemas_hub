@@ -28,16 +28,16 @@ export default function CalcDetalle() {
     <ToolShell name="Calculadora de Costos" slug="calculadora-costos" trail="Sesión">
 
       <div className="max-w-[720px] w-full mx-auto px-6 md:px-10 py-10">
-        {row === undefined && <p className="text-[13px] text-[#bebebe]">Cargando…</p>}
-        {row === null && <p className="text-[13px] text-[#bebebe]">No se encontró la sesión.</p>}
+        {row === undefined && <p className="text-[13px] text-[#a98c88]">Cargando…</p>}
+        {row === null && <p className="text-[13px] text-[#a98c88]">No se encontró la sesión.</p>}
         {row && result && (
           <>
             <div className="flex items-start justify-between gap-4 mb-6">
               <div>
-                <h1 className="text-[22px] font-bold text-[#ededed]">
+                <h1 className="text-[22px] font-bold text-[#efe7e0]">
                   {row.inputs.funnel === "leads" ? "Cálculo por leads" : "Cálculo por mensajes"}
                 </h1>
-                <p className="text-[12px] text-[#bebebe] mt-1">
+                <p className="text-[12px] text-[#a98c88] mt-1">
                   {new Date(row.created_at).toLocaleDateString("es-PE", { day: "numeric", month: "long", year: "numeric" })} · solo lectura
                 </p>
               </div>

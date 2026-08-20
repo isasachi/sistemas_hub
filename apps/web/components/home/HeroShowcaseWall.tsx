@@ -12,6 +12,7 @@ const RATIO_W: Record<string, number> = {
   "2/3": Math.round(TILE_H * (2 / 3)),
   "1/1": TILE_H,
   "4/3": Math.round(TILE_H * (4 / 3)),
+  "3/2": Math.round(TILE_H * 1.5),
   "16/10": Math.round(TILE_H * 1.6),
 };
 
@@ -27,11 +28,11 @@ export function HeroShowcaseWall() {
       {/* Fades laterales para que los tiles "entren y salgan" */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-y-0 left-0 z-10 w-28 bg-gradient-to-r from-[#0b0b0c] to-transparent"
+        className="pointer-events-none absolute inset-y-0 left-0 z-10 w-28 bg-gradient-to-r from-[#14050a] to-transparent"
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-y-0 right-0 z-10 w-28 bg-gradient-to-l from-[#0b0b0c] to-transparent"
+        className="pointer-events-none absolute inset-y-0 right-0 z-10 w-28 bg-gradient-to-l from-[#14050a] to-transparent"
       />
 
       <div className="jr-marquee flex w-max items-center">

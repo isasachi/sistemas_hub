@@ -64,8 +64,8 @@ export default function Section2Photos() {
     <div className="flex flex-col gap-4">
       {/* El encabezado del paso ya dice para qué son las fotos; acá va solo el
           requisito técnico, que es lo que el usuario no puede adivinar. */}
-      <p className="text-[13px] text-[#bebebe]">
-        De 1 a 3 fotos. Mejor una <strong className="font-semibold text-[#cfcfcf]">grande, nítida y de cerca</strong>{' '}
+      <p className="text-[13px] text-[#a98c88]">
+        De 1 a 3 fotos. Mejor una <strong className="font-semibold text-[#c9b4ae]">grande, nítida y de cerca</strong>{' '}
         (lado corto ≥ 800px): de eso depende que el producto salga consistente entre secciones.
       </p>
       <div className="flex gap-3">

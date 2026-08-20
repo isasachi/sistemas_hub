@@ -65,7 +65,7 @@ export default function QueVendesPage() {
           value={description}
           onChange={(e) => update({ productDescription: e.target.value })}
           onBlur={() => { setTouched(true); update({ productDescription: description.trim() }) }}
-          className="h-12 rounded-xl bg-white/[0.04] border-white/[0.08] text-[14px] text-[#ededed]"
+          className="h-12 rounded-xl bg-white/[0.04] border-white/[0.08] text-[14px] text-[#efe7e0]"
         />
         {error && <p className="text-[12px] text-red-400">{error}</p>}
       </div>

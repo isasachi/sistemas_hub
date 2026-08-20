@@ -9,7 +9,7 @@ export default function DashboardPage() {
       {/* Un solo titular. Antes había eyebrow + h1 ("Tus proyectos" arriba de
           "Historial de proyectos") diciendo dos veces lo mismo. */}
       <header className="mb-8">
-        <h1 className="text-[clamp(24px,3.2vw,34px)] font-semibold uppercase leading-[1.1] tracking-[0.16em] text-[#d6a860]">
+        <h1 className="text-[clamp(24px,3.2vw,34px)] font-semibold uppercase leading-[1.1] tracking-[0.16em] text-[#e8dcd6]">
           Tus proyectos
         </h1>
       </header>

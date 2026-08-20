@@ -49,7 +49,7 @@ export default function Section4Template() {
     : []
 
   const card = (title: string, children: React.ReactNode) => (
-    <div className="rounded-2xl border border-white/[0.06] bg-[#121214] px-4 py-4">
+    <div className="rounded-2xl border border-white/[0.06] bg-[#2a0f1a] px-4 py-4">
       <div className="mb-2.5 text-[11px] font-semibold uppercase tracking-wide text-[#c9a227]">{title}</div>
       {children}
     </div>
@@ -59,16 +59,16 @@ export default function Section4Template() {
     return (
       <div className="flex flex-col gap-5">
         {forensicAnalysis && card('Guión del original (literal)', (
-          <p className="whitespace-pre-wrap text-[12.5px] leading-relaxed text-[#cfcfcf]">
+          <p className="whitespace-pre-wrap text-[12.5px] leading-relaxed text-[#c9b4ae]">
             {forensicAnalysis.guionOriginal}
           </p>
         ))}
         {forensicAnalysis && clips.length > forensicAnalysis.cortes.length && (
-          <div className="rounded-2xl border border-white/[0.06] bg-[#121214] px-4 py-3 text-[12px] leading-relaxed text-[#8b8b8b]">
-            Este video es <strong className="text-[#cfcfcf]">una toma continua de {seg(forensicAnalysis.duracionTotalSeg)}</strong>,
+          <div className="rounded-2xl border border-white/[0.06] bg-[#2a0f1a] px-4 py-3 text-[12px] leading-relaxed text-[#8b8b8b]">
+            Este video es <strong className="text-[#c9b4ae]">una toma continua de {seg(forensicAnalysis.duracionTotalSeg)}</strong>,
             sin cortes de edición — el análisis está bien. Pero el generador no produce más
             de 15 s por clip, así que al renderizar se dividirá en{' '}
-            <strong className="text-[#cfcfcf]">{clips.length} clips</strong> ({clips.map((l) => seg(l.duracionSeg)).join(' · ')}),
+            <strong className="text-[#c9b4ae]">{clips.length} clips</strong> ({clips.map((l) => seg(l.duracionSeg)).join(' · ')}),
             cortando en pausas del guión. No se pierde una sola palabra; los descargas por
             separado y los unes en tu editor.
           </div>
@@ -79,7 +79,7 @@ export default function Section4Template() {
               <li key={c.n} className="flex gap-3">
                 <span className="mt-0.5 shrink-0 font-mono text-[11px] text-[#8b8b8b]">{c.tiempo}</span>
                 <span className="flex flex-col gap-0.5">
-                  <span className="text-[12.5px] leading-relaxed text-[#ededed]">{c.accion}</span>
+                  <span className="text-[12.5px] leading-relaxed text-[#efe7e0]">{c.accion}</span>
                   <span className="text-[11.5px] leading-relaxed text-[#8b8b8b]">{c.camara}</span>
                 </span>
               </li>
@@ -106,7 +106,7 @@ export default function Section4Template() {
         </div>
       )}
       {card('Guión convertido en plantilla', (
-        <p className="whitespace-pre-wrap text-[12.5px] leading-relaxed text-[#cfcfcf]">
+        <p className="whitespace-pre-wrap text-[12.5px] leading-relaxed text-[#c9b4ae]">
           {template.guionFillInBlank}
         </p>
       ))}
@@ -121,7 +121,7 @@ export default function Section4Template() {
                     de 700 caracteres esconde la estructura que después se renderiza por
                     separado. Es presentación — el dato sigue siendo una locución por toma. */}
                 {segmentar(t.locucion).map((f, j) => (
-                  <span key={j} className="text-[12.5px] leading-relaxed text-[#ededed]">
+                  <span key={j} className="text-[12.5px] leading-relaxed text-[#efe7e0]">
                     {segmentar(t.locucion).length > 1 && (
                       <span className="mr-1.5 font-mono text-[10px] text-[#6b6b6b]">{j + 1}</span>
                     )}

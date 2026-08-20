@@ -1,24 +1,33 @@
 /* ══════════════════════════════════════════════════════════════════
-   JR AI HUB — sistema de diseño (BRAND.md, jrconsulting.com.pe)
+   LEGACY BRAND — sistema de diseño (BRANDBOOK.md)
    ------------------------------------------------------------------
-   Lienzo casi-negro neutro · tinta blanca · acento cálido en escala
-   naranja→dorado: naranja = acción (CTA, links, activo), dorado =
-   prestigio (fuga de luz de las cards, eyebrows, badges premium).
-   La profundidad sale de hairlines translúcidos, no de color.
-   Un solo momento cálido por pantalla: el resto es blanco/gris.
+   Los tres colores del sistema son los tres colores del logotipo:
+   granate #1E0811 (lienzo), carmesí #BD1347 (acción), crema #F6F2EB
+   (tinta y prestigio). No hay un cuarto color, ni oro, ni metal.
 
-   Dos voces tipográficas: Poppins (titulares, UI, números) y Lato
-   (cuerpo). El sistema no tiene serif ni mono — ambas se retiraron
-   (2026-08); `--font-display`/`--font-mono` se conservan como alias
-   para no tocar los archivos que los nombran.
+   UN SOLO ACENTO, DOS EJES POR TRATAMIENTO: carmesí RELLENO = acción
+   (un objeto por pantalla); crema LUZ = prestigio (eyebrows, badges,
+   la fuga de luz de las cards). La profundidad sale de hairlines, no
+   de color.
 
-   Las familias del segundo @import NO son del chrome: las usa el
-   contenido generado (catálogo del generador de landings). El
-   catálogo del editor de branding inyecta su propio <link> — son 34
-   familias y meterlas acá volvería la hoja render-blocking.
+   ⚠️ El carmesí #BD1347 da 3.05:1 sobre el granate — sirve de relleno
+   y de borde, NO de texto. Todo carmesí que sea texto o icono usa
+   --brand-bright #E8467A (5.09:1). Es el error a vigilar acá.
+
+   Dos voces: Bodoni Moda (display — la didona del logotipo, nunca por
+   debajo de 20px) y Archivo (UI, cuerpo y cifras). Syne se retiró: el
+   logotipo lo compone ahora la voz de display.
+
+   ⚠️ LAS FUENTES NO SE PIDEN ACÁ. Están como <link> en app/layout.tsx:
+   Turbopack ELIMINA los `@import url(...)` externos al compilar esta
+   hoja, y el sitio se servía sin un solo @font-face (medido: todo caía
+   a la serif por defecto del navegador). No devuelvas el @import.
+
+   Poppins y Lato siguen cargándose, pero ya no son del chrome: son del
+   catálogo del CONTENIDO que se genera para el cliente
+   (`lib/landing/niches.ts` asigna Poppins ahí). El editor de branding
+   inyecta además su propio <link> con 34 familias.
    ══════════════════════════════════════════════════════════════════ */
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Lato:wght@400;700&family=Syne:wght@700;800&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;1,500&family=Space+Grotesk:wght@500;700&family=Cormorant+Garamond:wght@400;600&family=Libre+Baskerville:wght@400;700&family=Nunito:wght@400;700;800&family=Oswald:wght@500;700&family=Bitter:wght@500;700&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -28,14 +37,14 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  /* Poppins es la voz de UI (botones, labels, chips): `font-sans` en el
-     código significa "texto de interfaz". El cuerpo va en Lato vía body. */
-  --font-sans: 'Poppins', 'Segoe UI', system-ui, sans-serif;
-  --font-display: 'Poppins', 'Segoe UI', system-ui, sans-serif;
-  --font-heading: 'Poppins', 'Segoe UI', system-ui, sans-serif;
-  --font-body: 'Lato', system-ui, Arial, sans-serif;
-  /* Sin voz mono: los números viven en Poppins con tabular-nums (.readout). */
-  --font-mono: 'Poppins', 'Segoe UI', system-ui, sans-serif;
+  /* Archivo es la voz de UI Y de cuerpo: `font-sans` en el código
+     significa "texto de interfaz". Una familia para las dos funciones. */
+  --font-sans: 'Archivo', 'Segoe UI', system-ui, sans-serif;
+  --font-display: 'Bodoni Moda', 'Times New Roman', serif;
+  --font-heading: 'Archivo', 'Segoe UI', system-ui, sans-serif;
+  --font-body: 'Archivo', system-ui, Arial, sans-serif;
+  /* Sin voz mono: los números viven en Archivo con tabular-nums (.readout). */
+  --font-mono: 'Archivo', 'Segoe UI', system-ui, sans-serif;
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -58,57 +67,61 @@
   --radius-xl: calc(var(--radius) * 1.4);
 
   /* Acento de marca expuesto a Tailwind */
-  --color-brand: #ff6a00;
-  --color-brand-bright: #ff9b4a;
-  --color-gold: #d6a860;
-  --color-surface: rgba(255, 255, 255, 0.04);
-  --color-surface-hover: rgba(255, 255, 255, 0.07);
-  --color-border-brand: rgba(255, 155, 74, 0.35);
+  --color-brand: #bd1347;
+  --color-brand-bright: #e8467a;
+  --color-gold: #e8dcd6;
+  --color-surface: rgba(246, 242, 235, 0.04);
+  --color-surface-hover: rgba(246, 242, 235, 0.07);
+  --color-border-brand: rgba(232, 70, 122, 0.35);
 }
 
 :root {
-  /* ── Superficies ─────────────────────────────────────────── */
-  --bg: #000000;
-  --surface: #0a0a0a;
-  --surface-2: #0c0c0d;
-  --surface-3: #121214;
+  /* ── Superficies — la familia granate del logotipo ────────── */
+  --bg: #0d0308;
+  --surface: #14050a;
+  --surface-2: #1e0811;
+  --surface-3: #2a0f1a;
 
-  /* ── Texto ───────────────────────────────────────────────── */
-  --text: #ffffff;
-  --text-head: #ededed;
-  --text-muted: #cfcfcf;
-  --text-subtle: #bebebe;
-  --text-faint: #bdbdbd;
+  /* ── Texto — crema del logo, desaturada hacia abajo ───────── */
+  --text: #f6f2eb;        /* 17.14:1 */
+  --text-head: #efe7e0;   /* 15.5:1  */
+  --text-muted: #c9b4ae;  /*  9.67:1 */
+  --text-subtle: #a98c88; /*  6.19:1 */
+  --text-faint: #967b76;  /*  4.91:1 — el piso legible */
 
-  /* ── Acento cálido: naranja (acción) → dorado (prestigio) ── */
-  --brand: #ff6a00;
-  --brand-bright: #ff9b4a;
-  --brand-mid: #ff8c46;
-  --gold: #d6a860;
+  /* ── Acento único: carmesí. RELLENO = acción, LUZ crema = prestigio.
+       --brand NUNCA como color de texto (3.05:1): usa --brand-bright. ── */
+  --brand: #bd1347;        /* relleno / borde  3.05:1 */
+  --brand-bright: #e8467a; /* texto / icono    5.09:1 */
+  --brand-mid: #d42a60;
+  --gold: #e8dcd6;         /* alias heredado: hoy es la crema de prestigio */
 
-  /* ── Estado (NO son acentos de marca) ────────────────────── */
-  --success: #2ccf6f;
-  --success-mint: #b9ffd0;
-  --success-deep: #163e26;
-  --info: #188bf6;
-  --danger: #e93d3d;
+  /* ── Estado (NO son acentos de marca) ─────────────────────────
+       --danger se movió de #e93d3d a bermellón: el rojo anterior era
+       vecino del carmesí de marca y un error se leía como un botón
+       primario. ── */
+  --success: #3ed88a;
+  --success-mint: #c6ffe0;
+  --success-deep: #0f3a24;
+  --info: #4aa3ff;
+  --danger: #ff5a3c;
   --warning: #f6ad55;
 
   /* ── Hairlines translúcidos y vidrio ─────────────────────── */
-  --line-06: rgba(255, 255, 255, 0.06);
-  --line-08: rgba(255, 255, 255, 0.08);
-  --line-12: rgba(255, 255, 255, 0.12);
-  --line-25: rgba(255, 255, 255, 0.25);
-  --glass-hi: rgba(255, 255, 255, 0.05);
-  --glass-lo: rgba(255, 255, 255, 0.02);
-  --scrim: rgba(0, 0, 0, 0.5);
+  --line-06: rgba(246, 242, 235, 0.07);
+  --line-08: rgba(246, 242, 235, 0.09);
+  --line-12: rgba(246, 242, 235, 0.14);
+  --line-25: rgba(246, 242, 235, 0.28);
+  --glass-hi: rgba(246, 242, 235, 0.05);
+  --glass-lo: rgba(246, 242, 235, 0.02);
+  --scrim: rgba(13, 3, 8, 0.55);
 
   /* ── Elevación ───────────────────────────────────────────── */
-  --sh-card: rgba(0, 0, 0, 0.35) 0 4px 12px 0;
-  --sh-lift: rgba(0, 0, 0, 0.45) 0 8px 30px 0;
-  --sh-glass: rgba(255, 255, 255, 0.06) 0 1px 0 0 inset, rgba(0, 0, 0, 0.45) 0 8px 26px 0;
-  --sh-modal: rgba(255, 255, 255, 0.04) 0 1px 0 0 inset, rgba(0, 0, 0, 0.45) 0 20px 60px 0;
-  --sh-warm: rgba(255, 106, 0, 0.35) 0 8px 30px 0;
+  --sh-card: rgba(8, 2, 5, 0.45) 0 4px 12px 0;
+  --sh-lift: rgba(8, 2, 5, 0.55) 0 8px 30px 0;
+  --sh-glass: rgba(246, 242, 235, 0.06) 0 1px 0 0 inset, rgba(8, 2, 5, 0.5) 0 8px 26px 0;
+  --sh-modal: rgba(246, 242, 235, 0.04) 0 1px 0 0 inset, rgba(8, 2, 5, 0.55) 0 20px 60px 0;
+  --sh-warm: rgba(189, 19, 71, 0.4) 0 8px 30px 0;
 
   /* ── Movimiento ──────────────────────────────────────────── */
   --ease: cubic-bezier(0.29, 0.63, 0.44, 1);
@@ -120,24 +133,24 @@
 
   /* ── Shadcn / Base UI (`--accent` acá es la superficie de hover
        neutra del sistema de componentes, NO el naranja de marca) ── */
-  --background: #0b0b0c;
-  --foreground: #ededed;
-  --card: #0c0c0f;
-  --card-foreground: #ededed;
-  --popover: #121214;
-  --popover-foreground: #ededed;
-  --primary: #ff9b4a;
-  --primary-foreground: #1a0d00;
-  --secondary: #121214;
-  --secondary-foreground: #ededed;
-  --muted: #121214;
-  --muted-foreground: #bebebe;
-  --accent: #121214;
-  --accent-foreground: #ffffff;
-  --destructive: #e93d3d;
-  --border: rgba(255, 255, 255, 0.08);
-  --input: rgba(255, 255, 255, 0.08);
-  --ring: rgba(255, 140, 70, 0.5);
+  --background: #14050a;
+  --foreground: #efe7e0;
+  --card: #1e0811;
+  --card-foreground: #efe7e0;
+  --popover: #2a0f1a;
+  --popover-foreground: #efe7e0;
+  --primary: #bd1347;
+  --primary-foreground: #f6f2eb;
+  --secondary: #2a0f1a;
+  --secondary-foreground: #efe7e0;
+  --muted: #2a0f1a;
+  --muted-foreground: #a98c88;
+  --accent: #2a0f1a;
+  --accent-foreground: #f6f2eb;
+  --destructive: #ff5a3c;
+  --border: rgba(246, 242, 235, 0.09);
+  --input: rgba(246, 242, 235, 0.09);
+  --ring: rgba(232, 70, 122, 0.55);
   --radius: 1rem;
 
   /* ── Alias heredados (los nombran archivos .tsx; no renombrar) ── */
@@ -168,24 +181,24 @@
 /* .dark: los componentes de Shadcn lo exigen. El tema es dark-first,
    así que hereda los mismos valores. */
 .dark {
-  --background: #0b0b0c;
-  --foreground: #ededed;
-  --card: #0c0c0f;
-  --card-foreground: #ededed;
-  --popover: #121214;
-  --popover-foreground: #ededed;
-  --primary: #ff9b4a;
-  --primary-foreground: #1a0d00;
-  --secondary: #121214;
-  --secondary-foreground: #ededed;
-  --muted: #121214;
-  --muted-foreground: #bebebe;
-  --accent: #121214;
-  --accent-foreground: #ffffff;
-  --destructive: #e93d3d;
-  --border: rgba(255, 255, 255, 0.08);
-  --input: rgba(255, 255, 255, 0.08);
-  --ring: rgba(255, 140, 70, 0.5);
+  --background: #14050a;
+  --foreground: #efe7e0;
+  --card: #1e0811;
+  --card-foreground: #efe7e0;
+  --popover: #2a0f1a;
+  --popover-foreground: #efe7e0;
+  --primary: #bd1347;
+  --primary-foreground: #f6f2eb;
+  --secondary: #2a0f1a;
+  --secondary-foreground: #efe7e0;
+  --muted: #2a0f1a;
+  --muted-foreground: #a98c88;
+  --accent: #2a0f1a;
+  --accent-foreground: #f6f2eb;
+  --destructive: #ff5a3c;
+  --border: rgba(246, 242, 235, 0.09);
+  --input: rgba(246, 242, 235, 0.09);
+  --ring: rgba(232, 70, 122, 0.55);
 }
 
 @layer base {
@@ -194,25 +207,28 @@
     box-sizing: border-box;
   }
   body {
-    background: var(--surface-2);
+    background: var(--bg);
     color: var(--text-muted);
-    font-family: 'Lato', system-ui, Arial, sans-serif;
+    font-family: 'Archivo', system-ui, Arial, sans-serif;
     font-size: 16px;
     line-height: 1.6;
     letter-spacing: 0;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
+  /* Los titulares de UI van en Archivo, NO en la didona: a tamaño de
+     interfaz los finos de pelo de Bodoni desaparecen. El display se
+     pide explícitamente con .lp-serif. */
   h1, h2, h3, h4, h5, h6 {
-    font-family: 'Poppins', 'Segoe UI', system-ui, sans-serif;
+    font-family: 'Archivo', 'Segoe UI', system-ui, sans-serif;
     font-weight: 600;
     letter-spacing: -0.01em;
     color: var(--text-head);
   }
-  /* Foco visible siempre — anillo cálido de BRAND §9. */
+  /* Foco visible siempre — anillo carmesí (BRANDBOOK §6). */
   :focus-visible {
     outline: none;
-    box-shadow: 0 0 0 3px rgba(255, 140, 70, 0.22);
+    box-shadow: 0 0 0 3px rgba(232, 70, 122, 0.35);
     border-radius: 6px;
   }
 }
@@ -221,53 +237,77 @@
    TIPOGRAFÍA — tratamientos
    ══════════════════════════════════════════════════════════════════ */
 
-/* El display del sistema. Era serif de alto contraste (Replay Pro Headline
-   → Playfair → Times) y pasó a la sans (2026-08). El nombre se conserva
-   porque lo usan 7 archivos y renombrarlo no cambiaría un pixel. */
+/* El display del sistema: la didona del logotipo. Bloque cerrado —
+   tracking negativo y line-height corto, como el lockup, donde LEGACY y
+   BRAND están justificadas al mismo ancho con las letras casi tocándose.
+   ⚠️ Nunca por debajo de 20px: a tamaño chico los finos de pelo se
+   rompen. El nombre `.lp-serif` se conserva porque lo usan 8 archivos. */
 .lp-serif {
-  font-family: 'Poppins', 'Segoe UI', system-ui, sans-serif;
-  font-weight: 600;
-  letter-spacing: -0.02em;
+  font-family: 'Bodoni Moda', 'Times New Roman', serif;
+  font-weight: 800;
+  letter-spacing: -0.03em;
 }
 
-/* Titular metálico plata: el sheen recorre el texto una vez cada 14s. */
-.lp-metal {
-  background: linear-gradient(90deg, #ffffff 0%, #cfcfcf 50%, #ffffff 100%);
-  background-size: 220% auto;
+/* ── LA FIRMA: el corte a mitad de palabra ────────────────────────
+   El logotipo no es "texto en dos colores": el color cambia en una
+   línea vertical que ignora dónde terminan las palabras (LEG|ACY,
+   BR|AND). Esto es ese filo, aplicado a un titular.
+
+   Usa --brand (#BD1347), el carmesí EXACTO del archivo, no el claro:
+   --brand-bright se lee rosado al lado del logotipo. Se puede porque la
+   firma es display de 30px o más, donde el umbral es 3:1 y #BD1347 da
+   3.05:1 — por eso la regla de tamaño mínimo no es decorativa.
+
+   Es un degradado con parada dura sobre UN solo nodo de texto — no un
+   duplicado en ::after — así el lector de pantalla lee la frase una
+   vez. El corte se mueve con --cut-at (por defecto 58% desde la
+   izquierda); ponlo donde caiga DENTRO de una palabra.
+
+   Una sola vez por pantalla: es la firma, no una decoración. */
+.lp-cut {
+  background-image: linear-gradient(
+    90deg,
+    var(--brand) 0 var(--cut-at, 58%),
+    var(--text) var(--cut-at, 58%) 100%
+  );
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
   color: transparent;
-  animation: lp-sheen 14s linear infinite;
-}
-@keyframes lp-sheen {
-  from { background-position: 200% center; }
-  to { background-position: -20% center; }
 }
 
-/* Palabra de acento dorada dentro del display. */
+/* `.lp-metal` era un sheen metálico plata del ADN anterior. La marca no
+   tiene metal: queda como crema plana para no tocar sus 3 usos. */
+.lp-metal {
+  background: none;
+  -webkit-text-fill-color: var(--text);
+  color: var(--text);
+}
+
+/* Palabra de acento dentro del display — carmesí legible. */
 .lp-gold-word {
-  -webkit-text-fill-color: var(--gold);
-  color: var(--gold);
+  -webkit-text-fill-color: var(--brand-bright);
+  color: var(--brand-bright);
 }
 
 /* ── EL LOGOTIPO ──────────────────────────────────────────────────
-   Syne es la ÚNICA excepción tipográfica del sistema y existe solo para
-   el logotipo: geométrica ancha, de alto contraste y con quiebres que
-   Poppins no tiene, así el nombre se lee como una marca y no como un
-   título más. No usarla en ningún otro texto — si aparece dos veces en
-   una pantalla, deja de marcar nada. */
+   Ya no hay una familia aparte para la marca: el logotipo ES la didona
+   del display, en su peso más pesado y apretada como en el archivo
+   original. Syne se retiró con el rebranding.
+   El componente <Wordmark> le pone encima el corte de color. */
 .jr-wordmark {
-  font-family: 'Syne', 'Poppins', sans-serif;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  line-height: 1;
+  font-family: 'Bodoni Moda', 'Times New Roman', serif;
+  font-weight: 900;
+  letter-spacing: -0.01em;
+  line-height: 0.94;
   white-space: nowrap;
 }
 
 /* Eyebrow dorado (sección) y label neutro (metadata). */
+/* Eyebrow: eje de PRESTIGIO, o sea crema — nunca carmesí, que compite
+   con el CTA y deja la pantalla sin un solo foco de acción. */
 .lp-eyebrow {
-  font-family: 'Poppins', sans-serif;
+  font-family: 'Archivo', sans-serif;
   font-weight: 600;
   font-size: 11px;
   letter-spacing: 0.22em;
@@ -276,7 +316,7 @@
 }
 .lp-label,
 .spec-label {
-  font-family: 'Poppins', sans-serif;
+  font-family: 'Archivo', sans-serif;
   font-weight: 600;
   font-size: 11px;
   letter-spacing: 0.14em;
@@ -284,9 +324,9 @@
   color: var(--text-faint);
 }
 
-/* Todo número/dato: Poppins con cifras de ancho fijo (no salta al cambiar). */
+/* Todo número/dato: Archivo con cifras de ancho fijo (no salta al cambiar). */
 .readout {
-  font-family: 'Poppins', sans-serif;
+  font-family: 'Archivo', sans-serif;
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum";
   letter-spacing: -0.01em;
@@ -311,20 +351,21 @@
    BOTONES
    ══════════════════════════════════════════════════════════════════ */
 
-/* El objeto cálido del sistema: el único naranja pleno por pantalla. */
+/* El objeto de acción: el único carmesí pleno por pantalla. Plano, no
+   degradado — el logotipo no tiene ninguno. Crema sobre carmesí = 5.62:1. */
 .lp-cta,
 .jr-cta {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  background: linear-gradient(90deg, var(--brand-bright), var(--brand));
-  color: #ffffff;
-  font-family: 'Poppins', sans-serif;
+  background: var(--brand);
+  color: var(--text);
+  font-family: 'Archivo', sans-serif;
   font-weight: 600;
   border: 0;
   border-radius: var(--r-sm, 8px);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06) inset, var(--sh-card);
+  box-shadow: 0 0 0 1px rgba(246, 242, 235, 0.10) inset, var(--sh-card);
   transition: transform var(--t-fast) var(--ease),
     box-shadow var(--t-fast) var(--ease), filter var(--t-fast) var(--ease);
 }
@@ -332,7 +373,7 @@
 .jr-cta:hover:not(:disabled) {
   transform: translateY(-1px);
   filter: brightness(1.05);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08) inset, var(--sh-warm);
+  box-shadow: 0 0 0 1px rgba(246, 242, 235, 0.14) inset, var(--sh-warm);
 }
 .lp-cta:active:not(:disabled),
 .jr-cta:active:not(:disabled) {
@@ -343,18 +384,19 @@
    es — un botón que todavía no se puede tocar. */
 .lp-cta:disabled,
 .jr-cta:disabled {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(246, 242, 235, 0.06);
   color: var(--text-subtle);
   box-shadow: none;
   opacity: 0.65;
   pointer-events: none;
 }
 
-/* Botón dorado — prestigio (descarga, exportar, publicar). */
+/* Botón crema — prestigio (descarga, exportar, publicar). Es el único
+   relleno crema del sistema: granate sobre crema = 17.14:1. */
 .jr-btn-gold {
   background: var(--gold);
-  color: #1a1206;
-  font-family: 'Poppins', sans-serif;
+  color: #1e0811;
+  font-family: 'Archivo', sans-serif;
   font-weight: 600;
   border: 0;
   box-shadow: var(--sh-card);
@@ -376,15 +418,15 @@
   background: var(--glass-hi);
   border: 1px solid var(--line-08);
   color: var(--text-head);
-  font-family: 'Poppins', sans-serif;
+  font-family: 'Archivo', sans-serif;
   font-weight: 500;
   transition: background var(--t-fast) var(--ease),
     border-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
 }
 .lp-btn:hover:not(:disabled),
 .jr-btn-secondary:hover:not(:disabled) {
-  background: rgba(255, 155, 74, 0.08);
-  border-color: rgba(255, 155, 74, 0.45);
+  background: rgba(232, 70, 122, 0.10);
+  border-color: rgba(232, 70, 122, 0.45);
   color: var(--text);
 }
 .lp-btn:disabled,
@@ -399,7 +441,7 @@
   background: transparent;
   color: var(--text-subtle);
   border: 1px solid var(--line-08);
-  font-family: 'Poppins', sans-serif;
+  font-family: 'Archivo', sans-serif;
   font-weight: 500;
   transition: background var(--t-fast) var(--ease),
     border-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
@@ -416,9 +458,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: #ffffff;
-  color: #0a0a0a;
-  font-family: 'Poppins', sans-serif;
+  background: var(--text);
+  color: #1e0811;
+  font-family: 'Archivo', sans-serif;
   font-weight: 600;
   border-radius: 100px;
   box-shadow: 0 2px 14px rgba(0, 0, 0, 0.35);
@@ -445,19 +487,20 @@
 }
 .lp-card:hover,
 .jr-card:hover {
-  border-color: rgba(255, 155, 74, 0.35);
+  border-color: rgba(232, 70, 122, 0.4);
 }
 
-/* LA FIRMA — fuga de luz dorada: una barra de 1px que se apaga al cruzar
-   el borde superior, más un halo difuso desde la esquina. Es lo que hace
-   que una card casi-negra se lea encendida en vez de apagada. */
+/* Fuga de luz CREMA — el eje de prestigio: una barra de 1px que se apaga
+   al cruzar el borde superior, más un halo difuso desde la esquina. Es lo
+   que hace que una card granate se lea encendida en vez de apagada.
+   (Era dorada; el oro no está en la marca.) */
 .lp-leak::before {
   content: "";
   position: absolute;
   inset: 0 0 auto 0;
   height: 1px;
   border-radius: inherit;
-  background: linear-gradient(90deg, rgba(214, 168, 96, 0.7), rgba(214, 168, 96, 0) 55%);
+  background: linear-gradient(90deg, rgba(246, 242, 235, 0.65), rgba(246, 242, 235, 0) 55%);
 }
 .lp-leak::after {
   content: "";
@@ -465,18 +508,18 @@
   inset: 0;
   border-radius: inherit;
   pointer-events: none;
-  background: radial-gradient(120% 90% at 8% 0%, rgba(214, 168, 96, 0.14), rgba(0, 0, 0, 0) 45%);
+  background: radial-gradient(120% 90% at 8% 0%, rgba(246, 242, 235, 0.10), rgba(13, 3, 8, 0) 45%);
 }
 
 /* Panel grande de cierre: vignette + glow naranja envolvente. */
 .lp-hero-card {
   position: relative;
   overflow: hidden;
-  background: radial-gradient(120% 120% at 50% 120%, rgba(255, 106, 0, 0.10), rgba(0, 0, 0, 0) 55%),
-    linear-gradient(0deg, #0c0c0f, #121215);
+  background: radial-gradient(120% 120% at 50% 120%, rgba(189, 19, 71, 0.22), rgba(13, 3, 8, 0) 55%),
+    linear-gradient(0deg, #1e0811, #2a0f1a);
   border: 1px solid var(--line-08);
   border-radius: 28px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 20px 60px rgba(0, 0, 0, 0.45);
+  box-shadow: inset 0 1px 0 rgba(246, 242, 235, 0.05), 0 20px 60px rgba(8, 2, 5, 0.55);
 }
 
 /* Panel anidado (card dentro de card / marco de preview). */
@@ -495,7 +538,7 @@
   background: var(--glass-lo);
   border: 1px solid var(--line-08);
   color: var(--brand-bright);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 1px 0 rgba(246, 242, 235, 0.05);
 }
 
 /* Chip neutro de vidrio. */
@@ -507,21 +550,21 @@
   border: 1px solid var(--line-06);
   border-radius: 100px;
   color: var(--text-muted);
-  font-family: 'Poppins', sans-serif;
+  font-family: 'Archivo', sans-serif;
   font-size: 12px;
   padding: 5px 12px;
 }
 
-/* Badge dorado — prestigio. */
+/* Badge crema — prestigio. */
 .jr-badge-gold {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   color: var(--gold);
-  background: rgba(214, 168, 96, 0.12);
-  border: 1px solid rgba(214, 168, 96, 0.4);
+  background: rgba(246, 242, 235, 0.08);
+  border: 1px solid rgba(246, 242, 235, 0.32);
   border-radius: 100px;
-  font-family: 'Poppins', sans-serif;
+  font-family: 'Archivo', sans-serif;
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -535,7 +578,7 @@
   gap: 4px;
   background: var(--success-deep);
   color: var(--success-mint);
-  font-family: 'Poppins', sans-serif;
+  font-family: 'Archivo', sans-serif;
   font-weight: 600;
   border-radius: 50px;
 }
@@ -546,7 +589,7 @@
   height: 6px;
   border-radius: 50px;
   background: var(--success);
-  box-shadow: 0 0 0 3px rgba(44, 207, 111, 0.15);
+  box-shadow: 0 0 0 3px rgba(62, 216, 138, 0.18);
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -556,7 +599,7 @@
   background: var(--surface);
   border: 1px solid var(--line-08);
   color: var(--text-head);
-  font-family: 'Lato', system-ui, sans-serif;
+  font-family: 'Archivo', system-ui, sans-serif;
   transition: border-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
 }
 .jr-field::placeholder { color: var(--text-subtle); opacity: 0.7; }
@@ -565,7 +608,7 @@
 .jr-field:focus-within {
   outline: none;
   border-color: var(--brand-bright);
-  box-shadow: 0 0 0 3px rgba(255, 140, 70, 0.22);
+  box-shadow: 0 0 0 3px rgba(232, 70, 122, 0.32);
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -577,13 +620,13 @@
 .jr-hairline {
   height: 1px;
   border: 0;
-  background: linear-gradient(to right, rgba(255, 255, 255, 0),
-    rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0));
+  background: linear-gradient(to right, rgba(246, 242, 235, 0),
+    rgba(246, 242, 235, 0.22), rgba(246, 242, 235, 0));
 }
 
 /* Rejilla vertical tenue, enmascarada hacia el centro superior. */
 .lp-grid {
-  background-image: linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-image: linear-gradient(90deg, rgba(246, 242, 235, 0.035) 1px, transparent 1px);
   background-size: 92px 100%;
   -webkit-mask-image: radial-gradient(120% 80% at 50% 0%, #000 30%, transparent 75%);
   mask-image: radial-gradient(120% 80% at 50% 0%, #000 30%, transparent 75%);
@@ -592,7 +635,7 @@
 /* Lavado cálido detrás de un hero (la luz ambiental de la marca). */
 .jr-grid,
 .jr-glow {
-  background: radial-gradient(60% 80% at 30% 30%, rgba(255, 140, 70, 0.12), rgba(255, 140, 70, 0));
+  background: radial-gradient(60% 80% at 30% 30%, rgba(189, 19, 71, 0.20), rgba(189, 19, 71, 0));
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -620,7 +663,7 @@
 /* Skeleton de imagen. */
 .jr-shimmer {
   background:
-    linear-gradient(100deg, rgba(255, 255, 255, 0.02) 30%, rgba(255, 255, 255, 0.07) 50%, rgba(255, 255, 255, 0.02) 70%),
+    linear-gradient(100deg, rgba(246, 242, 235, 0.02) 30%, rgba(246, 242, 235, 0.07) 50%, rgba(246, 242, 235, 0.02) 70%),
     var(--surface-3);
   background-size: 220% 100%;
   animation: jr-shimmer-move 2.2s ease-in-out infinite;
@@ -643,8 +686,7 @@
   .jr-marquee,
   .jr-shimmer,
   .jr-float,
-  .jr-rise,
-  .lp-metal {
+  .jr-rise {
     animation: none;
   }
   .lp-cta:hover, .jr-cta:hover, .lp-card:hover, .jr-card:hover,
@@ -658,5 +700,5 @@
    No define nada propio a propósito — si vuelve a hacerlo, el landing y
    el dashboard se separan otra vez. */
 .lp-root {
-  background: var(--surface-2);
+  background: var(--bg);
 }

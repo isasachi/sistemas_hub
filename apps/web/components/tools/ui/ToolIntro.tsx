@@ -89,16 +89,16 @@ export default function ToolIntro({
     <ToolShell name={name}>
       <div className="mx-auto flex w-full max-w-[860px] flex-1 flex-col gap-8 px-5 pb-16 pt-12 md:px-8">
         <div className="jr-rise flex max-w-[640px] flex-col gap-4">
-          <h1 className="lp-serif text-[clamp(28px,3.8vw,38px)] leading-[1.15] text-[#ffffff]">
+          <h1 className="lp-serif text-[clamp(28px,3.8vw,38px)] leading-[1.15] text-[#f6f2eb]">
             {title}
           </h1>
-          <p className="font-[Lato] text-[15px] leading-[1.65] text-[#cfcfcf]">{description}</p>
+          <p className="font-[Archivo] text-[15px] leading-[1.65] text-[#c9b4ae]">{description}</p>
         </div>
 
         {/* 1 — lo terminado. */}
         {avisos.last && (
           <div data-intro="last" className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.02] p-5">
-            <p className="min-w-[220px] flex-1 text-[13px] text-[#cfcfcf]">{avisos.last.detail}</p>
+            <p className="min-w-[220px] flex-1 text-[13px] text-[#c9b4ae]">{avisos.last.detail}</p>
             <button type="button" onClick={avisos.last.onClick}
                     className="jr-btn-ghost h-11 rounded-xl px-5 text-[13px] cursor-pointer">
               <ImageIcon className="h-4 w-4" /> Ver el último
@@ -116,10 +116,10 @@ export default function ToolIntro({
         {/* 3 — lo que quedó a medias. */}
         {avisos.resume && (
           <div data-intro="resume" className="jr-card lp-leak flex flex-col gap-3 rounded-2xl p-5">
-            <p className="relative font-sans text-[14px] font-semibold text-[#ffffff]">
+            <p className="relative font-sans text-[14px] font-semibold text-[#f6f2eb]">
               Tienes algo a medias
             </p>
-            <p className="relative text-[13px] text-[#cfcfcf]">{avisos.resume.detail}</p>
+            <p className="relative text-[13px] text-[#c9b4ae]">{avisos.resume.detail}</p>
             <button type="button" onClick={avisos.resume.onClick}
                     className="jr-btn-secondary relative h-11 w-fit rounded-xl px-5 text-[13px] cursor-pointer">
               <Clock className="h-4 w-4" /> Retomar
