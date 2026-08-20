@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { Wordmark } from "@/components/layout/Wordmark";
 import { usePathname } from "next/navigation";
-import { LogOut, Menu, X, ChevronDown, Settings, ImageIcon } from "lucide-react";
+import { LogOut, Menu, X, ChevronDown, Settings, Coins } from "lucide-react";
 import { creditosBajos } from "@ph/shared";
 import { tools } from "@/lib/tools";
 import { toolIcon } from "@/lib/tool-icons";
@@ -12,7 +12,7 @@ import { signOut } from "@/app/actions/auth";
 
 interface AppShellProps {
   user: { label: string; avatarUrl?: string | null };
-  /** Imágenes que le quedan en el período. null = sin plan (no se pinta). */
+  /** Créditos que le quedan en el período. null = sin plan (no se pinta). */
   credits?: { restantes: number; limite: number } | null;
   children: React.ReactNode;
 }
@@ -40,11 +40,11 @@ export function CreditosPill({ restantes, limite }: { restantes: number; limite:
   return (
     <Link
       href="/cuenta"
-      title={`Te quedan ${restantes} de ${limite} imágenes en este período`}
-      aria-label={`Créditos de imagen: quedan ${restantes} de ${limite}`}
+      title={`Te quedan ${restantes} de ${limite} créditos en este período`}
+      aria-label={`Créditos: quedan ${restantes} de ${limite}`}
       className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-[Lato] text-[12px] font-bold no-underline transition-colors duration-200 ${color}`}
     >
-      <ImageIcon className="h-3.5 w-3.5" aria-hidden />
+      <Coins className="h-3.5 w-3.5" aria-hidden />
       {restantes}
     </Link>
   );
