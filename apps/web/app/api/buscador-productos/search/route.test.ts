@@ -19,12 +19,30 @@ vi.mock('@/lib/product-hunter/entry', () => ({
   toEntry: (r: { page_id: string }) => ({ id: `acne:${r.page_id}`, adCount: 0 }),
 }))
 
+// La ruta autentica por su cuenta para saber el PLAN (qué rangos y cuántos
+// productos sirve). Por defecto se corre como plan 3 — el que no recorta nada —
+// para que los tests de serving midan el serving y no el gate; los del gate
+// cambian el tier a propósito.
+vi.mock('@/lib/supabase/server', () => ({
+  getUser: vi.fn().mockResolvedValue({ id: 'u1', email: 'u@jrhub.pe' }),
+}))
+vi.mock('@/lib/whop', () => ({
+  getAccess: vi.fn().mockResolvedValue({ tier: 3, renewalPeriodEnd: null, grandfathered: false }),
+}))
+
 import { NextRequest } from 'next/server'
 import { POST } from './route'
 import {
   getApprovedByBucket, getApprovedByCategory, getNichesWithInventory,
-  countApproved, type RawBucket,
+  countApproved, PLANS, type RawBucket, type Tier,
 } from '@ph/shared'
+import { getAccess } from '@/lib/whop'
+import { getUser } from '@/lib/supabase/server'
+
+/** Corre el resto del test como si el usuario tuviera este plan. */
+function conPlan(tier: Tier) {
+  vi.mocked(getAccess).mockResolvedValue({ tier, renewalPeriodEnd: null, grandfathered: false })
+}
 
 const req = (body: unknown) =>
   new NextRequest('http://localhost/api/buscador-productos/search', {
@@ -40,7 +58,11 @@ function conStock(stock: Partial<Record<RawBucket, number>>) {
 }
 
 describe('POST /api/buscador-productos/search — un rango a la vez', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getUser).mockResolvedValue({ id: 'u1', email: 'u@jrhub.pe' } as never)
+    conPlan(3)
+  })
 
   it('sin bucket: autoelige el rango MÁS alto que tenga stock y no consulta los de abajo', async () => {
     conStock({ '100+': 3, '50-100': 5 })
@@ -117,7 +139,11 @@ describe('POST /api/buscador-productos/search — un rango a la vez', () => {
 // La UI busca por categoría: la ruta traduce la categoría a la lista de nichos
 // con inventario que le corresponden y sirve un rango sobre todos ellos.
 describe('POST /api/buscador-productos/search — por categoría', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getUser).mockResolvedValue({ id: 'u1', email: 'u@jrhub.pe' } as never)
+    conPlan(3)
+  })
 
   const conStockCat = (stock: Partial<Record<RawBucket, number>>) =>
     vi.mocked(getApprovedByCategory).mockImplementation(async (_n, bucket) =>
@@ -195,5 +221,99 @@ describe('POST /api/buscador-productos/search — por categoría', () => {
   it('sin categoría ni nicho: 400', async () => {
     const res = await POST(req({}))
     expect(res.status).toBe(400)
+  })
+})
+
+describe('POST /api/buscador-productos/search — el plan decide qué se sirve', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getUser).mockResolvedValue({ id: 'u1', email: 'u@jrhub.pe' } as never)
+    vi.mocked(getApprovedByCategory).mockResolvedValue([])
+    vi.mocked(getApprovedByBucket).mockResolvedValue([])
+  })
+
+  // El corazón del gate: el recorte ocurre EN EL SERVIDOR. Un candado pintado en
+  // el cliente sobre 50 productos ya enviados no es un candado.
+  it.each([1, 2, 3] as const)('el plan %i pide exactamente sus productos por rango', async (tier) => {
+    conPlan(tier)
+    await POST(req({ category: 'mascotas' }))
+    expect(vi.mocked(getApprovedByCategory).mock.calls[0][2]).toBe(PLANS[tier].porRango)
+  })
+
+  it('un rango bloqueado NO consulta la base y devuelve el grupo vacío', async () => {
+    conPlan(1)
+    const data = await (await POST(req({ category: 'mascotas', bucket: '100+' }))).json()
+
+    expect(vi.mocked(getApprovedByCategory)).not.toHaveBeenCalled()
+    expect(data.groups[0].bucket).toBe('100+')
+    expect(data.groups[0].products).toEqual([])
+    expect(data.locked).toEqual(['50-100', '100+'])
+  })
+
+  // Sin esto el plan 1 abriría siempre en "100 a más", que es justo el rango que
+  // no compró: la autoelección arranca por el más pautado.
+  it('la autoelección no prueba rangos que el plan no desbloquea', async () => {
+    conPlan(1)
+    await POST(req({ category: 'mascotas' }))
+    const probados = vi.mocked(getApprovedByCategory).mock.calls.map((c) => c[1])
+    expect(probados).toEqual(['0-50'])
+  })
+
+  it('el plan 2 prueba sus dos rangos, del más alto al más bajo', async () => {
+    conPlan(2)
+    await POST(req({ category: 'mascotas' }))
+    expect(vi.mocked(getApprovedByCategory).mock.calls.map((c) => c[1])).toEqual(['50-100', '0-50'])
+  })
+
+  // Sin sesión cae al plan más bajo, nunca al más alto.
+  it('sin sesión se sirve como plan 1', async () => {
+    vi.mocked(getUser).mockResolvedValue(null as never)
+    const data = await (await POST(req({ category: 'mascotas' }))).json()
+    expect(data.tier).toBe(1)
+    expect(vi.mocked(getApprovedByCategory).mock.calls[0][2]).toBe(PLANS[1].porRango)
+  })
+
+  it('con sesión pero sin suscripción también se sirve como plan 1', async () => {
+    vi.mocked(getAccess).mockResolvedValue(null)
+    const data = await (await POST(req({ category: 'mascotas' }))).json()
+    expect(data.tier).toBe(1)
+  })
+})
+
+describe('POST /api/buscador-productos/search — filtros globales', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getUser).mockResolvedValue({ id: 'u1', email: 'u@jrhub.pe' } as never)
+    conPlan(3)
+    vi.mocked(getApprovedByCategory).mockResolvedValue([])
+    vi.mocked(getApprovedByBucket).mockResolvedValue([])
+  })
+
+  it('pasa país y antigüedad a la consulta, en categoría y en nicho', async () => {
+    await POST(req({ category: 'mascotas', country: 'PE', minDias: 30 }))
+    expect(vi.mocked(getApprovedByCategory).mock.calls[0][3])
+      .toEqual({ country: 'PE', minDias: 30 })
+
+    await POST(req({ niche: 'acne', country: 'MX', minDias: 90 }))
+    expect(vi.mocked(getApprovedByBucket).mock.calls[0][3])
+      .toEqual({ country: 'MX', minDias: 90 })
+  })
+
+  // Un valor fuera de la lista cerrada se ignora en vez de romper la búsqueda —
+  // y sobre todo, no llega a la query.
+  it('ignora país y antigüedad inválidos', async () => {
+    await POST(req({ category: 'mascotas', country: 'XX', minDias: 7 }))
+    expect(vi.mocked(getApprovedByCategory).mock.calls[0][3])
+      .toEqual({ country: null, minDias: null })
+  })
+
+  // Con un filtro puesto y el nicho con inventario, "0 resultados" es "afloja el
+  // filtro", no "este nicho está vacío": la UI necesita `ready` para dejar los
+  // filtros a la vista.
+  it('nicho con inventario y filtro que no matchea: ready, no pending', async () => {
+    vi.mocked(countApproved).mockResolvedValue(120)
+    const data = await (await POST(req({ niche: 'acne', country: 'PE' }))).json()
+    expect(data.status).toBe('ready')
+    expect(data.total).toBe(0)
   })
 })

@@ -1,22 +1,89 @@
 import { redirect } from "next/navigation";
-import { Check } from "lucide-react";
+import { Check, Lock } from "lucide-react";
+import { PLANS, TIERS, RAW_BUCKET_LABEL, lockedBuckets, type Tier } from "@ph/shared";
 import { getUser } from "@/lib/supabase/server";
 import { hasAccess } from "@/lib/whop";
 
 /**
  * Paywall. Vive FUERA del grupo `(app)` a propósito: su layout redirige a esta
  * página cuando falta la suscripción, así que tenerla adentro sería un loop.
+ *
+ * ⚠️ Lo que promete cada card sale de `PLANS` (@ph/shared), que es la misma
+ * fuente que usa el servidor para servir. Escribir "10 productos" a mano acá es
+ * cómo el paywall termina vendiendo algo que el buscador no entrega.
  */
-const INCLUYE = [
+
+/** Incluido en los tres planes, sin tope por tier. */
+const INCLUYE_TODOS = [
   "Generador de anuncios estáticos",
-  "Generador de video ads UGC",
   "Generador de branding y landings",
-  "Buscador de productos ganadores",
+  "Calculadora de costos",
+  "Generador de video ads UGC (con tu propia API key de KIE)",
 ];
 
 const ERRORES: Record<string, string> = {
   checkout: "No pudimos abrir el checkout. Intenta de nuevo en un momento.",
+  plan: "Ese plan no existe. Elige uno de los tres.",
 };
+
+/** Lo que distingue a este plan de los otros, derivado de `PLANS`. */
+function ventajas(tier: Tier): string[] {
+  const p = PLANS[tier];
+  const rangos = p.buckets.map((b) => RAW_BUCKET_LABEL[b]).join(" · ");
+  return [
+    `Buscador: ${rangos}`,
+    `${p.porRango} productos por rango`,
+    `${p.creditos} imágenes al mes`,
+  ];
+}
+
+function PlanCard({ tier, destacado }: { tier: Tier; destacado: boolean }) {
+  const p = PLANS[tier];
+  const bloqueados = lockedBuckets(tier);
+  return (
+    <div
+      className="jr-card relative flex flex-col rounded-2xl p-6"
+      style={destacado ? { borderColor: "rgba(232,70,122,0.45)" } : undefined}
+    >
+      {destacado && (
+        <span className="absolute -top-2.5 left-6 rounded-full bg-[#bd1347] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.5px] text-[#f6f2eb]">
+          Más completo
+        </span>
+      )}
+      <h2 className="relative text-[18px] text-[#f6f2eb]">{p.nombre}</h2>
+      <p className="relative mb-5 mt-1 font-[Archivo] text-[13px] text-[#c9b4ae]">
+        <span className="text-[28px] font-extrabold text-[#f6f2eb]">${p.precio}</span>
+        <span className="ml-1">/ mes</span>
+      </p>
+
+      <ul className="relative mb-5 flex flex-col gap-2">
+        {ventajas(tier).map((v) => (
+          <li key={v} className="flex items-start gap-2.5 text-[13px] text-[#e8dcd6]">
+            <Check className="mt-0.5 h-4 w-4 shrink-0 text-[#e8467a]" aria-hidden />
+            {v}
+          </li>
+        ))}
+        {/* Lo que este plan NO desbloquea se dice acá, no se esconde: el
+            buscador va a mostrar esos rangos con candado igual. */}
+        {bloqueados.map((b) => (
+          <li key={b} className="flex items-start gap-2.5 text-[13px] text-[#8d7470]">
+            <Lock className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+            {RAW_BUCKET_LABEL[b]}
+          </li>
+        ))}
+      </ul>
+
+      <a
+        href={`/api/whop/checkout?plan=${tier}`}
+        className={`relative mt-auto flex w-full items-center justify-center rounded-xl py-3 text-[14px] no-underline ${
+          destacado ? "jr-cta" : "border border-white/[0.14] text-[#efe7e0] transition-colors hover:bg-white/[0.05]"
+        }`}
+      >
+        Empezar prueba gratis
+      </a>
+    </div>
+  );
+}
 
 export default async function SuscripcionPage({
   searchParams,
@@ -41,7 +108,7 @@ export default async function SuscripcionPage({
   // después muestra un contacto.
   if (pago === "ok") {
     return (
-      <div className="min-h-screen flex items-center justify-center px-6 py-10 bg-[#14050a]">
+      <div className="flex min-h-screen items-center justify-center bg-[#14050a] px-6 py-10">
         <div className="jr-card w-full max-w-[420px] rounded-2xl p-7 text-center">
           <h1 className="relative mb-1 text-[22px] text-[#f6f2eb]">
             Estamos confirmando tu pago
@@ -61,41 +128,48 @@ export default async function SuscripcionPage({
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-6 py-10 bg-[#14050a]">
-      <div className="jr-card w-full max-w-[420px] rounded-2xl p-7">
-        <h1 className="relative mb-1 text-[22px] text-[#f6f2eb]">Activa tu acceso</h1>
-        <p className="relative mb-6 font-[Archivo] text-[13px] leading-[1.5] text-[#c9b4ae]">
-          Prueba 3 días gratis. Luego $29 al mes, cancelas cuando quieras.
-        </p>
-
-        <ul className="relative mb-6 flex flex-col gap-2.5">
-          {INCLUYE.map((item) => (
-            <li key={item} className="flex items-start gap-2.5 text-[13px] text-[#e8dcd6]">
-              <Check className="mt-0.5 w-4 h-4 shrink-0 text-[#e8467a]" aria-hidden />
-              {item}
-            </li>
-          ))}
-        </ul>
+    <div className="min-h-screen bg-[#14050a] px-6 py-12">
+      <div className="mx-auto w-full max-w-[1000px]">
+        <header className="mb-9 text-center">
+          <h1 className="mb-1.5 text-[26px] text-[#f6f2eb]">Activa tu acceso</h1>
+          <p className="font-[Archivo] text-[14px] leading-[1.6] text-[#c9b4ae]">
+            Prueba 3 días gratis en cualquier plan. Cancelas cuando quieras.
+          </p>
+        </header>
 
         {error && ERRORES[error] && (
           <div
             role="alert"
-            className="relative mb-4 rounded-xl border border-[rgba(233,61,61,0.2)] bg-[rgba(233,61,61,0.08)] px-3.5 py-2.5 text-[12px] leading-[1.5] text-[#fca5a5]"
+            className="mx-auto mb-6 max-w-[520px] rounded-xl border border-[rgba(233,61,61,0.2)] bg-[rgba(233,61,61,0.08)] px-3.5 py-2.5 text-[12px] leading-[1.5] text-[#fca5a5]"
           >
             {ERRORES[error]}
           </div>
         )}
 
-        {/* `<a>` y no `<Link>`: Next prefetchea los Link a páginas, y esta URL crea una
-            checkout configuration en Whop. No queremos crear una al pasar el mouse. */}
-        <a
-          href="/api/whop/checkout"
-          className="jr-cta relative flex w-full items-center justify-center rounded-xl py-3 text-[14px] no-underline"
-        >
-          Empezar prueba gratis
-        </a>
+        {/* `<a>` y no `<Link>`: Next prefetchea los Link a páginas, y esas URLs crean
+            una checkout configuration en Whop. No queremos crear una al pasar el
+            mouse — y con tres planes serían tres. */}
+        <div className="grid gap-4 md:grid-cols-3">
+          {TIERS.map((t) => (
+            <PlanCard key={t} tier={t} destacado={t === 3} />
+          ))}
+        </div>
 
-        <p className="relative mt-5 text-center text-[13px] text-[#a98c88]">
+        <section className="mt-9 text-center">
+          <p className="mb-3 text-[12px] uppercase tracking-[1px] text-[#a98c88]">
+            En los tres planes
+          </p>
+          <ul className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
+            {INCLUYE_TODOS.map((item) => (
+              <li key={item} className="flex items-center gap-2 text-[13px] text-[#e8dcd6]">
+                <Check className="h-4 w-4 shrink-0 text-[#e8467a]" aria-hidden />
+                {item}
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <p className="mt-8 text-center text-[13px] text-[#a98c88]">
           Sesión iniciada como {user.email}
         </p>
       </div>

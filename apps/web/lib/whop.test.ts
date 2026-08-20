@@ -14,7 +14,7 @@ function evento(over: Record<string, unknown> = {}) {
       id: 'mem_abc123',
       status: 'trialing',
       renewal_period_end: '2026-08-22T00:00:00Z',
-      metadata: { supabase_user_id: 'uuid-del-usuario' },
+      metadata: { supabase_user_id: 'uuid-del-usuario', tier: '2' },
       ...over,
     },
   }
@@ -61,6 +61,7 @@ describe('entitlementFromEvent', () => {
       whop_membership_id: 'mem_abc123',
       user_id: 'uuid-del-usuario',
       status: 'trialing',
+      tier: 2,
       renewal_period_end: '2026-08-22T00:00:00Z',
     })
   })
@@ -79,6 +80,30 @@ describe('entitlementFromEvent', () => {
   // fila a medias que después nadie puede atribuir.
   it('descarta el evento si falta el supabase_user_id', () => {
     expect(entitlementFromEvent(evento({ metadata: {} }))).toBeNull()
+  })
+
+  // El tier viaja por el MISMO mecanismo que el user_id (metadata heredada de la
+  // checkout configuration), así que no agrega ninguna suposición sobre la forma
+  // del sobre: si uno llega, el otro también.
+  it('toma el tier del metadata', () => {
+    expect(entitlementFromEvent(evento({ metadata: { supabase_user_id: 'u', tier: '3' } }))?.tier)
+      .toBe(3)
+  })
+
+  it('cae al plan_id cuando el metadata no trae tier', () => {
+    vi.stubEnv('WHOP_PLAN_ID_2', 'plan_dos')
+    const e = evento({ metadata: { supabase_user_id: 'u' }, plan_id: 'plan_dos' })
+    expect(entitlementFromEvent(e)?.tier).toBe(2)
+  })
+
+  // ⚠️ Equivocarse hacia ARRIBA regala el plan caro y nadie reclama; hacia abajo es
+  // un ticket visible. El fallback tiene que ser el plan más bajo.
+  it.each([
+    ['metadata basura', { supabase_user_id: 'u', tier: 'oro' }],
+    ['sin tier ni plan conocido', { supabase_user_id: 'u' }],
+    ['tier fuera de rango', { supabase_user_id: 'u', tier: '9' }],
+  ])('%s: cae al plan 1, nunca al más alto', (_caso, metadata) => {
+    expect(entitlementFromEvent(evento({ metadata, plan_id: 'plan_desconocido' }))?.tier).toBe(1)
   })
 
   it('tolera que no venga renewal_period_end', () => {
@@ -126,7 +151,9 @@ describe('POST /api/whop/webhook', () => {
 
     expect(res.status).toBe(200)
     expect(guardadas).toHaveLength(1)
-    expect(guardadas[0]).toMatchObject({ whop_membership_id: 'mem_abc123', status: 'trialing' })
+    expect(guardadas[0]).toMatchObject({
+      whop_membership_id: 'mem_abc123', status: 'trialing', tier: 2,
+    })
   })
 
   // El cuerpo se firma crudo: cambiar un byte después de firmar tiene que fallar.

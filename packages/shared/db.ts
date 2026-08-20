@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { ProductRow, NicheRow, PePoolRow, WatchlistRow, StoredAnalysis, UrlResearchRow, UrlResearchResult, RawProductRow } from './types'
 import { bucketRange, type RawBucket } from './raw-buckets'
+import { type Pais } from './filtros'
 import { prescore } from './prescore'
 import { sanitizeJsonDeep, cleanJsonText } from './json-clean'
 import { isServible } from './physical-filter'
@@ -604,6 +605,8 @@ export async function upsertRawProducts(
     name: string | null
     ad_count: number
     country: string | null
+    /** Unix seconds del anuncio más viejo — la antigüedad que filtra el buscador. */
+    ad_start_date?: number | null
     raw_data: Record<string, unknown>
   }>,
 ): Promise<void> {
@@ -640,6 +643,10 @@ export interface RawVerdictInput {
   // Los escribe el pipeline scan-nicho; el verificador viejo los deja sin tocar.
   senal_nicho?: 'path' | 'titulo' | 'cuerpo' | 'ninguna' | null
   product_path?: string | null
+  // Antigüedad del anuncio más viejo (unix seconds). Sale de la lectura del
+  // anunciante que el verificador ya hace, así que rellenar la columna en las
+  // filas viejas no cuesta ni una navegación ni una llamada al LLM.
+  ad_start_date?: number | null
 }
 
 // Cola de verificación: productos scrapeados a los que todavía no se les
@@ -730,6 +737,10 @@ export async function saveRawVerdict(v: RawVerdictInput): Promise<void> {
       // escrito el otro verificador sobre la misma fila.
       ...(v.senal_nicho !== undefined ? { senal_nicho: v.senal_nicho } : {}),
       ...(v.product_path !== undefined ? { product_path: v.product_path } : {}),
+      // Igual que arriba: solo se escribe si se midió. Un null acá borraría la
+      // fecha que ya hubiera escrito el scraper de descubrimiento.
+      ...(typeof v.ad_start_date === 'number' && v.ad_start_date > 0
+        ? { ad_start_date: v.ad_start_date } : {}),
       verified_at: new Date().toISOString(),
     })
     .eq('niche', v.niche)
@@ -759,13 +770,47 @@ const SOBRE_PEDIDO = 4   // se piden 4× filas porque la lista negra recorta des
 // más golpeado conserva 82 productos.
 const NO_SERVIBLES = '(inactivo,descartado)'
 
-function bucketQuery(niche: string, bucket: RawBucket) {
+/**
+ * Filtros globales del buscador. Se aplican igual en la búsqueda por nicho y en la
+ * de categoría — de ahí "globales".
+ */
+export interface RawFilters {
+  /** Mercado del anuncio. null/undefined = todos. */
+  country?: Pais | null
+  /** Días mínimos corriendo del anuncio más viejo del anunciante. 0 = sin filtro. */
+  minDias?: number | null
+}
+
+/**
+ * Aplica país y antigüedad a una query ya armada.
+ *
+ * ⚠️ EL FILTRO DE ANTIGÜEDAD INCLUYE LAS FILAS SIN DATO, y no es un descuido.
+ * `ad_start_date` nace NULL: la columna se agregó el 2026-08-20 y se rellena a
+ * medida que el worker re-scrapea, así que hoy casi todo el inventario (~70k filas)
+ * la tiene vacía. Excluir los NULL dejaría la vitrina en blanco hasta terminar el
+ * backfill — es decir, rompería la herramienta para "arreglar" un filtro. La UI lo
+ * dice: el filtro promete "al menos X días" sobre lo que sí se pudo medir.
+ */
+function applyFilters<T>(q: T, f: RawFilters | undefined, now = Date.now()): T {
+  if (!f) return q
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let out = q as any
+  if (f.country) out = out.eq('country', f.country)
+  if (f.minDias && f.minDias > 0) {
+    const corte = Math.floor(now / 1000) - f.minDias * 86_400
+    out = out.or(`ad_start_date.lte.${corte},ad_start_date.is.null`)
+  }
+  return out as T
+}
+
+function bucketQuery(niche: string, bucket: RawBucket, f?: RawFilters) {
   const { min, max } = bucketRange(bucket)
   let q = getDb().from('ph_raw_products').select('*')
     .eq('niche', niche)
     .not('status', 'in', NO_SERVIBLES)
     .gte('ad_count', min)
   if (max !== null) q = q.lt('ad_count', max)
+  q = applyFilters(q, f)
   return q.order('ad_count', { ascending: false }).order('page_id')
 }
 
@@ -778,14 +823,15 @@ function bucketQuery(niche: string, bucket: RawBucket) {
 // Medido 2026-08-12 contra el proyecto real: un `.in()` con los 528 nichos
 // (~6.9KB de querystring) responde en ~350ms sin que PostgREST se queje; la
 // categoría más grande arma ~2.4KB, así que hay margen de sobra.
-function categoriaQuery(niches: string[], bucket: RawBucket) {
+function categoriaQuery(niches: string[], bucket: RawBucket, f?: RawFilters) {
   const { min, max } = bucketRange(bucket)
   let q = getDb().from('ph_raw_products')
-    .select('niche,page_id,name,product_name,country,ad_count,raw_data,status,share,senal_nicho')
+    .select('niche,page_id,name,product_name,country,ad_count,ad_start_date,raw_data,status,share,senal_nicho')
     .in('niche', niches)
     .not('status', 'in', NO_SERVIBLES)
     .gte('ad_count', min)
   if (max !== null) q = q.lt('ad_count', max)
+  q = applyFilters(q, f)
   return q.order('ad_count', { ascending: false }).order('page_id')
 }
 
@@ -793,8 +839,9 @@ export async function getApprovedByBucket(
   niche: string,
   bucket: RawBucket,
   limit = 10,
+  filters?: RawFilters,
 ): Promise<RawProductRow[]> {
-  const { data, error } = await bucketQuery(niche, bucket).limit(limit * SOBRE_PEDIDO)
+  const { data, error } = await bucketQuery(niche, bucket, filters).limit(limit * SOBRE_PEDIDO)
   if (error) throw new Error(error.message)
   return fisicos(data as RawProductRow[]).slice(0, limit)
 }
@@ -821,11 +868,12 @@ export async function getApprovedByCategory(
   niches: string[],
   bucket: RawBucket,
   limit = 10,
+  filters?: RawFilters,
 ): Promise<RawProductRow[]> {
   if (!niches.length) return []
   const [verificados, resto] = await Promise.all([
-    categoriaQuery(niches, bucket).eq('status', 'monoproducto').limit(limit * SOBRE_PEDIDO),
-    categoriaQuery(niches, bucket).not('status', 'in', '(inactivo,descartado,monoproducto)')
+    categoriaQuery(niches, bucket, filters).eq('status', 'monoproducto').limit(limit * SOBRE_PEDIDO),
+    categoriaQuery(niches, bucket, filters).not('status', 'in', '(inactivo,descartado,monoproducto)')
       .limit(VENTANA_CAT),
   ])
   if (verificados.error) throw new Error(verificados.error.message)

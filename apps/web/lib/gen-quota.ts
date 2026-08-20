@@ -4,6 +4,8 @@
  * imágenes/texto eran world-callable sin tope → un curl en loop = gasto LLM ilimitado.
  *
  * Dos capas (1 fila en ph_gen_usage por generación, keyed por session_id + kind):
+ *   CRÉDITOS del plan (30/100/180 al mes según el tier) — solo las imágenes de
+ *     anuncios, branding y landing; ver credits.ts. El video NO los gasta.
  *   PER-STEP (imagen + los pocos kinds de texto/video tan caros como una imagen,
  *     ver IMAGE_KINDS) — 1 gen libre + 3 regens por (sesión, step). UX visible
  *     vía regensLeft; el step es `kind`, la instancia de tool es `session_id`.
@@ -24,6 +26,7 @@
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { limaSearchDay } from './product-hunter/quota'
+import { checkCredits, type CreditStatus } from './credits'
 
 let _db: SupabaseClient | null = null
 function getDb(): SupabaseClient {
@@ -168,7 +171,7 @@ export async function checkGlobalBackstop(): Promise<{ blocked: Response | null 
 export async function checkGenQuota(
   sessionId: string | null,
   kind: string,
-): Promise<{ blocked: Response | null; regensLeft: number | null }> {
+): Promise<{ blocked: Response | null; regensLeft: number | null; credits?: CreditStatus | null }> {
   // 1. Backstop global diario (cuenta imagen + texto). `failed` fail-abre ACÁ
   // (return inmediato, nunca llega al paso 2/3) — si se colapsara con "no bloqueado"
   // sin distinguir, un error de DB en este conteo dejaría seguir de largo hacia el
@@ -177,21 +180,30 @@ export async function checkGenQuota(
   const global = await globalBackstop()
   if (global.failed || global.blocked) return { blocked: global.blocked, regensLeft: null }
 
-  // 2. Texto: sin tope per-step.
-  if (!isImageKind(kind) || !sessionId) return { blocked: null, regensLeft: null }
+  // 2. Créditos del plan (solo imágenes de anuncios/branding/landing — el video no
+  // los gasta, ver credits.ts). Va ANTES del gate per-step: el per-step es UX
+  // ("te quedan 3 regeneraciones de este paso") y los créditos son lo que el
+  // usuario compró, así que el mensaje correcto cuando se acabaron es ese.
+  const creditos = await checkCredits(kind)
+  if (creditos.blocked) return { blocked: creditos.blocked, regensLeft: 0, credits: creditos.credits }
+
+  // 3. Texto: sin tope per-step.
+  if (!isImageKind(kind) || !sessionId) {
+    return { blocked: null, regensLeft: null, credits: creditos.credits }
+  }
 
   const db = getDb()
 
-  // 3. Per-step (imagen): count(session_id, kind).
+  // 4. Per-step (imagen): count(session_id, kind).
   const { count: stepCount, error: sErr } = await db
     .from('ph_gen_usage').select('*', { count: 'exact', head: true }).eq('session_id', sessionId).eq('kind', kind)
-  if (sErr) { console.error('[gen-quota] step:', sErr.message); return { blocked: null, regensLeft: null } }
+  if (sErr) { console.error('[gen-quota] step:', sErr.message); return { blocked: null, regensLeft: null, credits: creditos.credits } }
   const used = stepCount ?? 0
   const limit = limitFor(kind)
   if (used >= limit) {
-    return { blocked: Response.json({ error: `Llegaste al límite de ${limit - 1} regeneraciones para este paso.` }, { status: 429 }), regensLeft: 0 }
+    return { blocked: Response.json({ error: `Llegaste al límite de ${limit - 1} regeneraciones para este paso.` }, { status: 429 }), regensLeft: 0, credits: creditos.credits }
   }
-  return { blocked: null, regensLeft: regensLeftFor(used + 1, kind) }
+  return { blocked: null, regensLeft: regensLeftFor(used + 1, kind), credits: creditos.credits }
 }
 
 /** Registra una generación exitosa (1 fila). Llamar SOLO tras generar OK.

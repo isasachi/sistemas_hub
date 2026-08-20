@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { Wordmark } from "@/components/layout/Wordmark";
 import { usePathname } from "next/navigation";
-import { LogOut, Menu, X, ChevronDown } from "lucide-react";
+import { LogOut, Menu, X, ChevronDown, Settings } from "lucide-react";
 import { tools } from "@/lib/tools";
 import { toolIcon } from "@/lib/tool-icons";
 import { signOut } from "@/app/actions/auth";
@@ -73,6 +73,16 @@ function AccountMenu({ label }: { label: string }) {
             </p>
             <p className="mt-0.5 truncate text-[13px] text-[#efe7e0]">{label}</p>
           </div>
+          {/* Plan, créditos y la API key de KIE. Va en el menú de cuenta y no en
+              la barra de tools: es configuración, no una herramienta. */}
+          <Link
+            href="/ajustes"
+            onClick={() => setMenu(false)}
+            className="flex w-full items-center gap-2.5 px-4 py-3 text-[13px] font-medium text-[#a98c88] no-underline transition-colors duration-200 hover:bg-white/[0.05] hover:text-[#f6f2eb]"
+          >
+            <Settings className="h-[18px] w-[18px]" />
+            Ajustes
+          </Link>
           <form action={signOut}>
             <button
               type="submit"

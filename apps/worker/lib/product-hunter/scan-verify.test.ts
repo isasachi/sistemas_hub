@@ -6,7 +6,7 @@ const medicion = (extra: Partial<Medicion> = {}): Medicion => ({
   // mercados. Se separan desde que medir en global inflaba el rango.
   adCount: 44, adCountGlobal: 44,
   share: 0.96, dominante: 'temu.com/organizador', distintos: 2,
-  muestra: 25, senal: 'ninguna',
+  muestra: 25, senal: 'ninguna', masViejo: null,
   textos: ['Organizador de closet plegable — Envío gratis a todo el país'],
   ...extra,
 })

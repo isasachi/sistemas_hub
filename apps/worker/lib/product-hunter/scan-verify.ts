@@ -21,6 +21,8 @@ export interface Medicion {
   muestra: number
   senal: SenalNicho
   textos: string[]
+  /** Unix seconds del anuncio más viejo del anunciante, o null si ninguno lo trae. */
+  masViejo: number | null
 }
 
 export interface Veredicto {
@@ -42,6 +44,8 @@ export interface Lectura {
   distintos: number
   muestra: number
   base: SsrAd[]
+  /** Unix seconds del anuncio más viejo — la antigüedad que filtra el buscador. */
+  masViejo: number | null
 }
 
 /** Espera lo que pida el rate-control compartido antes de tocar la IP. */
@@ -89,7 +93,20 @@ export async function leerAnunciante(
     share: s.share, dominante: s.dominante,
     distintos: s.distintos, muestra: s.muestra,
     base: delDominante.length ? delDominante : global.ads,
+    // Sobre TODOS los anuncios del anunciante, no solo los del dominante: la
+    // pregunta es hace cuánto que este anunciante viene pautando, y esta lectura
+    // ya está hecha — sale gratis. Es el backfill de `ad_start_date` para las
+    // filas viejas, que nacieron sin la columna.
+    masViejo: masViejoDe(global.ads),
   }
+}
+
+/** El unix timestamp más chico (= anuncio más viejo), ignorando los que faltan. */
+export function masViejoDe(ads: SsrAd[]): number | null {
+  return ads
+    .map((a) => a.start_date)
+    .filter((d): d is number => typeof d === 'number' && d > 0)
+    .reduce<number | null>((a, b) => (a === null || b < a ? b : a), null)
 }
 
 /** La señal SÍ depende del nicho, así que se calcula por fila, no por anunciante. */
@@ -99,6 +116,7 @@ export function medicionDe(l: Lectura, terminos: string[]): Medicion {
     share: l.share, dominante: l.dominante,
     distintos: l.distintos, muestra: l.muestra,
     senal: senalNicho(terminos, l.dominante, l.base),
+    masViejo: l.masViejo,
     textos: l.base.map((a) => [a.title, a.body].filter(Boolean).join(' — ')).filter((t) => t.trim()),
   }
 }

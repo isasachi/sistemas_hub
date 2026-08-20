@@ -1,6 +1,8 @@
 /**
- * Suscripción vía Whop — plan único, $29/mes, 3 días de prueba, desbloquea ACCESO
- * al área privada (/dashboard y /tools/*).
+ * Suscripción vía Whop — TRES planes (ver `PLANS` en @ph/shared): $29, $69 y $89 al
+ * mes, con 3 días de prueba. Desbloquean el ACCESO al área privada (/dashboard y
+ * /tools/*) y, según el tier, cuánto sirve el buscador y cuántos créditos de imagen
+ * entran en el período.
  *
  * Whop entra SOLO como capa de pago/entitlement. La identidad sigue siendo Supabase
  * Auth: no se usa "Sign in with Whop" ni la app embebida, porque migrar sesiones no
@@ -15,8 +17,26 @@
  * de buscador-productos).
  */
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { PLANS, toTier, type Tier } from '@ph/shared'
 
 const WHOP_API = process.env.WHOP_API_BASE ?? 'https://api.whop.com/api/v1'
+
+/**
+ * El plan de Whop de cada tier. Son tres links de checkout distintos en el
+ * dashboard, no un plan con precios variables: Whop ata el precio a la
+ * suscripción, así que bajar/subir el precio de un plan no mueve a quien ya
+ * está adentro.
+ */
+export function whopPlanId(tier: Tier): string | undefined {
+  return process.env[`WHOP_PLAN_ID_${tier}`]
+}
+
+/** Tier al que corresponde un plan de Whop, o null si no es ninguno nuestro. */
+function tierOfPlan(planId: string | null): Tier | null {
+  if (!planId) return null
+  for (const t of [1, 2, 3] as const) if (whopPlanId(t) === planId) return t
+  return null
+}
 
 let _db: SupabaseClient | null = null
 function getDb(): SupabaseClient {
@@ -74,16 +94,50 @@ export function isGrandfathered(email: string | null | undefined): boolean {
  * casi no existe: si Supabase no responde, `getUser()` ya habría fallado antes y el
  * usuario ni siquiera llega acá.
  */
-export async function hasAccess(userId: string, email?: string | null): Promise<boolean> {
-  if (isGrandfathered(email)) return true
+export async function getAccess(
+  userId: string,
+  email?: string | null,
+): Promise<Access | null> {
+  // Grandfathered = el tier MÁS ALTO. Son los 3 usuarios previos al paywall: el
+  // cambio no puede quitarles nada de lo que ya usaban.
+  if (isGrandfathered(email)) {
+    return { tier: 3, renewalPeriodEnd: null, grandfathered: true }
+  }
 
   const { data, error } = await getDb()
-    .from('user_entitlements').select('status').eq('user_id', userId)
+    .from('user_entitlements')
+    .select('status,tier,renewal_period_end')
+    .eq('user_id', userId)
   if (error) {
     console.error('[whop] leyendo entitlement:', error.message)
-    return false
+    return null
   }
-  return (data ?? []).some((row) => grantsAccess(row.status as string))
+
+  // Un usuario puede tener varias filas (canceló una y compró otra, o subió de
+  // plan). Vale la MEJOR de las que dan acceso: quitarle el plan caro porque
+  // arrastra una membership vieja cancelada sería cobrarle de más.
+  const vivas = (data ?? []).filter((r) => grantsAccess(r.status as string))
+  if (!vivas.length) return null
+  const mejor = vivas.reduce((a, b) => (toTier(b.tier) > toTier(a.tier) ? b : a))
+  return {
+    tier: toTier(mejor.tier),
+    renewalPeriodEnd: (mejor.renewal_period_end as string | null) ?? null,
+    grandfathered: false,
+  }
+}
+
+/** Lo que el hub sabe de la suscripción de un usuario. */
+export interface Access {
+  tier: Tier
+  /** Fin del período pagado — ancla del reinicio de créditos. */
+  renewalPeriodEnd: string | null
+  /** Usuario previo al paywall: acceso de por vida, sin fila en la tabla. */
+  grandfathered: boolean
+}
+
+/** ¿Este usuario puede entrar al área privada? */
+export async function hasAccess(userId: string, email?: string | null): Promise<boolean> {
+  return (await getAccess(userId, email)) !== null
 }
 
 /**
@@ -103,6 +157,7 @@ export type Entitlement = {
   whop_membership_id: string
   user_id: string
   status: string
+  tier: Tier
   renewal_period_end: string | null
 }
 
@@ -126,9 +181,10 @@ export function entitlementFromEvent(evt: unknown): Entitlement | null {
   if (e?.type !== 'membership.activated' && e?.type !== 'membership.deactivated') return null
 
   const d = e.data ?? {}
+  const meta = d.metadata as Record<string, unknown> | undefined
   const id = typeof d.id === 'string' ? d.id : null
   const status = typeof d.status === 'string' ? d.status : null
-  const userId = (d.metadata as Record<string, unknown> | undefined)?.supabase_user_id
+  const userId = meta?.supabase_user_id
   // Sin cualquiera de los tres la fila no sirve para nada: sin `id` no hay
   // idempotencia, sin `status` no se puede decidir y sin `user_id` no sabemos de quién
   // es el pago. Se descarta y se loguea en vez de escribir una fila a medias.
@@ -139,20 +195,69 @@ export function entitlementFromEvent(evt: unknown): Entitlement | null {
     whop_membership_id: id,
     user_id: userId,
     status,
+    tier: tierFromEvent(d, meta),
     renewal_period_end: typeof end === 'string' ? end : null,
   }
 }
 
 /**
- * Crea la checkout configuration y devuelve la URL a la que mandar al usuario.
+ * Qué plan compró. Tres fuentes, en orden de cuánto se puede confiar en ellas:
  *
- * El `metadata.supabase_user_id` es lo que ata el pago a la cuenta del hub. Whop lo
- * documenta explícito: "Payments and memberships created from a checkout session
- * inherit its metadata", así que vuelve en el webhook. La alternativa —un link de
+ *   1. `metadata.tier` — lo escribe NUESTRO checkout, y Whop documenta explícito que
+ *      "payments and memberships created from a checkout session inherit its
+ *      metadata". Es exactamente el mismo mecanismo por el que llega el
+ *      `supabase_user_id`: si ese funciona, este también, y no agrega ninguna
+ *      suposición nueva sobre la forma del sobre.
+ *   2. `data.plan_id` mapeado contra `WHOP_PLAN_ID_{1,2,3}` — red por si alguien
+ *      compra desde un link pegado en Whop, fuera de nuestro checkout.
+ *   3. Tier 1.
+ *
+ * ⚠️ El fallback es al plan MÁS BAJO y se loguea. Equivocarse hacia arriba regala el
+ * plan caro; equivocarse hacia abajo es un reclamo visible que se arregla en la
+ * tabla. Entre un error silencioso y uno ruidoso, este tiene que ser ruidoso.
+ */
+function tierFromEvent(
+  d: Record<string, unknown>,
+  meta: Record<string, unknown> | undefined,
+): Tier {
+  const enMeta = meta?.tier
+  if (typeof enMeta === 'string' || typeof enMeta === 'number') {
+    const t = toTier(enMeta)
+    // `toTier` cae a 1 ante basura; solo confiamos si el valor era realmente un tier.
+    if (String(t) === String(enMeta)) return t
+  }
+
+  const plan = typeof d.plan_id === 'string' ? d.plan_id : null
+  const porPlan = tierOfPlan(plan)
+  if (porPlan) return porPlan
+
+  console.error(
+    `[whop] sin tier en el evento (metadata.tier=${String(enMeta)}, plan_id=${plan}); ` +
+    'cae al plan 1 — revisar WHOP_PLAN_ID_1/2/3 y el metadata del checkout',
+  )
+  return 1
+}
+
+/**
+ * Crea la checkout configuration del plan pedido y devuelve la URL de pago.
+ *
+ * `metadata` es lo que ata el pago a la cuenta Y al plan. Whop lo documenta
+ * explícito: "Payments and memberships created from a checkout session inherit its
+ * metadata", así que las dos cosas vuelven en el webhook. La alternativa —un link de
  * plan pelado y mapear por email— se rompe la primera vez que alguien paga con un
  * correo distinto al de su cuenta.
+ *
+ * El `tier` viaja en metadata Y queda implícito en el `plan_id`: son dos caminos
+ * independientes para el mismo dato, y `tierFromEvent` los prueba en ese orden.
  */
-export async function createCheckout(userId: string, redirectUrl: string): Promise<string> {
+export async function createCheckout(
+  userId: string,
+  tier: Tier,
+  redirectUrl: string,
+): Promise<string> {
+  const planId = whopPlanId(tier)
+  if (!planId) throw new Error(`whop checkout: falta WHOP_PLAN_ID_${tier} (${PLANS[tier].nombre})`)
+
   const res = await fetch(`${WHOP_API}/checkout_configurations`, {
     method: 'POST',
     headers: {
@@ -160,15 +265,19 @@ export async function createCheckout(userId: string, redirectUrl: string): Promi
       'content-type': 'application/json',
     },
     body: JSON.stringify({
-      plan_id: process.env.WHOP_PLAN_ID,
+      plan_id: planId,
       redirect_url: redirectUrl,
-      metadata: { supabase_user_id: userId },
+      metadata: { supabase_user_id: userId, tier: String(tier) },
     }),
   })
   if (!res.ok) throw new Error(`whop checkout ${res.status}: ${await res.text()}`)
 
   const { purchase_url: url } = (await res.json()) as { purchase_url?: string }
   if (!url) throw new Error('whop checkout: respuesta sin purchase_url')
-  // La doc describe el campo como "/checkout/ch_xxx/", o sea puede venir relativo.
-  return url.startsWith('http') ? url : `https://whop.com${url}`
+  // La doc describe el campo como "/checkout/ch_xxx/", o sea puede venir relativo. El
+  // host se deriva de WHOP_API_BASE para que apuntar al sandbox no mande el checkout
+  // al dominio de producción.
+  if (url.startsWith('http')) return url
+  const host = WHOP_API.includes('sandbox') ? 'https://sandbox.whop.com' : 'https://whop.com'
+  return `${host}${url}`
 }
