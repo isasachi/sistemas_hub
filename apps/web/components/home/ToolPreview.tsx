@@ -10,6 +10,7 @@ const RATIO_CLASS: Record<string, string> = {
   "9/16": "aspect-[9/16]",
   "1/1": "aspect-square",
   "4/3": "aspect-[4/3]",
+  "3/2": "aspect-[3/2]",
   "2/3": "aspect-[2/3]",
   "16/10": "aspect-[16/10]",
 };
@@ -30,7 +31,10 @@ const SPEC_META: Record<string, [string, string]> = {
 // importante de cada imagen.
 const OBJECT_POS: Record<string, string> = {
   "generador-anuncios": "center 42%",
-  "generador-branding": "center 55%",
+  // El board de branding es 3/2 y el frame de la card es 16/10 (más ancho),
+  // así que lo que se recorta es arriba y abajo, no los lados: centrado. El
+  // "center 55%" anterior compensaba un asset vertical que ya no existe.
+  "generador-branding": "center",
   "generador-video-ads": "center 45%",
 };
 

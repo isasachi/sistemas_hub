@@ -12,6 +12,7 @@ const RATIO_W: Record<string, number> = {
   "2/3": Math.round(TILE_H * (2 / 3)),
   "1/1": TILE_H,
   "4/3": Math.round(TILE_H * (4 / 3)),
+  "3/2": Math.round(TILE_H * 1.5),
   "16/10": Math.round(TILE_H * 1.6),
 };
 
