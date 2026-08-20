@@ -206,7 +206,7 @@ export default function BuscadorProductosPage() {
     <ToolShell name="Buscador de Productos" slug="buscador-productos">
       <main className="flex-1 max-w-[1000px] w-full mx-auto px-8 py-10">
         <div className="mb-6">
-          <h1 className="text-[26px] font-extrabold text-[#efe7e0] tracking-[-0.5px] mb-1.5">
+          <h1 className="lp-serif text-[26px] leading-[1.15] text-[#f6f2eb] mb-1.5">
             Buscador de Productos
           </h1>
           <p className="text-[14px] text-[#c9b4ae] leading-[1.6]">
