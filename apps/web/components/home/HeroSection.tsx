@@ -62,7 +62,7 @@ export function HeroSection() {
       {/* Pared de outputs auto-scroll (el "trusted by" de la plataforma) */}
       <div className="relative z-[1] -mx-6">
         <p className="lp-label relative mb-5 !text-[10px]">
-          Generado por la plataforma — ejemplos reales, sin humo
+          Generado por la plataforma
         </p>
         <HeroShowcaseWall />
       </div>

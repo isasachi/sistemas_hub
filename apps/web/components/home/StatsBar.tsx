@@ -1,18 +1,20 @@
 import { PLATFORM_STATS } from "@/lib/home/stats";
 
-// Statement serif metálico + fila de stats con divisores verticales.
+// Statement en la didona del display + fila de stats con divisores verticales.
 // Statement de producto, no testimonio inventado.
 export function StatsBar() {
   return (
     <section className="px-8 pt-12 pb-20">
-      {/* Antes decía "los ganadores que aún nadie pauta en Perú". El serving
-          actual no valida competencia peruana y el inventario SÍ incluye avisos
-          de Perú (5.682 filas medidas), así que la frase era falsa en pantalla. */}
+      {/* ⚠️ Este statement NO debe prometer nada sobre la competencia en Perú.
+          Una versión anterior decía "los ganadores que aún nadie pauta en
+          Perú" y era falsa en pantalla: el serving no valida competencia
+          peruana y el inventario SÍ incluye avisos de Perú (5.682 filas
+          medidas). La frase de ahora habla de la plataforma, no del
+          inventario, así que no puede volverse falsa por un cambio de datos. */}
       <p className="lp-serif mx-auto max-w-[820px] text-center text-[clamp(24px,3.2vw,34px)] font-normal leading-[1.4] text-[#a98c88]">
-        De <span className="text-[#efe7e0]">miles de anuncios activos en LATAM</span>{" "}
-        sale lo que <span className="text-[#efe7e0]">de verdad se está vendiendo</span>{" "}
-        — y los creativos para venderlo,{" "}
-        <span className="lp-gold-word">en minutos</span>.
+        Todo lo que necesitas para{" "}
+        <span className="text-[#efe7e0]">lanzar, vender y escalar marcas rentables</span>,{" "}
+        <span className="lp-gold-word">en una sola plataforma</span>
       </p>
 
       <div className="mx-auto mt-14 flex max-w-[880px] flex-col items-stretch justify-center gap-8 sm:flex-row sm:gap-0 sm:divide-x sm:divide-[rgba(255,255,255,0.08)]">
