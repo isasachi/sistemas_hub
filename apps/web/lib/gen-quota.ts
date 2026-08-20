@@ -26,7 +26,7 @@
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { limaSearchDay } from './product-hunter/quota'
-import { checkCredits, type CreditStatus } from './credits'
+import { checkCredits, type CreditStatus, type CreditOwner } from './credits'
 
 let _db: SupabaseClient | null = null
 function getDb(): SupabaseClient {
@@ -171,6 +171,10 @@ export async function checkGlobalBackstop(): Promise<{ blocked: Response | null 
 export async function checkGenQuota(
   sessionId: string | null,
   kind: string,
+  // Dueño de los créditos ya resuelto. Solo lo pasa el stream de branding, que llama
+  // a esta función con los headers de la respuesta ya enviados y por eso no puede
+  // leer las cookies de la request. Ver `CreditOwner` en credits.ts.
+  owner?: CreditOwner | null,
 ): Promise<{ blocked: Response | null; regensLeft: number | null; credits?: CreditStatus | null }> {
   // 1. Backstop global diario (cuenta imagen + texto). `failed` fail-abre ACÁ
   // (return inmediato, nunca llega al paso 2/3) — si se colapsara con "no bloqueado"
@@ -184,7 +188,7 @@ export async function checkGenQuota(
   // los gasta, ver credits.ts). Va ANTES del gate per-step: el per-step es UX
   // ("te quedan 3 regeneraciones de este paso") y los créditos son lo que el
   // usuario compró, así que el mensaje correcto cuando se acabaron es ese.
-  const creditos = await checkCredits(kind)
+  const creditos = await checkCredits(kind, owner)
   if (creditos.blocked) return { blocked: creditos.blocked, regensLeft: 0, credits: creditos.credits }
 
   // 3. Texto: sin tope per-step.

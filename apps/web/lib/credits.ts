@@ -117,6 +117,11 @@ export async function creditStatus(userId: string, access: Access | null): Promi
   // PostgREST: `landing-section` necesita match por prefijo y el filtro quedaría
   // ilegible por ahorrar unos KB. El volumen está acotado por lo que una persona
   // puede generar en un mes.
+  // ponytail: tope de 5.000 filas. Los kinds de texto comparten la tabla y el
+  // backstop global permite 500/día, así que un usuario muy pesado podría pasarse
+  // y quedarse con créditos sin contar. Falla ABIERTO, que es el lado correcto para
+  // un control de costo. Si alguna vez importa, el upgrade es contar en Postgres con
+  // un `or(...like...)` en vez de filtrar en JS.
   const { data, error } = await getDb()
     .from('ph_gen_usage')
     .select('kind')
@@ -135,19 +140,42 @@ export async function creditStatus(userId: string, access: Access | null): Promi
   return { tier, limite, usados, restantes: Math.max(0, limite - usados), desde }
 }
 
+/**
+ * A quién se le cobran los créditos: su id y su plan. Se resuelve una vez por
+ * request y se puede pasar a `checkGenQuota`.
+ *
+ * ⚠️ EXISTE POR EL STREAM DE BRANDING. `generador-branding/generar` llama a
+ * `checkGenQuota` DENTRO del `ReadableStream`, o sea con los headers de la respuesta
+ * ya enviados (su propio comentario lo dice), y ahí leer las cookies de la request es
+ * frágil. Esa ruta resuelve el owner ANTES de abrir el stream y lo pasa. Nótese que
+ * es el OWNER y no el saldo: el saldo se vuelve a contar en cada llamada, así que las
+ * 4 etapas de una corrida de branding sí se descuentan entre sí.
+ */
+export interface CreditOwner {
+  userId: string
+  access: Access | null
+}
+
+export async function currentCreditOwner(): Promise<CreditOwner | null> {
+  const user = await getUser().catch(() => null)
+  if (!user) return null
+  return { userId: user.id, access: await getAccess(user.id, user.email) }
+}
+
 /** El estado de créditos del usuario de ESTA request (o null si no hay sesión). */
 export async function currentCreditStatus(): Promise<CreditStatus | null> {
-  const user = await getUser()
-  if (!user) return null
-  return creditStatus(user.id, await getAccess(user.id, user.email))
+  const owner = await currentCreditOwner()
+  return owner ? creditStatus(owner.userId, owner.access) : null
 }
 
 /**
  * Gate de créditos, para llamar ANTES de generar. Devuelve un 429 listo o null.
  *
- * Resuelve la suscripción desde la SESIÓN y no desde un `userId` que le pasen: el
- * tier de los grandfathered depende del email, y ese dato solo lo tiene `getUser()`.
- * Como efecto útil, ninguna de las 17 rutas caras necesita cambiar de firma.
+ * Por defecto resuelve la suscripción desde la SESIÓN y no desde un `userId` que le
+ * pasen: el tier de los grandfathered depende del email, y ese dato solo lo tiene
+ * `getUser()`. Como efecto útil, 16 de las 17 rutas caras no cambiaron de firma.
+ * La excepción es el stream de branding, que pasa su `owner` ya resuelto (ver
+ * `CreditOwner`).
  *
  * ⚠️ Sin sesión no hay créditos que contar y se deja pasar. No es un agujero nuevo:
  * `/api/*` está fuera del matcher de `proxy.ts` y esas rutas nunca pidieron sesión
@@ -157,13 +185,14 @@ export async function currentCreditStatus(): Promise<CreditStatus | null> {
  */
 export async function checkCredits(
   kind: string,
+  owner?: CreditOwner | null,
 ): Promise<{ blocked: Response | null; credits: CreditStatus | null }> {
   if (!isCreditKind(kind)) return { blocked: null, credits: null }
 
-  const user = await getUser().catch(() => null)
-  if (!user) return { blocked: null, credits: null }
+  const quien = owner !== undefined ? owner : await currentCreditOwner()
+  if (!quien) return { blocked: null, credits: null }
 
-  const credits = await creditStatus(user.id, await getAccess(user.id, user.email))
+  const credits = await creditStatus(quien.userId, quien.access)
   if (credits.restantes <= 0) {
     return {
       blocked: Response.json(
