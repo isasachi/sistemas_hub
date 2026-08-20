@@ -246,6 +246,15 @@ export default async function SuscripcionPage({
               </Link>
             </>
           )}
+          {/* ⚠️ Y ESTA ES LA SALIDA DE QUIEN NO TIENE PLAN. El enlace a /cuenta vive
+              en la barra del panel, que solo se pinta dentro del grupo `(app)` — o
+              sea justo donde un usuario con el plan vencido no puede entrar. Sin
+              esta línea, "Mi cuenta" existe pero solo se alcanza escribiendo la URL,
+              y de nada sirve haberla sacado de `(app)` para que él pudiera verla. */}
+          {" · "}
+          <Link href="/cuenta" className="font-bold text-[#e8467a] no-underline">
+            Mi cuenta
+          </Link>
         </p>
       </div>
     </div>

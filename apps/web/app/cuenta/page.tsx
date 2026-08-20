@@ -92,12 +92,14 @@ export default async function CuentaPage() {
     <div className="min-h-screen bg-[#14050a] px-6 py-12">
       <div className="mx-auto flex w-full max-w-[760px] flex-col gap-4">
         <header className="mb-2">
+          {/* Sin plan, "volver al panel" rebota al paywall: el layout de `(app)` lo
+              manda ahí. Se le ofrece el destino que de verdad va a ver. */}
           <Link
-            href="/dashboard"
+            href={access ? "/dashboard" : "/suscripcion"}
             className="mb-4 inline-flex items-center gap-1.5 text-[13px] text-[#a98c88] no-underline transition-colors hover:text-[#f6f2eb]"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
-            Volver al panel
+            {access ? "Volver al panel" : "Ver planes"}
           </Link>
           <h1 className="lp-serif mb-1.5 text-[26px] leading-[1.15] text-[#f6f2eb]">Mi cuenta</h1>
           <p className="text-[14px] leading-[1.6] text-[#c9b4ae]">{user.email}</p>

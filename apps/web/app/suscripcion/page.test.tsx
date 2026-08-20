@@ -82,6 +82,19 @@ describe('/suscripcion', () => {
     expect(await render()).toContain('href="/dashboard"')
   })
 
+  // ⚠️ La salida hacia "Mi cuenta" para quien NO tiene plan. El enlace a /cuenta
+  // vive en la barra del panel, que solo se pinta dentro del grupo `(app)` — o sea
+  // justo donde este usuario no puede entrar. Sin esta línea, haber sacado /cuenta
+  // de `(app)` no le sirve de nada: la página existe pero no se alcanza.
+  it('siempre ofrece llegar a Mi cuenta, con plan o sin plan', async () => {
+    expect(await render()).toContain('href="/cuenta"')
+
+    vi.mocked(getAccess).mockResolvedValue({
+      tier: 1, status: 'active', renewalPeriodEnd: null, grandfathered: false,
+    })
+    expect(await render()).toContain('href="/cuenta"')
+  })
+
   // Cambiar de plan crea una suscripción nueva en Whop y la vieja sigue cobrando.
   // Callarlo es cobrarle dos veces a alguien sin avisarle.
   it('avisa que contratar otro plan no cancela el anterior', async () => {

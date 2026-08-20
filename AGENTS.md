@@ -449,6 +449,21 @@ Paywall del hub: **tres planes**, 3 días de prueba, desbloquean el ACCESO al á
 
 **Env:** `WHOP_API_KEY`, `WHOP_PLAN_ID_1`, `WHOP_PLAN_ID_2`, `WHOP_PLAN_ID_3`, `WHOP_WEBHOOK_SECRET`, `WHOP_GRANDFATHERED_EMAILS`, `CREDITS_EPOCH`, y `WHOP_API_BASE` **solo** para apuntar al sandbox (`https://sandbox-api.whop.com/api/v1`) — producción es el default del código, así que en prod la variable **se omite**. De `WHOP_API_BASE` también se deriva el host del checkout cuando `purchase_url` viene relativo. **Schema:** `20260819000002_whop_entitlements.sql` + `20260820000001_plan_tiers.sql`.
 
+### Qué pierde y qué conserva un usuario sin plan
+
+Dos capas, y deciden cosas distintas — confundirlas es de dónde salieron dos bugs de esta rama:
+
+| capa | pregunta | qué corta |
+|---|---|---|
+| `proxy.ts` → `updateSession` | ¿hay sesión? (+ `LOGIN_ALLOWLIST`) | `/dashboard` y `/tools/*` sin sesión → `/login` |
+| `(app)/layout.tsx` | ¿hay suscripción activa? | `/dashboard` y `/tools/*` sin plan → `/suscripcion` |
+
+**El middleware NO consulta la suscripción**, así que a quien se le vence el plan **no se le cierra la sesión**: sigue entrando, pierde las tools y conserva `/cuenta` y `/suscripcion`, que son las dos únicas pantallas donde puede resolver el problema. Las dos viven fuera del grupo `(app)` justamente por eso. Fijado en `lib/supabase/middleware.test.ts`.
+
+⚠️ **Que una pantalla sea alcanzable no significa que se pueda LLEGAR a ella.** El enlace a `/cuenta` vive en `AppShell`, que solo se pinta dentro de `(app)` — o sea justo donde el usuario sin plan no entra. Sacar la página de `(app)` no sirve de nada si el único enlace queda del otro lado del gate: por eso `/suscripcion` linkea a `/cuenta` siempre, y el "volver" de `/cuenta` apunta a `/suscripcion` cuando no hay plan (si apuntara al panel, rebotaría al paywall). Los dos casos tienen test.
+
+⚠️ **`LOGIN_ALLOWLIST` es un gate de acceso al hub ENTERO, anterior y ortogonal al paywall — y hoy está seteada en Vercel producción.** Si sigue puesta al desplegar la suscripción, un cliente que pague **no puede ni iniciar sesión**: el middleware lo trata como anónimo y lo manda a `/login?error=restricted`. Hay que vaciarla en el mismo deploy. Ver [[login-restriction-state]].
+
 ### Mi cuenta (`app/cuenta`)
 
 Perfil (foto, nombre, teléfono), plan y créditos, datos de facturación y la API key de KIE, en una sola pantalla. Reemplaza a `/ajustes`, que fue su primera versión y nunca se desplegó.

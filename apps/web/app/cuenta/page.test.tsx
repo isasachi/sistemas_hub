@@ -101,6 +101,18 @@ describe('/cuenta', () => {
     expect(html).toContain('data-t="kie"')
   })
 
+  // "Volver al panel" rebotaría al paywall: el layout de `(app)` lo manda ahí.
+  it('sin plan, el enlace de salida apunta a los planes y no al panel', async () => {
+    vi.mocked(getAccess).mockResolvedValue(null)
+    const html = await render()
+    expect(html).toContain('Ver planes')
+    expect(html).not.toContain('href="/dashboard"')
+  })
+
+  it('con plan, el enlace de salida sí va al panel', async () => {
+    expect(await render()).toContain('href="/dashboard"')
+  })
+
   it('sin plan activo no inventa un contador de créditos', async () => {
     vi.mocked(getAccess).mockResolvedValue(null)
     const html = await render()
