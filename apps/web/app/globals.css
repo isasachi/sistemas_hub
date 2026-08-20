@@ -267,7 +267,15 @@
   letter-spacing: -0.02em;
 }
 
-/* ── LA FIRMA: el corte a mitad de palabra ────────────────────────
+/* ── EL CORTE A MITAD DE PALABRA — device SIN USO HOY ─────────────
+   ⚠️ Ninguna pantalla lo aplica. Estuvo en el titular del hero y se
+   retiró a pedido del dueño del repo, que prefirió una sola palabra de
+   acento (`.lp-gold-word`). Se conserva porque el device es correcto y
+   está probado, pero NO lo llames "la firma del sitio" mientras no esté
+   puesto en ningún lado. Si vuelve, que no conviva con un
+   `.lp-gold-word` en el mismo titular: son dos acentos peleando por la
+   misma línea.
+
    El logotipo no es "texto en dos colores": el color cambia en una
    línea vertical que ignora dónde terminan las palabras (LEG|ACY,
    BR|AND). Esto es ese filo, aplicado a un titular.
@@ -282,7 +290,7 @@
    vez. El corte se mueve con --cut-at (por defecto 58% desde la
    izquierda); ponlo donde caiga DENTRO de una palabra.
 
-   Una sola vez por pantalla: es la firma, no una decoración. */
+   Una sola vez por pantalla: es un acento, no una decoración. */
 .lp-cut {
   background-image: linear-gradient(
     90deg,

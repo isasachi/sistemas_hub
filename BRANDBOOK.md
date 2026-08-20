@@ -31,8 +31,9 @@ dentro de la palabra, no entre palabras. Eso convierte al lockup en un solo
 campo sólido atravesado por un filo, y es lo único verdaderamente distintivo
 del logotipo.
 
-Ese filo es **la firma del sistema** y se llama `.lp-cut`. Es el único gesto
-audaz que el sitio se permite; todo lo demás es disciplina y silencio.
+Ese filo existe como device (`.lp-cut`, §5) pero **hoy no se usa en ninguna
+pantalla**: el titular del hero, que era su único sitio, pasó a llevar una sola
+palabra de acento. En el sitio, el corte vive solo en el logotipo.
 
 Las dos líneas están además **justificadas al mismo ancho** (LEGACY y BRAND
 miden lo mismo), con las letras casi tocándose. La tipografía de display de
@@ -182,24 +183,42 @@ familia, no subir el número.
 
 ---
 
-## 5. La firma: `.lp-cut`
+## 5. El acento del titular
 
-El corte del logotipo, aplicado a un titular de display: la línea se parte con
-un filo vertical, crema de un lado y carmesí del otro, cortando **a mitad de
-palabra**.
+**La regla que sí está en uso: UNA sola palabra de acento por titular**, en
+`--brand-bright` vía `.lp-gold-word`. El resto de la línea va en crema.
 
 ```html
-<h1 class="lp-serif">
-  <span class="lp-cut" data-cut="El poder de la IA">El poder de la IA</span>
+<h1 class="lp-serif text-[#f6f2eb]">
+  al servicio de tu <span class="lp-gold-word">ecommerce</span>
 </h1>
 ```
 
-Reglas de uso:
-- **Una sola vez por pantalla.** Es la firma, no una decoración.
+El límite de una palabra no es estético: el carmesí de la pantalla ya lo tiene
+el CTA (§2). Repartir el acento entre varias palabras deja de señalar dónde
+mirar y compite con el botón.
+
+### `.lp-cut` — device disponible, hoy sin uso
+
+Lleva el corte del logotipo a un titular: la línea se parte con un filo
+vertical, carmesí de un lado y crema del otro, **a mitad de palabra**. Estuvo
+en el titular del hero y se retiró a pedido del dueño del repo, que prefirió
+el acento de una palabra. La clase sigue en `globals.css` porque el device es
+correcto y está probado, pero **no lo usa ninguna pantalla** — no lo cites como
+"la firma del sitio" hasta que vuelva a estar puesto en algún lado.
+
+```html
+<h1 class="lp-serif lp-cut" style="--cut-at: 43%">…</h1>
+```
+
+Si vuelve:
+- **Una sola vez por pantalla**, y no junto a un `.lp-gold-word` en el mismo
+  titular: son dos formas de acentuar peleando por la misma línea.
 - El corte cae donde el logo lo pone: dentro de una palabra, no en un espacio.
-- Solo sobre display de 30px o más.
-- El texto real vive en el DOM una sola vez; la mitad carmesí es un
-  `::after` con `aria-hidden`, así el lector de pantalla lee la frase una vez.
+- Solo sobre display de 30px o más — usa `--brand` (3.05:1), que solo cumple
+  como texto grande.
+- Es un degradado de parada dura sobre **un solo nodo de texto**, no un
+  duplicado en `::after`: el lector de pantalla lee la frase una vez.
 
 ---
 
