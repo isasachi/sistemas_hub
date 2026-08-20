@@ -1,9 +1,13 @@
 /**
- * Ajustes y datos de la cuenta: perfil, facturación y la API key de KIE con la que
- * se renderiza el video (BYOK — el render lo paga el usuario, por eso el generador
- * de video viene incluido en los tres planes).
+ * Ajustes de la cuenta: perfil (nombre, teléfono, foto) y la API key de KIE con la
+ * que se renderiza el video (BYOK — el render lo paga el usuario, por eso el
+ * generador de video viene incluido en los tres planes).
  *
- * Tabla `user_settings` (migraciones 20260820000001 y 20260820000002), RLS on sin
+ * ⚠️ NO hay datos de facturación. Se probaron y se quitaron (migración
+ * 20260820000003): los comprobantes los emite Whop como merchant-of-record, así que
+ * pedir RUC y dirección fiscal era juntar datos que nadie iba a leer.
+ *
+ * Tabla `user_settings` (migraciones 20260820000001 a 20260820000003), RLS on sin
  * políticas → solo el service role.
  */
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
@@ -33,24 +37,15 @@ export interface UserProfile {
   fullName: string | null
   phone: string | null
   avatarUrl: string | null
-  billingName: string | null
-  taxId: string | null
-  billingAddress: string | null
 }
 
-const VACIO: UserProfile = {
-  fullName: null, phone: null, avatarUrl: null,
-  billingName: null, taxId: null, billingAddress: null,
-}
+const VACIO: UserProfile = { fullName: null, phone: null, avatarUrl: null }
 
 /** Columna de DB → campo del perfil. Una sola tabla de nombres para leer y escribir. */
 const COLUMNA = {
   fullName: 'full_name',
   phone: 'phone',
   avatarUrl: 'avatar_url',
-  billingName: 'billing_name',
-  taxId: 'tax_id',
-  billingAddress: 'billing_address',
 } as const satisfies Record<keyof UserProfile, string>
 
 export async function getProfile(userId: string): Promise<UserProfile> {
@@ -73,19 +68,15 @@ export async function getProfile(userId: string): Promise<UserProfile> {
     fullName: leer('fullName'),
     phone: leer('phone'),
     avatarUrl: leer('avatarUrl'),
-    billingName: leer('billingName'),
-    taxId: leer('taxId'),
-    billingAddress: leer('billingAddress'),
   }
 }
 
 /**
  * Guarda SOLO los campos que vienen en `patch`.
  *
- * ⚠️ Parcial a propósito: la pantalla tiene tres formularios sobre la MISMA fila
- * (perfil, facturación, avatar). Escribir el objeto entero desde cualquiera de
- * ellos borraría lo que cargaron los otros — un guardado de facturación no puede
- * vaciar el nombre.
+ * ⚠️ Parcial a propósito: la pantalla tiene dos formularios sobre la MISMA fila
+ * (perfil y avatar). Escribir el objeto entero desde cualquiera de ellos borraría
+ * lo que cargó el otro — subir una foto no puede vaciar el nombre.
  */
 export async function saveProfile(userId: string, patch: Partial<UserProfile>): Promise<void> {
   const fila: Record<string, unknown> = { user_id: userId, updated_at: new Date().toISOString() }

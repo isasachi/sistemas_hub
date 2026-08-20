@@ -1,36 +1,45 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
-import { PLANS, RAW_BUCKET_LABEL } from "@ph/shared";
+import { ArrowLeft, ArrowUpRight, ArrowDownRight, Check, Sparkles } from "lucide-react";
+import { PLANS, TIERS, RAW_BUCKET_LABEL, creditosBajos, type Tier } from "@ph/shared";
 import { getUser } from "@/lib/supabase/server";
-import { getAccess } from "@/lib/whop";
-import { creditStatus } from "@/lib/credits";
+import { getAccess, type Access } from "@/lib/whop";
+import { creditStatus, type CreditStatus } from "@/lib/credits";
 import { getProfile, getKieKey, maskKey } from "@/lib/user-settings";
-import { PerfilForm, AvatarForm, FacturacionForm, KieKeyForm } from "./Formularios";
+import { PerfilForm, AvatarForm, KieKeyForm } from "./Formularios";
 
 /**
- * "Mi cuenta": perfil, plan, créditos, facturación y la API key de KIE.
+ * "Mi cuenta": perfil, plan, créditos y la API key de KIE.
  *
  * ⚠️ VIVE FUERA DEL GRUPO `(app)`, igual que el paywall, y por el mismo motivo. Ese
  * layout redirige a `/suscripcion` a quien no tenga suscripción activa — así que
  * un usuario en `past_due` (una tarjeta rechazada, que pasa todos los meses) no
- * podría entrar a ver ni corregir sus propios datos de facturación, que es
- * exactamente lo que necesita hacer en ese momento. Acá se autentica sola y el
- * bloque del plan sabe decir "sin plan activo".
+ * podría entrar a ver ni arreglar su cuenta, que es exactamente lo que necesita
+ * hacer en ese momento. Acá se autentica sola y el bloque del plan sabe decir
+ * "sin plan activo".
+ *
+ * ⚠️ NO hay datos de facturación: los comprobantes los emite Whop como
+ * merchant-of-record (migración 20260820000003).
  */
 export const dynamic = "force-dynamic";
 
-/** Los 9 estados de membership de Whop, en español. */
-const ESTADO: Record<string, string> = {
-  trialing: "En período de prueba",
-  active: "Activa",
-  canceling: "Activa hasta el fin del período",
-  past_due: "Pago pendiente",
-  completed: "Finalizada",
-  canceled: "Cancelada",
-  expired: "Vencida",
-  unresolved: "Con un problema de cobro",
-  drafted: "Sin completar",
+/** Los 9 estados de membership de Whop, en español y con el tono que les toca. */
+const ESTADO: Record<string, { texto: string; tono: "ok" | "aviso" | "malo" }> = {
+  trialing: { texto: "En prueba", tono: "ok" },
+  active: { texto: "Activa", tono: "ok" },
+  canceling: { texto: "Activa hasta el fin del período", tono: "aviso" },
+  past_due: { texto: "Pago pendiente", tono: "malo" },
+  unresolved: { texto: "Problema de cobro", tono: "malo" },
+  completed: { texto: "Finalizada", tono: "malo" },
+  canceled: { texto: "Cancelada", tono: "malo" },
+  expired: { texto: "Vencida", tono: "malo" },
+  drafted: { texto: "Sin completar", tono: "aviso" },
+};
+
+const TONO: Record<"ok" | "aviso" | "malo", string> = {
+  ok: "border-emerald-400/30 bg-emerald-400/10 text-emerald-300",
+  aviso: "border-amber-400/30 bg-amber-400/10 text-amber-300",
+  malo: "border-[rgba(233,61,61,0.3)] bg-[rgba(233,61,61,0.1)] text-[#fca5a5]",
 };
 
 /**
@@ -71,22 +80,174 @@ function Card({ title, description, children }: {
   );
 }
 
+/** Lo que incluye un plan, derivado de `PLANS` — nunca escrito a mano. */
+const incluye = (t: Tier) => [
+  PLANS[t].buckets.map((b) => RAW_BUCKET_LABEL[b]).join(" · "),
+  `${PLANS[t].porRango} productos por rango`,
+  `${PLANS[t].creditos} imágenes al mes`,
+];
+
+/** El plan actual, en grande. */
+function PlanActual({ access }: { access: Access }) {
+  const plan = PLANS[access.tier];
+  // ⚠️ `ESTADO[...] ?? fallback`, no `(status && ESTADO[status]) ?? fallback`: con
+  // `status` en string vacío el `&&` devuelve `""`, que NO es nullish, así que el
+  // `??` no se dispara y la insignia queda vacía en vez de decir "sin información".
+  const estado: { texto: string; tono: "ok" | "aviso" | "malo" } = access.grandfathered
+    ? { texto: "Acceso de por vida", tono: "ok" }
+    : ESTADO[access.status ?? ""] ?? { texto: "Sin información", tono: "aviso" };
+
+  return (
+    <div
+      className="relative overflow-hidden rounded-2xl border border-white/[0.10] p-5"
+      style={{
+        background:
+          "linear-gradient(135deg, rgba(189,19,71,0.22) 0%, rgba(189,19,71,0.06) 45%, rgba(246,242,235,0.03) 100%)",
+      }}
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <span className="flex items-center gap-1.5 text-[11px] uppercase tracking-[1px] text-[#e8467a]">
+            <Sparkles className="h-3 w-3" aria-hidden />
+            Tu plan
+          </span>
+          <p className="mt-1 text-[24px] font-extrabold leading-none text-[#f6f2eb]">
+            {plan.nombre}
+            <span className="ml-2 text-[15px] font-normal text-[#c9b4ae]">
+              ${plan.precio} / mes
+            </span>
+          </p>
+        </div>
+        <span className={`rounded-full border px-2.5 py-1 text-[11px] font-bold ${TONO[estado.tono]}`}>
+          {estado.texto}
+        </span>
+      </div>
+
+      <ul className="mt-4 flex flex-wrap gap-x-5 gap-y-2">
+        {incluye(access.tier).map((linea) => (
+          <li key={linea} className="flex items-center gap-1.5 text-[13px] text-[#e8dcd6]">
+            <Check className="h-3.5 w-3.5 shrink-0 text-[#e8467a]" aria-hidden />
+            {linea}
+          </li>
+        ))}
+      </ul>
+
+      {access.renewalPeriodEnd && (
+        <p className="mt-4 border-t border-white/[0.08] pt-3 text-[12px] text-[#a98c88]">
+          {access.status === "canceling" ? "Termina el " : "Se renueva el "}
+          <span className="text-[#efe7e0]">{fecha.instante(access.renewalPeriodEnd)}</span>
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Un plan al que se puede cambiar, con su checkout.
+ *
+ * ⚠️ `<a>` y no `<Link>`: Next prefetchea los `<Link>` a páginas, y esa URL crea una
+ * checkout configuration en Whop. No queremos crear una al pasar el mouse.
+ */
+function CambiarA({ tier, actual }: { tier: Tier; actual: Tier }) {
+  const plan = PLANS[tier];
+  const sube = tier > actual;
+  const Icono = sube ? ArrowUpRight : ArrowDownRight;
+  return (
+    <a
+      href={`/api/whop/checkout?plan=${tier}`}
+      className="group flex flex-1 items-center justify-between gap-3 rounded-xl border border-white/[0.12] px-4 py-3 no-underline transition-colors hover:border-[rgba(232,70,122,0.5)] hover:bg-white/[0.04]"
+    >
+      <span className="min-w-0">
+        <span className="block text-[13px] font-bold text-[#efe7e0]">
+          {plan.nombre} · ${plan.precio}
+        </span>
+        {/* La diferencia que importa, no la lista entera: acá el usuario compara. */}
+        <span className="block truncate text-[11px] text-[#a98c88]">
+          {plan.porRango} productos · {plan.creditos} imágenes
+        </span>
+      </span>
+      <span
+        className="flex shrink-0 items-center gap-1 text-[12px] font-bold"
+        style={{ color: sube ? "#e8467a" : "#a98c88" }}
+      >
+        {sube ? "Subir" : "Bajar"}
+        <Icono className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+      </span>
+    </a>
+  );
+}
+
+/** Créditos como anillo. SVG a mano: no hace falta una librería para un arco. */
+function AnilloCreditos({ credits }: { credits: CreditStatus }) {
+  const R = 42;
+  const CIRC = 2 * Math.PI * R;
+  const usadoPct = Math.min(1, credits.usados / Math.max(1, credits.limite));
+  // Se avisa por lo que QUEDA, no por lo gastado: es el número que decide si
+  // alcanza para terminar lo que el usuario está haciendo. El umbral es compartido
+  // con el contador de la barra (`@ph/shared`), para que no digan cosas distintas.
+  const bajo = creditosBajos(credits.restantes, credits.limite);
+  const color = credits.restantes === 0 ? "#e93d3d" : bajo ? "#f59e0b" : "#bd1347";
+
+  return (
+    <div className="flex flex-wrap items-center gap-6">
+      <div className="relative h-[104px] w-[104px] shrink-0">
+        <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90" aria-hidden>
+          <circle cx="50" cy="50" r={R} fill="none" stroke="rgba(246,242,235,0.10)" strokeWidth="9" />
+          <circle
+            cx="50" cy="50" r={R} fill="none" stroke={color} strokeWidth="9" strokeLinecap="round"
+            strokeDasharray={CIRC} strokeDashoffset={CIRC * (1 - usadoPct)}
+          />
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span className="text-[26px] font-extrabold leading-none text-[#f6f2eb]">
+            {credits.restantes}
+          </span>
+          <span className="text-[10px] uppercase tracking-[0.5px] text-[#a98c88]">
+            de {credits.limite}
+          </span>
+        </div>
+      </div>
+
+      <div className="min-w-[200px] flex-1">
+        <p className="text-[14px] text-[#efe7e0]">
+          Te quedan <strong className="font-extrabold">{credits.restantes}</strong> imágenes
+          {bajo && credits.restantes > 0 && (
+            <span className="ml-1.5 rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[11px] font-bold text-amber-300">
+              quedan pocas
+            </span>
+          )}
+          {credits.restantes === 0 && (
+            <span className="ml-1.5 rounded-full border border-[rgba(233,61,61,0.3)] bg-[rgba(233,61,61,0.1)] px-2 py-0.5 text-[11px] font-bold text-[#fca5a5]">
+              sin créditos
+            </span>
+          )}
+        </p>
+        <p className="mt-1 text-[12px] text-[#a98c88]">
+          Usaste {credits.usados} desde el {fecha.dia(credits.desde)}.
+        </p>
+        <p className="mt-3 text-[12px] leading-[1.6] text-[#8d7470]">
+          Cada imagen de Anuncios, Branding o Landing consume 1 crédito. El generador de
+          video y la calculadora no gastan créditos.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default async function CuentaPage() {
   const user = await getUser();
   if (!user) redirect("/login");
 
-  // Cuatro lecturas independientes: en paralelo, para que la pantalla no cueste la
-  // suma de sus round-trips.
   const [access, perfil, kie] = await Promise.all([
     getAccess(user.id, user.email),
     getProfile(user.id),
     getKieKey(user.id),
   ]);
   const credits = access ? await creditStatus(user.id, access) : null;
-  const plan = access ? PLANS[access.tier] : null;
-  const pct = credits
-    ? Math.min(100, Math.round((credits.usados / Math.max(1, credits.limite)) * 100))
-    : 0;
+  // A un grandfathered no se le ofrece comprar: ya tiene todo.
+  const otrosPlanes = access && !access.grandfathered
+    ? TIERS.filter((t) => t !== access.tier)
+    : [];
 
   return (
     <div className="min-h-screen bg-[#14050a] px-6 py-12">
@@ -116,55 +277,29 @@ export default async function CuentaPage() {
         </Card>
 
         <Card title="Tu plan">
-          {plan && access ? (
+          {access ? (
             <>
-              <div className="flex flex-wrap items-baseline justify-between gap-3">
-                <p className="text-[15px] font-extrabold text-[#efe7e0]">
-                  {plan.nombre}
-                  <span className="ml-2 text-[13px] font-normal text-[#a98c88]">
-                    ${plan.precio} / mes
-                  </span>
-                </p>
-                {!access.grandfathered && (
-                  <Link href="/suscripcion" className="text-[13px] font-bold text-[#e8467a] no-underline">
+              <PlanActual access={access} />
+
+              {otrosPlanes.length > 0 && (
+                <div className="mt-5">
+                  <p className="mb-2.5 text-[12px] uppercase tracking-[1px] text-[#a98c88]">
                     Cambiar de plan
-                  </Link>
-                )}
-              </div>
-
-              <ul className="mt-3 flex flex-col gap-1.5 text-[13px] text-[#c9b4ae]">
-                <li>Buscador: {plan.buckets.map((b) => RAW_BUCKET_LABEL[b]).join(" · ")}</li>
-                <li>{plan.porRango} productos por rango</li>
-                <li>{plan.creditos} imágenes por período</li>
-              </ul>
-
-              {/* Lo que el hub sabe de la suscripción. NO hay historial de pagos:
-                  el cobro lo hace Whop y el hub no guarda los pagos (ver la
-                  migración 20260820000002). Se muestra lo que es dato real. */}
-              <dl className="mt-4 flex flex-wrap gap-x-8 gap-y-2 border-t border-white/[0.08] pt-4 text-[13px]">
-                <div>
-                  <dt className="text-[11px] uppercase tracking-[0.5px] text-[#a98c88]">Estado</dt>
-                  <dd className="mt-0.5 text-[#efe7e0]">
-                    {access.grandfathered
-                      ? "Acceso de por vida"
-                      : (access.status && ESTADO[access.status]) ?? "Sin información"}
-                  </dd>
-                </div>
-                {access.renewalPeriodEnd && (
-                  <div>
-                    <dt className="text-[11px] uppercase tracking-[0.5px] text-[#a98c88]">
-                      {access.status === "canceling" ? "Termina el" : "Se renueva el"}
-                    </dt>
-                    <dd className="mt-0.5 text-[#efe7e0]">{fecha.instante(access.renewalPeriodEnd)}</dd>
+                  </p>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    {otrosPlanes.map((t) => (
+                      <CambiarA key={t} tier={t} actual={access.tier} />
+                    ))}
                   </div>
-                )}
-              </dl>
-
-              {!access.grandfathered && (
-                <p className="mt-4 text-[12px] leading-[1.6] text-[#8d7470]">
-                  El cobro y los comprobantes de pago los gestiona Whop. Desde tu cuenta
-                  de Whop puedes ver tus pagos, cambiar la tarjeta o cancelar.
-                </p>
+                  {/* ⚠️ Whop crea una suscripción NUEVA; la anterior sigue cobrando
+                      hasta que se cancele. Callarlo es cobrarle dos veces a alguien
+                      sin avisarle. */}
+                  <p className="mt-2.5 text-[11px] leading-[1.6] text-[#8d7470]">
+                    Al cambiar se crea una suscripción nueva en Whop: acuérdate de cancelar
+                    la anterior desde tu cuenta de Whop para no pagar las dos. El cobro y los
+                    comprobantes los gestiona Whop.
+                  </p>
+                </div>
               )}
             </>
           ) : (
@@ -187,39 +322,9 @@ export default async function CuentaPage() {
 
         {credits && (
           <Card title="Créditos de imagen">
-            <p className="mb-2 text-[13px] text-[#c9b4ae]">
-              <span className="text-[20px] font-extrabold text-[#efe7e0]">{credits.restantes}</span>
-              {" "}de {credits.limite} disponibles · período desde el {fecha.dia(credits.desde)}
-            </p>
-            <div
-              className="h-1.5 w-full overflow-hidden rounded-full bg-white/[0.08]"
-              role="progressbar"
-              aria-valuenow={credits.usados}
-              aria-valuemin={0}
-              aria-valuemax={credits.limite}
-            >
-              <div className="h-full rounded-full bg-[#bd1347]" style={{ width: `${pct}%` }} />
-            </div>
-            <p className="mt-3 text-[12px] leading-[1.6] text-[#a98c88]">
-              Cada imagen de Anuncios, Branding o Landing consume 1 crédito. El generador
-              de video y la calculadora de costos no gastan créditos.
-            </p>
+            <AnilloCreditos credits={credits} />
           </Card>
         )}
-
-        {/* ⚠️ El texto dice la verdad a propósito: hoy nadie emite estos comprobantes.
-            Pedir datos fiscales dando a entender que ya se factura es una promesa que
-            el producto no cumple. */}
-        <Card
-          title="Datos de facturación"
-          description="Los guardamos para cuando emitamos comprobantes. Hoy el cobro lo procesa Whop y la boleta o factura sale de su lado, no del nuestro."
-        >
-          <FacturacionForm
-            billingName={perfil.billingName}
-            taxId={perfil.taxId}
-            billingAddress={perfil.billingAddress}
-          />
-        </Card>
 
         <Card
           title="API key de KIE"

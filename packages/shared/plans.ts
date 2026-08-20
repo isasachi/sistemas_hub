@@ -54,3 +54,17 @@ export function unlocksBucket(tier: Tier, bucket: RawBucket): boolean {
 export function lockedBuckets(tier: Tier): RawBucket[] {
   return RAW_BUCKETS.filter((b) => !unlocksBucket(tier, b))
 }
+
+/**
+ * ¿Conviene avisarle que se le acaban los créditos?
+ *
+ * Vive acá y no en `lib/credits.ts` porque lo necesitan la página de cuenta (server)
+ * y el contador de la barra (client): importar el módulo de créditos desde el cliente
+ * arrastraría `next/headers` y el cliente de Supabase al bundle del navegador.
+ *
+ * El piso de 3 existe para los planes chicos: el 15% de 30 son 4,5, así que sin él un
+ * plan 1 avisaría recién con 4 restantes y un plan de 10 no avisaría nunca.
+ */
+export function creditosBajos(restantes: number, limite: number): boolean {
+  return restantes <= Math.max(3, limite * 0.15)
+}

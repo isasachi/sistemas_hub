@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { getUser } from "@/lib/supabase/server";
-import { hasAccess } from "@/lib/whop";
+import { getAccess } from "@/lib/whop";
 import { getProfile } from "@/lib/user-settings";
+import { creditStatus } from "@/lib/credits";
 import { AppShell } from "@/components/dashboard/AppShell";
 
 // Gate de autenticación del área privada (/dashboard y /tools/*). El middleware
@@ -30,13 +31,27 @@ export default async function AppLayout({
   const user = await getUser();
   if (!user) redirect("/login");
 
-  if (!(await hasAccess(user.id, user.email))) redirect("/suscripcion");
+  // `getAccess` en vez de `hasAccess`: el objeto que devuelve es el que necesita
+  // `creditStatus` para saber el tier y el ancla del período, así que pedirlo acá
+  // evita una segunda consulta de entitlement.
+  const access = await getAccess(user.id, user.email);
+  if (!access) redirect("/suscripcion");
 
-  // El nombre y la foto de la barra. Es una lectura por PK sobre una fila que ya
-  // se toca en /cuenta; va después del gate para no pagarla cuando el usuario ni
-  // siquiera va a ver el shell.
-  const perfil = await getProfile(user.id);
+  // El nombre, la foto y los créditos de la barra. Van DESPUÉS del gate (para no
+  // pagarlos cuando el usuario ni siquiera va a ver el shell) y en paralelo entre
+  // sí, así el shell no cuesta la suma de los dos round-trips.
+  const [perfil, credits] = await Promise.all([
+    getProfile(user.id),
+    creditStatus(user.id, access),
+  ]);
   const label = perfil.fullName ?? user.email ?? "Cuenta";
 
-  return <AppShell user={{ label, avatarUrl: perfil.avatarUrl }}>{children}</AppShell>;
+  return (
+    <AppShell
+      user={{ label, avatarUrl: perfil.avatarUrl }}
+      credits={{ restantes: credits.restantes, limite: credits.limite }}
+    >
+      {children}
+    </AppShell>
+  );
 }

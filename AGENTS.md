@@ -579,9 +579,9 @@ Dos capas, y deciden cosas distintas — confundirlas es de dónde salieron dos 
 
 ### Mi cuenta (`app/cuenta`)
 
-Perfil (foto, nombre, teléfono), plan y créditos, datos de facturación y la API key de KIE, en una sola pantalla. Reemplaza a `/ajustes`, que fue su primera versión y nunca se desplegó.
+Perfil (foto, nombre, teléfono), plan con cambio de plan en línea, créditos y la API key de KIE, en una sola pantalla. Reemplaza a `/ajustes`, que fue su primera versión y nunca se desplegó.
 
-⚠️ **VIVE FUERA DEL GRUPO `(app)`, igual que el paywall y por el mismo motivo.** Ese layout rebota a `/suscripcion` a quien no tenga suscripción activa — así que un usuario en `past_due` (una tarjeta rechazada: pasa todos los meses) no podría entrar a ver ni corregir sus propios datos de facturación, que es exactamente lo que necesita hacer en ese momento. Acá se autentica sola y el bloque del plan sabe decir "sin plan activo" sin inventar un contador de créditos. Es el mismo bug que la guarda vieja de `/suscripcion`, un directorio más allá.
+⚠️ **VIVE FUERA DEL GRUPO `(app)`, igual que el paywall y por el mismo motivo.** Ese layout rebota a `/suscripcion` a quien no tenga suscripción activa — así que un usuario en `past_due` (una tarjeta rechazada: pasa todos los meses) no podría entrar a ver ni arreglar su propia cuenta —ni cambiar de plan, que es exactamente lo que necesita hacer en ese momento—. Acá se autentica sola y el bloque del plan sabe decir "sin plan activo" sin inventar un contador de créditos. Es el mismo bug que la guarda vieja de `/suscripcion`, un directorio más allá.
 
 **Las mutaciones son server actions (`app/cuenta/actions.ts`), no rutas de API** — el repo ya usa ese patrón en `app/actions/auth.ts`, y así los formularios no necesitan fetch ni JSON. ⚠️ **Cada action resuelve la sesión por su cuenta y escribe sobre `user.id`**: un action es un endpoint público, y si el usuario objetivo saliera del formulario cualquiera podría escribirle el perfil —o la API key de KIE— a otra cuenta. Cubierto por test.
 
@@ -589,13 +589,21 @@ Perfil (foto, nombre, teléfono), plan y créditos, datos de facturación y la A
 
 ⚠️ **La zona horaria de las fechas va FIJA.** Sin `timeZone`, `toLocaleDateString` usa la del SERVIDOR — UTC en Vercel, la del equipo en local — así que la misma renovación se veía en días distintos según dónde corriera. Se separan dos casos: `renewal_period_end` es un instante y se traduce a `America/Lima` (mismo criterio que `limaSearchDay`); `credits.desde` ya es un día de calendario en formato `YYYY-MM-DD`, que se parsea como medianoche UTC, así que se formatea en UTC — traducirlo a Lima lo correría un día hacia atrás.
 
-**Los tres formularios escriben sobre la MISMA fila**, así que `saveProfile` es un patch parcial: guardar facturación no puede vaciar el nombre del perfil.
+**Perfil y avatar escriben sobre la MISMA fila**, así que `saveProfile` es un patch parcial: subir una foto no puede vaciar el nombre.
 
 ⚠️ **NO HAY HISTORIAL DE PAGOS, y es una decisión, no un olvido.** Mostrarlo de verdad exige capturar `payment.succeeded` del webhook, o sea una **segunda** suposición sobre la forma del sobre — la primera ya está documentada como no verificada. Si esa suposición falla, la tabla queda vacía para siempre y la pantalla muestra "aún no hay pagos" con toda naturalidad: éxito silencioso, el peor modo de fallo del proyecto. Mientras tanto se muestra lo que SÍ es dato real y ya está en `user_entitlements`: plan, estado de la membresía (los 9 de Whop, traducidos; uno desconocido dice "sin información" en vez de imprimir el string crudo) y fecha de renovación. Se agrega **después** del smoke que confirme el payload, y ahí es una función.
 
-**Los datos de facturación se piden pero hoy no los usa nadie** — el cobro lo hace Whop como merchant-of-record y el hub no emite comprobantes. La pantalla lo dice con esas palabras: pedir datos fiscales dando a entender que ya se factura es una promesa que el producto no cumple. Se guarda solo lo que pide un comprobante peruano (razón social/nombre, RUC o DNI, dirección); el documento se valida **solo si es todo dígitos** (8 = DNI, 11 = RUC), porque un cliente extranjero tiene identificadores con letras y exigirle el formato peruano sería inventar una regla que SUNAT no pide.
+⚠️ **NO HAY DATOS DE FACTURACIÓN, y estuvieron.** Se construyeron (razón social, RUC/DNI, dirección) y se **eliminaron** el 2026-08-20 con sus columnas (`20260820000003_drop_billing.sql`, aplicada con `user_settings` verificadamente vacía): los pagos se hacen solo por Whop, que es merchant-of-record y emite los comprobantes, así que eran datos que nadie iba a leer — tanto que la propia pantalla tenía que aclararle al usuario que todavía no se usaban. Se dropearon en vez de dejarlas muertas por el precedente de `testimonial_avatars`, que sigue en la base sin que nada la toque. **No las reintroduzcas** sin que exista antes quien emita el comprobante.
 
-**Schema:** `20260820000002_user_profile.sql` (columnas sobre `user_settings`).
+**El cambio de plan se hace DESDE acá, no solo desde el paywall.** El bloque "Tu plan" muestra el plan actual en grande (estado con color según los 9 de Whop, renovación) y debajo los otros dos como opciones con su checkout — `<a>` y no `<Link>`, porque Next prefetchea los Link y esa URL crea una checkout configuration en Whop. A un grandfathered no se le ofrece ninguna: ya tiene todo.
+
+⚠️ **`ESTADO[status] ?? fallback`, NUNCA `(status && ESTADO[status]) ?? fallback`.** Con `status` en string vacío el `&&` devuelve `""`, que no es nullish, así que el `??` no se dispara y la insignia queda en blanco en vez de decir "sin información". Lo cazó el typecheck, no un test.
+
+**Contador de créditos en la barra del panel** (`CreditosPill`, AppShell), al lado del avatar y enlazado a `/cuenta`. ⚠️ Se pinta en el render de servidor de cada página: **se actualiza al navegar, no en vivo**, así que generar una imagen sin cambiar de página deja el número viejo. Es aceptable porque el valor que manda lo impone el servidor en `checkGenQuota` — esto solo informa.
+
+⚠️ **El umbral de "quedan pocas" (`creditosBajos`) vive en `@ph/shared/plans.ts`, no en `lib/credits.ts`.** Lo necesitan la página (server) y el pill (client), y `lib/credits.ts` arrastra `next/headers` y el cliente de Supabase: importarlo desde el cliente metería todo eso en el bundle del navegador. El piso de 3 es para los planes chicos — el 15% de 30 son 4,5, así que sin él el plan 1 avisaría recién con 4 restantes.
+
+**Schema:** `20260820000002_user_profile.sql` (columnas de perfil) + `20260820000003_drop_billing.sql` (quita las de facturación).
 
 ### Créditos de imagen (`lib/credits.ts`)
 

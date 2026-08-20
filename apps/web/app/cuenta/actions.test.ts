@@ -10,7 +10,7 @@ vi.mock('@/lib/storage', () => ({
   uploadToStorage: vi.fn().mockResolvedValue('https://x.supabase.co/avatars/u1.png?v=1'),
 }))
 
-import { guardarPerfil, guardarFacturacion, guardarKieKey, subirAvatar } from './actions'
+import { guardarPerfil, guardarKieKey, subirAvatar } from './actions'
 import { getUser } from '@/lib/supabase/server'
 import { saveProfile, setKieKey } from '@/lib/user-settings'
 import { uploadToStorage } from '@/lib/storage'
@@ -34,7 +34,6 @@ describe('sin sesión no se escribe nada', () => {
 
   it.each([
     ['perfil', () => guardarPerfil({}, fd({ fullName: 'Ana' }))],
-    ['facturación', () => guardarFacturacion({}, fd({ billingName: 'ACME' }))],
     ['key de KIE', () => guardarKieKey({}, fd({ key: 'k' }))],
     ['avatar', () => subirAvatar({}, fd({ avatar: imagen(10, 'image/png') }))],
   ])('%s', async (_caso, correr) => {
@@ -93,29 +92,6 @@ describe('avatar', () => {
   })
 })
 
-describe('documento de facturación', () => {
-  // Un RUC mal escrito es un comprobante que no se puede emitir.
-  it.each([['12345678', 'DNI'], ['20123456789', 'RUC']])('acepta %s (%s)', async (doc) => {
-    expect((await guardarFacturacion({}, fd({ taxId: doc }))).ok).toBeTruthy()
-  })
-
-  it.each(['1234567', '123456789', '2012345678912'])('rechaza %s dígitos', async (doc) => {
-    const r = await guardarFacturacion({}, fd({ taxId: doc }))
-    expect(r.error).toMatch(/8 dígitos y un RUC 11/)
-    expect(saveProfile).not.toHaveBeenCalled()
-  })
-
-  // Un cliente extranjero tiene identificadores con letras: exigirle 8 u 11 dígitos
-  // sería inventar una regla que SUNAT no pide.
-  it('deja pasar un identificador no numérico', async () => {
-    expect((await guardarFacturacion({}, fd({ taxId: 'ESB12345678' }))).ok).toBeTruthy()
-  })
-
-  it('vacío es válido: el campo es opcional', async () => {
-    expect((await guardarFacturacion({}, fd({ taxId: '' }))).ok).toBeTruthy()
-  })
-})
-
 describe('topes de largo', () => {
   it('corta un nombre demasiado largo antes de la DB', async () => {
     const r = await guardarPerfil({}, fd({ fullName: 'a'.repeat(81) }))
@@ -130,15 +106,13 @@ describe('topes de largo', () => {
   })
 })
 
-// Los tres formularios escriben sobre la MISMA fila. Si uno guardara el objeto
-// entero, un guardado de facturación borraría el nombre del perfil.
+// Perfil y avatar escriben sobre la MISMA fila. Si uno guardara el objeto entero,
+// subir una foto borraría el nombre.
 it('cada formulario guarda solo SUS campos', async () => {
   await guardarPerfil({}, fd({ fullName: 'Ana', phone: '+51 999' }))
   expect(vi.mocked(saveProfile).mock.calls[0][1]).toEqual({ fullName: 'Ana', phone: '+51 999' })
 
   vi.clearAllMocks()
-  await guardarFacturacion({}, fd({ billingName: 'ACME', taxId: '20123456789', billingAddress: 'Lima' }))
-  expect(vi.mocked(saveProfile).mock.calls[0][1]).toEqual({
-    billingName: 'ACME', taxId: '20123456789', billingAddress: 'Lima',
-  })
+  await subirAvatar({}, fd({ avatar: imagen(1024, 'image/png') }))
+  expect(Object.keys(vi.mocked(saveProfile).mock.calls[0][1])).toEqual(['avatarUrl'])
 })
