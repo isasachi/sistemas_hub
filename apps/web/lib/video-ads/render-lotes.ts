@@ -1,6 +1,7 @@
 import { createHash } from 'crypto'
 import type { Lote, LoteImage } from './lotes'
-import type { VoiceProfile } from './character'
+import type { MotionProfile, VoiceProfile } from './character'
+import type { Personaje } from './personajes'
 
 /**
  * Lógica pura de orquestación del render por lotes (Task 6, fix rounds 1 a 4).
@@ -57,7 +58,20 @@ export function renderDone(lotes: Lote[]): boolean {
  * lotes que ya se pagaron la primera vez.
  */
 export function resumeSeed(base: Lote[], existentes: Lote[]): Lote[] {
-  return base.map((lote, i) => (existentes[i]?.taskId ? existentes[i] : lote))
+  return base.map((lote, i) => {
+    const previo = existentes[i]
+    // ⚠️ UN LOTE QUE FALLÓ NO SE CONSERVA, aunque tenga `taskId`. Ese id apunta a una
+    // tarea muerta: no hay video detrás y no lo va a haber. Conservarlo lo dejaba fuera
+    // de `pendientes` (`filter(l => !l.taskId)`), así que "reintentar" no recreaba nada
+    // y —si era el único que faltaba— la ruta salía por el early return de "nada por
+    // crear". El lote quedaba irrecuperable desde la UI: el usuario podía darle a
+    // reintentar para siempre sin que pasara nada.
+    //
+    // Pasó de verdad: Veo devolvió "The Google model was unable to generate audio for
+    // this request" en 1 de 5 lotes, y el MISMO prompt funcionó al reintentarlo. O sea
+    // el fallo es transitorio y reintentar es exactamente lo correcto.
+    return previo?.taskId && previo.status !== 'fail' ? previo : lote
+  })
 }
 
 /** Separador de campos del texto canónico de `scriptFingerprint`. Un carácter de
@@ -106,6 +120,11 @@ export function scriptFingerprint(input: {
   /** Una por lote, en el mismo orden que `lotes` (ver `camaraDeLote`, lotes.ts). */
   camaras: string[]
   voz: VoiceProfile
+  /** Cómo se mueve. Cambia el prompt de cada lote, así que cambia el render. */
+  movimiento?: MotionProfile | null
+  /** Todos los personajes: su identidad, su voz y su movimiento entran en el prompt, y
+   *  sus avatares son de donde salen los frames. Cambiar cualquiera cambia el video. */
+  personajes?: Personaje[]
   images: LoteImage[]
   /** Nicho: cambia el rótulo del bloque de producto y el bloque de consistencia. Sin
    *  esto, cambiar el chip y re-renderizar deja la huella igual con otro prompt. */
@@ -129,12 +148,41 @@ export function scriptFingerprint(input: {
     // v2 → v3: misma razón. La plantilla cambió otra vez — el plano por toma cuando el
     // lote mezcla más de uno, la duración de la toma redondeada a 1 decimal y el nivel
     // de degradación que comprime el párrafo de overlay antes de truncar la coreografía.
-    'v3',
+    // v3 → v4: migración a Veo 3.1. Cambia TODO lo que la huella cubre sin que ella pueda
+    // verlo — el modelo, el tope de lote (15 s → 8 s, o sea otro reparto), la duración
+    // legal ({4,6,8}) y la plantilla del prompt (sin escalera de degradación, sin
+    // "estable", con el bloque de toma continua). Un resume a través de este cambio
+    // pegaría un clip de grok a uno de Veo jurando que es el mismo contenido.
+    // v4 → v5: el render pasa al modo de keyframes. Cambia el `generationType` que se
+    // le manda a Veo y cambia la plantilla del prompt (la leyenda `@image(n)` se
+    // reemplaza por la instrucción de interpolar entre el primer y el último fotograma).
+    // Las URLs de los frames NO entran en la huella a propósito: son salida, cambian en
+    // cada corrida, y meterlas haría que `isPaidResume` no reanudara nunca. Lo que sí
+    // entra —el avatar y el producto de los que salen, más las tomas— es lo que decide
+    // si las poses serían las mismas.
+    // v5 → v6: el perfil de movimiento entra al prompt de cada lote. Cambia el render
+    // sin que ninguno de los otros insumos se mueva, así que sin el bump un resume
+    // pegaría un clip con perfil y otro sin él.
+    // v6 → v7: varios personajes. El prompt de cada lote pasa a llevar un bloque por
+    // persona presente y la locución atribuida (`P2 (padre) dice:`), y los frames salen
+    // de los avatares de quienes salen en cada toma. Nada de eso lo ve la huella sola.
+    'v7',
     String(input.niche ?? ''),
     consistencyBlock, productDesc, escenario,
     voz.idioma, voz.varianteRegional, voz.acento, voz.pronunciacion, voz.ritmo,
     voz.velocidad, voz.entonacion, voz.energia, voz.pausas, voz.tono, voz.timbre,
     voz.edadVocal, voz.estilo,
+    // Opcional: las sesiones anteriores a FASE 4.6 no lo tienen, y una cadena vacía las
+    // deja con la misma huella que antes en vez de invalidarlas.
+    input.movimiento?.calidadMovimiento ?? '', input.movimiento?.manerismos ?? '',
+    // Con su largo delante, como las demás listas: dos repartos distintos de los mismos
+    // personajes tienen que dar huellas distintas.
+    String(input.personajes?.length ?? 0),
+    ...(input.personajes ?? []).flatMap((p) => [
+      p.id, p.rol, p.avatarUrl ?? '', p.consistencyBlock ?? '',
+      p.voiceProfile?.acento ?? '', p.voiceProfile?.tono ?? '', p.voiceProfile?.edadVocal ?? '',
+      p.motionProfile?.calidadMovimiento ?? '', p.motionProfile?.manerismos ?? '',
+    ]),
     String(images.length),
   ]
   for (const img of images) campos.push(img.url, img.role)

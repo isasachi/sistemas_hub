@@ -14,15 +14,53 @@ import { z } from 'zod'
  * a reproducir.
  */
 
+/**
+ * Quién dice qué dentro de un corte.
+ *
+ * ⚠️ `dialogo` SIGUE SIENDO EL TEXTO COMPLETO del corte y no cambia de significado: esto
+ * es su DESGLOSE, no su reemplazo. `repairCutTiming` mide `dialogo.length` para el
+ * cronometraje, `mergeMicroCortes` lo concatena y toda la FASE 2/3 lo copia — hacerlo
+ * estructurado habría tocado los ~12 sitios que lo leen como string plano. Sin
+ * `hablantes` se lee como siempre: un solo hablante y toda la línea es suya.
+ */
+export const HablanteSchema = z.object({
+  /** Referencia a `ForensicReport.personajes[].id`. Se resuelve con `resolvePersonaje`. */
+  personaje: z.string(),
+  texto: z.string(),
+})
+
 export const CorteSchema = z.object({
   n: z.number(),
   tiempo: z.string(),          // "00:00 - 00:03"
   duracionSeg: z.number(),
   accion: z.string(),          // qué sucede, literal
   camara: z.string(),          // plano, posición, movimiento, zoom
-  dialogo: z.string(),         // texto hablado en este corte
+  dialogo: z.string(),         // texto hablado en este corte, COMPLETO
+  hablantes: z.array(HablanteSchema).optional(), // su desglose por persona
+  /**
+   * ⚠️ VOZ EN OFF: se oye la narración pero QUIEN HABLA NO ESTÁ EN CUADRO.
+   *
+   * Todo el pipeline nació asumiendo un protagonista visible que habla a cámara —
+   * el bloque de consistencia, el avatar como primer fotograma, el perfil de
+   * movimiento. Pero un formato entero de UGC es voz en off sobre b-roll: medido con
+   * un anuncio real de calzado, 62 s de narración completa sobre planos de pies y de
+   * manos, sin que la cara aparezca ni una vez.
+   *
+   * Sin este campo el render pone a un avatar a hacer lip-sync de esa narración, que
+   * es exactamente lo que el original NO hace. Opcional: ausente o false significa
+   * "habla a cámara", que es el comportamiento de siempre.
+   */
+  vozEnOff: z.boolean().optional(),
   textoOverlay: z.string(),    // "No aparece" si no hay
   transicion: z.string(),      // jump cut / corte directo / continuidad / zoom digital
+})
+
+/** Una persona con voz propia en el video de referencia. */
+export const PersonajeForenseSchema = z.object({
+  id: z.string(),           // 'P1', 'P2'… estable; es lo que referencia `hablantes`
+  rol: z.string(),          // 'hijo', 'padre' — cómo lo nombra el anuncio
+  descripcion: z.string(),  // edad aparente, cabello, complexión…
+  vestuario: z.string(),
 })
 export type Corte = z.infer<typeof CorteSchema>
 
@@ -55,6 +93,9 @@ export const ForensicReportSchema = z.object({
   producto: z.string(),
   fondo: z.string(),
   elementosGraficos: z.string(),
+  /** Las personas con voz propia. Opcional: las sesiones anteriores no la tienen y se
+   *  leen como un solo personaje (ver `personajesDe`, personajes.ts). */
+  personajes: z.array(PersonajeForenseSchema).optional(),
   cortes: z.array(CorteSchema).min(1),
   tomas: z.array(TomaSchema).min(1),
   edicion: EdicionSchema,
@@ -81,17 +122,33 @@ export type ForensicReport = z.infer<typeof ForensicReportSchema>
 export const CPS_MAX = 20
 
 /**
+ * Piso de caracteres por segundo, para el otro lado del mismo problema.
+ *
+ * ⚠️ MEDIDO: una locución demasiado corta para su clip hace que Veo la REPITA para
+ * rellenar el audio. En la sesión `02fa1205` el lote 2 tenía 23 caracteres en 6 s
+ * (3,8 car/s) y el video salió diciendo *"Y es nuestro mural y es nuestro top mural"* —
+ * la frase dos veces. Ese mismo lote fue además el que falló con "unable to generate
+ * audio" en el primer intento, así que la escasez de texto también le cuesta al modelo.
+ *
+ * 9 es permisivo a propósito: el español conversacional va a 14–17, así que esto no
+ * pelea con la variación normal, solo ataca el caso patológico.
+ */
+export const CPS_MIN = 9
+
+/**
  * Piso de duración de una TOMA, en segundos.
  *
- * Por debajo de esto un corte no es una toma que un generador de video pueda producir
- * con sentido: `MIN_DURATION` de KIE es 1 s, y un clip de 1 s renderiza una pose
- * congelada, no una acción. Además cada corte es una llamada PAGADA — la frontera de
- * plano abre un lote por encuadre, así que un montaje de micro-cortes multiplica el
- * costo por la granularidad del original, no por su duración.
+ * Ya NO es un número discutible: 4 es `MIN_DURATION` de Veo 3.1, la duración más corta
+ * que el modelo acepta. Una toma más corta que eso no se puede renderizar tal cual —
+ * `snapDuration` la subiría a 4 s igual, o sea el clip duraría más que la toma y el
+ * anuncio se alargaría solo. Fusionar antes es lo que evita esa inflación.
  *
- * El número es discutible y por eso está acá arriba y no enterrado en la función.
+ * Con grok esto era 3 y sí era discutible (su piso era 1 s, y un clip de 1 s renderiza
+ * una pose congelada, no una acción). El argumento de costo sigue valiendo igual: cada
+ * corte es una llamada PAGADA y la frontera de plano abre un lote por encuadre, así que
+ * un montaje de micro-cortes multiplica el costo por la granularidad del original.
  */
-export const MIN_TOMA_SEG = 3
+export const MIN_TOMA_SEG = 4
 
 /**
  * ¿Este corte muestra a la PERSONA, o solo al producto?
@@ -117,6 +174,13 @@ export function muestraPersona(accion: string): boolean {
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
+  // ⚠️ LA NEGACIÓN PRIMERO. Medido con el anuncio de calzado: el forense describe un
+  // plano de producto como "Detalle del zapato, SIN PERSONA en cuadro" y la búsqueda por
+  // palabra lo leía como plano de persona — o sea justo al revés. Un flat-lay clasificado
+  // como persona se fusiona con planos de persona y comparte fotograma con ellos, que es
+  // el fallo que `muestraPersona` existe para evitar.
+  // El hueco tolera artículos y preposiciones: "no se ve A LA modelo", "sin NINGUNA persona".
+  if (/\b(sin|no hay|no aparece|no se ve|no se observa)\s+(a\s+)?(la|el|una|un|ninguna|ningun)?\s*(persona|personas|gente|modelo|nadie)\b/.test(t)) return false
   return /\b(mujer|hombre|chica|chico|muchacha|muchacho|modelo|persona|sujeto|joven|senor|senora|ella|el sujeto|protagonista)\b/.test(t)
 }
 
@@ -215,6 +279,11 @@ export function mergeMicroCortes(
       duracionSeg: a.duracionSeg + b.duracionSeg,
       accion: [a.accion, b.accion].map((x) => x.trim()).filter(Boolean).join(' Luego, '),
       dialogo: [a.dialogo, b.dialogo].map((x) => x.trim()).filter(Boolean).join(' '),
+      // Los hablantes se concatenan en el mismo orden que el diálogo: si no, el desglose
+      // dejaría de reproducir el texto y `verificarHablantes` lo descartaría entero.
+      hablantes: [...(a.hablantes ?? []), ...(b.hablantes ?? [])].length
+        ? [...(a.hablantes ?? []), ...(b.hablantes ?? [])]
+        : undefined,
       textoOverlay: [a.textoOverlay, b.textoOverlay].find((x) => x && x !== 'No aparece') ?? a.textoOverlay,
     }
     origen.set(tiempo, (origen.get(a.tiempo) ?? 1) + (origen.get(b.tiempo) ?? 1))
@@ -386,6 +455,26 @@ export function buildForensicInstruction(): string {
     '  original. No resumir. No corregir. No parafrasear. Si una palabra no se puede',
     '  identificar con certeza, escribe [inaudible].',
     '',
+    '⚠️ VARIOS PERSONAJES: `personajes`.',
+    '  Un anuncio puede tener más de una persona con voz propia. Lista CADA una que',
+    '  hable o tenga presencia propia, hasta 4, con:',
+    '    `id`: "P1", "P2"… en orden de aparición. Es lo que después referencia el',
+    '      diálogo, así que tiene que ser estable y no repetirse.',
+    '    `rol`: cómo lo nombra el anuncio ("hijo", "padre", "vendedora"). En minúsculas.',
+    '    `descripcion`: edad aparente, cabello, complexión, rasgos visibles.',
+    '    `vestuario`: lo que lleva puesto.',
+    '  Si habla una sola persona, `personajes` lleva un único elemento.',
+    '  ⚠️ Descríbelos SIN etiquetar etnia ni origen cultural, igual que `sujeto`.',
+    '',
+    '⚠️ QUIÉN DICE QUÉ: `hablantes`, dentro de cada corte.',
+    '  Un corte puede tener varias voces (dos personas conversando, o alguien fuera de',
+    '  cuadro). Reparte el `dialogo` de ese corte entre quienes lo dicen, en ORDEN, con el',
+    '  `id` del personaje y su `texto`.',
+    '  ⚠️ NO cambies ni una palabra: pegar los `texto` en orden tiene que dar exactamente',
+    '  el mismo `dialogo`. Se comprueba en código, y si no cuadra se descarta el reparto',
+    '  entero de ese corte — o sea el anuncio pierde la atribución.',
+    '  Un corte mudo no lleva `hablantes`. Un corte con una sola voz lleva uno.',
+    '',
     'ELEMENTOS BASE (solo lo observable):',
     '  - `sujeto`: edad aparente, sexo aparente, cabello, barba si existe, expresión,',
     '    complexión visible y posición. Descríbelo con detalle suficiente para hacer',
@@ -402,6 +491,19 @@ export function buildForensicInstruction(): string {
     'Los elementos gráficos se analizan ÚNICAMENTE para entender el original.',
     'NO deben reproducirse en el video generado. Por eso van en su propio campo y',
     'nunca dentro de `accion` ni de `camara`.',
+    '',
+    '⚠️ EL EQUIPO DE GRABACIÓN TAMPOCO ES COREOGRAFÍA — misma regla, otra clase de',
+    'artefacto. Micrófono de mano, corbatero, caña, trípode, aro de luz, reflector, el',
+    'teléfono con el que graban: son herramientas de producción, no cosas que el',
+    'personaje haga. NO los menciones en `accion`, ni siquiera describiéndolos por su',
+    'forma ("un pequeño objeto plateado").',
+    'Medido, y por eso está acá: en un video real la presentadora sostenía un micrófono',
+    'de mano a la altura del pecho durante los cinco cortes. El análisis lo describió',
+    'como "sostiene un pequeño objeto plateado a la altura de su pecho" y el generador,',
+    'que no tenía ningún micrófono que poner, lo interpretó como TOCARSE EL PECHO en',
+    'cuatro de los cinco clips.',
+    'Si la mano está ocupada con equipo, describe solo dónde está la mano y qué hace la',
+    'otra — nunca el objeto.',
     '',
     'LA `accion` DE CADA CORTE ES COREOGRAFÍA, NO RESUMEN.',
     'Lo que se reconstruye después es un video: si la acción dice "muestra el producto",',
@@ -437,6 +539,23 @@ export function buildForensicInstruction(): string {
     '  límite del corte está mal puesto, no es que la persona hable rapidísimo — corrige',
     '  el límite. La suma de las duraciones tiene que dar la duración total del video.',
     '',
+    '⚠️ VOZ EN OFF: `vozEnOff`.',
+    '  Marca `true` cuando en ese corte SE OYE a alguien hablar pero QUIEN HABLA NO',
+    '  APARECE en cuadro — narración sobre planos de producto, de manos, de pies o de',
+    '  detalle. Es un formato entero de UGC, no una excepción rara.',
+    '  Marca `false` (o no lo pongas) cuando la persona que habla SÍ está en cuadro y se',
+    '  le ve la boca moverse.',
+    '  Un corte mudo no lleva `vozEnOff`: no hay voz que ubicar.',
+    '  ⚠️ Es la diferencia entre reconstruir el anuncio con alguien narrando por encima o',
+    '  con alguien hablándole a la cámara. Si te equivocás, el video generado pone a una',
+    '  persona a mover la boca donde el original solo mostraba el producto.',
+    '',
+    '⚠️ UN CORTE SIN HABLA LLEVA `dialogo` VACÍO (""), NUNCA UN MARCADOR.',
+    '  "No aparece" es el marcador de `textoOverlay` y SOLO de ese campo. Si en un corte',
+    '  nadie habla —música, silencio, una toma de producto— `dialogo` es la cadena vacía.',
+    '  Escribir ahí "No aparece" hace que el generador de video lo LEA EN VOZ ALTA: es',
+    '  texto hablado, y todo lo que esté en ese campo se pronuncia.',
+    '',
     'CORTES (`cortes`): uno por corte real, en orden. Para cada uno:',
     '  `tiempo` "MM:SS - MM:SS", `duracionSeg`, `accion` (descripción literal de lo',
     '  que sucede), `camara` (plano, posición, movimiento, zoom), `dialogo` (texto',
@@ -463,4 +582,144 @@ export function buildForensicInstruction(): string {
     '`resumenParaUsuario` va en español neutro: se muestra en la interfaz.',
     'Todo el output va en español.',
   ].join('\n')
+}
+
+/**
+ * Un campo del forense, en prosa y acotado a UN clip.
+ *
+ * ⚠️ DOS DEFECTOS MEDIDOS, Y EL SEGUNDO ES EL GRAVE. Gemini devuelve espontáneamente
+ * objetos y arrays en campos declarados `z.string()`, y el schema los coacciona a un
+ * string con JSON adentro. Medido en la sesión `430c5961`: `fondo` viajaba al prompt de
+ * render como 731 caracteres de `{"localizacionAparente": "...", "paredes": "..."}`, con
+ * llaves y nombres de campo en camelCase; `sujeto` y `vestuario` igual, hacia el prompt
+ * de identidad.
+ *
+ * Lo grave no es la sintaxis: es que el texto describe el VIDEO ENTERO dentro de un
+ * prompt de un solo clip — *"muebles: En un corte, se observa un sillón tapizado en tela
+ * gris claro"* — mientras el bloque `CONTINUIDAD` promete que nada cambia. De ahí salió
+ * el sillón que apareció en un clip de la prueba de ropa, que se reportó como deriva del
+ * modelo y no lo era: el prompt lo ofrecía.
+ *
+ * ponytail: el filtro de "en un corte" es una heurística sobre texto de un LLM, no un
+ * contrato. Si el forense cambia de redacción deja de filtrar — y el modo de fallo es
+ * volver al comportamiento anterior (una descripción de más), no romper nada.
+ */
+export function enProsa(campo: string | null | undefined): string {
+  const crudo = (campo ?? '').trim()
+  if (!crudo) return ''
+  let valor: unknown = crudo
+  if (crudo.startsWith('{') || crudo.startsWith('[')) {
+    try { valor = JSON.parse(crudo) } catch { return crudo }
+  }
+  const aplanar = (v: unknown): string[] =>
+    Array.isArray(v) ? v.flatMap(aplanar)
+    : v && typeof v === 'object' ? Object.values(v).flatMap(aplanar)
+    : [String(v)]
+  return aplanar(valor)
+    .map((x) => x.trim())
+    .filter(Boolean)
+    // Fuera lo que describe OTROS cortes: en un prompt de un solo clip es una lista de
+    // escenarios alternativos, y el modelo elige uno.
+    .filter((x) => !/^en (un|algunos|otros?|ciertos) cortes?\b/i.test(x))
+    .map((x) => (/[.!?]$/.test(x) ? x : `${x}.`))
+    .join(' ')
+}
+
+/** Frases que son un marcador de "acá no hay nada", no diálogo. */
+const MARCADORES_VACIO = ['no aparece', 'no hay dialogo', 'sin dialogo', 'no se escucha', 'silencio']
+
+const norm = (x: string) =>
+  x.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[.!?¡¿]+$/g, '').trim()
+
+/**
+ * Saca del diálogo las frases que en realidad son marcadores de campo vacío.
+ *
+ * ⚠️ FALLO MEDIDO EN UNA SESIÓN REAL (`02fa1205`). El prompt de FASE 1 pide
+ * `textoOverlay` "(o 'No aparece')" y el modelo generaliza ese marcador a `dialogo`
+ * cuando el corte es mudo: el corte 3 quedó con `dialogo: "No aparece. No aparece."` y
+ * el corte 2 con la frase real más el marcador pegado al final. FASE 2 y FASE 3 lo
+ * copian literal —que es exactamente lo que tienen que hacer— y termina en el prompt
+ * del lote como `Locución:`, o sea el generador de video LO DICE EN VOZ ALTA. En el
+ * guión final del usuario salieron tres "No aparece." seguidas.
+ *
+ * El `guionOriginal` de esa misma sesión está limpio, así que el forense sí sabía que
+ * el tramo era mudo: lo contaminado es solo el campo por corte.
+ *
+ * Se limpia en CÓDIGO además de arreglar el prompt porque el prompt no es garantía y
+ * porque esto repara también las sesiones ya guardadas, que es donde está el problema
+ * ahora mismo. Mismo patrón que el resto del pipeline: el modelo redacta, el código
+ * verifica.
+ *
+ * ponytail: solo se descartan frases COMPLETAS que son el marcador; un diálogo real que
+ * contenga "no aparece" dentro de una oración más larga ("la mancha ya no aparece") no
+ * se toca. El modo de fallo del acote es dejar pasar un marcador raro, no comerse
+ * diálogo legítimo.
+ */
+export function limpiarDialogo(texto: string): string {
+  return (texto ?? '')
+    .split(/(?<=[.!?])\s+/)
+    .filter((frase) => frase.trim() && !MARCADORES_VACIO.includes(norm(frase)))
+    .join(' ')
+    .trim()
+}
+
+/** `limpiarDialogo` sobre todo el reporte: los cortes y sus tomas. */
+export function limpiarDialogos(report: ForensicReport): ForensicReport {
+  // Dato de DB, no de este request: una fila legada puede no traer los arrays. Sin este
+  // guard un `.map` sobre undefined tira un 500 en la ruta que solo iba a limpiar texto.
+  if (!Array.isArray(report?.cortes) || !Array.isArray(report?.tomas)) return report
+  const cortes = report.cortes.map((c) => {
+    const hablantes = c.hablantes
+      ?.map((h) => ({ ...h, texto: limpiarDialogo(h.texto) }))
+      .filter((h) => h.texto)
+    return { ...c, dialogo: limpiarDialogo(c.dialogo), ...(hablantes ? { hablantes } : {}) }
+  })
+  const tomas = report.tomas.map((t) => ({ ...t, dialogo: limpiarDialogo(t.dialogo) }))
+  // Sin cambios devuelve el MISMO objeto: así no se ensucia una fila que ya estaba bien
+  // ni se mueve la huella por una reescritura idéntica.
+  const igual = cortes.every((c, i) =>
+      c.dialogo === report.cortes[i].dialogo
+      && (c.hablantes ?? []).length === (report.cortes[i].hablantes ?? []).length
+      && (c.hablantes ?? []).every((h, k) => h.texto === report.cortes[i].hablantes?.[k]?.texto))
+    && tomas.every((t, i) => t.dialogo === report.tomas[i].dialogo)
+  return igual ? report : { ...report, cortes, tomas }
+}
+
+/** Solo las palabras, para comparar dos textos sin que la puntuación decida. */
+const soloPalabras = (x: string) =>
+  (x ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9ñ ]+/g, ' ').replace(/\s+/g, ' ').trim()
+
+/**
+ * Verifica que el desglose por hablante REPRODUZCA el diálogo del corte.
+ *
+ * El modelo reparte `dialogo` entre las personas que hablan, y ese reparto es texto libre:
+ * nada le impide resumir, reordenar o inventar una línea. Acá se comprueba en código lo
+ * único que se PUEDE comprobar — que las palabras concatenadas de `hablantes` sean las
+ * mismas y en el mismo orden que las de `dialogo`.
+ *
+ * ⚠️ Lo que esto NO verifica es a QUIÉN se le asignó cada tramo: eso no se puede saber sin
+ * el audio. Por eso el paso del guión tiene que MOSTRAR la atribución — es el usuario
+ * quien la valida.
+ *
+ * Cuando no cuadra se descarta el desglose de ESE corte y se conserva `dialogo`: el modo
+ * de fallo pasa a ser "sin atribución", que es exactamente el comportamiento anterior y
+ * es seguro. Atribuir mal sería peor que no atribuir: le pondría la línea de un personaje
+ * a otro sin que nada lo reporte.
+ *
+ * La comparación ignora puntuación y acentos: el modelo suele mover una coma al partir la
+ * frase, y rechazar por eso tiraría un reparto correcto.
+ */
+export function verificarHablantes(report: ForensicReport): { report: ForensicReport; descartados: number[] } {
+  if (!Array.isArray(report?.cortes)) return { report, descartados: [] }
+  const descartados: number[] = []
+  const cortes = report.cortes.map((c) => {
+    if (!c.hablantes?.length) return c
+    const junto = soloPalabras(c.hablantes.map((h) => h.texto).join(' '))
+    if (junto === soloPalabras(c.dialogo)) return c
+    descartados.push(c.n)
+    const { hablantes: _fuera, ...sinAtribucion } = c
+    return sinAtribucion
+  })
+  return descartados.length ? { report: { ...report, cortes }, descartados } : { report, descartados }
 }

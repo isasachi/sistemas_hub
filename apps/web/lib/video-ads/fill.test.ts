@@ -692,3 +692,28 @@ describe('slotOriginals', () => {
     expect(o['beneficio#1']).toBe('energía')
   })
 })
+
+/**
+ * El caso de desacuerdo de artículo, extremo a extremo por el lado del código.
+ *
+ * El corrector propone el ajuste (verificado en vivo, 3/3 corridas: "en la Lima" → "en
+ * Lima"), pero solo llega al guión si `acceptScaffoldFix` lo deja pasar. Es el guard el
+ * que decide, no el modelo.
+ */
+describe('acceptScaffoldFix — quitar el artículo que no concuerda', () => {
+  const original = 'Y si te encuentras en la Lima, tienes que venir a Bloom para solicitar tu Top Murai.'
+  const propuesta = 'Y si te encuentras en Lima, tienes que venir a Bloom para solicitar tu Top Murai.'
+
+  it('acepta el ajuste real: cambia poco y conserva los demás valores', () => {
+    // `Lima` NO va en `valores`: es el del hueco que motivó el ajuste, y el caller lo
+    // excluye a propósito. Los otros dos sí tienen que sobrevivir.
+    expect(acceptScaffoldFix({ original, propuesta, valores: ['Bloom', 'Top Murai'] }))
+      .toEqual({ ok: true })
+  })
+
+  it('rechaza una reescritura que se lleve puesto otro valor', () => {
+    const mala = 'Y si te encuentras en Lima, tienes que venir a nuestra tienda para solicitar tu Top Murai.'
+    const r = acceptScaffoldFix({ original, propuesta: mala, valores: ['Bloom', 'Top Murai'] })
+    expect(r.ok).toBe(false)
+  })
+})

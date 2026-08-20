@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useVideoStore } from '@/store/video'
+import type { CampoTextoDeInputs } from '@/lib/video-ads/types'
 import { FileUpload } from '@/components/tools/ui/FileUpload'
 import { STEP } from '@/lib/video-ads/steps'
 import { NICHES, NICHE_SPEC, NICHE_DEFAULT, type Niche } from '@/lib/video-ads/niches'
@@ -21,7 +22,7 @@ export default function Section1Product() {
   // equivoca el video sale mal y el usuario no tiene dónde corregirlo.
   const [niche, setNiche] = useState<Niche>(NICHE_DEFAULT)
 
-  const set = (k: keyof typeof inputs, v: string) => patch({ inputs: { ...inputs, [k]: v } })
+  const set = (k: CampoTextoDeInputs, v: string) => patch({ inputs: { ...inputs, [k]: v } })
   const ready = !!file && !!inputs.productName.trim() && !!inputs.productDescription.trim()
     && !!inputs.angle.trim() && !!inputs.targetAudience.trim() && !!inputs.problem.trim()
 
@@ -51,7 +52,7 @@ export default function Section1Product() {
     }
   }
 
-  const field = (label: string, k: keyof typeof inputs, placeholder: string, hint?: string) => (
+  const field = (label: string, k: CampoTextoDeInputs, placeholder: string, hint?: string) => (
     <div className="flex flex-col gap-1.5">
       <label htmlFor={k} className="text-[13px] font-semibold text-[#efe7e0]">{label}</label>
       {hint && <span className="text-[11.5px] leading-relaxed text-[#8b8b8b]">{hint}</span>}

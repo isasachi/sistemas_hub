@@ -9,7 +9,8 @@ import type { ValidationMatrix } from './validation'
 // esos archivos aparezcan; tsc SÍ marcará estos tres imports como error mientras tanto
 // — es la rotura esperada de esta tarea, documentada en el reporte.
 import type { AdaptedScript } from './adapt'
-import type { VoiceProfile } from './character'
+import type { MotionProfile, VoiceProfile } from './character'
+import type { Personaje } from './personajes'
 import type { Lote } from './lotes'
 
 // ─── INPUTS DEL USUARIO (spec: "INPUTS DEL USUARIO") ─────────────────────────
@@ -36,8 +37,34 @@ export const UserInputsSchema = z.object({
   // la sesión. Sin esto `character_url` se quedaba en null para siempre y la
   // fila "Personaje" de la matriz nunca podía confirmarse por imagen.
   characterUrl: z.string().url().optional(),
+  /**
+   * Varios personajes (hasta 4). Lo que el USUARIO define de cada uno; lo generado
+   * (avatar, bloque de consistencia, voz, movimiento) lo pone FASE 4 y la ruta de
+   * inputs lo conserva al mezclar por id.
+   *
+   * Opcional: sin esto el wizard manda los campos singulares de siempre y todo se
+   * comporta como antes.
+   */
+  personajes: z.array(z.object({
+    id: z.string(),
+    rol: z.string(),
+    desc: z.string(),
+    etnia: z.string(),
+    acento: z.string(),
+    voz: z.string(),
+    fotoUrl: z.string().url().nullable().optional(),
+  })).max(4).optional(),
 })
 export type UserInputs = z.infer<typeof UserInputsSchema>
+
+/**
+ * Las claves de `UserInputs` cuyo valor es TEXTO — las que un `<input>` puede editar.
+ * Existe porque al agregar `personajes` (un array) los helpers genéricos de campo del
+ * wizard empezaron a aceptarla como clave y a intentar renderizarla en un input.
+ */
+export type CampoTextoDeInputs = {
+  [K in keyof UserInputs]-?: NonNullable<UserInputs[K]> extends string ? K : never
+}[keyof UserInputs]
 
 // ─── Línea 1: análisis forense del video de referencia ───────────────────────
 
@@ -62,6 +89,11 @@ export interface VideoSessionResponse {
   reference_video_url: string | null
   forensic_analysis: ForensicReport | null
   character_url: string | null
+  /** Avatar GENERADO (Nano Banana Pro, 9:16). `character_url` es la foto que subió
+   *  el usuario, que es la referencia de identidad — no el personaje del render. */
+  avatar_url: string | null
+  /** Keyframes de cierre, uno por lote (ver `frames.ts`). El avatar abre el primero. */
+  frames: string[] | null
   product_url: string | null
   // Nicho del ad (migración 20260818000001_video_niche.sql). Decide si el producto es
   // un objeto que se sostiene o algo que el personaje LLEVA PUESTO — ver niches.ts.
@@ -86,6 +118,14 @@ export interface VideoSessionResponse {
   character_prompt: string | null
   consistency_block: string | null
   voice_profile: VoiceProfile | null
+  /** Cómo se MUEVE (FASE 4.6). Null en sesiones anteriores a la columna. */
+  motion_profile: MotionProfile | null
+  /**
+   * Varios personajes (hasta 4). Null en toda sesión anterior a la migración: ahí
+   * `personajesDe` arma uno solo con las columnas singulares de arriba. NO leas esta
+   * columna directo — pasa siempre por ese accesor (lib/video-ads/personajes.ts).
+   */
+  personajes: Personaje[] | null
   // FASE 5
   lotes: Lote[] | null
   video_url: string | null   // primer lote listo: sirve de miniatura en el dashboard

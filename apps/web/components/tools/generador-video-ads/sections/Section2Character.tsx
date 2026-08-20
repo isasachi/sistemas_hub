@@ -2,10 +2,19 @@
 
 import { useRef, useState } from 'react'
 import { useVideoStore } from '@/store/video'
+import type { CampoTextoDeInputs, UserInputs } from '@/lib/video-ads/types'
 import { FileUpload } from '@/components/tools/ui/FileUpload'
 import { uploadDirect, measureAsset, isPortrait } from '@/lib/video-ads/upload-client'
 import { STEP } from '@/lib/video-ads/steps'
-import { btnPrimary, errorBox, warnBox, spinner } from './shared'
+import { btnPrimary, btnGhost, errorBox, warnBox, spinner } from './shared'
+import { MAX_PERSONAJES, nuevoId } from '@/lib/video-ads/personajes'
+
+/** Lo que el usuario define de cada personaje. Lo generado lo pone FASE 4. */
+type PersonajeInput = NonNullable<UserInputs['personajes']>[number]
+
+const vacio = (i: number): PersonajeInput => ({
+  id: nuevoId(i), rol: '', desc: '', etnia: '', acento: '', voz: '', fotoUrl: null,
+})
 
 // Paso 2: personaje y voz. Etnia y acento son campos LIBRES y obligatorios: el spec
 // prohíbe inferirlos de la apariencia, así que no hay chips ni defaults — si el
@@ -18,7 +27,30 @@ export default function Section2Character() {
   const [measuring, setMeasuring] = useState(false)
   const pickToken = useRef(0)
 
-  const set = (k: keyof typeof inputs, v: string) => patch({ inputs: { ...inputs, [k]: v } })
+  const set = (k: CampoTextoDeInputs, v: string) => patch({ inputs: { ...inputs, [k]: v } })
+
+  // La lista arranca con UN personaje armado desde los campos singulares, así que una
+  // sesión a medio llenar (o reanudada) no pierde lo que el usuario ya escribió.
+  const gente: PersonajeInput[] = inputs.personajes?.length
+    ? inputs.personajes
+    : [{ id: nuevoId(0), rol: '', desc: inputs.characterDesc, etnia: inputs.characterEthnicity,
+         acento: inputs.accent, voz: inputs.voice, fotoUrl: characterUrl }]
+
+  /**
+   * Escribe la lista y, de paso, sincroniza los campos singulares con el PROTAGONISTA.
+   * El camino legado —la FASE 0 de un solo personaje y el render de las sesiones viejas—
+   * los sigue leyendo, así que desincronizarlos dejaría la validación mirando datos
+   * viejos.
+   */
+  const setGente = (lista: PersonajeInput[]) => patch({
+    inputs: {
+      ...inputs, personajes: lista,
+      characterDesc: lista[0]?.desc ?? '', characterEthnicity: lista[0]?.etnia ?? '',
+      accent: lista[0]?.acento ?? '', voice: lista[0]?.voz ?? '',
+    },
+  })
+  const setCampo = (i: number, k: keyof PersonajeInput, v: string) =>
+    setGente(gente.map((p, j) => (j === i ? { ...p, [k]: v } : p)))
 
   async function pickCharacter(f: File) {
     setError(null); setNotVertical(null); setMeasuring(true)
@@ -76,7 +108,7 @@ export default function Section2Character() {
     }
   }
 
-  const field = (label: string, k: keyof typeof inputs, placeholder: string, hint?: string) => (
+  const field = (label: string, k: CampoTextoDeInputs, placeholder: string, hint?: string) => (
     <div className="flex flex-col gap-1.5">
       <label htmlFor={k} className="text-[13px] font-semibold text-[#efe7e0]">{label}</label>
       {hint && <span className="text-[11.5px] leading-relaxed text-[#8b8b8b]">{hint}</span>}
@@ -98,13 +130,71 @@ export default function Section2Character() {
       </p>
       {notVertical && <div className={warnBox}>{notVertical}</div>}
 
-      {field('Personaje que aparecerá', 'characterDesc', 'Mujer de 25, cabello negro recogido, piel clara',
-        'Edad aproximada, sexo, apariencia general.')}
-      {field('Raza / etnia / origen cultural', 'characterEthnicity', 'Latina peruana',
-        'Obligatorio y solo tuyo: nunca lo deducimos de una foto ni del video de referencia.')}
-      {field('Acento / variante de habla', 'accent', 'Español peruano de Lima',
-        'Obligatorio. Sin esto la voz saldría con un acento genérico que no elegiste.')}
-      {field('Voz (opcional)', 'voice', 'Femenina joven, ritmo conversacional, energía media')}
+      {/* ⚠️ Etnia y acento son campos LIBRES y obligatorios POR PERSONAJE: el spec
+          prohíbe inferirlos, y que uno los tenga no cubre al otro — un anuncio con el
+          padre sin acento saldría con una voz genérica que nadie eligió. */}
+      {gente.map((p, i) => (
+        <div key={p.id} className="flex flex-col gap-3 rounded-xl border border-white/[0.08] p-3.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[12px] font-semibold text-[#ededed]">
+              {i === 0 ? 'Protagonista' : `Personaje ${i + 1}`}
+            </span>
+            {gente.length > 1 && (
+              <button
+                onClick={() => setGente(gente.filter((_, j) => j !== i).map((x, j) => ({ ...x, id: nuevoId(j) })))}
+                className="text-[11.5px] text-[#8b8b8b] hover:text-[#ededed]"
+              >
+                Quitar
+              </button>
+            )}
+          </div>
+
+          {gente.length > 1 && (
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[13px] font-semibold text-[#ededed]">Rol en el anuncio</label>
+              <span className="text-[11.5px] text-[#8b8b8b]">Cómo lo nombra el guión: hijo, padre, vendedora.</span>
+              <input value={p.rol} onChange={(e) => setCampo(i, 'rol', e.target.value)}
+                placeholder="hijo" className="jr-field h-11 rounded-lg px-3 text-[13px]" />
+            </div>
+          )}
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[13px] font-semibold text-[#ededed]">Personaje que aparecerá</label>
+            <span className="text-[11.5px] text-[#8b8b8b]">Edad aproximada, sexo, apariencia general.</span>
+            <input value={p.desc} onChange={(e) => setCampo(i, 'desc', e.target.value)}
+              placeholder="Mujer de 25, cabello negro recogido, piel clara"
+              className="jr-field h-11 rounded-lg px-3 text-[13px]" />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[13px] font-semibold text-[#ededed]">Raza / etnia / origen cultural</label>
+            <span className="text-[11.5px] text-[#8b8b8b]">Obligatorio y solo tuyo: nunca lo deducimos de una foto ni del video de referencia.</span>
+            <input value={p.etnia} onChange={(e) => setCampo(i, 'etnia', e.target.value)}
+              placeholder="Latina peruana" className="jr-field h-11 rounded-lg px-3 text-[13px]" />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[13px] font-semibold text-[#ededed]">Acento / variante de habla</label>
+            <span className="text-[11.5px] text-[#8b8b8b]">Obligatorio. Sin esto la voz saldría con un acento genérico que no elegiste.</span>
+            <input value={p.acento} onChange={(e) => setCampo(i, 'acento', e.target.value)}
+              placeholder="Español peruano de Lima" className="jr-field h-11 rounded-lg px-3 text-[13px]" />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[13px] font-semibold text-[#ededed]">Voz (opcional)</label>
+            <input value={p.voz} onChange={(e) => setCampo(i, 'voz', e.target.value)}
+              placeholder="Femenina joven, ritmo conversacional, energía media"
+              className="jr-field h-11 rounded-lg px-3 text-[13px]" />
+          </div>
+        </div>
+      ))}
+
+      {gente.length < MAX_PERSONAJES && (
+        <button onClick={() => setGente([...gente, vacio(gente.length)])} className={btnGhost}>
+          + Agregar otro personaje
+        </button>
+      )}
+
       {field('Restricciones (opcional)', 'constraints', 'No mencionar precios')}
 
       {error && <div className={errorBox}>{error}</div>}

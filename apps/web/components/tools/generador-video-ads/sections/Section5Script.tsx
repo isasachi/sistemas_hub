@@ -180,12 +180,23 @@ export default function Section5Script() {
             // un aviso de que "algo cambió" no le sirve de nada a quien tiene que juzgarlo.
             const ajuste = adapted.ajustesAndamiaje?.find((a) => a.n === l.n)
             const largo = holgado(l)
+            // ⚠️ Una toma MUDA es un caso legítimo, no un campo sin llenar. El forense
+            // marcaba los cortes sin habla con el marcador "No aparece" y el render lo
+            // pronunciaba; ahora se limpia a cadena vacía (`limpiarDialogo`), y sin
+            // decirlo acá la caja vacía se lee como "te faltó escribir esto". El riesgo
+            // no es cosmético: si el usuario la rellena, le agrega al anuncio diálogo que
+            // el original no tenía, que es justo lo que la adaptación literal prohíbe.
+            const muda = !l.texto.trim()
             return (
               <div key={l.i} className="flex flex-col gap-1">
                 <div className="flex items-center justify-between text-[11px] text-[#8b8b8b]">
                   <span>Toma {l.n} · {seg(l.duracionSeg)}</span>
                   <span className="flex items-center gap-2">
-                    {cpsOriginal > 0 && (
+                    {muda ? (
+                      <span className="text-[#8b8b8b]" title="En el video original nadie habla durante esta toma">
+                        sin diálogo
+                      </span>
+                    ) : cpsOriginal > 0 && (
                       <span className={largo ? 'text-amber-400' : ''} title="Caracteres que caben en esta toma al ritmo del video original">
                         {l.texto.length}/{cabe} car
                       </span>
@@ -208,6 +219,7 @@ export default function Section5Script() {
                       key={j}
                       value={f}
                       onChange={(e) => setEdiciones({ ...ediciones, [`${l.i}:${j}`]: e.target.value })}
+                      placeholder={muda ? 'En el original nadie habla acá. Déjala vacía para que el clip salga en silencio.' : undefined}
                       rows={2}
                       className={`jr-field rounded-lg px-3 py-2 text-[13px] leading-relaxed ${
                         f.includes('[PENDIENTE:') ? 'border-amber-500/40' : ''

@@ -21,6 +21,16 @@ vi.mock('@/lib/gen-quota', async (importOriginal) => ({
   recordGenQuota: vi.fn().mockResolvedValue(undefined),
 }))
 
+// Los frames frontera son imágenes PAGADAS de Nano Banana Pro: si no se mockean, cada
+// test intentaría generarlas de verdad. Se devuelve una URL por lote, que es la
+// invariante que `pairFrames` necesita (frames[i] cierra el lote i y abre el i+1).
+vi.mock('@/lib/video-ads/nano-banana', () => ({
+  generateImage: vi.fn(async () => Buffer.from('png')),
+}))
+vi.mock('@/lib/storage', () => ({
+  uploadToStorage: vi.fn(async (_id: string, _b: Buffer, _m: string, nombre: string) => `https://cdn.test/${nombre}.png`),
+}))
+
 // BYOK: el render usa la API key de KIE del usuario. Los tests corren con una
 // cargada; el caso de la key ausente tiene su propio bloque al final.
 vi.mock('@/lib/user-settings', () => ({
@@ -35,6 +45,7 @@ import { NextRequest } from 'next/server'
 import { POST } from './route'
 import { getVideoSession, updateVideoSession, claimFreshLotes } from '@/lib/video-ads/db'
 import { createVideoTask } from '@/lib/video-ads/kie'
+import { generateImage } from '@/lib/video-ads/nano-banana'
 import { checkGenQuota, checkGlobalBackstop, recordGenQuota } from '@/lib/gen-quota'
 import type { VideoSessionResponse } from '@/lib/video-ads/types'
 import type { Lote } from '@/lib/video-ads/lotes'
@@ -60,14 +71,14 @@ const VOZ = {
 
 const toma = (n: number, duracionSeg: number) => ({
   n, tiempoOriginal: '00:00-00:10', duracionSeg,
-  accionVisual: `acción ${n}`, personaje: 'Mujer 25', producto: 'Frasco', locucion: `línea ${n}`,
+  accionVisual: `la mujer hace la acción ${n}`, personaje: 'Mujer 25', producto: 'Frasco', locucion: `línea ${n}`,
 })
 
 // Dos tomas de 10 s: juntas suman 20 s (>15), así que `groupIntoLotes` las separa en
 // 2 lotes reales — es el caso que prueba que la cuota nueva cobra 1 vez, no 2.
 const ADAPTED_2_LOTES = {
   guionFinal: 'x', caracteresAdaptado: 1, diferenciaCaracteres: 0,
-  tomas: [toma(1, 10), toma(2, 10)],
+  tomas: [toma(1, 8), toma(2, 8)],
   variablesPendientes: [] as string[],
 }
 
@@ -78,8 +89,8 @@ const ADAPTED_2_LOTES = {
 const ADAPTED_2_LOTES_OTRO_TEXTO = {
   ...ADAPTED_2_LOTES,
   tomas: [
-    { ...toma(1, 10), accionVisual: 'otra acción distinta', locucion: 'otro guión completamente distinto' },
-    { ...toma(2, 10), accionVisual: 'segunda acción distinta', locucion: 'segunda línea distinta' },
+    { ...toma(1, 8), accionVisual: 'la mujer hace otra acción distinta', locucion: 'otro guión completamente distinto' },
+    { ...toma(2, 8), accionVisual: 'la mujer hace la segunda acción distinta', locucion: 'segunda línea distinta' },
   ],
 }
 
@@ -204,6 +215,47 @@ describe('POST generate-lotes — fix round 2: cuota por video, no por lote', ()
     expect(generationCalls).toHaveLength(0)
   })
 
+  // ⚠️ EL FALLO SILENCIOSO QUE ESTE MODO PUEDE TENER. `frames[i]` cierra el lote i y
+  // ABRE el i+1. Si al reanudar se regeneraran, el clip pendiente arrancaría en una pose
+  // distinta de donde terminó el que ya se pagó — y nada lo reportaría: los dos clips
+  // existen, los dos tienen video, y el corte entre ellos salta.
+  it('reanudar REUSA los frames guardados en vez de regenerarlos', async () => {
+    const guardados = await renderInicial()
+    const framesGuardados = ['https://cdn.test/viejo-1.png', 'https://cdn.test/viejo-2.png']
+    vi.mocked(getVideoSession).mockResolvedValue(
+      session({
+        lotes: conPendiente(guardados) as unknown as VideoSessionResponse['lotes'],
+        frames: framesGuardados,
+      } as never),
+    )
+    vi.mocked(generateImage).mockClear()
+
+    const res = await POST(req({ resume: true }), ctx())
+    expect(res.status).toBe(200)
+    // Ni una sola imagen nueva: son llamadas pagadas Y romperían la continuidad.
+    expect(generateImage).not.toHaveBeenCalled()
+    // Y el lote pendiente (el 2) arranca exactamente donde cerró el 1.
+    const [creado] = vi.mocked(createVideoTask).mock.calls.slice(-1)
+    expect(creado[0].images.map((i) => i.url)).toEqual([framesGuardados[0], framesGuardados[1]])
+  })
+
+  it('si el guión cambió, los frames NO se reusan aunque estén guardados', async () => {
+    // Huella distinta = otro contenido = otras poses. Reusar los frames viejos pegaría
+    // el video nuevo a los fotogramas del anterior.
+    vi.mocked(getVideoSession).mockResolvedValue(
+      session({
+        adapted: ADAPTED_2_LOTES_OTRO_TEXTO,
+        lotes: [{ n: 1, tomas: [], duracionSeg: 8, prompt: 'v', taskId: 't-old', status: 'waiting', videoUrl: null, failMsg: null, scriptHash: 'huella-vieja' }],
+        frames: ['https://cdn.test/viejo-1.png'],
+      } as never),
+    )
+    vi.mocked(generateImage).mockClear()
+
+    const res = await POST(req({ resume: true }), ctx())
+    expect(res.status).toBe(200)
+    expect(generateImage).toHaveBeenCalled()
+  })
+
   it('resume:true SIN ningún taskId pagado se trata como intento nuevo: SÍ cobra', async () => {
     // Placeholders de un intento anterior que falló por completo (0 gastado) — un
     // cliente que mande resume:true igual no se libra de pagar la generación.
@@ -275,9 +327,11 @@ describe('POST generate-lotes — fix round 2: cuota por video, no por lote', ()
   })
 
   it('fallo total en el primer lote (prompt que nunca cabe): NO cobra video-generation y guarda placeholders', async () => {
-    // consistency_block absurdamente largo: ni el nivel mínimo de buildLotePrompt
-    // entra en KIE_PROMPT_MAX, así que lanza antes de llamar a KIE por primera vez.
-    vi.mocked(getVideoSession).mockResolvedValue(session({ consistency_block: 'x'.repeat(6000) }))
+    // consistency_block absurdamente largo: el prompt no entra en KIE_PROMPT_MAX, así
+    // que `buildLotePrompt` lanza antes de llamar a KIE por primera vez. El bloque de
+    // consistencia no se recorta nunca — es lo único que sostiene la identidad entre
+    // lotes — así que la única salida es fallar, no mandar una tarea que daría 422.
+    vi.mocked(getVideoSession).mockResolvedValue(session({ consistency_block: 'x'.repeat(70_000) }))
 
     const res = await POST(req(), ctx())
     expect(res.status).toBe(400)

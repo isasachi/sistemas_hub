@@ -33,18 +33,43 @@ export async function POST(
   const characterUrl = i.characterUrl ?? session.character_url ?? null
   const validation = buildValidationMatrix(i, !!characterUrl)
 
+  /**
+   * ⚠️ MEZCLA POR ID, NO PISA. Lo que llega del wizard es solo lo que el USUARIO define
+   * (rol, descripción, etnia, acento, voz, foto). El avatar, el bloque de consistencia,
+   * el perfil de voz y el de movimiento los genera FASE 4 y viven en la misma fila:
+   * escribir el array del wizard tal cual los borraría, y volver a este paso a corregir
+   * una tilde obligaría a re-generar N avatares.
+   */
+  const previos = Array.isArray(session.personajes) ? session.personajes : []
+  const personajes = i.personajes?.length
+    ? i.personajes.map((p) => {
+        const antes = previos.find((x) => x.id === p.id)
+        return {
+          ...p,
+          fotoUrl: p.fotoUrl ?? antes?.fotoUrl ?? null,
+          avatarUrl: antes?.avatarUrl ?? null,
+          consistencyBlock: antes?.consistencyBlock ?? null,
+          voiceProfile: antes?.voiceProfile ?? null,
+          motionProfile: antes?.motionProfile ?? null,
+        }
+      })
+    : null
+
   await updateVideoSession(id, {
     product_name: i.productName,
     what_it_does: i.productDescription,
     angle: i.angle,
     target_audience: i.targetAudience,
     problem: i.problem,
-    character_desc: i.characterDesc,
-    character_ethnicity: i.characterEthnicity,
-    accent: i.accent,
-    voice: i.voice,
+    character_desc: personajes?.[0]?.desc ?? i.characterDesc,
+    character_ethnicity: personajes?.[0]?.etnia ?? i.characterEthnicity,
+    accent: personajes?.[0]?.acento ?? i.accent,
+    voice: personajes?.[0]?.voz ?? i.voice,
     constraints: i.constraints,
     character_url: characterUrl,
+    // Las columnas singulares se siguen escribiendo con el PROTAGONISTA: son el camino
+    // legado y lo que leen las sesiones sin `personajes`.
+    ...(personajes ? { personajes } : {}),
     validation,
     step: Math.max(session.step, STEP.VALIDATION),
   })

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildAdaptInstruction, AdaptedScriptSchema, applyScriptEdits, resyncTomaDurations, type AdaptedScript } from './adapt'
+import { buildAdaptInstruction, AdaptedScriptSchema, applyScriptEdits, resyncTomaDurations, type AdaptedScript, buildCoherenceInstruction } from './adapt'
 import { extractSlots } from './fill'
 import type { ScriptTemplate } from './template'
 import type { ForensicReport } from './forensic'
@@ -315,5 +315,42 @@ describe('AdaptedScriptSchema', () => {
 
   it('rechaza un guión sin tomas', () => {
     expect(AdaptedScriptSchema.safeParse({ guionFinal: 'x', tomas: [] }).success).toBe(false)
+  })
+})
+
+/**
+ * ⚠️ MEDIDO EN UN ANUNCIO REAL. El original decía "si te encuentras en la Galería Santa
+ * Lucía"; FASE 2 dejó "en la [ubicación específica]" y el valor correcto era una ciudad,
+ * así que el guión salió diciendo "si te encuentras en la Lima".
+ *
+ * `correcciones` no puede arreglarlo: el artículo es ANDAMIAJE, no valor, y ningún valor
+ * de ubicación encaja detrás de "la". El único mecanismo que sirve es `ajustes` — la
+ * excepción de la directiva 13 —, y su sección solo describía el caso del adjetivo que
+ * no existe.
+ */
+describe('buildCoherenceInstruction — desacuerdo de artículo', () => {
+  const instruccion = buildCoherenceInstruction(
+    [{ n: 1, locucion: 'Y si te encuentras en la Lima, tienes que venir a Bloom.' }],
+    [{ id: 'ubicación específica#1', valor: 'Lima', contexto: 'en la [ubicación específica]' }],
+    {
+      productName: 'Top', productDescription: 'x', angle: 'x', targetAudience: 'x',
+      problem: 'x', characterDesc: 'x', characterEthnicity: 'x', accent: 'x',
+      voice: '', constraints: '',
+    },
+    null,
+  )
+
+  it('nombra el desacuerdo de artículo como caso de `ajustes`, no de `correcciones`', () => {
+    expect(instruccion).toMatch(/ART[IÍ]CULO O LA PREPOSICI[OÓ]N/)
+    expect(instruccion).toMatch(/art[ií]culo es andamiaje, no valor/i)
+  })
+
+  it('trae el caso real con su arreglo, para que no lo resuelva cambiando la ciudad', () => {
+    expect(instruccion).toContain('en la Lima')
+    expect(instruccion).toMatch(/quitar el artículo, no cambiar la ciudad/)
+  })
+
+  it('conserva el caso del adjetivo que no existe', () => {
+    expect(instruccion).toMatch(/andas muy/)
   })
 })

@@ -32,6 +32,7 @@ export interface VideoListRow {
   product_name: string | null
   video_url: string | null
   character_url: string | null
+  avatar_url: string | null
   product_url: string | null
   // Señal angosta de "¿terminó el render?" — NO `!!video_url` (ese se estampa con el
   // primer lote listo). Ver render_done en types.ts / la migración
@@ -44,7 +45,7 @@ export interface VideoListRow {
 export async function listVideoSessions(userId: string): Promise<VideoListRow[]> {
   const { data, error } = await getDb()
     .from('video_sessions')
-    .select('id, created_at, step, product_name, video_url, character_url, product_url, render_done')
+    .select('id, created_at, step, product_name, video_url, avatar_url, character_url, product_url, render_done')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(24)

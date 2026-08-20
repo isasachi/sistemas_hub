@@ -103,3 +103,62 @@ describe('capMaxReached', () => {
     expect(capMaxReached(1, PENDING, VALIDATION_STEP)).toBe(1)
   })
 })
+
+/**
+ * ⚠️ CON VARIOS PERSONAJES LA FASE 0 BLOQUEA POR CADA UNO. Etnia y acento son los dos
+ * campos que el spec prohíbe inferir, y que uno los tenga no cubre al otro: un anuncio
+ * con el padre sin acento saldría con una voz genérica que nadie eligió.
+ */
+describe('buildValidationMatrix — varios personajes', () => {
+  const completos = {
+    productName: 'Top', productDescription: 'Top asimétrico', angle: 'Nuevo ingreso',
+    targetAudience: 'Mujeres 20-30', problem: 'Ropa en tendencia',
+    characterDesc: 'x', characterEthnicity: 'x', accent: 'x', voice: '', constraints: '',
+  }
+  const p = (over: Record<string, unknown> = {}) => ({
+    id: 'P1', rol: 'hijo', desc: 'Hombre de 30', etnia: 'Latino mexicano',
+    acento: 'Español mexicano', voz: '', fotoUrl: null, ...over,
+  })
+
+  it('con dos personajes completos, todo confirmado', () => {
+    const m = buildValidationMatrix(
+      { ...completos, personajes: [p(), p({ id: 'P2', rol: 'padre' })] } as never, false,
+    )
+    expect(m.pending).toEqual([])
+    expect(m.rows.some((r) => r.variable === 'Acento · hijo')).toBe(true)
+    expect(m.rows.some((r) => r.variable === 'Acento · padre')).toBe(true)
+  })
+
+  it('si al SEGUNDO le falta el acento, la FASE 0 lo bloquea y dice de quién', () => {
+    const m = buildValidationMatrix(
+      { ...completos, personajes: [p(), p({ id: 'P2', rol: 'padre', acento: '' })] } as never, false,
+    )
+    expect(m.pending).toContain('Acento · padre')
+    expect(m.pending).not.toContain('Acento · hijo')
+  })
+
+  it('la foto confirma la APARIENCIA de ese personaje, nunca su etnia', () => {
+    // Una foto no confirma origen cultural: el spec lo prohíbe explícitamente.
+    const m = buildValidationMatrix({
+      ...completos,
+      personajes: [p({ fotoUrl: 'https://cdn/f.png', desc: '', etnia: '' }), p({ id: 'P2', rol: 'padre' })],
+    } as never, false)
+    // La apariencia del hijo queda confirmada por su foto…
+    expect(m.rows.find((r) => r.variable === 'Personaje · hijo')?.estado).toBe('CONFIRMADA')
+    // …pero su etnia sigue pendiente: una foto no confirma origen cultural.
+    expect(m.pending).toContain('Raza / etnia / origen cultural · hijo')
+    expect(m.pending).not.toContain('Raza / etnia / origen cultural · padre')
+  })
+
+  it('con UN solo personaje la matriz es la de siempre — sin sufijos de rol', () => {
+    const m = buildValidationMatrix({ ...completos, personajes: [p()] } as never, false)
+    expect(m.rows.some((r) => r.variable === 'Acento')).toBe(true)
+    expect(m.rows.some((r) => r.variable.includes('·'))).toBe(false)
+  })
+
+  it('sin la lista se comporta exactamente como antes', () => {
+    const sinLista = buildValidationMatrix(completos as never, false)
+    const conUno = buildValidationMatrix({ ...completos, personajes: [p()] } as never, false)
+    expect(sinLista.rows.map((r) => r.variable)).toEqual(conUno.rows.map((r) => r.variable))
+  })
+})

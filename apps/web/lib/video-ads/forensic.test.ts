@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildForensicInstruction, ForensicReportSchema, repairCutTiming, mergeMicroCortes, muestraPersona, CPS_MAX, type ForensicReport } from './forensic'
+import { buildForensicInstruction, ForensicReportSchema, repairCutTiming, mergeMicroCortes, muestraPersona, CPS_MAX, type ForensicReport, enProsa, limpiarDialogo, verificarHablantes } from './forensic'
 
 // El prompt es el contrato con Gemini. Estos asserts fijan las reglas del spec que,
 // si se caen, producen el bug que ya vimos en producción: cortes inventados por
@@ -453,5 +453,193 @@ describe('repairCutTiming — el piso no infla', () => {
   it('pero tampoco se lo vacía para financiar a otro', () => {
     const { report } = repairCutTiming(rep([c(1, 1.2, ''), c(2, 2, 'x'.repeat(200))]), 3)
     expect(report.cortes[0].duracionSeg).toBeCloseTo(1.2, 6)
+  })
+})
+
+/**
+ * Gemini devuelve objetos y arrays en campos declarados `z.string()` y el schema los
+ * coacciona a un string con JSON adentro. Eso viajaba crudo al prompt de render.
+ */
+describe('enProsa', () => {
+  it('aplana un objeto a prosa, sin llaves ni nombres de campo', () => {
+    const fondo = JSON.stringify({
+      localizacionAparente: 'Interior, habitación con pared lisa',
+      paredes: 'Lisas, color crema',
+      iluminacion: 'Luz suave y uniforme',
+    })
+    const p = enProsa(fondo)
+    expect(p).toBe('Interior, habitación con pared lisa. Lisas, color crema. Luz suave y uniforme.')
+    expect(p).not.toMatch(/[{}"]|localizacionAparente/)
+  })
+
+  it('aplana un array de objetos — la forma real de `vestuario`', () => {
+    const vestuario = JSON.stringify([
+      { prenda: 'Camisa de manga larga', colores: 'Crema' },
+      { prenda: 'Pantalón', colores: 'Negro' },
+    ])
+    expect(enProsa(vestuario)).toBe('Camisa de manga larga. Crema. Pantalón. Negro.')
+  })
+
+  // ⚠️ El defecto grave. En un prompt de UN clip, una descripción que empieza "En un
+  // corte…" es una lista de escenarios alternativos, y el modelo elige uno: de ahí salió
+  // el sillón que apareció en un clip de la prueba de ropa.
+  it('descarta lo que describe OTROS cortes', () => {
+    const fondo = JSON.stringify({
+      paredes: 'Lisas, color crema',
+      muebles: 'En un corte, se observa un sillón tapizado en tela gris claro',
+      superficies: 'En algunos cortes se ve un suelo de baldosas',
+    })
+    const p = enProsa(fondo)
+    expect(p).toBe('Lisas, color crema.')
+    expect(p).not.toMatch(/sillón|baldosas/)
+  })
+
+  it('un texto que ya es prosa vuelve intacto, y lo vacío se queda vacío', () => {
+    expect(enProsa('Dormitorio con luz natural.')).toBe('Dormitorio con luz natural.')
+    expect(enProsa('')).toBe('')
+    expect(enProsa(null)).toBe('')
+  })
+
+  it('un JSON corrupto se devuelve tal cual en vez de perderse', () => {
+    expect(enProsa('{no es json')).toBe('{no es json')
+  })
+})
+
+/**
+ * ⚠️ FALLO MEDIDO EN LA SESIÓN `02fa1205`. El prompt de FASE 1 pide `textoOverlay` "(o
+ * 'No aparece')" y el modelo generaliza ese marcador a `dialogo` en los cortes mudos.
+ * FASE 2 y 3 lo copian literal —que es lo que deben hacer— y llega al prompt del lote
+ * como `Locución:`, o sea el generador de video LO DICE EN VOZ ALTA. En el guión final
+ * del usuario salieron tres "No aparece." seguidas.
+ */
+describe('limpiarDialogo', () => {
+  it('vacía un corte mudo cuyo diálogo es solo el marcador, repetido', () => {
+    expect(limpiarDialogo('No aparece. No aparece.')).toBe('')
+    expect(limpiarDialogo('No aparece.')).toBe('')
+  })
+
+  it('quita el marcador pegado al final de una frase real y conserva la frase', () => {
+    expect(limpiarDialogo('Y es nuestro Top Mei. No aparece.')).toBe('Y es nuestro Top Mei.')
+  })
+
+  it('NO se come diálogo legítimo que contenga esas palabras dentro de una oración', () => {
+    // El acote es a frases COMPLETAS: el modo de fallo es dejar pasar un marcador raro,
+    // no borrar algo que el personaje sí dice.
+    const real = 'Después de dos semanas la mancha ya no aparece.'
+    expect(limpiarDialogo(real)).toBe(real)
+  })
+
+  it('tolera acentos, mayúsculas y las otras formas del marcador', () => {
+    expect(limpiarDialogo('SIN DIÁLOGO.')).toBe('')
+    expect(limpiarDialogo('Silencio. Hola a todas.')).toBe('Hola a todas.')
+  })
+
+  it('un diálogo limpio vuelve intacto', () => {
+    const t = 'La tendencia asiática llegó y este es el nuevo ingreso.'
+    expect(limpiarDialogo(t)).toBe(t)
+  })
+})
+
+/**
+ * VARIOS PERSONAJES (slice 2). El desglose por hablante es texto libre del modelo: nada
+ * le impide resumir, reordenar o inventar. Lo único verificable en código es que las
+ * palabras concatenadas reproduzcan el diálogo del corte.
+ *
+ * Lo que NO se puede verificar es a QUIÉN se le asignó cada tramo — para eso hace falta
+ * el audio. Por eso el fallo se resuelve DESCARTANDO la atribución de ese corte: quedarse
+ * sin atribución es el comportamiento de siempre y es seguro; atribuir mal le pondría la
+ * línea de un personaje a otro sin que nada lo reporte.
+ */
+describe('verificarHablantes', () => {
+  const corte = (over: Record<string, unknown> = {}) => ({
+    n: 1, tiempo: '00:00 - 00:05', duracionSeg: 5, accion: 'a', camara: 'plano medio',
+    dialogo: 'Tome, doctorcito. No se preocupe por eso.',
+    textoOverlay: 'No aparece', transicion: 'corte', ...over,
+  })
+  const rep = (cortes: unknown[]) => ({ cortes, tomas: [] } as never)
+
+  it('acepta un reparto que reproduce el diálogo', () => {
+    const r = verificarHablantes(rep([corte({
+      hablantes: [
+        { personaje: 'P2', texto: 'Tome, doctorcito.' },
+        { personaje: 'P1', texto: 'No se preocupe por eso.' },
+      ],
+    })]))
+    expect(r.descartados).toEqual([])
+    expect(r.report.cortes[0].hablantes).toHaveLength(2)
+  })
+
+  it('tolera puntuación y acentos movidos al partir la frase', () => {
+    // El modelo suele mover una coma; rechazar por eso tiraría un reparto correcto.
+    const r = verificarHablantes(rep([corte({
+      hablantes: [
+        { personaje: 'P2', texto: 'Tome doctorcito' },
+        { personaje: 'P1', texto: '¡No se preocupe por eso!' },
+      ],
+    })]))
+    expect(r.descartados).toEqual([])
+  })
+
+  it('DESCARTA el reparto que inventa o pierde texto, y conserva el diálogo', () => {
+    const r = verificarHablantes(rep([corte({
+      hablantes: [{ personaje: 'P2', texto: 'Tome, doctorcito. Dios se lo pague.' }],
+    })]))
+    expect(r.descartados).toEqual([1])
+    expect(r.report.cortes[0].hablantes).toBeUndefined()
+    expect(r.report.cortes[0].dialogo).toBe('Tome, doctorcito. No se preocupe por eso.')
+  })
+
+  it('descarta también si se pierde una parte', () => {
+    const r = verificarHablantes(rep([corte({
+      hablantes: [{ personaje: 'P1', texto: 'Tome, doctorcito.' }],
+    })]))
+    expect(r.descartados).toEqual([1])
+  })
+
+  it('un corte sin atribución pasa intacto — es el caso de toda sesión anterior', () => {
+    const antes = rep([corte()])
+    expect(verificarHablantes(antes).report).toBe(antes)
+  })
+})
+
+describe('el prompt de FASE 1 pide personajes y atribución', () => {
+  const p = buildForensicInstruction()
+
+  it('pide la lista de personajes con id estable', () => {
+    expect(p).toMatch(/`personajes`/)
+    expect(p).toMatch(/hasta 4/)
+    expect(p).toMatch(/estable y no repetirse/)
+  })
+
+  it('exige que el reparto no cambie una palabra, y dice qué pasa si no', () => {
+    expect(p).toMatch(/NO cambies ni una palabra/)
+    expect(p).toMatch(/se descarta el reparto/)
+  })
+
+  it('mantiene la prohibición de etiquetar etnia también en los personajes', () => {
+    expect(p).toMatch(/SIN etiquetar etnia ni origen cultural/)
+  })
+})
+
+/**
+ * ⚠️ FALSO POSITIVO MEDIDO con el anuncio de calzado. El forense describe un plano de
+ * producto como "Detalle del zapato, SIN PERSONA en cuadro" y la búsqueda por palabra lo
+ * leía como plano de PERSONA — al revés. Un flat-lay mal clasificado se fusiona con planos
+ * de persona y comparte fotograma con ellos, que es justo lo que esta función evita.
+ */
+describe('muestraPersona — la negación manda', () => {
+  it('no lee como persona lo que dice explícitamente que no la hay', () => {
+    expect(muestraPersona('Detalle del zapato beige con lazo, sin persona en cuadro')).toBe(false)
+    expect(muestraPersona('Plano cenital del producto, no aparece nadie')).toBe(false)
+    expect(muestraPersona('La prenda extendida, no se ve a la modelo')).toBe(false)
+  })
+
+  it('sigue reconociendo los planos de persona de siempre', () => {
+    expect(muestraPersona('Primer plano de los pies de la modelo calzando los tacones')).toBe(true)
+    expect(muestraPersona('La mujer levanta la mano y mira a la cámara')).toBe(true)
+  })
+
+  it('un plano sin personas mencionadas sigue siendo de producto', () => {
+    expect(muestraPersona('Placa final con el logotipo de la marca sobre fondo blanco')).toBe(false)
   })
 })

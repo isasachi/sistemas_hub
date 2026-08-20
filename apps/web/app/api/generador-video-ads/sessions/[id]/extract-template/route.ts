@@ -7,7 +7,7 @@ import { readUserId } from '@/lib/product-hunter/session'
 import { TemplateDraftSchema, buildTemplateInstruction } from '@/lib/video-ads/template'
 import { validateTemplate, assembleTemplate, normalizeSlots } from '@/lib/video-ads/fill'
 import { canProceed } from '@/lib/video-ads/validation'
-import { repairCutTiming, mergeMicroCortes, MIN_TOMA_SEG } from '@/lib/video-ads/forensic'
+import { repairCutTiming, mergeMicroCortes, MIN_TOMA_SEG, limpiarDialogos, verificarHablantes } from '@/lib/video-ads/forensic'
 import { resyncTomaDurations } from '@/lib/video-ads/adapt'
 import { STEP } from '@/lib/video-ads/steps'
 
@@ -86,7 +86,11 @@ export async function POST(
   // no entran — deshaciendo justo lo que la fusión acababa de garantizar. Medido en una
   // sesión real de ropa: las dos tomas de cierre, las únicas mudas, quedaban en 0.91 s
   // y 1.27 s después de fusionar a 3 s.
-  const { report: forensic, ajustes } = repairCutTiming(base, MIN_TOMA_SEG)
+  const { report: atribuido, descartados } = verificarHablantes(limpiarDialogos(base))
+  if (descartados.length) {
+    console.warn(`[video-ads/extract-template] sesión ${id}: atribución descartada en los cortes ${descartados.join(', ')}`)
+  }
+  const { report: forensic, ajustes } = repairCutTiming(atribuido, MIN_TOMA_SEG)
   if (ajustes.length || base !== session.forensic_analysis) {
     if (ajustes.length)
       console.warn(
