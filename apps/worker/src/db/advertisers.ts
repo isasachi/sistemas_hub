@@ -115,31 +115,39 @@ export async function saveAdvertiserProducts(
   if (error) throw new Error(`disc_advertiser_products: ${error.message}`)
 }
 
-/** Nombre del producto que resolvió la Fase 6, por anuncio. */
-export async function productNameForAd(adIds: string[]): Promise<Map<string, string>> {
-  const out = new Map<string, string>()
+export interface ResolvedProduct {
+  productId: string
+  name: string | null
+  confidence: number
+}
+
+/** Producto que resolvió la Fase 6, por anuncio, CON su confianza real. */
+export async function productNameForAd(adIds: string[]): Promise<Map<string, ResolvedProduct>> {
+  const out = new Map<string, ResolvedProduct>()
   for (let i = 0; i < adIds.length; i += 200) {
     const { data } = await db().from('disc_ad_products')
-      .select('ad_id, disc_products(canonical_name)')
+      .select('ad_id, confidence, product_id, disc_products(canonical_name)')
       .in('ad_id', adIds.slice(i, i + 200))
     // El embed de PostgREST tipa la relación como array aunque acá sea 1-a-1.
     for (const r of (data ?? []) as unknown as {
       ad_id: string
+      confidence: number | string | null
+      product_id: string
       disc_products: { canonical_name: string | null } | { canonical_name: string | null }[] | null
     }[]) {
       const rel = Array.isArray(r.disc_products) ? r.disc_products[0] : r.disc_products
-      if (rel?.canonical_name) out.set(r.ad_id, rel.canonical_name)
+      out.set(r.ad_id, {
+        productId: r.product_id,
+        name: rel?.canonical_name ?? null,
+        // numeric de Postgres vuelve como string por el driver.
+        confidence: Number(r.confidence ?? 0),
+      })
     }
   }
   return out
 }
 
-/** Producto dominante del anunciante, buscado entre los productos ya resueltos. */
-export async function productIdForAd(adId: string): Promise<string | null> {
-  const { data } = await db().from('disc_ad_products')
-    .select('product_id').eq('ad_id', adId).limit(1).maybeSingle()
-  return (data as { product_id: string } | null)?.product_id ?? null
-}
+
 
 /**
  * ⚠️ El veredicto se escribe SIEMPRE, también cuando pasa. Antes solo se

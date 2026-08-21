@@ -22,9 +22,10 @@ import { BUCKET_LABEL } from '../advertisers/bucket'
 import { expandKeyword } from '../discovery/expand'
 import { bm25, phraseCoverage } from '../scoring/relevance'
 import { eligibility, opportunityScore, daysActive, type Candidate } from '../scoring/opportunity'
+import { jaccard } from '../products/similarity'
 import {
   acceptedAds, countriesByAd, saveAdvertiser, saveAdvertiserProducts,
-  productIdForAd, markRejected, markAccepted, productNameForAd, setRelevance, type AcceptedAd,
+  markRejected, markAccepted, productNameForAd, setRelevance, type AcceptedAd,
 } from '../db/advertisers'
 
 const JITTER_MS = Math.max(0, Number(process.env.PH_JITTER_MS ?? 500))
@@ -108,7 +109,33 @@ async function main() {
       // rango bajo y un monoproducto perfecto de la nada.
       if (!prof) { inconclusos.push(pageId); continue }
 
-      const productId = !dryRun ? await productIdForAd(grupo[0].id) : null
+      // ⚠️ El producto DOMINANTE del anunciante no es el producto del primer
+      // anuncio que matcheó la búsqueda, y confundirlos escribe una clave
+      // foránea falsa con un `ad_count` convincente al lado. Son cosas
+      // distintas por construcción: el dominante sale del catálogo entero
+      // (`tallyProducts`), mientras que los productos que resolvimos son solo
+      // los de los anuncios que pasaron NUESTRO filtro temático — o sea una
+      // muestra sesgada hacia la consulta. bnatural Store tiene 13 productos y
+      // 23% de share: su dominante casi seguro no es la crema dental que
+      // encontramos buscando "dolor de muela".
+      //
+      // Se empareja por nombre y, si no hay coincidencia clara, se guarda NULL.
+      // Un nulo es honesto; una FK equivocada no.
+      // Con UN solo producto en el catálogo no hay ambigüedad que proteger: el
+      // producto que resolvimos ES el dominante. Exigir además que los nombres
+      // se parezcan dejaba en NULL hasta a Oral-B (1 producto, share 100%),
+      // porque el nombre del tally sale del TÍTULO DEL ANUNCIO y el resuelto de
+      // la LANDING — dos textos distintos del mismo producto.
+      const dominantName = prof.distribution.dominant?.name ?? null
+      let productId: string | null = null
+      if (!dryRun) {
+        const resueltos = grupo.map((ad) => nombres.get(ad.id)).filter((r) => !!r)
+        if (prof.distribution.distinct === 1) {
+          productId = resueltos[0]?.productId ?? null
+        } else if (dominantName) {
+          productId = resueltos.find((r) => r!.name && jaccard(r!.name, dominantName) >= 0.6)?.productId ?? null
+        }
+      }
       let advertiserId: string | null = null
       if (!dryRun) {
         advertiserId = await saveAdvertiser(prof, paisDe.get(pageId) ?? country, productId)
@@ -127,8 +154,11 @@ async function main() {
           physicalProduct: true,     // ya lo garantizó la Fase 5
           ecommerce: true,
           relevance: rel.get(ad.id) ?? 0,
-          // La Fase 6 ya exigió nombre resoluble para aceptar el anuncio.
-          productConfidence: 0.75,
+          // Confianza REAL de la Fase 6 (json-ld 0,95 · título 0,75 · copy del
+          // anuncio 0,45), leída de `disc_ad_products`. Con una constante, el
+          // gate `minProductConfidence` del §43 no evaluaba nada: todo pasaba
+          // por construcción.
+          productConfidence: nombres.get(ad.id)?.confidence ?? 0,
           productShare: prof.distribution.share,
           daysActive: daysActive(ad.start_date),
           ecommerceScore: ad.ecommerce_score ?? 0,
@@ -146,7 +176,7 @@ async function main() {
           // El nombre sale de la Fase 6 (leído de la LANDING) y no del título
           // del anuncio: el título es copy publicitario y da cosas como "Pago
           // Contraentrega 🚚" como si fuera el nombre del producto.
-          product: nombres.get(ad.id) ?? prof.distribution.dominant?.name ?? ad.headline,
+          product: nombres.get(ad.id)?.name ?? prof.distribution.dominant?.name ?? ad.headline,
           countries: [...(geo.get(ad.id) ?? [country])],
           advertiser: prof.pageName ?? ad.page_name,
           advertiser_ads: prof.activeAds,
@@ -174,11 +204,15 @@ async function main() {
   for (const f of filas) {
     const k = `${f.advertiser ?? ''}|${f.product ?? ''}`
     const prev = porProducto.get(k)
-    if (!prev) { porProducto.set(k, { ...f, matched_ads: 1 }); continue }
-    prev.matched_ads = (prev.matched_ads as number) + 1
+    if (!prev) { porProducto.set(k, { ...f, accepted_ads: 1 }); continue }
+    // `accepted_ads`, no "matched": es cuántos anuncios ACEPTADOS colapsaron en
+    // esta fila. `product_ads` es otra cosa — los anuncios del producto en todo
+    // el catálogo del anunciante — y nombrar a los dos "matched" hacía que uno
+    // de los dos números pareciera roto.
+    prev.accepted_ads = (prev.accepted_ads as number) + 1
     // Se conserva el mejor de sus anuncios: el más viejo y el más relevante.
     if ((f.score as number) > (prev.score as number)) {
-      Object.assign(prev, f, { matched_ads: prev.matched_ads })
+      Object.assign(prev, f, { accepted_ads: prev.accepted_ads })
     }
     prev.countries = [...new Set([...(prev.countries as string[]), ...(f.countries as string[])])]
   }
