@@ -67,6 +67,17 @@ describe('refinePrompt', () => {
     expect(p).toContain('copy ONLY the layout, never who appears in it')
   })
 
+  // Mismo hueco, segunda mitad: STEP5 re-apunta los marcadores a la zona del producto y
+  // recolorea con la marca del usuario. Sin nombrarlos, la imagen 1 los tira de vuelta.
+  for (const [caso, feedback] of [['sin feedback', ''], ['con feedback', 'titular en blanco']] as const) {
+    it(`${caso}: ancla la zona señalada y la paleta a la imagen actual`, () => {
+      const p = refinePrompt(4, feedback)
+      expect(p).toContain('attention markers in image 4')
+      expect(p).toMatch(/NEVER re-aim them at the zone shown in image 1/)
+      expect(p).toMatch(/never restore image 1's colors/)
+    })
+  }
+
   it('con feedback el cambio sigue siendo exclusivo', () => {
     const p = refinePrompt(3, 'titular en blanco')
     expect(p).toContain('Change request: titular en blanco')

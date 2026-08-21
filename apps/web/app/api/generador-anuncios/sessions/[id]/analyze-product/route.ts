@@ -75,6 +75,13 @@ export async function POST(
           ? 'Image 1 is the PRODUCT. Image 2 is the brand LOGO — a separate asset, not part of the product. Describe ONLY image 1: never fold the logo lockup, its tagline or its layout into productDescription or brandingDescription.'
           : 'No logo provided.',
         'brandingDescription = only the text and graphics actually printed on the product in image 1 (label, packaging). If the product carries no readable text, return null.',
+        // ÚNICA excepción a la regla de arriba: los COLORES sí se leen del logo. La regla existe
+        // para que el lockup y su tagline no se conviertan en texto a renderizar; una paleta no
+        // se renderiza como texto, y el logo es donde la marca elige sus colores.
+        'brandColors = the brand palette, as hex codes ordered by prominence: the dominant colors'
+          + (logoB64 ? ' of the packaging in image 1 AND of the logo in image 2' : ' of the packaging in image 1')
+          + '. Read the colors off the artwork, never off the photo background, the surface it rests on or the lighting.'
+          + ' Return at most 4. If the product has no deliberate palette (plain white, unbranded, unreadable), return null — do not invent one.',
         precision ? `Ajuste pedido: ${precision}` : '',
         'Analyze the product image. Return ProductScan JSON.',
       ].join('\n'),

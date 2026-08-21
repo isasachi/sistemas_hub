@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { BodyFocus } from '@/lib/body-focus'
 
 // ─── Step 1: Reference ────────────────────────────────────────────────────────
 
@@ -20,6 +21,15 @@ export const ReferenceAnalysisSchema = z.object({
   persuasiveLogic: z.string(),
   layoutDescription: z.string(),
   sceneElements: SceneElementsSchema,
+  // ⚠️ ZONA DEL CUERPO A LA QUE APUNTA EL ANUNCIO. Un anuncio de "baja la panza" con flechas al
+  // abdomen replicado para unas gomitas de glúteos tiene que apuntar a los GLÚTEOS: la estructura
+  // (flechas, antes/después, círculos) se conserva, la zona cambia. Es dato VISUAL, así que no se
+  // puede inferir en STEP5 —que es texto puro— y por eso se extrae acá. `null` = el anuncio no
+  // señala ninguna zona (packshot, flat-lay): ahí no hay nada que re-apuntar.
+  bodyFocus: BodyFocus.nullable().catch(null),
+  // Los dispositivos que dirigen la mirada a esa zona, uno por elemento, con dónde está cada uno:
+  // flechas, círculos, líneas de callout, mitades de antes/después, zoom, resaltados.
+  attentionMarkers: z.array(z.string()).nullable().catch(null),
   summaryForUser: z.string(),
 })
 export type ReferenceAnalysis = z.infer<typeof ReferenceAnalysisSchema>
@@ -29,6 +39,11 @@ export type ReferenceAnalysis = z.infer<typeof ReferenceAnalysisSchema>
 export const ProductScanSchema = z.object({
   productDescription: z.string(),
   brandingDescription: z.string().nullish(),
+  // Paleta de la MARCA del usuario, en hex y ordenada por prominencia. El anuncio final adopta
+  // estos colores: el reparto de roles de la referencia (qué es fondo, qué es acento, qué es CTA)
+  // se conserva, los tonos se sustituyen. `null` = no hay paleta legible → se deja la de la
+  // referencia intacta. Es el ÚNICO campo del scan que puede mirar el logo (imagen 2).
+  brandColors: z.array(z.string()).nullable().catch(null),
   styleCompatibilityNote: z.string().nullish(),
   summaryForUser: z.string(),
 })
