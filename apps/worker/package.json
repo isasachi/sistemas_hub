@@ -15,6 +15,7 @@
     "@anthropic-ai/sdk": "^0.71.0",
     "@ph/shared": "*",
     "@supabase/supabase-js": "^2.106.1",
+    "cheerio": "^1.2.0",
     "dotenv": "^16.4.7",
     "ws": "^8.21.0",
     "zod": "^4.4.3"
