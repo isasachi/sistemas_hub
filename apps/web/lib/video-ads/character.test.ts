@@ -3,6 +3,7 @@ import { buildIdentityInstruction, buildCharacterParts, CharacterIdentitySchema,
 import type { UserInputs } from './types'
 import type { ForensicReport } from './forensic'
 import type { Personaje } from './personajes'
+import { NICHES_BLOQUEADOS } from './niches'
 
 const INPUTS: UserInputs = {
   productName: 'Serum Eunoia', productDescription: 'Suero', angle: 'Testimonio',
@@ -207,7 +208,27 @@ describe('buildIdentityInstruction — producto que se lleva puesto', () => {
       .toBe(buildIdentityInstruction(inputs, forensic, [SIN_FOTO], 'suplementos'))
   })
 
-  it('en ropa el avatar aparece VISTIENDO la prenda y el vestuario del original no manda', () => {
+  // BLOQUEO TEMPORAL de ropa y calzado (`NICHES_BLOQUEADOS`): mientras estén bloqueados,
+  // esos nichos se leen como suplementos y el camino de prenda NO se activa, aunque la
+  // sesión guardada diga 'ropa'.
+  it('un nicho bloqueado NO activa el camino de prenda', () => {
+    const base = buildIdentityInstruction(inputs, forensic, [SIN_FOTO], 'suplementos')
+    for (const n of NICHES_BLOQUEADOS) {
+      const p = buildIdentityInstruction(inputs, forensic, [SIN_FOTO], n)
+      expect(p).toBe(base)
+      expect(p).toContain('sin el producto en el encuadre')
+      expect(p).not.toContain('LLEVA PUESTO')
+    }
+  })
+
+  // Las dos de abajo cubren el camino de prenda, que hoy es INALCANZABLE por el bloqueo:
+  // se saltan solas mientras el nicho esté bloqueado y vuelven a correr al vaciar
+  // `NICHES_BLOQUEADOS`, sin que quien desbloquee tenga que acordarse de nada. Durante el
+  // bloqueo las ramas `wornProduct` de character.ts y lotes.ts quedan sin ejercitar; lo
+  // que sigue cubierto es el spec en sí (niches.test.ts).
+  const bloqueado = (n: string) => (NICHES_BLOQUEADOS as readonly string[]).includes(n)
+
+  it.skipIf(bloqueado('ropa'))('en ropa el avatar aparece VISTIENDO la prenda y el vestuario del original no manda', () => {
     const p = buildIdentityInstruction(inputs, forensic, [SIN_FOTO], 'ropa')
     expect(p).toContain('EL PRODUCTO ES ROPA Y EL PERSONAJE LO LLEVA PUESTO')
     expect(p).toContain('El producto SÍ va en el encuadre')
@@ -218,7 +239,7 @@ describe('buildIdentityInstruction — producto que se lleva puesto', () => {
     expect(p).toContain('El vestuario que describas ES EL PRODUCTO')
   })
 
-  it('en zapatos aplica el mismo eje', () => {
+  it.skipIf(bloqueado('zapatos'))('en zapatos aplica el mismo eje', () => {
     const p = buildIdentityInstruction(inputs, forensic, [SIN_FOTO], 'zapatos')
     expect(p).toContain('EL PRODUCTO ES CALZADO Y EL PERSONAJE LO LLEVA PUESTO')
     expect(p).not.toContain('sin el producto en el encuadre')

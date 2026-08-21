@@ -27,13 +27,30 @@ export type Niche = (typeof NICHES)[number]
 
 export const NICHE_DEFAULT: Niche = 'suplementos'
 
+/**
+ * BLOQUEO TEMPORAL (2026-08-21, a pedido del dueño del repo): solo se ofrece UGC de
+ * suplementos. Los specs de ropa y calzado se conservan enteros — lo único que cambia es
+ * que no se ofrecen y que `toNiche` los normaliza al default, con lo que TODO el pipeline
+ * (`nicheSpec` en character.ts, lotes.ts y la ruta de personaje) los trata como
+ * suplementos: una fila guardada con `niche='ropa'` deja de activar el camino de prenda.
+ * Para devolverlos, vaciar esta lista. ponytail: una lista, no un feature flag.
+ */
+export const NICHES_BLOQUEADOS: readonly Niche[] = ['ropa', 'zapatos']
+
+/** Lo que la UI puede ofrecer. */
+export const NICHES_ACTIVOS = NICHES.filter((n) => !NICHES_BLOQUEADOS.includes(n))
+
 export function isNiche(v: unknown): v is Niche {
   return typeof v === 'string' && (NICHES as readonly string[]).includes(v)
 }
 
-/** Normaliza lo que venga de la base o del cliente. Las filas legadas no tienen nicho. */
+/**
+ * Normaliza lo que venga de la base o del cliente. Las filas legadas no tienen nicho, y
+ * un nicho bloqueado cae al default igual que un valor desconocido — es lo que desvincula
+ * el pipeline sin tocar ninguna fila.
+ */
 export function toNiche(v: unknown): Niche {
-  return isNiche(v) ? v : NICHE_DEFAULT
+  return isNiche(v) && !NICHES_BLOQUEADOS.includes(v) ? v : NICHE_DEFAULT
 }
 
 export interface NicheSpec {

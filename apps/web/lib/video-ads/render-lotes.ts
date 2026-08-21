@@ -2,6 +2,7 @@ import { createHash } from 'crypto'
 import type { Lote, LoteImage } from './lotes'
 import type { MotionProfile, VoiceProfile } from './character'
 import type { Personaje } from './personajes'
+import { toNiche } from './niches'
 
 /**
  * Lógica pura de orquestación del render por lotes (Task 6, fix rounds 1 a 4).
@@ -167,7 +168,11 @@ export function scriptFingerprint(input: {
     // persona presente y la locución atribuida (`P2 (padre) dice:`), y los frames salen
     // de los avatares de quienes salen en cada toma. Nada de eso lo ve la huella sola.
     'v7',
-    String(input.niche ?? ''),
+    // Pasa por `toNiche`: un nicho BLOQUEADO se renderiza como suplementos, así que su
+    // huella tiene que ser la de suplementos. Sin esto, una sesión guardada como 'ropa'
+    // con lotes ya pagados reanudaría pegando un clip del camino de prenda a uno del
+    // camino de objeto, con la huella jurando que es el mismo contenido.
+    toNiche(input.niche),
     consistencyBlock, productDesc, escenario,
     voz.idioma, voz.varianteRegional, voz.acento, voz.pronunciacion, voz.ritmo,
     voz.velocidad, voz.entonacion, voz.energia, voz.pausas, voz.tono, voz.timbre,

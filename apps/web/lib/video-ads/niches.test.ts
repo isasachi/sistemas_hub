@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { NICHES, NICHE_DEFAULT, toNiche, isNiche, nicheSpec, NICHE_SPEC } from './niches'
+import { NICHES, NICHES_ACTIVOS, NICHES_BLOQUEADOS, NICHE_DEFAULT, toNiche, isNiche, nicheSpec, NICHE_SPEC } from './niches'
 
 describe('niches', () => {
   // Las filas legadas no tienen `niche`, y la columna nació con default 'suplementos':
@@ -11,8 +11,20 @@ describe('niches', () => {
   })
 
   it('reconoce los nichos válidos', () => {
-    for (const n of NICHES) { expect(isNiche(n)).toBe(true); expect(toNiche(n)).toBe(n) }
+    for (const n of NICHES) expect(isNiche(n)).toBe(true)
+    for (const n of NICHES_ACTIVOS) expect(toNiche(n)).toBe(n)
     expect(isNiche('perfume')).toBe(false)
+  })
+
+  // El bloqueo: no se ofrecen, y lo que ya esté guardado con ese nicho se RENDERIZA como
+  // suplementos — es lo que desvincula el pipeline sin migrar ninguna fila.
+  it('un nicho bloqueado no se ofrece y cae en suplementos', () => {
+    for (const n of NICHES_BLOQUEADOS) {
+      expect(NICHES_ACTIVOS).not.toContain(n)
+      expect(toNiche(n)).toBe(NICHE_DEFAULT)
+      expect(nicheSpec(n).wornProduct).toBe(false)
+    }
+    expect(NICHES_ACTIVOS).toContain(NICHE_DEFAULT)
   })
 
   // `wornProduct` es el eje: es lo único que el CÓDIGO consulta. Si un nicho lo tiene,

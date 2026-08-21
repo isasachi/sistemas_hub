@@ -5,7 +5,7 @@ import { useVideoStore } from '@/store/video'
 import type { CampoTextoDeInputs } from '@/lib/video-ads/types'
 import { FileUpload } from '@/components/tools/ui/FileUpload'
 import { STEP } from '@/lib/video-ads/steps'
-import { NICHES, NICHE_SPEC, NICHE_DEFAULT, type Niche } from '@/lib/video-ads/niches'
+import { NICHES_ACTIVOS, NICHE_SPEC, NICHE_DEFAULT, type Niche } from '@/lib/video-ads/niches'
 import type { ProductScan } from '@/lib/video-ads/types'
 import { btnPrimary, errorBox, spinner } from './shared'
 
@@ -68,10 +68,12 @@ export default function Section1Product() {
 
   return (
     <div className="flex flex-col gap-5">
+      {/* Con un solo nicho activo el selector no elige nada: ver NICHES_BLOQUEADOS. */}
+      {NICHES_ACTIVOS.length > 1 && (
       <div className="flex flex-col gap-1.5">
         <span className="text-[13px] font-semibold text-[#efe7e0]">Tipo de producto</span>
         <div className="flex flex-wrap gap-2">
-          {NICHES.map((n) => (
+          {NICHES_ACTIVOS.map((n) => (
             <button key={n} type="button" onClick={() => setNiche(n)}
               className={`rounded-full border px-3.5 py-1.5 text-[12.5px] transition ${
                 niche === n
@@ -83,6 +85,7 @@ export default function Section1Product() {
           ))}
         </div>
       </div>
+      )}
       <FileUpload label="Foto del producto" accept="image/*" preview={preview}
         onFile={(f) => { setFile(f); setPreview(URL.createObjectURL(f)) }} />
       <p className="text-[12px] leading-relaxed text-[#8b8b8b]">

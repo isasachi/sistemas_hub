@@ -402,6 +402,14 @@ Detalles medidos de esa corrida: 122 caracteres en 8 s = 15,25 car/s, dentro de 
 
 ### Nichos (`lib/video-ads/niches.ts`) — ropa y zapatos
 
+🚫 **BLOQUEADOS TEMPORALMENTE (2026-08-21, a pedido del dueño del repo): solo se ofrece suplementos.** Todo lo que describe esta sección sigue en el código y sigue siendo cierto — lo que cambia es que `NICHES_BLOQUEADOS = ['ropa', 'zapatos']` los saca del selector (`Section1Product` esconde los chips cuando queda un solo nicho activo) y `toNiche` los normaliza al default, con lo que `nicheSpec` devuelve el spec de suplementos en `character.ts`, `lotes.ts` y la ruta de personaje: una fila guardada con `niche='ropa'` deja de activar el camino de prenda. **Se desbloquea vaciando esa lista**, y los dos tests del camino de prenda (`character.test.ts`, hoy `it.skipIf`) vuelven a correr solos.
+
+⚠️ **La columna SÍ conserva el nicho que el usuario eligió** — `analyze-product` escribe con `isNiche`, no con `toNiche`. Normalizar al escribir borraría la intención para siempre y al desbloquear no habría forma de distinguir esas sesiones. La normalización es de LECTURA, en cada consumidor.
+
+⚠️ **La huella de reanudación pasa por `toNiche`** (`render-lotes.ts`): un nicho bloqueado tiene que hashear como suplementos. Sin eso, una sesión de ropa con lotes ya pagados reanudaría pegando un clip del camino de prenda a uno del camino de objeto mientras `isPaidResume` jura que es el mismo contenido. Medido contra la base al aplicar el bloqueo: **2 sesiones de ropa con lotes pagados** cambian de huella (fail-closed, cuentan como generación nueva al reanudar) y **ninguna fila tiene `niche` null**, así que ninguna sesión de suplementos se invalida.
+
+⚠️ Durante el bloqueo las ramas `wornProduct` de `character.ts` y `lotes.ts` quedan **sin ejercitar** por ningún test. Lo que sigue cubierto es el spec en sí (`niches.test.ts`).
+
 ⚠️ **EN ROPA Y ZAPATOS EL PRODUCTO Y EL VESTUARIO SON EL MISMO OBJETO, y hoy eran dos campos que se contradecían dentro del mismo prompt.** El pipeline nació asumiendo un producto que el personaje SOSTIENE. Con una prenda: (1) `bloqueConsistencia` describe el vestuario —copiado del video original— y viaja íntegro a cada lote junto a `productDesc`, o sea el prompt afirma *"viste camiseta rosa"* y *"el producto es una blusa crema"* en el mismo texto; (2) el prompt que genera el avatar pide explícitamente *"sin el producto en el encuadre"*, que para ropa es justo al revés.
 
 Por eso `NicheSpec.wornProduct` es el ÚNICO eje que conoce el código, y no una lista de features por nicho: es la diferencia que el pipeline necesita saber. Lo demás (rótulo del bloque de producto, nota del avatar, hint de la UI) cuelga de ese eje.
