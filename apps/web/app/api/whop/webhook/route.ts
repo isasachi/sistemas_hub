@@ -1,5 +1,5 @@
 import { Webhook } from 'standardwebhooks'
-import { entitlementFromEvent, saveEntitlement } from '@/lib/whop'
+import { entitlementFromEvent, saveEntitlement, webhookKey } from '@/lib/whop'
 
 /**
  * Webhook de Whop — la ÚNICA escritura de `user_entitlements`.
@@ -27,7 +27,7 @@ export async function POST(req: Request) {
   let evt: unknown
   try {
     // Verifica firma HMAC y ventana de tiempo (Standard Webhooks). Lanza si no cuadra.
-    evt = new Webhook(secret).verify(body, headers)
+    evt = new Webhook(webhookKey(secret)).verify(body, headers)
   } catch (err) {
     console.error('[whop] firma inválida:', err instanceof Error ? err.message : String(err))
     return new Response('firma inválida', { status: 401 })

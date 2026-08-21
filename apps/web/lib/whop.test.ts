@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { createHmac } from 'node:crypto'
 import { Webhook } from 'standardwebhooks'
-import { grantsAccess, isGrandfathered, entitlementFromEvent } from './whop'
+import { grantsAccess, isGrandfathered, entitlementFromEvent, webhookKey } from './whop'
 
 // Secreto de juguete en el formato que pide Standard Webhooks (base64).
 const SECRET = Buffer.from('secreto-de-prueba-para-firmar-webhooks').toString('base64')
@@ -197,5 +198,63 @@ describe('POST /api/whop/webhook', () => {
 
     expect(res.status).toBe(200)
     expect(guardadas).toHaveLength(0)
+  })
+})
+
+/**
+ * ⚠️ EL SECRET REAL DE WHOP EMPIEZA CON `ws_`, NO CON `whsec_`, Y ESO ROMPÍA LA
+ * VERIFICACIÓN ENTERA.
+ *
+ * Los tests de arriba firman con `new Webhook(SECRET)`, o sea con la MISMA librería
+ * que verifica y con un secreto base64 inventado — la misma trampa que este proyecto
+ * ya documentó para el sobre del webhook: construir el caso con la suposición que se
+ * quiere probar. Con el secreto real (`ws_…`, medido el 2026-08-21) el constructor
+ * lanza `Base64Coder: incorrect characters for decoding` y la ruta devuelve 401 a
+ * TODO evento, en silencio.
+ *
+ * Acá la firma se arma como la documenta Whop y sin usar la librería: HMAC-SHA256
+ * sobre `{id}.{timestamp}.{cuerpo}` con la clave = los bytes literales del `ws_…`,
+ * en base64, en el header `webhook-signature` como `v1,<firma>`.
+ */
+describe('firma con el secret real de Whop (ws_…)', () => {
+  const WS = 'ws_' + 'a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4'
+
+  // Solo se convierte el formato de Whop: un secreto que la librería ya entiende
+  // (con prefijo o base64 pelado) tiene que pasar intacto, o se rompería.
+  it('webhookKey convierte un ws_ y no toca ningún otro formato', () => {
+    expect(webhookKey(WS)).toBe(`whsec_${Buffer.from(WS, 'utf8').toString('base64')}`)
+    expect(webhookKey('whsec_abc')).toBe('whsec_abc')
+    expect(webhookKey(SECRET)).toBe(SECRET)
+  })
+
+  it('la ruta acepta un evento firmado como firma Whop de verdad', async () => {
+    vi.resetModules()
+    vi.stubEnv('WHOP_WEBHOOK_SECRET', WS)
+    const guardadas: unknown[] = []
+    vi.doMock('@/lib/whop', async (orig) => ({
+      ...(await orig<typeof import('./whop')>()),
+      saveEntitlement: async (row: unknown) => void guardadas.push(row),
+    }))
+    const { POST } = await import('@/app/api/whop/webhook/route')
+
+    const body = JSON.stringify(evento())
+    const id = 'msg_real'
+    const ts = Math.floor(Date.now() / 1000).toString()
+    const firma = createHmac('sha256', Buffer.from(WS, 'utf8'))
+      .update(`${id}.${ts}.${body}`)
+      .digest('base64')
+
+    const res = await POST(new Request('https://hub.test/api/whop/webhook', {
+      method: 'POST',
+      headers: {
+        'webhook-id': id,
+        'webhook-timestamp': ts,
+        'webhook-signature': `v1,${firma}`,
+      },
+      body,
+    }))
+
+    expect(res.status).toBe(200)
+    expect(guardadas).toHaveLength(1)
   })
 })

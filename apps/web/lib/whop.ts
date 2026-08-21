@@ -159,6 +159,34 @@ export async function saveEntitlement(row: Entitlement): Promise<void> {
   if (error) throw new Error(`guardando entitlement: ${error.message}`)
 }
 
+/**
+ * Traduce el secret de Whop a lo que espera `standardwebhooks`.
+ *
+ * ⚠️ ESTO NO ES UN DETALLE DE FORMATO — sin esto la verificación falla SIEMPRE, en
+ * silencio, y el paywall no otorga acceso a nadie que pague. Medido el 2026-08-21
+ * contra el secret real: `new Webhook('ws_…')` **lanza** `Base64Coder: incorrect
+ * characters for decoding`, la ruta lo cacha y devuelve 401, Whop reintenta ~3 días
+ * y termina desactivando el endpoint.
+ *
+ * La causa es que las dos partes usan el secret de forma distinta. Whop firma con la
+ * clave = los BYTES LITERALES de la cadena `ws_…` (su doc: "El key es tu secreto
+ * `ws_...`"), mientras que `standardwebhooks` solo sabe quitar el prefijo `whsec_` y
+ * **base64-decodifica** el resto para obtener la clave. Así que hay que entregarle el
+ * secreto entero base64-encodeado detrás de ese prefijo: al decodificarlo recupera
+ * exactamente los bytes con los que Whop firmó.
+ *
+ * Se normaliza en código y no guardando el valor ya convertido en la variable de
+ * entorno a propósito: en la env va TAL CUAL lo entrega Whop, así nadie tiene que
+ * acordarse de un paso de conversión al rotar el secreto.
+ */
+export function webhookKey(secret: string): string {
+  // Solo se toca el formato de Whop. Cualquier otra cosa pasa tal cual: un secreto ya
+  // en formato Standard Webhooks (`whsec_…` o base64 pelado) la librería lo entiende
+  // sola, y convertirlo lo rompería.
+  if (!secret.startsWith('ws_')) return secret
+  return `whsec_${Buffer.from(secret, 'utf8').toString('base64')}`
+}
+
 /** Fila lista para escribir en `user_entitlements`. */
 export type Entitlement = {
   whop_membership_id: string
