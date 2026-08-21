@@ -15,7 +15,14 @@ export interface Plan {
   tier: Tier
   /** Nombre comercial. Se muestra tal cual en la tabla de precios y en Mi cuenta. */
   nombre: string
-  /** USD al mes. */
+  /**
+   * USD al mes. ⚠️ TIENE QUE COINCIDIR CON EL PRECIO DEL PLAN EN WHOP, que es lo
+   * que el usuario ve en el checkout y lo que se le cobra. Verificado contra la
+   * API el 2026-08-21: los tres planes devuelven `formatted_price` "$29.90 /
+   * month", "$69.90 / month" y "$89.90 / month". Publicar otra cifra acá es la
+   * misma clase de mentira que las dos tablas de precios separadas, pero peor:
+   * la contradicción aparece en el momento de pagar.
+   */
   precio: number
   /**
    * Rangos de anuncios que desbloquea. ACUMULATIVO: el plan 3 incluye los del 1
@@ -29,9 +36,17 @@ export interface Plan {
 }
 
 export const PLANS: Record<Tier, Plan> = {
-  1: { tier: 1, nombre: 'Legacy Start', precio: 29, buckets: ['0-50'], porRango: 10, creditos: 30 },
-  2: { tier: 2, nombre: 'Legacy Scale', precio: 69, buckets: ['0-50', '50-100'], porRango: 20, creditos: 100 },
-  3: { tier: 3, nombre: 'Legacy Empire', precio: 89, buckets: [...RAW_BUCKETS], porRango: 50, creditos: 180 },
+  1: { tier: 1, nombre: 'Legacy Start', precio: 29.9, buckets: ['0-50'], porRango: 10, creditos: 30 },
+  2: { tier: 2, nombre: 'Legacy Scale', precio: 69.9, buckets: ['0-50', '50-100'], porRango: 20, creditos: 100 },
+  3: { tier: 3, nombre: 'Legacy Empire', precio: 89.9, buckets: [...RAW_BUCKETS], porRango: 50, creditos: 180 },
+}
+
+/**
+ * El precio como se muestra. Con centavos SIEMPRE: `${29.9}` da "$29.9", que se
+ * lee como un precio distinto del "$29.90" que imprime el checkout de Whop.
+ */
+export function precioUSD(plan: Plan): string {
+  return `$${plan.precio.toFixed(2)}`
 }
 
 export function isTier(v: unknown): v is Tier {

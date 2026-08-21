@@ -1,6 +1,7 @@
 /**
- * Suscripción vía Whop — TRES planes (ver `PLANS` en @ph/shared): $29, $69 y $89 al
- * mes, con 3 días de prueba. Desbloquean el ACCESO al área privada (/dashboard y
+ * Suscripción vía Whop — TRES planes (ver `PLANS` en @ph/shared): $29.90, $69.90 y
+ * $89.90 al mes, SIN prueba gratis (`trial_period_days` es null en los tres planes,
+ * verificado contra la API el 2026-08-21). Desbloquean el ACCESO al área privada (/dashboard y
  * /tools/*) y, según el tier, cuánto sirve el buscador y cuántos créditos de imagen
  * entran en el período.
  *
@@ -55,10 +56,13 @@ function getDb(): SupabaseClient {
  * `completed`, `canceled`, `expired`, `unresolved`, `drafted`, `canceling`), estos
  * tres dan acceso.
  *
- * ⚠️ `trialing` NO es opcional, y es la razón por la que el entitlement cuelga del
- * MEMBERSHIP y no del pago: el plan tiene 3 días de prueba y durante esos días no
- * existe ningún `payment.succeeded`. Un gate colgado de los eventos de pago dejaría
- * al usuario afuera exactamente durante la prueba que lo trajo.
+ * ⚠️ `trialing` SE QUEDA aunque hoy no haya prueba gratis, y no es código muerto por
+ * descuido. Durante una prueba no existe ningún `payment.succeeded`, así que un gate
+ * colgado de los eventos de pago dejaría al usuario afuera justo durante la prueba
+ * que lo trajo — es la razón por la que el entitlement cuelga del MEMBERSHIP y no del
+ * pago. Borrar la rama solo se ganaría el derecho a dejar afuera a alguien que pagó el
+ * día que se habilite una prueba en Whop, que es un cambio de una casilla allá y de
+ * cero acá.
  *
  * `canceling` = pidió cancelar pero el período ya pagado sigue corriendo; quitarle el
  * acceso antes de que termine sería cobrarle por algo que no puede usar.
@@ -153,6 +157,34 @@ export async function saveEntitlement(row: Entitlement): Promise<void> {
     .from('user_entitlements')
     .upsert({ ...row, updated_at: new Date().toISOString() }, { onConflict: 'whop_membership_id' })
   if (error) throw new Error(`guardando entitlement: ${error.message}`)
+}
+
+/**
+ * Traduce el secret de Whop a lo que espera `standardwebhooks`.
+ *
+ * ⚠️ ESTO NO ES UN DETALLE DE FORMATO — sin esto la verificación falla SIEMPRE, en
+ * silencio, y el paywall no otorga acceso a nadie que pague. Medido el 2026-08-21
+ * contra el secret real: `new Webhook('ws_…')` **lanza** `Base64Coder: incorrect
+ * characters for decoding`, la ruta lo cacha y devuelve 401, Whop reintenta ~3 días
+ * y termina desactivando el endpoint.
+ *
+ * La causa es que las dos partes usan el secret de forma distinta. Whop firma con la
+ * clave = los BYTES LITERALES de la cadena `ws_…` (su doc: "El key es tu secreto
+ * `ws_...`"), mientras que `standardwebhooks` solo sabe quitar el prefijo `whsec_` y
+ * **base64-decodifica** el resto para obtener la clave. Así que hay que entregarle el
+ * secreto entero base64-encodeado detrás de ese prefijo: al decodificarlo recupera
+ * exactamente los bytes con los que Whop firmó.
+ *
+ * Se normaliza en código y no guardando el valor ya convertido en la variable de
+ * entorno a propósito: en la env va TAL CUAL lo entrega Whop, así nadie tiene que
+ * acordarse de un paso de conversión al rotar el secreto.
+ */
+export function webhookKey(secret: string): string {
+  // Solo se toca el formato de Whop. Cualquier otra cosa pasa tal cual: un secreto ya
+  // en formato Standard Webhooks (`whsec_…` o base64 pelado) la librería lo entiende
+  // sola, y convertirlo lo rompería.
+  if (!secret.startsWith('ws_')) return secret
+  return `whsec_${Buffer.from(secret, 'utf8').toString('base64')}`
 }
 
 /** Fila lista para escribir en `user_entitlements`. */

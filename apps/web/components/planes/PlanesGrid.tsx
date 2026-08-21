@@ -1,5 +1,5 @@
 import { Check, Lock, Search, Sparkles, Star, Crown, Rocket, type LucideIcon } from "lucide-react";
-import { PLANS, TIERS, RAW_BUCKETS, RAW_BUCKET_LABEL, unlocksBucket, type Tier } from "@ph/shared";
+import { PLANS, TIERS, RAW_BUCKETS, RAW_BUCKET_LABEL, precioUSD, unlocksBucket, type Tier } from "@ph/shared";
 
 /**
  * La tabla de precios. UN solo componente para la home y para `/suscripcion`:
@@ -61,14 +61,14 @@ const COPY: Record<Tier, CopyPlan> = {
     promesa: "Más productos. Más creativos. Más oportunidades.",
     etiqueta: { texto: "Más popular", Icono: Star, tono: "accion" },
     buscador: "Buscador avanzado",
-    cta: "Empezar prueba gratis",
+    cta: "Empezar con Scale",
   },
   3: {
     para: "Para llevar tu e-commerce al máximo",
     promesa: "Todo el poder de Legacy Brand",
     etiqueta: { texto: "Más completo", Icono: Crown, tono: "prestigio" },
     buscador: "Buscador completo",
-    cta: "Empezar prueba gratis",
+    cta: "Empezar con Empire",
   },
 };
 
@@ -241,7 +241,7 @@ export function PlanesGrid({ hrefDe, actual = null, bloqueado = false }: PlanesG
                 decidió por el precio tenía que recorrerlos igual para encontrarlo. */}
             <div className="mt-6 flex items-baseline gap-2">
               <span className="readout text-[44px] font-bold leading-none text-[#f6f2eb]">
-                ${plan.precio}
+                {precioUSD(plan)}
               </span>
               <span className="font-[Lato] text-[13px] text-[#8d7470]">/ mes</span>
             </div>
