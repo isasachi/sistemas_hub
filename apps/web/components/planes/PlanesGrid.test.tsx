@@ -25,11 +25,11 @@ describe('lo que se vende es lo que se sirve', () => {
     expect(html).toContain('Legacy Empire')
   })
 
-  it('los productos por rango y las imágenes salen de PLANS', () => {
+  it('los productos por rango y los créditos salen de PLANS', () => {
     const html = landing()
     for (const t of TIERS) {
       expect(html).toContain(`Hasta ${PLANS[t].porRango} productos por rango`)
-      expect(html).toContain(`${PLANS[t].creditos} imágenes al mes`)
+      expect(html).toContain(`${PLANS[t].creditos} créditos al mes`)
     }
   })
 

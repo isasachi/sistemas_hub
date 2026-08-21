@@ -85,7 +85,7 @@ function Card({ title, description, children }: {
 const incluye = (t: Tier) => [
   PLANS[t].buckets.map((b) => RAW_BUCKET_LABEL[b]).join(" · "),
   `${PLANS[t].porRango} productos por rango`,
-  `${PLANS[t].creditos} imágenes al mes`,
+  `${PLANS[t].creditos} créditos al mes`,
 ];
 
 /** El plan actual, en grande. */
@@ -182,7 +182,7 @@ function CambiarA({ tier, actual }: { tier: Tier; actual: Tier }) {
         </span>
         {/* La diferencia que importa, no la lista entera: acá el usuario compara. */}
         <span className="block truncate text-[11px] text-[#a98c88]">
-          {plan.porRango} productos · {plan.creditos} imágenes
+          {plan.porRango} productos · {plan.creditos} créditos
         </span>
       </span>
       <span
