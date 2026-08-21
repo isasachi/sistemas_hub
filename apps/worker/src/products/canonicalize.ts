@@ -71,8 +71,15 @@ const STOP = new Set([
   'un', 'una', 'unos', 'unas', 'por', 'the', 'of', 'for', 'and', 'with',
 ])
 
+/**
+ * ⚠️ NO se filtran los tokens de una letra, y hay un fallo medido detrás. Con
+ * `length > 1`, "Producto A" y "Producto B" quedan los dos como {producto} y
+ * pasan a ser el MISMO producto: en el ejemplo del §30 los tres productos del
+ * anunciante se fundían en uno y el share daba 100% en vez de 87,36%. La letra
+ * suelta suele ser justo lo que distingue una variante de otra.
+ */
 export function tokens(name: string | null | undefined): string[] {
   const n = normalizeName(name)
   if (!n) return []
-  return n.split(' ').filter((t) => t.length > 1 && !STOP.has(t))
+  return n.split(' ').filter((t) => t.length >= 1 && !STOP.has(t))
 }
