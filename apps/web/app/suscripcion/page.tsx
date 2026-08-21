@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getUser } from "@/lib/supabase/server";
 import { getAccess, type Access } from "@/lib/whop";
+import { signOut } from "@/app/actions/auth";
 import { PlanesGrid, IncluidoEnTodos } from "@/components/planes/PlanesGrid";
 
 /**
@@ -116,7 +117,7 @@ export default async function SuscripcionPage({
 
         <IncluidoEnTodos />
 
-        <p className="mt-8 text-center text-[13px] text-[#a98c88]">
+        <div className="mt-8 text-center text-[13px] text-[#a98c88]">
           Sesión iniciada como {user.email}
           {/* Sin esta salida, quien ya tiene acceso queda encerrado en el paywall:
               la página dejó de redirigirlo al dashboard. */}
@@ -137,7 +138,19 @@ export default async function SuscripcionPage({
           <Link href="/cuenta" className="font-bold text-[#e8467a] no-underline">
             Mi cuenta
           </Link>
-        </p>
+          {/* Y la salida del hub. Cerrar sesión vive en AppShell, que solo se pinta
+              dentro de `(app)`: sin esto, quien no tiene plan no puede cambiar de
+              cuenta ni salir sin borrar cookies a mano. */}
+          {" · "}
+          <form action={signOut} className="inline">
+            <button
+              type="submit"
+              className="cursor-pointer border-0 bg-transparent p-0 text-[13px] font-bold text-[#e8467a] underline-offset-2 hover:underline"
+            >
+              Cerrar sesión
+            </button>
+          </form>
+        </div>
       </div>
     </div>
   );
