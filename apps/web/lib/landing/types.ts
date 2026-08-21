@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { BodyFocus } from '@/lib/body-focus'
 // Solo tipo: `brand-system.ts` arrastra gemini/storage y este módulo lo consume el cliente.
 import type { BrandSystem } from '@/lib/branding/brand-system'
 // Enum liviano (sin gemini/storage detrás), así que sí se puede importar como VALOR desde acá.
@@ -52,22 +53,10 @@ export type DemographicId = z.infer<typeof DemographicId>
 // —"mano en la mejilla", "ambas manos enmarcando el rostro"— fuera un sérum para el acné o una
 // creatina para glúteos, y una rodillera salía con un retrato en vez de una rodilla.
 //
-// NO se deriva del nicho ni de la demografía: creatina para masa y creatina para glúteos son el
-// MISMO nicho y la MISMA demografía, y distinta zona. Sale del producto + el ángulo (beneficios,
-// público, etiquetas), que es justo lo que ya recibe `classifyNiche`.
-export const BodyFocus = z.enum([
-  'rostro',
-  'cabello',
-  'torso',
-  'abdomen',
-  'gluteos_piernas',
-  'rodilla',
-  'articulacion',
-  'manos',
-  'pies',
-  'cuerpo_completo',
-])
-export type BodyFocus = z.infer<typeof BodyFocus>
+// La definición se mudó a `lib/body-focus.ts` (módulo hoja) para que el generador de anuncios use
+// EL MISMO vocabulario sin arrastrar la cadena de imports de este archivo. Se re-exporta acá
+// porque medio landing lo importa desde `@/lib/landing/types`.
+export { BodyFocus }
 
 // Salida del paso 0.a (clasificación). Zod rechaza cualquier valor fuera del set.
 export const NicheClassification = z.object({

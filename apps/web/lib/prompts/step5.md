@@ -10,11 +10,11 @@ The model will receive:
 
 ## WHAT STAYS (sacred — reproduce exactly from Image 1)
 
-Layout, format, composition, visual hierarchy, background structure, badge position, text positions, persuasive mechanism, visual style, typography style, product physical position, colorimetry.
+Layout, format, composition, visual hierarchy, background structure, badge position, text positions, persuasive mechanism, visual style, typography style, product physical position, and the colorimetry STRUCTURE — which element is background, which is dominant, which is accent, which is the CTA, and how much they contrast with each other.
 
 ## WHAT CHANGES (replace with new brand)
 
-Product, brand name, logo, copy text.
+Product, brand name, logo, copy text, the colorimetry HUES (section 5), and the body zone the ad points at (section 10).
 
 ## NEVER INVENT
 
@@ -42,8 +42,15 @@ Use the physicalPosition data. State each of these explicitly:
 **4. VISUAL STYLE**
 Style category and key stylistic descriptors from the reference. Fixed.
 
-**5. COLORIMETRY**
-Dominant colors, background color, headline color, CTA color. Fixed from reference.
+**5. COLORIMETRY — roles fixed, hues from the user's brand**
+
+The reference decides the color STRUCTURE: which element is background, which is dominant, which is accent, which is the CTA, and how strongly each contrasts with the rest. That structure is fixed.
+
+If brandColors are provided, the HUES are the user's: map the reference's palette onto the brand palette role by role, most prominent brand color onto the reference's dominant role, and keep every contrast relationship at least as strong as in the reference. State the mapping explicitly, hex by hex — "background #F4EDE4 (was cream), CTA fill #1E0811 (was red)".
+
+If brandColors are not provided, keep the reference palette exactly as it is. Never invent a palette.
+
+Two things the recolor never touches: the product itself and its label, which are reproduced from Image 2 exactly as photographed (section 7), and text legibility — no copy ends up on a background it cannot be read against.
 
 **6. TYPOGRAPHY**
 Font style, weight, case, alignment, size hierarchy, color. Fixed from reference.
@@ -70,6 +77,16 @@ Every text element: element name → exact text content. Specify font weight, ex
 
 Primary subject first (the person using, holding or presenting the product): if their apparent demographic — gender, age range, apparent context — does not match targetAudience, REPLACE them with a description that does, keeping the exact same pose, framing, expression and position in frame. If it already matches, preserve exactly. State the decision explicitly either way. An ad for "mujeres de 20-40" showing a young man is a failed adaptation, no matter how well the rest is reproduced.
 
+**Body zone second.** The reference data carries "Body zone the reference points at" and "Attention markers".
+
+If the zone is `none`, there is nothing to re-aim — skip this and say so in one clause.
+
+Otherwise, work out which body zone the user's product acts on, from "What it does" (gomitas para aumentar glúteos → the glutes; sérum para el acné → the face; rodillera → the knee). If it is the SAME zone as the reference's, preserve every marker exactly. If you cannot tell which zone the product acts on, preserve every marker exactly — an ad that points at the wrong zone is worse than one that points where the reference did.
+
+If it is a DIFFERENT zone, re-aim the ad at the product's zone: EVERY attention marker listed — each arrow, callout line, circle, highlight, zoom, and both halves of any before/after pair — now points at, frames, or contrasts the new zone. The bodies in frame are shown at the framing that makes the new zone visible, and the before/after contrast is the one the new product promises, not the old one. Name each marker and its new target explicitly, one by one.
+
+What does NOT move: the markers keep their own position, size, shape, color, style and count in the canvas, the text at the far end of each arrow stays exactly where it is, and layout, composition and proportions are untouched. This is a change of what the ad points AT, never of how the ad is built. An arrow that moved to a different corner of the canvas is a failed adaptation.
+
 Then, for every other non-product, non-text element visible in the reference (secondary figures, props, setting details, background elements, brand marks):
 
 - **Step A — Identify:** name the element and its role in the original ad's persuasive logic.
@@ -84,7 +101,8 @@ Constraint: every decision must leave the overall composition, layout proportion
 **11. DO NOT**
 
 - Do NOT change composition, layout, or background structure
-- Do NOT alter the primary subject's appearance beyond the demographic adaptation above
+- Do NOT alter the primary subject's appearance beyond the two adaptations allowed in section 10: the demographic match, and the framing needed to show the product's body zone
+- Do NOT move, resize, restyle or add attention markers — they are re-aimed in place, never relocated
 - Do NOT add text not listed in section 9
 - Do NOT invent props, elements, or visual details
 - Do NOT change aspect ratio or format

@@ -337,6 +337,15 @@ export function refinePrompt(resultImageNumber: number, feedback: string): strin
     `The people in image ${resultImageNumber} were already adapted to this ad's target audience: ` +
     `keep their gender, age, skin tone, hair and appearance exactly as they are in image ` +
     `${resultImageNumber}. NEVER revert them to the person shown in image 1.`
+  // ⚠️ Mismo hueco que el identityLock, y por el mismo camino. STEP5 re-apunta los marcadores de
+  // atención a la zona del producto y recolorea la paleta con la marca del usuario; refine no ve
+  // ese instructivo, así que sin nombrar las dos cosas en la lista de "conservar" la imagen 1 las
+  // tira de vuelta: las flechas vuelven al abdomen de la referencia y el CTA a su color viejo.
+  const adaptationLock =
+    `The attention markers in image ${resultImageNumber} — arrows, callouts, circles, highlights, ` +
+    `before/after halves — already point at the body zone this product acts on, and its color ` +
+    `palette is already this brand's. Keep both exactly as they are in image ${resultImageNumber}. ` +
+    `NEVER re-aim them at the zone shown in image 1, and never restore image 1's colors.`
   // Con feedback el cambio es SAGRADO y EXCLUSIVO: solo eso, el resto pixel-idéntico
   // (no redibujar ni "mejorar" lo no pedido). Sin feedback, una variación fresca
   // (el botón "Regenerar" sin texto debe dar algo distinto, no un eco de la misma).
@@ -348,6 +357,7 @@ export function refinePrompt(resultImageNumber: number, feedback: string): strin
         `pixel-identical to image ${resultImageNumber}. Do NOT redesign, re-render or "improve"`,
         `anything not asked.`,
         identityLock,
+        adaptationLock,
         `Change request: ${feedback.trim()}`,
       ].join(' ')
     : [
@@ -358,8 +368,10 @@ export function refinePrompt(resultImageNumber: number, feedback: string): strin
         `keep the same product, logo, copy and people, AND the layout, composition and format of`,
         `image 1 (the reference ad) — from image 1 copy ONLY the layout, never who appears in it.`,
         identityLock,
-        `Vary only the visual treatment — lighting, framing detail, background texture, color`,
-        `accents — so it reads as a different take of the same ad, never a redesign.`,
+        adaptationLock,
+        `Vary only the visual treatment — lighting, framing detail, background texture, and how`,
+        `strongly the accents read WITHIN that same palette — so it reads as a different take of`,
+        `the same ad, never a redesign.`,
       ].join(' ')
 }
 

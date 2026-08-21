@@ -41,7 +41,17 @@ export async function POST(
     // base de TODO lo que sigue, así que ahí es donde más cuesta el modelo chico.
     callStructured('reference_analysis', ReferenceAnalysisSchema, [
       { inlineData: { mimeType, data: base64 } },
-      { text: `Analyze this reference ad. Return the complete structured analysis including all sceneElements.${precision ? '\nAjuste pedido: ' + precision : ''}` },
+      { text: [
+        'Analyze this reference ad. Return the complete structured analysis including all sceneElements.',
+        // El campo existe para poder RE-APUNTAR esos marcadores a la zona del producto nuevo,
+        // así que hay que nombrarlos uno por uno: "hay flechas" no dice cuál mover ni adónde.
+        'bodyFocus + attentionMarkers: if the ad directs the viewer\'s attention to a specific body',
+        'zone — arrows or lines pointing at it, a circle or highlight over it, a before/after pair',
+        'contrasting it, a close-up of it — set bodyFocus to that zone and list every such marker',
+        'in attentionMarkers with what it is and where it sits. If the ad points at no body zone,',
+        'bodyFocus is null and attentionMarkers is null. Never guess a zone.',
+        precision ? 'Ajuste pedido: ' + precision : '',
+      ].filter(Boolean).join('\n') },
     ], 3, undefined, { preferGemini: true }),
   ])
 
