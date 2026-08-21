@@ -1,13 +1,15 @@
 // Exporta un .xlsx IDÉNTICO al archivo fuente: carga el template, parchea solo las
-// celdas de input con los valores del wizard (preservando estilos y fórmulas), borra
-// la hoja del embudo no usado, y fuerza recálculo al abrir. JSZip = read-modify-write del zip.
+// celdas de input con los valores de la hoja (preservando estilos y fórmulas), borra
+// las hojas que no se usan, y fuerza recálculo al abrir. JSZip = read-modify-write del zip.
 import JSZip from "jszip";
-import { type CalcInputs } from "./model";
+import { type CalcInputs, type PrecioInputs } from "./model";
 
-// LEADS → sheet3.xml (rId3) · MENSAJES → sheet4.xml (rId4). Hoja1=1, ESTABLECIENDO PRECIOS=2.
+// Hoja1=sheet1/rId1 (oculta) · ESTABLECIENDO PRECIOS=sheet2/rId2
+// ANALISIS FINANCIERO - LEADS=sheet3/rId3 · … MENSAJES=sheet4/rId4
 const SHEET = {
-  leads: { file: "sheet3.xml", rId: "rId3", name: "ANALISIS FINANCIERO - LEADS" },
-  mensajes: { file: "sheet4.xml", rId: "rId4", name: "ANALISIS FINANCIERO - MENSAJES" },
+  precio: { file: "sheet2.xml", rId: "rId2" },
+  leads: { file: "sheet3.xml", rId: "rId3" },
+  mensajes: { file: "sheet4.xml", rId: "rId4" },
 };
 
 // Reemplaza el valor numérico de una celda por su ref, preservando atributos (estilo `s=`)
@@ -16,8 +18,57 @@ function setCell(xml: string, ref: string, value: number): string {
   const re = new RegExp(`<c r="${ref}"([^>]*?)(?:/>|>[\\s\\S]*?</c>)`);
   return xml.replace(re, (_m, attrs: string) => {
     const clean = attrs.replace(/\s+t="[^"]*"/, "");
-    return `<c r="${ref}"${clean}><v>${value}</v></c>`;
+    return `<c r="${ref}"${clean}><v>${Number.isFinite(value) ? value : 0}</v></c>`;
   });
+}
+
+/** Parchea una hoja, borra las otras y descarga el archivo. */
+async function construir(
+  keep: { file: string; rId: string },
+  cells: Record<string, number>,
+  drop: { file: string; rId: string }[],
+  nombre: string,
+): Promise<void> {
+  const res = await fetch("/calculadora-costos/template.xlsx");
+  const zip = await JSZip.loadAsync(await res.arrayBuffer());
+
+  // 1) Parchear las celdas de input en la hoja que se conserva.
+  let sheetXml = await zip.file(`xl/worksheets/${keep.file}`)!.async("string");
+  for (const [ref, val] of Object.entries(cells)) sheetXml = setCell(sheetXml, ref, val);
+  zip.file(`xl/worksheets/${keep.file}`, sheetXml);
+
+  // 2) Borrar las hojas que no se usan (archivo + entrada + relación + content-type).
+  let wb = await zip.file("xl/workbook.xml")!.async("string");
+  let rels = await zip.file("xl/_rels/workbook.xml.rels")!.async("string");
+  let ct = await zip.file("[Content_Types].xml")!.async("string");
+  for (const d of drop) {
+    zip.remove(`xl/worksheets/${d.file}`);
+    wb = wb.replace(new RegExp(`<sheet [^>]*r:id="${d.rId}"/>`), "");
+    rels = rels.replace(new RegExp(`<Relationship Id="${d.rId}"[^>]*/>`), "");
+    ct = ct.replace(new RegExp(`<Override PartName="/xl/worksheets/${d.file}"[^>]*/>`), "");
+  }
+
+  wb = wb.replace(/<calcPr [^>]*\/>/, '<calcPr calcId="191029" fullCalcOnLoad="1"/>'); // 3) forzar recálculo
+  wb = wb.replace(/<extLst>[\s\S]*?<\/extLst>/, ""); // quitar metadata de Google (el checksum dejaría de cuadrar)
+  zip.file("xl/workbook.xml", wb);
+
+  // 4) Borrar calcChain (referencia celdas de las hojas borradas; los apps lo reconstruyen).
+  zip.remove("xl/calcChain.xml");
+  rels = rels.replace(/<Relationship [^>]*calcChain[^>]*\/>/, "");
+  ct = ct.replace(/<Override PartName="\/xl\/calcChain\.xml"[^>]*\/>/, "");
+  zip.file("xl/_rels/workbook.xml.rels", rels);
+  zip.file("[Content_Types].xml", ct);
+
+  const blob = await zip.generateAsync({
+    type: "blob",
+    mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = nombre;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 // Mapa celda→valor para la hoja del funnel elegido. Los % van crudos, igual que en pantalla:
@@ -38,52 +89,38 @@ function cellMap(input: CalcInputs): Record<string, number> {
   };
   if (input.funnel === "leads") {
     const f = input.embudoLeads!;
-    Object.assign(m, { J4: f.inversion, J5: f.cpm, J8: f.ctr, J11: f.velocidadCarga, J14: f.conversionRate, J17: f.pctConfirmacion, J20: f.pctRechazo });
+    Object.assign(m, {
+      J4: f.inversion, J5: f.cpm, J8: f.ctr, J11: f.velocidadCarga,
+      J14: f.conversionRate, J17: f.pctConfirmacion, J20: f.pctRechazo,
+      J30: input.ventasDeseadas ?? 0, N2: input.diasAnalisis ?? 30,
+      J34: input.velocidad?.clics ?? 0, J35: input.velocidad?.visitantes ?? 0, J36: input.velocidad?.compras ?? 0,
+    });
   } else {
     const f = input.embudoMensajes!;
-    Object.assign(m, { J4: f.inversion, J5: f.costoPorMensaje, J7: f.tasaCierre, J12: f.pctRechazo });
+    Object.assign(m, {
+      J4: f.inversion, J5: f.costoPorMensaje, J7: f.tasaCierre, J12: f.pctRechazo,
+      J22: input.ventasDeseadas ?? 0, N2: input.diasAnalisis ?? 30,
+      J34: input.velocidad?.clics ?? 0, J35: input.velocidad?.visitantes ?? 0, J36: input.velocidad?.compras ?? 0,
+    });
   }
   return m;
 }
 
 export async function exportarXlsx(input: CalcInputs): Promise<void> {
-  const res = await fetch("/calculadora-costos/template.xlsx");
-  const zip = await JSZip.loadAsync(await res.arrayBuffer());
-
   const keep = SHEET[input.funnel];
-  const drop = SHEET[input.funnel === "leads" ? "mensajes" : "leads"];
+  const otro = SHEET[input.funnel === "leads" ? "mensajes" : "leads"];
+  await construir(keep, cellMap(input), [otro], "analisis-financiero-ecom.xlsx");
+}
 
-  // 1) Parchear las celdas de input en la hoja del funnel elegido.
-  let sheetXml = await zip.file(`xl/worksheets/${keep.file}`)!.async("string");
-  const map = cellMap(input);
-  for (const [ref, val] of Object.entries(map)) sheetXml = setCell(sheetXml, ref, val);
-  zip.file(`xl/worksheets/${keep.file}`, sheetXml);
-
-  // 2) Borrar la hoja del embudo no usado (archivo + entrada + relación).
-  zip.remove(`xl/worksheets/${drop.file}`);
-  let wb = await zip.file("xl/workbook.xml")!.async("string");
-  wb = wb.replace(new RegExp(`<sheet [^>]*r:id="${drop.rId}"/>`), "");
-  wb = wb.replace(/<calcPr [^>]*\/>/, '<calcPr calcId="191029" fullCalcOnLoad="1"/>'); // 3) forzar recálculo
-  wb = wb.replace(/<extLst>[\s\S]*?<\/extLst>/, ""); // quitar metadata de Google (checksum dejaría de cuadrar)
-  zip.file("xl/workbook.xml", wb);
-
-  let rels = await zip.file("xl/_rels/workbook.xml.rels")!.async("string");
-  rels = rels.replace(new RegExp(`<Relationship Id="${drop.rId}"[^>]*/>`), "");
-  // 4) Borrar calcChain (referencia celdas de la hoja borrada; los apps lo reconstruyen).
-  zip.remove("xl/calcChain.xml");
-  rels = rels.replace(/<Relationship [^>]*calcChain[^>]*\/>/, "");
-  zip.file("xl/_rels/workbook.xml.rels", rels);
-
-  let ct = await zip.file("[Content_Types].xml")!.async("string");
-  ct = ct.replace(new RegExp(`<Override PartName="/xl/worksheets/${drop.file}"[^>]*/>`), "");
-  ct = ct.replace(/<Override PartName="\/xl\/calcChain\.xml"[^>]*\/>/, "");
-  zip.file("[Content_Types].xml", ct);
-
-  const blob = await zip.generateAsync({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "analisis-financiero-ecom.xlsx";
-  a.click();
-  URL.revokeObjectURL(url);
+export async function exportarXlsxPrecio(input: PrecioInputs): Promise<void> {
+  await construir(
+    SHEET.precio,
+    {
+      B5: input.costoMercancia, B6: input.flete, B7: input.costoCompra, B8: input.fullfillment,
+      B9: input.igv, B10: input.pctPasarela, B11: input.tasaPasarela, B12: input.cuatroXMil,
+      B16: input.margenEsperado, H6: input.precioManual,
+    },
+    [SHEET.leads, SHEET.mensajes],
+    "costeo-de-productos.xlsx",
+  );
 }
