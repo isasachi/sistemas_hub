@@ -19,7 +19,7 @@ export function HeroSection() {
   const ctaLabel =
     process.env.AUTH_DISABLED === "true"
       ? "Entrar al dashboard"
-      : "Comenzar gratis";
+      : "Comenzar ahora";
 
   return (
     <section className="relative overflow-hidden px-6 pt-16 pb-14 text-center md:pt-24">

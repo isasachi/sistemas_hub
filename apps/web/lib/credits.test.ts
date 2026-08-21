@@ -1,16 +1,24 @@
 import { describe, expect, it } from 'vitest'
-import { PLANS, TIERS, RAW_BUCKETS, lockedBuckets, unlocksBucket, toTier } from '@ph/shared'
+import { PLANS, TIERS, RAW_BUCKETS, lockedBuckets, precioUSD, unlocksBucket, toTier } from '@ph/shared'
 import { isCreditKind, periodStart, periodStartDay, CREDIT_KINDS } from './credits'
 import { IMAGE_KINDS } from './gen-quota'
 
 describe('planes', () => {
-  // Lo que se vendió: 29/69/89, con 10/20/50 productos y 30/100/180 imágenes.
+  // Lo que se cobra: 29.90/69.90/89.90, con 10/20/50 productos y 30/100/180 imágenes.
+  // ⚠️ Los precios están verificados contra la API de Whop (2026-08-21): son los que
+  // devuelven los tres planes en `formatted_price`. Cambiarlos acá sin cambiarlos allá
+  // hace que la tabla anuncie una cifra y el checkout cobre otra.
   it('los tres planes son los acordados', () => {
     expect(TIERS.map((t) => [PLANS[t].precio, PLANS[t].porRango, PLANS[t].creditos])).toEqual([
-      [29, 10, 30],
-      [69, 20, 100],
-      [89, 50, 180],
+      [29.9, 10, 30],
+      [69.9, 20, 100],
+      [89.9, 50, 180],
     ])
+  })
+
+  // `${29.9}` da "$29.9", que se lee como otro precio que el "$29.90" del checkout.
+  it('el precio se muestra siempre con centavos', () => {
+    expect(TIERS.map((t) => precioUSD(PLANS[t]))).toEqual(['$29.90', '$69.90', '$89.90'])
   })
 
   // Acumulativo: el plan 2 incluye lo del 1, el 3 incluye todo. Sin esto, subir de

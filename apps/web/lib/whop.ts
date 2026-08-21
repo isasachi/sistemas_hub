@@ -1,6 +1,7 @@
 /**
- * Suscripción vía Whop — TRES planes (ver `PLANS` en @ph/shared): $29, $69 y $89 al
- * mes, con 3 días de prueba. Desbloquean el ACCESO al área privada (/dashboard y
+ * Suscripción vía Whop — TRES planes (ver `PLANS` en @ph/shared): $29.90, $69.90 y
+ * $89.90 al mes, SIN prueba gratis (`trial_period_days` es null en los tres planes,
+ * verificado contra la API el 2026-08-21). Desbloquean el ACCESO al área privada (/dashboard y
  * /tools/*) y, según el tier, cuánto sirve el buscador y cuántos créditos de imagen
  * entran en el período.
  *
@@ -55,10 +56,13 @@ function getDb(): SupabaseClient {
  * `completed`, `canceled`, `expired`, `unresolved`, `drafted`, `canceling`), estos
  * tres dan acceso.
  *
- * ⚠️ `trialing` NO es opcional, y es la razón por la que el entitlement cuelga del
- * MEMBERSHIP y no del pago: el plan tiene 3 días de prueba y durante esos días no
- * existe ningún `payment.succeeded`. Un gate colgado de los eventos de pago dejaría
- * al usuario afuera exactamente durante la prueba que lo trajo.
+ * ⚠️ `trialing` SE QUEDA aunque hoy no haya prueba gratis, y no es código muerto por
+ * descuido. Durante una prueba no existe ningún `payment.succeeded`, así que un gate
+ * colgado de los eventos de pago dejaría al usuario afuera justo durante la prueba
+ * que lo trajo — es la razón por la que el entitlement cuelga del MEMBERSHIP y no del
+ * pago. Borrar la rama solo se ganaría el derecho a dejar afuera a alguien que pagó el
+ * día que se habilite una prueba en Whop, que es un cambio de una casilla allá y de
+ * cero acá.
  *
  * `canceling` = pidió cancelar pero el período ya pagado sigue corriendo; quitarle el
  * acceso antes de que termine sería cobrarle por algo que no puede usar.

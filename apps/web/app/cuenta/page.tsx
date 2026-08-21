@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, ArrowUpRight, ArrowDownRight, Check, Sparkles } from "lucide-react";
-import { PLANS, TIERS, RAW_BUCKET_LABEL, creditosBajos, type Tier } from "@ph/shared";
+import { PLANS, TIERS, RAW_BUCKET_LABEL, creditosBajos, precioUSD, type Tier } from "@ph/shared";
 import { getUser } from "@/lib/supabase/server";
 import { getAccess, type Access } from "@/lib/whop";
 import { creditStatus, type CreditStatus } from "@/lib/credits";
@@ -114,7 +114,7 @@ function PlanActual({ access }: { access: Access }) {
           <p className="mt-1 text-[24px] font-extrabold leading-none text-[#f6f2eb]">
             {plan.nombre}
             <span className="ml-2 text-[15px] font-normal text-[#c9b4ae]">
-              ${plan.precio} / mes
+              {precioUSD(plan)} / mes
             </span>
           </p>
         </div>
@@ -159,7 +159,7 @@ function CambiarA({ tier, actual }: { tier: Tier; actual: Tier }) {
     >
       <span className="min-w-0">
         <span className="block text-[13px] font-bold text-[#efe7e0]">
-          {plan.nombre} · ${plan.precio}
+          {plan.nombre} · {precioUSD(plan)}
         </span>
         {/* La diferencia que importa, no la lista entera: acá el usuario compara. */}
         <span className="block truncate text-[11px] text-[#a98c88]">

@@ -21,8 +21,9 @@ function evento(over: Record<string, unknown> = {}) {
 }
 
 describe('grantsAccess', () => {
-  // El bug que este proyecto tiene que evitar: el plan lleva 3 días de prueba, así
-  // que si `trialing` no diera acceso el usuario quedaría afuera justo en la prueba.
+  // Hoy los planes no tienen prueba gratis, pero la rama se queda: durante una prueba
+  // no hay `payment.succeeded`, así que si `trialing` no diera acceso, habilitar una
+  // prueba en Whop (una casilla, cero código) dejaría afuera a quien acaba de entrar.
   it('trialing da acceso', () => {
     expect(grantsAccess('trialing')).toBe(true)
   })

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { PLANS, TIERS } from '@ph/shared'
+import { PLANS, TIERS, precioUSD } from '@ph/shared'
 import { PlanesGrid, IncluidoEnTodos } from './PlanesGrid'
 
 /**
@@ -18,7 +18,7 @@ describe('lo que se vende es lo que se sirve', () => {
     const html = landing()
     for (const t of TIERS) {
       expect(html).toContain(PLANS[t].nombre)
-      expect(html).toContain(`$${PLANS[t].precio}`)
+      expect(html).toContain(precioUSD(PLANS[t]))
     }
     expect(html).toContain('Legacy Start')
     expect(html).toContain('Legacy Scale')
@@ -43,6 +43,13 @@ describe('lo que se vende es lo que se sirve', () => {
     expect(html).toContain('Productos con 100 a más anuncios')  // solo Empire
     // Los tres rangos se nombran en las tres cards, desbloqueados o no.
     expect(html.split('0 a 50 anuncios').length - 1).toBeGreaterThanOrEqual(3)
+  })
+
+  // ⚠️ NO HAY PRUEBA GRATIS: `trial_period_days` es null en los tres planes de Whop y
+  // `createCheckout` no manda ningún campo de prueba. Un botón que la prometa es una
+  // promesa que el checkout no cumple.
+  it('ningún botón ni card promete algo gratis', () => {
+    expect(landing()).not.toMatch(/gratis/i)
   })
 
   it('el CTA de cada plan va a donde dice quien lo usa', () => {

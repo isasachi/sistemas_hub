@@ -33,7 +33,7 @@ export default function Home() {
   const ctaLabel =
     process.env.AUTH_DISABLED === "true"
       ? "Entrar al dashboard"
-      : "Comenzar gratis";
+      : "Comenzar ahora";
 
   return (
     <div className="lp-root flex min-h-screen flex-col">

@@ -28,7 +28,7 @@ export function PricingSection() {
           Un plan por cada etapa
         </h2>
         <p className="mx-auto mt-4 max-w-[520px] font-[Lato] text-[15px] leading-[1.6] text-[#a98c88]">
-          Prueba 3 días gratis en cualquier plan. Cancelas cuando quieras.
+          Elige tu plan y empieza hoy. Cancelas cuando quieras.
         </p>
       </div>
 

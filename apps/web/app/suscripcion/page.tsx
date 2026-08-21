@@ -20,13 +20,12 @@ import { PlanesGrid, IncluidoEnTodos } from "@/components/planes/PlanesGrid";
  * no existían).
  */
 
-/**
- * Días de prueba. ⚠️ Whop ata el free trial al CHECKOUT LINK, no al plan, así que
- * este número es cierto solo si los tres links se configuraron con él. Si algún
- * link va sin prueba, se cambia esta constante (o se saca la línea) — una promesa
- * de prueba que el checkout no cumple es peor que no prometerla.
- */
-const PRUEBA_DIAS = 3;
+// ⚠️ NO HAY PRUEBA GRATIS, y esta pantalla no puede prometerla. Hubo una constante
+// `PRUEBA_DIAS = 3` acá, con la advertencia de que solo era cierta si los checkout
+// links la traían. No la traen: verificado contra la API de Whop el 2026-08-21,
+// `trial_period_days` es null en los tres planes, y `createCheckout` tampoco manda
+// ningún campo de prueba. Si algún día se habilita, se cambia el copy Y se verifica
+// contra la API — no al revés.
 
 const ERRORES: Record<string, string> = {
   checkout: "No pudimos abrir el checkout. Intenta de nuevo en un momento.",
@@ -84,7 +83,7 @@ export default async function SuscripcionPage({
           <p className="text-[14px] leading-[1.6] text-[#c9b4ae]">
             {access
               ? "Tu plan actual está marcado abajo."
-              : `Prueba ${PRUEBA_DIAS} días gratis en cualquier plan. Cancelas cuando quieras.`}
+              : "Elige tu plan y empieza hoy. Cancelas cuando quieras."}
           </p>
         </header>
 

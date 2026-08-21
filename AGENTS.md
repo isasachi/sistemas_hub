@@ -506,13 +506,17 @@ Efecto sobre la sesión de ropa: **29 cortes → 7 lotes**, dos de ellos los fla
 
 ## Suscripción — Whop (`lib/whop.ts`) y planes (`@ph/shared` `plans.ts`)
 
-Paywall del hub: **tres planes**, 3 días de prueba, desbloquean el ACCESO al área privada (`/dashboard` y `/tools/*`) y, según el tier, cuánto sirve el buscador y cuántas imágenes entran en el período. Whop entra **solo como capa de pago/entitlement** — la identidad sigue siendo Supabase Auth. Se descartaron "Sign in with Whop" (OAuth 2.1 + PKCE) y la app embebida en el iframe de Whop: obligarían a migrar sesiones y no compran nada sobre el login que ya existe.
+Paywall del hub: **tres planes**, sin prueba gratis, que desbloquean el ACCESO al área privada (`/dashboard` y `/tools/*`) y, según el tier, cuánto sirve el buscador y cuántas imágenes entran en el período. Whop entra **solo como capa de pago/entitlement** — la identidad sigue siendo Supabase Auth. Se descartaron "Sign in with Whop" (OAuth 2.1 + PKCE) y la app embebida en el iframe de Whop: obligarían a migrar sesiones y no compran nada sobre el login que ya existe.
 
 | plan | nombre | precio | buscador | productos por rango | créditos de imagen |
 |---|---|---|---|---|---|
-| 1 | Legacy Start | $29 | `0-50` | 10 | 30 |
-| 2 | Legacy Scale | $69 | `0-50` + `50-100` | 20 | 100 |
-| 3 | Legacy Empire | $89 | los tres rangos | 50 | 180 |
+| 1 | Legacy Start | $29.90 | `0-50` | 10 | 30 |
+| 2 | Legacy Scale | $69.90 | `0-50` + `50-100` | 20 | 100 |
+| 3 | Legacy Empire | $89.90 | los tres rangos | 50 | 180 |
+
+⚠️ **EL PRECIO DE `PLANS` TIENE QUE SER EL DE WHOP, Y SE MUESTRA CON CENTAVOS.** Los tres planes cobran **.90**, no números redondos ni `.99` — verificado contra la API el 2026-08-21 (`formatted_price`: `"$29.90 / month"`, `"$69.90 / month"`, `"$89.90 / month"`). La tabla publicaba $29/$69/$89, así que la card anunciaba una cifra y el checkout cobraba otra: es la misma clase de mentira que las dos tablas de precios separadas, pero peor, porque la contradicción aparece en el momento de pagar. Y el precio se pinta con `precioUSD` y no interpolando el número: `${29.9}` da **"$29.9"**, que se lee como un precio distinto del "$29.90" de Whop.
+
+⚠️ **NO HAY PRUEBA GRATIS.** `trial_period_days` es null en los tres planes y `createCheckout` no manda ningún campo de prueba, así que ninguna pantalla puede prometerla: se cayeron la constante `PRUEBA_DIAS` del paywall, el subtítulo de la home y los CTA "Empezar prueba gratis" (ahora nombran el plan), y los "Comenzar gratis" del hero y la barra. `grantsAccess('trialing')` **se queda igual** — habilitar una prueba en Whop es una casilla allá y cero código acá, y sin esa rama el día que se habilite dejaría afuera a quien acaba de entrar.
 
 **La calculadora de costos y el generador de video vienen en los TRES planes**, sin tope por tier: el render de video lo paga el usuario con su propia API key de KIE (ver "BYOK" abajo), así que no hay costo del hub que racionar.
 
@@ -540,7 +544,7 @@ Paywall del hub: **tres planes**, 3 días de prueba, desbloquean el ACCESO al á
 
 ⚠️ **`getAccess` se queda con el tier MÁS ALTO de las memberships vivas.** Un usuario puede tener varias filas (canceló una y compró otra, o subió de plan): quedarse con la peor sería cobrarle el plan caro y servirle el barato. Un `tier` nulo —fila escrita antes de que existiera la columna— vale como plan 1.
 
-⚠️ **EL ENTITLEMENT CUELGA DEL MEMBERSHIP, NO DEL PAGO — y esa es la decisión que sostiene el trial.** Los planes tienen 3 días de prueba, así que durante esos días **no existe ningún `payment.succeeded`**: un gate colgado de los eventos de pago dejaría al usuario afuera exactamente durante la prueba que lo trajo. Los estados de membership son nueve (`trialing`, `active`, `past_due`, `completed`, `canceled`, `expired`, `unresolved`, `drafted`, `canceling`) y `grantsAccess` otorga en tres: `trialing`, `active` y `canceling` (canceló pero el período pagado sigue corriendo — quitárselo antes sería cobrarle por algo que no puede usar). `past_due` **no** da acceso: Whop reintenta el cobro y al recuperarlo manda `membership.activated`, que lo devuelve a `active`.
+⚠️ **EL ENTITLEMENT CUELGA DEL MEMBERSHIP, NO DEL PAGO.** Durante una prueba **no existe ningún `payment.succeeded`**, así que un gate colgado de los eventos de pago dejaría al usuario afuera exactamente durante la prueba que lo trajo. Hoy los planes no tienen prueba, pero la decisión se sostiene igual: es lo que permite habilitarla sin tocar código. Los estados de membership son nueve (`trialing`, `active`, `past_due`, `completed`, `canceled`, `expired`, `unresolved`, `drafted`, `canceling`) y `grantsAccess` otorga en tres: `trialing`, `active` y `canceling` (canceló pero el período pagado sigue corriendo — quitárselo antes sería cobrarle por algo que no puede usar). `past_due` **no** da acceso: Whop reintenta el cobro y al recuperarlo manda `membership.activated`, que lo devuelve a `active`.
 
 ⚠️ **El estado sale SIEMPRE del payload (`data.status`), nunca del nombre del evento.** Un `membership.activated` de una membership que ya está `past_due` no puede otorgar acceso por el solo hecho de llamarse "activated". Cubierto por test.
 
@@ -560,7 +564,7 @@ Paywall del hub: **tres planes**, 3 días de prueba, desbloquean el ACCESO al á
 
 ⚠️ **Cambiar de plan crea una suscripción NUEVA en Whop; la vieja sigue cobrando.** `getAccess` ya resuelve la mitad que importa —se queda con el tier más alto, así que durante el cambio el usuario nunca pierde acceso— pero la mitad de facturación no está resuelta: haría falta la API de cambio de plan de Whop, o cancelar la anterior en su dashboard. **Se avisa en pantalla** en vez de decidirlo en silencio: cobrarle dos veces a alguien sin decírselo es peor que pedirle un click.
 
-⚠️ **El free trial se configura en el CHECKOUT LINK, no en el plan.** La constante `PRUEBA_DIAS` del paywall es cierta solo si los **tres** links se crearon con la prueba. Si alguno va sin ella, se cambia esa constante — una promesa de prueba que el checkout no cumple es peor que no prometerla.
+⚠️ **El free trial se configura en el CHECKOUT LINK, no en el plan** — así que si algún día se habilita, comprobarlo mirando el plan no alcanza. Hoy no hay prueba por ningún lado (plan y checkout, los dos verificados) y ninguna pantalla la promete; ver arriba.
 
 ⚠️ **EL REDIRECT DEL NAVEGADOR Y EL WEBHOOK COMPITEN.** Al volver del checkout la fila puede no existir todavía. Con `redirect_url` apuntando a `/dashboard`, el gate rebotaba al paywall y alguien que acababa de pagar leía *"Activa tu acceso"* — o sea "mi pago falló", que es un pedido de reembolso. Por eso el checkout vuelve a **`/suscripcion?pago=ok`**, donde la página distingue ese caso; si el webhook ya llegó, redirige sola a `/dashboard`. El refresco es manual a propósito: un auto-refresh giraría para siempre si el webhook nunca llega.
 
