@@ -17,6 +17,7 @@ vi.mock('next/navigation', () => ({
 }))
 vi.mock('@/lib/supabase/server', () => ({ getUser: vi.fn() }))
 vi.mock('@/lib/whop', () => ({ getAccess: vi.fn() }))
+vi.mock('@/app/actions/auth', () => ({ signOut: vi.fn() }))
 
 import SuscripcionPage from './page'
 import { getUser } from '@/lib/supabase/server'
@@ -45,6 +46,12 @@ describe('/suscripcion', () => {
   it('sin sesión manda a login', async () => {
     vi.mocked(getUser).mockResolvedValue(null as never)
     expect(await render()).toBe('REDIRECT:/login')
+  })
+
+  // Cerrar sesión vive en AppShell, que no se pinta fuera de `(app)`: sin este
+  // botón quien no tiene plan no tiene forma de salir ni de cambiar de cuenta.
+  it('siempre ofrece cerrar sesión', async () => {
+    expect(await render()).toContain('Cerrar sesión')
   })
 
   it('sin suscripción muestra los tres planes con su checkout', async () => {
