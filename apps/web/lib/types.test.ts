@@ -36,6 +36,21 @@ describe('zona del cuerpo y colores de marca', () => {
     expect(ProductScanSchema.parse(scanBase).brandColors).toBeNull()
   })
 
+  // La forma REAL que devuelve Postgres para una fila jsonb anterior al cambio: sin las claves
+  // nuevas y con los nullish explícitos en null. Son tres los sitios que parsean esto —
+  // generate-image, generate-copy (dentro de un try/catch que devuelve un 500 genérico) y
+  // analyze-product — así que el fallo se vería como "no se pudo generar el copy", sin causa.
+  it('la forma exacta de una fila jsonb vieja parsea en los tres sitios', () => {
+    const oldScan = {
+      productDescription: 'frasco ámbar de 30 ml',
+      brandingDescription: null,
+      styleCompatibilityNote: null,
+      summaryForUser: 'ok',
+    }
+    expect(ProductScanSchema.parse(oldScan).brandColors).toBeNull()
+    expect(ReferenceAnalysisSchema.parse({ ...refBase, bodyFocus: undefined }).bodyFocus).toBeNull()
+  })
+
   it('el modelo está OBLIGADO a emitirlos: los tres siguen en el required del JSON Schema', () => {
     expect(required(ReferenceAnalysisSchema)).toEqual(
       expect.arrayContaining(['bodyFocus', 'attentionMarkers'])
