@@ -87,7 +87,13 @@ export const tools: Tool[] = [
     preview: { kind: "video", ratio: "9/16" },
     stats: [
       { value: "1 referencia", label: "video vertical obligatorio" },
-      { value: "clips de 15s", label: "descargables por separado" },
+      // ponytail: literal y no `LOTE_MAX_SEC` importado. Este archivo no tiene NINGÚN
+      // import y su único consumidor es un componente `'use client'`; traer
+      // `lib/video-ads/lotes.ts` (zod + kie + niches + personajes) al bundle del
+      // navegador por un string de marketing no compensa. Si el tope del modelo
+      // cambia, cambia también acá — decía 15s desde la migración a Veo, que es
+      // cuando pasó a 8.
+      { value: "clips de 8s", label: "descargables por separado" },
     ],
   },
   {

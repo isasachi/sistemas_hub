@@ -130,6 +130,12 @@ export function scriptFingerprint(input: {
   /** Nicho: cambia el rótulo del bloque de producto y el bloque de consistencia. Sin
    *  esto, cambiar el chip y re-renderizar deja la huella igual con otro prompt. */
   niche?: unknown
+  /** Quién habla en cada toma, por `tiempo`. Decide la atribución en el prompt
+   *  (`P2 (padre) dice:`) y de qué avatares salen los frames. */
+  quien?: Map<string, { id: string }[]>
+  /** Tomas narradas por encima, por `tiempo`. Cambia el rótulo de la locución y la
+   *  orden de no mover la boca. */
+  enOff?: Set<string>
 }): string {
   const { lotes, consistencyBlock, productDesc, escenario, camaras, voz, images } = input
   const campos: string[] = [
@@ -167,7 +173,15 @@ export function scriptFingerprint(input: {
     // v6 → v7: varios personajes. El prompt de cada lote pasa a llevar un bloque por
     // persona presente y la locución atribuida (`P2 (padre) dice:`), y los frames salen
     // de los avatares de quienes salen en cada toma. Nada de eso lo ve la huella sola.
-    'v7',
+    // v7 → v8: el eje de voz en off y la atribución de hablantes ENTRAN a la huella.
+    // Estaban en el prompt y en `frameSpecs` desde su slice, pero no acá: se derivan de
+    // `forensic_analysis.cortes`, y `analyze-reference` reescribe esa columna SIN limpiar
+    // `adapted` ni `template`. O sea re-analizar la referencia de una sesión ya renderizada
+    // podía cambiar `vozEnOff`/`hablantes` conservando las tomas; si los `tiempo` no se
+    // movían, `camaras` tampoco, y `isPaidResume` daba `true` sobre contenido distinto —
+    // pegando un clip con la boca moviéndose a otro narrado en off. Angosto, pero es
+    // exactamente la clase de incoherencia que la huella existe para evitar, y toca dinero.
+    'v8',
     // Pasa por `toNiche`: un nicho BLOQUEADO se renderiza como suplementos, así que su
     // huella tiene que ser la de suplementos. Sin esto, una sesión guardada como 'ropa'
     // con lotes ya pagados reanudaría pegando un clip del camino de prenda a uno del
@@ -204,6 +218,15 @@ export function scriptFingerprint(input: {
         String(t.n), num(t.duracionSeg), t.accionVisual, t.personaje, t.producto,
         t.locucion, t.tiempoOriginal,
       )
+      // Por toma y no una sola vez al final: los dos se emparejan por `tiempoOriginal`,
+      // así que lo que cambia el render es qué toma concreta queda narrada o a quién se
+      // le atribuye la línea — un total agregado no distinguiría mover el off de una
+      // toma a otra. Las sesiones sin ninguno de los dos campos pushean '' y '0', que es
+      // lo mismo que hashearían antes de que existieran… salvo por el bump de versión,
+      // que es lo que las invalida a propósito.
+      campos.push((input.enOff?.has(t.tiempoOriginal) ? '1' : '0'))
+      const hablan = input.quien?.get(t.tiempoOriginal) ?? []
+      campos.push(String(hablan.length), ...hablan.map((p) => p.id))
     }
   }
   return createHash('sha256').update(campos.join(SEP)).digest('hex')

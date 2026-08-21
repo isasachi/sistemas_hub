@@ -48,11 +48,19 @@ export async function listLandingSessions(userId: string): Promise<LandingListRo
   return (data ?? []) as LandingListRow[]
 }
 
-export async function getLandingSession(id: string): Promise<LandingSessionResponse | null> {
+/**
+ * PERTENENCIA — ver la nota larga en `lib/db.ts` (`getSession`). En corto: el `uid`
+ * llega resuelto por quien llama (`readUserId`: usuario autenticado o cookie `ph_uid`),
+ * un `uid` nulo devuelve null, y las filas legadas sin `user_id` quedan fuera del
+ * alcance de todos — igual que ya lo estaban en los listados del historial.
+ */
+export async function getLandingSession(id: string, uid: string | null): Promise<LandingSessionResponse | null> {
+  if (!uid) return null
   const { data, error } = await getDb()
     .from('landing_sessions')
     .select('*')
     .eq('id', id)
+    .eq('user_id', uid)
     .single()
   if (error) return null
   return data as LandingSessionResponse
@@ -96,9 +104,20 @@ export async function updateLandingSession(
   if (error) throw new Error(error.message)
 }
 
-export async function deleteLandingSession(id: string): Promise<void> {
-  const { error } = await getDb().from('landing_sessions').delete().eq('id', id)
+/**
+ * Devuelve si borró algo — ver `deleteSession` en `lib/db.ts`. Un DELETE que no
+ * matchea no es error en PostgREST, así que sin el `count` la ruta respondería
+ * `{ok:true}` sobre una sesión ajena que sigue viva.
+ */
+export async function deleteLandingSession(id: string, uid: string | null): Promise<boolean> {
+  if (!uid) return false
+  const { error, count } = await getDb()
+    .from('landing_sessions')
+    .delete({ count: 'exact' })
+    .eq('id', id)
+    .eq('user_id', uid)
   if (error) throw new Error(error.message)
+  return (count ?? 0) > 0
 }
 
 // Fase 6 (paralelización): upsert ATÓMICO de UNA sección en el array jsonb `sections` vía RPC

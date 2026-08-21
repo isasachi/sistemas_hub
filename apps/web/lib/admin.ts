@@ -69,12 +69,22 @@ export async function otorgarCortesia(userId: string, tier: Tier): Promise<void>
  * única escritura de esas filas (AGENTS.md), así que "revocarlas" acá duraría hasta
  * el siguiente evento. Cancelar un plan pagado se hace en Whop.
  */
-export async function quitarCortesia(userId: string): Promise<void> {
-  const { error } = await getDb()
+/**
+ * Devuelve si había una cortesía que quitar.
+ *
+ * ⚠️ Borrar cero filas NO es error en PostgREST, así que sin el `count` esto reportaba
+ * "Cortesía retirada" sobre un usuario cuyo acceso viene de otro lado — un
+ * grandfathered (que sale de `WHOP_GRANDFATHERED_EMAILS`, no de la tabla) o una
+ * membership real de Whop. El admin leía que revocó y el usuario seguía entrando a
+ * `/tools/*`: éxito silencioso sobre una acción de permisos.
+ */
+export async function quitarCortesia(userId: string): Promise<boolean> {
+  const { error, count } = await getDb()
     .from('user_entitlements')
-    .delete()
+    .delete({ count: 'exact' })
     .eq('whop_membership_id', manualMembershipId(userId))
   if (error) throw new Error(`quitando cortesía: ${error.message}`)
+  return (count ?? 0) > 0
 }
 
 export interface AdminUser {

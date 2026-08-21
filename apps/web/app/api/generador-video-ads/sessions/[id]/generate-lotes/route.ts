@@ -7,7 +7,7 @@ import { personajesDe, hablantesPorTiempo, vozEnOffPorTiempo } from '@/lib/video
 import { enProsa } from '@/lib/video-ads/forensic'
 import { generateImage } from '@/lib/video-ads/nano-banana'
 import { uploadToStorage } from '@/lib/storage'
-import { groupIntoLotes, buildLotePrompt, camaraDeLote, type Lote } from '@/lib/video-ads/lotes'
+import { planoPorTiempoDe, groupIntoLotes, buildLotePrompt, camaraDeLote, type Lote } from '@/lib/video-ads/lotes'
 import { totalDuration, resumeSeed, mergeRescue, isPaidResume, scriptFingerprint, renderDone } from '@/lib/video-ads/render-lotes'
 import { AdaptedScriptSchema, type AdaptedScript } from '@/lib/video-ads/adapt'
 import { extractPending } from '@/lib/video-ads/pending'
@@ -71,7 +71,7 @@ export async function POST(
   const { id } = await params
   const userId = await readUserId()
 
-  const session = await getVideoSession(id)
+  const session = await getVideoSession(id, await readUserId())
   if (!session) return NextResponse.json({ error: 'No se encontró la sesión' }, { status: 404 })
   if (!session.adapted || !session.consistency_block || !session.voice_profile)
     return NextResponse.json({ error: 'Completa los pasos anteriores' }, { status: 409 })
@@ -135,7 +135,7 @@ export async function POST(
   // (medido). Cerrar el lote donde el original corta el plano es además donde el montaje
   // pone el corte — el entregable son N clips independientes. Cuesta más lotes, o sea
   // más llamadas pagadas, y por eso está acá y no escondido en `groupIntoLotes`.
-  const planoPorTiempo = new Map(cortes.map((c) => [c.tiempo, c.camara.trim()]))
+  const planoPorTiempo = planoPorTiempoDe(cortes)
   const agrupados = groupIntoLotes(adapted.tomas, planoPorTiempo)
   if (!agrupados.length) return NextResponse.json({ error: 'El guión no tiene tomas' }, { status: 409 })
 
@@ -150,11 +150,18 @@ export async function POST(
   // —incluidos los placeholders `idle` de un rescate parcial— para que la próxima
   // llamada pueda comprobar, sin adivinar, si está reanudando el MISMO video o
   // empezando otro distinto (ver `isPaidResume`).
+  // Quién habla en cada toma y cuáles son narración por encima. Se resuelven ACÁ, antes
+  // de la huella, y no más abajo junto a los frames: los dos cambian el prompt del lote
+  // (el rótulo `VOZ EN OFF`, la orden de no mover la boca, la atribución `P2 (padre)
+  // dice:`) y deciden qué frames se generan, así que tienen que ENTRAR en el hash.
+  const quien = hablantesPorTiempo(cortes, gente)
+  const enOff = vozEnOffPorTiempo(cortes)
+
   const huella = scriptFingerprint({
     niche: session.niche,
     lotes: agrupados, consistencyBlock: session.consistency_block, productDesc,
     escenario, camaras, voz: session.voice_profile, movimiento: session.motion_profile,
-    personajes: gente, images,
+    personajes: gente, images, quien, enOff,
   })
   const base: Lote[] = agrupados.map((l) => ({ ...l, scriptHash: huella }))
 
@@ -312,11 +319,9 @@ export async function POST(
   // `jobs` incluye un frame de cierre por lote MÁS uno de apertura en cada lote cuya
   // escena no continúa la del anterior (ver `frameSpecs`), así que puede haber más
   // frames que lotes. Por eso la comprobación de reutilización va contra `jobs.length`.
-  // Quién habla en cada toma, para saber a quién retrata cada frame y quién dice qué.
-  const quien = hablantesPorTiempo(cortes, gente)
-  // Qué tomas son narración por encima: sin esto el render le mueve la boca a alguien
-  // donde el original solo mostraba el producto.
-  const enOff = vozEnOffPorTiempo(cortes)
+  // `quien` (a quién retrata cada frame y quién dice qué) y `enOff` (qué tomas son
+  // narración por encima, para que el render no le mueva la boca a nadie donde el
+  // original solo mostraba el producto) se resuelven más arriba, antes de la huella.
   const jobs = frameSpecs(seed, quien, enOff)
   let cierres: string[]
   const guardados = session.frames

@@ -17,7 +17,7 @@ export const maxDuration = 30 // classifyNiche = 1 llamada gemini-flash con visi
 // cero gasto de LLM/quota por un no-op. Solo clasifica de cero cuando falta alguno de los dos.
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const session = await getLandingSession(id)
+  const session = await getLandingSession(id, await readUserId())
   if (!session) return NextResponse.json({ error: 'No se encontró la sesión' }, { status: 404 })
 
   // `body_focus` entra en la condición: una sesión clasificada ANTES de que el campo existiera lo
@@ -52,7 +52,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   })
   if (gano) return NextResponse.json(result)
 
-  const actual = await getLandingSession(id)
+  const actual = await getLandingSession(id, await readUserId())
   return NextResponse.json({
     niche_id: actual?.niche_id ?? result.niche_id,
     demographic_id: actual?.demographic_id ?? result.demographic_id,

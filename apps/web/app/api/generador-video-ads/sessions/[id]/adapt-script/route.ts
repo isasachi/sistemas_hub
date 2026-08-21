@@ -24,7 +24,7 @@ export async function POST(
   if (blocked) return blocked
   const userId = await readUserId()
 
-  const session = await getVideoSession(id)
+  const session = await getVideoSession(id, await readUserId())
   if (!session) return NextResponse.json({ error: 'No se encontró la sesión' }, { status: 404 })
   if (!session.template || !session.forensic_analysis)
     return NextResponse.json({ error: 'Extrae la plantilla primero' }, { status: 409 })

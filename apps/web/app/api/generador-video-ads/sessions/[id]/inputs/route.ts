@@ -3,6 +3,7 @@ import { getVideoSession, updateVideoSession } from '@/lib/video-ads/db'
 import { UserInputsSchema } from '@/lib/video-ads/types'
 import { buildValidationMatrix, canProceed } from '@/lib/video-ads/validation'
 import { STEP } from '@/lib/video-ads/steps'
+import { readUserId } from '@/lib/product-hunter/session'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -14,7 +15,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
-  const session = await getVideoSession(id)
+  const session = await getVideoSession(id, await readUserId())
   if (!session) return NextResponse.json({ error: 'No se encontró la sesión' }, { status: 404 })
 
   let body: unknown

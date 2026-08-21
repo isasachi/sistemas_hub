@@ -42,23 +42,44 @@ export async function createCalcSession(
   return data.id as string
 }
 
+/**
+ * El ÚNICO escritor del hub que no lee la sesión antes, y por eso necesita su propia
+ * comprobación de pertenencia: el resto de las rutas carga con `getX(id, uid)` y corta
+ * en null, así que la guarda del loader las cubre. Ésta escribía directo, o sea con el
+ * UUID ajeno se sobrescribía el P&G guardado de otro — sin auth, sin cuota y sin LLM.
+ *
+ * Devuelve si escribió algo, por el mismo motivo que los deletes: un UPDATE que no
+ * matchea no es error, y `{ok:true}` sobre datos ajenos intactos es éxito silencioso.
+ */
 export async function updateCalcSession(
   id: string,
+  uid: string | null,
   inputs: StoredInputs,
   snapshot: StoredSnapshot
-): Promise<void> {
-  const { error } = await getDb()
+): Promise<boolean> {
+  if (!uid) return false
+  const { error, count } = await getDb()
     .from('calc_sessions')
-    .update({ inputs, snapshot })
+    .update({ inputs, snapshot }, { count: 'exact' })
     .eq('id', id)
+    .eq('user_id', uid)
   if (error) throw new Error(error.message)
+  return (count ?? 0) > 0
 }
 
-export async function getCalcSession(id: string): Promise<CalcSessionRow | null> {
+/**
+ * PERTENENCIA — ver la nota larga en `lib/db.ts` (`getSession`). En corto: el `uid`
+ * llega resuelto por quien llama (`readUserId`: usuario autenticado o cookie `ph_uid`),
+ * un `uid` nulo devuelve null, y las filas legadas sin `user_id` quedan fuera del
+ * alcance de todos — igual que ya lo estaban en los listados del historial.
+ */
+export async function getCalcSession(id: string, uid: string | null): Promise<CalcSessionRow | null> {
+  if (!uid) return null
   const { data, error } = await getDb()
     .from('calc_sessions')
     .select('id, created_at, inputs, snapshot')
     .eq('id', id)
+    .eq('user_id', uid)
     .single()
   if (error) return null
   return data as CalcSessionRow
@@ -75,7 +96,18 @@ export async function listCalcSessions(userId: string): Promise<CalcSessionRow[]
   return (data ?? []) as CalcSessionRow[]
 }
 
-export async function deleteCalcSession(id: string): Promise<void> {
-  const { error } = await getDb().from('calc_sessions').delete().eq('id', id)
+/**
+ * Devuelve si borró algo — ver `deleteSession` en `lib/db.ts`. Un DELETE que no
+ * matchea no es error en PostgREST, así que sin el `count` la ruta respondería
+ * `{ok:true}` sobre una sesión ajena que sigue viva.
+ */
+export async function deleteCalcSession(id: string, uid: string | null): Promise<boolean> {
+  if (!uid) return false
+  const { error, count } = await getDb()
+    .from('calc_sessions')
+    .delete({ count: 'exact' })
+    .eq('id', id)
+    .eq('user_id', uid)
   if (error) throw new Error(error.message)
+  return (count ?? 0) > 0
 }

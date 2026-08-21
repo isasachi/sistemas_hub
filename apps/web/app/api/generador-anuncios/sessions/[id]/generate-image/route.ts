@@ -31,7 +31,7 @@ export async function POST(
         controller.enqueue(`data: ${JSON.stringify(data)}\n\n`)
 
       try {
-        const session = await getSession(id)
+        const session = await getSession(id, userId)
         if (!session || !session.reference_url || !session.product_url || !session.confirmed_copy) {
           send({ status: 'error', message: 'Session incomplete' })
           return controller.close()

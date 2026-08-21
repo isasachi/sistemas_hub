@@ -23,7 +23,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   if (blocked) return blocked
   const userId = await readUserId()
 
-  const session = await getLandingSession(id)
+  const session = await getLandingSession(id, await readUserId())
   if (!session) return NextResponse.json({ error: 'No se encontró la sesión' }, { status: 404 })
   if (!session.niche_id || !session.demographic_id) {
     return NextResponse.json({ error: 'Clasifica el nicho primero', needsClassify: true }, { status: 400 })
@@ -49,7 +49,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
 // demographicChanged para que la UI avise antes de aplicar (spec 0.a, solo para niche_id).
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const session = await getLandingSession(id)
+  const session = await getLandingSession(id, await readUserId())
   if (!session) return NextResponse.json({ error: 'No se encontró la sesión' }, { status: 404 })
 
   let body: { landing_dna?: unknown; niche_id?: unknown; demographic_id?: unknown; body_focus?: unknown } = {}

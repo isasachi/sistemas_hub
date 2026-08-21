@@ -93,6 +93,26 @@ export const useVideoStore = create<VideoState & VideoActions>((set) => ({
         // Section2Character lo toma del `characterUrl` de nivel superior (recién
         // subido puede ir más adelantado que lo que ya hidrató la sesión).
         characterUrl: s.character_url ?? undefined,
+        /**
+         * ⚠️ SIN ESTO SE PERDÍAN LOS PERSONAJES 2-4 AL VOLVER ATRÁS.
+         *
+         * `hydrateFromSession` armaba `inputs` campo por campo y omitía la lista, así
+         * que al reanudar una sesión `inputs.personajes` quedaba vacío y
+         * `Section2Character` caía a su fallback de UNO solo (armado con las columnas
+         * singulares). El riel deja volver a un paso ya alcanzado, así que bastaba
+         * entrar a "Personaje" y darle a Continuar: `POST /inputs` mapea sobre lo que
+         * le manda el wizard —correcto, porque ahí es donde se BORRA un personaje— y
+         * los que no viajaban desaparecían de la fila. Con ellos se iban sus avatares
+         * ya generados (dinero de Nano Banana Pro), la FASE 0 dejaba de bloquear por
+         * su etnia y acento, y el render salía con una persona.
+         *
+         * Se toma la columna cruda y no `personajesDe`: ese accesor SINTETIZA un
+         * personaje desde las columnas singulares cuando la lista es null, y meter ese
+         * sintético acá haría que una sesión de un personaje empezara a escribir la
+         * columna `personajes` solo por haberla abierto — justo lo que el camino
+         * legado evita. Null se mantiene null y el fallback de la sección decide.
+         */
+        personajes: s.personajes ?? undefined,
       },
       validation: s.validation,
       template: s.template,

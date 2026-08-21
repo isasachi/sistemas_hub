@@ -21,7 +21,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (blocked) return blocked
   const userId = await readUserId()
 
-  const session = await getLandingSession(id)
+  const session = await getLandingSession(id, await readUserId())
   if (!session) return NextResponse.json({ error: 'No se encontró la sesión' }, { status: 404 })
 
   let body: { sections?: string[]; feedback?: string; prompt?: string }

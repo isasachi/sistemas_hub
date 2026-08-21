@@ -4,6 +4,9 @@ vi.mock('@/lib/video-ads/db', () => ({
   getVideoSession: vi.fn(),
   updateVideoSession: vi.fn(),
 }))
+// Las rutas resuelven la identidad para acotar la sesión a su dueño; `cookies()`
+// no existe fuera de una request, así que la identidad se fija acá.
+vi.mock('@/lib/product-hunter/session', () => ({ readUserId: async () => 'u1' }))
 
 import { NextRequest } from 'next/server'
 import { POST } from './route'

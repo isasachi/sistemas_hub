@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getSession, updateSession } from '@/lib/db'
 import { CopyVersionsSchema, ConfirmedCopySchema } from '@/lib/types'
+import { readUserId } from '@/lib/product-hunter/session'
 
 const BodySchema = z.object({ version: z.enum(['A', 'B']) })
 
@@ -10,7 +11,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
-  const session = await getSession(id)
+  const session = await getSession(id, await readUserId())
   if (!session) return NextResponse.json({ error: 'No se encontró la sesión' }, { status: 404 })
   if (session.step < 3 || !session.copy_versions)
     return NextResponse.json({ error: 'Completa los pasos anteriores primero' }, { status: 409 })
