@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Download } from 'lucide-react'
 import { useVideoStore } from '@/store/video'
-import { groupIntoLotes, planoPorTiempoDe, type Lote } from '@/lib/video-ads/lotes'
+import { groupIntoLotes, planoPorTiempoDe, LOTE_MAX_SEC, type Lote } from '@/lib/video-ads/lotes'
 import { isInFlight, isStuck } from '@/lib/video-ads/lote-ui'
 import BackToDashboard from '@/components/tools/ui/BackToDashboard'
 import { btnPrimary, btnGhost, errorBox, warnBox, spinner, seg } from './shared'
@@ -113,7 +113,7 @@ export default function Section6Lotes() {
       <div className="flex flex-col gap-4">
         <div className="rounded-2xl border border-white/[0.06] bg-[#2a0f1a] px-4 py-4">
           <div className="mb-2.5 text-[11px] font-semibold uppercase tracking-wide text-[#c9a227]">
-            {preview.length} {preview.length === 1 ? 'lote' : 'lotes'} de máximo 15 s
+            {preview.length} {preview.length === 1 ? 'lote' : 'lotes'} de máximo {LOTE_MAX_SEC} s
           </div>
           <ol className="flex flex-col gap-1.5">
             {preview.map((l) => (

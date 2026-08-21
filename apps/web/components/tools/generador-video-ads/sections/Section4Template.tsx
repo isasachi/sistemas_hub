@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useVideoStore } from '@/store/video'
 import type { ScriptTemplate } from '@/lib/video-ads/types'
 import { STEP } from '@/lib/video-ads/steps'
-import { groupIntoLotes, planoPorTiempoDe } from '@/lib/video-ads/lotes'
+import { groupIntoLotes, planoPorTiempoDe, LOTE_MAX_SEC } from '@/lib/video-ads/lotes'
 import { segmentar } from '@/lib/video-ads/segments'
 import { btnPrimary, btnGhost, errorBox, warnBox, spinner, seg } from './shared'
 
@@ -35,7 +35,8 @@ export default function Section4Template() {
     }
   }
 
-  // En cuántos clips va a salir el video. El generador topa en 15 s por llamada, así que
+  // En cuántos clips va a salir el video. El generador topa en LOTE_MAX_SEC por llamada,
+  // así que
   // un corte más largo se parte en FASE 5 (`splitLongToma`, regla 7 del spec) por pausas
   // del guión. Se calcula ACÁ, con la misma función que usa el render, porque es donde el
   // usuario se forma la expectativa: leer "Cortes detectados — 1" sobre un video de 33 s
@@ -67,7 +68,7 @@ export default function Section4Template() {
           <div className="rounded-2xl border border-white/[0.06] bg-[#2a0f1a] px-4 py-3 text-[12px] leading-relaxed text-[#8b8b8b]">
             Este video es <strong className="text-[#c9b4ae]">una toma continua de {seg(forensicAnalysis.duracionTotalSeg)}</strong>,
             sin cortes de edición — el análisis está bien. Pero el generador no produce más
-            de 15 s por clip, así que al renderizar se dividirá en{' '}
+            de {LOTE_MAX_SEC} s por clip, así que al renderizar se dividirá en{' '}
             <strong className="text-[#c9b4ae]">{clips.length} clips</strong> ({clips.map((l) => seg(l.duracionSeg)).join(' · ')}),
             cortando en pausas del guión. No se pierde una sola palabra; los descargas por
             separado y los unes en tu editor.

@@ -15,6 +15,7 @@ import Section3Validation from './sections/Section3Validation'
 import Section4Template from './sections/Section4Template'
 import Section5Script from './sections/Section5Script'
 import Section6Lotes from './sections/Section6Lotes'
+import { LOTE_MAX_SEC } from '@/lib/video-ads/lotes'
 
 // Array posicional: el orden es el orden real del riel. Cada posición corresponde
 // al índice del mismo nombre en `STEP` (lib/video-ads/steps.ts) — esa es la fuente
@@ -98,7 +99,7 @@ export default function VideoWizard() {
     {
       label: 'Lotes',
       title: 'Tus clips',
-      hint: 'El video se renderiza en tramos de máximo 15 segundos. Descárgalos y únelos en tu editor.',
+      hint: `El video se renderiza en tramos de máximo ${LOTE_MAX_SEC} segundos. Descárgalos y únelos en tu editor.`,
     },
   ]
 
