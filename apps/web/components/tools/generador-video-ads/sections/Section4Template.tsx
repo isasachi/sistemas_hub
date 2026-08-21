@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useVideoStore } from '@/store/video'
 import type { ScriptTemplate } from '@/lib/video-ads/types'
 import { STEP } from '@/lib/video-ads/steps'
-import { groupIntoLotes } from '@/lib/video-ads/lotes'
+import { groupIntoLotes, planoPorTiempoDe } from '@/lib/video-ads/lotes'
 import { segmentar } from '@/lib/video-ads/segments'
 import { btnPrimary, btnGhost, errorBox, warnBox, spinner, seg } from './shared'
 
@@ -45,7 +45,7 @@ export default function Section4Template() {
     ? groupIntoLotes(forensicAnalysis.cortes.map((c) => ({
         n: c.n, duracionSeg: c.duracionSeg, locucion: c.dialogo, tiempoOriginal: c.tiempo,
         accionVisual: c.accion, personaje: '', producto: '',
-      })))
+      })), planoPorTiempoDe(forensicAnalysis.cortes))
     : []
 
   const card = (title: string, children: React.ReactNode) => (

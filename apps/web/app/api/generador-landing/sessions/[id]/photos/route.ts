@@ -3,6 +3,7 @@ import { getLandingSession, updateLandingSession } from '@/lib/landing/db'
 import { uploadToStorage } from '@/lib/storage'
 import { extractProductBox, cropProduct } from '@/lib/landing/product-box'
 import type { LandingSessionResponse } from '@/lib/landing/types'
+import { readUserId } from '@/lib/product-hunter/session'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -11,7 +12,7 @@ export const maxDuration = 30 // + bbox por visión (~2-3s) + crop sobre la 1ª 
 // Etapa 2 — sube 1-3 fotos del producto. Sin LLM: entran como input a Gemini al generar.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const session = await getLandingSession(id)
+  const session = await getLandingSession(id, await readUserId())
   if (!session) return NextResponse.json({ error: 'No se encontró la sesión' }, { status: 404 })
 
   let formData: FormData

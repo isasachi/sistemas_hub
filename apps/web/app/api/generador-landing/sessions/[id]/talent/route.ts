@@ -22,7 +22,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   if (blocked) return blocked
   const userId = await readUserId()
 
-  const session = await getLandingSession(id)
+  const session = await getLandingSession(id, await readUserId())
   if (!session) return NextResponse.json({ error: 'No se encontró la sesión' }, { status: 404 })
   if (!session.landing_dna) {
     return NextResponse.json({ error: 'Genera la identidad primero', needsIdentity: true }, { status: 400 })

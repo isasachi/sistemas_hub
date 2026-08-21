@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getBrandingSession } from '@/lib/branding/db'
 import { briefFromRow } from '@/lib/branding/session-brief'
 import { buildKit } from '@/lib/branding/kit'
+import { readUserId } from '@/lib/product-hunter/session'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -11,7 +12,7 @@ export const maxDuration = 60
 /** Descarga del kit. Cero llamadas al modelo: solo lee, empaqueta y comprime. */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const row = await getBrandingSession(id)
+  const row = await getBrandingSession(id, await readUserId())
   if (!row) return NextResponse.json({ error: 'Esa sesión no existe' }, { status: 404 })
 
   const brief = briefFromRow(row as unknown as Record<string, unknown>)

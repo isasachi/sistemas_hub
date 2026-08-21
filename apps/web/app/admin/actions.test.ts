@@ -17,7 +17,8 @@ vi.mock('@/lib/credits', () => ({
 vi.mock('@/lib/admin', async (orig) => ({
   ...(await orig<typeof import('@/lib/admin')>()),
   otorgarCortesia: vi.fn().mockResolvedValue(undefined),
-  quitarCortesia: vi.fn().mockResolvedValue(undefined),
+  // Devuelve si HABÍA cortesía: por defecto sí, que es el camino feliz.
+  quitarCortesia: vi.fn().mockResolvedValue(true),
 }))
 
 import { cambiarRol, otorgarAcceso, revocarAcceso, ajustarCreditos } from './actions'
@@ -99,6 +100,16 @@ describe('acceso de cortesía', () => {
   it('revoca', async () => {
     expect((await revocarAcceso({}, fd({ userId: 'v' }))).ok).toBeTruthy()
     expect(quitarCortesia).toHaveBeenCalledWith('v')
+  })
+
+  // Antes esto reportaba "Cortesía retirada" igual: borrar cero filas no es error en
+  // PostgREST. El admin creía haber revocado a un grandfathered (o a alguien con
+  // membership real de Whop) y el usuario seguía entrando.
+  it('no dice que retiró nada cuando no había cortesía', async () => {
+    vi.mocked(quitarCortesia).mockResolvedValueOnce(false)
+    const r = await revocarAcceso({}, fd({ userId: 'v' }))
+    expect(r.ok).toBeFalsy()
+    expect(r.error).toMatch(/sigue vigente/)
   })
 })
 

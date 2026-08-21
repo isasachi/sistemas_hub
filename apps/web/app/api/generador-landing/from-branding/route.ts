@@ -28,7 +28,12 @@ export async function POST(req: NextRequest) {
   if (!body.brandingSessionId)
     return NextResponse.json({ error: 'Falta brandingSessionId' }, { status: 400 })
 
-  const bs = await getBrandingSession(body.brandingSessionId)
+  // La identidad se resuelve ANTES de leer la marca: este handoff crea una landing a
+  // partir de una sesión de branding, así que esa sesión tiene que ser de quien pide —
+  // si no, con el UUID ajeno se clonaba la marca de otro en una landing propia.
+  const { uid, setCookie } = await ensureUserId()
+
+  const bs = await getBrandingSession(body.brandingSessionId, uid)
   if (!bs) return NextResponse.json({ error: 'Sesión de branding no encontrada' }, { status: 404 })
 
   // El mockup del producto es la mejor foto para una landing; la identidad es un
@@ -38,7 +43,6 @@ export async function POST(req: NextRequest) {
   // Acuñar la identidad si falta, no solo adoptarla: este handoff crea la sesión
   // como efecto secundario de otra acción, y un navegador sin cookie ph_uid dejaba
   // la landing huérfana (user_id null → fuera del historial para siempre).
-  const { uid, setCookie } = await ensureUserId()
   const id = await createLandingSession(uid)
   await updateLandingSession(id, {
     product_name: bs.brand_name ?? null,

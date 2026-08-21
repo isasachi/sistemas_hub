@@ -87,13 +87,23 @@ export async function revocarAcceso(_prev: FormState, fd: FormData): Promise<For
   const q = await objetivo(fd)
   if (fallo(q)) return q
 
+  let habia: boolean
   try {
-    await quitarCortesia(q.userId)
+    habia = await quitarCortesia(q.userId)
   } catch (err) {
     console.error('[admin] revocar:', err instanceof Error ? err.message : String(err))
     return { error: 'No pudimos quitar el acceso.' }
   }
   refrescar(q.userId)
+  // Decir la verdad importa acá: si el acceso venía de una membership real o de la
+  // lista de grandfathered, no se quitó nada y el usuario SIGUE entrando. Reportar
+  // "retirada" mandaba al admin a suponer lo contrario.
+  if (!habia)
+    return {
+      error:
+        'Este usuario no tenía cortesía, así que no se quitó nada — su acceso viene ' +
+        'de una suscripción de Whop o de la lista de accesos permanentes, y sigue vigente.',
+    }
   return { ok: 'Cortesía retirada. Una suscripción real de Whop no se toca desde acá.' }
 }
 

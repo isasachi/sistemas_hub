@@ -134,6 +134,41 @@ describe('mergeRescue', () => {
 })
 
 describe('scriptFingerprint', () => {
+  // ── Voz en off y hablantes (v8) ─────────────────────────────────────────────
+  // Los dos entran al prompt del lote y deciden qué frames se generan, pero hasta el
+  // 2026-08-21 no entraban a la huella. Se derivan de `forensic_analysis.cortes`, y
+  // `analyze-reference` reescribe esa columna sin limpiar `adapted`: re-analizar una
+  // sesión ya renderizada podía cambiarlos conservando las tomas, y `isPaidResume`
+  // daba `true` sobre contenido distinto.
+
+  it('marcar una toma como voz en off cambia la huella', () => {
+    const off = new Set(['00:00'])
+    expect(scriptFingerprint(fpInput({ enOff: off }))).not.toBe(scriptFingerprint(fpInput()))
+  })
+
+  it('cambiar QUIÉN habla cambia la huella', () => {
+    const a = new Map([['00:00', [{ id: 'p1' }]]])
+    const b = new Map([['00:00', [{ id: 'p2' }]]])
+    expect(scriptFingerprint(fpInput({ quien: a }))).not.toBe(scriptFingerprint(fpInput({ quien: b })))
+  })
+
+  it('mover el off de una toma a otra cambia la huella', () => {
+    // Por eso se hashea POR TOMA y no como un total: un contador agregado daría lo
+    // mismo para "la toma 1 está en off" y "la toma 2 está en off".
+    const dos = [lote(1), lote(2)]
+    dos[1].tomas[0].tiempoOriginal = '00:05'
+    const uno = scriptFingerprint(fpInput({ lotes: dos, enOff: new Set(['00:00']) }))
+    const otro = scriptFingerprint(fpInput({ lotes: dos, enOff: new Set(['00:05']) }))
+    expect(uno).not.toBe(otro)
+  })
+
+  it('sin ninguno de los dos campos sigue siendo estable', () => {
+    // Las sesiones de un personaje sin voz en off no deben depender de que quien llama
+    // pase un Map vacío o no pase nada.
+    expect(scriptFingerprint(fpInput({ enOff: new Set(), quien: new Map() })))
+      .toBe(scriptFingerprint(fpInput()))
+  })
+
   it('es determinista: los mismos datos dan la misma huella', () => {
     expect(scriptFingerprint(fpInput())).toBe(scriptFingerprint(fpInput()))
   })

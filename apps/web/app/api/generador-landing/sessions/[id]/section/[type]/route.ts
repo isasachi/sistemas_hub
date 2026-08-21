@@ -38,7 +38,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (blocked) return blocked
   const userId = await readUserId()
 
-  const session = await getLandingSession(id)
+  const session = await getLandingSession(id, await readUserId())
   if (!session) return NextResponse.json({ error: 'No se encontró la sesión' }, { status: 404 })
 
   // Guard de sesión legada (spec 2026-07-23): sin `landing_dna` no hay paleta/partículas/props/

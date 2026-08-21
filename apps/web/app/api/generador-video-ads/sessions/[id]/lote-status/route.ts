@@ -5,6 +5,7 @@ import { currentKieKey } from '@/lib/user-settings'
 import { uploadToStorage } from '@/lib/storage'
 import { renderDone } from '@/lib/video-ads/render-lotes'
 import type { Lote } from '@/lib/video-ads/lotes'
+import { readUserId } from '@/lib/product-hunter/session'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -46,7 +47,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
-  const session = await getVideoSession(id)
+  const session = await getVideoSession(id, await readUserId())
   if (!session) return NextResponse.json({ error: 'No se encontró la sesión' }, { status: 404 })
   if (!session.lotes?.length) return NextResponse.json({ lotes: [], done: false })
 

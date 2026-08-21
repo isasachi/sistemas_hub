@@ -36,6 +36,10 @@ vi.mock('@supabase/supabase-js', () => ({
 }))
 vi.mock('../../lib/product-hunter/quota', () => ({ limaSearchDay: () => '2026-06-26' }))
 vi.mock('../../lib/product-hunter/session', () => ({ readUserId: async () => 'u1' }))
+// El gate de créditos vive en credits.ts y tiene sus propios tests
+// (`lib/credits-gate.test.ts`). Acá se neutraliza para medir SOLO el tope per-step:
+// desde que rechaza sin sesión, dejarlo vivo haría fallar estos casos por 401.
+vi.mock('../../lib/credits', () => ({ checkCredits: async () => ({ blocked: null, credits: null }) }))
 
 import {
   checkGenQuota, checkGlobalBackstop, recordGenQuota, GEN_PER_STEP_LIMIT, GEN_GLOBAL_DAILY_LIMIT, isImageKind,

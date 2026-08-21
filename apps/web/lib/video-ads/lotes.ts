@@ -157,6 +157,27 @@ function splitLongToma(t: TomaFinal): TomaFinal[] {
  * original (uno sin cortes sigue dando un lote). Por eso `planoPorTiempo` es OPCIONAL y
  * sin él la función se comporta exactamente como antes: quien llama decide.
  */
+/**
+ * El mapa de encuadres que espera `groupIntoLotes`, construido en UN solo lugar.
+ *
+ * ⚠️ Existe porque las tres copias de esta línea se desincronizaron y eso costaba plata
+ * de forma invisible: el servidor la construía y la pasaba, pero las dos previsualizaciones
+ * del wizard (`Section6Lotes`, `Section4Template`) llamaban a `groupIntoLotes` SIN ella.
+ * O sea la pantalla contaba los clips con la regla vieja y el render usaba la nueva: con
+ * los números del video de ropa que documenta AGENTS.md, el preview decía 2 clips y el
+ * servidor creaba 24 llamadas pagadas. Y ese aviso solo aparece cuando todavía no hay
+ * lotes — justo el momento en que el usuario decide gastar.
+ *
+ * La clave es `tiempo` y NO `n`, por lo mismo que `camaraDeLote`: `groupIntoLotes`
+ * renumera la secuencia tras `splitLongToma`, así que en cuanto una toma se parte el `n`
+ * deja de ser el índice de su corte.
+ */
+export function planoPorTiempoDe(
+  cortes: ReadonlyArray<{ tiempo: string; camara: string }> | undefined | null,
+): Map<string, string> {
+  return new Map((cortes ?? []).map((c) => [c.tiempo, c.camara.trim()]))
+}
+
 export function groupIntoLotes(
   tomas: TomaFinal[],
   planoPorTiempo?: Map<string, string>,

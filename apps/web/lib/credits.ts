@@ -211,11 +211,21 @@ export async function currentCreditStatus(): Promise<CreditStatus | null> {
  * La excepción es el stream de branding, que pasa su `owner` ya resuelto (ver
  * `CreditOwner`).
  *
- * ⚠️ Sin sesión no hay créditos que contar y se deja pasar. No es un agujero nuevo:
- * `/api/*` está fuera del matcher de `proxy.ts` y esas rutas nunca pidieron sesión
- * (ver AGENTS.md, "esto gatea la UI y nada más"). Lo que las topa ahí sigue siendo el
- * backstop global diario. Cerrar eso es exigir sesión en las 17 rutas, que es otro
- * cambio.
+ * ⚠️ SIN SESIÓN SE RECHAZA (2026-08-21). Antes se dejaba pasar, razonando que `/api/*`
+ * nunca pidió sesión y que el backstop global diario alcanzaba. Medido, eso no era un
+ * hueco de anónimos sino algo peor: **el propio comprador podía evadir el tope que le
+ * vendimos** — el mismo POST desde curl sin la cookie no resolvía owner, no contaba
+ * créditos y no imputaba la generación a nadie, con el plan 1 (30 imágenes) intacto.
+ * Un tope que se salta quitando una cookie no es un tope.
+ *
+ * Solo aplica a los kinds de crédito (imagen); el resto sigue pasando de largo, así
+ * que las rutas de texto no cambian de comportamiento.
+ *
+ * ⚠️ `AUTH_DISABLED` es la ÚNICA salida, y es deliberada: es el mismo interruptor de
+ * desarrollo que ya cortocircuita `readUserId` y el gate del layout, y sin la excepción
+ * este cambio rompería el loop local de quien no tenga sesión de Supabase levantada.
+ * No abre nada nuevo en producción — con esa variable puesta el hub ya está entero sin
+ * paywall — y está verificado ausente de Vercel prod.
  */
 export async function checkCredits(
   kind: string,
@@ -224,7 +234,16 @@ export async function checkCredits(
   if (!isCreditKind(kind)) return { blocked: null, credits: null }
 
   const quien = owner !== undefined ? owner : await currentCreditOwner()
-  if (!quien) return { blocked: null, credits: null }
+  if (!quien) {
+    if (process.env.AUTH_DISABLED === 'true') return { blocked: null, credits: null }
+    return {
+      blocked: Response.json(
+        { error: 'Inicia sesión para generar imágenes.' },
+        { status: 401 },
+      ),
+      credits: null,
+    }
+  }
 
   const credits = await creditStatus(quien.userId, quien.access)
   if (credits.restantes <= 0) {

@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
         let sessionId: string
 
         if (body.sessionId) {
-          const row = await getBrandingSession(body.sessionId)
+          const row = await getBrandingSession(body.sessionId, userId)
           if (!row) { send({ status: 'error', message: 'Esa sesión no existe' }); return }
           brief = briefFromRow(row as unknown as Record<string, unknown>)
           sessionId = body.sessionId
@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
         const origin = req.nextUrl.origin
 
         // En una regeneración suelta el board ya existe: se reusa como referencia.
-        const existing = await getBrandingSession(sessionId)
+        const existing = await getBrandingSession(sessionId, userId)
         let identityUrl: string | null = (existing?.mockup_url as string) ?? null
         const urls: Partial<Record<Stage, string>> = {}
         const failed: Stage[] = []

@@ -53,19 +53,38 @@ export async function listVideoSessions(userId: string): Promise<VideoListRow[]>
   return (data ?? []) as VideoListRow[]
 }
 
-export async function getVideoSession(id: string): Promise<VideoSessionResponse | null> {
+/**
+ * PERTENENCIA — ver la nota larga en `lib/db.ts` (`getSession`). En corto: el `uid`
+ * llega resuelto por quien llama (`readUserId`: usuario autenticado o cookie `ph_uid`),
+ * un `uid` nulo devuelve null, y las filas legadas sin `user_id` quedan fuera del
+ * alcance de todos — igual que ya lo estaban en los listados del historial.
+ */
+export async function getVideoSession(id: string, uid: string | null): Promise<VideoSessionResponse | null> {
+  if (!uid) return null
   const { data, error } = await getDb()
     .from('video_sessions')
     .select('*')
     .eq('id', id)
+    .eq('user_id', uid)
     .single()
   if (error) return null
   return data as VideoSessionResponse
 }
 
-export async function deleteVideoSession(id: string): Promise<void> {
-  const { error } = await getDb().from('video_sessions').delete().eq('id', id)
+/**
+ * Devuelve si borró algo — ver `deleteSession` en `lib/db.ts`. Un DELETE que no
+ * matchea no es error en PostgREST, así que sin el `count` la ruta respondería
+ * `{ok:true}` sobre una sesión ajena que sigue viva.
+ */
+export async function deleteVideoSession(id: string, uid: string | null): Promise<boolean> {
+  if (!uid) return false
+  const { error, count } = await getDb()
+    .from('video_sessions')
+    .delete({ count: 'exact' })
+    .eq('id', id)
+    .eq('user_id', uid)
   if (error) throw new Error(error.message)
+  return (count ?? 0) > 0
 }
 
 export async function updateVideoSession(
