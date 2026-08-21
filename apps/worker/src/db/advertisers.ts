@@ -40,25 +40,76 @@ export interface AcceptedAd {
  * intento anterior— y no había forma de re-evaluar sin resetear la tabla a mano.
  * Así es idempotente: se vuelve a correr las veces que haga falta.
  */
-export async function acceptedAds(limit: number): Promise<AcceptedAd[]> {
-  const { data, error } = await db().from('disc_ads')
-    .select('id,page_id,page_name,headline,primary_text,landing_url,landing_domain,start_date,ecommerce_score')
-    .eq('physical_product', true)
-    .eq('ecommerce', true)
-    .limit(limit)
-  if (error) throw new Error(`acceptedAds: ${error.message}`)
-  return (data ?? []) as AcceptedAd[]
+/**
+ * Ids de anuncios descubiertos por una corrida. Se pagina por el tope de 1000.
+ */
+export async function adIdsOfRun(runId: string): Promise<string[]> {
+  const { data: qs } = await db().from('disc_search_queries').select('id').eq('run_id', runId)
+  const qIds = (qs ?? []).map((q) => (q as { id: string }).id)
+  const ids = new Set<string>()
+  for (let i = 0; i < qIds.length; i += 100) {
+    const chunk = qIds.slice(i, i + 100)
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await db().from('disc_ad_discoveries')
+        .select('ad_id').in('query_id', chunk).range(from, from + 999)
+      if (error) break
+      const rows = (data ?? []) as { ad_id: string }[]
+      for (const r of rows) ids.add(r.ad_id)
+      if (rows.length < 1000) break
+    }
+  }
+  return [...ids]
+}
+
+export async function acceptedAds(limit: number, onlyIds?: string[]): Promise<AcceptedAd[]> {
+  // Paginado por el tope silencioso de 1000 filas de PostgREST.
+  const cols = 'id,page_id,page_name,headline,primary_text,landing_url,landing_domain,start_date,ecommerce_score'
+  const out: AcceptedAd[] = []
+  const PAGE = 1000
+  // ⚠️ Acotar a UNA corrida importa para la relevancia: el IDF y la cobertura se
+  // calculan sobre el corpus que se le pasa, así que mezclar dos nichos mide los
+  // anuncios de uno contra las keywords del otro y los tira a todos por
+  // LOW_RELEVANCE.
+  if (onlyIds) {
+    for (let i = 0; i < onlyIds.length && out.length < limit; i += 200) {
+      const { data, error } = await db().from('disc_ads')
+        .select(cols).eq('physical_product', true).eq('ecommerce', true)
+        .in('id', onlyIds.slice(i, i + 200))
+      if (error) throw new Error(`acceptedAds: ${error.message}`)
+      out.push(...((data ?? []) as AcceptedAd[]))
+    }
+    return out.slice(0, limit)
+  }
+  for (let from = 0; out.length < limit; from += PAGE) {
+    const take = Math.min(PAGE, limit - out.length)
+    const { data, error } = await db().from('disc_ads')
+      .select(cols).eq('physical_product', true).eq('ecommerce', true)
+      .range(from, from + take - 1)
+    if (error) throw new Error(`acceptedAds: ${error.message}`)
+    const rows = (data ?? []) as AcceptedAd[]
+    out.push(...rows)
+    if (rows.length < take) break
+  }
+  return out
 }
 
 /** Países en los que se descubrió cada anuncio (para `geographicSpread`). */
 export async function countriesByAd(adIds: string[]): Promise<Map<string, Set<string>>> {
   const out = new Map<string, Set<string>>()
+  // Chunks de 200 ids y además paginado: un anuncio puede tener varios caminos,
+  // así que 200 ids pueden pasar de 1000 filas.
   for (let i = 0; i < adIds.length; i += 200) {
-    const { data } = await db().from('disc_ad_discoveries')
-      .select('ad_id,country').in('ad_id', adIds.slice(i, i + 200))
-    for (const r of (data ?? []) as { ad_id: string; country: string }[]) {
-      if (!out.has(r.ad_id)) out.set(r.ad_id, new Set())
-      out.get(r.ad_id)!.add(r.country)
+    const chunk = adIds.slice(i, i + 200)
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await db().from('disc_ad_discoveries')
+        .select('ad_id,country').in('ad_id', chunk).range(from, from + 999)
+      if (error) break
+      const rows = (data ?? []) as { ad_id: string; country: string }[]
+      for (const r of rows) {
+        if (!out.has(r.ad_id)) out.set(r.ad_id, new Set())
+        out.get(r.ad_id)!.add(r.country)
+      }
+      if (rows.length < 1000) break
     }
   }
   return out

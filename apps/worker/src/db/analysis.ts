@@ -27,10 +27,31 @@ export interface PendingAd {
   start_date: string | null
 }
 
-/** Anuncios sin analizar. `accepted IS NULL` es el estado "todavía no se evaluó". */
+const COLS = 'id,page_id,page_name,headline,primary_text,landing_url,landing_domain,start_date'
+const PAGE = 1000
+
+/**
+ * Anuncios sin analizar. `accepted IS NULL` es el estado "todavía no se evaluó".
+ *
+ * ⚠️ Se pagina: PostgREST corta en 1000 filas por request SIN avisar, así que
+ * `--limit 1247` devolvía 1000 y el resto quedaba invisible.
+ */
 export async function pendingAds(limit: number, runId?: string): Promise<PendingAd[]> {
+  if (!runId) {
+    const out: PendingAd[] = []
+    for (let from = 0; out.length < limit; from += PAGE) {
+      const take = Math.min(PAGE, limit - out.length)
+      const { data, error } = await db().from('disc_ads')
+        .select(COLS).is('accepted', null).range(from, from + take - 1)
+      if (error) throw new Error(`pendingAds: ${error.message}`)
+      const rows = (data ?? []) as PendingAd[]
+      out.push(...rows)
+      if (rows.length < take) break
+    }
+    return out
+  }
   let q = db().from('disc_ads')
-    .select('id,page_id,page_name,headline,primary_text,landing_url,landing_domain,start_date')
+    .select(COLS)
     .is('accepted', null)
     .limit(limit)
   if (runId) {
@@ -173,12 +194,18 @@ export async function funnel(): Promise<{ total: number; accepted: number; byRea
   const { count: total } = await db().from('disc_ads').select('*', { count: 'exact', head: true })
   const { count: accepted } = await db().from('disc_ads')
     .select('*', { count: 'exact', head: true }).eq('accepted', true)
+  // ⚠️ Paginado: `.limit(5000)` era mentira, PostgREST devuelve 1000 y calla.
   const byReason: Record<string, number> = {}
-  const { data } = await db().from('disc_ads')
-    .select('rejection_reason').eq('accepted', false).limit(5000)
-  for (const r of (data ?? []) as { rejection_reason: string | null }[]) {
-    const k = r.rejection_reason ?? 'sin motivo'
-    byReason[k] = (byReason[k] ?? 0) + 1
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await db().from('disc_ads')
+      .select('rejection_reason').eq('accepted', false).range(from, from + PAGE - 1)
+    if (error) break
+    const rows = (data ?? []) as { rejection_reason: string | null }[]
+    for (const r of rows) {
+      const k = r.rejection_reason ?? 'sin motivo'
+      byReason[k] = (byReason[k] ?? 0) + 1
+    }
+    if (rows.length < PAGE) break
   }
   return { total: total ?? 0, accepted: accepted ?? 0, byReason }
 }

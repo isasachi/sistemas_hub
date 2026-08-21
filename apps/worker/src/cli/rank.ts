@@ -25,7 +25,7 @@ import { eligibility, opportunityScore, daysActive, type Candidate } from '../sc
 import { jaccard } from '../products/similarity'
 import {
   acceptedAds, countriesByAd, saveAdvertiser, saveAdvertiserProducts,
-  markRejected, markAccepted, productNameForAd, setRelevance, type AcceptedAd,
+  markRejected, markAccepted, productNameForAd, setRelevance, adIdsOfRun, type AcceptedAd,
 } from '../db/advertisers'
 
 const JITTER_MS = Math.max(0, Number(process.env.PH_JITTER_MS ?? 500))
@@ -48,7 +48,9 @@ async function main() {
   const jsonOut = val('--json')
   const dryRun = args.includes('--dry-run')
 
-  const ads = await acceptedAds(limit)
+  const runId = val('--run')
+  const scope = runId ? await adIdsOfRun(runId) : undefined
+  const ads = await acceptedAds(limit, scope)
   if (!ads.length) { console.log('No hay anuncios aceptados. Corré antes src/cli/analyze.ts. DISC_RANK_EMPTY'); return }
 
   // ── Fase 9a: relevancia (BM25 sobre el corpus de ESTA corrida) ────────────

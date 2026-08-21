@@ -145,19 +145,36 @@ export async function saveDiscoveries(
   return { ads: ids.size, discoveries: disc.length }
 }
 
-/** Resumen de la corrida para el reporte final del CLI. */
+/**
+ * Resumen de la corrida para el reporte final del CLI.
+ *
+ * ⚠️ SE PAGINA CON `.range()`. PostgREST devuelve como máximo 1000 filas por
+ * request y no avisa: la corrida de "rodilla" tenía 1247 anuncios y 1739
+ * caminos, y este resumen informaba 718 y 1000 — un tope silencioso que se lee
+ * como el dato real. Es el mismo fallo que el propio motor reporta en
+ * `truncated` para las búsquedas; acá estaba del lado nuestro.
+ */
 export async function runSummary(runId: string) {
   const { count: queries } = await db().from('disc_search_queries')
     .select('*', { count: 'exact', head: true }).eq('run_id', runId)
+
   const { data: qs } = await db().from('disc_search_queries')
     .select('id').eq('run_id', runId)
   const qIds = (qs ?? []).map((q) => (q as { id: string }).id)
+
   let discoveries = 0
   const adIds = new Set<string>()
+  const PAGE = 1000
   for (let i = 0; i < qIds.length; i += 100) {
-    const { data } = await db().from('disc_ad_discoveries')
-      .select('ad_id').in('query_id', qIds.slice(i, i + 100))
-    for (const r of (data ?? []) as { ad_id: string }[]) { discoveries++; adIds.add(r.ad_id) }
+    const chunk = qIds.slice(i, i + 100)
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await db().from('disc_ad_discoveries')
+        .select('ad_id').in('query_id', chunk).range(from, from + PAGE - 1)
+      if (error) break
+      const rows = (data ?? []) as { ad_id: string }[]
+      for (const r of rows) { discoveries++; adIds.add(r.ad_id) }
+      if (rows.length < PAGE) break
+    }
   }
   return { queries: queries ?? 0, uniqueAds: adIds.size, discoveries }
 }
