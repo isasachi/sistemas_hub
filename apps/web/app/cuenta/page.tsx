@@ -210,7 +210,7 @@ function AnilloCreditos({ credits }: { credits: CreditStatus }) {
 
       <div className="min-w-[200px] flex-1">
         <p className="text-[14px] text-[#efe7e0]">
-          Te quedan <strong className="font-extrabold">{credits.restantes}</strong> imágenes
+          Te quedan <strong className="font-extrabold">{credits.restantes}</strong> créditos
           {bajo && credits.restantes > 0 && (
             <span className="ml-1.5 rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[11px] font-bold text-amber-300">
               quedan pocas
@@ -321,7 +321,7 @@ export default async function CuentaPage() {
         </Card>
 
         {credits && (
-          <Card title="Créditos de imagen">
+          <Card title="Créditos">
             <AnilloCreditos credits={credits} />
           </Card>
         )}

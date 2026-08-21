@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ArrowRight, Clock, ImageIcon } from 'lucide-react'
 import ToolShell from './ToolShell'
@@ -25,6 +26,18 @@ export interface IntroAction {
   onClick: () => void
 }
 
+/**
+ * Bifurcación de entrada: una tool que hace DOS cosas distintas pregunta cuál antes de
+ * empezar, en vez de meter la elección adentro como un primer paso. Si se pasa `choices`,
+ * las cards reemplazan al botón único de `cta`.
+ */
+export interface IntroChoice {
+  title: string
+  description: string
+  cta: string
+  href: string
+}
+
 export default function ToolIntro({
   name,
   slug,
@@ -37,6 +50,9 @@ export default function ToolIntro({
   state,
   /** Reemplaza el arranque por defecto (branding no tiene /wizard sino /nuevo). */
   onStart,
+  /** Pregunta + cards en lugar del botón único. */
+  question,
+  choices,
 }: {
   name: string
   slug: string
@@ -46,6 +62,8 @@ export default function ToolIntro({
   sessionKey?: string
   state?: { last: IntroAction | null; resume: IntroAction | null }
   onStart?: () => void
+  question?: string
+  choices?: IntroChoice[]
 }) {
   const router = useRouter()
   const [items, setItems] = useState<HistoryItem[] | null>(null)
@@ -106,12 +124,32 @@ export default function ToolIntro({
           </div>
         )}
 
-        {/* 2 — empezar de cero. */}
-        <button type="button" data-intro="start" onClick={empezar}
-                className="jr-cta h-13 self-start rounded-xl px-8 py-4 text-[15px] cursor-pointer">
-          {cta}
-          <ArrowRight className="h-4 w-4" />
-        </button>
+        {/* 2 — empezar de cero: un botón, o la bifurcación en cards. */}
+        {choices?.length ? (
+          <div data-intro="choices" className="flex flex-col gap-4">
+            {question && (
+              <h2 className="font-sans text-[17px] font-semibold text-[#f6f2eb]">{question}</h2>
+            )}
+            <div className="grid gap-4 sm:grid-cols-2">
+              {choices.map((c) => (
+                <div key={c.href} className="jr-card lp-leak flex flex-col gap-3 rounded-2xl p-5">
+                  <p className="relative font-sans text-[15px] font-semibold text-[#f6f2eb]">{c.title}</p>
+                  <p className="relative flex-1 text-[13px] leading-relaxed text-[#c9b4ae]">{c.description}</p>
+                  <Link href={c.href} className="jr-cta relative h-11 w-fit rounded-xl px-5 text-[13px] no-underline">
+                    {c.cta}
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <button type="button" data-intro="start" onClick={empezar}
+                  className="jr-cta h-13 self-start rounded-xl px-8 py-4 text-[15px] cursor-pointer">
+            {cta}
+            <ArrowRight className="h-4 w-4" />
+          </button>
+        )}
 
         {/* 3 — lo que quedó a medias. */}
         {avisos.resume && (

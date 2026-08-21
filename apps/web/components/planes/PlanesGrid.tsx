@@ -19,6 +19,22 @@ import { PLANS, TIERS, RAW_BUCKETS, RAW_BUCKET_LABEL, precioUSD, unlocksBucket, 
  *     17.14:1 sobre granate). Se lo lleva Empire, que tiene que leerse premium
  *     sin robarle el carmesí a Scale.
  * Start queda en el botón secundario: presente, sin pelear.
+ *
+ * ── El layout: paneles hundidos, no una lista plana ─────────────────────────
+ * Tomado de una referencia visual que el dueño del repo pasó (una tabla de
+ * precios de SaaS de IA), adaptada y no copiada. Lo que se trae de ahí:
+ *   · Cada eje que DIFERENCIA a los planes vive en su propio panel hundido
+ *     dentro de la card, no suelto en una lista corrida. Así las tres columnas
+ *     se comparan panel contra panel de un vistazo.
+ *   · El CTA sube: va pegado al precio, no al final de la card. Quien ya se
+ *     decidió no tiene que recorrer la lista entera para encontrar el botón.
+ *   · Lo bloqueado se MUESTRA con su candado y con el chip del plan que lo
+ *     abre ("Legacy Empire"), en vez de esconderse: el usuario tiene que ver
+ *     qué le falta y cuánto cuesta.
+ * Lo que NO se trae, y a propósito: los tres botones de color distinto (acá
+ * manda la regla de un solo relleno carmesí) y todos los adornos de comercio
+ * que la referencia usa —precio tachado, "billed annually", "Save $120"— porque
+ * `PLANS` no tiene plan anual ni descuento y serían una promesa inventada.
  */
 
 interface CopyPlan {
@@ -91,7 +107,12 @@ const ETIQUETA_TONO = {
   prestigio: "border-transparent bg-[#e8dcd6] text-[#1e0811]",
 } as const;
 
-function Item({ texto, incluido }: { texto: string; incluido: boolean }) {
+function Item({ texto, incluido, chip }: {
+  texto: string;
+  incluido: boolean;
+  /** Chip a la derecha. En una fila bloqueada dice qué plan la abre. */
+  chip?: string;
+}) {
   const Icono = incluido ? Check : Lock;
   return (
     <li className="flex items-start gap-2.5">
@@ -104,22 +125,39 @@ function Item({ texto, incluido }: { texto: string; incluido: boolean }) {
       >
         {texto}
       </span>
+      {chip && (
+        <span className="ml-auto mt-[1px] shrink-0 whitespace-nowrap rounded-full bg-white/[0.06] px-2 py-0.5 font-[Lato] text-[10px] font-bold text-[#a98c88]">
+          {chip}
+        </span>
+      )}
     </li>
   );
 }
 
-function Grupo({ titulo, Icono, children }: {
-  titulo: string; Icono: LucideIcon; children: React.ReactNode;
+/**
+ * Panel hundido dentro de la card — un eje de comparación por panel. Es el
+ * device que se trae de la referencia: separa lo que DIFERENCIA a los planes de
+ * la lista de lo que traen todos, que en una lista corrida se leían igual.
+ */
+function Panel({ titulo, Icono, children }: {
+  titulo: string;
+  Icono: LucideIcon;
+  children: React.ReactNode;
 }) {
   return (
-    <div>
-      <p className="mb-2.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#a98c88]">
-        <Icono className="h-3.5 w-3.5" aria-hidden />
+    <div className="rounded-xl border border-white/[0.07] bg-white/[0.04] p-4">
+      <p className="mb-3 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#efe7e0]">
+        <Icono className="h-3.5 w-3.5 shrink-0" aria-hidden />
         {titulo}
       </p>
-      <ul className="flex list-none flex-col gap-2 p-0">{children}</ul>
+      <ul className="flex list-none flex-col gap-2.5 p-0">{children}</ul>
     </div>
   );
+}
+
+/** El plan más barato que abre este rango: lo que dice el chip de una fila con candado. */
+function abrePrimero(bucket: (typeof RAW_BUCKETS)[number]): Tier {
+  return TIERS.find((t) => unlocksBucket(t, bucket)) ?? 3;
 }
 
 export interface PlanesGridProps {
@@ -133,7 +171,7 @@ export interface PlanesGridProps {
 
 export function PlanesGrid({ hrefDe, actual = null, bloqueado = false }: PlanesGridProps) {
   return (
-    <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-3">
+    <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-3">
       {TIERS.map((tier) => {
         const plan = PLANS[tier];
         const copy = COPY[tier];
@@ -143,10 +181,39 @@ export function PlanesGrid({ hrefDe, actual = null, bloqueado = false }: PlanesG
         // propia card es venderle algo mientras le tapamos lo que ya pagó.
         const destacado = actual ? esActual : tier === 2;
 
+        // El botón se arma acá arriba porque ahora se pinta junto al precio, no
+        // al final de la card. Va a ancho completo: es el objeto de acción de la
+        // columna y en la referencia es lo primero que se ve después del número.
+        const boton = esActual ? (
+          <p className="rounded-lg border border-white/[0.12] py-3 text-center font-[Lato] text-[14px] text-[#a98c88]">
+            Tu plan actual
+          </p>
+        ) : bloqueado ? (
+          // Mismo recuadro que "Tu plan actual", más apagado: ahora este texto
+          // ocupa el hueco del botón a media card y suelto se leía huérfano.
+          <p className="rounded-lg border border-dashed border-white/[0.10] py-3 text-center font-[Lato] text-[13px] text-[#8d7470]">
+            Ya incluido en tu acceso
+          </p>
+        ) : (
+          /* ⚠️ `<a>` y NUNCA `<Link>`: en /suscripcion este href crea una
+             checkout configuration en Whop, y Next prefetchea los Link — se
+             crearían configuraciones con solo pasar el mouse. Se usa `<a>` en
+             los dos contextos para que nadie pueda equivocarse al reutilizar
+             el componente. */
+          <a
+            href={hrefDe(tier)}
+            className={`block w-full rounded-lg px-6 py-3.5 text-center font-[Lato] text-[14px] font-semibold no-underline ${
+              tier === 2 ? "lp-cta" : tier === 3 ? "jr-btn-gold" : "lp-btn"
+            }`}
+          >
+            {copy.cta}
+          </a>
+        );
+
         return (
           <div
             key={tier}
-            className={`lp-card ${tier === 3 ? "lp-leak" : ""} flex flex-col p-8 ${
+            className={`lp-card ${tier === 3 ? "lp-leak" : ""} flex h-full flex-col p-8 ${
               destacado ? "border-[rgba(232,70,122,0.45)] lg:-mt-4 lg:pb-10" : ""
             }`}
           >
@@ -162,24 +229,34 @@ export function PlanesGrid({ hrefDe, actual = null, bloqueado = false }: PlanesG
               </span>
             </div>
 
-            <p className="mt-2 font-[Lato] text-[13px] leading-[1.5] text-[#a98c88]">
+            {/* min-h = dos renglones. El copy de cada plan tiene largo distinto y
+                sin reservar el alto los paneles de las tres columnas arrancan a
+                alturas distintas: comparar deja de ser leer una fila. */}
+            <p className="mt-2 min-h-[39px] font-[Lato] text-[13px] leading-[1.5] text-[#a98c88]">
               {copy.para}
             </p>
 
-            <div className="mt-5 flex items-baseline gap-2">
-              <span className="readout text-[40px] font-bold leading-none text-[#f6f2eb]">
+            {/* Precio y CTA juntos y arriba. En la versión anterior el botón vivía
+                al final de la card, detrás de tres bloques de features: quien ya se
+                decidió por el precio tenía que recorrerlos igual para encontrarlo. */}
+            <div className="mt-6 flex items-baseline gap-2">
+              <span className="readout text-[44px] font-bold leading-none text-[#f6f2eb]">
                 {precioUSD(plan)}
               </span>
               <span className="font-[Lato] text-[13px] text-[#8d7470]">/ mes</span>
             </div>
 
-            <p className="mt-3 font-[Lato] text-[14px] leading-[1.5] text-[#efe7e0]">
+            <p className="mt-3 min-h-[42px] font-[Lato] text-[14px] leading-[1.5] text-[#efe7e0]">
               {copy.promesa}
             </p>
 
-            <div className="mt-7 mb-8 flex flex-col gap-5">
-              <Grupo titulo={copy.buscador} Icono={Search}>
-                {/* Derivado de PLANS: el candado no está escrito a mano. */}
+            <div className="mt-5">{boton}</div>
+
+            <div className="mt-6 flex flex-col gap-3">
+              <Panel titulo={copy.buscador} Icono={Search}>
+                {/* Derivado de PLANS: el candado no está escrito a mano. La fila
+                    bloqueada lleva el chip del plan que la abre — esconder el rango
+                    dejaría al usuario sin saber qué le falta ni cuánto cuesta. */}
                 {RAW_BUCKETS.map((b) => {
                   const incluido = unlocksBucket(tier, b);
                   return (
@@ -187,46 +264,33 @@ export function PlanesGrid({ hrefDe, actual = null, bloqueado = false }: PlanesG
                       key={b}
                       incluido={incluido}
                       texto={incluido ? `Productos con ${RAW_BUCKET_LABEL[b]}` : RAW_BUCKET_LABEL[b]}
+                      chip={incluido ? undefined : PLANS[abrePrimero(b)].nombre.replace("Legacy ", "")}
                     />
                   );
                 })}
                 <Item incluido texto={`Hasta ${plan.porRango} productos por rango`} />
-              </Grupo>
+              </Panel>
 
-              <Grupo titulo="Creación con IA" Icono={Sparkles}>
+              <Panel titulo="Creación con IA" Icono={Sparkles}>
                 <Item incluido texto={`${plan.creditos} imágenes al mes`} />
-              </Grupo>
+                <Item incluido texto="Video ads UGC sin gastar imágenes" />
+              </Panel>
+            </div>
 
-              <Grupo titulo="Incluido también" Icono={Check}>
+            {/* Lo que traen los TRES planes va suelto y en último lugar: no
+                diferencia nada, así que no merece un panel propio compitiendo con
+                los dos de arriba, que son los que sí cambian entre columnas. */}
+            <div className="mt-6">
+              <p className="mb-2.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#a98c88]">
+                <Check className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                Incluido también
+              </p>
+              <ul className="flex list-none flex-col gap-2 p-0">
                 {INCLUIDO_EN_TODOS.map((i) => (
                   <Item key={i.titulo} incluido texto={i.titulo} />
                 ))}
-              </Grupo>
+              </ul>
             </div>
-
-            {esActual ? (
-              <p className="mt-auto rounded-lg border border-white/[0.12] py-3 text-center font-[Lato] text-[14px] text-[#a98c88]">
-                Tu plan actual
-              </p>
-            ) : bloqueado ? (
-              <p className="mt-auto py-3 text-center font-[Lato] text-[13px] text-[#8d7470]">
-                Ya incluido en tu acceso
-              </p>
-            ) : (
-              /* ⚠️ `<a>` y NUNCA `<Link>`: en /suscripcion este href crea una
-                 checkout configuration en Whop, y Next prefetchea los Link — se
-                 crearían configuraciones con solo pasar el mouse. Se usa `<a>` en
-                 los dos contextos para que nadie pueda equivocarse al reutilizar
-                 el componente. */
-              <a
-                href={hrefDe(tier)}
-                className={`mt-auto rounded-lg px-6 py-3 text-center text-[14px] no-underline ${
-                  tier === 2 ? "lp-cta" : tier === 3 ? "jr-btn-gold" : "lp-btn"
-                }`}
-              >
-                {copy.cta}
-              </a>
-            )}
           </div>
         );
       })}
