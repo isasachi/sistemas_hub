@@ -1,0 +1,8 @@
+{
+  "CO": { "terms": ["droguería", "cacharrería"] },
+  "MX": { "terms": ["farmacia", "chuchulucos"] },
+  "AR": { "terms": ["farmacia", "remedio casero"] },
+  "CL": { "terms": ["farmacia", "botica"] },
+  "EC": { "terms": ["farmacia", "botica"] },
+  "PE": { "terms": ["botica", "farmacia"] }
+}
