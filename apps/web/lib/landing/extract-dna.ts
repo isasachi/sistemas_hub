@@ -4,7 +4,7 @@ import { callStructured } from '@/lib/gemini'
 import { fetchAsBase64 } from '@/lib/storage'
 import { hslToHex, derivePalette, paletteFromBrand } from './palette-derive'
 import { NICHE_TYPOGRAPHY, NICHE_FALLBACK } from './niches'
-import { personaFor, NO_TALENT_SUBSTITUTE, assignPoses } from './demographics'
+import { personaFor, NO_TALENT_SUBSTITUTE, assignPoses, DEMOGRAPHIC_LABELS, BODY_FOCUS_LABELS } from './demographics'
 import {
   Polarity,
   LandingDnaSchema,
@@ -30,6 +30,21 @@ const DnaExtractSchema = z.object({
   particle_type: z.string(),
   particle_density: ParticleDensity,
   props: z.array(z.string()).min(1).max(5),
+  // ⚠️ REQUERIDO, NUNCA `.nullish()`. Un campo nullish sale del `required` del JSON Schema y el
+  // modelo lo omite en silencio: el eje entero quedaría en no-op con el síntoma idéntico al del
+  // avatar genérico que vino a arreglar (ya pasó con `body_focus` en landing y con `style` en el
+  // ADN de marca). El único fail-safe es que la visión ENTERA falle, y esa rama ya existe.
+  talent: z.object({
+    // Solo la CONSTITUCIÓN FÍSICA. Sexo, edad y peinado los manda `DEMOGRAPHIC_PERSONA` y el
+    // usuario los eligió en el wizard: si el modelo pudiera escribirlos acá, un producto de
+    // musculación devolvería "hombre musculoso" para una sesión de mujer 30-45.
+    // ⚠️ El techo lleva HOLGURA DE COMPLETADO, misma lección que los ceilings del copy: el modelo
+    // aplica maxLength al decodificar, así que un tope justo no acorta la frase — la CORTA. Medido
+    // con 80: "…con desarrollo muscular visible en glúteos y," partida a mitad, y esa línea viaja
+    // literal a las dos placas y a las 8 secciones. El prompt sigue pidiendo 2-8 palabras.
+    physique: z.string().max(140),
+    poses: z.array(z.string().max(200)).min(3).max(5),
+  }),
 })
 type DnaExtract = z.infer<typeof DnaExtractSchema>
 
@@ -54,16 +69,61 @@ const PROMPT = [
   'que representen esos ingredientes en su forma cruda o su origen, más el formato de consumo',
   'del producto. Cada prop debe poder apoyarse en una superficie o recostarse contra el envase.',
   'Nada abstracto, nada decorativo sin relación (props).',
+  '',
+  'Por último, decidí la COMPLEXIÓN y las POSES de la persona que protagoniza la pieza (talent).',
+  'No hay una lista de casos: decidilo vos a partir de lo que este producto promete.',
+  '',
+  'talent.physique — la complexión la decide la PROMESA, no la categoría. Preguntate qué cuerpo',
+  'hace CREÍBLE el resultado que este producto ofrece: si lo que promete es rendimiento o',
+  'desempeño físico, el cuerpo tiene que leerse entrenado; si promete desarrollo o volumen',
+  'muscular, con musculatura desarrollada y visible; si promete pérdida de grasa o figura, una',
+  'constitución acorde al resultado que se está vendiendo; si lo que promete es descanso, calma,',
+  'digestión, defensas o cualquier bienestar interno, una constitución común y sana, sin nada',
+  'marcado — ahí un cuerpo atlético distrae de la promesa en vez de sostenerla. Sigue siendo una',
+  'persona real y alcanzable, jamás un cuerpo de portada retocado.',
+  'Escribí SOLO la constitución física, de 2 a 8 palabras. El sexo, la edad y el peinado ya están',
+  'decididos y NO los podés tocar: tu texto los refina, nunca los reemplaza.',
+  '',
+  'talent.poses — 4 poses. Cada una es un MOMENTO REAL, no un retrato posando de catálogo. Elegí',
+  'el momento con este criterio, en este orden:',
+  '  1. Si el producto se APLICA o se USA sobre una parte del cuerpo, la persona lo está usando o',
+  '     acaba de aplicarlo, y esa parte del cuerpo es lo que ocupa el cuadro.',
+  '  2. Si el producto se TOMA o se consume, la pose es el momento cotidiano en que su resultado',
+  '     se nota: la persona haciendo aquello que el producto le devuelve la capacidad de hacer, o',
+  '     descansando/moviéndose/actuando como lo hace alguien para quien el producto ya funcionó.',
+  '  3. Si la promesa se ve en una zona concreta, esa zona manda el cuadro y la pose la exhibe.',
+  'Describí siempre QUÉ HACE EL CUERPO: la postura, qué hacen las manos, sobre qué se apoya, a',
+  'dónde mira, en qué momento del día ocurre. Una pose que solo dice una emoción no sirve.',
+  'Las 4 tienen que ser CLARAMENTE distintas entre sí — van en 4 secciones de la misma pieza, y',
+  'repetirse se lee como un error.',
+  'El encuadre de esta pieza nunca se abre más allá del medio cuerpo, así que describí lo que el',
+  'cuerpo hace dentro de ese límite.',
 ].join('\n')
 
 // Corre la visión (foto + niche/labels como contexto). null si no hay foto, falla la visión o
 // agota los reintentos internos de callStructured — el caller aplica el fallback del Anexo C.
-async function runVision(session: LandingSessionResponse, niche: NicheId): Promise<DnaExtract | null> {
+async function runVision(
+  session: LandingSessionResponse,
+  niche: NicheId,
+  demographic: DemographicId,
+  focus?: BodyFocus | null,
+): Promise<DnaExtract | null> {
   try {
     const photoUrl = session.product_photo_urls?.[0]
     if (!photoUrl) return null
     const { data, mimeType } = await fetchAsBase64(photoUrl)
-    const ctx = [`Nicho: ${niche}`, session.product_labels && `Etiquetas: ${session.product_labels}`]
+    // La foto y las etiquetas alcanzaban para color/partículas/props, que son FÁCTICOS del envase.
+    // La complexión y el momento de uso salen de la PROMESA, y eso no está impreso en el frasco:
+    // sin beneficios, público y zona, el modelo decide el cuerpo por la categoría — que es
+    // exactamente el atajo que este eje existe para evitar.
+    const ctx = [
+      `Nicho: ${niche}`,
+      session.product_labels && `Etiquetas: ${session.product_labels}`,
+      session.benefits && `Qué promete: ${session.benefits}`,
+      session.audience && `Público: ${session.audience}`,
+      `Persona ya decidida (no la cambies): ${DEMOGRAPHIC_LABELS[demographic]}`,
+      focus && `Zona del cuerpo sobre la que actúa: ${BODY_FOCUS_LABELS[focus]}`,
+    ]
       .filter(Boolean)
       .join('\n')
     const parts: Part[] = [
@@ -89,7 +149,7 @@ export async function extractDna(
 ): Promise<LandingDna> {
   const fallback = NICHE_FALLBACK[niche]
   const brand = session.brand_system
-  const extraction = await runVision(session, niche)
+  const extraction = await runVision(session, niche, demographic, focus)
 
   // PRECEDENCIA (decisión #4, 2026-08-07): la MARCA gana sobre el nicho. Cuando hay sistema de
   // marca, él manda paleta, polaridad, tipografía, halo y densidad de partículas; el nicho pasa a
@@ -131,8 +191,16 @@ export async function extractDna(
   const style = brand?.style
   // El vestuario ya NO viene incrustado en la persona: se compone del nicho (qué registro) y de
   // la zona (qué tiene que dejarse ver). Ver `personaFor`.
-  const model_persona = demographic === 'no_talent' ? NO_TALENT_SUBSTITUTE[niche] : personaFor(demographic, niche, focus)
-  const poses = assignPoses(order, demographic, focus)
+  // Complexión y poses contextuales (2026-08-21): las decide la visión a partir de la PROMESA.
+  // Si la visión cayó, `extraction` es null y las dos llamadas reciben `undefined` → persona y
+  // poses deterministas, idénticas a las de antes de este eje.
+  const model_persona = demographic === 'no_talent'
+    ? NO_TALENT_SUBSTITUTE[niche]
+    // `?.talent?.` y no `?.talent.`: el campo es REQUERIDO en el schema (que es lo que obliga al
+    // modelo a producirlo), pero una respuesta que igual llegue sin él debe caer al camino
+    // determinista, no tumbar la extracción entera con un TypeError. Lo cazó un test.
+    : personaFor(demographic, niche, focus, extraction?.talent?.physique)
+  const poses = assignPoses(order, demographic, focus, extraction?.talent?.poses)
 
   const dna: LandingDna = {
     brand_base,

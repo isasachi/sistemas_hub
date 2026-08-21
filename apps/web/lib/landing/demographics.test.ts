@@ -162,3 +162,64 @@ describe('cuerpo_completo no es una zona', () => {
     expect(BODY_FOCUS_FRAMING.cuerpo_completo).not.toMatch(/cuerpo entero|cabeza a pies/i)
   })
 })
+
+
+// ─── Talento contextual (2026-08-21) ────────────────────────────────────────
+describe('poses contextuales y complexión', () => {
+  const ORDEN: SectionType[] = ['hero', 'oferta', 'antes-despues', 'beneficios']
+  const CTX = ['Sentada en la cama al despertar, estirando los brazos', 'Recostada de lado sobre la almohada, ojos cerrados', 'Sirviéndose agua en la mesa de noche', 'Leyendo en el sillón antes de dormir']
+
+  // La garantía que importa: sin visión, TODO sale idéntico a antes de este eje.
+  it('sin poses contextuales el reparto es EXACTAMENTE el de siempre', () => {
+    for (const focus of ['cuerpo_completo', 'gluteos_piernas', 'rostro'] as const) {
+      expect(assignPoses(ORDEN, 'female_30_45', focus, undefined))
+        .toEqual(assignPoses(ORDEN, 'female_30_45', focus))
+      expect(assignPoses(ORDEN, 'female_30_45', focus, [])).toEqual(assignPoses(ORDEN, 'female_30_45', focus))
+    }
+    expect(personaFor('female_30_45', 'generic', 'rostro', undefined))
+      .toBe(personaFor('female_30_45', 'generic', 'rostro'))
+  })
+
+  it('sin zona real, las poses contextuales entran en TODAS las secciones', () => {
+    const out = assignPoses(ORDEN, 'female_30_45', 'cuerpo_completo', CTX)
+    // Cada sección recibe UNA del set contextual (y ninguna del banco demográfico).
+    for (const s of ORDEN) expect(CTX.some((c) => out[s].startsWith(c))).toBe(true)
+    expect(new Set(ORDEN.map((s) => out[s])).size).toBe(4) // 4 secciones, 4 poses distintas
+  })
+
+  // El guard que impide que el maniquí vuelva por la puerta nueva.
+  it('el techo de encuadre se aplica AUNQUE no haya zona real', () => {
+    const out = assignPoses(ORDEN, 'female_30_45', 'cuerpo_completo', ['De pie de cuerpo entero, brazos sueltos'])
+    expect(out.hero).toContain('el plano NUNCA se abre más que eso')
+    expect(out.hero).toContain('medio cuerpo')
+  })
+
+  it('con zona real el hero conserva su pose demográfica y la zona recibe lo contextual', () => {
+    const out = assignPoses(ORDEN, 'female_30_45', 'rodilla', CTX)
+    expect(out.hero).toBe(DEMOGRAPHIC_POSES.female_30_45[0])
+    expect(out.beneficios).toContain('SIN el rostro en cuadro')
+  })
+
+  it('no_talent no recibe poses aunque lleguen contextuales', () => {
+    const out = assignPoses(ORDEN, 'no_talent', 'cuerpo_completo', CTX)
+    for (const s of ORDEN) expect(out[s]).toBe('')
+  })
+
+  it('la complexión entra en la persona sin desplazar rasgos ni vestuario', () => {
+    const p = personaFor('female_30_45', 'fitness_weightloss', null, 'atlética, hombros definidos')
+    expect(p).toContain('complexión atlética, hombros definidos')
+    expect(p).toContain('Mujer peruana de 30-45')
+    expect(p).toContain('viste ')
+  })
+
+  it('la complexión se redacta sin costuras venga como adjetivo o como sustantivo', () => {
+    // Medido: el modelo devuelve la complexión capitalizada y con punto, y a veces repitiendo la
+    // palabra. Sin normalizar salía "complexión Complexión atlética, …., viste …".
+    expect(personaFor('female_30_45', 'generic', null, 'Complexión atlética, con piernas tonificadas.'))
+      .toContain('complexión atlética, con piernas tonificadas, viste')
+    expect(personaFor('female_30_45', 'generic', null, 'Cuerpo entrenado con glúteos definidos'))
+      .toContain('cuerpo entrenado con glúteos definidos, viste')
+    expect(personaFor('female_30_45', 'generic', null, 'sana y equilibrada'))
+      .toContain('complexión sana y equilibrada, viste')
+  })
+})

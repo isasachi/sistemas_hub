@@ -16,7 +16,13 @@ function buildTalentPrompt(persona: string): string {
   return [
     `Generate a HALF-BODY PORTRAIT of ONE real Latin-American person to be used as the fixed talent reference for a Peruvian e-commerce campaign: ${persona}.`,
     `Plain, smooth, evenly-lit NEUTRAL background (soft light grey/beige, no scenery, no props, no furniture). Soft, directional studio lighting. The person faces the camera, looking into the lens, natural relaxed posture, head and torso in frame.`,
-    `REAL, non-idealized features: visible skin texture, pores, freckles or fine lines as appropriate to the age, natural hair, believable body — NOT an airbrushed, glossy or "AI stock" look. A real Peruvian person you would meet, photographed well.`,
+    // ⚠️ "believable body" se acotó a la piel/los rasgos y NO al físico (2026-08-21): la persona
+    // ahora puede traer una complexión leída del producto ("atlética", "con musculatura
+    // desarrollada"), y una regla que empuje el cuerpo hacia lo genérico contradice al texto que la
+    // describe DENTRO DEL MISMO PROMPT — el modo de fallo que este repo ya registró tres veces
+    // (`estable` contra el micro-temblor, "no reescribas" contra la sección que pide reescribir).
+    // Lo que sigue prohibido es el RETOQUE, que es lo que la regla siempre quiso decir.
+    `REAL, non-idealized features: visible skin texture, pores, freckles or fine lines as appropriate to the age, natural hair — NOT an airbrushed, glossy or "AI stock" look. A real Peruvian person you would meet, photographed well. Render the build EXACTLY as the description states, neither slimmer nor more muscular than described.`,
     `This is a REFERENCE PLATE, not an ad: render ZERO text, letters, numbers, logos, watermarks, captions or graphics anywhere in the image. No product, no packaging.`,
   ].join('\n')
 }
@@ -61,7 +67,12 @@ function buildZonePrompt(persona: string, focus: BodyFocus): string {
     `Generate a REFERENCE PLATE of ONE real Latin-American person framed on ${BODY_FOCUS_FRAMING[focus]}. The person is: ${persona}.`,
     `The FIRST image attached is the same person's portrait: match her/his skin tone, body type, build and clothing EXACTLY. It is the SAME person — only the framing changes. Do NOT include the face in this plate even if the reference shows it.`,
     `Plain, smooth, evenly-lit NEUTRAL background (soft light grey/beige, no scenery, no props, no furniture). Soft, directional studio lighting.`,
-    `REAL, non-idealized body: visible skin texture and natural proportions appropriate to the age — NOT airbrushed, NOT a fitness-model composite, NOT an "AI stock" look.`,
+    // Mismo acote que en la placa canónica: "NOT a fitness-model composite" negaba de plano el
+    // físico que `model_persona` puede estar pidiendo. Si las placas de zona empiezan a volver
+    // null, mirá acá primero: `generateZonePlate` ya necesita `preferGemini` porque gpt-image-2
+    // modera los encuadres de cuerpo sin rostro, y la ruta de talento cae en silencio al retrato
+    // canónico — o sea devuelve la cara, que es justo el bug que la placa existe para evitar.
+    `REAL, non-idealized body: visible skin texture and natural proportions appropriate to the age — NOT airbrushed, NOT an "AI stock" look. Render the build EXACTLY as the description states, neither slimmer nor more muscular than described.`,
     `This is a REFERENCE PLATE, not an ad: render ZERO text, letters, numbers, logos, watermarks, captions or graphics anywhere in the image. No product, no packaging.`,
   ].join('\n')
 }
