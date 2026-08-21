@@ -162,12 +162,23 @@ export const SECTION_REF: Record<SectionType, string> =
 // tiraría el caso bueno. Se conserva el string original — es el que la difusión tiene que colorear.
 const plano = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
 
+//
+// Y cuando SÍ está, se emite el recorte LITERAL del headline, no el string del modelo: si el campo
+// dice "DESCANSO ESTA" y el titular "Tu descanso está asegurado", pedirle a la difusión que coloree
+// "DESCANSO ESTA" es una versión suave del mismo bug — un string que no aparece así en el titular.
+// El recorte se verifica antes de usarlo (`plano` puede no preservar índices con caracteres raros);
+// si no cuadra se conserva el string del modelo, que igual está en el titular salvo caso/acentos.
 export function cleanAccentWord<T extends { headline?: string; accentWord?: string }>(copy: T): T {
   const acc = copy.accentWord?.trim()
   if (!acc) return copy
-  if (plano(copy.headline ?? '').includes(plano(acc))) return copy
-  const { accentWord: _drop, ...rest } = copy
-  return rest as T
+  const headline = copy.headline ?? ''
+  const i = plano(headline).indexOf(plano(acc))
+  if (i < 0) {
+    const { accentWord: _drop, ...rest } = copy
+    return rest as T
+  }
+  const literal = headline.slice(i, i + acc.length)
+  return plano(literal) === plano(acc) ? { ...copy, accentWord: literal } : copy
 }
 
 export const SectionCopySchema = z.object({

@@ -522,3 +522,34 @@ describe('accentWord — sub-cadena del headline', () => {
     expect(out).toContain('Emphasis:')
   })
 })
+
+describe('antes/despues — cuerpo_completo NO toma la rama de zona', () => {
+  const build = (bodyFocus: 'cuerpo_completo' | 'gluteos_piernas') =>
+    buildDiffusionInstruction({
+      section: 'antes-despues', copy: { type: 'antes-despues', headline: 'H' },
+      dna: DNA, productLabels: null, hasTalent: true, bodyFocus,
+    })
+
+  it('sin zona real, el par vuelve al rostro', () => {
+    const out = build('cuerpo_completo')
+    expect(out).toContain('el mismo rostro ya resuelto')
+    expect(out).not.toContain('los DOS paneles encuadran')
+  })
+
+  it('con zona real, los dos paneles la encuadran', () => {
+    const out = build('gluteos_piernas')
+    expect(out).toContain('los DOS paneles encuadran')
+    expect(out).not.toContain('el mismo rostro ya resuelto')
+  })
+})
+
+describe('accentWord — se emite el recorte LITERAL del titular', () => {
+  it('no le pide a la difusión un string que el titular no tiene así', () => {
+    const out = buildDiffusionInstruction({
+      section: 'beneficios', dna: DNA, productLabels: null, hasTalent: true,
+      copy: { type: 'beneficios', headline: 'Tu descanso está asegurado', accentWord: 'DESCANSO ESTA' },
+    })
+    expect(out).toContain('"descanso está"')
+    expect(out).not.toContain('DESCANSO ESTA')
+  })
+})

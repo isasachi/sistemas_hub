@@ -1,6 +1,6 @@
 import { cleanAccentWord, type SectionCopy, type SectionType, type LandingDna, type PaletteTokens, type Offer, type TrustBlock, type NicheId, type PaymentMethod, type BodyFocus } from './types'
 import { NICHE_LABELS } from './niches'
-import { BODY_FOCUS_FRAMING } from './demographics'
+import { BODY_FOCUS_FRAMING, zoneNeedsOwnPlate } from './demographics'
 import { SECTION_DNA } from './section-dna'
 import { moneyRamp, type MoneyRamp } from './palette-derive'
 import { styleOf, DEFAULT_STYLE } from './style-dna'
@@ -285,7 +285,12 @@ function beforeAfterNote(hasTalent: boolean, nicheLabel?: string, bodyFocus?: Bo
   // cualquier producto: en una rodillera o una creatina de glúteos, los dos paneles salían siendo
   // caras. El par ANTES/DESPUÉS solo prueba algo si muestra la parte del cuerpo que el producto
   // cambia — y es la única sección donde ese encuadre es, además, el argumento de venta.
-  const zona = bodyFocus ? BODY_FOCUS_FRAMING[bodyFocus] : undefined
+  // ⚠️ Se gatea por `zoneNeedsOwnPlate`, NO por `bodyFocus` a secas. `cuerpo_completo` es la
+  // AUSENCIA de zona: con la comprobación por truthiness caía en la rama de zona y el prompt
+  // terminaba prohibiendo el rostro ("ni sustituyas la zona por un rostro") justo en los productos
+  // donde el par cara-cansada / cara-descansada ES la prueba — un suplemento para dormir no muestra
+  // nada de medio cuerpo. Sin zona real vuelve la rama del rostro, que es la de antes del eje.
+  const zona = zoneNeedsOwnPlate(bodyFocus) ? BODY_FOCUS_FRAMING[bodyFocus!] : undefined
   return [
     (nicheLabel ? `Para un producto de categoría «${nicheLabel}», ` : '') +
       'ANTES/DESPUÉS ADAPTATIVO: los dos paneles muestran el MISMO sujeto en dos estados coherentes con el nicho y el copy —',
