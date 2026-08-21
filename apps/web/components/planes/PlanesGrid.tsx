@@ -274,8 +274,8 @@ export function PlanesGrid({ hrefDe, actual = null, bloqueado = false }: PlanesG
               </Panel>
 
               <Panel titulo="Creación con IA" Icono={Sparkles}>
-                <Item incluido texto={`${plan.creditos} imágenes al mes`} />
-                <Item incluido texto="Video ads UGC sin gastar imágenes" />
+                <Item incluido texto={`${plan.creditos} créditos al mes`} />
+                <Item incluido texto="Video ads UGC sin gastar créditos" />
               </Panel>
             </div>
 
