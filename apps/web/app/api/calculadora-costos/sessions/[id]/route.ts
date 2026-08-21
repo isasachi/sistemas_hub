@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getCalcSession, updateCalcSession, deleteCalcSession, type CalcSnapshot } from '@/lib/calculadora-costos/db'
-import type { CalcInputs } from '@/lib/calculadora-costos/model'
+import { getCalcSession, updateCalcSession, deleteCalcSession } from '@/lib/calculadora-costos/db'
+import type { StoredInputs, StoredSnapshot } from '@/lib/calculadora-costos/stored'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -20,7 +20,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
-  let body: { inputs?: CalcInputs; snapshot?: CalcSnapshot }
+  let body: { inputs?: StoredInputs; snapshot?: StoredSnapshot }
   try { body = await req.json() } catch {
     return NextResponse.json({ error: 'Petición inválida' }, { status: 400 })
   }

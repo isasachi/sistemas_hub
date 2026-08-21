@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import type { CalcInputs } from './model'
+import type { StoredInputs, StoredSnapshot } from './stored'
 
 // Cliente lazy singleton para el historial de la calculadora (espeja landing/db.ts).
 // A diferencia de las otras tools, la sesión se crea al FINAL (al llegar al resultado),
@@ -17,26 +17,21 @@ function getDb(): SupabaseClient {
 }
 
 // KPIs para el preview de la card (evita recalcular en el listado). La vista detalle
-// sí recalcula al vuelo con calcular(inputs) para quedar consistente con el modelo.
-export interface CalcSnapshot {
-  funnel: 'leads' | 'mensajes'
-  precioVenta: number
-  profitNeto: number
-  margenNeto: number
-  roiAds: number
-}
+// sí recalcula al vuelo desde `inputs` para quedar consistente con el modelo.
+// La forma la define `stored.ts`, que es donde vive el discriminador precio/rentabilidad.
+export type CalcSnapshot = StoredSnapshot
 
 export interface CalcSessionRow {
   id: string
   created_at: string
-  inputs: CalcInputs
-  snapshot: CalcSnapshot
+  inputs: StoredInputs
+  snapshot: StoredSnapshot
 }
 
 export async function createCalcSession(
   userId: string,
-  inputs: CalcInputs,
-  snapshot: CalcSnapshot
+  inputs: StoredInputs,
+  snapshot: StoredSnapshot
 ): Promise<string> {
   const { data, error } = await getDb()
     .from('calc_sessions')
@@ -49,8 +44,8 @@ export async function createCalcSession(
 
 export async function updateCalcSession(
   id: string,
-  inputs: CalcInputs,
-  snapshot: CalcSnapshot
+  inputs: StoredInputs,
+  snapshot: StoredSnapshot
 ): Promise<void> {
   const { error } = await getDb()
     .from('calc_sessions')

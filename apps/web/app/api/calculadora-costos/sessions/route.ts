@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createCalcSession, listCalcSessions, type CalcSnapshot } from '@/lib/calculadora-costos/db'
-import type { CalcInputs } from '@/lib/calculadora-costos/model'
+import { createCalcSession, listCalcSessions } from '@/lib/calculadora-costos/db'
+import { tituloDe, type StoredInputs, type StoredSnapshot } from '@/lib/calculadora-costos/stored'
 import { readUserId, newUserId, PH_USER_COOKIE } from '@/lib/product-hunter/session'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 export async function POST(req: NextRequest) {
-  let body: { inputs?: CalcInputs; snapshot?: CalcSnapshot }
+  let body: { inputs?: StoredInputs; snapshot?: StoredSnapshot }
   try { body = await req.json() } catch {
     return NextResponse.json({ error: 'Petición inválida' }, { status: 400 })
   }
@@ -32,7 +32,7 @@ export async function GET() {
     id: r.id,
     created_at: r.created_at,
     step: 0,
-    title: `${r.snapshot.funnel === 'leads' ? 'Por leads' : 'Por mensajes'} · S/ ${Math.round(r.snapshot.precioVenta)}`,
+    title: tituloDe(r.snapshot),
     thumb: null,
     done: true,
   }))
