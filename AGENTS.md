@@ -729,6 +729,45 @@ El render de video lo paga el usuario con su cuenta de KIE — por eso el genera
 
 ⚠️ **La key se guarda en claro** (RLS on sin políticas → solo el service role, el mismo blindaje que el resto del proyecto) y **nunca vuelve al cliente**: la pantalla muestra `maskKey` (los últimos 4 caracteres). Una key en el DOM es una key en el historial del navegador y en cualquier captura de pantalla. Por eso `UserProfile` —lo que sí viaja a la pantalla— no la incluye.
 
+### Panel de usuarios (`/admin`) — roles y soporte
+
+Lista de usuarios, ficha por usuario, consumo y acciones de soporte. Roles en `user_settings.role`: **`admin`** y **`operador`** (migración `20260821000001_user_roles.sql`).
+
+⚠️ **NO HAY MATRIZ DE PERMISOS, y es una decisión.** Con un solo rol privilegiado, una tabla de permisos cuesta una tabla, un join y una pantalla para responder exactamente lo mismo que un `= 'admin'` — es la interfaz-con-una-implementación que el repo evita en otros lados. Se convierte en permisos cuando exista un TERCER rol que necesite una rebanada distinta (soporte que lee pero no otorga acceso), no antes.
+
+⚠️ **EL DEFAULT DE LA COLUMNA NO ALCANZA: un usuario que nunca guardó nada NO TIENE FILA en `user_settings`.** La ausencia también significa `operador`, así que `getRole` trata el null como el valor por defecto. Y **el primer admin no puede salir de esa columna** —nadie podría nombrarse a sí mismo—: sale de **`ADMIN_EMAILS`** (env, lista de correos separados por coma), mismo patrón y mismo argumento que `WHOP_GRANDFATHERED_EMAILS`. Es además la salida de emergencia si alguien se quita el rol por error.
+
+⚠️ **`/admin` VIVE FUERA DEL GRUPO `(app)`, y acá el motivo es más fuerte que en `/cuenta`.** Ese layout redirige a `/suscripcion` a quien no tenga suscripción activa: un admin sin plan —la env de grandfathering vaciada, un segundo admin que nunca compró, o el dueño con la tarjeta rechazada (`past_due`, pasa todos los meses)— quedaría encerrado justo fuera de la única pantalla capaz de arreglar entitlements. **El acceso de administración no puede depender de tener un plan pagado.** A quien no es admin se le responde **404**, no un "no tienes permiso": ese mensaje confirma que la ruta existe y a quién buscar.
+
+⚠️ **LAS MUTACIONES SON SERVER ACTIONS, NUNCA RUTAS DE `/api/*`.** Esas rutas no pasan por `proxy.ts` ni por ningún layout (ver "esto gatea la UI y nada más"), así que un endpoint de API que otorgue plan sería escalada de privilegios abierta a internet. Cada action arranca por `currentAdmin()`, que resuelve la sesión por su cuenta y verifica el rol contra la DB.
+
+⚠️ **Y acá el `userId` del formulario SÍ se usa — al revés que en `app/cuenta/actions.ts`.** En "Mi cuenta" el objetivo es siempre el de la sesión y aceptarlo del cliente dejaría que cualquiera le escriba a otro. En administración el objetivo es otra persona por definición: lo que no puede venir del cliente es el **permiso**. La distinción está fijada por el test `'sin rol de admin no se escribe nada'`, que cubre las cuatro acciones.
+
+**Lo que el panel muestra:**
+
+- **Lista** — correo, nombre, rol, plan, estado de acceso, alta y último ingreso. ⚠️ **El correo no está en ninguna tabla nuestra**: `user_entitlements` guarda un `user_id` uuid y `user_settings` tampoco lo tiene, así que la única fuente es `auth.users` vía `auth.admin.listUsers()` — y **eso no se puede joinear con PostgREST**. Por eso el cruce va en memoria: 3 consultas fijas sin importar cuántos usuarios haya. ponytail: se recorren hasta 10 páginas de 1000; pasado eso la lista se corta y hay que paginar de verdad.
+- **Estado de acceso** — `access` en null no distingue "nunca pagó" de "se le venció la tarjeta", y ésa es justo la diferencia que decide qué hacer con esa persona. Por eso `AdminUser.ultimoEstado` conserva el último estado conocido aunque ya no dé acceso.
+- **Consumo** — `ph_gen_usage` en los últimos 30 días, agrupado por tipo y por usuario. **Es la única visibilidad que existe del costo real de Gemini/OpenAI.** ponytail: UNA consulta con tope de 20.000 filas y todo el agrupado en JS; el backstop global permite 500/día, así que cubre 40 días a tope absoluto.
+- **Actividad** — sesiones por tool sobre las 5 tablas de sesión (`sessions`, `video_sessions`, `landing_sessions`, `branding_sessions`, `calc_sessions`). Una consulta por tabla con `count: 'exact'` + `limit(1)` ordenado, así el total y la fecha de la última salen en un solo viaje. Una tabla que falle cuenta 0 en vez de romper la ficha: `sessions` se creó en una migración condicional y puede no existir en todos los entornos.
+
+**Acciones de soporte:**
+
+⚠️ **EL ACCESO DE CORTESÍA ES EL FAILSAFE QUE NO EXISTÍA.** El webhook de Whop tiene su forma de sobre documentada como **no verificada** contra un evento real: si falla, alguien paga y no recibe acceso, y hasta ahora la única salida era SQL a mano. La cortesía escribe una fila de `user_entitlements` con `whop_membership_id = 'manual:<userId>'`, `status: 'active'` y `renewal_period_end` en null.
+
+- **El id es DETERMINISTA por usuario**, y eso es lo que hace idempotente el otorgar: `whop_membership_id` es la PK, así que otorgar dos veces actualiza la misma fila en vez de dejar dos cortesías sueltas. Con un uuid nuevo cada vez habría que revocarlas de a una.
+- **Convive con la membership real sin pisarla**: son dos filas del mismo `user_id` y `pickAccess` se queda con el tier más alto de las vivas.
+- **`renewal_period_end` va en null a propósito**: no hay período pagado que anclar, y `periodStart` (credits.ts) ancla los créditos al día 1, que es lo que ya hace con los grandfathered.
+- **Revocar BORRA la fila `manual:`**, no la marca cancelada: una fila muerta solo confunde la ficha, y la membership real de Whop —si existe— vuelve a mandar sola. ⚠️ **No toca las memberships reales**, y no debe: el webhook es su única escritura, así que "revocarlas" acá duraría hasta el siguiente evento. Cancelar un plan pagado se hace en Whop.
+- **`otorgarAcceso` rechaza un tier inválido en vez de normalizarlo.** `toTier` cae al plan 1 ante cualquier basura, y acá eso sería regalar el plan equivocado en silencio.
+
+⚠️ **LOS CRÉDITOS DE CORTESÍA SON UN SUMANDO (`user_settings.credit_bonus`), NO UN "RESET" DEL PERÍODO.** El saldo ES el conteo de filas de `ph_gen_usage` (credits.ts), así que resetear significaría **borrar esas filas** — las mismas que alimentan el backstop global diario y la única visibilidad del costo. Sumar compensa al usuario sin destruir el dato, y además permite regalar 20 en vez de solo volver a cero. `creditStatus` lo lee y lo suma al límite del plan, así que el usuario lo ve en `/cuenta` y en la píldora de la barra. ponytail: es una lectura por PK más en el gate de generación; si pesa, el upgrade es resolverlo junto con `access` en `currentCreditOwner`.
+
+⚠️ **Nadie se quita a sí mismo el rol de admin.** Con un solo admin real eso deja el panel sin dueño y recuperarlo exige tocar la env o la DB a mano. El costo de la guarda es un `if`; el del incidente, un deploy.
+
+**`pickAccess` se extrajo de `getAccess` (whop.ts) y es la razón de que el panel no duplique la regla de dinero.** El panel lee las filas de todos los usuarios de una sola vez y las agrupa en memoria, pero quién manda entre varias memberships tiene que decidirse en UN solo lugar: dos definiciones es cómo el panel termina mostrando un plan distinto del que el hub sirve. `getAccess` ahora delega en ella; el caso grandfathered se queda afuera porque depende del email, no de las filas.
+
+**Env:** `ADMIN_EMAILS`. **Schema:** `20260821000001_user_roles.sql` (columnas `role` y `credit_bonus` sobre `user_settings`).
+
 ## Tool: Buscador de Productos (`buscador-productos`)
 
 Encuentra productos ganadores validados en LATAM que aún no están saturados en Perú, usando Meta Ads Library. Migrado desde el proyecto Python standalone `~/chamba/product-hunter` (dejado como referencia).

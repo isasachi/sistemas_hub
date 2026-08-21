@@ -117,10 +117,32 @@ export async function getAccess(
     return null
   }
 
+  return pickAccess(data ?? [])
+}
+
+/** Fila de `user_entitlements` tal como la lee `getAccess`. */
+export interface EntitlementRow {
+  status?: unknown
+  tier?: unknown
+  renewal_period_end?: unknown
+  updated_at?: unknown
+}
+
+/**
+ * Qué acceso dan estas filas. Función PURA, y separada de `getAccess` para que el
+ * panel de administración (lib/admin.ts) no tenga que reimplementar la regla: lee
+ * las filas de todos los usuarios de una sola vez y las agrupa en memoria, pero
+ * quién manda entre varias memberships tiene que decidirse en UN solo lugar. Dos
+ * definiciones de una regla de dinero es cómo el panel termina mostrando un plan
+ * distinto del que el hub sirve.
+ *
+ * No cubre el caso grandfathered: eso depende del email, no de las filas.
+ */
+export function pickAccess(filas: EntitlementRow[]): Access | null {
   // Un usuario puede tener varias filas (canceló una y compró otra, o subió de
   // plan). Vale la MEJOR de las que dan acceso: quitarle el plan caro porque
   // arrastra una membership vieja cancelada sería cobrarle de más.
-  const vivas = (data ?? []).filter((r) => grantsAccess(r.status as string))
+  const vivas = filas.filter((r) => grantsAccess(String(r.status ?? '')))
   if (!vivas.length) return null
   const mejor = vivas.reduce((a, b) => (toTier(b.tier) > toTier(a.tier) ? b : a))
 

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getUser } from "@/lib/supabase/server";
 import { getAccess } from "@/lib/whop";
 import { getProfile } from "@/lib/user-settings";
+import { isAdmin } from "@/lib/roles";
 import { creditStatus } from "@/lib/credits";
 import { AppShell } from "@/components/dashboard/AppShell";
 
@@ -40,9 +41,10 @@ export default async function AppLayout({
   // El nombre, la foto y los créditos de la barra. Van DESPUÉS del gate (para no
   // pagarlos cuando el usuario ni siquiera va a ver el shell) y en paralelo entre
   // sí, así el shell no cuesta la suma de los dos round-trips.
-  const [perfil, credits] = await Promise.all([
+  const [perfil, credits, admin] = await Promise.all([
     getProfile(user.id),
     creditStatus(user.id, access),
+    isAdmin(user.id, user.email),
   ]);
   const label = perfil.fullName ?? user.email ?? "Cuenta";
 
@@ -50,6 +52,7 @@ export default async function AppLayout({
     <AppShell
       user={{ label, avatarUrl: perfil.avatarUrl }}
       credits={{ restantes: credits.restantes, limite: credits.limite }}
+      admin={admin}
     >
       {children}
     </AppShell>

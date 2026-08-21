@@ -91,6 +91,39 @@ export function periodStartDay(renewalEnd: string | null, now = new Date()): str
   return dia < EPOCH ? EPOCH : dia
 }
 
+/**
+ * Créditos de cortesía que un admin le sumó al usuario (migración 20260821000001).
+ *
+ * ⚠️ ES UN SUMANDO Y NO UN "RESET" DEL PERÍODO. El saldo ES el conteo de filas de
+ * `ph_gen_usage`, así que resetear significaría BORRAR esas filas — las mismas que
+ * alimentan el backstop global diario y la única visibilidad del costo real de
+ * Gemini/OpenAI. Compensar sumando no destruye ese dato.
+ *
+ * ponytail: es una lectura por PK más en el gate de generación. Es la misma tabla que
+ * el gate ya toca para otras cosas y el índice es la PK; si alguna vez pesa, el
+ * upgrade es resolverlo junto con `access` en `currentCreditOwner`.
+ *
+ * Fail-open a 0, igual que el resto de gen-quota: control de costo, no paywall.
+ */
+export async function getCreditBonus(userId: string): Promise<number> {
+  const { data, error } = await getDb()
+    .from('user_settings').select('credit_bonus').eq('user_id', userId).maybeSingle()
+  if (error) {
+    console.error('[credits] leyendo credit_bonus:', error.message)
+    return 0
+  }
+  const n = Number(data?.credit_bonus ?? 0)
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0
+}
+
+export async function setCreditBonus(userId: string, bonus: number): Promise<void> {
+  const { error } = await getDb().from('user_settings').upsert(
+    { user_id: userId, credit_bonus: Math.max(0, Math.floor(bonus)), updated_at: new Date().toISOString() },
+    { onConflict: 'user_id' },
+  )
+  if (error) throw new Error(`guardando credit_bonus: ${error.message}`)
+}
+
 export interface CreditStatus {
   tier: Tier
   limite: number
@@ -110,7 +143,8 @@ export interface CreditStatus {
  */
 export async function creditStatus(userId: string, access: Access | null): Promise<CreditStatus> {
   const tier: Tier = access?.tier ?? 1
-  const limite = PLANS[tier].creditos
+  const bonus = await getCreditBonus(userId)
+  const limite = PLANS[tier].creditos + bonus
   const desde = periodStartDay(access?.renewalPeriodEnd ?? null)
 
   // Se traen los kinds y se filtran en JS en vez de armar el `or(...like...)` de

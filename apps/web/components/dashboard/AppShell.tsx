@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { Wordmark } from "@/components/layout/Wordmark";
 import { usePathname } from "next/navigation";
-import { LogOut, Menu, X, ChevronDown, Settings, Coins } from "lucide-react";
+import { LogOut, Menu, X, ChevronDown, Settings, Coins, ShieldCheck } from "lucide-react";
 import { creditosBajos } from "@ph/shared";
 import { tools } from "@/lib/tools";
 import { toolIcon } from "@/lib/tool-icons";
@@ -14,6 +14,12 @@ interface AppShellProps {
   user: { label: string; avatarUrl?: string | null };
   /** Créditos que le quedan en el período. null = sin plan (no se pinta). */
   credits?: { restantes: number; limite: number } | null;
+  /**
+   * Muestra el acceso al panel de usuarios. Lo resuelve el layout del servidor:
+   * este componente es cliente y no puede consultar el rol — y aunque el enlace se
+   * escondiera mal, `/admin` tiene su propio gate (devuelve 404 a quien no es admin).
+   */
+  admin?: boolean;
   children: React.ReactNode;
 }
 
@@ -68,7 +74,11 @@ const NAV_LABEL: Record<string, string> = {
  * `mousedown` al pulsar sobre el otro — desmontando el <form> antes de que el
  * click llegara a ser un submit. Cerrar sesión no hacía nada.
  */
-function AccountMenu({ label, avatarUrl }: { label: string; avatarUrl?: string | null }) {
+function AccountMenu({ label, avatarUrl, admin }: {
+  label: string;
+  avatarUrl?: string | null;
+  admin?: boolean;
+}) {
   const [menu, setMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -130,6 +140,16 @@ function AccountMenu({ label, avatarUrl }: { label: string; avatarUrl?: string |
             <Settings className="h-[18px] w-[18px]" />
             Mi cuenta
           </Link>
+          {admin && (
+            <Link
+              href="/admin"
+              onClick={() => setMenu(false)}
+              className="flex w-full items-center gap-2.5 px-4 py-3 text-[13px] font-medium text-[#a98c88] no-underline transition-colors duration-200 hover:bg-white/[0.05] hover:text-[#f6f2eb]"
+            >
+              <ShieldCheck className="h-[18px] w-[18px]" />
+              Usuarios
+            </Link>
+          )}
           <form action={signOut}>
             <button
               type="submit"
@@ -145,7 +165,7 @@ function AccountMenu({ label, avatarUrl }: { label: string; avatarUrl?: string |
   );
 }
 
-export function AppShell({ user, credits, children }: AppShellProps) {
+export function AppShell({ user, credits, admin, children }: AppShellProps) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false); // drawer móvil
 
@@ -216,13 +236,13 @@ export function AppShell({ user, credits, children }: AppShellProps) {
           {/* Espaciador + créditos y cuenta a la derecha (desktop) */}
           <div className="ml-auto hidden items-center gap-2 md:flex">
             {credits && <CreditosPill {...credits} />}
-            <AccountMenu label={user.label} avatarUrl={user.avatarUrl} />
+            <AccountMenu label={user.label} avatarUrl={user.avatarUrl} admin={admin} />
           </div>
 
           {/* Móvil: hamburguesa + cuenta */}
           <div className="ml-auto flex items-center gap-2 md:hidden">
             {credits && <CreditosPill {...credits} />}
-            <AccountMenu label={user.label} avatarUrl={user.avatarUrl} />
+            <AccountMenu label={user.label} avatarUrl={user.avatarUrl} admin={admin} />
             <button
               type="button"
               onClick={() => setOpen(true)}
