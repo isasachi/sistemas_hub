@@ -148,12 +148,21 @@ export const ZONE_POSES: Record<BodyFocus, string[]> = {
     'Pies de perfil en paso corto, encuadre cerrado',
     'Pies en primer plano con el envase apoyado al lado, sobre la misma superficie',
   ],
-  cuerpo_completo: [
-    'Cuerpo entero de pie, postura relajada y abierta, encuadre de cabeza a pies a distancia media',
-    'Cuerpo entero en 3/4, peso sobre una pierna, brazos sueltos',
-    'Cuerpo entero de perfil en paso natural, encuadre completo',
-    'Cuerpo entero de pie sosteniendo el envase a la altura de la cintura',
-  ],
+  // ⚠️ VACÍO A PROPÓSITO — `cuerpo_completo` NO ES UNA ZONA, es la ausencia de zona, y no lleva
+  // placa propia. Tenía un banco de poses de cuerpo entero y `zoneNeedsOwnPlate` devolvía true, así
+  // que un suplemento de bienestar general (la rama que `classify.ts` manda explícitamente acá)
+  // generaba una placa "de cabeza a pies a distancia media" y TODA sección menos el hero salía con
+  // una persona de pie, entera y rígida — reportado como "parado como un maniquí, le quita
+  // profesionalidad". Medido en la sesión 147b44d4 (GomiSleep, body_focus `cuerpo_completo`,
+  // talent_zone_url poblada).
+  //
+  // El encuadre de este proyecto NUNCA fue de cuerpo entero: o medio cuerpo, o rostro, o la zona
+  // concreta (glúteos/rodilla/pies). Con el banco vacío, `zoneNeedsOwnPlate` devuelve false y la
+  // sección vuelve al retrato canónico (`buildTalentPrompt`: HALF-BODY, cabeza y torso) con las
+  // poses demográficas — exactamente el comportamiento anterior a que existiera el eje de zona.
+  // El valor sigue en el enum porque es la respuesta HONESTA del clasificador para un producto sin
+  // zona visible; lo que cambia es qué significa al renderizar.
+  cuerpo_completo: [],
 }
 
 // Nombre legible (UI) — el selector de Identidad, junto a nicho y demografía.
@@ -167,7 +176,7 @@ export const BODY_FOCUS_LABELS: Record<BodyFocus, string> = {
   articulacion: 'Articulación (hombro, codo, muñeca)',
   manos: 'Manos y uñas',
   pies: 'Pies',
-  cuerpo_completo: 'Cuerpo completo',
+  cuerpo_completo: 'Sin zona específica (medio cuerpo)',
 }
 
 // Encuadre en lenguaje de prompt. Lo consumen la PLACA de zona (`talent.ts`) y la nota de
@@ -183,7 +192,10 @@ export const BODY_FOCUS_FRAMING: Record<BodyFocus, string> = {
   articulacion: 'la articulación (hombro, codo o muñeca), encuadre cerrado del miembro, SIN el rostro en cuadro',
   manos: 'las manos, encuadre cerrado de muñecas a dedos, SIN el rostro en cuadro',
   pies: 'los pies, encuadre cerrado de tobillos a dedos, SIN el rostro en cuadro',
-  cuerpo_completo: 'el cuerpo entero, encuadre de cabeza a pies a distancia media',
+  // Sin zona visible = el encuadre por defecto del proyecto, medio cuerpo. NO se gatea por
+  // `zonePlate`: `beforeAfterNote` lo lee siempre, así que dejarlo en "cabeza a pies" mandaba los dos
+  // paneles de antes/después a cuerpo entero aunque ya no hubiera placa de zona.
+  cuerpo_completo: 'a la persona de medio cuerpo, encuadre de la cabeza a la cintura',
 }
 
 // `rostro`/`cabello` ya están servidos por el banco demográfico y por la placa canónica: no

@@ -144,6 +144,32 @@ export const SECTION_REF: Record<SectionType, string> =
 // que el inglés para el que se dimensionaron antes; topes apretados = frases cortadas. Regla:
 // ceiling ≈ 1.4× el target del ADN. NO recortamos post-hoc (un word-trim nunca completa una frase;
 // la difusión auto-escala el texto, así que largo-y-completo > corto-y-cortado — pedido del usuario).
+// ⚠️ EL MODELO REDACTA, EL CÓDIGO VERIFICA — `accentWord` tiene que ser SUB-CADENA del headline.
+// `landing-system.md` lo pide ("sub-cadena EXACTA del `headline`") y `types.ts` lo documenta, pero
+// nada lo comprobaba: `copyBlock` (instructions.ts) le ordena a la difusión "render the words X in
+// the ACCENT COLOR **within the headline**", y cuando X no está en el headline el modelo no falla —
+// lo INSERTA. Medido sobre las sesiones guardadas: 5 de 26 traen un accentWord que no aparece en su
+// headline, y el caso reportado salió como titular impreso "Descansa mejor cada dormir mejor noche."
+// (headline "Descansa mejor cada noche", accentWord "dormir mejor").
+//
+// El fail-safe es DESCARTAR el acento, no sustituirlo por otro: sin la línea de Emphasis el
+// DESIGN_SYSTEM ya manda titular bicolor y el modelo elige la palabra por su cuenta — la sección
+// `oferta` de esa misma sesión no traía accentWord y salió bien. Elegirle nosotros una palabra sería
+// inventar copy.
+//
+// La comparación es insensible a mayúsculas y acentos porque el modelo reescribe el caso al citar
+// ("Duerme mejor" del headline, "duerme mejor" en el campo) y ahí el acento SÍ es válido: rechazarlo
+// tiraría el caso bueno. Se conserva el string original — es el que la difusión tiene que colorear.
+const plano = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+
+export function cleanAccentWord<T extends { headline?: string; accentWord?: string }>(copy: T): T {
+  const acc = copy.accentWord?.trim()
+  if (!acc) return copy
+  if (plano(copy.headline ?? '').includes(plano(acc))) return copy
+  const { accentWord: _drop, ...rest } = copy
+  return rest as T
+}
+
 export const SectionCopySchema = z.object({
   type: SectionType,
   headline: z.string().max(90),

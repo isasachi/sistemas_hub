@@ -1,4 +1,4 @@
-import type { SectionCopy, SectionType, LandingDna, PaletteTokens, Offer, TrustBlock, NicheId, PaymentMethod, BodyFocus } from './types'
+import { cleanAccentWord, type SectionCopy, type SectionType, type LandingDna, type PaletteTokens, type Offer, type TrustBlock, type NicheId, type PaymentMethod, type BodyFocus } from './types'
 import { NICHE_LABELS } from './niches'
 import { BODY_FOCUS_FRAMING } from './demographics'
 import { SECTION_DNA } from './section-dna'
@@ -30,7 +30,11 @@ import { styleOf, DEFAULT_STYLE } from './style-dna'
 // distintas) en sus cards; `faq`/`garantia`/`cta-final` no llevan persona alguna.
 export const NO_TALENT_SECTIONS: Set<SectionType> = new Set(['faq', 'testimonios', 'garantia', 'cta-final'])
 
-function copyBlock(copy: SectionCopy): string {
+function copyBlock(raw: SectionCopy): string {
+  // Segunda puerta de `cleanAccentWord` (la primera está en `copy.ts`, al generar). Esta repara las
+  // sesiones YA guardadas —5 de 26 traen un accentWord que no está en su headline— sin migración: el
+  // copy se persiste en jsonb y esta ruta lo vuelve a leer en cada render y regeneración.
+  const copy = cleanAccentWord(raw)
   const lines: string[] = [`Headline: "${copy.headline}".`]
   // La palabra-acento se resalta con COLOR (no con corchetes ni comillas). Dirigirla evita que el
   // modelo elija otra o la envuelva en [ ] para "enfatizar".

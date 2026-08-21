@@ -493,3 +493,32 @@ describe('body_focus en la instrucción', () => {
     }
   })
 })
+
+
+// ─── accentWord: el código verifica que sea sub-cadena del headline ──────────
+// El fallo que esto cubre salió impreso en un render real: headline "Descansa mejor cada noche" +
+// accentWord "dormir mejor" → la difusión INSERTÓ las palabras y el titular quedó "Descansa mejor
+// cada dormir mejor noche.". La línea de Emphasis es la que se lo ordena, así que el fail-safe es
+// no emitirla.
+describe('accentWord — sub-cadena del headline', () => {
+  const build = (copy: SectionCopy) =>
+    buildDiffusionInstruction({ section: 'beneficios', copy, dna: DNA, productLabels: null, hasTalent: true })
+
+  it('NO emite la línea de Emphasis si el acento no está en el headline', () => {
+    const out = build({ type: 'beneficios', headline: 'Descansa mejor cada noche', accentWord: 'dormir mejor' })
+    expect(out).not.toContain('Emphasis:')
+    expect(out).not.toContain('dormir mejor')
+    expect(out).toContain('Descansa mejor cada noche')
+  })
+
+  it('SÍ la emite cuando el acento está en el headline (el caso bueno no se rompe)', () => {
+    const out = build({ type: 'beneficios', headline: 'Duerme mejor, despierta renovada', accentWord: 'Duerme mejor' })
+    expect(out).toContain('Emphasis:')
+    expect(out).toContain('"Duerme mejor"')
+  })
+
+  it('tolera diferencia de mayúsculas y acentos al comparar', () => {
+    const out = build({ type: 'beneficios', headline: 'Tu descanso está asegurado', accentWord: 'DESCANSO ESTA' })
+    expect(out).toContain('Emphasis:')
+  })
+})

@@ -2,7 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import { z } from 'zod'
 import { callStructured } from '@/lib/gemini'
-import { LandingCopySchema, OfferGenSchema, SectionCopySchema, SECTION_LABELS, type SectionCopy, type SectionType, type Offer, type OfferCopy, type LandingSessionResponse } from './types'
+import { LandingCopySchema, OfferGenSchema, SectionCopySchema, SECTION_LABELS, cleanAccentWord, type SectionCopy, type SectionType, type Offer, type OfferCopy, type LandingSessionResponse } from './types'
 import { SECTION_DNA } from './section-dna'
 import type { Part } from '@google/genai'
 
@@ -112,8 +112,10 @@ async function generateOneSection(session: LandingSessionResponse, s: SectionTyp
   // Prefiere la sección con el type correcto; si el modelo devolvió UNA sola con el type mal escrito,
   // la coacciona a `s` (per-sección pedimos exactamente `s`, así que esa única ES `s`); si no, null —
   // nunca guarda un objeto de OTRO type bajo la clave `s` (corrompería shareBullets/render por type).
-  const pick = (r: { sections: SectionCopy[] }): SectionCopy | null =>
-    r.sections.find((x) => x.type === s) ?? (r.sections.length === 1 ? { ...r.sections[0], type: s } : null)
+  const pick = (r: { sections: SectionCopy[] }): SectionCopy | null => {
+    const hit = r.sections.find((x) => x.type === s) ?? (r.sections.length === 1 ? { ...r.sections[0], type: s } : null)
+    return hit && cleanAccentWord(hit)
+  }
   const parts = copyPromptParts(session, [s], feedback)
   try {
     const strict = z.object({ sections: z.array(sectionCopySchema(s)) })

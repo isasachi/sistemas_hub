@@ -146,3 +146,19 @@ describe('personaFor — vestuario del nicho y de la zona', () => {
     for (const n of NicheId.options) expect(NICHE_WARDROBE[n]).toBeTruthy()
   })
 })
+
+
+// `cuerpo_completo` = ausencia de zona, no una zona: sin banco de poses no se genera placa propia y
+// la sección vuelve al retrato canónico de medio cuerpo (comportamiento previo al eje de zona).
+describe('cuerpo_completo no es una zona', () => {
+  it('no pide placa propia', () => {
+    expect(zoneNeedsOwnPlate('cuerpo_completo')).toBe(false)
+  })
+  it('las zonas reales sí la piden', () => {
+    expect(zoneNeedsOwnPlate('gluteos_piernas')).toBe(true)
+    expect(zoneNeedsOwnPlate('rodilla')).toBe(true)
+  })
+  it('su encuadre no nombra el cuerpo entero', () => {
+    expect(BODY_FOCUS_FRAMING.cuerpo_completo).not.toMatch(/cuerpo entero|cabeza a pies/i)
+  })
+})
