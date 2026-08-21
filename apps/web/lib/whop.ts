@@ -105,12 +105,12 @@ export async function getAccess(
   // Grandfathered = el tier MÁS ALTO. Son los 3 usuarios previos al paywall: el
   // cambio no puede quitarles nada de lo que ya usaban.
   if (isGrandfathered(email)) {
-    return { tier: 3, status: null, renewalPeriodEnd: null, grandfathered: true }
+    return { tier: 3, status: null, renewalPeriodEnd: null, grandfathered: true, bajaA: null }
   }
 
   const { data, error } = await getDb()
     .from('user_entitlements')
-    .select('status,tier,renewal_period_end')
+    .select('status,tier,renewal_period_end,updated_at')
     .eq('user_id', userId)
   if (error) {
     console.error('[whop] leyendo entitlement:', error.message)
@@ -123,11 +123,21 @@ export async function getAccess(
   const vivas = (data ?? []).filter((r) => grantsAccess(r.status as string))
   if (!vivas.length) return null
   const mejor = vivas.reduce((a, b) => (toTier(b.tier) > toTier(a.tier) ? b : a))
+
+  // Baja en curso: durante el cambio conviven dos memberships vivas y la más
+  // RECIENTE es la que el usuario acaba de contratar. Si es de un tier menor que el
+  // que manda, está bajando y todavía no le tocó. Se compara por `updated_at` en vez
+  // de por tier porque una subida no necesita aviso: ahí la nueva ya ES `mejor`.
+  const reciente = vivas.reduce((a, b) =>
+    String(b.updated_at ?? '') > String(a.updated_at ?? '') ? b : a)
+  const bajaA = toTier(reciente.tier) < toTier(mejor.tier) ? toTier(reciente.tier) : null
+
   return {
     tier: toTier(mejor.tier),
     status: (mejor.status as string | null) ?? null,
     renewalPeriodEnd: (mejor.renewal_period_end as string | null) ?? null,
     grandfathered: false,
+    bajaA,
   }
 }
 
@@ -140,6 +150,18 @@ export interface Access {
   renewalPeriodEnd: string | null
   /** Usuario previo al paywall: acceso de por vida, sin fila en la tabla. */
   grandfathered: boolean
+  /**
+   * Tier al que va a BAJAR cuando termine el período ya pagado, o null si no hay
+   * ninguna baja en curso.
+   *
+   * ⚠️ Existe porque el cambio de plan deja dos memberships vivas a la vez. Al
+   * contratar un plan MENOR se cancela el anterior `at_period_end`, así que el
+   * usuario conserva el tier alto hasta que ese período termine — y `tier` sigue
+   * siendo el alto, que es lo correcto para servir. Sin este campo, alguien que
+   * acaba de pasarse a Start vería "Legacy Empire" en Mi cuenta y ninguna señal
+   * de que cambió algo: parecería que su compra no se aplicó.
+   */
+  bajaA: Tier | null
 }
 
 /** ¿Este usuario puede entrar al área privada? */
@@ -152,6 +174,67 @@ export async function hasAccess(userId: string, email?: string | null): Promise<
  * webhooks es at-least-once con reintentos, así que el mismo evento llega repetido y
  * la idempotencia tiene que salir de la tabla, no de lógica en el handler.
  */
+/**
+ * Cancela en Whop toda membership VIVA del usuario que no sea la que acaba de
+ * activarse. Es lo que hace que cambiar de plan sea automático.
+ *
+ * ⚠️ WHOP NO TIENE ENDPOINT DE CAMBIO DE PLAN — verificado el 2026-08-21:
+ * `PATCH /memberships/{id}` solo escribe `metadata`, y crear el checkout no acepta
+ * ningún parámetro de reemplazo. Contratar otro plan crea una suscripción NUEVA,
+ * así que la única forma de que el usuario no termine pagando dos es cancelar la
+ * anterior nosotros. Antes eso se le pedía al usuario con un aviso en pantalla.
+ *
+ * ⚠️ `at_period_end`, NUNCA `immediate`. `immediate` le quita el acceso que ya
+ * pagó. Con `at_period_end` no se pierde nada y encaja con que `getAccess` se
+ * quede con el tier más alto: una SUBIDA aplica al instante (el nuevo tier es el
+ * más alto) y una BAJADA recién cuando termina el período que ya estaba pagado,
+ * que es la semántica normal de una suscripción.
+ *
+ * ⚠️ Los ids salen de NUESTRA tabla, no de `GET /memberships` — así no hace falta
+ * ningún scope de lectura de members en la API key.
+ */
+export async function cancelPreviousMemberships(userId: string, keepId: string): Promise<void> {
+  const { data, error } = await getDb()
+    .from('user_entitlements')
+    .select('whop_membership_id,status')
+    .eq('user_id', userId)
+  if (error) throw new Error(`buscando memberships previas: ${error.message}`)
+
+  const previas = (data ?? []).filter(
+    (r) => r.whop_membership_id !== keepId && grantsAccess((r.status as string) ?? ''),
+  )
+
+  for (const r of previas) {
+    const id = r.whop_membership_id as string
+    const res = await fetch(`${WHOP_API}/memberships/${id}/cancel`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${process.env.WHOP_API_KEY}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ cancellation_mode: 'at_period_end' }),
+      // ⚠️ `fetch` en Node NO tiene timeout por defecto, y esto corre DENTRO del
+      // handler del webhook: una conexión que Whop deje abierta sin responder
+      // colgaría la respuesta hasta el `maxDuration` de Vercel, Whop lo leería como
+      // entrega fallida y reintentaría el evento entero. El repo ya pagó esta
+      // lección con KIE (ver `fetchKie`).
+      signal: AbortSignal.timeout(10_000),
+    })
+    // ⚠️ No se lanza si Whop dice que ya estaba cancelándose. La entrega del webhook
+    // es at-least-once y nuestra fila sigue diciendo `active` hasta que llegue el
+    // `deactivated`, así que este cancel se REPITE en cada reintento del mismo evento.
+    if (!res.ok) {
+      const txt = await res.text()
+      if (/alread(y|)|cancel/i.test(txt) && res.status < 500) {
+        console.warn(`[whop] ${id} ya estaba cancelándose: ${txt}`)
+        continue
+      }
+      throw new Error(`cancelando ${id}: ${res.status} ${txt}`)
+    }
+    console.log(`[whop] plan anterior ${id} cancelado al fin del período`)
+  }
+}
+
 export async function saveEntitlement(row: Entitlement): Promise<void> {
   const { error } = await getDb()
     .from('user_entitlements')

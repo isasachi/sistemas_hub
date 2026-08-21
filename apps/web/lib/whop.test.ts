@@ -156,9 +156,56 @@ describe('POST /api/whop/webhook', () => {
     vi.doMock('@/lib/whop', async (orig) => ({
       ...(await orig<typeof import('./whop')>()),
       saveEntitlement: async (row: unknown) => void guardadas.push(row),
+      // Sin esto la ruta llama a Whop y a Supabase de verdad y el test se cuelga.
+      cancelPreviousMemberships: async () => {},
     }))
     return (await import('@/app/api/whop/webhook/route')).POST
   }
+
+  // ⚠️ EL CAMBIO DE PLAN AUTOMÁTICO SE DISPARA ACÁ. Si esta llamada no ocurre, el
+  // usuario que cambia de plan queda pagando DOS suscripciones — y la pantalla ya
+  // no le avisa que cancele la vieja, porque se supone que lo hacemos nosotros.
+  it('cancela el plan anterior después de guardar', async () => {
+    const cancelados: Array<[string, string]> = []
+    vi.doMock('@/lib/whop', async (orig) => ({
+      ...(await orig<typeof import('./whop')>()),
+      saveEntitlement: async () => {},
+      cancelPreviousMemberships: async (u: string, keep: string) => void cancelados.push([u, keep]),
+    }))
+    const { POST } = await import('@/app/api/whop/webhook/route')
+    await POST(firmado(JSON.stringify(evento())))
+
+    expect(cancelados).toEqual([['uuid-del-usuario', 'mem_abc123']])
+  })
+
+  // Un `deactivated` no puede arrastrarse al resto de las memberships del usuario.
+  it('un evento que NO da acceso no cancela nada', async () => {
+    const cancelados: string[] = []
+    vi.doMock('@/lib/whop', async (orig) => ({
+      ...(await orig<typeof import('./whop')>()),
+      saveEntitlement: async () => {},
+      cancelPreviousMemberships: async (_u: string, keep: string) => void cancelados.push(keep),
+    }))
+    const { POST } = await import('@/app/api/whop/webhook/route')
+    await POST(firmado(JSON.stringify(evento({ status: 'expired' }))))
+
+    expect(cancelados).toEqual([])
+  })
+
+  // ⚠️ Best-effort. Un 500 haría que Whop reintente ~3 días y vuelva a correr TODO
+  // el handler por algo que YA quedó guardado; el peor caso de no cancelar es un
+  // cobro de más que se arregla a mano, bastante mejor que el endpoint desactivado.
+  it('si la cancelación falla, igual responde 200', async () => {
+    vi.doMock('@/lib/whop', async (orig) => ({
+      ...(await orig<typeof import('./whop')>()),
+      saveEntitlement: async () => {},
+      cancelPreviousMemberships: async () => { throw new Error('whop caído') },
+    }))
+    const { POST } = await import('@/app/api/whop/webhook/route')
+    const res = await POST(firmado(JSON.stringify(evento())))
+
+    expect(res.status).toBe(200)
+  })
 
   it('acepta una firma válida y guarda el entitlement', async () => {
     const POST = await rutaConDbFalsa()
@@ -234,6 +281,7 @@ describe('firma con el secret real de Whop (ws_…)', () => {
     vi.doMock('@/lib/whop', async (orig) => ({
       ...(await orig<typeof import('./whop')>()),
       saveEntitlement: async (row: unknown) => void guardadas.push(row),
+      cancelPreviousMemberships: async () => {},
     }))
     const { POST } = await import('@/app/api/whop/webhook/route')
 

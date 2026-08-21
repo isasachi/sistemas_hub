@@ -50,7 +50,7 @@ beforeEach(() => {
   vi.mocked(getUser).mockResolvedValue({ id: 'u1', email: 'u@jrhub.pe' } as never)
   vi.mocked(getProfile).mockResolvedValue(PERFIL_VACIO)
   vi.mocked(getAccess).mockResolvedValue({
-    tier: 2, status: 'active', renewalPeriodEnd: '2026-09-20T15:00:00Z', grandfathered: false,
+    tier: 2, status: 'active', renewalPeriodEnd: '2026-09-20T15:00:00Z', grandfathered: false, bajaA: null,
   })
   vi.mocked(creditStatus).mockResolvedValue({
     tier: 2, limite: 100, usados: 40, restantes: 60, desde: '2026-08-20',
@@ -96,9 +96,28 @@ describe('/cuenta', () => {
     expect(html).toContain('Bajar')
   })
 
-  // Un cambio crea una suscripción NUEVA en Whop y la vieja sigue cobrando.
-  it('avisa que el plan anterior hay que cancelarlo', async () => {
-    expect(await render()).toMatch(/cancelar\s+la anterior/i)
+  // Ya no se le pide al usuario que cancele nada: lo hace el webhook.
+  it('no le pide al usuario que cancele el plan anterior', async () => {
+    expect(await render()).not.toMatch(/cancelar\s+la anterior/i)
+  })
+
+  // ⚠️ Con una baja en curso conviven dos memberships y `getAccess` devuelve el tier
+  // MÁS ALTO — correcto para servir, pero sin esta línea el usuario ve el plan viejo
+  // y parece que su compra no se aplicó.
+  it('con una baja en curso dice a qué plan pasa y hasta cuándo conserva el actual', async () => {
+    vi.mocked(getAccess).mockResolvedValue({
+      tier: 3, status: 'active', renewalPeriodEnd: '2026-09-20T15:00:00Z',
+      grandfathered: false, bajaA: 1,
+    })
+    const html = await render()
+    expect(html).toContain('Legacy Start')          // a dónde va
+    expect(html).toContain('Legacy Empire')         // qué conserva mientras tanto
+    expect(html).toContain('20 de setiembre de 2026')
+    expect(html).toMatch(/no tienes que cancelar nada/i)
+  })
+
+  it('sin baja en curso no inventa ningún aviso de cambio', async () => {
+    expect(await render()).not.toMatch(/Cambiaste a/i)
   })
 
   // ⚠️ LA RAZÓN POR LA QUE ESTA PÁGINA VIVE FUERA DEL GRUPO `(app)`. Ese layout
@@ -140,7 +159,7 @@ describe('/cuenta', () => {
 
   it('a un grandfathered no le ofrece cambiar de plan ni le habla de cobros', async () => {
     vi.mocked(getAccess).mockResolvedValue({
-      tier: 3, status: null, renewalPeriodEnd: null, grandfathered: true,
+      tier: 3, status: null, renewalPeriodEnd: null, grandfathered: true, bajaA: null,
     })
     const html = await render()
     expect(html).toContain('Acceso de por vida')
@@ -150,7 +169,7 @@ describe('/cuenta', () => {
 
   it('con la suscripción cancelada dice cuándo TERMINA, no cuándo se renueva', async () => {
     vi.mocked(getAccess).mockResolvedValue({
-      tier: 1, status: 'canceling', renewalPeriodEnd: '2026-09-20T00:00:00Z', grandfathered: false,
+      tier: 1, status: 'canceling', renewalPeriodEnd: '2026-09-20T00:00:00Z', grandfathered: false, bajaA: null,
     })
     const html = await render()
     expect(html).toContain('Termina el')
@@ -161,7 +180,7 @@ describe('/cuenta', () => {
   // del usuario.
   it('un estado desconocido no se imprime crudo', async () => {
     vi.mocked(getAccess).mockResolvedValue({
-      tier: 1, status: 'estado_nuevo_de_whop', renewalPeriodEnd: null, grandfathered: false,
+      tier: 1, status: 'estado_nuevo_de_whop', renewalPeriodEnd: null, grandfathered: false, bajaA: null,
     })
     const html = await render()
     expect(html).not.toContain('estado_nuevo_de_whop')

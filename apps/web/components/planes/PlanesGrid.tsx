@@ -1,4 +1,5 @@
 import { Check, Lock, Search, Sparkles, Star, Crown, Rocket, type LucideIcon } from "lucide-react";
+import { PlanCTA } from "./PlanCTA";
 import { PLANS, TIERS, RAW_BUCKETS, RAW_BUCKET_LABEL, precioUSD, unlocksBucket, type Tier } from "@ph/shared";
 
 /**
@@ -195,19 +196,20 @@ export function PlanesGrid({ hrefDe, actual = null, bloqueado = false }: PlanesG
             Ya incluido en tu acceso
           </p>
         ) : (
-          /* ⚠️ `<a>` y NUNCA `<Link>`: en /suscripcion este href crea una
-             checkout configuration en Whop, y Next prefetchea los Link — se
-             crearían configuraciones con solo pasar el mouse. Se usa `<a>` en
-             los dos contextos para que nadie pueda equivocarse al reutilizar
-             el componente. */
-          <a
+          /* `PlanCTA` es un `<a>` (NUNCA un `<Link>`: este href crea una checkout
+             configuration en Whop y Next prefetchea los Link — se crearían con solo
+             pasar el mouse). Lo único que agrega es la confirmación al BAJAR de
+             plan, y por eso es la única parte cliente de esta tabla. */
+          <PlanCTA
+            tier={tier}
+            actual={actual}
             href={hrefDe(tier)}
             className={`block w-full rounded-lg px-6 py-3.5 text-center font-[Lato] text-[14px] font-semibold no-underline ${
               tier === 2 ? "lp-cta" : tier === 3 ? "jr-btn-gold" : "lp-btn"
             }`}
           >
             {copy.cta}
-          </a>
+          </PlanCTA>
         );
 
         return (

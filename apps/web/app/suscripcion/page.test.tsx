@@ -62,7 +62,7 @@ describe('/suscripcion', () => {
   // personas que podían cambiar de plan.
   it('con un plan activo NO redirige: muestra la grilla y marca el plan actual', async () => {
     vi.mocked(getAccess).mockResolvedValue({
-      tier: 1, status: 'active', renewalPeriodEnd: null, grandfathered: false,
+      tier: 1, status: 'active', renewalPeriodEnd: null, grandfathered: false, bajaA: null,
     })
     const html = await render()
 
@@ -77,7 +77,7 @@ describe('/suscripcion', () => {
   // Sin salida, quien ya pagó queda encerrado en el paywall.
   it('con acceso ofrece volver al panel', async () => {
     vi.mocked(getAccess).mockResolvedValue({
-      tier: 2, status: 'active', renewalPeriodEnd: null, grandfathered: false,
+      tier: 2, status: 'active', renewalPeriodEnd: null, grandfathered: false, bajaA: null,
     })
     expect(await render()).toContain('href="/dashboard"')
   })
@@ -90,23 +90,26 @@ describe('/suscripcion', () => {
     expect(await render()).toContain('href="/cuenta"')
 
     vi.mocked(getAccess).mockResolvedValue({
-      tier: 1, status: 'active', renewalPeriodEnd: null, grandfathered: false,
+      tier: 1, status: 'active', renewalPeriodEnd: null, grandfathered: false, bajaA: null,
     })
     expect(await render()).toContain('href="/cuenta"')
   })
 
-  // Cambiar de plan crea una suscripción nueva en Whop y la vieja sigue cobrando.
-  // Callarlo es cobrarle dos veces a alguien sin avisarle.
-  it('avisa que contratar otro plan no cancela el anterior', async () => {
+  // Whop no tiene cambio de plan: contratar otro crea una suscripción nueva. Antes
+  // acá se le PEDÍA al usuario que cancelara la vieja; ahora lo hace el webhook y la
+  // pantalla tiene que decir eso, no lo contrario.
+  it('dice que el plan anterior se cancela solo, sin pedirle nada al usuario', async () => {
     vi.mocked(getAccess).mockResolvedValue({
-      tier: 1, status: 'active', renewalPeriodEnd: null, grandfathered: false,
+      tier: 1, status: 'active', renewalPeriodEnd: null, grandfathered: false, bajaA: null,
     })
-    expect(await render()).toMatch(/cancelar\s+la anterior/i)
+    const html = await render()
+    expect(html).toMatch(/cancelamos el anterior por ti/i)
+    expect(html).not.toMatch(/acuérdate de cancelar/i)
   })
 
   it('a un grandfathered no le ofrece comprar nada', async () => {
     vi.mocked(getAccess).mockResolvedValue({
-      tier: 3, status: 'active', renewalPeriodEnd: null, grandfathered: true,
+      tier: 3, status: 'active', renewalPeriodEnd: null, grandfathered: true, bajaA: null,
     })
     const html = await render()
     expect(html).not.toContain('/api/whop/checkout')
@@ -124,7 +127,7 @@ describe('/suscripcion', () => {
 
     it('con el webhook ya procesado, va al dashboard', async () => {
       vi.mocked(getAccess).mockResolvedValue({
-        tier: 3, status: 'active', renewalPeriodEnd: null, grandfathered: false,
+        tier: 3, status: 'active', renewalPeriodEnd: null, grandfathered: false, bajaA: null,
       })
       expect(await render({ pago: 'ok' })).toBe('REDIRECT:/dashboard')
     })
