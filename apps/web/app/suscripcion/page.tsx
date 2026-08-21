@@ -96,14 +96,15 @@ export default async function SuscripcionPage({
           </div>
         )}
 
-        {/* ⚠️ Cambiar de plan crea una suscripción NUEVA en Whop; la anterior sigue
-            cobrando hasta que se cancele. No se resuelve solo desde acá (haría falta
-            la API de cambio de plan de Whop, o cancelar la vieja en su dashboard), y
-            callarlo es cobrarle dos veces a alguien sin avisarle. */}
+        {/* ⚠️ Acá decía "acuérdate de cancelar la anterior desde tu cuenta de Whop".
+            Ya no: el webhook cancela el plan viejo solo, al fin del período
+            (`cancelPreviousMemberships`). Whop sigue SIN endpoint de cambio de plan
+            —contratar otro crea una suscripción nueva—, así que el mecanismo es el
+            mismo de antes; lo que cambió es quién lo ejecuta. */}
         {access && !access.grandfathered && (
           <div className="mx-auto mb-6 max-w-[560px] rounded-xl border border-white/[0.12] bg-white/[0.03] px-3.5 py-2.5 text-[12px] leading-[1.6] text-[#c9b4ae]">
-            Si contratas otro plan se crea una suscripción nueva: acuérdate de cancelar
-            la anterior desde tu cuenta de Whop para no pagar las dos.
+            Si contratas otro plan cancelamos el anterior por ti. Conservas los
+            beneficios del que tienes hasta que termine el período que ya pagaste.
           </div>
         )}
 

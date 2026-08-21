@@ -1,5 +1,11 @@
 import { Webhook } from 'standardwebhooks'
-import { entitlementFromEvent, saveEntitlement, webhookKey } from '@/lib/whop'
+import {
+  cancelPreviousMemberships,
+  entitlementFromEvent,
+  grantsAccess,
+  saveEntitlement,
+  webhookKey,
+} from '@/lib/whop'
 
 /**
  * Webhook de Whop — la ÚNICA escritura de `user_entitlements`.
@@ -44,6 +50,29 @@ export async function POST(req: Request) {
     // Acá SÍ conviene el reintento: el evento era bueno y la escritura falló.
     console.error('[whop]', err instanceof Error ? err.message : String(err))
     return new Response('error al guardar', { status: 500 })
+  }
+
+  // Cambio de plan automático. Whop no tiene endpoint para mover una membership de
+  // plan, así que contratar otro crea una suscripción NUEVA y la vieja seguiría
+  // cobrando: se cancela acá.
+  //
+  // ⚠️ DESPUÉS de guardar y solo si la nueva DA acceso. Cancelar antes de que el
+  // pago esté confirmado dejaría al usuario sin ningún plan; y un `deactivated` no
+  // puede arrastrarse al resto de sus memberships.
+  //
+  // ⚠️ Best-effort: un fallo se loguea y la respuesta sigue siendo 200. Devolver
+  // 500 haría que Whop reintente ~3 días y vuelva a correr TODO el handler por algo
+  // que ya quedó guardado, y el peor caso de no cancelar es un cobro de más que se
+  // arregla a mano — bastante mejor que un endpoint desactivado.
+  if (grantsAccess(row.status)) {
+    try {
+      await cancelPreviousMemberships(row.user_id, row.whop_membership_id)
+    } catch (err) {
+      console.error(
+        '[whop] no se pudo cancelar el plan anterior:',
+        err instanceof Error ? err.message : String(err),
+      )
+    }
   }
 
   return new Response('ok', { status: 200 })

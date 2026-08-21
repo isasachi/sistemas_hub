@@ -7,6 +7,7 @@ import { getAccess, type Access } from "@/lib/whop";
 import { creditStatus, type CreditStatus } from "@/lib/credits";
 import { getProfile, getKieKey, maskKey } from "@/lib/user-settings";
 import { PerfilForm, AvatarForm, KieKeyForm } from "./Formularios";
+import { PlanCTA } from "@/components/planes/PlanCTA";
 
 /**
  * "Mi cuenta": perfil, plan, créditos y la API key de KIE.
@@ -132,6 +133,20 @@ function PlanActual({ access }: { access: Access }) {
         ))}
       </ul>
 
+      {/* ⚠️ Cambio a un plan MENOR en curso. Sin esta línea el usuario ve el plan
+          viejo —`getAccess` devuelve el tier más alto, que es lo correcto para
+          servir— y parece que su compra no se aplicó. La bajada recién ocurre
+          cuando termina el período que ya pagó, que es también lo que le prometió
+          el aviso de confirmación. */}
+      {access.bajaA && (
+        <p className="mt-4 rounded-lg border border-white/[0.12] bg-white/[0.04] px-3 py-2 text-[12px] leading-[1.6] text-[#c9b4ae]">
+          Cambiaste a <span className="font-bold text-[#efe7e0]">{PLANS[access.bajaA].nombre}</span>.
+          Conservas los beneficios de {plan.nombre}
+          {access.renewalPeriodEnd ? ` hasta el ${fecha.instante(access.renewalPeriodEnd)}` : ""}; después
+          pasas al plan nuevo. No tienes que cancelar nada.
+        </p>
+      )}
+
       {access.renewalPeriodEnd && (
         <p className="mt-4 border-t border-white/[0.08] pt-3 text-[12px] text-[#a98c88]">
           {access.status === "canceling" ? "Termina el " : "Se renueva el "}
@@ -145,15 +160,19 @@ function PlanActual({ access }: { access: Access }) {
 /**
  * Un plan al que se puede cambiar, con su checkout.
  *
- * ⚠️ `<a>` y no `<Link>`: Next prefetchea los `<Link>` a páginas, y esa URL crea una
- * checkout configuration en Whop. No queremos crear una al pasar el mouse.
+ * ⚠️ `PlanCTA` y no un `<a>` suelto: es lo que pide confirmación al BAJAR, y es el
+ * mismo botón que usa la tabla de precios — el cambio de plan se puede hacer desde
+ * los dos lados y tiene que avisar igual en los dos. Sigue siendo un `<a>` por
+ * dentro (un `<Link>` prefetchearía la creación del checkout en Whop).
  */
 function CambiarA({ tier, actual }: { tier: Tier; actual: Tier }) {
   const plan = PLANS[tier];
   const sube = tier > actual;
   const Icono = sube ? ArrowUpRight : ArrowDownRight;
   return (
-    <a
+    <PlanCTA
+      tier={tier}
+      actual={actual}
       href={`/api/whop/checkout?plan=${tier}`}
       className="group flex flex-1 items-center justify-between gap-3 rounded-xl border border-white/[0.12] px-4 py-3 no-underline transition-colors hover:border-[rgba(232,70,122,0.5)] hover:bg-white/[0.04]"
     >
@@ -173,7 +192,7 @@ function CambiarA({ tier, actual }: { tier: Tier; actual: Tier }) {
         {sube ? "Subir" : "Bajar"}
         <Icono className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
       </span>
-    </a>
+    </PlanCTA>
   );
 }
 
@@ -291,12 +310,12 @@ export default async function CuentaPage() {
                       <CambiarA key={t} tier={t} actual={access.tier} />
                     ))}
                   </div>
-                  {/* ⚠️ Whop crea una suscripción NUEVA; la anterior sigue cobrando
-                      hasta que se cancele. Callarlo es cobrarle dos veces a alguien
-                      sin avisarle. */}
+                  {/* Whop sigue sin tener cambio de plan: contratar otro crea una
+                      suscripción NUEVA. La diferencia es que ahora la anterior la
+                      cancela el webhook (`cancelPreviousMemberships`), no el usuario. */}
                   <p className="mt-2.5 text-[11px] leading-[1.6] text-[#8d7470]">
-                    Al cambiar se crea una suscripción nueva en Whop: acuérdate de cancelar
-                    la anterior desde tu cuenta de Whop para no pagar las dos. El cobro y los
+                    El cambio es automático: cancelamos tu plan anterior y conservas sus
+                    beneficios hasta que termine el período que ya pagaste. El cobro y los
                     comprobantes los gestiona Whop.
                   </p>
                 </div>
