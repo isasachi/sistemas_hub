@@ -374,7 +374,8 @@ export function assignPoses(
   const ctx = (contextPoses ?? []).map((p) => p.trim()).filter(Boolean).map((p) => conEncuadre(p, focus))
   const zonaReal = zone.length > 0
   const reserved = bank[bank.length - 1]
-  const pool = ctx.length && !zonaReal ? ctx : bank.slice(0, -1)
+  const demoPool = bank.slice(0, -1)
+  const pool = ctx.length && !zonaReal ? ctx : demoPool
   const zonePool = ctx.length && zonaReal ? ctx : zone.slice(0, -1)
   // Dos cursores: cada banco recorre el suyo, así ninguna sección repite pose dentro de su pool
   // (QA#6) aunque el reparto entre bancos sea desparejo.
@@ -390,7 +391,17 @@ export function assignPoses(
       z++
       continue
     }
-    out[s] = pool[i % pool.length]
+    // ⚠️ `antes-despues` SIN zona real conserva su pose determinista, aunque haya contextuales.
+    // Es la única sección con una instrucción propia sobre el encuadre (`beforeAfterNote`), y sin
+    // zona real esa nota toma la rama del ROSTRO: "los dos paneles muestran el mismo rostro, con el
+    // problema visible y ya resuelto". Una pose contextual de actividad —medido: "de pie, brazos
+    // estirados en un estiramiento matutino"— la contradice DENTRO DEL MISMO PROMPT, que es el modo
+    // de fallo que este repo ya registró tres veces. Manda la nota: en el antes/después el encuadre
+    // ES el argumento de venta. Con zona real no hay conflicto y lo contextual entra por el pool de
+    // zona: ahí la nota y la pose piden las dos la misma zona.
+    out[s] = s === 'antes-despues' && ctx.length && !zonaReal
+      ? demoPool[i % demoPool.length]
+      : pool[i % pool.length]
     i++
   }
   return out

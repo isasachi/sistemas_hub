@@ -565,12 +565,16 @@ Tres detalles que cuestan un fallo si se tocan: el campo es **requerido** en el 
 
 ⚠️ **Se reconciliaron los prompts de placa, que negaban el físico de plano.** `buildTalentPrompt` decía *"believable body"* y `buildZonePrompt` *"NOT a fitness-model composite"*: con una persona que ahora puede pedir complexión atlética, esas líneas contradicen al texto que la describe **dentro del mismo prompt** — el modo de fallo que este repo ya registró tres veces (`estable` contra el micro-temblor, *"no reescribas"* contra la sección que pide reescribir). Ahora prohíben el RETOQUE, que es lo que siempre quisieron decir, y exigen la complexión declarada. Si las placas de ZONA empiezan a volver null, mirá esto primero: `generateZonePlate` ya necesita `preferGemini` porque gpt-image-2 modera los encuadres de cuerpo sin rostro, y la ruta de talento **cae en silencio al retrato canónico**, o sea devuelve la cara.
 
+⚠️ **`antes-despues` SIN ZONA REAL CONSERVA SU POSE DETERMINISTA, y es la excepción que evita una contradicción dentro del mismo prompt.** Es la única sección con instrucción propia de encuadre (`beforeAfterNote`), y sin zona real esa nota toma la rama del ROSTRO (*"los dos paneles muestran el mismo rostro, con el problema visible y ya resuelto"*). Una pose contextual de actividad —medido en el probe: *"de pie, brazos estirados en un estiramiento matutino"*— la contradice bloque contra bloque. Manda la nota: en el antes/después el encuadre ES el argumento de venta. **Con zona real no hay conflicto** y lo contextual sí entra, porque ahí la nota y la pose piden las dos la misma zona. Con test sobre la instrucción ARMADA, no sobre `assignPoses` a secas — la contradicción vivía entre dos bloques del prompt, así que comprobar la función sola no la habría visto.
+
 ✅ **Medido con `scripts/probe-talento-contextual.ts`** (una llamada de visión por caso, cero imágenes y cero cuota de imagen), sobre dos sesiones de producción reales:
 
 | caso | complexión | poses |
 |---|---|---|
 | GomiSleep, magnesio para dormir (sin zona) | *"sana y equilibrada, sin rasgos atléticos o marcados"* | recostada de lado en la cama · cabeza apoyada en la almohada, respirando hondo · estiramiento matutino · leyendo en calma |
 | CreatiMax, creatina de glúteos (zona) | *"atlética y glúteos tonificados"* | sentadilla profunda · patada de glúteo · vaso mezclador, todas con el encuadre de tren inferior SIN rostro; **el hero conservó su pose demográfica** |
+
+⚠️ **El probe corrió contra GEMINI, no contra el motor de producción.** `OPENAI_API_KEY` está inválida en el entorno local (401 en cada llamada), así que `callStructured` cayó a Gemini en los dos casos — y landing es **OpenAI-primario** en producción. El eje está verificado, el prompt está afinado, pero el modelo que lo va a ejecutar en prod no lo ejecutó nunca todavía.
 
 Que el producto para dormir devuelva explícitamente *"sin rasgos atléticos"* es la señal de que el eje decide por la promesa y no por la categoría: un cuerpo atlético ahí distrae de lo que se vende.
 

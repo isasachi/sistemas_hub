@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { buildDiffusionInstruction, MULTI_UNIT_SECTIONS, PAYMENT_SECTIONS, NO_TALENT_SECTIONS } from './instructions'
 import type { SectionCopy, SectionType, LandingDna, Offer, TrustBlock } from './types'
+import { assignPoses } from './demographics'
 import { COPPER } from './palette-derive'
 import { BrandStyle, STYLE_DNA } from './style-dna'
 
@@ -551,5 +552,33 @@ describe('accentWord — se emite el recorte LITERAL del titular', () => {
     })
     expect(out).toContain('"descanso está"')
     expect(out).not.toContain('DESCANSO ESTA')
+  })
+})
+
+// ⚠️ La contradicción que esto fija es entre DOS bloques del MISMO prompt, así que se comprueba
+// sobre la instrucción armada y no sobre `assignPoses` a secas.
+describe('antes-despues — la nota de encuadre y la pose no se contradicen', () => {
+  it('sin zona real, la sección no recibe una pose contextual de actividad', () => {
+    const poses = assignPoses(['hero', 'antes-despues'], 'female_30_45', 'cuerpo_completo', [
+      'De pie en la habitación, brazos estirados hacia arriba en un estiramiento matutino',
+    ])
+    const out = buildDiffusionInstruction({
+      section: 'antes-despues', copy: { type: 'antes-despues', headline: 'H' },
+      dna: { ...DNA, poses }, productLabels: null, hasTalent: true, bodyFocus: 'cuerpo_completo',
+    })
+    expect(out).toContain('el mismo rostro ya resuelto')   // la nota manda
+    expect(out).not.toContain('estiramiento matutino')     // y nada la contradice
+  })
+
+  it('con zona real sí la recibe: nota y pose piden la misma zona', () => {
+    const poses = assignPoses(['hero', 'antes-despues'], 'female_18_30', 'gluteos_piernas', [
+      'Sentadilla profunda, glúteos contraídos',
+    ])
+    const out = buildDiffusionInstruction({
+      section: 'antes-despues', copy: { type: 'antes-despues', headline: 'H' },
+      dna: { ...DNA, poses }, productLabels: null, hasTalent: true, bodyFocus: 'gluteos_piernas',
+    })
+    expect(out).toContain('Sentadilla profunda')
+    expect(out).toContain('los DOS paneles encuadran')
   })
 })

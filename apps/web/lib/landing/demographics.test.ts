@@ -182,8 +182,11 @@ describe('poses contextuales y complexión', () => {
 
   it('sin zona real, las poses contextuales entran en TODAS las secciones', () => {
     const out = assignPoses(ORDEN, 'female_30_45', 'cuerpo_completo', CTX)
-    // Cada sección recibe UNA del set contextual (y ninguna del banco demográfico).
-    for (const s of ORDEN) expect(CTX.some((c) => out[s].startsWith(c))).toBe(true)
+    // Cada sección recibe UNA del set contextual, MENOS `antes-despues`: ahí manda su propia nota
+    // de encuadre (ver el test de contradicción en instructions.test.ts).
+    const contextuales = ORDEN.filter((s) => s !== 'antes-despues')
+    for (const s of contextuales) expect(CTX.some((c) => out[s].startsWith(c))).toBe(true)
+    expect(DEMOGRAPHIC_POSES.female_30_45).toContain(out['antes-despues'])
     expect(new Set(ORDEN.map((s) => out[s])).size).toBe(4) // 4 secciones, 4 poses distintas
   })
 
