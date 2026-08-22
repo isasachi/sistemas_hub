@@ -763,6 +763,20 @@ Leer el catálogo de un anunciante son dos navegaciones a Meta. `rank.ts` lee de
 
 ⚠️ **Un error de PostgREST tragado cuesta un soft-block.** `storedProfiles` embebe `disc_products`, que cuelga de `disc_advertisers` por DOS caminos (el dominante y la tabla puente): sin nombrar la FK explícita devuelve `PGRST201` y `data` viene `null`. Ignorando el error eso se lee como "no hay caché" — y la respuesta a "no hay caché" es volver a navegar Meta hasta que bloquee. Pasó, medido. Por eso el error se lanza.
 
+### Preview del flujo nuevo (`/tools/buscador-productos/preview`) — NO es lo que se lanza
+
+Lo que se lanza es la lista de siempre. Esto es el flujo acordado (elegir nicho → animación → un producto anónimo → confirmación → Ads Library → encuesta → aceptar o gastar un comodín → seguir o cambiar de nicho), construido en paralelo **solo para ver cómo queda**. No hay ningún enlace hacia esa ruta desde la tool.
+
+⚠️ **NO CONSUME NI ESCRIBE NADA.** Cupo, comodines y lista viven en el estado de React y se pierden al recargar. No existe la tabla de "producto tomado", no se oculta nada para los demás usuarios y no se descuenta ningún crédito — eso es la implementación real, que es lo que todavía no se decidió construir. Las reglas están en `lib/product-hunter/preview-flujo.ts` (con test) y no dentro del componente: son lo que hay que discutir, y una regla enterrada en un `onClick` no se lee ni se prueba.
+
+⚠️ **OCULTAR EL NOMBRE OBLIGA A OCULTAR TAMBIÉN EL COPY.** El acuerdo dice "ocultar nombre y marca", pero el cuerpo del anuncio dice el producto con todas las letras (*"🟥 RODILLERA ORTOPÉDICA PREMIUM…"*), y el titular igual. Con cualquiera de los cuatro campos visible se busca el producto por fuera y se lo lleva sin gastar cupo, que es justo lo que el paso existe para evitar. La tarjeta anónima muestra **solo señal estructural**: anuncios, días corriendo, share y país. **De ahí sale la necesidad del comodín**, no de un capricho: con eso no se puede saber si el producto sirve hasta abrirlo.
+
+⚠️ **EL COMODÍN SE OFRECE SOLO SI LA ENCUESTA DICE QUE ALGO FALLÓ.** Ofrecerlo siempre lo convierte en un "siguiente" gratis: el usuario pasa productos hasta que le guste uno y el cupo deja de significar nada. Una pregunta sin responder NO cuenta como fallo.
+
+⚠️ **`CUPO` (5+3 / 15+5 / 20+10) NO ES `PLANS[tier].porRango` (10/20/50) Y HOY SE CONTRADICEN.** Son dos cosas distintas —cuántos productos podés RECLAMAR contra cuántos VE la lista— y el segundo es el que la tabla de precios promete hoy. El preview los mantiene separados a propósito: mezclarlos movería el serving que está en producción. Cuál gana es una decisión pendiente.
+
+`?motor=discovery` sirve el preview desde el motor nuevo; sin el parámetro va por el clásico, que es el que hoy tiene inventario en las 13 categorías.
+
 ## Tool: Buscador de Productos (`buscador-productos`)
 
 Encuentra productos ganadores validados en LATAM que aún no están saturados en Perú, usando Meta Ads Library. Migrado desde el proyecto Python standalone `~/chamba/product-hunter` (dejado como referencia).
