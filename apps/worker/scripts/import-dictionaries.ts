@@ -1,7 +1,8 @@
 // Importa a `data/dictionaries/` las keywords que el motor VIEJO tiene
 // cacheadas en `ph_niches.keywords`.
 //
-//   npx tsx scripts/import-dictionaries.ts            (escribe)
+//   npx tsx scripts/import-dictionaries.ts            (ph_niches + curados)
+//   npx tsx scripts/import-dictionaries.ts --curados  (solo los escritos a mano)
 //   npx tsx scripts/import-dictionaries.ts --dry-run  (solo cuenta)
 //   npx tsx scripts/import-dictionaries.ts --force    (pisa los ya existentes)
 //
@@ -36,6 +37,7 @@ import { fileURLToPath } from 'node:url'
 import { createClient } from '@supabase/supabase-js'
 import { isBlocked } from '@ph/shared'
 import { normalizeQuery, dictionaryKey } from '../src/discovery/normalize-query'
+import { readFileSync } from 'node:fs'
 
 const DICT_DIR = join(dirname(fileURLToPath(import.meta.url)), '../data/dictionaries')
 
@@ -60,12 +62,64 @@ async function todosLosNichos(): Promise<NicheRow[]> {
   return out
 }
 
+/**
+ * Escribe UN diccionario. Devuelve 'escrito' | 'existe'.
+ *
+ * La semilla va en `problem` y el resto en `product`, por el mismo motivo
+ * documentado arriba: el grupo solo importa por encima del tope de queries.
+ */
+function escribir(
+  nicho: string, terminos: string[], force: boolean, dryRun: boolean,
+): 'escrito' | 'existe' {
+  const clave = dictionaryKey(nicho)
+  const file = join(DICT_DIR, `${clave}.json`)
+  if (existsSync(file) && !force) return 'existe'
+  const semilla = normalizeQuery(nicho)
+  const resto = [...new Set(terminos.map((t) => normalizeQuery(t)).filter((t) => t && t !== semilla))]
+  const dict = { problem: [semilla], symptom: [], intent: [], commercial: [], product: resto }
+  if (!dryRun) writeFileSync(file, JSON.stringify(dict, null, 2) + '\n')
+  return 'escrito'
+}
+
+/**
+ * Nichos escritos a mano (`data/nichos-curados.json`), para las categorías donde
+ * el vocabulario importado quedaba flaco: ortopedia, mascotas, fitness, moda,
+ * cocina, suplementos, skincare y hogar.
+ *
+ * ⚠️ VAN DESPUÉS de la importación y SIN `--force` por defecto, así que no pisan
+ * un diccionario que ya exista: si un nicho está en las dos fuentes, gana el que
+ * ya estaba (el importado tiene el vocabulario que la expansión con LLM produjo
+ * para ESE nicho concreto).
+ */
+function importarCurados(force: boolean, dryRun: boolean): { escritos: number; saltados: number } {
+  const file = join(DICT_DIR, '../nichos-curados.json')
+  if (!existsSync(file)) return { escritos: 0, saltados: 0 }
+  const raw = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>
+  let escritos = 0, saltados = 0
+  for (const [categoria, contenido] of Object.entries(raw)) {
+    if (categoria.startsWith('_') || typeof contenido !== 'object' || !contenido) continue
+    for (const [nicho, terminos] of Object.entries(contenido as Record<string, string[]>)) {
+      if (!Array.isArray(terminos)) continue
+      if (escribir(nicho, terminos, force, dryRun) === 'escrito') escritos++
+      else saltados++
+    }
+  }
+  return { escritos, saltados }
+}
+
 async function main() {
   const args = process.argv.slice(2)
   const dryRun = args.includes('--dry-run')
   const force = args.includes('--force')
+  const soloCurados = args.includes('--curados')
 
   if (!existsSync(DICT_DIR)) mkdirSync(DICT_DIR, { recursive: true })
+
+  if (soloCurados) {
+    const c = importarCurados(force, dryRun)
+    console.log(`curados · ${c.escritos} ${dryRun ? 'a escribir' : 'escritos'} · ${c.saltados} ya existían`)
+    return
+  }
 
   const nichos = await todosLosNichos()
   let escritos = 0, saltados = 0, sinKeywords = 0, bloqueados = 0
@@ -77,31 +131,22 @@ async function main() {
     const kws = (n.keywords ?? []).map((k) => normalizeQuery(k)).filter(Boolean)
     if (!kws.length) { sinKeywords++; continue }
 
-    const clave = dictionaryKey(n.id)
-    const file = join(DICT_DIR, `${clave}.json`)
     // ⚠️ NO se pisa un diccionario existente sin `--force`: los curados a mano
     // son mejores que la expansión vieja, y este script no puede distinguirlos.
-    if (existsSync(file) && !force) { saltados++; continue }
-
-    const semilla = normalizeQuery(n.id)
-    const resto = [...new Set(kws.filter((k) => k !== semilla))]
-    const dict = {
-      problem: [semilla],
-      symptom: [],
-      intent: [],
-      commercial: [],
-      product: resto,
-    }
-    if (!dryRun) writeFileSync(file, JSON.stringify(dict, null, 2) + '\n')
-    escritos++
+    if (escribir(n.id, kws, force, dryRun) === 'escrito') escritos++
+    else saltados++
   }
+
+  const c = importarCurados(force, dryRun)
 
   console.log(
     `${nichos.length} nichos leídos\n` +
     `  ${escritos} diccionarios ${dryRun ? 'a escribir' : 'escritos'}\n` +
     `  ${saltados} ya existían (usá --force para pisarlos)\n` +
     `  ${sinKeywords} sin keywords cacheadas\n` +
-    `  ${bloqueados} bloqueados`,
+    `  ${bloqueados} bloqueados\n` +
+    `  ${c.escritos} nichos curados a mano ${dryRun ? 'a escribir' : 'escritos'} ` +
+    `(${c.saltados} ya existían)`,
   )
 }
 

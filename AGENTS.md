@@ -773,7 +773,13 @@ Leer el catálogo de un anunciante son dos navegaciones a Meta. `rank.ts` lee de
 
 ⚠️ **Los términos "situacionales" ("trabajo sedentario", "dormir mal") NO se filtran a mano.** Son una dirección deliberada de la expansión vieja, y el mecanismo para podarlos es el `yield_rate` del bandit: con datos, no con opinión.
 
-**Medido:** 649 diccionarios, todos cargan, mediana 23 queries (min 16, max 33). Barrer los 649 × 5 países son **74.615 búsquedas ≈ 50 h** a las 25 búsquedas/min medidas. O sea el descubrimiento sobre TODO el vocabulario es cuestión de días, no de meses.
+**Y 193 nichos ESCRITOS A MANO** (`data/nichos-curados.json`, se explotan con `--curados`), para las categorías donde el vocabulario importado quedaba flaco: ortopedia 9 → 25, mascotas 17 → 40, fitness 19 → 30, moda 21 → 27, cocina 25 → 35, suplementos 31 → 37, belleza/skincare 89 → 109, hogar 49 → 60. ⚠️ Son términos **como los escribe un anuncio**, no sinónimos elegantes: "faja lumbar", no "soporte de la región lumbar". Y se prefieren 10-18 términos reales antes que 40 de relleno — la matriz es términos × países, así que cada uno cuesta; lo que falte lo agrega solo el vocabulario auto-alimentado. Los curados **no pisan** un diccionario existente: si el nicho ya vino de `ph_niches`, gana ese.
+
+**Medido:** 842 diccionarios, todos cargan, mediana 22 queries. Barrer los 842 × 5 países son **79.605 búsquedas ≈ 53 h** a las 25 búsquedas/min medidas. O sea el descubrimiento sobre TODO el vocabulario es cuestión de días, no de meses.
+
+✅ **Verificado end-to-end sobre un nicho curado NUEVO** ("faja lumbar", CO+MX): 24 queries → **501 anuncios únicos** → 147 aceptados por las fases 5-6 → **19 productos elegibles** escritos en `disc_ranked`, encabezados por fajas, correctores de postura y masajeadores lumbares con share 100% y 174 días corriendo.
+
+⚠️ **Y ese mismo ranking destapó un hueco de la Regla 1: pasó "Fuerza y Movilidad Programa Online", un infoproducto.** `INTANGIBLE` cubría `curso online` pero no que el mismo negocio se venda como **programa / plan / rutina / entrenamiento / asesoría** en línea. Corregido con test, y con un segundo test que fija que una faja vendida con "plan de pagos" **siga siendo física**: el acote no puede tragarse el producto.
 
 ⚠️ **EL CUELLO DE BOTELLA NO ES EL DESCUBRIMIENTO, ES EL PERFILADO.** Una búsqueda es un `fetch` same-origin (~2,3 s) y escala; leer el catálogo de un anunciante son **dos navegaciones** y es lo que bloquea: medido en esta máquina (IP residencial directa, sin proxy), **~11 lecturas seguidas** bastan para que Meta empiece a devolver payloads sin nodos. `storedProfiles` reusa los ya medidos, así que el costo marginal cae al repetirse — el primer ranking de un nicho nuevo es el caro.
 

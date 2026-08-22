@@ -1,0 +1,13 @@
+{
+  "problem": [
+    "horno electrico"
+  ],
+  "symptom": [],
+  "intent": [],
+  "commercial": [],
+  "product": [
+    "horno tostador",
+    "mini horno",
+    "horno de conveccion"
+  ]
+}

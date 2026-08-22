@@ -1,0 +1,13 @@
+{
+  "problem": [
+    "venda elastica"
+  ],
+  "symptom": [],
+  "intent": [],
+  "commercial": [],
+  "product": [
+    "vendaje compresivo",
+    "venda deportiva",
+    "venda autoadherente"
+  ]
+}

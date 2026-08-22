@@ -1,0 +1,14 @@
+{
+  "problem": [
+    "ahorro de energia"
+  ],
+  "symptom": [],
+  "intent": [],
+  "commercial": [],
+  "product": [
+    "enchufe inteligente",
+    "regleta con usb",
+    "medidor de consumo electrico",
+    "foco led inteligente"
+  ]
+}

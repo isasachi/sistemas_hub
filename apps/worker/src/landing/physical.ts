@@ -29,7 +29,12 @@ export interface PhysicalVerdict {
 
 // Cosas que se compran online y no se envían. `isSoftware` ya cubre apps; esto
 // cubre lo demás que tiene checkout pero no tiene caja.
-const INTANGIBLE = /\b(curso online|clases? en vivo|acceso inmediato al (curso|contenido)|descarga inmediata|archivo digital|pdf descargable|ebook|e-book|licencia digital|c[óo]digo de activaci[óo]n|gift ?card|tarjeta de regalo|reserva tu (lugar|cupo)|entradas?|boletos?|membres[íi]a|suscripci[óo]n mensual)\b/i
+// ⚠️ "programa online" y sus parientes entraron por un caso MEDIDO: en el nicho
+// "faja lumbar" pasó como producto físico *"Fuerza y Movilidad Programa Online"*
+// de "Proyecto Columna", que es un infoproducto de libro. `curso online` ya
+// estaba; lo que faltaba era que el mismo negocio se vende también como
+// "programa", "plan", "rutina", "entrenamiento" o "asesoría" en línea.
+const INTANGIBLE = /\b((programa|plan|rutina|entrenamiento|asesor[íi]a|consultor[íi]a|mentor[íi]a|taller|clase|masterclass|webinar)\s+(online|virtual|en l[íi]nea|digital)|curso online|clases? en vivo|acceso inmediato al (curso|contenido)|descarga inmediata|archivo digital|pdf descargable|ebook|e-book|licencia digital|c[óo]digo de activaci[óo]n|gift ?card|tarjeta de regalo|reserva tu (lugar|cupo)|entradas?|boletos?|membres[íi]a|suscripci[óo]n mensual)\b/i
 
 // Envío físico explícito: si la página promete que llega a una dirección, hay
 // caja. Es la señal positiva más limpia que existe para esto.

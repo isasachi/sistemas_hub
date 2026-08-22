@@ -1,0 +1,13 @@
+{
+  "problem": [
+    "selladora al vacio"
+  ],
+  "symptom": [],
+  "intent": [],
+  "commercial": [],
+  "product": [
+    "envasadora al vacio",
+    "bolsas al vacio",
+    "conservacion de alimentos"
+  ]
+}

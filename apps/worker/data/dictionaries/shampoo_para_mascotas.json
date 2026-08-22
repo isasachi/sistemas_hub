@@ -1,0 +1,15 @@
+{
+  "problem": [
+    "shampoo para mascotas"
+  ],
+  "symptom": [],
+  "intent": [],
+  "commercial": [],
+  "product": [
+    "shampoo para perro",
+    "shampoo para gato",
+    "shampoo hipoalergenico mascota",
+    "acondicionador para perro",
+    "toallitas para mascotas"
+  ]
+}

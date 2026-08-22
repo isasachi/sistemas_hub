@@ -83,6 +83,34 @@ describe('ecommerce + physical son variables DISTINTAS (spec §24)', () => {
     expect(classifyPhysical(tienda).physical).toBe(true)
   })
 
+  it('un PROGRAMA online tampoco es físico, aunque no diga "curso"', () => {
+    // Caso medido: en el nicho "faja lumbar" pasó como producto físico
+    // "Fuerza y Movilidad Programa Online" de Proyecto Columna. `curso online`
+    // ya estaba cubierto; el mismo negocio se vende también como programa,
+    // plan, rutina, entrenamiento o asesoría.
+    for (const texto of [
+      'Programa Online de fuerza y movilidad',
+      'Plan virtual de entrenamiento',
+      'Asesoría en línea personalizada',
+      'Rutina digital para tu espalda',
+    ]) {
+      const p = parseLanding(page(
+        `<p>${texto}. Finalizar compra. $ 49.900. en stock</p><img><img><img>`,
+      ))
+      expect(classifyPhysical(p).physical, texto).toBe(false)
+    }
+  })
+
+  it('una faja de verdad sigue siendo física aunque la vendan con un "plan"', () => {
+    // El acote no puede tragarse el producto: "plan de pagos" no es un
+    // infoproducto, y la palabra suelta no alcanza para descalificar.
+    const faja = parseLanding(
+      page('<p>Faja lumbar ortopédica. Plan de pagos. Envío gratis. Agregar al carrito. en stock</p><img><img><img>'),
+      'https://tienda.com/products/faja-lumbar',
+    )
+    expect(classifyPhysical(faja).physical).toBe(true)
+  })
+
   it('un curso con checkout es ecommerce pero NO físico', () => {
     const curso = parseLanding(page(
       '<p>Curso online. Acceso inmediato al curso. Finalizar compra. $ 49.900. en stock</p><img><img><img>',
