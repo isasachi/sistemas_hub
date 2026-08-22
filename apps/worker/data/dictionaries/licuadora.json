@@ -25,9 +25,11 @@
     "procesador alimentos",
     "licuadora doble vaso",
     "licuadora recargable",
+    "licuadora de vaso",
+    "batidora de mano",
+    "minipimer",
     "batidora electrica",
     "batidora manual",
-    "batidora de mano",
     "mixer cocina",
     "batidor varillas",
     "batidora stand",
@@ -97,6 +99,10 @@
     "juguera compacta",
     "extractor vitaminas",
     "exprimidor automatico",
-    "extractor zumo"
+    "extractor zumo",
+    "exprimidor",
+    "juguera",
+    "extractor de frio",
+    "exprimidor de citricos"
   ]
 }

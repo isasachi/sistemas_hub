@@ -3,6 +3,10 @@
 //
 //   npx tsx scripts/import-dictionaries.ts            (ph_niches + curados)
 //   npx tsx scripts/import-dictionaries.ts --curados  (solo los escritos a mano)
+//
+// ⚠️ LOS CURADOS ENRIQUECEN, NO PISAN: sus términos se UNEN a los que el nicho
+// ya tuviera. Es lo que permite engordar un nicho flaco sin perder de vista lo
+// que ya traía de `ph_niches`.
 //   npx tsx scripts/import-dictionaries.ts --dry-run  (solo cuenta)
 //   npx tsx scripts/import-dictionaries.ts --force    (pisa los ya existentes)
 //
@@ -70,15 +74,33 @@ async function todosLosNichos(): Promise<NicheRow[]> {
  */
 function escribir(
   nicho: string, terminos: string[], force: boolean, dryRun: boolean,
-): 'escrito' | 'existe' {
+  modo: 'saltar' | 'enriquecer' = 'saltar',
+): 'escrito' | 'existe' | 'enriquecido' {
   const clave = dictionaryKey(nicho)
   const file = join(DICT_DIR, `${clave}.json`)
-  if (existsSync(file) && !force) return 'existe'
+  const existe = existsSync(file)
+  if (existe && !force && modo === 'saltar') return 'existe'
+
   const semilla = normalizeQuery(nicho)
-  const resto = [...new Set(terminos.map((t) => normalizeQuery(t)).filter((t) => t && t !== semilla))]
+  const previos: string[] = []
+  // ⚠️ ENRIQUECER, NO PISAR. Un nicho escrito a mano casi siempre YA tiene un
+  // diccionario (importado de `ph_niches` o de una pasada anterior), así que
+  // reemplazarlo tiraría el vocabulario que ya funcionaba: engordar un nicho
+  // flaco lo dejaría más flaco todavía. Se unen los dos.
+  if (existe && modo === 'enriquecer') {
+    try {
+      const raw = JSON.parse(readFileSync(file, 'utf8')) as Record<string, string[]>
+      for (const g of ['problem', 'symptom', 'intent', 'commercial', 'product']) {
+        for (const t of raw[g] ?? []) previos.push(t)
+      }
+    } catch { /* JSON roto: se reescribe entero */ }
+  }
+
+  const resto = [...new Set([...previos, ...terminos]
+    .map((t) => normalizeQuery(t)).filter((t) => t && t !== semilla))]
   const dict = { problem: [semilla], symptom: [], intent: [], commercial: [], product: resto }
   if (!dryRun) writeFileSync(file, JSON.stringify(dict, null, 2) + '\n')
-  return 'escrito'
+  return existe ? 'enriquecido' : 'escrito'
 }
 
 /**
@@ -100,7 +122,8 @@ function importarCurados(force: boolean, dryRun: boolean): { escritos: number; s
     if (categoria.startsWith('_') || typeof contenido !== 'object' || !contenido) continue
     for (const [nicho, terminos] of Object.entries(contenido as Record<string, string[]>)) {
       if (!Array.isArray(terminos)) continue
-      if (escribir(nicho, terminos, force, dryRun) === 'escrito') escritos++
+      const r = escribir(nicho, terminos, force, dryRun, 'enriquecer')
+      if (r === 'escrito') escritos++
       else saltados++
     }
   }
@@ -145,8 +168,7 @@ async function main() {
     `  ${saltados} ya existían (usá --force para pisarlos)\n` +
     `  ${sinKeywords} sin keywords cacheadas\n` +
     `  ${bloqueados} bloqueados\n` +
-    `  ${c.escritos} nichos curados a mano ${dryRun ? 'a escribir' : 'escritos'} ` +
-    `(${c.saltados} ya existían)`,
+    `  ${c.escritos} nichos curados nuevos · ${c.saltados} enriquecidos sobre su diccionario`,
   )
 }
 

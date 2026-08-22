@@ -272,7 +272,8 @@
     "taladro": "fuera de alcance",
     "destornillador electrico": "fuera de alcance",
     "nivel laser": "fuera de alcance",
-    "herramientas del hogar": "fuera de alcance"
+    "herramientas del hogar": "fuera de alcance",
+    "corrector de nado y natacion": "abstraccion"
   },
   "fusionar": {
     "_nota": "superviviente → nichos que absorbe. El superviviente conserva la unión de términos.",

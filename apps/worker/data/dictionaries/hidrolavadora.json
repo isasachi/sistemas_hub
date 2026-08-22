@@ -34,6 +34,9 @@
     "motor ventilador",
     "ventilador compacto",
     "ventilador potente",
+    "ventilador de torre",
+    "ventilador de pie",
+    "ventilador sin aspas",
     "calefactor",
     "calefactor electrico",
     "calefactor ceramico",
@@ -55,6 +58,8 @@
     "consumo energia calefaccion",
     "espacios pequenos frios",
     "dormitorio frio",
+    "calentador de ambiente",
+    "panel calefactor",
     "aire acondicionado portatil",
     "enfriador de aire",
     "climatizador evaporativo"
