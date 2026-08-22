@@ -201,6 +201,94 @@ export async function productNameForAd(adIds: string[]): Promise<Map<string, Res
 
 
 /**
+ * Perfiles YA medidos, para no volver a navegar lo que se midió ayer.
+ *
+ * ⚠️ Es lo que hace re-rankeable una corrida sin pagar el deep crawl otra vez.
+ * Leer el catálogo de un anunciante son dos navegaciones a Meta, y volver a
+ * hacerlas por datos que están en `disc_advertisers` es la forma más cara de
+ * conseguir el mismo número — además de calentar la IP (medido: 11 anunciantes
+ * bastaron para disparar el soft-block).
+ *
+ * `maxDias` es la ventana de frescura: por encima de eso el catálogo pudo
+ * cambiar y se vuelve a leer. Devuelve un `AdvertiserProfile` reconstruido, con
+ * `ads`/`top` vacíos — el ranking no los usa — y el `dominantProductId` que la
+ * corrida anterior ya resolvió (re-emparejarlo por nombre podría dar otro).
+ */
+export interface StoredProfile {
+  profile: AdvertiserProfile
+  dominantProductId: string | null
+}
+
+export async function storedProfiles(
+  pageIds: string[],
+  maxDias: number,
+): Promise<Map<string, StoredProfile>> {
+  const out = new Map<string, StoredProfile>()
+  if (!pageIds.length || maxDias <= 0) return out
+  const corte = new Date(Date.now() - maxDias * 86_400_000).toISOString()
+  for (let i = 0; i < pageIds.length; i += 200) {
+    // ⚠️ El embed va con la FK EXPLÍCITA. `disc_products` cuelga de
+    // `disc_advertisers` por dos caminos (el dominante y la tabla puente), así
+    // que sin nombrar cuál PostgREST devuelve PGRST201 y `data` viene null.
+    // Y el error se LANZA: tragárselo devolvía "0 perfiles guardados", que se
+    // lee igual que "no hay caché" — y el costo de esa confusión es volver a
+    // navegar Meta hasta el soft-block. Medido, en esta misma sesión.
+    const { data, error } = await db().from('disc_advertisers')
+      .select('id, page_id, page_name, active_ads_count, bucket, sample_size, distinct_products, ' +
+        'product_share, monoproduct, dominant_product_id, ' +
+        'disc_products!disc_advertisers_dominant_product_id_fkey(canonical_name)')
+      .gte('scraped_at', corte)
+      // Defensa en profundidad contra el mismo fallo: una fila con muestra 0 no
+      // es un perfil, es una lectura bloqueada que alguien guardó. Reusarla
+      // serviría `share 0%` para siempre sin volver a mirar.
+      .gt('sample_size', 0)
+      .in('page_id', pageIds.slice(i, i + 200))
+    if (error) throw new Error(`storedProfiles: ${error.message}`)
+    for (const r of (data ?? []) as unknown as {
+      id: string
+      page_id: string
+      page_name: string | null
+      active_ads_count: number | null
+      bucket: string | null
+      sample_size: number | null
+      distinct_products: number | null
+      product_share: number | string | null
+      monoproduct: boolean | null
+      dominant_product_id: string | null
+      disc_products: { canonical_name: string | null } | { canonical_name: string | null }[] | null
+    }[]) {
+      const rel = Array.isArray(r.disc_products) ? r.disc_products[0] : r.disc_products
+      const share = Number(r.product_share ?? 0)
+      const sample = r.sample_size ?? 0
+      out.set(r.page_id, {
+        dominantProductId: r.dominant_product_id,
+        profile: {
+          pageId: r.page_id,
+          pageName: r.page_name,
+          activeAds: r.active_ads_count,
+          bucket: (r.bucket as AdvertiserProfile['bucket']) ?? null,
+          distribution: {
+            sample,
+            distinct: r.distinct_products ?? 0,
+            // `count` se reconstruye del share y la muestra: es la cuenta con la
+            // que se calculó, no una estimación nueva.
+            dominant: rel?.canonical_name
+              ? { name: rel.canonical_name, count: Math.round(share * sample), key: '' }
+              : null,
+            share,
+            monoproduct: r.monoproduct ?? false,
+            strong: false,
+            top: [],
+          },
+          ads: [],
+        },
+      })
+    }
+  }
+  return out
+}
+
+/**
  * ⚠️ El veredicto se escribe SIEMPRE, también cuando pasa. Antes solo se
  * marcaba el rechazo, así que un anuncio que fallaba en una corrida y pasaba en
  * la siguiente conservaba el `rejection_reason` viejo: la base mostraba

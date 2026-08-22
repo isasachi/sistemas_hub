@@ -729,6 +729,40 @@ El render de video lo paga el usuario con su cuenta de KIE — por eso el genera
 
 ⚠️ **La key se guarda en claro** (RLS on sin políticas → solo el service role, el mismo blindaje que el resto del proyecto) y **nunca vuelve al cliente**: la pantalla muestra `maskKey` (los últimos 4 caracteres). Una key en el DOM es una key en el historial del navegador y en cualquier captura de pantalla. Por eso `UserProfile` —lo que sí viaja a la pantalla— no la incluye.
 
+## Motor de descubrimiento (`disc_*`) — el rediseño del buscador
+
+Pipeline nuevo del `SPEC-pipeline-inventario.md` + `CONTEXT.md`: descubre en la Ad Library, lee la LANDING para decidir si es un producto físico, resuelve el producto, cuenta el catálogo del anunciante y rankea. **Cero LLM en todo el recorrido** — la restricción dura del CONTEXT §4.1. Vive en `apps/worker/src/` (no en `lib/product-hunter/`, que es el motor viejo) y **no lee ni escribe una sola fila `ph_*`**: los dos conviven para poder compararlos sobre datos reales antes de jubilar ninguno.
+
+Tres CLI, en orden: `src/cli/discover.ts` → `src/cli/analyze.ts` → `src/cli/rank.ts`.
+
+⚠️ **NO es todavía el "inventario, no búsqueda" del CONTEXT §4.2.** Falta el §9 del spec (scheduler y recrawl por tiers) y la mitad bandit del §10: no hay tabla de cola ni proceso que encole solo. Hoy el pipeline es **run-scoped por semilla** (`disc_search_runs.seed_query`), o sea sigue siendo "una consulta, una corrida". Por eso los criterios A2/A3/A8 (5.000 productos, 80% revisitado en 72h, 7 días sin tocar) **no se cumplen** — no están rotos, no están construidos.
+
+### La salida vive en `disc_ranked`, y por eso es una tabla y no una vista
+
+⚠️ **La vista materializada del §11 del spec NO se puede usar tal cual**: une `landings`/`ads`/`advertisers` por columnas que acá no existen (`url_norm`, `crawl_tier`, `total_active_days`) y, sobre todo, **el score no está en ninguna columna** — lo calcula `opportunityScore` durante el ranking, en el worker. Una vista no puede reconstruirlo, así que el ranking lo escribe (`src/db/ranked.ts`, migración `20260822000001`).
+
+⚠️ **LA UNIDAD ES (ANUNCIANTE, PRODUCTO), NO EL ANUNCIO.** Es el §0 del spec y `rank.ts` ya lo resuelve: un producto con cuatro anuncios es UNA fila. Servir `disc_ads WHERE accepted` reintroduciría las cuatro y desplazaría productos distintos del ranking. El `dedupe_key` (`page_id|nombre normalizado`) es esa misma clave, para que re-rankear la misma semilla ACTUALICE la fila en vez de duplicarla.
+
+### En la UI: un selector de motor, y los chips cambian de significado
+
+`POST /api/buscador-productos/search` acepta `motor: 'discovery'` y `seed`. **Es la MISMA ruta a propósito** — una ruta hermana se saltaría el gate de plan que autentica ahí adentro (`tierDeLaRequest`), que es justo lo que se endureció en el PR #94. El plan sigue decidiendo cuántos productos y qué rangos, igual que en el motor viejo.
+
+⚠️ **Los chips del motor nuevo son SEMILLAS, no categorías.** El pipeline es run-scoped, así que clasificar por las 13 categorías del viejo pintaría 11 chips vacíos. Salen de la respuesta (`seeds`), no del código: cada corrida del worker agrega la suya.
+
+⚠️ **Las filas NO pasan por `toEntry`.** Ese adaptador es la defensa en profundidad de las **reglas de oro del motor viejo** (≥40 anuncios, ≥10 días); el motor nuevo demota el rango a etiqueta descriptiva a propósito (CONTEXT §2, regla 2), así que reusarlo tiraría filas que este diseño quiere conservar. El adaptador propio es `lib/product-hunter/discovery-entry.ts`.
+
+⚠️ **DOS VOCABULARIOS DE RANGO SOBRE LOS MISMOS CORTES.** El motor nuevo usa `0_49 / 50_99 / 100_plus` (sin ambigüedad en el 50); la UI vieja usa `0-50 / 50-100 / 100+`. Los tramos son idénticos —[0,50) [50,100) [100,∞)— y la traducción vive en `DISC_BUCKET` (`@ph/shared/discovery.ts`). `raw-buckets.ts` **no se toca**: cambiarlo movería el serving del buscador que ya está en producción. Hay un test que verifica tramo por tramo que los dos vocabularios siguen cubriendo lo mismo — si alguien mueve uno, el anunciante aparecería en el rango equivocado y nada más lo notaría.
+
+### ⚠️ UNA LECTURA BLOQUEADA SE ESTABA GUARDANDO COMO MEDICIÓN
+
+`profileAdvertiser` devolvía `null` si la conexión fallaba, pero **no si devolvía un payload sin nodos** — que es exactamente lo que da un soft-block de Meta. El perfil salía con `sample 0 · distinct 0 · share 0` y `saveAdvertiser` lo escribía **encima de una medición buena**. Medido en vivo: dos corridas bloqueadas dejaron **19 filas de `disc_advertisers` en ceros**, pisando shares reales del día anterior (las 19 se borraron; quedan 113). Es el modo de fallo que el comentario de esa función ya prometía evitar — faltaba la mitad del guard. Ahora `if (!all || !all.ads.length) return null`, y `storedProfiles` además filtra `sample_size > 0` por si alguna fila así vuelve a aparecer.
+
+### El perfil del anunciante se REUSA, no se vuelve a navegar
+
+Leer el catálogo de un anunciante son dos navegaciones a Meta. `rank.ts` lee de `disc_advertisers` los perfiles medidos dentro de la ventana de frescura (`DISC_REUSE_DAYS`, default 7) y solo navega los que faltan; `--refresh` fuerza la relectura. Medido: re-rankear una corrida de 112 anunciantes pasó de bloquearse contra Meta a **111 perfiles reusados y 1 lectura**, 46 productos rankeados sin gastar una navegación. El dominante guardado se conserva tal cual — re-emparejarlo por nombre acá podría dar otro.
+
+⚠️ **Un error de PostgREST tragado cuesta un soft-block.** `storedProfiles` embebe `disc_products`, que cuelga de `disc_advertisers` por DOS caminos (el dominante y la tabla puente): sin nombrar la FK explícita devuelve `PGRST201` y `data` viene `null`. Ignorando el error eso se lee como "no hay caché" — y la respuesta a "no hay caché" es volver a navegar Meta hasta que bloquee. Pasó, medido. Por eso el error se lanza.
+
 ## Tool: Buscador de Productos (`buscador-productos`)
 
 Encuentra productos ganadores validados en LATAM que aún no están saturados en Perú, usando Meta Ads Library. Migrado desde el proyecto Python standalone `~/chamba/product-hunter` (dejado como referencia).

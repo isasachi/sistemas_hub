@@ -208,6 +208,13 @@ export default function BuscadorProductosPage() {
   // Filtros globales: aplican tanto al cambio de categoría como al de rango.
   const [pais, setPais] = useState<Pais | "">("");
   const [dias, setDias] = useState<Antiguedad>(0);
+  // Qué motor sirve el inventario. 'raw' es el de producción (`ph_*`); el nuevo
+  // (`disc_*`) todavía tiene dos semillas, así que convive en vez de reemplazar.
+  const [motor, setMotor] = useState<"raw" | "discovery">("raw");
+  // En el motor nuevo los chips son SEMILLAS, no categorías: es run-scoped por
+  // consulta, así que las 13 categorías del viejo darían 11 chips vacíos.
+  // null = todas las semillas.
+  const [seed, setSeed] = useState<string | null>(null);
 
 
   // `cat` y `bucket` van por parámetro y no desde el estado: el chip busca en el
@@ -219,11 +226,16 @@ export default function BuscadorProductosPage() {
   const search = useCallback(async (
     cat: CategoryId | null,
     bucket: RawBucket | null,
-    f?: { pais?: Pais | ""; dias?: Antiguedad },
+    f?: { pais?: Pais | ""; dias?: Antiguedad; motor?: "raw" | "discovery"; seed?: string | null },
   ) => {
+    // `motor` y `seed` viajan por parámetro por el mismo motivo que `cat`: el
+    // chip busca en el mismo click en que se marca seleccionado.
+    const m = f?.motor ?? motor;
+    const s = f?.seed !== undefined ? f.seed : seed;
     // cat null = "Todos": el servidor sirve sobre TODOS los nichos con
-    // inventario, sin filtrar por categoría.
-    const clave = cat ?? "todos";
+    // inventario, sin filtrar por categoría. En el motor nuevo la clave es la
+    // semilla.
+    const clave = m === "discovery" ? (s ?? "todos") : (cat ?? "todos");
     if (loading) return;
     setLoading(true);
     setError(null);
@@ -237,7 +249,9 @@ export default function BuscadorProductosPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          category: clave,
+          category: m === "discovery" ? undefined : clave,
+          motor: m === "discovery" ? "discovery" : undefined,
+          seed: m === "discovery" ? (s ?? undefined) : undefined,
           bucket,
           country: (f?.pais ?? pais) || undefined,
           minDias: f?.dias ?? dias,
@@ -251,7 +265,7 @@ export default function BuscadorProductosPage() {
     } finally {
       setLoading(false);
     }
-  }, [loading, pais, dias]);
+  }, [loading, pais, dias, motor, seed]);
 
   const elegirCategoria = useCallback((id: CategoryId) => {
     setSel(id);
@@ -263,6 +277,20 @@ export default function BuscadorProductosPage() {
   const verTodos = useCallback(() => {
     setSel(null);
     search(null, null);
+  }, [search]);
+
+  // Cambiar de motor resetea la navegación: los chips de uno no significan nada
+  // en el otro.
+  const elegirMotor = useCallback((m: "raw" | "discovery") => {
+    setMotor(m);
+    setSel(null);
+    setSeed(null);
+    search(null, null, { motor: m, seed: null });
+  }, [search]);
+
+  const elegirSemilla = useCallback((s: string | null) => {
+    setSeed(s);
+    search(null, null, { seed: s });
   }, [search]);
 
   // Carga inicial. `search` cambia de identidad con `loading`, así que la
@@ -294,13 +322,29 @@ export default function BuscadorProductosPage() {
           </p>
         </div>
 
+        {/* Selector de motor. El viejo (`ph_*`) es el que sirve producción; el
+            nuevo (`disc_*`) es el pipeline del rediseño: descubre, lee la
+            landing, resuelve el producto y cuenta el catálogo del anunciante,
+            todo sin LLM. Conviven a propósito para poder compararlos sobre los
+            mismos datos antes de jubilar ninguno. */}
+        <div className="flex items-center gap-2 mb-5">
+          <span className="text-[12px] text-[#a98c88] mr-1">Motor</span>
+          <Chip label="Clásico" active={motor === "raw"} busy={loading && motor === "raw"} disabled={loading} onClick={() => elegirMotor("raw")} />
+          <Chip label="Descubrimiento (beta)" active={motor === "discovery"} busy={loading && motor === "discovery"} disabled={loading} onClick={() => elegirMotor("discovery")} />
+        </div>
+
         {/* Los chips SON la navegación: sin barra de búsqueda, esta lista es la
             única entrada a la herramienta. Son CATEGORÍAS (`@ph/shared`
             `categories.ts`), no nichos: el inventario tiene 528 nichos y esa
             lista no cabe en chips. Van fijas y en código — pintarlas no cuesta
-            ninguna llamada. */}
+            ninguna llamada.
+
+            ⚠️ En el motor nuevo son SEMILLAS y salen de la respuesta, no del
+            código: cada corrida del worker agrega la suya. */}
         <div className="flex items-start gap-3 mb-8">
-            <span className="text-[12px] text-[#a98c88] shrink-0 py-1.5">Categorías</span>
+            <span className="text-[12px] text-[#a98c88] shrink-0 py-1.5">
+              {motor === "discovery" ? "Búsquedas" : "Categorías"}
+            </span>
             {/* ponytail: colapsado = dos filas por altura fija. El chip mide
                 33.2px renderizado (12px de texto + line-height del navegador +
                 py-1.5 + borde) y el gap es 8 → dos filas = 74.4, la tercera
@@ -311,22 +355,40 @@ export default function BuscadorProductosPage() {
               className="flex-1 flex flex-wrap gap-2 overflow-hidden"
               style={expandido ? undefined : { maxHeight: 75 }}
             >
-              <Chip label="Todos" active={sel === null} busy={loading && sel === null} disabled={loading} onClick={verTodos} />
-              {CATEGORIES.map((c) => (
-                <Chip
-                  key={c.id}
-                  label={c.label}
-                  active={sel === c.id}
-                  busy={loading && sel === c.id}
-                  disabled={loading}
-                  onClick={() => elegirCategoria(c.id)}
-                />
-              ))}
+              {motor === "discovery" ? (
+                <>
+                  <Chip label="Todas" active={seed === null} busy={loading && seed === null} disabled={loading} onClick={() => elegirSemilla(null)} />
+                  {(result?.seeds ?? []).map((sd) => (
+                    <Chip
+                      key={sd}
+                      label={sd}
+                      active={seed === sd}
+                      busy={loading && seed === sd}
+                      disabled={loading}
+                      onClick={() => elegirSemilla(sd)}
+                    />
+                  ))}
+                </>
+              ) : (
+                <>
+                  <Chip label="Todos" active={sel === null} busy={loading && sel === null} disabled={loading} onClick={verTodos} />
+                  {CATEGORIES.map((c) => (
+                    <Chip
+                      key={c.id}
+                      label={c.label}
+                      active={sel === c.id}
+                      busy={loading && sel === c.id}
+                      disabled={loading}
+                      onClick={() => elegirCategoria(c.id)}
+                    />
+                  ))}
+                </>
+              )}
             </div>
             {/* ponytail: el toggle aparece por conteo de chips, no midiendo el
                 DOM. Con etiquetas muy largas puede sobrar/faltar por uno; si
                 molesta, un ResizeObserver sobre el contenedor lo resuelve. */}
-            {CATEGORIES.length > 8 && (
+            {motor === "raw" && CATEGORIES.length > 8 && (
               <button
                 onClick={() => setExpandido((v) => !v)}
                 aria-expanded={expandido}
@@ -381,7 +443,9 @@ export default function BuscadorProductosPage() {
             la búsqueda libre por nicho, que ya no existe en la UI. */}
         {result?.status === "empty" && (
           <p className="text-[13px] text-[#c9b4ae]">
-            No encontramos productos físicos que cumplan los criterios en esta categoría.
+            {motor === "discovery"
+              ? "El motor nuevo todavía no tiene productos rankeados para esta búsqueda y este rango."
+              : "No encontramos productos físicos que cumplan los criterios en esta categoría."}
           </p>
         )}
 

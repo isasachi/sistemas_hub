@@ -67,7 +67,14 @@ export async function profileAdvertiser(
 ): Promise<AdvertiserProfile | null> {
   // Share: muestra grande, todos los mercados.
   const all = await readConnection(page, advertiserUrl(pageId, 'ALL'))
-  if (!all) return null
+  // ⚠️ UNA CONEXIÓN SIN ANUNCIOS TAMBIÉN ES INCONCLUSA, no un anunciante de cero
+  // productos. Un soft-block de Meta devuelve un payload que parsea pero llega
+  // sin nodos, y sin este acote el perfil salía con `sample 0 · distinct 0 ·
+  // share 0` y se PERSISTÍA encima de una medición buena. Medido: 19 filas de
+  // `disc_advertisers` quedaron en ceros, pisando shares reales del día
+  // anterior. Es exactamente el modo de fallo que el comentario de arriba
+  // promete evitar; faltaba la mitad del guard.
+  if (!all || !all.ads.length) return null
 
   const ads = all.ads.slice(0, MAX_ADS_PER_ADVERTISER)
   const dist = distribution(tallyProducts(ads))

@@ -324,4 +324,9 @@ export interface RawSearchResponse {
   // Cuántos productos sirve su plan por rango, para que la UI pueda decir
   // "10 de 50 con el Plan 3" sin duplicar la tabla de planes.
   porRango?: number
+  // Qué motor sirvió esta respuesta. Ausente = el viejo (`ph_*`). Con
+  // 'discovery' los chips dejan de ser categorías y pasan a ser las SEMILLAS
+  // (`seeds`) con inventario rankeado: el motor nuevo es run-scoped.
+  motor?: 'discovery'
+  seeds?: string[]
 }

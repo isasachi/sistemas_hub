@@ -17,7 +17,7 @@ import {
   isPersistentlyBlocked, PersistentBlockError, CONCURRENCY,
 } from '../../lib/product-hunter/scraper'
 import { openSsrSession } from '../../lib/product-hunter/ssr-fetch'
-import { profileAdvertiser } from '../advertisers/aggregate'
+import { profileAdvertiser, type AdvertiserProfile } from '../advertisers/aggregate'
 import { BUCKET_LABEL } from '../advertisers/bucket'
 import { expandKeyword } from '../discovery/expand'
 import { bm25, phraseCoverage } from '../scoring/relevance'
@@ -25,8 +25,10 @@ import { eligibility, opportunityScore, daysActive, type Candidate } from '../sc
 import { jaccard } from '../products/similarity'
 import {
   acceptedAds, countriesByAd, saveAdvertiser, saveAdvertiserProducts,
-  markRejected, markAccepted, productNameForAd, setRelevance, adIdsOfRun, type AcceptedAd,
+  markRejected, markAccepted, productNameForAd, setRelevance, adIdsOfRun, storedProfiles,
+  type AcceptedAd, type StoredProfile,
 } from '../db/advertisers'
+import { saveRanked } from '../db/ranked'
 
 const JITTER_MS = Math.max(0, Number(process.env.PH_JITTER_MS ?? 500))
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
@@ -89,23 +91,56 @@ async function main() {
     for (const a of grupo) for (const c of geo.get(a.id) ?? []) paises.add(c)
     paisDe.set(pageId, [...paises][0] ?? country)
   }
-  const { browser, pages } = await launchScraperContext(Math.min(CONCURRENCY, pageIds.length))
+  // ⚠️ NO SE VUELVE A NAVEGAR LO QUE YA SE MIDIÓ. Leer el catálogo de un
+  // anunciante son dos navegaciones a Meta; re-rankear una corrida con los
+  // perfiles ya guardados las cuesta cero, y medido bastan ~11 anunciantes para
+  // disparar el soft-block. `--refresh` fuerza la relectura; `DISC_REUSE_DAYS`
+  // mueve la ventana de frescura.
+  const guardados = args.includes('--refresh')
+    ? new Map<string, StoredProfile>()
+    : await storedProfiles(pageIds, Number(process.env.DISC_REUSE_DAYS ?? 7))
+  const porCrawlear = pageIds.filter((id) => !guardados.has(id))
+  if (guardados.size) {
+    console.log(`${guardados.size} perfiles reusados de disc_advertisers · ${porCrawlear.length} por leer\n`)
+  }
+
   const filas: Record<string, unknown>[] = []
   const inconclusos: string[] = []
+  // Perfil por anunciante, venga de la base o del crawl. El dominante guardado
+  // se conserva: lo resolvió la corrida que leyó el catálogo, y re-emparejarlo
+  // por nombre acá podría dar otro.
+  const perfiles = new Map<string, { prof: AdvertiserProfile | null; dominantProductId?: string | null }>()
+  for (const [pageId, g] of guardados) {
+    perfiles.set(pageId, { prof: g.profile, dominantProductId: g.dominantProductId })
+  }
+
+  // Sin nada que leer no se levanta Chromium: son ~2s y 300 MB por nada.
+  const { browser, pages } = porCrawlear.length
+    ? await launchScraperContext(Math.min(CONCURRENCY, porCrawlear.length))
+    : { browser: null, pages: [] as Page[] }
 
   try {
-    await Promise.all(pages.map((p) => openSsrSession(p, country).catch(() => {})))
+    if (browser) {
+      await Promise.all(pages.map((p) => openSsrSession(p, country).catch(() => {})))
 
-    const settled = await runPool(pageIds, pages, async (pageId: string, page: Page) => {
-      await esperarTurno()
-      const prof = await profileAdvertiser(page, pageId, paisDe.get(pageId) ?? country)
-      noteNavResult(prof ? prof.distribution.sample : 0)
-      return { pageId, prof }
-    })
+      const settled = await runPool(porCrawlear, pages, async (pageId: string, page: Page) => {
+        await esperarTurno()
+        const prof = await profileAdvertiser(page, pageId, paisDe.get(pageId) ?? country)
+        noteNavResult(prof ? prof.distribution.sample : 0)
+        return { pageId, prof }
+      })
+      for (const s of settled) {
+        // Una tarea rechazada (soft-block, timeout) es inconclusa igual que un
+        // perfil nulo: antes se saltaba en silencio y el resumen decía "0
+        // productos" sin decir que no se había podido leer a nadie.
+        if (s.status !== 'fulfilled') continue
+        perfiles.set(s.value.pageId, { prof: s.value.prof })
+      }
+    }
 
-    for (const s of settled) {
-      if (s.status !== 'fulfilled') continue
-      const { pageId, prof } = s.value
+    for (const pageId of pageIds) {
+      const entrada = perfiles.get(pageId)
+      const prof = entrada?.prof ?? null
       const grupo = byAdvertiser.get(pageId) ?? []
       // null = inconcluso. NO se degrada a "anunciante chico": eso fabricaría un
       // rango bajo y un monoproducto perfecto de la nada.
@@ -129,8 +164,8 @@ async function main() {
       // porque el nombre del tally sale del TÍTULO DEL ANUNCIO y el resuelto de
       // la LANDING — dos textos distintos del mismo producto.
       const dominantName = prof.distribution.dominant?.name ?? null
-      let productId: string | null = null
-      if (!dryRun) {
+      let productId: string | null = entrada?.dominantProductId ?? null
+      if (!dryRun && productId === null && entrada?.dominantProductId === undefined) {
         const resueltos = grupo.map((ad) => nombres.get(ad.id)).filter((r) => !!r)
         if (prof.distribution.distinct === 1) {
           productId = resueltos[0]?.productId ?? null
@@ -179,6 +214,12 @@ async function main() {
           // del anuncio: el título es copy publicitario y da cosas como "Pago
           // Contraentrega 🚚" como si fuera el nombre del producto.
           product: nombres.get(ad.id)?.name ?? prof.distribution.dominant?.name ?? ad.headline,
+          // Para la card del front: el anunciante se enlaza por `page_id` y el
+          // texto del anuncio es lo único que describe el producto en pantalla.
+          page_id: pageId,
+          product_id: nombres.get(ad.id)?.productId ?? null,
+          headline: ad.headline,
+          body: ad.primary_text,
           countries: [...(geo.get(ad.id) ?? [country])],
           advertiser: prof.pageName ?? ad.page_name,
           advertiser_ads: prof.activeAds,
@@ -195,7 +236,7 @@ async function main() {
       }
     }
   } finally {
-    await browser.close()
+    await browser?.close()
   }
 
   // ⚠️ LA UNIDAD DE SALIDA ES (ANUNCIANTE, PRODUCTO), NO EL ANUNCIO. Es el §0
@@ -238,6 +279,31 @@ async function main() {
   if (jsonOut) {
     writeFileSync(jsonOut, JSON.stringify(salida, null, 2))
     console.log(`\nJSON → ${jsonOut}`)
+  }
+  // El ranking es lo ÚNICO que lee el front. Sin esta escritura el embudo entero
+  // termina en un console.log y la UI no tiene de dónde leer: el score no vive en
+  // ninguna columna, lo calcula `opportunityScore` acá.
+  if (!dryRun) {
+    const n = await saveRanked(seed, runId ?? null, salida.map((f) => ({
+      page_id: String(f.page_id),
+      advertiser: (f.advertiser as string) ?? null,
+      product_id: (f.product_id as string) ?? null,
+      product_name: (f.product as string) ?? null,
+      headline: (f.headline as string) ?? null,
+      body: (f.body as string) ?? null,
+      landing: (f.landing as string) ?? null,
+      countries: f.countries as string[],
+      bucket: (f.bucket as string) ?? null,
+      advertiser_ads: (f.advertiser_ads as number) ?? null,
+      product_ads: f.product_ads as number,
+      product_share: f.product_share as number,
+      monoproduct: f.monoproduct as boolean,
+      days_active: f.days_active as number,
+      relevance: f.relevance as number,
+      score: f.score as number,
+      accepted_ads: f.accepted_ads as number,
+    })))
+    console.log(`\n${n} filas → disc_ranked (las que sirve el buscador)`)
   }
   if (isPersistentlyBlocked()) { console.log('PH_PERSISTENT_BLOCK'); process.exitCode = 2 }
 }

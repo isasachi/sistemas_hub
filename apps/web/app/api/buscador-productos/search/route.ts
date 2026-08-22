@@ -7,10 +7,12 @@ import {
   PLANS, lockedBuckets, unlocksBucket, isPais, isAntiguedad,
   type RawBucket, type RawProductEntry, type RawBucketGroup, type RawSearchResponse,
   type RawFilters, type Tier,
+  getDiscoveryRanked, getDiscoverySeeds,
 } from '@ph/shared'
 import { getUser } from '@/lib/supabase/server'
 import { getAccess } from '@/lib/whop'
 import { toEntry } from '@/lib/product-hunter/entry'
+import { toDiscoveryEntry } from '@/lib/product-hunter/discovery-entry'
 
 // ⚠️ Esta ruta SOLO lee de Supabase: ni Anthropic ni Playwright. El scraping
 // corre en el worker local.
@@ -53,6 +55,9 @@ export async function POST(req: NextRequest) {
   let body: {
     niche?: string; bucket?: string; category?: string
     country?: string; minDias?: number
+    // Qué motor sirve el inventario. Ausente = el viejo (`ph_*`), que es lo que
+    // hoy ve producción.
+    motor?: string; seed?: string
   }
   try { body = await req.json() } catch {
     return NextResponse.json({ error: 'Petición inválida' }, { status: 400 })
@@ -66,6 +71,7 @@ export async function POST(req: NextRequest) {
   const niche = body.niche?.trim().toLowerCase().replace(/\s+/g, ' ')
   // Rango pedido por el filtro. Sin él (o inválido) se autoelige.
   const pedido = isRawBucket(body.bucket) ? body.bucket : null
+  const motor = body.motor === 'discovery' ? 'discovery' : 'raw'
 
   // Filtros globales. Se validan contra las listas cerradas de @ph/shared: lo
   // que no matchea se ignora en vez de romper la búsqueda.
@@ -99,6 +105,34 @@ export async function POST(req: NextRequest) {
   // siempre en "100 a más", que es justo el rango que no compró.
   const ordenAuto = ORDEN_AUTO.filter((b) => unlocksBucket(tier, b))
   const aProbar = pedido ? [pedido] : ordenAuto
+
+  // ─── Motor de descubrimiento (`disc_*`) ────────────────────────────────────
+  // Mismo contrato de respuesta y el MISMO gate de plan: lo único que cambia es
+  // de qué tabla sale el inventario. Los dos motores conviven a propósito —el
+  // viejo sigue sirviendo producción— y se comparan sobre datos reales.
+  //
+  // Acá los "chips" no son categorías sino SEMILLAS: el motor nuevo es
+  // run-scoped (`disc_search_runs.seed_query`), así que clasificar por las 13
+  // categorías del viejo pintaría 11 chips vacíos.
+  if (motor === 'discovery') {
+    const seeds = await getDiscoverySeeds()
+    const semilla = body.seed && seeds.includes(body.seed) ? body.seed : null
+    let servidoDisc: RawBucket = aProbar[0]
+    let productos: RawProductEntry[] = []
+    for (const bucket of aProbar) {
+      servidoDisc = bucket
+      productos = (await getDiscoveryRanked(bucket, limite, semilla, filters)).map(toDiscoveryEntry)
+      if (productos.length) break
+    }
+    return responder({
+      niche: semilla ?? 'todos',
+      status: productos.length > 0 || pedido ? 'ready' : 'empty',
+      groups: [{ bucket: servidoDisc, label: RAW_BUCKET_LABEL[servidoDisc], products: productos }],
+      total: productos.length,
+      motor: 'discovery',
+      seeds,
+    })
+  }
 
   // ─── Búsqueda por CATEGORÍA (los chips de la UI) ───────────────────────────
   // Una categoría son decenas de nichos: se resuelve la lista contra el
