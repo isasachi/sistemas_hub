@@ -334,6 +334,9 @@ export interface LandingSessionResponse {
   // por el usuario. Ground-truth para el prompt de imagen → el modelo renderiza las palabras
   // correctas en vez de confabular texto ilegible de la foto. Null = copiar de la foto.
   product_labels: string | null
+  // Qué ES el producto en palabras del vendedor (gomitas, cápsulas, crema…). Ver la migración
+  // 20260822000001: sin esto la visión deduce el formato de la etiqueta y lo inventa.
+  product_form: string | null
   // Copy propio de la sección Oferta (headline/subheadline). Lo compone Satori. Null = la
   // sesión aún no generó la oferta híbrida. En sesiones pre-F5 también trae tiers/urgency. Ver OfferCopy.
   offer_copy: OfferCopy | null

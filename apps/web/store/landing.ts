@@ -21,6 +21,7 @@ interface LandingState {
   audience: string | null
   tone: string[]
   productLabels: string | null
+  productForm: string | null
   productPhotoUrls: string[]
   nicheId: NicheId | null
   demographicId: DemographicId | null
@@ -37,7 +38,7 @@ interface LandingState {
 
 interface LandingActions {
   setStep: (step: number) => void
-  setDetails: (data: { productName: string; price: string; benefits: string; audience: string; tone: string[]; productLabels: string }) => void
+  setDetails: (data: { productName: string; price: string; benefits: string; audience: string; tone: string[]; productLabels?: string; productForm: string }) => void
   setPhotos: (urls: string[]) => void
   setNicheId: (id: NicheId | null) => void
   setDemographicId: (id: DemographicId | null) => void
@@ -68,6 +69,7 @@ const initialState: LandingState = {
   audience: null,
   tone: [],
   productLabels: null,
+  productForm: null,
   productPhotoUrls: [],
   nicheId: null,
   demographicId: null,
@@ -87,8 +89,11 @@ export const useLandingStore = create<LandingState & LandingActions>((set) => ({
 
   setStep: (step) => set({ step }),
 
-  setDetails: ({ productName, price, benefits, audience, tone, productLabels }) =>
-    set({ productName, price, benefits, audience, tone, productLabels, step: 1 }),
+  // `productLabels` es OPCIONAL desde que su campo salió del wizard: el paso 1 ya no lo edita, así
+  // que si no viene se conserva el que trajo la sesión en vez de vaciarlo (misma decisión que en la
+  // ruta `details`).
+  setDetails: ({ productName, price, benefits, audience, tone, productLabels, productForm }) =>
+    set((s) => ({ productName, price, benefits, audience, tone, productLabels: productLabels ?? s.productLabels, productForm, step: 1 })),
 
   setPhotos: (urls) => set({ productPhotoUrls: urls, step: 2 }),
 
@@ -133,6 +138,7 @@ export const useLandingStore = create<LandingState & LandingActions>((set) => ({
       audience: s.audience,
       tone: s.tone ?? [],
       productLabels: s.product_labels,
+      productForm: s.product_form,
       productPhotoUrls: s.product_photo_urls ?? [],
       nicheId: s.niche_id ?? null,
       demographicId: s.demographic_id ?? null,

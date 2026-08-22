@@ -160,6 +160,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         copy,
         dna: session.landing_dna,
         productLabels: session.product_labels,
+        productForm: session.product_form,
         offer,
         trust,
         packUnits,

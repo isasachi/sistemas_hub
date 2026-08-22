@@ -204,6 +204,19 @@ describe('poses contextuales y complexión', () => {
     expect(out.beneficios).toContain('SIN el rostro en cuadro')
   })
 
+  // ⚠️ EL BUG QUE VEÍA EL USUARIO: dos advertencias de coherencia ANTES de generar imagen alguna.
+  // Con 8 secciones y 4 poses contextuales el cursor daba la vuelta y `validateSet` (R7
+  // `pose-duplicate`) marcaba hero↔testimonios y oferta↔faq — los dos choques exactos que reportó,
+  // medidos sobre la sesión e3117b54.
+  it('con las 8 secciones y solo 4 contextuales, ninguna pose se repite', () => {
+    const ocho: SectionType[] = ['hero', 'oferta', 'beneficios', 'antes-despues', 'testimonios', 'faq', 'garantia', 'cta-final']
+    for (const focus of ['cuerpo_completo', 'gluteos_piernas'] as const) {
+      const out = assignPoses(ocho, 'female_18_30', focus, CTX)
+      const poses = ocho.map((s) => out[s])
+      expect(new Set(poses).size).toBe(ocho.length)
+    }
+  })
+
   it('no_talent no recibe poses aunque lleguen contextuales', () => {
     const out = assignPoses(ORDEN, 'no_talent', 'cuerpo_completo', CTX)
     for (const s of ORDEN) expect(out[s]).toBe('')

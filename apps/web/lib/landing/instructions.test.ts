@@ -75,6 +75,37 @@ function build(section: SectionType, extra: Partial<Parameters<typeof buildDiffu
 }
 
 describe('buildDiffusionInstruction — DNA-driven (spec 2026-07-23)', () => {
+  // ⚠️ EL ANTES/DESPUÉS SE COLABA EN EL HERO. La línea de "Componentes de oferta" describía la
+  // pill ANTES/DESPUÉS y el doble »» "entre las dos cards de comparación" en las 8 secciones, y la
+  // difusión los dibujó en un hero cuyo copy no tiene un solo campo de comparación (medido en la
+  // sesión e3117b54). Se reparte por componente: la geometría de comparación es de `antes-despues`
+  // y de nadie más.
+  // El formato lo declara el vendedor y manda sobre lo que el modelo lea en la etiqueta: unas
+  // gomitas cuya etiqueta nombra vitamina C salieron renderizadas como POLVO servido en un vaso,
+  // con un frasco extra inventado de "VITAMINA C EN POLVO" al lado (sesión e3117b54).
+  it('el formato declarado viaja al prompt y el envase extra queda prohibido siempre', () => {
+    const conFormato = build('beneficios', { productForm: 'gomitas masticables' })
+    expect(conFormato).toContain('FORMATO DEL PRODUCTO')
+    expect(conFormato).toContain('gomitas masticables')
+    expect(conFormato).toContain('vasos mezcladores')
+    expect(build('beneficios', { productForm: null })).not.toContain('FORMATO DEL PRODUCTO')
+    // La prohibición del segundo envase NO depende del campo: el frasco inventado aparecía igual.
+    for (const pf of ['gomitas masticables', null])
+      expect(build('hero', { productForm: pf })).toContain('UN SOLO ENVASE CON ETIQUETA')
+  })
+
+  it('la geometría de comparación llega SOLO a antes-despues', () => {
+    expect(build('antes-despues')).toContain('cards de comparación')
+    for (const s of ['hero', 'oferta', 'beneficios', 'testimonios', 'faq', 'garantia', 'cta-final'] as SectionType[])
+      expect(build(s)).not.toContain('cards de comparación')
+    // El hero no lleva botón CTA (su propio `composition` lo dice), así que tampoco su descripción.
+    expect(build('hero')).not.toContain('CTA: botón redondeado')
+    // Y lo que sí es de cada una se conserva.
+    expect(build('oferta')).toContain('Cinta de oferta')
+    expect(build('garantia')).toContain('Sello: medalla circular dorada')
+    expect(build('cta-final')).toContain('CTA: botón redondeado')
+  })
+
   it('cada sección inyecta su REFUERZO COMPOSITIVO (checklist estructural del ADN)', () => {
     const anchor: Record<SectionType, string> = {
       hero: 'EXACTAMENTE 4 bullets',

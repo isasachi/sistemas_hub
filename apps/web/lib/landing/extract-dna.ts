@@ -74,7 +74,10 @@ const PROMPT = [
   'Lee la línea de ingredientes y el formato del envase. Lista de 3 a 5 objetos físicos reales',
   'que representen esos ingredientes en su forma cruda o su origen, más el formato de consumo',
   'del producto. Cada prop debe poder apoyarse en una superficie o recostarse contra el envase.',
-  'Nada abstracto, nada decorativo sin relación (props).',
+  'Nada abstracto, nada decorativo sin relación (props). Si abajo se declara el FORMATO del',
+  'producto, ese dato manda sobre lo que la etiqueta sugiera: los props tienen que ser coherentes',
+  'con ESE formato de consumo, y ninguno puede ser otro producto envasado ni un utensilio de un',
+  'formato distinto (un vaso mezclador o una cuchara dosificadora no van con unas gomitas).',
   '',
   'Por último, decidí la COMPLEXIÓN y las POSES de la persona que protagoniza la pieza (talent).',
   'No hay una lista de casos: decidilo vos a partir de lo que este producto promete.',
@@ -104,6 +107,8 @@ const PROMPT = [
   'repetirse se lee como un error.',
   'El encuadre de esta pieza nunca se abre más allá del medio cuerpo, así que describí lo que el',
   'cuerpo hace dentro de ese límite.',
+  'Si abajo se declara el FORMATO del producto y la pose incluye el momento de tomarlo o aplicarlo,',
+  'tiene que ser ESE formato: nadie disuelve un polvo si el producto son gomitas.',
   '',
   'talent.wardrobe — qué ropa lleva puesta, en el REGISTRO del momento que describen las poses: la',
   'ropa de alguien que está haciendo eso, en ese lugar y a esa hora. Preguntate si una persona real',
@@ -130,6 +135,9 @@ async function runVision(
     const ctx = [
       `Nicho: ${niche}`,
       session.product_labels && `Etiquetas: ${session.product_labels}`,
+      // El vendedor declara QUÉ es el producto. Sin esto la visión deduce el formato de la
+      // etiqueta: con unas gomitas cuya etiqueta nombra vitamina C devolvió props de POLVO.
+      session.product_form && `Formato del producto (dato del vendedor, manda sobre la etiqueta): ${session.product_form}`,
       session.benefits && `Qué promete: ${session.benefits}`,
       session.audience && `Público: ${session.audience}`,
       `Persona ya decidida (no la cambies): ${DEMOGRAPHIC_LABELS[demographic]}`,

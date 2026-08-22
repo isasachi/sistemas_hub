@@ -415,10 +415,39 @@ export function assignPoses(
   const zonaReal = zone.length > 0
   const reserved = bank[bank.length - 1]
   const demoPool = bank.slice(0, -1)
-  const pool = ctx.length && !zonaReal ? ctx : demoPool
-  const zonePool = ctx.length && zonaReal ? ctx : zone.slice(0, -1)
+  // ⚠️ LAS CONTEXTUALES SON 4 Y LAS SECCIONES HASTA 8: EL POOL SE AGOTA Y EL CURSOR DA LA VUELTA.
+  // Reemplazar el banco por las contextuales a secas dejaba `pool[i % 4]` repitiendo pose a partir
+  // de la quinta sección, y eso lo DETECTA `validateSet` (R7 `pose-duplicate`, severidad error): el
+  // usuario veía dos advertencias de coherencia antes de generar ninguna imagen. Medido en la
+  // sesión e3117b54 (8 secciones, `cuerpo_completo` → sin zona real): hero↔testimonios y
+  // oferta↔faq, exactamente los dos choques reportados.
+  // El banco va DETRÁS, no mezclado: las contextuales se gastan primero —son las que ejemplifican
+  // el uso del producto, que es el punto del eje— y el banco demográfico cubre la cola sin repetir.
+  // Con `demoPool` de 7-8 entradas el pool llega a 11+ contra 8 secciones, así que ya no da vuelta.
+  const pool = ctx.length && !zonaReal ? [...ctx, ...demoPool] : demoPool
+  const zoneRest = zone.slice(0, -1)
+  const zonePool = ctx.length && zonaReal ? [...ctx, ...zoneRest] : zoneRest
   // Dos cursores: cada banco recorre el suyo, así ninguna sección repite pose dentro de su pool
   // (QA#6) aunque el reparto entre bancos sea desparejo.
+  // ⚠️ EL CURSOR SOLO NO ALCANZA, y el modo de fallo es una advertencia en la cara del usuario.
+  // Los dos bancos se cruzan —`antes-despues` saca del demográfico mientras el resto saca del pool
+  // que ahora TERMINA en ese mismo banco— así que con cierto orden de secciones dos cursores
+  // distintos aterrizan en la misma entrada. `tomar` avanza sobre la pose ya usada en vez de
+  // confiar en que la aritmética no colisione: la unicidad es lo que R7 exige, y acá se garantiza
+  // en vez de deducirse. Si el pool entero ya está gastado devuelve la del cursor (repetir es
+  // preferible a no tener pose), pero con 11+ entradas contra 8 secciones eso no ocurre.
+  const usadas = new Set<string>()
+  const tomar = (p: string[], desde: number): string => {
+    for (let k = 0; k < p.length; k++) {
+      const cand = p[(desde + k) % p.length]
+      if (!usadas.has(cand)) return cand
+    }
+    return p[desde % p.length]
+  }
+  const marcar = (s: SectionType, pose: string) => {
+    out[s] = pose
+    usadas.add(pose)
+  }
   let i = 0
   let z = 0
   for (const s of order) {
@@ -427,7 +456,7 @@ export function assignPoses(
       continue
     }
     if (zonePool.length && s !== 'hero') {
-      out[s] = zonePool[z % zonePool.length]
+      marcar(s, tomar(zonePool, z))
       z++
       continue
     }
@@ -439,9 +468,9 @@ export function assignPoses(
     // de fallo que este repo ya registró tres veces. Manda la nota: en el antes/después el encuadre
     // ES el argumento de venta. Con zona real no hay conflicto y lo contextual entra por el pool de
     // zona: ahí la nota y la pose piden las dos la misma zona.
-    out[s] = s === 'antes-despues' && ctx.length && !zonaReal
-      ? demoPool[i % demoPool.length]
-      : pool[i % pool.length]
+    marcar(s, s === 'antes-despues' && ctx.length && !zonaReal
+      ? tomar(demoPool, i)
+      : tomar(pool, i))
     i++
   }
   return out
