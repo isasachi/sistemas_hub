@@ -106,6 +106,16 @@ describe('buildDiffusionInstruction — DNA-driven (spec 2026-07-23)', () => {
   // prohibición que dijera "ni sello… ni porcentaje de ahorro" a secas dejaría dos líneas pidiendo
   // lo contrario — el modo de fallo que este repo ya registró tres veces. Se comprueba leyendo los
   // DOS bloques en la misma cadena: que cada uno exista por separado no dice nada del conflicto.
+  // ⚠️ NINGÚN EJEMPLO CON FORMA DE VALOR EN EL CHECKLIST. La composición de `oferta` ofrecía la
+  // cinta como «"Recomendado"/"3x2"» y el modelo imprimió un "3x2" enorme sobre un pack de DOS
+  // unidades — una promo que no existe en la sesión (badge guardado: "Mejor valor") y que además
+  // es falsa. Tercera vez que este repo pisa la misma trampa.
+  it('la sección de oferta no ofrece promos de ejemplo como si fueran copy', () => {
+    const of = build('oferta', { offer: OFFER, trust: TRUST })
+    expect(of).not.toContain('3x2')
+    expect(of).toContain('Recomendado')   // rótulo fijo de la plantilla, ese sí se conserva
+  })
+
   it('la prohibición de venta no contradice al sello que la sección declara', () => {
     const g = build('garantia', { offer: OFFER, trust: TRUST })
     expect(g).toContain('Sello: medalla circular dorada')

@@ -98,7 +98,15 @@ export const SECTION_DNA: Record<SectionType, SectionDna> = {
     composition: [
       'Badge de urgencia dorado en la parte superior (con icono de gota)',
       'Titular + kicker dorado',
-      'EXACTAMENTE 3 columnas de precio; la CENTRAL elevada y enmarcada en oro, con cinta "Recomendado"/"3x2" arriba y "Mejor valor" abajo y CTA dorado; las laterales con CTA en color de acento',
+      // ⚠️ ACÁ DECÍA cinta "Recomendado"/"3x2", Y EL "3x2" SE IMPRIMIÓ COMO SI FUERA COPY. Medido en la
+      // sesión fbe218f3: el tier destacado salió con un "3x2" enorme sobre "2 Unidades · S/ 169" —
+      // una promo que NO existe en ningún lado (`badge` guardado = "Mejor valor", y 3x2 es además
+      // falso para un pack de 2). El string era la única fuente de "3x2" en todo el repo. Es el
+      // anti-ejemplo con forma de valor que este repo ya documentó dos veces (la FASE 3 de video-ads
+      // y el `"S/ 199"` que se borró del prompt de esta misma oferta): un ejemplo con la forma del
+      // dato que el modelo tiene que producir es una plantilla que rellenar. "Recomendado" y "Mejor
+      // valor" se quedan porque son rótulos FIJOS de la plantilla, no valores que salgan de la sesión.
+      'EXACTAMENTE 3 columnas de precio; la CENTRAL elevada y enmarcada en oro, con cinta "Recomendado" arriba y "Mejor valor" abajo y CTA dorado; las laterales con CTA en color de acento',
       'Cada columna: cinta de % de ahorro, cantidad, precio ancla tachado, precio actual gigante, precio por unidad, botón',
       'Columna izquierda mini-trust de 3 ítems (icono + título + microcopy)',
       'Fila de logos de pago + sello de garantía + talento inferior derecho',

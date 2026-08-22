@@ -11,9 +11,10 @@
  *
  *   npx tsx --env-file=.env.local scripts/auditar-precios.mts
  *
- * ⚠️ Audita lo CALCULADO, no lo IMPRESO. La difusión puede desviarse de estas cifras al renderizar
- * la sección de oferta (medido: una de tres ofertas infló las anclas ~25% y recalculó los % desde
- * ellas), y eso solo se ve mirando la imagen.
+ * ⚠️ Audita lo CALCULADO, no lo IMPRESO — eso solo se ve mirando la imagen. Al comparar un render
+ * contra estos tiers, hacelo contra la sesión que produjo ESA imagen: la oferta se regenera cuando
+ * cambia el precio, así que una comparación tardía mide un estado que ya no existe. Verificado así
+ * sobre la sesión fbe218f3, el render coincide en las 12 cifras.
  */
 import { createClient } from '@supabase/supabase-js'
 
