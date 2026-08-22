@@ -3,20 +3,9 @@
 // ⚠️ La unidad es (anunciante, producto). `rank.ts` ya la colapsó; acá solo se
 // escribe. El `dedupe_key` reproduce esa misma clave para que una segunda
 // corrida de la misma semilla ACTUALICE la fila en vez de duplicarla.
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { db } from './client'
 import { normalizeText } from '../normalization/text'
 
-let _db: SupabaseClient | null = null
-function db(): SupabaseClient {
-  if (!_db) {
-    _db = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      { auth: { persistSession: false } },
-    )
-  }
-  return _db
-}
 
 export interface RankedRow {
   page_id: string

@@ -1,21 +1,10 @@
 // Persistencia del descubrimiento. Tablas `disc_*`, ninguna `ph_*`: los dos
 // motores conviven y se comparan sobre datos reales antes de jubilar ninguno.
 import { randomUUID, createHash } from 'node:crypto'
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { db } from './client'
 import type { NormalizedAd } from '../normalization/ad'
 import type { SearchJob } from '../discovery/matrix'
 
-let _db: SupabaseClient | null = null
-function db(): SupabaseClient {
-  if (!_db) {
-    _db = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      { auth: { persistSession: false } },
-    )
-  }
-  return _db
-}
 
 export async function createRun(seedQuery: string, countries: string[]): Promise<string> {
   const id = randomUUID()

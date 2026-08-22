@@ -1,0 +1,30 @@
+{
+  "problem": [
+    "gadgets cocina"
+  ],
+  "symptom": [],
+  "intent": [],
+  "commercial": [],
+  "product": [
+    "cocina lenta",
+    "preparar comida rapido",
+    "cortar verduras facil",
+    "cocinar sin quemarse",
+    "limpiar ollas dificil",
+    "cocina desorganizada",
+    "espacio cocina pequeno",
+    "cocina caliente",
+    "organizador cocina",
+    "cortador verduras",
+    "rallador electrico",
+    "abridor latas",
+    "colador cocina",
+    "tabla corte",
+    "cuchillo ceramica",
+    "pelador papas",
+    "medidor ingredientes",
+    "dispensador aceite",
+    "soporte ollas",
+    "contenedor alimentos"
+  ]
+}

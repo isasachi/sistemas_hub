@@ -1,0 +1,34 @@
+{
+  "problem": [
+    "ventilador"
+  ],
+  "symptom": [],
+  "intent": [],
+  "commercial": [],
+  "product": [
+    "ventilador de piso",
+    "ventilador de techo",
+    "ventilador portatil",
+    "ventilador usb",
+    "ventilador silencioso",
+    "ventilador con control remoto",
+    "ventilador de pedestal",
+    "ventilador de escritorio",
+    "ventilador recargable",
+    "ventilador industrial",
+    "calor excesivo",
+    "aire circulacion",
+    "temperatura ambiente",
+    "ventilacion habitacion",
+    "ruido ventilador",
+    "consumo energia",
+    "ventilador verano",
+    "oficina calor",
+    "dormitorio ventilacion",
+    "ventilador bajo consumo",
+    "aspas ventilador",
+    "motor ventilador",
+    "ventilador compacto",
+    "ventilador potente"
+  ]
+}

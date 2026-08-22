@@ -1,0 +1,32 @@
+{
+  "problem": [
+    "bronquios"
+  ],
+  "symptom": [],
+  "intent": [],
+  "commercial": [],
+  "product": [
+    "jarabe bronquial",
+    "inhalador vapor",
+    "difusor aromatico",
+    "nebulizador portatil",
+    "pastilla garganta",
+    "spray nasal",
+    "humidificador aire",
+    "parche pecho",
+    "te expectorante",
+    "aceite eucalipto",
+    "tos persistente",
+    "congestion pecho",
+    "flema garganta",
+    "respiracion dificil",
+    "bronquitis cronica",
+    "asma alergica",
+    "trabajo polvo",
+    "clima seco",
+    "inhalacion vapor",
+    "expectorante natural",
+    "suplemento pulmon",
+    "mascarilla respiratoria"
+  ]
+}

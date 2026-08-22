@@ -1,0 +1,33 @@
+{
+  "problem": [
+    "heridas"
+  ],
+  "symptom": [],
+  "intent": [],
+  "commercial": [],
+  "product": [
+    "vendaje adhesivo",
+    "gasa esteril",
+    "aposito heridas",
+    "parche curativo",
+    "esparadrapo",
+    "vendaje elastico",
+    "curitas",
+    "aposito transparente",
+    "vendaje compresivo",
+    "kit primeros auxilios",
+    "sangrado herida",
+    "herida abierta",
+    "corte profundo",
+    "quemadura leve",
+    "inflamacion herida",
+    "cicatrizacion",
+    "infeccion herida",
+    "herida infectada",
+    "limpieza herida",
+    "desinfectante herida",
+    "antiseptico",
+    "agua oxigenada",
+    "vendaje quirurgico"
+  ]
+}

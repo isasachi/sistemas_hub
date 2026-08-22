@@ -1,0 +1,34 @@
+{
+  "problem": [
+    "limpieza hogar"
+  ],
+  "symptom": [],
+  "intent": [],
+  "commercial": [],
+  "product": [
+    "escoba electrica",
+    "aspiradora inalambrica",
+    "mopa electrica",
+    "trapo microfibra",
+    "cepillo limpieza",
+    "desengrasante cocina",
+    "limpiador pisos",
+    "kit limpieza hogar",
+    "pano absorbente",
+    "esponja reutilizable",
+    "detergente multiusos",
+    "limpiador vidrios",
+    "polvo acumulado",
+    "suciedad pisos",
+    "manchas cocina",
+    "trabajo domestico",
+    "limpieza profunda",
+    "desinfectante hogar",
+    "recogedor polvo",
+    "escobilla bano",
+    "limpiador desinfectante",
+    "trapo secador",
+    "cepillo bano",
+    "set limpieza completo"
+  ]
+}

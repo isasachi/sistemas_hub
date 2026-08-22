@@ -1,0 +1,32 @@
+{
+  "problem": [
+    "cafetera"
+  ],
+  "symptom": [],
+  "intent": [],
+  "commercial": [],
+  "product": [
+    "cafetera electrica",
+    "cafetera italiana",
+    "cafetera prensa francesa",
+    "cafetera goteo",
+    "cafetera espresso",
+    "cafetera portatil",
+    "cafetera viaje",
+    "cafetera termica",
+    "cafetera automatica",
+    "cafetera manual",
+    "filtro cafe",
+    "moledor cafe",
+    "taza termica cafe",
+    "jarra cafe",
+    "cafe molido",
+    "cafe en grano",
+    "preparar cafe",
+    "cafe caliente",
+    "cafe frio",
+    "cafe instantaneo",
+    "accesorios cafe",
+    "kit cafe completo"
+  ]
+}

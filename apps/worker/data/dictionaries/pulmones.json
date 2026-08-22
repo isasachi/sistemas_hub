@@ -1,0 +1,30 @@
+{
+  "problem": [
+    "pulmones"
+  ],
+  "symptom": [],
+  "intent": [],
+  "commercial": [],
+  "product": [
+    "inhalador asma",
+    "nebulizador portatil",
+    "oximetro digital",
+    "humidificador aire",
+    "purificador aire",
+    "mascarilla respiratoria",
+    "tubo oxigeno",
+    "difusor aromaterapia",
+    "soporte respiratorio",
+    "filtro aire",
+    "tos persistente",
+    "falta aire",
+    "congestion pulmonar",
+    "respiracion dificil",
+    "asma alergica",
+    "bronquitis cronica",
+    "enfisema pulmonar",
+    "apnea sueno",
+    "mucosidad pulmones",
+    "silbido pecho"
+  ]
+}

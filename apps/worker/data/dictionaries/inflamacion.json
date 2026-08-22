@@ -1,0 +1,31 @@
+{
+  "problem": [
+    "inflamacion"
+  ],
+  "symptom": [],
+  "intent": [],
+  "commercial": [],
+  "product": [
+    "antiinflamatorio topico",
+    "gel antiinflamatorio",
+    "parche antiinflamatorio",
+    "crema inflamacion",
+    "spray antiinflamatorio",
+    "vendaje compresion",
+    "faja antiinflamatoria",
+    "hielo reutilizable",
+    "bolsa fria",
+    "masajeador vibratorio",
+    "inflamacion articular",
+    "inflamacion muscular",
+    "hinchazon",
+    "edema",
+    "dolor inflamatorio",
+    "articulacion inflamada",
+    "musculo inflamado",
+    "lesion deportiva",
+    "golpe hinchado",
+    "post operatorio",
+    "recuperacion lesion"
+  ]
+}

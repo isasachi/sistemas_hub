@@ -1,0 +1,35 @@
+{
+  "problem": [
+    "dolor de garganta"
+  ],
+  "symptom": [],
+  "intent": [],
+  "commercial": [],
+  "product": [
+    "pastilla garganta",
+    "spray garganta",
+    "caramelo garganta",
+    "te garganta",
+    "enjuague bucal",
+    "pastilla menta",
+    "losanga garganta",
+    "inhalador vapor",
+    "humidificador aire",
+    "difusor aromatico",
+    "dolor garganta",
+    "garganta inflamada",
+    "garganta irritada",
+    "amigdalitis",
+    "faringitis",
+    "garganta seca",
+    "garganta roja",
+    "trabajo voz",
+    "cambio clima",
+    "aire seco",
+    "pastilla propolis",
+    "spray propolis",
+    "caramelo miel",
+    "te miel limon",
+    "gargaras sal"
+  ]
+}

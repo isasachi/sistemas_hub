@@ -1,0 +1,33 @@
+{
+  "problem": [
+    "procesadora de alimentos"
+  ],
+  "symptom": [],
+  "intent": [],
+  "commercial": [],
+  "product": [
+    "procesadora alimentos",
+    "robot cocina",
+    "licuadora industrial",
+    "picadora electrica",
+    "molino granos",
+    "batidora profesional",
+    "trituradora alimentos",
+    "extractor jugo",
+    "rallador electrico",
+    "amasadora pan",
+    "procesadora verduras",
+    "molinillo cafe",
+    "batidora smoothie",
+    "picador carne",
+    "exprimidor electrico",
+    "trabajo cocina",
+    "preparar comida rapido",
+    "moler granos",
+    "picar verduras",
+    "licuar frutas",
+    "amasar masa",
+    "extraer jugo",
+    "rallar queso"
+  ]
+}

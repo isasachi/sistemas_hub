@@ -1,18 +1,8 @@
 import { createHash } from 'node:crypto'
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { db } from './client'
 import type { AdvertiserProfile } from '../advertisers/aggregate'
+import type { CrawlTier } from '../scheduler/tiers'
 
-let _db: SupabaseClient | null = null
-function db(): SupabaseClient {
-  if (!_db) {
-    _db = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      { auth: { persistSession: false } },
-    )
-  }
-  return _db
-}
 
 export interface AcceptedAd {
   id: string
@@ -320,4 +310,58 @@ export async function setRelevance(rows: { id: string; relevance: number }[]): P
       await db().from('disc_ads').update({ relevance: r.relevance }).eq('id', r.id)
     }))
   }
+}
+
+/**
+ * Estado de recrawl de un anunciante, para decidir su siguiente tier.
+ *
+ * `adCount` es el que tenía la última vez: `nextTier` lo compara contra el de
+ * ahora y de esa diferencia sale todo (crece → hot/warm, quieto → baja, pierde
+ * → cold).
+ */
+export interface EstadoRecrawl {
+  tier: CrawlTier
+  adCount: number | null
+  consecutiveMisses: number
+  dominantProductId: string | null
+}
+
+export async function estadoRecrawl(pageId: string): Promise<EstadoRecrawl | null> {
+  const { data, error } = await db().from('disc_advertisers')
+    .select('crawl_tier,active_ads_count,consecutive_misses,dominant_product_id')
+    .eq('page_id', pageId).maybeSingle()
+  if (error) throw new Error(`estadoRecrawl: ${error.message}`)
+  if (!data) return null
+  const r = data as {
+    crawl_tier: string | null
+    active_ads_count: number | null
+    consecutive_misses: number | null
+    dominant_product_id: string | null
+  }
+  return {
+    tier: (r.crawl_tier as CrawlTier) ?? 'warm',
+    adCount: r.active_ads_count,
+    consecutiveMisses: r.consecutive_misses ?? 0,
+    dominantProductId: r.dominant_product_id,
+  }
+}
+
+/**
+ * Cierra una auditoría: tier nuevo, fallos consecutivos y la fecha.
+ *
+ * ⚠️ `last_audited_at` SOLO se escribe acá, o sea solo cuando la lectura
+ * concluyó. Estamparlo en una lectura bloqueada haría que el anunciante no
+ * volviera a vencer hasta el próximo intervalo, con el dato viejo dado por
+ * bueno.
+ */
+export async function guardarAuditoria(
+  pageId: string,
+  t: { tier: CrawlTier; consecutiveMisses: number },
+): Promise<void> {
+  const { error } = await db().from('disc_advertisers').update({
+    crawl_tier: t.tier,
+    consecutive_misses: t.consecutiveMisses,
+    last_audited_at: new Date().toISOString(),
+  }).eq('page_id', pageId)
+  if (error) throw new Error(`guardarAuditoria: ${error.message}`)
 }

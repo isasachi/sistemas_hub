@@ -1,0 +1,30 @@
+{
+  "problem": [
+    "maquillaje"
+  ],
+  "symptom": [],
+  "intent": [],
+  "commercial": [],
+  "product": [
+    "ojeras oscuras",
+    "piel grasa",
+    "acne",
+    "poros dilatados",
+    "arrugas",
+    "manchas piel",
+    "brillo excesivo",
+    "base maquillaje",
+    "corrector ojeras",
+    "polvo compacto",
+    "brocha maquillaje",
+    "paleta sombras",
+    "delineador ojos",
+    "labial mate",
+    "mascara pestanas",
+    "contorno facial",
+    "iluminador rostro",
+    "primer maquillaje",
+    "removedor maquillaje",
+    "esponja aplicadora"
+  ]
+}

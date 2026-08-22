@@ -1,0 +1,33 @@
+{
+  "problem": [
+    "moto"
+  ],
+  "symptom": [],
+  "intent": [],
+  "commercial": [],
+  "product": [
+    "casco moto",
+    "guantes motociclista",
+    "chaqueta cuero moto",
+    "protector espalda moto",
+    "botas motociclista",
+    "espejo retrovisor moto",
+    "manillar moto",
+    "asiento moto",
+    "kit proteccion moto",
+    "funda moto",
+    "acelerador moto",
+    "cadena moto",
+    "frenos moto",
+    "neumatico moto",
+    "bateria moto",
+    "luz led moto",
+    "mantenimiento moto",
+    "accesorios moto",
+    "ropa motociclista",
+    "protector rodillas",
+    "visor casco",
+    "moto deportiva",
+    "moto cruiser"
+  ]
+}

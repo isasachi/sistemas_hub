@@ -1,0 +1,34 @@
+{
+  "problem": [
+    "diabetes"
+  ],
+  "symptom": [],
+  "intent": [],
+  "commercial": [],
+  "product": [
+    "glucosa alta",
+    "azucar en sangre",
+    "prediabetes",
+    "resistencia insulina",
+    "neuropatia diabetica",
+    "pie diabetico",
+    "retinopatia",
+    "nefropatia",
+    "pancreas",
+    "insulina",
+    "sedentarismo",
+    "sobrepeso",
+    "mala alimentacion",
+    "estres cronico",
+    "glucometro",
+    "lancetas glucometro",
+    "tiras reactivas",
+    "monitor glucosa continuo",
+    "inyector insulina",
+    "pastillas diabetes",
+    "suplemento cromo",
+    "te para diabetes",
+    "alimentos bajos indice glucemico",
+    "dieta baja carbohidratos"
+  ]
+}

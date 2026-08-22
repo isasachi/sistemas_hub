@@ -1,0 +1,32 @@
+{
+  "problem": [
+    "lavanderia"
+  ],
+  "symptom": [],
+  "intent": [],
+  "commercial": [],
+  "product": [
+    "detergente ropa",
+    "suavizante tela",
+    "quitamanchas",
+    "jabon polvo",
+    "blanqueador ropa",
+    "detergente liquido",
+    "perfume ropa",
+    "bolsas lavar",
+    "cesto ropa",
+    "tendedero ropa",
+    "plancha vapor",
+    "secadora ropa",
+    "ropa manchada",
+    "ropa sucia",
+    "lavar delicados",
+    "ropa blanca",
+    "ropa oscura",
+    "manchas dificiles",
+    "olor ropa",
+    "ropa humeda",
+    "aromatizante tela",
+    "kit limpieza ropa"
+  ]
+}

@@ -763,6 +763,46 @@ Leer el catálogo de un anunciante son dos navegaciones a Meta. `rank.ts` lee de
 
 ⚠️ **Un error de PostgREST tragado cuesta un soft-block.** `storedProfiles` embebe `disc_products`, que cuelga de `disc_advertisers` por DOS caminos (el dominante y la tabla puente): sin nombrar la FK explícita devuelve `PGRST201` y `data` viene `null`. Ignorando el error eso se lee como "no hay caché" — y la respuesta a "no hay caché" es volver a navegar Meta hasta que bloquee. Pasó, medido. Por eso el error se lanza.
 
+### Diccionarios: 649 semillas, importadas del motor viejo
+
+`data/dictionaries/<clave>.json` expande una semilla a ~23 queries. Había **uno solo curado**; ahora hay **649**, importados de `ph_niches.keywords` con `scripts/import-dictionaries.ts` (one-off, se corre a mano y los JSON se commitean — el motor nuevo **no lee `ph_*` en runtime**).
+
+⚠️ **Reusar esas keywords no viola la regla de costo, la cumple.** Se expandieron con LLM una vez y quedaron cacheadas; el CONTEXT §4.1 permite exactamente eso —LLM fuera del pipeline, pagado una vez— y re-generarlas sería pagar dos veces lo mismo.
+
+⚠️ **NO se clasifican en los 5 grupos, y no es pereza.** El grupo solo decide el orden en que `expandKeyword` corta al llegar a `MAX_QUERIES_PER_SEED` (100). Con 23 términos no corta nunca, así que cualquier clasificación sería decorativa — y una heurística equivocada sí puede tirar el término bueno el día que sí corte. La semilla va en `problem` y el resto en `product`, que es como `resolveDictionary` ya trata las listas viejas.
+
+⚠️ **Los términos "situacionales" ("trabajo sedentario", "dormir mal") NO se filtran a mano.** Son una dirección deliberada de la expansión vieja, y el mecanismo para podarlos es el `yield_rate` del bandit: con datos, no con opinión.
+
+**Medido:** 649 diccionarios, todos cargan, mediana 23 queries (min 16, max 33). Barrer los 649 × 5 países son **74.615 búsquedas ≈ 50 h** a las 25 búsquedas/min medidas. O sea el descubrimiento sobre TODO el vocabulario es cuestión de días, no de meses.
+
+⚠️ **EL CUELLO DE BOTELLA NO ES EL DESCUBRIMIENTO, ES EL PERFILADO.** Una búsqueda es un `fetch` same-origin (~2,3 s) y escala; leer el catálogo de un anunciante son **dos navegaciones** y es lo que bloquea: medido en esta máquina (IP residencial directa, sin proxy), **~11 lecturas seguidas** bastan para que Meta empiece a devolver payloads sin nodos. `storedProfiles` reusa los ya medidos, así que el costo marginal cae al repetirse — el primer ranking de un nicho nuevo es el caro.
+
+### Cola, scheduler y vocabulario (spec §2.5, §2.6, §9, §10)
+
+Es lo que convierte "una corrida por consulta" en el inventario continuo del CONTEXT §4.2. Migración `20260822000002`.
+
+**`disc_jobs`** — cola en Postgres, sin Redis. Tres kinds: `discover` (semilla × países), `audit` (un anunciante) y `rank` (una corrida). ⚠️ El claim va por **función SQL** (`disc_claim_job`) porque PostgREST no sabe `FOR UPDATE SKIP LOCKED`, y sin eso dos workers se llevan el mismo job y se paga dos veces la misma navegación. `disc_reap_jobs` devuelve a la cola lo que quedó tomado por un worker muerto — sin reaper, matar el daemon a mitad de un job deja esa semilla sin mirar para siempre.
+
+**`src/cli/scheduler.ts`** — decide y encola, no scrapea. Rescata, refresca el yield, poda, y reparte la capacidad **60% descubrimiento / 40% recrawl** (`src/scheduler/budget.ts`). ⚠️ Sin ese reparto el mantenimiento se come toda la capacidad conforme crece el inventario y el motor deja de descubrir **sin que nada lo reporte**: la cola sigue llena y los workers ocupados.
+
+**`src/cli/run-jobs.ts`** — drena. ⚠️ Cada job corre en un **proceso aparte**: un OOM de Chromium o un `process.exit` del CLI mataría el drenador entero si compartieran proceso. Secuencial a propósito — la concurrencia vive dentro de cada job y la comparte una sola IP.
+
+⚠️ **EL EMBUDO SE CIERRA CON EL JOB DE `rank`, que lo encola el propio `discover`** leyendo el `run_id:` de su salida. Sin eso el descubrimiento llena `disc_ads` y no llega **ni un producto a la pantalla**. Va con la CORRIDA porque la relevancia se mide contra la semilla de esa corrida: sobre un backlog mezclado mediría los anuncios de un nicho contra las keywords de otro.
+
+**Recrawl adaptativo (`src/scheduler/tiers.ts`)** — hot 24 h / warm 72 h / cold 168 h / quarantine 336 h. Crece + monoproducto → `hot`; sin anuncios dos pasadas → cuarentena y después `archived`. ⚠️ **"Los viejos salen" es consecuencia de esto, no un job de limpieza.** ✅ Verificado con dos auditorías reales: un anunciante de 12 anuncios bajó `warm → cold` y otro de 126 con 86% de share subió `warm → hot`.
+
+⚠️ **UNA LECTURA INCONCLUSA NO ES UNA AUDITORÍA.** `audit.ts` sale con código 2 sin tocar el tier ni `last_audited_at` cuando `profileAdvertiser` devuelve null. Estampar "auditado hoy, 0 anuncios" sobre un bloqueo manda a cuarentena a un anunciante sano — el mismo modo de fallo que ya dejó 19 perfiles en ceros. Por lo mismo el runner NO cuenta el código 2 como fallo del job: a los 3 intentos lo marcaría `dead` y lo sacaría del recrawl por un mal día de la IP.
+
+**Vocabulario auto-alimentado (`src/vocab/terms.ts`, `src/cli/vocab.ts`)** — de cada landing física auditada salen `product_type`, tags y n-gramas del nombre. Es lo que reemplaza a la generación de keywords por LLM (D8). **Medido: 649 semillas + 146 términos extraídos de 137 productos reales.**
+
+⚠️ **SIN FILTRO DE PALABRAS VACÍAS EL VOCABULARIO SE LLENA DE FRAGMENTOS.** Medido sobre esas 137 landings, entraron `para`, `con`, `tus`, `obten`, `y adoloridos` y `de pies` — y **cada término del vocabulario es una búsqueda pagada**: `para` como consulta devuelve todo y no descubre nada. Se rechaza el término que EMPIEZA o TERMINA en palabra vacía (un bigrama así es un fragmento de frase), no el que la lleva en el medio: `aceite de coco` es legítimo. Post-fix se purgaron **56 de 146**.
+
+**Bandit ε-greedy (spec §10).** ⚠️ **`pickNextBatch` rellena con exploración lo que la explotación no llena, y sin eso el motor arranca al 10% de su capacidad.** En frío `disc_keyword_country_state` está vacía, así que la rama de explotación no devuelve nada y ε capa el ciclo entero a un job: medido, con capacidad 6 el scheduler encolaba **1**. ε es el piso de exploración, no su techo.
+
+⚠️ **`yield_rate` SE DERIVA, NO SE ACUMULA** (`disc_refresh_yield`, en SQL). `qualified_pages` no se conoce al terminar el descubrimiento —hace falta analizar landings y perfilar catálogos, horas más tarde—, así que un contador que se incrementa al cerrar la corrida se quedaría en cero y el bandit leería "este nicho no rinde" sobre todos. Derivarlo lo hace además idempotente. **Medido: rodilla/CO 8,4% · rodilla/MX 6,1%**, contra 0% de los nichos que todavía no llegaron al ranking.
+
+**`scripts/discovery-loop.sh`** — el ciclo bajo systemd: scheduler → discover → audit → analyze → rank → vocab. ⚠️ El orden importa: `rank` va **después** de `analyze` porque solo mira anuncios que ya pasaron las fases 5-6. `analyze` corre incluso con la IP bloqueada (pide landings de terceros, no Meta); `rank` no.
+
 ### Preview del flujo nuevo (`/tools/buscador-productos/preview`) — NO es lo que se lanza
 
 Lo que se lanza es la lista de siempre. Esto es el flujo acordado (elegir nicho → animación → un producto anónimo → confirmación → Ads Library → encuesta → aceptar o gastar un comodín → seguir o cambiar de nicho), construido en paralelo **solo para ver cómo queda**. No hay ningún enlace hacia esa ruta desde la tool.

@@ -1,0 +1,34 @@
+{
+  "problem": [
+    "garganta"
+  ],
+  "symptom": [],
+  "intent": [],
+  "commercial": [],
+  "product": [
+    "pastilla garganta",
+    "spray garganta",
+    "caramelo garganta",
+    "te garganta",
+    "humidificador aire",
+    "inhalador vapor",
+    "bufanda termica",
+    "collar cervical",
+    "pastilla propolis",
+    "jarabe garganta",
+    "dolor garganta",
+    "garganta irritada",
+    "garganta inflamada",
+    "garganta seca",
+    "tos persistente",
+    "faringitis",
+    "amigdalitis",
+    "laringitis",
+    "garganta roja",
+    "garganta congestionada",
+    "trabajo voz",
+    "aire seco",
+    "cambio clima",
+    "parche calor cuello"
+  ]
+}

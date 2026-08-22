@@ -1,0 +1,32 @@
+{
+  "problem": [
+    "rostro"
+  ],
+  "symptom": [],
+  "intent": [],
+  "commercial": [],
+  "product": [
+    "mascarilla facial",
+    "serum facial",
+    "crema hidratante",
+    "rodillo facial",
+    "limpiador facial",
+    "parche facial",
+    "masaje facial",
+    "kit cuidado rostro",
+    "tonificador facial",
+    "espuma limpiadora",
+    "acne",
+    "arrugas",
+    "piel seca",
+    "piel grasa",
+    "ojeras",
+    "bolsas ojos",
+    "poros dilatados",
+    "manchas piel",
+    "envejecimiento",
+    "hidratacion piel",
+    "limpieza profunda",
+    "cuidado diario"
+  ]
+}

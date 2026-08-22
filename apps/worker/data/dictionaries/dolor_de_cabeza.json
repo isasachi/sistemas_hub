@@ -1,0 +1,30 @@
+{
+  "problem": [
+    "dolor de cabeza"
+  ],
+  "symptom": [],
+  "intent": [],
+  "commercial": [],
+  "product": [
+    "masajeador cabeza",
+    "banda frontal tension",
+    "parche frio cabeza",
+    "almohada cervical",
+    "masajeador cuello",
+    "casco masaje",
+    "rodillo facial",
+    "parche calor cuello",
+    "soporte cervical",
+    "banda presion cabeza",
+    "almohadilla termica cuello",
+    "masajeador electrico cuello",
+    "dolor cabeza",
+    "migrania",
+    "tension cervical",
+    "contractura cuello",
+    "trabajo oficina",
+    "estres tension",
+    "postura incorrecta",
+    "dormir mal"
+  ]
+}

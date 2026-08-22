@@ -1,0 +1,32 @@
+{
+  "problem": [
+    "dermatitis"
+  ],
+  "symptom": [],
+  "intent": [],
+  "commercial": [],
+  "product": [
+    "crema dermatitis",
+    "locion piel irritada",
+    "jabon dermatologico",
+    "parche dermatitis",
+    "crema eczema",
+    "serum piel sensible",
+    "mascarilla calmante",
+    "balsamo reparador",
+    "spray antiinflamatorio piel",
+    "toallitas limpiadoras",
+    "picazon piel",
+    "enrojecimiento piel",
+    "piel irritada",
+    "descamacion piel",
+    "piel seca sensible",
+    "dermatitis atopica",
+    "dermatitis seborreica",
+    "alergia piel",
+    "inflamacion cutanea",
+    "sensibilidad cutanea",
+    "piel reactiva",
+    "tratamiento piel inflamada"
+  ]
+}

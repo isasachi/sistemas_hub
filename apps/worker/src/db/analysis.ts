@@ -1,20 +1,9 @@
 // Persistencia de las Fases 5-8.
 import { randomUUID } from 'node:crypto'
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { db } from './client'
 import type { LandingSignals } from '../landing/parse'
 import type { ProductCandidate } from '../products/extract'
 
-let _db: SupabaseClient | null = null
-function db(): SupabaseClient {
-  if (!_db) {
-    _db = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      { auth: { persistSession: false } },
-    )
-  }
-  return _db
-}
 
 export interface PendingAd {
   id: string

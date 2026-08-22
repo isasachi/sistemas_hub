@@ -1,0 +1,33 @@
+{
+  "problem": [
+    "masajeador muscular"
+  ],
+  "symptom": [],
+  "intent": [],
+  "commercial": [],
+  "product": [
+    "pistola masaje",
+    "masajeador percutor",
+    "masajeador vibratorio",
+    "masajeador cuello",
+    "masajeador espalda",
+    "masajeador portatil",
+    "masajeador inalambrico",
+    "kit masaje muscular",
+    "masajeador profundo",
+    "dolor muscular",
+    "tension muscular",
+    "contractura muscular",
+    "rigidez muscular",
+    "espalda tensa",
+    "cuello contracturado",
+    "trapecio",
+    "lumbar",
+    "trabajo oficina",
+    "ejercicio intenso",
+    "parche calor",
+    "rodillo masaje",
+    "bola masaje",
+    "almohadilla termica"
+  ]
+}

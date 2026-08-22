@@ -1,0 +1,32 @@
+{
+  "problem": [
+    "ojos"
+  ],
+  "symptom": [],
+  "intent": [],
+  "commercial": [],
+  "product": [
+    "vision borrosa",
+    "ojo seco",
+    "fatiga ocular",
+    "picazon ojos",
+    "enrojecimiento ojos",
+    "bolsas bajo ojos",
+    "ojeras",
+    "astigmatismo",
+    "miopia",
+    "hipermetropia",
+    "presbicia",
+    "cataratas",
+    "pantalla computadora",
+    "luz azul",
+    "trabajo oficina",
+    "lentes antireflejo",
+    "gafas lectura",
+    "lentes contacto",
+    "gotas oculares",
+    "masajeador ojos",
+    "parche ojo",
+    "filtro pantalla"
+  ]
+}
