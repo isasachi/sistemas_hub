@@ -11,13 +11,13 @@ const btnPrimary =
 const TONE_OPTIONS = ['Profesional', 'Cercano', 'Divertido', 'Lujoso', 'Urgente', 'Confiable']
 
 export default function Section1Product() {
-  const { sessionId, productName, price, benefits, audience, tone, productLabels, setDetails } = useLandingStore()
+  const { sessionId, productName, price, benefits, audience, tone, productForm, setDetails } = useLandingStore()
   const [name, setName] = useState(productName ?? '')
   const [priceV, setPriceV] = useState(price ?? '')
   const [benefitsV, setBenefitsV] = useState(benefits ?? '')
   const [audienceV, setAudienceV] = useState(audience ?? '')
   const [toneV, setToneV] = useState<string[]>(tone)
-  const [labelsV, setLabelsV] = useState(productLabels ?? '')
+  const [formV, setFormV] = useState(productForm ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -29,11 +29,11 @@ export default function Section1Product() {
       const res = await fetch(`/api/generador-landing/sessions/${sessionId}/details`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ productName: name, price: priceV, benefits: benefitsV, audience: audienceV, tone: toneV, productLabels: labelsV }),
+        body: JSON.stringify({ productName: name, price: priceV, benefits: benefitsV, audience: audienceV, tone: toneV, productForm: formV }),
       })
       const data = (await res.json()) as { error?: string }
       if (!res.ok) throw new Error(data.error ?? 'No se pudo guardar')
-      setDetails({ productName: name, price: priceV, benefits: benefitsV, audience: audienceV, tone: toneV, productLabels: labelsV })
+      setDetails({ productName: name, price: priceV, benefits: benefitsV, audience: audienceV, tone: toneV, productForm: formV })
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -54,13 +54,15 @@ export default function Section1Product() {
       <FieldGroup type="input" id="ld-price" label="Precio de venta" helper="(opcional, pero la sección Oferta lo inventa si lo dejas vacío)"
         value={priceV} onChange={setPriceV} placeholder="Ej: S/ 89" />
 
-      {/* Mismo motivo que el precio: es un DATO del producto (lo que dice el envase), no un afinado
-          de copy — dentro del acordeón nadie lo llenaba. El acordeón queda solo con lo que afina el
-          copy: beneficios, público y tono. */}
-      <FieldGroup type="textarea" id="ld-labels" label="Texto de las etiquetas del producto"
-        helper="(opcional — una etiqueta por línea; mejora la fidelidad del texto en el envase)"
-        value={labelsV} onChange={setLabelsV} rows={4}
-        placeholder={'Ej:\nEÚNOIA\nNiacinamida · Pantenol · Colágeno\nACNÉ + HIDRATACIÓN\n30ml / 1.85 fl oz'} />
+      {/* QUÉ ES el producto. El pipeline conocía su nombre y el texto de su etiqueta, pero nunca su
+          formato: la visión lo deducía de la foto y se equivocaba. Medido con unas gomitas de
+          melatonina — la sección de beneficios salió con la persona sirviendo POLVO en un vaso y un
+          frasco inventado de "vitamina C en polvo" al lado. El helper nombra la consecuencia de
+          dejarlo vacío, mismo criterio que el del precio. */}
+      <FieldGroup type="input" id="ld-form" label="¿Qué es el producto?"
+        helper="(opcional, pero si lo dejas vacío se deduce de la foto y puede equivocarse de formato)"
+        value={formV} onChange={setFormV}
+        placeholder="Ej: gomitas masticables · cápsulas · crema · polvo para disolver" />
 
       <details className="rounded-xl border border-white/[0.08] bg-white/[0.02] px-4 py-3">
         <summary className="text-[13px] font-semibold text-[#efe7e0] cursor-pointer select-none">

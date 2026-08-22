@@ -126,7 +126,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // ⚠️ La placa es el lever REAL del encuadre, no el texto: es la imagen que la difusión copia.
     // Pedir el recorte por prompt contra una plantilla que muestra un retrato es la misma pelea que
     // ya se perdió con la luz.
-    const usaZona = showProtagonist && parsedType.data !== 'hero' && !!session.talent_zone_url
+    // ⚠️ `zoneNeedsOwnPlate` acá NO es redundante con la ruta que genera la placa: es la segunda
+    // puerta que repara las sesiones YA guardadas. Una sesión clasificada como `cuerpo_completo`
+    // antes de este cambio tiene una `talent_zone_url` de cuerpo entero persistida, y sin este gate
+    // se seguiría adjuntando para siempre — el fix no llegaría a la sesión que lo motivó.
+    const usaZona = showProtagonist && parsedType.data !== 'hero'
+      && !!session.talent_zone_url && zoneNeedsOwnPlate(session.body_focus)
     if (showProtagonist) {
       const plate = await fetchAsBase64(usaZona ? session.talent_zone_url! : session.talent_canonical_url!)
       parts.push({ inlineData: { mimeType: plate.mimeType, data: plate.data } })
@@ -155,6 +160,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         copy,
         dna: session.landing_dna,
         productLabels: session.product_labels,
+        productForm: session.product_form,
         offer,
         trust,
         packUnits,

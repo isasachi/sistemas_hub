@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useLandingStore } from '@/store/landing'
 import { NicheId, DemographicId, BodyFocus, type LandingDna, type NicheClassification } from '@/lib/landing/types'
 import { NICHE_LABELS, NICHE_DEFAULT_DEMOGRAPHIC } from '@/lib/landing/niches'
-import { DEMOGRAPHIC_LABELS, BODY_FOCUS_LABELS } from '@/lib/landing/demographics'
+import { DEMOGRAPHIC_LABELS, BODY_FOCUS_LABELS, BODY_FOCUS_ZONAS, SIN_ZONA } from '@/lib/landing/demographics'
 
 const btnPrimary =
   'rounded-xl jr-cta text-[13px] font-bold disabled:opacity-40 transition-all duration-200 cursor-pointer border-0 font-sans flex items-center justify-center gap-2 h-11 w-full'
@@ -271,10 +271,15 @@ export default function SectionIdentity() {
           onChange={(e) => setSelFocus(BodyFocus.parse(e.target.value))}
           className={field}
         >
-          {BodyFocus.options.map((f) => <option key={f} value={f}>{BODY_FOCUS_LABELS[f]}</option>)}
+          {/* "Sin zona" va PRIMERO y aparte: no es una parte del cuerpo, es el caso de un producto
+              cuyo beneficio no se ve en ninguna. La lista de zonas ya no ofrece "cuerpo completo" —
+              esta tool nunca encuadra a la persona entera. */}
+          <option value={SIN_ZONA}>{BODY_FOCUS_LABELS[SIN_ZONA]}</option>
+          {BODY_FOCUS_ZONAS.map((f) => <option key={f} value={f}>{BODY_FOCUS_LABELS[f]}</option>)}
         </select>
         <p className="text-[11px] text-[#94a3b8]">
-          El hero siempre muestra el rostro; el resto de las secciones encuadran esta zona.
+          El hero siempre muestra el rostro; el resto de las secciones encuadran esta zona. Sin zona
+          específica, la persona sale de medio cuerpo.
         </p>
       </div>
 

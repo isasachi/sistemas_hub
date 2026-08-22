@@ -16,24 +16,15 @@ export default function Section2Photos() {
   ])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [dims, setDims] = useState<({ w: number; h: number } | null)[]>([null, null, null])
 
-  // Piso de resolución: con fotos chicas el producto sale inconsistente entre secciones —
-  // el detalle de las etiquetas no existe en el input y cada sección lo confabula distinto.
-  // Una foto tipo 1080px sale perfecta; una de ~400px, no. Avisamos (no bloqueamos).
-  const MIN_SHORT = 800
-
-  async function onFile(i: number, f: File) {
+  // El aviso de "foto pequeña" se retiró a pedido del dueño del repo: medía el lado corto contra
+  // 800px y avisaba en el paso de fotos. El requisito de resolución sigue dicho en el texto de
+  // arriba, que es donde el usuario decide qué subir; el aviso solo aparecía cuando ya la había
+  // elegido. Con él se fue la medición (`createImageBitmap`) que no alimentaba nada más.
+  function onFile(i: number, f: File) {
     setFiles((prev) => prev.map((x, j) => (j === i ? f : x)))
     setPreviews((prev) => prev.map((x, j) => (j === i ? URL.createObjectURL(f) : x)))
-    try {
-      const bmp = await createImageBitmap(f)
-      setDims((prev) => prev.map((x, j) => (j === i ? { w: bmp.width, h: bmp.height } : x)))
-      bmp.close?.()
-    } catch { /* si no se puede medir, no avisamos */ }
   }
-
-  const smallPhoto = dims.find((d, i) => files[i] && d && Math.min(d.w, d.h) < MIN_SHORT) as { w: number; h: number } | undefined
 
   const hasAny = files.some(Boolean) || productPhotoUrls.length > 0
 
@@ -73,12 +64,6 @@ export default function Section2Photos() {
           <FileUpload key={i} label={i === 0 ? 'Foto principal' : 'Otra foto'} onFile={(f) => onFile(i, f)} preview={previews[i]} variant={i === 0 ? 'primary' : 'ghost'} />
         ))}
       </div>
-
-      {smallPhoto && (
-        <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-[12px] text-amber-300/90">
-          Esa foto es pequeña ({smallPhoto.w}×{smallPhoto.h}px). El texto de las etiquetas no se ve con detalle, así que el producto puede salir <strong>inconsistente entre secciones</strong>. Para mejor resultado: sube una foto más grande y nítida (lado corto ≥ 800px), o escribe las etiquetas exactas del producto en el paso <strong>“Producto”</strong>, dentro de <strong>“Afinar copy y etiquetas”</strong>.
-        </div>
-      )}
 
       {error && <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-[12px] text-red-400">{error}</div>}
 

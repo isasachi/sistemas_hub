@@ -32,8 +32,16 @@ export const SECTION_LABELS: Record<SectionType, string> = {
 
 // ─── Nicho y demografía (spec 2026-07-23, Anexos A/B) ────────────────────────
 export const NicheId = z.enum([
-  'supplement_skin_female', 'skincare_topical', 'haircare',
-  'fitness_weightloss', 'supplement_male_performance',
+  // `supplement_skin_female` es el suplemento de BELLEZA (piel, cabello, uñas). `supplement_female`
+  // es el resto del bienestar femenino —sueño, hormonas, energía, hierro, ciclo—, que antes caía en
+  // el de belleza por no tener casillero propio: la sesión de GomiSleep (magnesio para dormir) salió
+  // clasificada como belleza/piel, y de ahí heredaba tipografía, props y vestuario de skincare.
+  // `supplement_male` es el simétrico masculino, y nació del mismo fallo del otro lado: unas gomitas
+  // de melatonina para hombres no tenían más casillero que `supplement_male_performance`, cuyo
+  // vestuario de nicho es "camiseta deportiva ajustada o musculosa" — de ahí el avatar de gimnasio
+  // en un anuncio para dormir.
+  'supplement_skin_female', 'supplement_female', 'skincare_topical', 'haircare',
+  'fitness_weightloss', 'supplement_male_performance', 'supplement_male',
   'joint_mobility', 'intimate_wellness', 'herbal_natural',
   'baby_maternity', 'pets', 'home_cleaning',
   'tech_gadgets', 'kitchen_tools', 'jewelry_fashion',
@@ -144,6 +152,43 @@ export const SECTION_REF: Record<SectionType, string> =
 // que el inglés para el que se dimensionaron antes; topes apretados = frases cortadas. Regla:
 // ceiling ≈ 1.4× el target del ADN. NO recortamos post-hoc (un word-trim nunca completa una frase;
 // la difusión auto-escala el texto, así que largo-y-completo > corto-y-cortado — pedido del usuario).
+// ⚠️ EL MODELO REDACTA, EL CÓDIGO VERIFICA — `accentWord` tiene que ser SUB-CADENA del headline.
+// `landing-system.md` lo pide ("sub-cadena EXACTA del `headline`") y `types.ts` lo documenta, pero
+// nada lo comprobaba: `copyBlock` (instructions.ts) le ordena a la difusión "render the words X in
+// the ACCENT COLOR **within the headline**", y cuando X no está en el headline el modelo no falla —
+// lo INSERTA. Medido sobre las sesiones guardadas: 5 de 26 traen un accentWord que no aparece en su
+// headline, y el caso reportado salió como titular impreso "Descansa mejor cada dormir mejor noche."
+// (headline "Descansa mejor cada noche", accentWord "dormir mejor").
+//
+// El fail-safe es DESCARTAR el acento, no sustituirlo por otro: sin la línea de Emphasis el
+// DESIGN_SYSTEM ya manda titular bicolor y el modelo elige la palabra por su cuenta — la sección
+// `oferta` de esa misma sesión no traía accentWord y salió bien. Elegirle nosotros una palabra sería
+// inventar copy.
+//
+// La comparación es insensible a mayúsculas y acentos porque el modelo reescribe el caso al citar
+// ("Duerme mejor" del headline, "duerme mejor" en el campo) y ahí el acento SÍ es válido: rechazarlo
+// tiraría el caso bueno. Se conserva el string original — es el que la difusión tiene que colorear.
+const plano = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+
+//
+// Y cuando SÍ está, se emite el recorte LITERAL del headline, no el string del modelo: si el campo
+// dice "DESCANSO ESTA" y el titular "Tu descanso está asegurado", pedirle a la difusión que coloree
+// "DESCANSO ESTA" es una versión suave del mismo bug — un string que no aparece así en el titular.
+// El recorte se verifica antes de usarlo (`plano` puede no preservar índices con caracteres raros);
+// si no cuadra se conserva el string del modelo, que igual está en el titular salvo caso/acentos.
+export function cleanAccentWord<T extends { headline?: string; accentWord?: string }>(copy: T): T {
+  const acc = copy.accentWord?.trim()
+  if (!acc) return copy
+  const headline = copy.headline ?? ''
+  const i = plano(headline).indexOf(plano(acc))
+  if (i < 0) {
+    const { accentWord: _drop, ...rest } = copy
+    return rest as T
+  }
+  const literal = headline.slice(i, i + acc.length)
+  return plano(literal) === plano(acc) ? { ...copy, accentWord: literal } : copy
+}
+
 export const SectionCopySchema = z.object({
   type: SectionType,
   headline: z.string().max(90),
@@ -289,6 +334,9 @@ export interface LandingSessionResponse {
   // por el usuario. Ground-truth para el prompt de imagen → el modelo renderiza las palabras
   // correctas en vez de confabular texto ilegible de la foto. Null = copiar de la foto.
   product_labels: string | null
+  // Qué ES el producto en palabras del vendedor (gomitas, cápsulas, crema…). Ver la migración
+  // 20260822000001: sin esto la visión deduce el formato de la etiqueta y lo inventa.
+  product_form: string | null
   // Copy propio de la sección Oferta (headline/subheadline). Lo compone Satori. Null = la
   // sesión aún no generó la oferta híbrida. En sesiones pre-F5 también trae tiers/urgency. Ver OfferCopy.
   offer_copy: OfferCopy | null

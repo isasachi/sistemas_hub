@@ -98,8 +98,44 @@ describe('pinUserPrice', () => {
     const unit = out.tiers.map((t, i) => (parseFloat(t.price.slice(2)) / (i + 1)))
     expect(unit[1]).toBeLessThan(unit[0])
     expect(unit[2]).toBeLessThan(unit[1])
-    // el perUnit del modelo también se escala: no puede quedar con la aritmética vieja
-    expect(out.tiers[0].perUnit).toBe('S/ 27 c/u')
+    // ⚠️ EL perUnit SE DERIVA DEL PRECIO, y esta aserción fijaba el bug: escalando el string del
+    // modelo (S/ 60 c/u × 0.447) daba "S/ 27 c/u" para un tier de UNA unidad que cuesta S/ 89 —
+    // el precio por unidad de una sola unidad ES el precio. Ahora sale de price/cantidad.
+    expect(out.tiers[0].perUnit).toBe('S/ 89 c/u')
+    expect(out.tiers[1].perUnit).toBe('S/ 78.50 c/u')  // 157 / 2
+    expect(out.tiers[2].perUnit).toBe('S/ 67 c/u')     // 201 / 3
+  })
+
+  // ⚠️ UN CENTAVO SE PERDÍA EN LA FUNCIÓN QUE EXISTE PARA NO PERDERLO. `scalePrice` redondea a
+  // entero todo lo que pase de 10, así que "S/ 89.90" sobre una oferta de S/ 89 salía como S/ 90:
+  // una landing anunciando una cifra que el vendedor no cobra, que es exactamente el fallo que
+  // `pinUserPrice` vino a evitar.
+  it('el precio del usuario se escribe EXACTO, con sus decimales', () => {
+    const out = pinUserPrice({ tiers: tiers('S/ 89', 'S/ 159', 'S/ 219') } as any, 'S/ 89.90')
+    expect(out.tiers[0].price).toBe('S/ 89.90')
+    expect(out.tiers[0].perUnit).toBe('S/ 89.90 c/u')
+    // el resto de la escalera sí se redondea: los precios en soles son enteros
+    expect(out.tiers[1].price).toBe('S/ 161')
+  })
+
+  // La card tiene que CERRAR: es la cuenta que un comprador hace a mano.
+  it('precio y precio-por-unidad no pueden contar historias distintas', () => {
+    const out = pinUserPrice({ tiers: tiers('S/ 89', 'S/ 159', 'S/ 219') } as any, 'S/ 129')
+    for (const [i, t] of out.tiers.entries()) {
+      const precio = parseFloat(t.price.replace(/[^\d.]/g, ''))
+      const unidad = parseFloat(t.perUnit!.replace(/[^\d.]/g, ''))
+      expect(unidad).toBeCloseTo(precio / (i + 1), 2)
+    }
+  })
+
+  // Un perUnit que NO es por-pack (la cantidad del label no cuenta cápsulas) se escala como antes.
+  it('no reescribe un perUnit que mide otra cosa ("por cápsula")', () => {
+    const out = pinUserPrice(
+      { tiers: [{ label: '1 Frasco', price: 'S/ 100', perUnit: 'S/ 1.20 por cápsula', cta: 'c', featured: true }] } as any,
+      'S/ 50',
+    )
+    expect(out.tiers[0].price).toBe('S/ 50')
+    expect(out.tiers[0].perUnit).toBe('S/ 0.6 por cápsula')  // escalado, no derivado
   })
 
   it('no toca nada si el modelo ya usó el precio del usuario', () => {

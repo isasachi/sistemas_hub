@@ -1,0 +1,14 @@
+-- Qué ES el producto (formato de consumo/uso), en palabras del vendedor.
+--
+-- El pipeline sabía el NOMBRE del producto y el texto de su etiqueta, pero nunca qué formato
+-- tiene. `props` y las poses las decide la visión leyendo la foto y la etiqueta, y con eso sola
+-- se equivoca de formato: medido en la sesión e3117b54 (NNF Gummy Sleep, gomitas), la sección
+-- de beneficios salió con la persona sirviendo POLVO en un vaso y un frasco inventado de
+-- "VITAMINA C EN POLVO" al lado, y la de oferta con un bol de polvo rosa. La etiqueta dice
+-- "Caramelo blando … y vitamina C" y el modelo se quedó con lo segundo.
+--
+-- Es texto libre y no un enum a propósito: "gomitas masticables", "cápsulas blandas", "sobres
+-- para disolver" y "roll-on" no caben en una lista cerrada, y una lista corta obliga a elegir
+-- mal justo en los casos raros — el mismo argumento por el que el nicho del video se elige y no
+-- se detecta.
+alter table landing_sessions add column if not exists product_form text;

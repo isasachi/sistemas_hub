@@ -4,10 +4,12 @@ import type { NicheId, DemographicId } from './types'
 // `font_accent` solo se usa en el titular de hero_problem y offer, nunca en cuerpo/cards.
 export const NICHE_TYPOGRAPHY: Record<NicheId, { font_family: string; font_accent: string | null }> = {
   supplement_skin_female: { font_family: 'Poppins', font_accent: null },
+  supplement_female: { font_family: 'Nunito Sans', font_accent: null },
   skincare_topical: { font_family: 'Inter', font_accent: 'Playfair Display' },
   haircare: { font_family: 'Gilroy', font_accent: null },
   fitness_weightloss: { font_family: 'Montserrat', font_accent: 'Anton' },
   supplement_male_performance: { font_family: 'Oswald', font_accent: 'Archivo Black' },
+  supplement_male: { font_family: 'Source Sans 3', font_accent: null },
   joint_mobility: { font_family: 'Source Sans 3', font_accent: null },
   intimate_wellness: { font_family: 'Recoleta', font_accent: null },
   herbal_natural: { font_family: 'Nunito Sans', font_accent: 'Lora' },
@@ -24,10 +26,12 @@ export const NICHE_TYPOGRAPHY: Record<NicheId, { font_family: string; font_accen
 // Anexo A, columna "Nombre legible (UI)".
 export const NICHE_LABELS: Record<NicheId, string> = {
   supplement_skin_female: 'Suplemento belleza / piel',
+  supplement_female: 'Suplemento femenino',
   skincare_topical: 'Skincare / cosmética',
   haircare: 'Cuidado capilar',
   fitness_weightloss: 'Fitness / pérdida de peso',
-  supplement_male_performance: 'Suplemento masculino',
+  supplement_male_performance: 'Suplemento masculino (rendimiento)',
+  supplement_male: 'Suplemento masculino (bienestar)',
   joint_mobility: 'Articulaciones / movilidad',
   intimate_wellness: 'Bienestar íntimo',
   herbal_natural: 'Herbal / natural',
@@ -69,6 +73,14 @@ export const NICHE_FALLBACK: Record<
     halo: 'radial_soft',
     particles_on: true,
   },
+  supplement_female: {
+    hue: 280,
+    particles: 'Polvo de luz tenue y destellos suaves suspendidos',
+    particle_density: 'medium',
+    propsFamily: 'Raíz o flor del ingrediente, hojas, cápsulas sueltas',
+    halo: 'radial_soft',
+    particles_on: true,
+  },
   skincare_topical: {
     hue: 340,
     particles: 'Gotas de agua, vapor suave, pétalos flotando',
@@ -99,6 +111,14 @@ export const NICHE_FALLBACK: Record<
     particle_density: 'low',
     propsFamily: 'Raíz de maca, cápsulas oscuras, textura de piedra',
     halo: 'backlight',
+    particles_on: true,
+  },
+  supplement_male: {
+    hue: 215,
+    particles: 'Polvo de luz tenue y destellos suaves suspendidos',
+    particle_density: 'medium',
+    propsFamily: 'Raíz o flor del ingrediente, hojas, cápsulas sueltas',
+    halo: 'radial_soft',
     particles_on: true,
   },
   joint_mobility: {
@@ -194,6 +214,7 @@ export const NICHE_FALLBACK: Record<
 // ─── Anexo B.0 — Demografía por defecto según niche_id ──────────────────────
 export const NICHE_DEFAULT_DEMOGRAPHIC: Record<NicheId, DemographicId> = {
   supplement_skin_female: 'female_18_30',
+  supplement_female: 'female_30_45',
   skincare_topical: 'female_18_30',
   haircare: 'female_18_30',
   intimate_wellness: 'female_30_45',
@@ -202,6 +223,7 @@ export const NICHE_DEFAULT_DEMOGRAPHIC: Record<NicheId, DemographicId> = {
   joint_mobility: 'senior_55_plus',
   fitness_weightloss: 'male_20_35',
   supplement_male_performance: 'male_35_55',
+  supplement_male: 'male_35_55',
   pets: 'no_talent',
   home_cleaning: 'no_talent',
   tech_gadgets: 'no_talent',

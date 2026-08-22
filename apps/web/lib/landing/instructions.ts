@@ -1,6 +1,6 @@
-import type { SectionCopy, SectionType, LandingDna, PaletteTokens, Offer, TrustBlock, NicheId, PaymentMethod, BodyFocus } from './types'
+import { cleanAccentWord, type SectionCopy, type SectionType, type LandingDna, type PaletteTokens, type Offer, type TrustBlock, type NicheId, type PaymentMethod, type BodyFocus } from './types'
 import { NICHE_LABELS } from './niches'
-import { BODY_FOCUS_FRAMING } from './demographics'
+import { BODY_FOCUS_FRAMING, zoneNeedsOwnPlate } from './demographics'
 import { SECTION_DNA } from './section-dna'
 import { moneyRamp, type MoneyRamp } from './palette-derive'
 import { styleOf, DEFAULT_STYLE } from './style-dna'
@@ -30,7 +30,11 @@ import { styleOf, DEFAULT_STYLE } from './style-dna'
 // distintas) en sus cards; `faq`/`garantia`/`cta-final` no llevan persona alguna.
 export const NO_TALENT_SECTIONS: Set<SectionType> = new Set(['faq', 'testimonios', 'garantia', 'cta-final'])
 
-function copyBlock(copy: SectionCopy): string {
+function copyBlock(raw: SectionCopy): string {
+  // Segunda puerta de `cleanAccentWord` (la primera está en `copy.ts`, al generar). Esta repara las
+  // sesiones YA guardadas —5 de 26 traen un accentWord que no está en su headline— sin migración: el
+  // copy se persiste en jsonb y esta ruta lo vuelve a leer en cada render y regeneración.
+  const copy = cleanAccentWord(raw)
   const lines: string[] = [`Headline: "${copy.headline}".`]
   // La palabra-acento se resalta con COLOR (no con corchetes ni comillas). Dirigirla evita que el
   // modelo elija otra o la envuelva en [ ] para "enfatizar".
@@ -54,11 +58,26 @@ function copyBlock(copy: SectionCopy): string {
 // El envase = Imagen 1 (canónico), SIEMPRE el mismo objeto — nunca se reinventa forma, tapa,
 // proporción ni material. Los labels son EXCLUSIVAMENTE `productLabels` (ground-truth tipeado
 // por el usuario) en la jerarquía del spec; sin ellos, se leen de las fotos reales (Imagen 2+).
-function brandBlock(productLabels: string | null): string {
+function brandBlock(productLabels: string | null, productForm: string | null): string {
   const lines: string[] = [
     'BRAND — el envase renderizado es SIEMPRE el mismo objeto de la Imagen 1 (envase canónico): misma forma, proporciones, tapa, material y color exacto. Nunca se reinventa forma, tapa, proporción ni material.',
     'PROPORCIONES REALES (crítico): renderizá el envase con su relación ancho/alto NATURAL de frasco real, IDÉNTICA en todas las secciones. NUNCA lo estires, alargues, angostes ni comprimas — aunque la imagen de referencia venga recortada, parcial o angosta, reconstruí las proporciones reales del frasco. Un envase estirado o deforme es criterio de fallo.',
+    // ⚠️ EL SEGUNDO ENVASE INVENTADO. Medido en la sesión e3117b54: junto a las gomitas apareció un
+    // frasco extra rotulado "VITAMINA C EN POLVO" que no existe — el modelo tomó un ingrediente de
+    // la etiqueta y le fabricó su propio producto con marca. Los props son objetos CRUDOS
+    // (ingredientes, fruta, materia prima); un envase con etiqueta es un producto, y el único
+    // producto de esta pieza es el de la Imagen 1.
+    'UN SOLO ENVASE CON ETIQUETA: el de la Imagen 1. No inventes frascos, potes, sobres ni cajas adicionales con marca, rótulo o texto impreso, ni siquiera para representar un ingrediente — los ingredientes se muestran en su forma cruda, nunca envasados.',
   ]
+  // El formato lo declara el VENDEDOR (campo "¿Qué es el producto?"). Sin este dato la visión lo
+  // deduce de la etiqueta y se equivoca: unas gomitas cuya etiqueta nombra vitamina C salieron
+  // renderizadas como polvo, con la persona sirviéndolo en un vaso. El dato manda sobre lo que el
+  // modelo crea leer.
+  if (productForm && productForm.trim()) {
+    lines.push(
+      `FORMATO DEL PRODUCTO (dato del vendedor, manda sobre cualquier lectura de la etiqueta): es ${productForm.trim()}. Todo lo que se muestre alrededor tiene que ser coherente con ese formato — el contenido visible, la dosis, la forma de consumirlo y lo que la persona sostiene o usa. Prohibido mostrar otro formato de consumo ni los utensilios de otro formato (vasos mezcladores, cucharas dosificadoras, polvo vertiéndose, líquidos preparados) si no corresponden a ${productForm.trim()}.`,
+    )
+  }
   if (productLabels && productLabels.trim()) {
     lines.push(
       `El texto de la etiqueta es EXCLUSIVAMENTE este (ground-truth), en esta jerarquía de mayor a menor peso visual:\n${productLabels.trim()}\nOrden: 1) marca (mayor peso, negro) 2) sub-marca 3) descriptor 4) línea de ingredientes (dentro de una caja con borde fino) 5) cantidad/unidades. Prohibido inventar, traducir, abreviar o completar ingredientes: si un ingrediente no está en esta lista, no existe. La etiqueta debe ser IDÉNTICA entre secciones — es el criterio de fallo #1.`,
@@ -80,7 +99,7 @@ function brandBlock(productLabels: string | null): string {
 // que vivía acá se retiró — `masterLayoutBlock` es ahora el ÚNICO emisor de la instrucción de
 // partículas (on/off vía `dna.particles_on`). Dejarla acá duplicada contradecía el caso OFF: el
 // prompt decía "Siempre presentes" (esta capa) Y "SIN partículas" (masterLayoutBlock) a la vez.
-function designSystemBlock(dna: LandingDna, money: MoneyRamp): string {
+function designSystemBlock(dna: LandingDna, money: MoneyRamp, section: SectionType): string {
   const p: PaletteTokens = dna.palette
   // Lenguaje MATERIAL heredado de la marca (2026-08-15). Antes de esto las cuatro líneas de abajo
   // que lo describen eran texto fijo, idéntico en toda sesión: la marca solo movía los hex y todas
@@ -109,8 +128,40 @@ function designSystemBlock(dna: LandingDna, money: MoneyRamp): string {
     'Titular (invariante): 3-4 líneas, alineado a la izquierda, ragged right; conviven líneas neutras en el color de titular semibold y 1-2 palabras clave en el color de acento extrabold, a mayor tamaño. Subtítulo: 1 línea, ~40% del tamaño del titular, con una palabra en el color de acento.',
     'Card title (invariante): bold en el color de titular. Card body: regular en el color de cuerpo, máximo 2 líneas. Microcopy: uppercase bold + descriptor regular debajo, a menor tamaño.',
     `Componentes — la GEOMETRÍA es invariante (radio, proporciones y anatomía los manda la plantilla); el MATERIAL lo manda la marca. Card: radio 28-32px, con este acabado — ${st.surface} Icono: ${st.icon} Diámetro constante dentro de una misma sección.`,
-    'Componentes de oferta (geometría invariante, solo cambia color): Pill: "ANTES" en gris oscuro, "DESPUÉS" en dorado. Chevron: doble »» en el color de acento dentro de un círculo blanco entre las dos cards de comparación. Cinta de oferta: banda dorada con corona, superpuesta al borde superior de la card central. Sello: medalla circular dorada con texto curvo. CTA: botón redondeado — acento sólido en opciones laterales, dorado en la recomendada.',
+    ...offerComponents(section),
   ].join('\n')
+}
+
+// ⚠️ ESTA LÍNEA SE EMITÍA EN LAS 8 SECCIONES, Y ASÍ ES COMO EL ANTES/DESPUÉS SE COLÓ EN EL HERO.
+// Era un solo string con CUATRO componentes distintos adentro (pill de comparación, chevron, cinta
+// de oferta, sello, botón CTA) y viajaba idéntico a toda sección. El hero lo recibía entero: su
+// `composition` dice explícitamente "SIN botón CTA — el hero solo presenta" y no menciona paneles
+// de comparación, pero la instrucción le describía la pill "ANTES"/"DESPUÉS" y el doble »» "entre
+// las dos cards de comparación" — y la difusión los dibujó. Medido en la sesión e3117b54: el hero
+// salió con los dos paneles (cara cansada / cara en la almohada), sus pills y los chevrons, sin
+// que el copy del hero tuviera un solo campo de antes/después (`bulletsAfter` vacío).
+//
+// Se reparte por COMPONENTE y no por "sección con oferta", que es lo que hace la diferencia: el
+// hero SÍ está en `OFFER_SECTIONS` y puede llevar el tier destacado, así que apagarle la línea
+// entera por no ser `oferta` le sacaría también el tratamiento del precio. Lo que no le toca es la
+// geometría de COMPARACIÓN. Cada componente va donde su `composition` lo declara.
+const COMPARACION = 'Pill: "ANTES" en gris oscuro, "DESPUÉS" en dorado. Chevron: doble »» en el color de acento dentro de un círculo blanco entre las dos cards de comparación.'
+const CINTA = 'Cinta de oferta: banda dorada con corona, superpuesta al borde superior de la card central.'
+const SELLO = 'Sello: medalla circular dorada con texto curvo.'
+const BOTON = 'CTA: botón redondeado — acento sólido en opciones laterales, dorado en la recomendada.'
+const OFFER_COMPONENTS: Partial<Record<SectionType, string[]>> = {
+  'antes-despues': [COMPARACION],
+  oferta: [CINTA, SELLO, BOTON],
+  garantia: [SELLO],
+  'cta-final': [SELLO, BOTON],
+}
+function offerComponents(section: SectionType): string[] {
+  const partes = OFFER_COMPONENTS[section]
+  if (!partes) return []
+  // El rótulo dice "de oferta" solo donde HAY oferta. En `garantia` y `antes-despues` ese título
+  // aterrizaba al lado de "SIN BLOQUE DE VENTA" y la contradicción se leía ya desde el encabezado.
+  const rotulo = OFFER_SECTIONS.has(section) ? 'Componentes de oferta' : 'Componentes'
+  return [`${rotulo} (geometría invariante, solo cambia color): ${partes.join(' ')}`]
 }
 
 // ─── Capa 4 — CONTENIDO DE CARRILES (spec §3, motor plantilla-como-scaffold) ─
@@ -255,10 +306,45 @@ export const PAYMENT_SECTIONS: Set<SectionType> = new Set(['oferta', 'garantia']
 export const MULTI_UNIT_SECTIONS: Set<SectionType> = new Set(['oferta', 'cta-final'])
 
 // Secciones que CONSUMEN los tiers de la oferta: `oferta` los pinta enteros (offerText) y
-// hero/cta-final el destacado (featuredPriceText + urgencyText). El route se apoya en este set para
+// `cta-final` el destacado (featuredPriceText + urgencyText). El route se apoya en este set para
 // asegurar que `session.offer` exista ANTES de renderizarlas — sin tiers la difusión inventa el
 // precio, y siempre el mismo.
-export const OFFER_SECTIONS: Set<SectionType> = new Set(['oferta', 'hero', 'cta-final'])
+//
+// ⚠️ EL HERO ESTABA ACÁ Y NO DEBÍA: ES LA SEGUNDA FUGA DE ESTRUCTURA AL HERO. Primero se le colaba
+// el antes/después (la pill y el chevron de comparación); sacado eso, apareció en su lugar un
+// bloque de precio entero — "2 Unidades · S/ 159 · Antes: S/ 240 · S/ 79.50 c/u" y el sello dorado
+// "Oferta por tiempo limitado". No lo inventó la difusión: se lo pedían `featuredPriceText` y
+// `urgencyText`. Y su `composition` NO declara bloque de precio, ni badge de urgencia, ni botón
+// —dice literal "SIN botón CTA — el hero solo presenta"—, así que la instrucción le estaba pidiendo
+// algo que su propia estructura niega.
+//
+// El razonamiento viejo ("sin la cifra exacta el hero inventa el precio") resolvía el problema
+// equivocado: si el hero no lleva precio, la respuesta no es darle el correcto sino que no lleve
+// ninguno. Eso es `NO_SALES_BLOCK`, abajo.
+export const OFFER_SECTIONS: Set<SectionType> = new Set(['oferta', 'cta-final'])
+
+// Prohibición explícita para las 6 secciones que NO son bloque de venta. Es la contraparte de
+// arriba y va por DERIVACIÓN, no por una lista escrita a mano: cualquier sección fuera de
+// `OFFER_SECTIONS` la recibe, así que la próxima que se agregue nace protegida. Ninguna de esas 6
+// declara precio, ancla, ahorro, urgencia ni botón en su `composition`.
+// ⚠️ EL SELLO DE GARANTÍA NO ES UN ELEMENTO DE VENTA, y una primera versión de esta prohibición lo
+// trataba como tal. `garantia` está fuera de `OFFER_SECTIONS`, así que recibía la prohibición
+// entera —"ni sello… ni porcentaje de ahorro"— mientras `offerComponents` le pedía en el MISMO
+// prompt su "Sello: medalla circular dorada con texto curvo", y su `composition` declara un sello
+// con un porcentaje grande. Es el modo de fallo que este repo ya registró tres veces (`estable`
+// contra el micro-temblor, "no reescribas" contra la sección que pide reescribir, el 06c8259): dos
+// líneas del mismo prompt pidiendo lo contrario. La prohibición nombra ahora los sellos de
+// URGENCIA o DESCUENTO, y exime explícitamente al de garantía en las secciones que lo declaran.
+function noSalesBlock(section: SectionType): string {
+  const conSello = (OFFER_COMPONENTS[section] ?? []).includes(SELLO)
+  return [
+    'SIN BLOQUE DE VENTA en esta sección: no rendericies NINGÚN precio, cifra de moneda, precio ancla tachado, porcentaje de ahorro, etiqueta de cantidad ("2 Unidades") ni botón de compra, ni sello, cinta o badge que anuncie urgencia, escasez o descuento ("oferta por tiempo limitado", "solo hoy", stock restante). Esos elementos viven en la sección de oferta y en el cierre, no acá.',
+    conSello
+      ? 'ÚNICA EXCEPCIÓN: el sello de GARANTÍA que esta sección sí declara — no anuncia precio ni urgencia sino respaldo, y va con su porcentaje de satisfacción como manda su estructura.'
+      : null,
+    'Si la plantilla adjunta muestra algo parecido a un bloque de venta, ignoralo: esta sección no vende, presenta.',
+  ].filter(Boolean).join(' ')
+}
 
 // Secciones que llevan la barra de confianza inferior (mismas 4 filas, composición idéntica; solo
 // cambia el color de fondo). Oferta y antes-despues NO la llevan (payment_row / closing_strip).
@@ -281,7 +367,12 @@ function beforeAfterNote(hasTalent: boolean, nicheLabel?: string, bodyFocus?: Bo
   // cualquier producto: en una rodillera o una creatina de glúteos, los dos paneles salían siendo
   // caras. El par ANTES/DESPUÉS solo prueba algo si muestra la parte del cuerpo que el producto
   // cambia — y es la única sección donde ese encuadre es, además, el argumento de venta.
-  const zona = bodyFocus ? BODY_FOCUS_FRAMING[bodyFocus] : undefined
+  // ⚠️ Se gatea por `zoneNeedsOwnPlate`, NO por `bodyFocus` a secas. `cuerpo_completo` es la
+  // AUSENCIA de zona: con la comprobación por truthiness caía en la rama de zona y el prompt
+  // terminaba prohibiendo el rostro ("ni sustituyas la zona por un rostro") justo en los productos
+  // donde el par cara-cansada / cara-descansada ES la prueba — un suplemento para dormir no muestra
+  // nada de medio cuerpo. Sin zona real vuelve la rama del rostro, que es la de antes del eje.
+  const zona = zoneNeedsOwnPlate(bodyFocus) ? BODY_FOCUS_FRAMING[bodyFocus!] : undefined
   return [
     (nicheLabel ? `Para un producto de categoría «${nicheLabel}», ` : '') +
       'ANTES/DESPUÉS ADAPTATIVO: los dos paneles muestran el MISMO sujeto en dos estados coherentes con el nicho y el copy —',
@@ -382,6 +473,7 @@ export function buildDiffusionInstruction(args: {
   copy: SectionCopy
   dna: LandingDna
   productLabels: string | null
+  productForm?: string | null  // session.product_form — qué ES el producto, en palabras del vendedor
   offer?: Offer | null
   trust?: TrustBlock | null
   packUnits?: number | null
@@ -393,7 +485,7 @@ export function buildDiffusionInstruction(args: {
   bodyFocus?: BodyFocus         // session.body_focus — la zona sobre la que actúa el producto
   zonePlate?: boolean           // true si la placa ADJUNTA es la de zona (todo menos el hero)
 }): string {
-  const { section, copy, dna, productLabels, offer, trust, packUnits, hasTalent, talentSubstitute, reserveLockup, nicheId, demographicLabel, bodyFocus, zonePlate } = args
+  const { section, copy, dna, productLabels, productForm, offer, trust, packUnits, hasTalent, talentSubstitute, reserveLockup, nicheId, demographicLabel, bodyFocus, zonePlate } = args
 
   // El talento/protagonista se muestra solo si el nicho lo tiene Y la sección no está en
   // NO_TALENT_SECTIONS (faq/testimonios/garantia/cta-final). Determina si se adjunta el retrato
@@ -407,8 +499,8 @@ export function buildDiffusionInstruction(args: {
 
   const base = [
     'Diseña UNA sección de landing 9:16 full-bleed, calidad de anuncio comercial premium, mobile-first. La ÚLTIMA imagen adjunta es la PLANTILLA DE COMPOSICIÓN — reproduce EXACTAMENTE su composición y estructura; esta instrucción solo cambia producto, talento, copy, colores, acabado/material y props del nicho.',
-    brandBlock(productLabels),
-    designSystemBlock(dna, money),
+    brandBlock(productLabels, productForm ?? null),
+    designSystemBlock(dna, money, section),
     masterLayoutBlock(dna, section, hasTalent, talentSubstitute, demographicLabel, bodyFocus, zonePlate),
     compositionReinforcementBlock(section),
     '',
@@ -424,10 +516,14 @@ export function buildDiffusionInstruction(args: {
   if (section === 'oferta' && offer) extra.push(offerText(offer))
   // Precio + urgencia en hero/cta-final: la cifra EXACTA del tier destacado y el badge único con la
   // línea del copy (oferta ya trae ambos en offerText). Sin esto, hero/cta inventan precio y moneda.
-  if (offer && (section === 'hero' || section === 'cta-final')) extra.push(featuredPriceText(offer))
-  if (offer?.urgency && (section === 'hero' || section === 'cta-final')) extra.push(urgencyText(offer))
+  if (offer && section === 'cta-final') extra.push(featuredPriceText(offer))
+  if (offer?.urgency && section === 'cta-final') extra.push(urgencyText(offer))
+  if (!OFFER_SECTIONS.has(section)) extra.push(noSalesBlock(section))
   if (trust && TRUST_BAND_SECTIONS.has(section)) extra.push(trustText(trust, money))
-  if (packUnits && packUnits > 1) extra.push(packNote(packUnits))
+  // Gateado por sección además de por el caller. La ruta ya solo manda `packUnits` en
+  // MULTI_UNIT_SECTIONS, pero el contrato de qué muestra una sección es del builder: dejarlo
+  // colgando del llamador es exactamente cómo el hero terminó con un bloque de precio.
+  if (packUnits && packUnits > 1 && MULTI_UNIT_SECTIONS.has(section)) extra.push(packNote(packUnits))
   if (reserveLockup) extra.push(LOCKUP_BAND)
   if (section === 'oferta' && trust?.paymentMethods?.length) extra.push(paymentLogosText(trust.paymentMethods))
   else if (PAYMENT_SECTIONS.has(section)) extra.push(PAYMENT_BAND)

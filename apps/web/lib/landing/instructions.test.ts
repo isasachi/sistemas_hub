@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { buildDiffusionInstruction, MULTI_UNIT_SECTIONS, PAYMENT_SECTIONS, NO_TALENT_SECTIONS } from './instructions'
 import type { SectionCopy, SectionType, LandingDna, Offer, TrustBlock } from './types'
+import { assignPoses } from './demographics'
 import { COPPER } from './palette-derive'
 import { BrandStyle, STYLE_DNA } from './style-dna'
 
@@ -74,6 +75,107 @@ function build(section: SectionType, extra: Partial<Parameters<typeof buildDiffu
 }
 
 describe('buildDiffusionInstruction — DNA-driven (spec 2026-07-23)', () => {
+  // ⚠️ EL ANTES/DESPUÉS SE COLABA EN EL HERO. La línea de "Componentes de oferta" describía la
+  // pill ANTES/DESPUÉS y el doble »» "entre las dos cards de comparación" en las 8 secciones, y la
+  // difusión los dibujó en un hero cuyo copy no tiene un solo campo de comparación (medido en la
+  // sesión e3117b54). Se reparte por componente: la geometría de comparación es de `antes-despues`
+  // y de nadie más.
+  // El formato lo declara el vendedor y manda sobre lo que el modelo lea en la etiqueta: unas
+  // gomitas cuya etiqueta nombra vitamina C salieron renderizadas como POLVO servido en un vaso,
+  // con un frasco extra inventado de "VITAMINA C EN POLVO" al lado (sesión e3117b54).
+  it('el formato declarado viaja al prompt y el envase extra queda prohibido siempre', () => {
+    const conFormato = build('beneficios', { productForm: 'gomitas masticables' })
+    expect(conFormato).toContain('FORMATO DEL PRODUCTO')
+    expect(conFormato).toContain('gomitas masticables')
+    expect(conFormato).toContain('vasos mezcladores')
+    expect(build('beneficios', { productForm: null })).not.toContain('FORMATO DEL PRODUCTO')
+    // La prohibición del segundo envase NO depende del campo: el frasco inventado aparecía igual.
+    for (const pf of ['gomitas masticables', null])
+      expect(build('hero', { productForm: pf })).toContain('UN SOLO ENVASE CON ETIQUETA')
+  })
+
+  // ⚠️ AUDITORÍA DE FUGAS ENTRE SECCIONES. El hero se llevó DOS piezas que no le tocaban, una tras
+  // otra: primero la geometría de comparación del antes/después, y una vez tapada esa, un bloque de
+  // precio entero con su sello de urgencia ("2 Unidades · S/ 159 · Antes: S/ 240" + "Oferta por
+  // tiempo limitado"). Las dos venían del ensamblador, no de la difusión. Este test cierra la clase
+  // entera: con TODOS los insumos disponibles, cada bloque opcional aparece SOLO en las secciones
+  // que lo declaran en su `composition`.
+  // ⚠️ LA PROHIBICIÓN NO PUEDE CONTRADECIR A LA ESTRUCTURA DE LA SECCIÓN. `garantia` está fuera de
+  // OFFER_SECTIONS y recibe `noSalesBlock`, pero su `composition` declara un "Sello de garantía
+  // dorado (porcentaje grande...)" y `offerComponents` se lo pide en el MISMO prompt. Una
+  // prohibición que dijera "ni sello… ni porcentaje de ahorro" a secas dejaría dos líneas pidiendo
+  // lo contrario — el modo de fallo que este repo ya registró tres veces. Se comprueba leyendo los
+  // DOS bloques en la misma cadena: que cada uno exista por separado no dice nada del conflicto.
+  // ⚠️ NINGÚN EJEMPLO CON FORMA DE VALOR EN EL CHECKLIST. La composición de `oferta` ofrecía la
+  // cinta como «"Recomendado"/"3x2"» y el modelo imprimió un "3x2" enorme sobre un pack de DOS
+  // unidades — una promo que no existe en la sesión (badge guardado: "Mejor valor") y que además
+  // es falsa. Tercera vez que este repo pisa la misma trampa.
+  it('la sección de oferta no ofrece promos de ejemplo como si fueran copy', () => {
+    const of = build('oferta', { offer: OFFER, trust: TRUST })
+    expect(of).not.toContain('3x2')
+    expect(of).toContain('Recomendado')   // rótulo fijo de la plantilla, ese sí se conserva
+  })
+
+  it('la prohibición de venta no contradice al sello que la sección declara', () => {
+    const g = build('garantia', { offer: OFFER, trust: TRUST })
+    expect(g).toContain('Sello: medalla circular dorada')
+    expect(g).toContain('SIN BLOQUE DE VENTA')
+    expect(g).toContain('ÚNICA EXCEPCIÓN')          // el sello de garantía queda exento
+    expect(g).not.toContain('Componentes de oferta') // el rótulo tampoco puede decir "oferta" acá
+
+    // Donde no hay sello declarado, no hay excepción que otorgar.
+    const hero = build('hero', { offer: OFFER, trust: TRUST })
+    expect(hero).toContain('SIN BLOQUE DE VENTA')
+    expect(hero).not.toContain('ÚNICA EXCEPCIÓN')
+    expect(hero).not.toContain('Sello: medalla circular dorada')
+
+    // Y donde SÍ hay oferta, el rótulo la nombra y no aparece prohibición alguna.
+    const of = build('oferta', { offer: OFFER, trust: TRUST })
+    expect(of).toContain('Componentes de oferta')
+    expect(of).not.toContain('SIN BLOQUE DE VENTA')
+  })
+
+  it('ningún bloque opcional se filtra a una sección que no lo declara', () => {
+    const TODAS: SectionType[] = ['hero', 'beneficios', 'antes-despues', 'testimonios', 'faq', 'garantia', 'oferta', 'cta-final']
+    // marcador → las únicas secciones donde puede aparecer
+    const PERMITIDO: Record<string, SectionType[]> = {
+      'FEATURED PRICE': ['cta-final'],
+      'PRICE TIERS': ['oferta'],
+      'URGENCY:': ['cta-final'],
+      'Badge de urgencia': ['oferta'],
+      'cards de comparación': ['antes-despues'],
+      'ANTES/DESPUÉS ADAPTATIVO': ['antes-despues'],
+      'PAYMENT LOGOS (DRAW them)': ['oferta'],
+      'PAYMENT LOGOS (do NOT draw)': ['garantia'],
+      'TRUST BAR': ['hero', 'beneficios', 'testimonios', 'faq', 'garantia', 'cta-final'],
+      'MULTI-UNIT PACK': ['oferta', 'cta-final'],
+      'SIN BLOQUE DE VENTA': ['hero', 'beneficios', 'antes-despues', 'testimonios', 'faq', 'garantia'],
+    }
+    // Todo disponible a la vez: es el peor caso, el que produce las fugas.
+    const salida = Object.fromEntries(
+      TODAS.map((s) => [s, build(s, { offer: OFFER, trust: TRUST, packUnits: 3 })]),
+    ) as Record<SectionType, string>
+
+    for (const [marcador, permitidas] of Object.entries(PERMITIDO)) {
+      for (const s of TODAS) {
+        const deberia = permitidas.includes(s)
+        expect(salida[s].includes(marcador), `«${marcador}» en ${s}: ${deberia ? 'falta' : 'SE FILTRÓ'}`).toBe(deberia)
+      }
+    }
+  })
+
+  it('la geometría de comparación llega SOLO a antes-despues', () => {
+    expect(build('antes-despues')).toContain('cards de comparación')
+    for (const s of ['hero', 'oferta', 'beneficios', 'testimonios', 'faq', 'garantia', 'cta-final'] as SectionType[])
+      expect(build(s)).not.toContain('cards de comparación')
+    // El hero no lleva botón CTA (su propio `composition` lo dice), así que tampoco su descripción.
+    expect(build('hero')).not.toContain('CTA: botón redondeado')
+    // Y lo que sí es de cada una se conserva.
+    expect(build('oferta')).toContain('Cinta de oferta')
+    expect(build('garantia')).toContain('Sello: medalla circular dorada')
+    expect(build('cta-final')).toContain('CTA: botón redondeado')
+  })
+
   it('cada sección inyecta su REFUERZO COMPOSITIVO (checklist estructural del ADN)', () => {
     const anchor: Record<SectionType, string> = {
       hero: 'EXACTAMENTE 4 bullets',
@@ -169,13 +271,22 @@ describe('buildDiffusionInstruction — DNA-driven (spec 2026-07-23)', () => {
     expect(out).toContain('ahorra 33%')
   })
 
-  it('hero/cta-final inyectan featuredPriceText + urgencia', () => {
-    for (const type of ['hero', 'cta-final'] as SectionType[]) {
-      const out = build(type, { offer: OFFER })
-      expect(out).toContain('FEATURED PRICE')
-      expect(out).toContain('S/ 199')
-      expect(out).toContain('Oferta por tiempo limitado')
-    }
+  // ⚠️ EL HERO YA NO LLEVA PRECIO. Lo llevaba —`featuredPriceText` + `urgencyText`— y salió
+  // impreso: un bloque "2 Unidades · S/ 159 · Antes: S/ 240" con el sello "Oferta por tiempo
+  // limitado", en una sección cuya `composition` no declara precio, ni badge, ni botón. El
+  // argumento viejo ("sin la cifra exacta el hero inventa el precio") resolvía el problema
+  // equivocado: si no lleva precio, no hay cifra que acertar.
+  it('el cierre inyecta featuredPriceText + urgencia; el hero NO lleva precio', () => {
+    const cierre = build('cta-final', { offer: OFFER })
+    expect(cierre).toContain('FEATURED PRICE')
+    expect(cierre).toContain('S/ 199')
+    expect(cierre).toContain('Oferta por tiempo limitado')
+
+    const hero = build('hero', { offer: OFFER })
+    expect(hero).not.toContain('FEATURED PRICE')
+    expect(hero).not.toContain('S/ 199')
+    expect(hero).not.toContain('Oferta por tiempo limitado')
+    expect(hero).toContain('SIN BLOQUE DE VENTA')
   })
 
   it('la barra de confianza (TRUST BAR) va en las 6 secciones que la tienen, no en oferta/antes-despues', () => {
@@ -491,5 +602,93 @@ describe('body_focus en la instrucción', () => {
     for (const s of ALL) {
       expect(build(s, { bodyFocus: undefined, zonePlate: undefined })).toBe(build(s))
     }
+  })
+})
+
+
+// ─── accentWord: el código verifica que sea sub-cadena del headline ──────────
+// El fallo que esto cubre salió impreso en un render real: headline "Descansa mejor cada noche" +
+// accentWord "dormir mejor" → la difusión INSERTÓ las palabras y el titular quedó "Descansa mejor
+// cada dormir mejor noche.". La línea de Emphasis es la que se lo ordena, así que el fail-safe es
+// no emitirla.
+describe('accentWord — sub-cadena del headline', () => {
+  const build = (copy: SectionCopy) =>
+    buildDiffusionInstruction({ section: 'beneficios', copy, dna: DNA, productLabels: null, hasTalent: true })
+
+  it('NO emite la línea de Emphasis si el acento no está en el headline', () => {
+    const out = build({ type: 'beneficios', headline: 'Descansa mejor cada noche', accentWord: 'dormir mejor' })
+    expect(out).not.toContain('Emphasis:')
+    expect(out).not.toContain('dormir mejor')
+    expect(out).toContain('Descansa mejor cada noche')
+  })
+
+  it('SÍ la emite cuando el acento está en el headline (el caso bueno no se rompe)', () => {
+    const out = build({ type: 'beneficios', headline: 'Duerme mejor, despierta renovada', accentWord: 'Duerme mejor' })
+    expect(out).toContain('Emphasis:')
+    expect(out).toContain('"Duerme mejor"')
+  })
+
+  it('tolera diferencia de mayúsculas y acentos al comparar', () => {
+    const out = build({ type: 'beneficios', headline: 'Tu descanso está asegurado', accentWord: 'DESCANSO ESTA' })
+    expect(out).toContain('Emphasis:')
+  })
+})
+
+describe('antes/despues — cuerpo_completo NO toma la rama de zona', () => {
+  const build = (bodyFocus: 'cuerpo_completo' | 'gluteos_piernas') =>
+    buildDiffusionInstruction({
+      section: 'antes-despues', copy: { type: 'antes-despues', headline: 'H' },
+      dna: DNA, productLabels: null, hasTalent: true, bodyFocus,
+    })
+
+  it('sin zona real, el par vuelve al rostro', () => {
+    const out = build('cuerpo_completo')
+    expect(out).toContain('el mismo rostro ya resuelto')
+    expect(out).not.toContain('los DOS paneles encuadran')
+  })
+
+  it('con zona real, los dos paneles la encuadran', () => {
+    const out = build('gluteos_piernas')
+    expect(out).toContain('los DOS paneles encuadran')
+    expect(out).not.toContain('el mismo rostro ya resuelto')
+  })
+})
+
+describe('accentWord — se emite el recorte LITERAL del titular', () => {
+  it('no le pide a la difusión un string que el titular no tiene así', () => {
+    const out = buildDiffusionInstruction({
+      section: 'beneficios', dna: DNA, productLabels: null, hasTalent: true,
+      copy: { type: 'beneficios', headline: 'Tu descanso está asegurado', accentWord: 'DESCANSO ESTA' },
+    })
+    expect(out).toContain('"descanso está"')
+    expect(out).not.toContain('DESCANSO ESTA')
+  })
+})
+
+// ⚠️ La contradicción que esto fija es entre DOS bloques del MISMO prompt, así que se comprueba
+// sobre la instrucción armada y no sobre `assignPoses` a secas.
+describe('antes-despues — la nota de encuadre y la pose no se contradicen', () => {
+  it('sin zona real, la sección no recibe una pose contextual de actividad', () => {
+    const poses = assignPoses(['hero', 'antes-despues'], 'female_30_45', 'cuerpo_completo', [
+      'De pie en la habitación, brazos estirados hacia arriba en un estiramiento matutino',
+    ])
+    const out = buildDiffusionInstruction({
+      section: 'antes-despues', copy: { type: 'antes-despues', headline: 'H' },
+      dna: { ...DNA, poses }, productLabels: null, hasTalent: true, bodyFocus: 'cuerpo_completo',
+    })
+    expect(out).toContain('el mismo rostro ya resuelto')   // la nota manda
+    expect(out).not.toContain('estiramiento matutino')     // y nada la contradice
+  })
+
+  it('con zona real sí la recibe: nota y pose piden la misma zona', () => {
+    const poses = assignPoses(['hero', 'antes-despues'], 'female_18_30', 'gluteos_piernas', [
+      'Sentadilla profunda, glúteos contraídos',
+    ])
+    const out = buildDiffusionInstruction({
+      section: 'antes-despues', copy: { type: 'antes-despues', headline: 'H' },
+      dna: { ...DNA, poses }, productLabels: null, hasTalent: true, bodyFocus: 'gluteos_piernas',
+    })
+    expect(out).toContain('Sentadilla profunda')
+    expect(out).toContain('los DOS paneles encuadran')
   })
 })

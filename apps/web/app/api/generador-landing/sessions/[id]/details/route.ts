@@ -11,7 +11,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const session = await getLandingSession(id, await readUserId())
   if (!session) return NextResponse.json({ error: 'No se encontró la sesión' }, { status: 404 })
 
-  let body: { productName?: string; price?: string; benefits?: string; audience?: string; tone?: string[]; productLabels?: string }
+  let body: { productName?: string; price?: string; benefits?: string; audience?: string; tone?: string[]; productLabels?: string; productForm?: string }
   try { body = await req.json() } catch {
     return NextResponse.json({ error: 'Petición inválida' }, { status: 400 })
   }
@@ -34,7 +34,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     benefits: body.benefits?.trim() ?? null,
     audience: body.audience?.trim() ?? null,
     tone: (body.tone ?? []).map((t) => t.trim()).filter(Boolean),
-    product_labels: body.productLabels?.trim() || null,
+    // El campo de etiquetas salió del wizard (pedido del dueño del repo), así que el cliente ya no
+    // manda `productLabels`. Se escribe SOLO si viene: con `?? null` a secas, guardar el paso
+    // borraba el valor de una sesión vieja que sí lo tenía, y ese texto es el ground-truth de la
+    // etiqueta en `brandBlock`. La columna y su cableado siguen vivos; lo que se fue es el input.
+    ...('productLabels' in body ? { product_labels: body.productLabels?.trim() || null } : {}),
+    product_form: body.productForm?.trim() || null,
   })
   return NextResponse.json({ ok: true })
 }

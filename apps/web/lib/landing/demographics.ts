@@ -1,4 +1,5 @@
-import type { BodyFocus, DemographicId, NicheId, SectionType } from './types'
+import { BodyFocus } from './types'
+import type { DemographicId, NicheId, SectionType } from './types'
 
 // Nombre legible (UI) por demografía — paso 0.a Paso 2 del wizard (selector siempre editable).
 export const DEMOGRAPHIC_LABELS: Record<DemographicId, string> = {
@@ -148,12 +149,21 @@ export const ZONE_POSES: Record<BodyFocus, string[]> = {
     'Pies de perfil en paso corto, encuadre cerrado',
     'Pies en primer plano con el envase apoyado al lado, sobre la misma superficie',
   ],
-  cuerpo_completo: [
-    'Cuerpo entero de pie, postura relajada y abierta, encuadre de cabeza a pies a distancia media',
-    'Cuerpo entero en 3/4, peso sobre una pierna, brazos sueltos',
-    'Cuerpo entero de perfil en paso natural, encuadre completo',
-    'Cuerpo entero de pie sosteniendo el envase a la altura de la cintura',
-  ],
+  // ⚠️ VACÍO A PROPÓSITO — `cuerpo_completo` NO ES UNA ZONA, es la ausencia de zona, y no lleva
+  // placa propia. Tenía un banco de poses de cuerpo entero y `zoneNeedsOwnPlate` devolvía true, así
+  // que un suplemento de bienestar general (la rama que `classify.ts` manda explícitamente acá)
+  // generaba una placa "de cabeza a pies a distancia media" y TODA sección menos el hero salía con
+  // una persona de pie, entera y rígida — reportado como "parado como un maniquí, le quita
+  // profesionalidad". Medido en la sesión 147b44d4 (GomiSleep, body_focus `cuerpo_completo`,
+  // talent_zone_url poblada).
+  //
+  // El encuadre de este proyecto NUNCA fue de cuerpo entero: o medio cuerpo, o rostro, o la zona
+  // concreta (glúteos/rodilla/pies). Con el banco vacío, `zoneNeedsOwnPlate` devuelve false y la
+  // sección vuelve al retrato canónico (`buildTalentPrompt`: HALF-BODY, cabeza y torso) con las
+  // poses demográficas — exactamente el comportamiento anterior a que existiera el eje de zona.
+  // El valor sigue en el enum porque es la respuesta HONESTA del clasificador para un producto sin
+  // zona visible; lo que cambia es qué significa al renderizar.
+  cuerpo_completo: [],
 }
 
 // Nombre legible (UI) — el selector de Identidad, junto a nicho y demografía.
@@ -167,8 +177,22 @@ export const BODY_FOCUS_LABELS: Record<BodyFocus, string> = {
   articulacion: 'Articulación (hombro, codo, muñeca)',
   manos: 'Manos y uñas',
   pies: 'Pies',
-  cuerpo_completo: 'Cuerpo completo',
+  cuerpo_completo: 'Sin zona específica',
 }
+
+// ⚠️ EL SELECTOR NO OFRECE "CUERPO COMPLETO" — no es una zona y un avatar de cuerpo entero no es
+// una opción de esta tool. `SIN_ZONA` nombra al valor por lo que SIGNIFICA, para que la UI no
+// vuelva a escribir la clave cruda y para que nadie lo lea como "una zona más de la lista".
+//
+// La clave del enum sobrevive porque es el marcador PERSISTIDO de "sin zona": representarlo con
+// `null` obligaría a re-clasificar en cada carga —el guard de caché de `classify/route.ts` exige
+// `body_focus` no nulo—, o sea una llamada pagada por vista. Y el enum lo comparte el generador de
+// anuncios, donde el valor significa "zona del producto indeterminada".
+export const SIN_ZONA: BodyFocus = 'cuerpo_completo'
+
+// Las zonas REALES, en el orden del enum y sin el marcador de arriba. Es lo que se ofrece como
+// "parte del cuerpo" en el wizard.
+export const BODY_FOCUS_ZONAS: BodyFocus[] = BodyFocus.options.filter((f) => f !== SIN_ZONA)
 
 // Encuadre en lenguaje de prompt. Lo consumen la PLACA de zona (`talent.ts`) y la nota de
 // antes/después: los dos necesitan nombrar la misma zona con las mismas palabras, y si cada uno la
@@ -183,7 +207,10 @@ export const BODY_FOCUS_FRAMING: Record<BodyFocus, string> = {
   articulacion: 'la articulación (hombro, codo o muñeca), encuadre cerrado del miembro, SIN el rostro en cuadro',
   manos: 'las manos, encuadre cerrado de muñecas a dedos, SIN el rostro en cuadro',
   pies: 'los pies, encuadre cerrado de tobillos a dedos, SIN el rostro en cuadro',
-  cuerpo_completo: 'el cuerpo entero, encuadre de cabeza a pies a distancia media',
+  // Sin zona visible = el encuadre por defecto del proyecto, medio cuerpo. NO se gatea por
+  // `zonePlate`: `beforeAfterNote` lo lee siempre, así que dejarlo en "cabeza a pies" mandaba los dos
+  // paneles de antes/después a cuerpo entero aunque ya no hubiera placa de zona.
+  cuerpo_completo: 'a la persona de medio cuerpo, encuadre de la cabeza a la cintura',
 }
 
 // `rostro`/`cabello` ya están servidos por el banco demográfico y por la placa canónica: no
@@ -218,10 +245,12 @@ export const DEMOGRAPHIC_PERSONA: Record<DemographicId, string> = {
 // auditar en cada corrida.
 export const NICHE_WARDROBE: Record<NicheId, string> = {
   supplement_skin_female: 'top o camiseta lisa de tono neutro, look limpio de cuidado personal',
+  supplement_female: 'top o camiseta lisa de tono neutro, look cómodo de bienestar diario',
   skincare_topical: 'top o camiseta lisa de tono neutro, hombros descubiertos, look limpio de skincare',
   haircare: 'camiseta lisa de tono neutro que no compita con el cabello',
   fitness_weightloss: 'ropa deportiva de entrenamiento ajustada — licra y top deportivo',
   supplement_male_performance: 'camiseta deportiva ajustada o musculosa de color neutro',
+  supplement_male: 'polo o camiseta lisa de tono neutro, look cómodo de bienestar diario',
   joint_mobility: 'ropa deportiva cómoda de entrenamiento suave, tejido elástico',
   intimate_wellness: 'ropa de casa cómoda y discreta, tonos suaves, nada sugerente',
   herbal_natural: 'prendas de fibras naturales en tonos tierra, look sereno',
@@ -255,11 +284,70 @@ export function personaFor(
   demographic: DemographicId,
   niche: NicheId,
   focus?: BodyFocus | null,
+  // Complexión leída del PRODUCTO por la visión de `extract-dna` (2026-08-21). Va acá y no en el
+  // prompt de cada consumidor porque `model_persona` es el ancla de identidad: se resuelve UNA vez
+  // y viaja literal a las dos placas y a las 8 secciones. Metida acá, un avatar atlético lo es
+  // también en la placa canónica; descrita en el prompt de sección, la placa seguiría mandando otro
+  // cuerpo y las secciones se contradirían con ella. `undefined` = complexión sin especificar, o
+  // sea exactamente la persona de antes de este eje.
+  physique?: string | null,
+  // Vestuario contextual (2026-08-21). REEMPLAZA a `NICHE_WARDROBE`, no se suma: el del nicho es un
+  // uniforme de categoría —"camiseta deportiva ajustada o musculosa" para todo suplemento
+  // masculino— y tenerlos a los dos deja la persona describiendo dos atuendos. `WARDROBE_FOR_FOCUS`
+  // sí se conserva encima: es la restricción de ZONA (la prenda tiene que dejar ver la parte que el
+  // producto cambia), el mismo reparto que `conEncuadre` — el modelo pone el registro, el código la
+  // invariante.
+  wardrobe?: string | null,
 ): string {
   const base = DEMOGRAPHIC_PERSONA[demographic]
   if (!base) return base // no_talent: el carril lo llena el sustituto por nicho, sin persona
   const zona = focus ? WARDROBE_FOR_FOCUS[focus] : undefined
-  return [base, `viste ${NICHE_WARDROBE[niche]}${zona ? `, y ${zona}` : ''}`].join(', ')
+  // Se normaliza en código y no pidiéndoselo al prompt: medido, el modelo devuelve la complexión
+  // como oración capitalizada y con punto final ("Complexión atlética, con glúteos tonificadas."),
+  // y la persona quedaba diciendo "complexión Complexión atlética, …., viste …" — palabra repetida
+  // y puntuación partiendo la frase justo antes del vestuario. Es una línea que viaja LITERAL a las
+  // dos placas y a las 8 secciones, así que la costura se ve en todas.
+  // Mismo trato que la complexión: el modelo devuelve la prenda capitalizada y con punto final
+  // ("Pijama de algodón liso o ropa cómoda de casa."), y la persona quedaba diciendo "viste Pijama"
+  // a mitad de frase. Se normaliza en código, no pidiéndoselo al prompt.
+  const limpiar = (v?: string | null) => {
+    const t = v?.trim().replace(/[.,;\s]+$/, '') ?? ''
+    return t && `${t.charAt(0).toLowerCase()}${t.slice(1)}`
+  }
+  const crudo = physique?.trim().replace(/^complexi[oó]n\s+/i, '').replace(/[.,;\s]+$/, '') ?? ''
+  // El modelo responde de dos formas y las dos son válidas: con un sintagma adjetivo ("sana y
+  // equilibrada, sin musculatura marcada") o con uno nominal ("cuerpo entrenado con glúteos
+  // definidos"). Anteponer "complexión" a ciegas produce "complexión cuerpo entrenado"; solo se
+  // antepone cuando hace falta un sustantivo que sostenga la frase.
+  const yaEsSustantivo = /^(cuerpo|f[ií]sico|constituci[oó]n|contextura|complexi[oó]n)\b/i.test(crudo)
+  const enMinuscula = crudo && `${crudo.charAt(0).toLowerCase()}${crudo.slice(1)}`
+  const complexion = crudo ? (yaEsSustantivo ? enMinuscula : `complexión ${enMinuscula}`) : undefined
+  const ropa = limpiar(wardrobe) || NICHE_WARDROBE[niche]
+  // ⚠️ La expresión que trae la plantilla demográfica se CAE cuando hay contexto del producto, y es
+  // la última costura de este caso: `male_20_35` la trae como "expresión de confianza física", que
+  // al lado de "complexión común y sana, proyectando descanso" vuelve a leerse como gimnasio. Con
+  // complexión y poses derivadas del producto, la actitud enlatada del banco es el único resto
+  // ciego a la promesa — y para un producto que SÍ es físico, la complexión ya lo dice mejor.
+  const rasgos = complexion ? base.replace(/,\s*expresi[oó]n[^,]*$/i, '') : base
+  return [rasgos, complexion, `viste ${ropa}${zona ? `, y ${zona}` : ''}`]
+    .filter(Boolean)
+    .join(', ')
+}
+
+// ⚠️ EL TECHO DE ENCUADRE LO PONE EL CÓDIGO, EN LOS DOS CAMINOS — no el modelo.
+// Las poses contextuales son texto libre, y "de pie, postura relajada y abierta" es una respuesta
+// perfectamente plausible para un producto de bienestar general: sería el avatar-maniquí de cuerpo
+// entero volviendo a entrar por la puerta que se acaba de cerrar, en la misma sesión. El techo NO
+// se puede gatear por `zoneNeedsOwnPlate`, porque el caso sin zona (`cuerpo_completo`) es justo el
+// que se quedaría sin guard.
+//
+// `BODY_FOCUS_FRAMING` sirve para los dos caminos porque ninguna de sus entradas es de cuerpo
+// entero: las zonas reales ya traen su "SIN el rostro en cuadro" y `cuerpo_completo` es el medio
+// cuerpo por defecto. Sin `focus` se usa ese mismo default.
+export function conEncuadre(pose: string, focus?: BodyFocus | null): string {
+  if (!pose.trim()) return pose
+  const marco = BODY_FOCUS_FRAMING[focus ?? 'cuerpo_completo']
+  return `${pose.trim().replace(/\.$/, '')}. Encuadre obligatorio: se muestra ${marco}; el plano NUNCA se abre más que eso.`
 }
 
 // Anexo B.7 — sustituto del carril de talento cuando `demographic_id` es `no_talent`. Cinco
@@ -269,10 +357,12 @@ const GENERIC_SUBSTITUTE = 'Producto en contexto, a escala humana'
 
 export const NO_TALENT_SUBSTITUTE: Record<NicheId, string> = {
   supplement_skin_female: GENERIC_SUBSTITUTE,
+  supplement_female: GENERIC_SUBSTITUTE,
   skincare_topical: GENERIC_SUBSTITUTE,
   haircare: GENERIC_SUBSTITUTE,
   fitness_weightloss: GENERIC_SUBSTITUTE,
   supplement_male_performance: GENERIC_SUBSTITUTE,
+  supplement_male: GENERIC_SUBSTITUTE,
   joint_mobility: GENERIC_SUBSTITUTE,
   intimate_wellness: GENERIC_SUBSTITUTE,
   herbal_natural: GENERIC_SUBSTITUTE,
@@ -295,23 +385,69 @@ export const NO_TALENT_SUBSTITUTE: Record<NicheId, string> = {
 // cara, que es lo que construye confianza al abrir la landing— y el resto de las secciones con
 // protagonista toman la pose de la ZONA donde el producto actúa. Con `rostro`/`cabello` el banco de
 // zona está vacío y todo sale del demográfico: comportamiento histórico exacto.
+// POSES CONTEXTUALES (2026-08-21): `contextPoses` son las que la visión de `extract-dna` derivó
+// del PRODUCTO — momentos de uso, no actitudes de catálogo. Reemplazan al banco, no se mezclan con
+// él: mezclar dejaría una sección ejemplificando el uso y la siguiente posando, dentro de la misma
+// pieza. Sin ellas (visión caída, o campo vacío) todo sale de los bancos, byte por byte como antes.
+//
+// ⚠️ QUÉ POOL REEMPLAZAN DEPENDE DE A QUÉ PLACA ESTÁ ANCLADA LA SECCIÓN, y por eso no es "todas":
+// con una zona REAL el hero adjunta la placa canónica (con rostro) y el resto la de zona (sin él).
+// Una pose contextual de rodilla en el hero pelearía contra un retrato — es la misma contradicción
+// texto-vs-imagen que ya se perdió con la luz. Así que con zona real el hero conserva su pose
+// demográfica y lo contextual entra en el pool de zona; sin zona real todas las secciones usan la
+// canónica y lo contextual entra en el único pool que hay.
 export function assignPoses(
   order: SectionType[],
   demographic: DemographicId,
   focus?: BodyFocus | null,
+  contextPoses?: string[] | null,
 ): Record<string, string> {
   const bank = DEMOGRAPHIC_POSES[demographic]
   const out: Record<string, string> = {}
+  // `no_talent` manda sobre todo lo demás: no hay persona que posar, así que unas poses
+  // contextuales acá serían instrucciones para renderizar a alguien que no debe aparecer.
   if (bank.length === 0) {
     for (const s of order) out[s] = ''
     return out
   }
   const zone = focus ? ZONE_POSES[focus] : []
+  const ctx = (contextPoses ?? []).map((p) => p.trim()).filter(Boolean).map((p) => conEncuadre(p, focus))
+  const zonaReal = zone.length > 0
   const reserved = bank[bank.length - 1]
-  const pool = bank.slice(0, -1)
-  const zonePool = zone.slice(0, -1)
+  const demoPool = bank.slice(0, -1)
+  // ⚠️ LAS CONTEXTUALES SON 4 Y LAS SECCIONES HASTA 8: EL POOL SE AGOTA Y EL CURSOR DA LA VUELTA.
+  // Reemplazar el banco por las contextuales a secas dejaba `pool[i % 4]` repitiendo pose a partir
+  // de la quinta sección, y eso lo DETECTA `validateSet` (R7 `pose-duplicate`, severidad error): el
+  // usuario veía dos advertencias de coherencia antes de generar ninguna imagen. Medido en la
+  // sesión e3117b54 (8 secciones, `cuerpo_completo` → sin zona real): hero↔testimonios y
+  // oferta↔faq, exactamente los dos choques reportados.
+  // El banco va DETRÁS, no mezclado: las contextuales se gastan primero —son las que ejemplifican
+  // el uso del producto, que es el punto del eje— y el banco demográfico cubre la cola sin repetir.
+  // Con `demoPool` de 7-8 entradas el pool llega a 11+ contra 8 secciones, así que ya no da vuelta.
+  const pool = ctx.length && !zonaReal ? [...ctx, ...demoPool] : demoPool
+  const zoneRest = zone.slice(0, -1)
+  const zonePool = ctx.length && zonaReal ? [...ctx, ...zoneRest] : zoneRest
   // Dos cursores: cada banco recorre el suyo, así ninguna sección repite pose dentro de su pool
   // (QA#6) aunque el reparto entre bancos sea desparejo.
+  // ⚠️ EL CURSOR SOLO NO ALCANZA, y el modo de fallo es una advertencia en la cara del usuario.
+  // Los dos bancos se cruzan —`antes-despues` saca del demográfico mientras el resto saca del pool
+  // que ahora TERMINA en ese mismo banco— así que con cierto orden de secciones dos cursores
+  // distintos aterrizan en la misma entrada. `tomar` avanza sobre la pose ya usada en vez de
+  // confiar en que la aritmética no colisione: la unicidad es lo que R7 exige, y acá se garantiza
+  // en vez de deducirse. Si el pool entero ya está gastado devuelve la del cursor (repetir es
+  // preferible a no tener pose), pero con 11+ entradas contra 8 secciones eso no ocurre.
+  const usadas = new Set<string>()
+  const tomar = (p: string[], desde: number): string => {
+    for (let k = 0; k < p.length; k++) {
+      const cand = p[(desde + k) % p.length]
+      if (!usadas.has(cand)) return cand
+    }
+    return p[desde % p.length]
+  }
+  const marcar = (s: SectionType, pose: string) => {
+    out[s] = pose
+    usadas.add(pose)
+  }
   let i = 0
   let z = 0
   for (const s of order) {
@@ -320,11 +456,21 @@ export function assignPoses(
       continue
     }
     if (zonePool.length && s !== 'hero') {
-      out[s] = zonePool[z % zonePool.length]
+      marcar(s, tomar(zonePool, z))
       z++
       continue
     }
-    out[s] = pool[i % pool.length]
+    // ⚠️ `antes-despues` SIN zona real conserva su pose determinista, aunque haya contextuales.
+    // Es la única sección con una instrucción propia sobre el encuadre (`beforeAfterNote`), y sin
+    // zona real esa nota toma la rama del ROSTRO: "los dos paneles muestran el mismo rostro, con el
+    // problema visible y ya resuelto". Una pose contextual de actividad —medido: "de pie, brazos
+    // estirados en un estiramiento matutino"— la contradice DENTRO DEL MISMO PROMPT, que es el modo
+    // de fallo que este repo ya registró tres veces. Manda la nota: en el antes/después el encuadre
+    // ES el argumento de venta. Con zona real no hay conflicto y lo contextual entra por el pool de
+    // zona: ahí la nota y la pose piden las dos la misma zona.
+    marcar(s, s === 'antes-despues' && ctx.length && !zonaReal
+      ? tomar(demoPool, i)
+      : tomar(pool, i))
     i++
   }
   return out
