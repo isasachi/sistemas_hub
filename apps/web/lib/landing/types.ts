@@ -36,8 +36,12 @@ export const NicheId = z.enum([
   // es el resto del bienestar femenino —sueño, hormonas, energía, hierro, ciclo—, que antes caía en
   // el de belleza por no tener casillero propio: la sesión de GomiSleep (magnesio para dormir) salió
   // clasificada como belleza/piel, y de ahí heredaba tipografía, props y vestuario de skincare.
+  // `supplement_male` es el simétrico masculino, y nació del mismo fallo del otro lado: unas gomitas
+  // de melatonina para hombres no tenían más casillero que `supplement_male_performance`, cuyo
+  // vestuario de nicho es "camiseta deportiva ajustada o musculosa" — de ahí el avatar de gimnasio
+  // en un anuncio para dormir.
   'supplement_skin_female', 'supplement_female', 'skincare_topical', 'haircare',
-  'fitness_weightloss', 'supplement_male_performance',
+  'fitness_weightloss', 'supplement_male_performance', 'supplement_male',
   'joint_mobility', 'intimate_wellness', 'herbal_natural',
   'baby_maternity', 'pets', 'home_cleaning',
   'tech_gadgets', 'kitchen_tools', 'jewelry_fashion',

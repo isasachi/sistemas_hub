@@ -250,6 +250,7 @@ export const NICHE_WARDROBE: Record<NicheId, string> = {
   haircare: 'camiseta lisa de tono neutro que no compita con el cabello',
   fitness_weightloss: 'ropa deportiva de entrenamiento ajustada — licra y top deportivo',
   supplement_male_performance: 'camiseta deportiva ajustada o musculosa de color neutro',
+  supplement_male: 'polo o camiseta lisa de tono neutro, look cómodo de bienestar diario',
   joint_mobility: 'ropa deportiva cómoda de entrenamiento suave, tejido elástico',
   intimate_wellness: 'ropa de casa cómoda y discreta, tonos suaves, nada sugerente',
   herbal_natural: 'prendas de fibras naturales en tonos tierra, look sereno',
@@ -290,6 +291,13 @@ export function personaFor(
   // cuerpo y las secciones se contradirían con ella. `undefined` = complexión sin especificar, o
   // sea exactamente la persona de antes de este eje.
   physique?: string | null,
+  // Vestuario contextual (2026-08-21). REEMPLAZA a `NICHE_WARDROBE`, no se suma: el del nicho es un
+  // uniforme de categoría —"camiseta deportiva ajustada o musculosa" para todo suplemento
+  // masculino— y tenerlos a los dos deja la persona describiendo dos atuendos. `WARDROBE_FOR_FOCUS`
+  // sí se conserva encima: es la restricción de ZONA (la prenda tiene que dejar ver la parte que el
+  // producto cambia), el mismo reparto que `conEncuadre` — el modelo pone el registro, el código la
+  // invariante.
+  wardrobe?: string | null,
 ): string {
   const base = DEMOGRAPHIC_PERSONA[demographic]
   if (!base) return base // no_talent: el carril lo llena el sustituto por nicho, sin persona
@@ -299,6 +307,13 @@ export function personaFor(
   // y la persona quedaba diciendo "complexión Complexión atlética, …., viste …" — palabra repetida
   // y puntuación partiendo la frase justo antes del vestuario. Es una línea que viaja LITERAL a las
   // dos placas y a las 8 secciones, así que la costura se ve en todas.
+  // Mismo trato que la complexión: el modelo devuelve la prenda capitalizada y con punto final
+  // ("Pijama de algodón liso o ropa cómoda de casa."), y la persona quedaba diciendo "viste Pijama"
+  // a mitad de frase. Se normaliza en código, no pidiéndoselo al prompt.
+  const limpiar = (v?: string | null) => {
+    const t = v?.trim().replace(/[.,;\s]+$/, '') ?? ''
+    return t && `${t.charAt(0).toLowerCase()}${t.slice(1)}`
+  }
   const crudo = physique?.trim().replace(/^complexi[oó]n\s+/i, '').replace(/[.,;\s]+$/, '') ?? ''
   // El modelo responde de dos formas y las dos son válidas: con un sintagma adjetivo ("sana y
   // equilibrada, sin musculatura marcada") o con uno nominal ("cuerpo entrenado con glúteos
@@ -307,7 +322,14 @@ export function personaFor(
   const yaEsSustantivo = /^(cuerpo|f[ií]sico|constituci[oó]n|contextura|complexi[oó]n)\b/i.test(crudo)
   const enMinuscula = crudo && `${crudo.charAt(0).toLowerCase()}${crudo.slice(1)}`
   const complexion = crudo ? (yaEsSustantivo ? enMinuscula : `complexión ${enMinuscula}`) : undefined
-  return [base, complexion, `viste ${NICHE_WARDROBE[niche]}${zona ? `, y ${zona}` : ''}`]
+  const ropa = limpiar(wardrobe) || NICHE_WARDROBE[niche]
+  // ⚠️ La expresión que trae la plantilla demográfica se CAE cuando hay contexto del producto, y es
+  // la última costura de este caso: `male_20_35` la trae como "expresión de confianza física", que
+  // al lado de "complexión común y sana, proyectando descanso" vuelve a leerse como gimnasio. Con
+  // complexión y poses derivadas del producto, la actitud enlatada del banco es el único resto
+  // ciego a la promesa — y para un producto que SÍ es físico, la complexión ya lo dice mejor.
+  const rasgos = complexion ? base.replace(/,\s*expresi[oó]n[^,]*$/i, '') : base
+  return [rasgos, complexion, `viste ${ropa}${zona ? `, y ${zona}` : ''}`]
     .filter(Boolean)
     .join(', ')
 }
@@ -340,6 +362,7 @@ export const NO_TALENT_SUBSTITUTE: Record<NicheId, string> = {
   haircare: GENERIC_SUBSTITUTE,
   fitness_weightloss: GENERIC_SUBSTITUTE,
   supplement_male_performance: GENERIC_SUBSTITUTE,
+  supplement_male: GENERIC_SUBSTITUTE,
   joint_mobility: GENERIC_SUBSTITUTE,
   intimate_wellness: GENERIC_SUBSTITUTE,
   herbal_natural: GENERIC_SUBSTITUTE,

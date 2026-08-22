@@ -44,6 +44,12 @@ const DnaExtractSchema = z.object({
     // literal a las dos placas y a las 8 secciones. El prompt sigue pidiendo 2-8 palabras.
     physique: z.string().max(140),
     poses: z.array(z.string().max(200)).min(3).max(5),
+    // El VESTUARIO era la tercera pata que seguía saliendo del nicho, ciega a la promesa: un
+    // suplemento masculino vestía "camiseta deportiva ajustada o musculosa" fuera una creatina o
+    // unas gomitas de melatonina. Medido sobre el caso reportado, la persona quedaba diciendo
+    // "complexión común y sana, proyectando descanso, viste camiseta deportiva ajustada" — la misma
+    // autocontradicción dentro de un solo string que este eje viene arreglando.
+    wardrobe: z.string().max(140),
   }),
 })
 type DnaExtract = z.infer<typeof DnaExtractSchema>
@@ -98,6 +104,11 @@ const PROMPT = [
   'repetirse se lee como un error.',
   'El encuadre de esta pieza nunca se abre más allá del medio cuerpo, así que describí lo que el',
   'cuerpo hace dentro de ese límite.',
+  '',
+  'talent.wardrobe — qué ropa lleva puesta, en el REGISTRO del momento que describen las poses: la',
+  'ropa de alguien que está haciendo eso, en ese lugar y a esa hora. Preguntate si una persona real',
+  'se vestiría así para ese momento — no para una foto de producto. Es ropa común y creíble, nunca',
+  'un uniforme de la categoría del producto. De 3 a 12 palabras, sin marcas ni logos.',
 ].join('\n')
 
 // Corre la visión (foto + niche/labels como contexto). null si no hay foto, falla la visión o
@@ -199,7 +210,7 @@ export async function extractDna(
     // `?.talent?.` y no `?.talent.`: el campo es REQUERIDO en el schema (que es lo que obliga al
     // modelo a producirlo), pero una respuesta que igual llegue sin él debe caer al camino
     // determinista, no tumbar la extracción entera con un TypeError. Lo cazó un test.
-    : personaFor(demographic, niche, focus, extraction?.talent?.physique)
+    : personaFor(demographic, niche, focus, extraction?.talent?.physique, extraction?.talent?.wardrobe)
   const poses = assignPoses(order, demographic, focus, extraction?.talent?.poses)
 
   const dna: LandingDna = {

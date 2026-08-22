@@ -5,6 +5,9 @@
 // toca cuota de imagen. Se corre a mano desde la raíz del repo:
 //   npx tsx --env-file=.env.local apps/web/scripts/probe-talento-contextual.ts
 import { extractDna } from '../lib/landing/extract-dna'
+import { classifyNiche } from '../lib/landing/classify'
+import { NICHE_LABELS } from '../lib/landing/niches'
+import { BODY_FOCUS_LABELS } from '../lib/landing/demographics'
 import type { LandingSessionResponse, SectionType, NicheId, DemographicId, BodyFocus } from '../lib/landing/types'
 
 const ORDEN: SectionType[] = ['hero', 'oferta', 'antes-despues', 'beneficios']
@@ -28,6 +31,15 @@ const CASOS = [
     audience: 'Mujeres de 25 a 40, Deportistas',
     foto: 'https://hryygojgihqazsmnduvh.supabase.co/storage/v1/object/public/ad-uploads/9a8d80c2-01e3-4ad9-aa5a-c817efa67391/mockup.png?v=1786831887794',
   },
+  {
+    nombre: 'NNF Gummy-Sleep — gomitas de melatonina, nicho "suplemento masculino" (caso reportado)',
+    niche: 'supplement_male_performance' as NicheId,
+    demographic: 'male_20_35' as DemographicId,
+    focus: 'torso' as BodyFocus,
+    benefits: 'Gomitas de melatonina para dormir profundo y despertar renovado',
+    audience: 'Hombres de 25 a 45',
+    foto: 'https://hryygojgihqazsmnduvh.supabase.co/storage/v1/object/public/ad-uploads/33beb825-d25c-4e7f-878a-efb6a9675073/photo-0.jpg?v=1787356592969',
+  },
 ]
 
 function sesion(c: (typeof CASOS)[number]): LandingSessionResponse {
@@ -44,6 +56,9 @@ async function main() {
     console.log('\n' + '='.repeat(78))
     console.log(c.nombre)
     console.log('='.repeat(78))
+    // ¿A qué nicho y zona manda hoy el clasificador este mismo producto?
+    const cls = await classifyNiche(sesion(c))
+    console.log(`\nCLASIFICA COMO: ${NICHE_LABELS[cls.niche_id]} · zona: ${BODY_FOCUS_LABELS[cls.body_focus]}`)
     const dna = await extractDna(sesion(c), c.niche, c.demographic, ORDEN, c.focus)
     console.log('\nPERSONA:\n  ' + dna.model_persona)
     console.log('\nPOSES:')

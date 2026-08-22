@@ -248,11 +248,38 @@ describe('suplemento femenino es un nicho aparte', () => {
   it('convive con el de belleza y el masculino, con etiqueta propia', () => {
     expect(NICHE_LABELS.supplement_female).toBe('Suplemento femenino')
     expect(NICHE_LABELS.supplement_skin_female).not.toBe(NICHE_LABELS.supplement_female)
-    expect(NICHE_LABELS.supplement_male_performance).toBe('Suplemento masculino')
+    expect(NICHE_LABELS.supplement_male_performance).toBe('Suplemento masculino (rendimiento)')
   })
   it('tiene su propia identidad visual y vestuario, no los hereda de belleza', () => {
     expect(NICHE_FALLBACK.supplement_female.hue).not.toBe(NICHE_FALLBACK.supplement_skin_female.hue)
     expect(NICHE_WARDROBE.supplement_female).not.toBe(NICHE_WARDROBE.supplement_skin_female)
     expect(NICHE_DEFAULT_DEMOGRAPHIC.supplement_female).toBe('female_30_45')
+  })
+
+  it('el vestuario contextual reemplaza al del nicho y no lo duplica', () => {
+    const p = personaFor('male_20_35', 'supplement_male_performance', null, 'común y sana', 'Pijama de algodón liso.')
+    expect(p).toContain('viste pijama de algodón liso')          // normalizado: minúscula, sin punto
+    expect(p).not.toContain('camiseta deportiva')                 // el uniforme del nicho se cae
+    expect(p).not.toContain('expresión de confianza física')      // y la actitud enlatada también
+  })
+
+  it('la restricción de ZONA sobrevive al vestuario contextual (la pone el código)', () => {
+    const p = personaFor('female_18_30', 'generic', 'rodilla', null, 'ropa de casa')
+    expect(p).toContain('viste ropa de casa')
+    expect(p).toContain('short')  // WARDROBE_FOR_FOCUS.rodilla
+  })
+
+  it('sin vestuario contextual se conserva el del nicho, y la expresión con él', () => {
+    expect(personaFor('male_20_35', 'supplement_male_performance'))
+      .toBe(personaFor('male_20_35', 'supplement_male_performance', null, null, null))
+    const p = personaFor('male_20_35', 'supplement_male_performance')
+    expect(p).toContain('camiseta deportiva')
+    expect(p).toContain('expresión de confianza física')
+  })
+
+  it('el suplemento masculino de bienestar es un nicho aparte del de rendimiento', () => {
+    expect(NICHE_LABELS.supplement_male).toBe('Suplemento masculino (bienestar)')
+    expect(NICHE_WARDROBE.supplement_male).not.toContain('musculosa')
+    expect(NICHE_FALLBACK.supplement_male.halo).not.toBe(NICHE_FALLBACK.supplement_male_performance.halo)
   })
 })

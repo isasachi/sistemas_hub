@@ -17,11 +17,14 @@ describe('contrato landing (spec 2026-07-23)', () => {
   // Los 16 del Anexo A del spec + `supplement_female`, que es una DESVIACIÓN DELIBERADA (2026-08-21):
   // el Anexo solo tenía el suplemento de belleza y el masculino, así que todo el bienestar femenino
   // que no se ve en el espejo (sueño, hormonas, energía) caía en belleza y heredaba su tipografía,
-  // sus props y su vestuario de skincare.
-  it('NicheId tiene los 16 valores del spec (Anexo A) + el suplemento femenino', () => {
-    expect(NicheId.options).toHaveLength(17)
+  // sus props y su vestuario de skincare. `supplement_male` es el simétrico: unas gomitas de
+  // melatonina para hombres solo tenían `supplement_male_performance`, cuyo vestuario de nicho es
+  // "camiseta deportiva ajustada o musculosa" — de ahí el avatar de gimnasio en un anuncio de dormir.
+  it('NicheId tiene los 16 valores del spec (Anexo A) + los dos de bienestar', () => {
+    expect(NicheId.options).toHaveLength(18)
     expect(NicheId.options).toContain('supplement_skin_female')
     expect(NicheId.options).toContain('supplement_female')
+    expect(NicheId.options).toContain('supplement_male')
     expect(NicheId.options).toContain('generic')
   })
   it('DemographicId tiene los 7 valores del spec (Anexo B)', () => {
