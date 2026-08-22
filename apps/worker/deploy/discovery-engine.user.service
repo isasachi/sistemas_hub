@@ -1,0 +1,53 @@
+# Daemon del MOTOR DE DESCUBRIMIENTO (`disc_*`) — variante USER unit (local, sin sudo).
+#
+#   mkdir -p ~/.config/systemd/user
+#   cp apps/worker/deploy/discovery-engine.user.service ~/.config/systemd/user/discovery-engine.service
+#   loginctl enable-linger "$USER"          # arranca al boot de WSL sin sesión abierta
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now discovery-engine
+# Observar:
+#   journalctl --user -u discovery-engine -f
+#
+# ⚠️ `WorkingDirectory` APUNTA AL WORKTREE, NO AL CLON PRINCIPAL. El motor nuevo
+# vive en la rama `worktree-discovery-engine` y todavía no está en `main`, así
+# que en `/home/isasachi/chamba/sistemas_hub/apps/worker` NO existe
+# `scripts/discovery-loop.sh`. **Al mergear a main hay que reapuntar esta ruta y
+# recargar la unit**, o el daemon se queda arrancando contra un script borrado.
+#
+# ⚠️ COMPARTE LA IP con `url-research.service` y con el daemon del motor viejo.
+# El rate-controller del scraper es un singleton POR PROCESO, así que ninguno ve
+# el cool-down del otro. Los números de abajo están puestos bajos por eso:
+# medido, ~11 lecturas de catálogo seguidas bastan para que Meta empiece a
+# devolver payloads sin nodos en esta IP (residencial directa, sin proxy).
+#
+# ⚠️ SIN el guard `require-egress.sh` del system unit: acá se navega con IP
+# DIRECTA. Es la variante local.
+#
+# Secretos (SUPABASE_*) en apps/worker/.env.local del worktree — bootstrap.ts los
+# carga vía dotenv.
+
+[Unit]
+Description=Motor de descubrimiento — loop de nichos (disc_*, sin LLM)
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/isasachi/chamba/sistemas_hub/.claude/worktrees/discovery-engine/apps/worker
+ExecStart=/usr/bin/env bash scripts/discovery-loop.sh
+
+# Ritmo conservador para una IP compartida y sin proxy. Subir de a un escalón
+# mirando los "0 anuncios" en el log, no de golpe.
+Environment=DISC_CAPACIDAD=8
+Environment=DISC_MAX_DISCOVER=2
+Environment=DISC_MAX_AUDIT=2
+Environment=DISC_MAX_RANK=1
+Environment=DISC_SLEEP=600
+Environment=DISC_BLOCK_SLEEP=3600
+Environment=PH_BLOCK_MEDIA=1
+
+Restart=always
+RestartSec=60
+SyslogIdentifier=discovery-engine
+
+[Install]
+WantedBy=default.target
