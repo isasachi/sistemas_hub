@@ -858,19 +858,32 @@ Es lo que convierte "una corrida por consulta" en el inventario continuo del CON
 
 ⚠️ **COMPARTE LA IP con `url-research.service`**, y el rate-controller del scraper es un singleton POR PROCESO: ninguno ve el cool-down del otro. Por eso la unit arranca conservadora (capacidad 8, 1 ranking por ciclo, 10 min de descanso). Subir de a un escalón mirando los `0 anuncios` del log. ⚠️ El orden importa: `rank` va **después** de `analyze` porque solo mira anuncios que ya pasaron las fases 5-6. `analyze` corre incluso con la IP bloqueada (pide landings de terceros, no Meta); `rank` no.
 
-### Preview del flujo nuevo (`/tools/buscador-productos/preview`) — NO es lo que se lanza
+### El flujo de un producto por vez — la interfaz del motor nuevo
 
-Lo que se lanza es la lista de siempre. Esto es el flujo acordado (elegir nicho → animación → un producto anónimo → confirmación → Ads Library → encuesta → aceptar o gastar un comodín → seguir o cambiar de nicho), construido en paralelo **solo para ver cómo queda**. No hay ningún enlace hacia esa ruta desde la tool.
+`/tools/buscador-productos` sirve **dos herramientas distintas según el chip de motor**, no dos filtros del mismo listado:
 
-⚠️ **NO CONSUME NI ESCRIBE NADA.** Cupo, comodines y lista viven en el estado de React y se pierden al recargar. No existe la tabla de "producto tomado", no se oculta nada para los demás usuarios y no se descuenta ningún crédito — eso es la implementación real, que es lo que todavía no se decidió construir. Las reglas están en `lib/product-hunter/preview-flujo.ts` (con test) y no dentro del componente: son lo que hay que discutir, y una regla enterrada en un `onClick` no se lee ni se prueba.
+- **Clásico** (`ph_*`): la lista de siempre — chips de categoría, rango, filtros de país y antigüedad.
+- **Descubrimiento** (`disc_*`): `components/tools/buscador-productos/FlujoDescubrimiento.tsx` — nicho → animación → tarjeta anónima → confirmación → Ads Library → encuesta → aceptar o gastar un cambio.
 
-⚠️ **OCULTAR EL NOMBRE OBLIGA A OCULTAR TAMBIÉN EL COPY.** El acuerdo dice "ocultar nombre y marca", pero el cuerpo del anuncio dice el producto con todas las letras (*"🟥 RODILLERA ORTOPÉDICA PREMIUM…"*), y el titular igual. Con cualquiera de los cuatro campos visible se busca el producto por fuera y se lo lleva sin gastar cupo, que es justo lo que el paso existe para evitar. La tarjeta anónima muestra **solo señal estructural**: anuncios, días corriendo, share y país. **De ahí sale la necesidad del comodín**, no de un capricho: con eso no se puede saber si el producto sirve hasta abrirlo.
+⚠️ **NO COMPARTEN CONTROLES, y es deliberado.** El flujo trae su propia navegación por nicho y su propio cupo; dejar a la vista el filtro de rango del clásico mostraría un control que el flujo no usa. Antes esto vivía en `/preview`; esa ruta ya no existe.
 
-⚠️ **EL COMODÍN SE OFRECE SOLO SI LA ENCUESTA DICE QUE ALGO FALLÓ.** Ofrecerlo siempre lo convierte en un "siguiente" gratis: el usuario pasa productos hasta que le guste uno y el cupo deja de significar nada. Una pregunta sin responder NO cuenta como fallo.
+⚠️ **TOMAR UN PRODUCTO LO OCULTA PARA TODOS** (`disc_claims`, migración `20260822000003`). Es el punto del rediseño: si la lista fuera la misma para todos, varios usuarios terminarían testeando lo mismo. `disc_ranked_activo` excluye lo reclamado, así que el producto desaparece del catálogo para cualquiera.
 
-⚠️ **`CUPO` (5+3 / 15+5 / 20+10) NO ES `PLANS[tier].porRango` (10/20/50) Y HOY SE CONTRADICEN.** Son dos cosas distintas —cuántos productos podés RECLAMAR contra cuántos VE la lista— y el segundo es el que la tabla de precios promete hoy. El preview los mantiene separados a propósito: mezclarlos movería el serving que está en producción. Cuál gana es una decisión pendiente.
+⚠️ **LA CLAVE PRIMARIA ES EL PRODUCTO, NO (usuario, producto).** La primera versión tenía la PK compuesta y **dos usuarios distintos podían reclamar el mismo producto** — justo lo que este diseño existe para evitar — mientras el comentario de `tomarProducto` juraba que la PK guardaba esa carrera. Lo cazó el probe en la primera corrida. Con `PRIMARY KEY (dedupe_key)` el segundo insert falla con `23505` y ahí se le entrega otro producto; comprobar antes con un SELECT dejaría la ventana abierta.
 
-`?motor=discovery` sirve el preview desde el motor nuevo; sin el parámetro va por el clásico, que es el que hoy tiene inventario en las 13 categorías.
+⚠️ **EL RECLAMO SE ESCRIBE ANTES DE ABRIR LA ADS LIBRARY**, no después de la encuesta. Al revés, quien cierra la pestaña se lleva el link sin gastar cupo — el otro agujero que esto tapa. Y la pestaña se abre SOLO si el reclamo se escribió: abrir primero dejaría al usuario con el link de un producto que quizá no pudo tomar.
+
+⚠️ **EL CUPO LO HACE CUMPLIR EL SERVIDOR** (`/api/buscador-productos/claim`), no la pantalla. El contador informa; lo que impide tomar el producto 6 con el plan 1 es esa ruta. Y exige **sesión de verdad**, no la cookie anónima de `readUserId`: el cupo cuelga del PLAN, y una identidad que se renueva borrando cookies daría cupo infinito.
+
+⚠️ **UN PRODUCTO DESCARTADO CON UN CAMBIO SIGUE OCULTO.** No cuenta contra el cupo de productos (sí contra el de cambios), pero devolverlo al catálogo sería pasarle a otro usuario justo lo que este acaba de reportar como malo.
+
+⚠️ **OCULTAR EL NOMBRE OBLIGA A OCULTAR TAMBIÉN EL COPY.** El cuerpo del anuncio dice el producto con todas las letras (*"🟥 RODILLERA ORTOPÉDICA PREMIUM…"*), y el titular y el anunciante también: con cualquiera de los cuatro visible se busca por fuera y se lo lleva sin gastar cupo. La tarjeta muestra solo señal estructural — y de ahí sale la necesidad del cambio, no de un capricho.
+
+⚠️ **EL CAMBIO SE OFRECE SOLO SI LA ENCUESTA DICE QUE ALGO FALLÓ.** Ofrecerlo siempre lo vuelve un "siguiente" gratis y el cupo deja de significar nada. Una pregunta sin responder NO cuenta como fallo (`ofreceComodin`, `lib/product-hunter/flujo.ts`, con test).
+
+⚠️ **`CUPO` (5+3 / 15+5 / 20+10) NO ES `PLANS[tier].porRango` (10/20/50) Y SIGUEN CONTRADICIÉNDOSE.** Son dos cosas distintas —cuántos productos podés RECLAMAR contra cuántos VE la lista del clásico— y hoy conviven porque cada motor usa el suyo. Cuál gana cuando el clásico se jubile es una decisión pendiente.
+
+**Su lista viaja con el estado** (`GET /api/…/claim` devuelve `lista`): el usuario tiene que poder volver a un producto que ya pagó con su cupo. Si cierra la pestaña y no lo tiene, gastó el cupo en algo que no puede recuperar.
 
 ## Tool: Buscador de Productos (`buscador-productos`)
 

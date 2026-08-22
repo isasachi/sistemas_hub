@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import type { RawProductEntry } from '@ph/shared'
 import {
   cupoDe, ofreceComodin, siguienteProducto, encuestaCompleta, ENCUESTA_VACIA,
-} from './preview-flujo'
+} from './flujo'
 
 const p = (id: string): RawProductEntry => ({
   id, advertiser: 'x', productName: null, title: null, body: null, country: 'CO',
