@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { hslToHex, hexToHsl, derivePalette, paletteFromBrand, moneyRamp, GOLD, COPPER } from './palette-derive'
+import { hslToHex, hexToHsl, derivePalette, paletteFromBrand, moneyRamp, polarityFromPackage, GOLD, COPPER } from './palette-derive'
 import { contrastRatio } from '@/lib/branding/contrast'
 import type { BrandSystem } from '@/lib/branding/brand-system'
 import { NICHE_FALLBACK } from './niches'
@@ -349,5 +349,24 @@ describe('bgDeltaL — el estilo decide el recorrido del degradado', () => {
       const p = conEstilo(casiNegro, style)
       expect(Math.abs(L(p.bg_end) - L(p.bg_start))).toBeGreaterThanOrEqual(4)
     }
+  })
+})
+
+// ⚠️ La polaridad dejó de ser un veredicto del modelo. Medido (probe-polaridad.ts): preguntada
+// dentro del prompt completo se caía la mitad de las veces sobre un frasco blanco.
+describe('polarityFromPackage', () => {
+  it('decide por luminancia, no por la L de HSL', () => {
+    expect(polarityFromPackage('#FFFFFF')).toBe('light')
+    expect(polarityFromPackage('#000000')).toBe('dark')
+    expect(polarityFromPackage('#112C2B')).toBe('dark')  // verde muy oscuro
+    expect(polarityFromPackage('#8B5A2B')).toBe('dark')  // ámbar de frasco
+    // El caso que mata usar HSL: amarillo intenso tiene L=50 (caería en `dark`) y es clarísimo.
+    expect(polarityFromPackage('#FFFF00')).toBe('light')
+    expect(polarityFromPackage('#808080')).toBe('light')  // gris medio, del lado claro
+  })
+
+  it('sin dato o con un hex ilegible conserva el comportamiento histórico (claro)', () => {
+    for (const v of [undefined, null, '', 'blanco', '#FFF', '#GGGGGG', '  '])
+      expect(polarityFromPackage(v)).toBe('light')
   })
 })

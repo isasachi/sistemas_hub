@@ -2,11 +2,10 @@ import { z } from 'zod'
 import type { Part } from '@google/genai'
 import { callStructured } from '@/lib/gemini'
 import { fetchAsBase64 } from '@/lib/storage'
-import { hslToHex, derivePalette, paletteFromBrand } from './palette-derive'
+import { hslToHex, derivePalette, paletteFromBrand, polarityFromPackage } from './palette-derive'
 import { NICHE_TYPOGRAPHY, NICHE_FALLBACK } from './niches'
 import { personaFor, NO_TALENT_SUBSTITUTE, assignPoses, DEMOGRAPHIC_LABELS, BODY_FOCUS_LABELS } from './demographics'
 import {
-  Polarity,
   LandingDnaSchema,
   ParticleDensity,
   type LandingDna,
@@ -26,7 +25,12 @@ const DnaExtractSchema = z.object({
   // Polaridad del producto suelto (2026-08-07): viaja SEPARADA del color a propósito. El hue no la
   // implica, y un envase negro/blanco cae además al fallback de nicho por baja saturación (s<12),
   // así que sin este campo la señal se perdería dos veces.
-  polarity: Polarity,
+  // ⚠️ YA NO SE PIDE EL VEREDICTO (`polarity`) SINO EL HECHO. Medido con probe-polaridad.ts: la
+  // pregunta "¿es claro u oscuro?" contestada dentro de este prompt completo se cae la mitad de
+  // las veces sobre un frasco blanco, porque convive con el razonamiento sobre la promesa. El
+  // color de la superficie mayoritaria es una observación, y `polarityFromPackage` la convierte
+  // en polaridad con aritmética. Ver el comentario largo en palette-derive.ts.
+  package_hex: z.string(),
   particle_type: z.string(),
   particle_density: ParticleDensity,
   props: z.array(z.string()).min(1).max(5),
@@ -60,11 +64,13 @@ const PROMPT = [
   'cualquier color que provenga del fondo, la superficie o la iluminación. Devuelve ese color en',
   'HEX y en HSL (brand_base).',
   '',
-  'Decide además si el producto se lee OSCURO o CLARO (polarity): `dark` si su envase y su etiqueta',
-  'son de tonos oscuros y el texto impreso encima va claro (frasco negro mate, ámbar oscuro, lata',
-  'negra); `light` si el envase y la etiqueta son claros con texto oscuro encima. Juzgá el ENVASE,',
-  'nunca el fondo de la foto ni la iluminación del estudio: un frasco negro fotografiado sobre fondo',
-  'blanco es `dark`.',
+  'Devuelve además `package_hex`: el color de la SUPERFICIE MAYORITARIA del envase — el cuerpo del',
+  'frasco, la lata, el pomo o la caja, el material que ocupa más área. A diferencia de brand_base,',
+  'acá SÍ cuentan los blancos, los negros, los grises y los plateados: si el frasco es blanco, el',
+  'valor es un blanco. No devuelvas el color del fondo de la foto, ni el de la superficie donde el',
+  'envase se apoya, ni el de un reflejo o un brillo especular. Si el envase es transparente, el',
+  'color es el de su contenido. Es una OBSERVACIÓN del envase y nada más: no la ajustes por lo que',
+  'el producto promete, por su categoría ni por el ambiente en que se usa. Formato #RRGGBB.',
   '',
   'A partir del producto y su categoría, describe qué partículas flotarían de forma físicamente',
   'creíble en su entorno. Deben pertenecer al registro sensorial del producto: su estado de la',
@@ -198,7 +204,7 @@ export async function extractDna(
   // En ninguno de los dos caminos se le pide al modelo que elija colores.
   // La polaridad del producto suelto sobrevive al fallback de color: un envase negro mate cae al
   // hue del nicho por s<12, pero sigue siendo una pieza oscura. Sin visión → 'light' (histórico).
-  const palette = brand ? paletteFromBrand(brand) : derivePalette(brand_base, extraction?.polarity ?? 'light')
+  const palette = brand ? paletteFromBrand(brand) : derivePalette(brand_base, polarityFromPackage(extraction?.package_hex))
 
   // E: tipografía/halo — de la marca si la hay, si no por lookup de nicho.
   const { font_family, font_accent } = brand

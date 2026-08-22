@@ -1,4 +1,4 @@
-import { contrastRatio } from '@/lib/branding/contrast'
+import { contrastRatio, relativeLuminance } from '@/lib/branding/contrast'
 import type { BrandSystem } from '@/lib/branding/brand-system'
 import type { PaletteTokens, Polarity } from './types'
 import { styleOf } from './style-dna'
@@ -79,6 +79,32 @@ const ICON_L = 80
 //
 // Los extremos son SIMÉTRICOS (claro L90→L98, oscuro L12→L4): 8 puntos de separación en ambos,
 // y el L12 del arranque oscuro deja lugar para bajar sin chocar contra el piso.
+// ⚠️ LA POLARIDAD DEJÓ DE SER UN VEREDICTO DEL MODELO Y PASÓ A SER ARITMÉTICA (2026-08-22).
+// El mismo frasco blanco salía claro en una sesión y oscuro en la siguiente, y de `polarity`
+// cuelga la paleta entera. MEDIDO con `scripts/probe-polaridad.ts` sobre la foto real, 3 corridas
+// por contexto: preguntada SOLA la polaridad sale bien 6/6 (`light`), pero dentro del prompt de
+// producción completo —donde el mismo modelo decide además partículas, props, complexión, poses y
+// vestuario a partir de una promesa de DESCANSO NOCTURNO— se cae a light/light/dark y
+// light/dark/dark. No es varianza de muestreo ni contaminación de un contexto puntual: los dos
+// contextos flaquean. Es el razonamiento sobre la promesa filtrándose a una lectura que debería
+// mirar solo el frasco.
+//
+// El reparto es el de siempre en este repo: el modelo OBSERVA (devuelve el color de la superficie
+// mayoritaria del envase, un hecho) y el código DECIDE. Una lectura de color no la puede torcer la
+// palabra "noche".
+//
+// Se usa luminancia relativa (WCAG) y no la L de HSL: un envase amarillo intenso tiene L=50 en HSL
+// —caería en `dark` por un pelo— y una luminancia de 0.93, o sea es clarísimo. El corte en 0.2
+// deja el gris medio (#808080 → 0.216) del lado claro.
+const HEX6 = /^#[0-9a-f]{6}$/i
+export function polarityFromPackage(hex: string | null | undefined): Polarity {
+  const v = hex?.trim() ?? ''
+  // Fail-safe histórico: sin visión (o con un hex ilegible) la pieza sale CLARA, que es como
+  // salieron todas las landings hasta que este campo existió.
+  if (!HEX6.test(v)) return 'light'
+  return relativeLuminance(v) < 0.2 ? 'dark' : 'light'
+}
+
 export function derivePalette(
   base: { h: number; s: number; l: number },
   polarity: Polarity = 'light',
