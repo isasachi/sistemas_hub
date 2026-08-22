@@ -302,10 +302,29 @@ export const PAYMENT_SECTIONS: Set<SectionType> = new Set(['oferta', 'garantia']
 export const MULTI_UNIT_SECTIONS: Set<SectionType> = new Set(['oferta', 'cta-final'])
 
 // Secciones que CONSUMEN los tiers de la oferta: `oferta` los pinta enteros (offerText) y
-// hero/cta-final el destacado (featuredPriceText + urgencyText). El route se apoya en este set para
+// `cta-final` el destacado (featuredPriceText + urgencyText). El route se apoya en este set para
 // asegurar que `session.offer` exista ANTES de renderizarlas — sin tiers la difusión inventa el
 // precio, y siempre el mismo.
-export const OFFER_SECTIONS: Set<SectionType> = new Set(['oferta', 'hero', 'cta-final'])
+//
+// ⚠️ EL HERO ESTABA ACÁ Y NO DEBÍA: ES LA SEGUNDA FUGA DE ESTRUCTURA AL HERO. Primero se le colaba
+// el antes/después (la pill y el chevron de comparación); sacado eso, apareció en su lugar un
+// bloque de precio entero — "2 Unidades · S/ 159 · Antes: S/ 240 · S/ 79.50 c/u" y el sello dorado
+// "Oferta por tiempo limitado". No lo inventó la difusión: se lo pedían `featuredPriceText` y
+// `urgencyText`. Y su `composition` NO declara bloque de precio, ni badge de urgencia, ni botón
+// —dice literal "SIN botón CTA — el hero solo presenta"—, así que la instrucción le estaba pidiendo
+// algo que su propia estructura niega.
+//
+// El razonamiento viejo ("sin la cifra exacta el hero inventa el precio") resolvía el problema
+// equivocado: si el hero no lleva precio, la respuesta no es darle el correcto sino que no lleve
+// ninguno. Eso es `NO_SALES_BLOCK`, abajo.
+export const OFFER_SECTIONS: Set<SectionType> = new Set(['oferta', 'cta-final'])
+
+// Prohibición explícita para las 6 secciones que NO son bloque de venta. Es la contraparte de
+// arriba y va por DERIVACIÓN, no por una lista escrita a mano: cualquier sección fuera de
+// `OFFER_SECTIONS` la recibe, así que la próxima que se agregue nace protegida. Ninguna de esas 6
+// declara precio, ancla, ahorro, urgencia ni botón en su `composition`.
+const NO_SALES_BLOCK =
+  'SIN BLOQUE DE VENTA en esta sección: no rendericies NINGÚN precio, cifra de moneda, precio ancla tachado, porcentaje de ahorro, etiqueta de cantidad ("2 Unidades"), sello o badge de urgencia/escasez ("oferta por tiempo limitado", "solo hoy", stock restante) ni botón de compra. Esos elementos viven en la sección de oferta y en el cierre, no acá. Si la plantilla adjunta muestra algo parecido, ignoralo: esta sección no vende, presenta.'
 
 // Secciones que llevan la barra de confianza inferior (mismas 4 filas, composición idéntica; solo
 // cambia el color de fondo). Oferta y antes-despues NO la llevan (payment_row / closing_strip).
@@ -477,10 +496,14 @@ export function buildDiffusionInstruction(args: {
   if (section === 'oferta' && offer) extra.push(offerText(offer))
   // Precio + urgencia en hero/cta-final: la cifra EXACTA del tier destacado y el badge único con la
   // línea del copy (oferta ya trae ambos en offerText). Sin esto, hero/cta inventan precio y moneda.
-  if (offer && (section === 'hero' || section === 'cta-final')) extra.push(featuredPriceText(offer))
-  if (offer?.urgency && (section === 'hero' || section === 'cta-final')) extra.push(urgencyText(offer))
+  if (offer && section === 'cta-final') extra.push(featuredPriceText(offer))
+  if (offer?.urgency && section === 'cta-final') extra.push(urgencyText(offer))
+  if (!OFFER_SECTIONS.has(section)) extra.push(NO_SALES_BLOCK)
   if (trust && TRUST_BAND_SECTIONS.has(section)) extra.push(trustText(trust, money))
-  if (packUnits && packUnits > 1) extra.push(packNote(packUnits))
+  // Gateado por sección además de por el caller. La ruta ya solo manda `packUnits` en
+  // MULTI_UNIT_SECTIONS, pero el contrato de qué muestra una sección es del builder: dejarlo
+  // colgando del llamador es exactamente cómo el hero terminó con un bloque de precio.
+  if (packUnits && packUnits > 1 && MULTI_UNIT_SECTIONS.has(section)) extra.push(packNote(packUnits))
   if (reserveLockup) extra.push(LOCKUP_BAND)
   if (section === 'oferta' && trust?.paymentMethods?.length) extra.push(paymentLogosText(trust.paymentMethods))
   else if (PAYMENT_SECTIONS.has(section)) extra.push(PAYMENT_BAND)

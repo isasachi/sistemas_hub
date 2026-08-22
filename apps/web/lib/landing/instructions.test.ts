@@ -94,6 +94,41 @@ describe('buildDiffusionInstruction — DNA-driven (spec 2026-07-23)', () => {
       expect(build('hero', { productForm: pf })).toContain('UN SOLO ENVASE CON ETIQUETA')
   })
 
+  // ⚠️ AUDITORÍA DE FUGAS ENTRE SECCIONES. El hero se llevó DOS piezas que no le tocaban, una tras
+  // otra: primero la geometría de comparación del antes/después, y una vez tapada esa, un bloque de
+  // precio entero con su sello de urgencia ("2 Unidades · S/ 159 · Antes: S/ 240" + "Oferta por
+  // tiempo limitado"). Las dos venían del ensamblador, no de la difusión. Este test cierra la clase
+  // entera: con TODOS los insumos disponibles, cada bloque opcional aparece SOLO en las secciones
+  // que lo declaran en su `composition`.
+  it('ningún bloque opcional se filtra a una sección que no lo declara', () => {
+    const TODAS: SectionType[] = ['hero', 'beneficios', 'antes-despues', 'testimonios', 'faq', 'garantia', 'oferta', 'cta-final']
+    // marcador → las únicas secciones donde puede aparecer
+    const PERMITIDO: Record<string, SectionType[]> = {
+      'FEATURED PRICE': ['cta-final'],
+      'PRICE TIERS': ['oferta'],
+      'URGENCY:': ['cta-final'],
+      'Badge de urgencia': ['oferta'],
+      'cards de comparación': ['antes-despues'],
+      'ANTES/DESPUÉS ADAPTATIVO': ['antes-despues'],
+      'PAYMENT LOGOS (DRAW them)': ['oferta'],
+      'PAYMENT LOGOS (do NOT draw)': ['garantia'],
+      'TRUST BAR': ['hero', 'beneficios', 'testimonios', 'faq', 'garantia', 'cta-final'],
+      'MULTI-UNIT PACK': ['oferta', 'cta-final'],
+      'SIN BLOQUE DE VENTA': ['hero', 'beneficios', 'antes-despues', 'testimonios', 'faq', 'garantia'],
+    }
+    // Todo disponible a la vez: es el peor caso, el que produce las fugas.
+    const salida = Object.fromEntries(
+      TODAS.map((s) => [s, build(s, { offer: OFFER, trust: TRUST, packUnits: 3 })]),
+    ) as Record<SectionType, string>
+
+    for (const [marcador, permitidas] of Object.entries(PERMITIDO)) {
+      for (const s of TODAS) {
+        const deberia = permitidas.includes(s)
+        expect(salida[s].includes(marcador), `«${marcador}» en ${s}: ${deberia ? 'falta' : 'SE FILTRÓ'}`).toBe(deberia)
+      }
+    }
+  })
+
   it('la geometría de comparación llega SOLO a antes-despues', () => {
     expect(build('antes-despues')).toContain('cards de comparación')
     for (const s of ['hero', 'oferta', 'beneficios', 'testimonios', 'faq', 'garantia', 'cta-final'] as SectionType[])
@@ -201,13 +236,22 @@ describe('buildDiffusionInstruction — DNA-driven (spec 2026-07-23)', () => {
     expect(out).toContain('ahorra 33%')
   })
 
-  it('hero/cta-final inyectan featuredPriceText + urgencia', () => {
-    for (const type of ['hero', 'cta-final'] as SectionType[]) {
-      const out = build(type, { offer: OFFER })
-      expect(out).toContain('FEATURED PRICE')
-      expect(out).toContain('S/ 199')
-      expect(out).toContain('Oferta por tiempo limitado')
-    }
+  // ⚠️ EL HERO YA NO LLEVA PRECIO. Lo llevaba —`featuredPriceText` + `urgencyText`— y salió
+  // impreso: un bloque "2 Unidades · S/ 159 · Antes: S/ 240" con el sello "Oferta por tiempo
+  // limitado", en una sección cuya `composition` no declara precio, ni badge, ni botón. El
+  // argumento viejo ("sin la cifra exacta el hero inventa el precio") resolvía el problema
+  // equivocado: si no lleva precio, no hay cifra que acertar.
+  it('el cierre inyecta featuredPriceText + urgencia; el hero NO lleva precio', () => {
+    const cierre = build('cta-final', { offer: OFFER })
+    expect(cierre).toContain('FEATURED PRICE')
+    expect(cierre).toContain('S/ 199')
+    expect(cierre).toContain('Oferta por tiempo limitado')
+
+    const hero = build('hero', { offer: OFFER })
+    expect(hero).not.toContain('FEATURED PRICE')
+    expect(hero).not.toContain('S/ 199')
+    expect(hero).not.toContain('Oferta por tiempo limitado')
+    expect(hero).toContain('SIN BLOQUE DE VENTA')
   })
 
   it('la barra de confianza (TRUST BAR) va en las 6 secciones que la tienen, no en oferta/antes-despues', () => {
