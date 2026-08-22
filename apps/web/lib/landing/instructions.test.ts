@@ -100,6 +100,31 @@ describe('buildDiffusionInstruction — DNA-driven (spec 2026-07-23)', () => {
   // tiempo limitado"). Las dos venían del ensamblador, no de la difusión. Este test cierra la clase
   // entera: con TODOS los insumos disponibles, cada bloque opcional aparece SOLO en las secciones
   // que lo declaran en su `composition`.
+  // ⚠️ LA PROHIBICIÓN NO PUEDE CONTRADECIR A LA ESTRUCTURA DE LA SECCIÓN. `garantia` está fuera de
+  // OFFER_SECTIONS y recibe `noSalesBlock`, pero su `composition` declara un "Sello de garantía
+  // dorado (porcentaje grande...)" y `offerComponents` se lo pide en el MISMO prompt. Una
+  // prohibición que dijera "ni sello… ni porcentaje de ahorro" a secas dejaría dos líneas pidiendo
+  // lo contrario — el modo de fallo que este repo ya registró tres veces. Se comprueba leyendo los
+  // DOS bloques en la misma cadena: que cada uno exista por separado no dice nada del conflicto.
+  it('la prohibición de venta no contradice al sello que la sección declara', () => {
+    const g = build('garantia', { offer: OFFER, trust: TRUST })
+    expect(g).toContain('Sello: medalla circular dorada')
+    expect(g).toContain('SIN BLOQUE DE VENTA')
+    expect(g).toContain('ÚNICA EXCEPCIÓN')          // el sello de garantía queda exento
+    expect(g).not.toContain('Componentes de oferta') // el rótulo tampoco puede decir "oferta" acá
+
+    // Donde no hay sello declarado, no hay excepción que otorgar.
+    const hero = build('hero', { offer: OFFER, trust: TRUST })
+    expect(hero).toContain('SIN BLOQUE DE VENTA')
+    expect(hero).not.toContain('ÚNICA EXCEPCIÓN')
+    expect(hero).not.toContain('Sello: medalla circular dorada')
+
+    // Y donde SÍ hay oferta, el rótulo la nombra y no aparece prohibición alguna.
+    const of = build('oferta', { offer: OFFER, trust: TRUST })
+    expect(of).toContain('Componentes de oferta')
+    expect(of).not.toContain('SIN BLOQUE DE VENTA')
+  })
+
   it('ningún bloque opcional se filtra a una sección que no lo declara', () => {
     const TODAS: SectionType[] = ['hero', 'beneficios', 'antes-despues', 'testimonios', 'faq', 'garantia', 'oferta', 'cta-final']
     // marcador → las únicas secciones donde puede aparecer

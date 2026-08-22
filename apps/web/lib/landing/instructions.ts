@@ -157,7 +157,11 @@ const OFFER_COMPONENTS: Partial<Record<SectionType, string[]>> = {
 }
 function offerComponents(section: SectionType): string[] {
   const partes = OFFER_COMPONENTS[section]
-  return partes ? [`Componentes de oferta (geometría invariante, solo cambia color): ${partes.join(' ')}`] : []
+  if (!partes) return []
+  // El rótulo dice "de oferta" solo donde HAY oferta. En `garantia` y `antes-despues` ese título
+  // aterrizaba al lado de "SIN BLOQUE DE VENTA" y la contradicción se leía ya desde el encabezado.
+  const rotulo = OFFER_SECTIONS.has(section) ? 'Componentes de oferta' : 'Componentes'
+  return [`${rotulo} (geometría invariante, solo cambia color): ${partes.join(' ')}`]
 }
 
 // ─── Capa 4 — CONTENIDO DE CARRILES (spec §3, motor plantilla-como-scaffold) ─
@@ -323,8 +327,24 @@ export const OFFER_SECTIONS: Set<SectionType> = new Set(['oferta', 'cta-final'])
 // arriba y va por DERIVACIÓN, no por una lista escrita a mano: cualquier sección fuera de
 // `OFFER_SECTIONS` la recibe, así que la próxima que se agregue nace protegida. Ninguna de esas 6
 // declara precio, ancla, ahorro, urgencia ni botón en su `composition`.
-const NO_SALES_BLOCK =
-  'SIN BLOQUE DE VENTA en esta sección: no rendericies NINGÚN precio, cifra de moneda, precio ancla tachado, porcentaje de ahorro, etiqueta de cantidad ("2 Unidades"), sello o badge de urgencia/escasez ("oferta por tiempo limitado", "solo hoy", stock restante) ni botón de compra. Esos elementos viven en la sección de oferta y en el cierre, no acá. Si la plantilla adjunta muestra algo parecido, ignoralo: esta sección no vende, presenta.'
+// ⚠️ EL SELLO DE GARANTÍA NO ES UN ELEMENTO DE VENTA, y una primera versión de esta prohibición lo
+// trataba como tal. `garantia` está fuera de `OFFER_SECTIONS`, así que recibía la prohibición
+// entera —"ni sello… ni porcentaje de ahorro"— mientras `offerComponents` le pedía en el MISMO
+// prompt su "Sello: medalla circular dorada con texto curvo", y su `composition` declara un sello
+// con un porcentaje grande. Es el modo de fallo que este repo ya registró tres veces (`estable`
+// contra el micro-temblor, "no reescribas" contra la sección que pide reescribir, el 06c8259): dos
+// líneas del mismo prompt pidiendo lo contrario. La prohibición nombra ahora los sellos de
+// URGENCIA o DESCUENTO, y exime explícitamente al de garantía en las secciones que lo declaran.
+function noSalesBlock(section: SectionType): string {
+  const conSello = (OFFER_COMPONENTS[section] ?? []).includes(SELLO)
+  return [
+    'SIN BLOQUE DE VENTA en esta sección: no rendericies NINGÚN precio, cifra de moneda, precio ancla tachado, porcentaje de ahorro, etiqueta de cantidad ("2 Unidades") ni botón de compra, ni sello, cinta o badge que anuncie urgencia, escasez o descuento ("oferta por tiempo limitado", "solo hoy", stock restante). Esos elementos viven en la sección de oferta y en el cierre, no acá.',
+    conSello
+      ? 'ÚNICA EXCEPCIÓN: el sello de GARANTÍA que esta sección sí declara — no anuncia precio ni urgencia sino respaldo, y va con su porcentaje de satisfacción como manda su estructura.'
+      : null,
+    'Si la plantilla adjunta muestra algo parecido a un bloque de venta, ignoralo: esta sección no vende, presenta.',
+  ].filter(Boolean).join(' ')
+}
 
 // Secciones que llevan la barra de confianza inferior (mismas 4 filas, composición idéntica; solo
 // cambia el color de fondo). Oferta y antes-despues NO la llevan (payment_row / closing_strip).
@@ -498,7 +518,7 @@ export function buildDiffusionInstruction(args: {
   // línea del copy (oferta ya trae ambos en offerText). Sin esto, hero/cta inventan precio y moneda.
   if (offer && section === 'cta-final') extra.push(featuredPriceText(offer))
   if (offer?.urgency && section === 'cta-final') extra.push(urgencyText(offer))
-  if (!OFFER_SECTIONS.has(section)) extra.push(NO_SALES_BLOCK)
+  if (!OFFER_SECTIONS.has(section)) extra.push(noSalesBlock(section))
   if (trust && TRUST_BAND_SECTIONS.has(section)) extra.push(trustText(trust, money))
   // Gateado por sección además de por el caller. La ruta ya solo manda `packUnits` en
   // MULTI_UNIT_SECTIONS, pero el contrato de qué muestra una sección es del builder: dejarlo
