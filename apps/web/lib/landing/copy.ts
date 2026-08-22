@@ -211,6 +211,26 @@ function scalePrice(s: string | undefined, ratio: number): string | undefined {
   })
 }
 
+// Cantidad declarada en el label ("2 Unidades", "3 Frascos"). El label lo escribe el modelo y es
+// texto libre, así que sin número devuelve null y el perUnit se deja como estaba.
+function tierQty(label?: string): number | null {
+  const m = label?.match(/\d+/)
+  const n = m ? parseInt(m[0], 10) : NaN
+  return Number.isFinite(n) && n > 0 ? n : null
+}
+
+// ⚠️ EL PRECIO DEL USUARIO SE ESCRIBE EXACTO, NO ESCALADO — un centavo se perdía justo en la
+// función que existe para no perderlo. `scalePrice` redondea a entero todo lo que pase de 10, así
+// que con el usuario pidiendo "S/ 89.90" sobre una oferta de S/ 89 el ratio daba 89.9 y la card
+// salía diciendo **S/ 90**. Es el fallo que `pinUserPrice` vino a evitar, de nuevo y por 10
+// céntimos: una landing que anuncia una cifra que el vendedor no cobra. El resto de la escalera SÍ
+// se escala y se redondea (los precios en soles son enteros); lo que se fija literal es el tier que
+// el usuario nombró.
+const fmtSoles = (v: number): string => {
+  const r = Math.round(v * 100) / 100
+  return Number.isInteger(r) ? String(r) : r.toFixed(2)
+}
+
 export function pinUserPrice(offer: Offer, userPrice?: string | null): Offer {
   const nums = userPrice?.match(/\d[\d.,]*/g) ?? []
   if (nums.length !== 1) return offer
@@ -222,12 +242,29 @@ export function pinUserPrice(offer: Offer, userPrice?: string | null): Offer {
   if (!Number.isFinite(base) || base <= 0) return offer
   const ratio = want / base
   const tiers = offer.tiers.map((t) => {
-    const price = scalePrice(t.price, ratio) ?? t.price
+    const esElDelUsuario = parsePrice(t.price) === base
+    // El tier que el usuario nombró lleva SU cifra, con sus decimales; los demás, la escala.
+    const price = esElDelUsuario
+      ? (t.price.replace(/\d[\d.,]*/, fmtSoles(want)))
+      : (scalePrice(t.price, ratio) ?? t.price)
     const priceBefore = scalePrice(t.priceBefore, ratio)
     // Un ancla que no quedó por encima del precio es una card rota (recomputeSavings solo limpia
     // el %, no el ancla). Solo puede pasar si el modelo ya la había dado mal: la escala es uniforme.
     const validBefore = (parsePrice(priceBefore) ?? 0) > (parsePrice(price) ?? 0)
-    return { ...t, price, priceBefore: validBefore ? priceBefore : undefined, perUnit: scalePrice(t.perUnit, ratio) }
+    // ⚠️ EL perUnit SE DERIVA DEL PRECIO, NO SE ESCALA APARTE. `scalePrice` redondea cada campo por
+    // su cuenta, así que precio y precio-por-unidad quedaban contando historias distintas: medido
+    // con base S/ 129, el tier de 3 salía "S/ 317" con "S/ 106 c/u" — y 106 × 3 = 318. La card no
+    // cierra, y es la clase de error que un comprador SÍ hace a mano. Derivarlo del precio ya
+    // fijado lo vuelve consistente por construcción.
+    // Solo se reescribe el formato "c/u" que pide el prompt: un perUnit como "S/ 0.7 por cápsula"
+    // NO es precio-por-pack (la cantidad del label no es el número de cápsulas), así que ese se
+    // escala como antes.
+    const q = tierQty(t.label)
+    const precioNum = parsePrice(price)
+    const perUnit = t.perUnit && /c\/u/i.test(t.perUnit) && q && precioNum
+      ? t.perUnit.replace(/\d[\d.,]*/, fmtSoles(precioNum / q))
+      : scalePrice(t.perUnit, ratio)
+    return { ...t, price, priceBefore: validBefore ? priceBefore : undefined, perUnit }
   })
   // Los strings los genera este código, así que los topes del schema (price 12, perUnit 28) no los
   // valida nadie más: si la escala se pasa de largo, se deja lo del modelo antes que romper el parse.
