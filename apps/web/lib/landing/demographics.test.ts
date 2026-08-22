@@ -3,8 +3,9 @@ import { DemographicId, BodyFocus, NicheId, type SectionType } from './types'
 import {
   DEMOGRAPHIC_POSES, DEMOGRAPHIC_PERSONA, assignPoses,
   ZONE_POSES, BODY_FOCUS_LABELS, BODY_FOCUS_FRAMING, zoneNeedsOwnPlate,
-  personaFor, NICHE_WARDROBE,
+  personaFor, NICHE_WARDROBE, BODY_FOCUS_ZONAS, SIN_ZONA,
 } from './demographics'
+import { NICHE_LABELS, NICHE_FALLBACK, NICHE_DEFAULT_DEMOGRAPHIC } from './niches'
 
 describe('Anexo B — poses y persona', () => {
   it('cada demografía con talento tiene ≥8 poses únicas; no_talent = 0', () => {
@@ -224,5 +225,34 @@ describe('poses contextuales y complexión', () => {
       .toContain('cuerpo entrenado con glúteos definidos, viste')
     expect(personaFor('female_30_45', 'generic', null, 'sana y equilibrada'))
       .toContain('complexión sana y equilibrada, viste')
+  })
+})
+
+describe('el selector no ofrece cuerpo entero', () => {
+  it('las zonas ofrecidas excluyen el marcador de "sin zona"', () => {
+    expect(BODY_FOCUS_ZONAS).not.toContain(SIN_ZONA)
+    expect(BODY_FOCUS_ZONAS.length).toBe(BodyFocus.options.length - 1)
+  })
+  it('ninguna etiqueta ofrecida nombra el cuerpo entero', () => {
+    for (const f of [SIN_ZONA, ...BODY_FOCUS_ZONAS]) {
+      expect(BODY_FOCUS_LABELS[f]).not.toMatch(/cuerpo (completo|entero)/i)
+    }
+  })
+  it('sin zona sigue siendo un valor válido del enum (es el marcador persistido)', () => {
+    expect(BodyFocus.options).toContain(SIN_ZONA)
+    expect(zoneNeedsOwnPlate(SIN_ZONA)).toBe(false)
+  })
+})
+
+describe('suplemento femenino es un nicho aparte', () => {
+  it('convive con el de belleza y el masculino, con etiqueta propia', () => {
+    expect(NICHE_LABELS.supplement_female).toBe('Suplemento femenino')
+    expect(NICHE_LABELS.supplement_skin_female).not.toBe(NICHE_LABELS.supplement_female)
+    expect(NICHE_LABELS.supplement_male_performance).toBe('Suplemento masculino')
+  })
+  it('tiene su propia identidad visual y vestuario, no los hereda de belleza', () => {
+    expect(NICHE_FALLBACK.supplement_female.hue).not.toBe(NICHE_FALLBACK.supplement_skin_female.hue)
+    expect(NICHE_WARDROBE.supplement_female).not.toBe(NICHE_WARDROBE.supplement_skin_female)
+    expect(NICHE_DEFAULT_DEMOGRAPHIC.supplement_female).toBe('female_30_45')
   })
 })

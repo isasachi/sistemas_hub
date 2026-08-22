@@ -4,6 +4,7 @@ import type { NicheId, DemographicId } from './types'
 // `font_accent` solo se usa en el titular de hero_problem y offer, nunca en cuerpo/cards.
 export const NICHE_TYPOGRAPHY: Record<NicheId, { font_family: string; font_accent: string | null }> = {
   supplement_skin_female: { font_family: 'Poppins', font_accent: null },
+  supplement_female: { font_family: 'Nunito Sans', font_accent: null },
   skincare_topical: { font_family: 'Inter', font_accent: 'Playfair Display' },
   haircare: { font_family: 'Gilroy', font_accent: null },
   fitness_weightloss: { font_family: 'Montserrat', font_accent: 'Anton' },
@@ -24,6 +25,7 @@ export const NICHE_TYPOGRAPHY: Record<NicheId, { font_family: string; font_accen
 // Anexo A, columna "Nombre legible (UI)".
 export const NICHE_LABELS: Record<NicheId, string> = {
   supplement_skin_female: 'Suplemento belleza / piel',
+  supplement_female: 'Suplemento femenino',
   skincare_topical: 'Skincare / cosmética',
   haircare: 'Cuidado capilar',
   fitness_weightloss: 'Fitness / pérdida de peso',
@@ -66,6 +68,14 @@ export const NICHE_FALLBACK: Record<
     particles: 'Burbujas translúcidas y destellos sobre agua',
     particle_density: 'high',
     propsFamily: 'Raíz o flor del ingrediente, hojas, cápsulas sueltas, molécula 3D',
+    halo: 'radial_soft',
+    particles_on: true,
+  },
+  supplement_female: {
+    hue: 280,
+    particles: 'Polvo de luz tenue y destellos suaves suspendidos',
+    particle_density: 'medium',
+    propsFamily: 'Raíz o flor del ingrediente, hojas, cápsulas sueltas',
     halo: 'radial_soft',
     particles_on: true,
   },
@@ -194,6 +204,7 @@ export const NICHE_FALLBACK: Record<
 // ─── Anexo B.0 — Demografía por defecto según niche_id ──────────────────────
 export const NICHE_DEFAULT_DEMOGRAPHIC: Record<NicheId, DemographicId> = {
   supplement_skin_female: 'female_18_30',
+  supplement_female: 'female_30_45',
   skincare_topical: 'female_18_30',
   haircare: 'female_18_30',
   intimate_wellness: 'female_30_45',

@@ -1,4 +1,5 @@
-import type { BodyFocus, DemographicId, NicheId, SectionType } from './types'
+import { BodyFocus } from './types'
+import type { DemographicId, NicheId, SectionType } from './types'
 
 // Nombre legible (UI) por demografía — paso 0.a Paso 2 del wizard (selector siempre editable).
 export const DEMOGRAPHIC_LABELS: Record<DemographicId, string> = {
@@ -176,8 +177,22 @@ export const BODY_FOCUS_LABELS: Record<BodyFocus, string> = {
   articulacion: 'Articulación (hombro, codo, muñeca)',
   manos: 'Manos y uñas',
   pies: 'Pies',
-  cuerpo_completo: 'Sin zona específica (medio cuerpo)',
+  cuerpo_completo: 'Sin zona específica',
 }
+
+// ⚠️ EL SELECTOR NO OFRECE "CUERPO COMPLETO" — no es una zona y un avatar de cuerpo entero no es
+// una opción de esta tool. `SIN_ZONA` nombra al valor por lo que SIGNIFICA, para que la UI no
+// vuelva a escribir la clave cruda y para que nadie lo lea como "una zona más de la lista".
+//
+// La clave del enum sobrevive porque es el marcador PERSISTIDO de "sin zona": representarlo con
+// `null` obligaría a re-clasificar en cada carga —el guard de caché de `classify/route.ts` exige
+// `body_focus` no nulo—, o sea una llamada pagada por vista. Y el enum lo comparte el generador de
+// anuncios, donde el valor significa "zona del producto indeterminada".
+export const SIN_ZONA: BodyFocus = 'cuerpo_completo'
+
+// Las zonas REALES, en el orden del enum y sin el marcador de arriba. Es lo que se ofrece como
+// "parte del cuerpo" en el wizard.
+export const BODY_FOCUS_ZONAS: BodyFocus[] = BodyFocus.options.filter((f) => f !== SIN_ZONA)
 
 // Encuadre en lenguaje de prompt. Lo consumen la PLACA de zona (`talent.ts`) y la nota de
 // antes/después: los dos necesitan nombrar la misma zona con las mismas palabras, y si cada uno la
@@ -230,6 +245,7 @@ export const DEMOGRAPHIC_PERSONA: Record<DemographicId, string> = {
 // auditar en cada corrida.
 export const NICHE_WARDROBE: Record<NicheId, string> = {
   supplement_skin_female: 'top o camiseta lisa de tono neutro, look limpio de cuidado personal',
+  supplement_female: 'top o camiseta lisa de tono neutro, look cómodo de bienestar diario',
   skincare_topical: 'top o camiseta lisa de tono neutro, hombros descubiertos, look limpio de skincare',
   haircare: 'camiseta lisa de tono neutro que no compita con el cabello',
   fitness_weightloss: 'ropa deportiva de entrenamiento ajustada — licra y top deportivo',
@@ -319,6 +335,7 @@ const GENERIC_SUBSTITUTE = 'Producto en contexto, a escala humana'
 
 export const NO_TALENT_SUBSTITUTE: Record<NicheId, string> = {
   supplement_skin_female: GENERIC_SUBSTITUTE,
+  supplement_female: GENERIC_SUBSTITUTE,
   skincare_topical: GENERIC_SUBSTITUTE,
   haircare: GENERIC_SUBSTITUTE,
   fitness_weightloss: GENERIC_SUBSTITUTE,

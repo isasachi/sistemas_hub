@@ -32,7 +32,11 @@ export const SECTION_LABELS: Record<SectionType, string> = {
 
 // ─── Nicho y demografía (spec 2026-07-23, Anexos A/B) ────────────────────────
 export const NicheId = z.enum([
-  'supplement_skin_female', 'skincare_topical', 'haircare',
+  // `supplement_skin_female` es el suplemento de BELLEZA (piel, cabello, uñas). `supplement_female`
+  // es el resto del bienestar femenino —sueño, hormonas, energía, hierro, ciclo—, que antes caía en
+  // el de belleza por no tener casillero propio: la sesión de GomiSleep (magnesio para dormir) salió
+  // clasificada como belleza/piel, y de ahí heredaba tipografía, props y vestuario de skincare.
+  'supplement_skin_female', 'supplement_female', 'skincare_topical', 'haircare',
   'fitness_weightloss', 'supplement_male_performance',
   'joint_mobility', 'intimate_wellness', 'herbal_natural',
   'baby_maternity', 'pets', 'home_cleaning',

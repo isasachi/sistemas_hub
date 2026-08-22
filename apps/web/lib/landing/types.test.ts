@@ -14,9 +14,14 @@ describe('contrato landing (spec 2026-07-23)', () => {
     expect(parsed.kicker).toBe('RESULTADOS REALES')
     expect(parsed.ctaHeadline).toBe('PIDE EL TUYO')
   })
-  it('NicheId tiene los 16 valores del spec (Anexo A)', () => {
-    expect(NicheId.options).toHaveLength(16)
+  // Los 16 del Anexo A del spec + `supplement_female`, que es una DESVIACIÓN DELIBERADA (2026-08-21):
+  // el Anexo solo tenía el suplemento de belleza y el masculino, así que todo el bienestar femenino
+  // que no se ve en el espejo (sueño, hormonas, energía) caía en belleza y heredaba su tipografía,
+  // sus props y su vestuario de skincare.
+  it('NicheId tiene los 16 valores del spec (Anexo A) + el suplemento femenino', () => {
+    expect(NicheId.options).toHaveLength(17)
     expect(NicheId.options).toContain('supplement_skin_female')
+    expect(NicheId.options).toContain('supplement_female')
     expect(NicheId.options).toContain('generic')
   })
   it('DemographicId tiene los 7 valores del spec (Anexo B)', () => {
