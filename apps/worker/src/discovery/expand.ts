@@ -8,9 +8,23 @@
 import { normalizeQuery } from './normalize-query'
 import { resolveDictionary, type KeywordExpansion } from './dictionaries'
 
+/**
+ * ⚠️ SUBIDO DE 100 A 200 AL CONSOLIDAR LOS DICCIONARIOS, con la medición al lado.
+ *
+ * El 100 se dimensionó para diccionarios de ~23 términos, donde no llegaba a
+ * cortar nunca. Con los nichos fusionados la unidad es otra —un superviviente
+ * hereda el vocabulario de varios— y a 100 truncaban **24 de 157 semillas,
+ * perdiendo 747 queries en silencio**. Medido a 200: cero truncado, la semilla
+ * más grande queda en 178 y el barrido pasa de 30 h a 33 h.
+ *
+ * El techo real no es el presupuesto sino el TIEMPO DE UN JOB: el scheduler
+ * emite un job por (término, país), así que el peor caso son 178 búsquedas ≈ 7
+ * min a las 25/min medidas — por debajo del tope de 12 min del runner y del
+ * plazo de 15 del reaper. Subirlo más volvería a acercarse a esa pared.
+ */
 export const MAX_QUERIES_PER_SEED = Math.max(
   1,
-  Number(process.env.DISC_MAX_QUERIES ?? 100),
+  Number(process.env.DISC_MAX_QUERIES ?? 200),
 )
 
 // Reglas singular ↔ plural del español (spec §8).
@@ -51,6 +65,22 @@ export function morphVariants(query: string): string[] {
  * usuario escribió.
  */
 export function expandKeyword(seed: string, dictionary?: KeywordExpansion): string[] {
+  return expandKeywordInfo(seed, dictionary).queries
+}
+
+/**
+ * Igual que `expandKeyword` pero dice CUÁNTAS queries se perdieron por el tope.
+ *
+ * ⚠️ EL TRUNCADO NO PUEDE SER SILENCIOSO. Al consolidar los diccionarios, 23 de
+ * 147 semillas pasaron a superar las 100 queries —una fusión suma el
+ * vocabulario de varios nichos— y la cola se cortaba sin que nada lo dijera: se
+ * lee igual que "este nicho se buscó entero". Es la misma regla que ya vale para
+ * las búsquedas truncadas por `DISC_MAX_PAGES`.
+ */
+export function expandKeywordInfo(
+  seed: string,
+  dictionary?: KeywordExpansion,
+): { queries: string[]; descartadas: number } {
   const dict = dictionary ?? resolveDictionary(seed)
   const ordered = [
     seed,
@@ -63,13 +93,14 @@ export function expandKeyword(seed: string, dictionary?: KeywordExpansion): stri
 
   const seen = new Set<string>()
   const out: string[] = []
+  let descartadas = 0
   for (const raw of ordered) {
     for (const variant of morphVariants(normalizeQuery(raw))) {
       if (!variant || seen.has(variant)) continue
       seen.add(variant)
+      if (out.length >= MAX_QUERIES_PER_SEED) { descartadas++; continue }
       out.push(variant)
-      if (out.length >= MAX_QUERIES_PER_SEED) return out
     }
   }
-  return out
+  return { queries: out, descartadas }
 }

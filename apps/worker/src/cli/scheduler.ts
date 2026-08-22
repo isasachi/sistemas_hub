@@ -44,20 +44,22 @@ async function main() {
   // 3. Reparto fijo de capacidad (spec §9).
   const { descubrir, recrawl } = repartoCiclo(capacidad)
 
-  // 4. Descubrimiento: el bandit elige término×país y se agrupa por término,
-  //    porque la unidad que el worker sabe correr es una semilla con sus países.
+  // 4. Descubrimiento: UN JOB POR (término, país), que es la unidad del bandit.
+  //
+  // ⚠️ NO SE AGRUPAN LOS PAÍSES DE UN MISMO TÉRMINO, y agruparlos fue un bug
+  // real: al consolidar los diccionarios, un nicho fusionado como "faja lumbar"
+  // pasó de 10 a 86 queries, así que un job con sus 5 países eran 430 búsquedas
+  // ≈ 17 min a las 25/min medidas — por encima del tope de 12 min del runner y
+  // del plazo de 15 min del reaper. El job moría, volvía a la cola y moría otra
+  // vez, para siempre. Con un país por job el peor caso es el tope de queries
+  // (100) × 1 país ≈ 4 min.
   const picks = await pickNextBatch(descubrir)
-  const porTermino = new Map<string, string[]>()
-  for (const p of picks) {
-    if (!porTermino.has(p.term)) porTermino.set(p.term, [])
-    porTermino.get(p.term)!.push(p.country)
-  }
   const ahora = new Date()
-  const jobs = [...porTermino.entries()].map(([term, countries]) => ({
+  const jobs = picks.map((p) => ({
     kind: 'discover' as const,
-    payload: { term, countries: [...new Set(countries)].sort() },
+    payload: { term: p.term, countries: [p.country] },
     priority: 3,
-    dedupKey: dedupKey(term, [...new Set(countries)].sort().join('-'), ahora),
+    dedupKey: dedupKey(p.term, p.country, ahora),
   }))
   const encolados = dryRun ? jobs.length : await enqueue(jobs)
 
@@ -75,7 +77,7 @@ async function main() {
     `(${descubrir} descubrir / ${recrawl} recrawl · ε=${EPSILON})\n` +
     `  ${rescatados} jobs rescatados · ${combinaciones} combinaciones con yield al día · ` +
     `${apagados.length} términos apagados\n` +
-    `  ${encolados} jobs de descubrimiento (${picks.length} combinaciones en ${jobs.length} semillas)\n` +
+    `  ${encolados} jobs de descubrimiento (uno por término×país)\n` +
     `  ${recrawls} auditorías de recrawl`,
   )
   if (apagados.length) console.log(`  apagados: ${apagados.slice(0, 10).join(', ')}${apagados.length > 10 ? '…' : ''}`)

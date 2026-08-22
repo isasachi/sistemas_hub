@@ -787,6 +787,33 @@ Leer el catálogo de un anunciante son dos navegaciones a Meta. `rank.ts` lee de
 
 ⚠️ **EL CUELLO DE BOTELLA NO ES EL DESCUBRIMIENTO, ES EL PERFILADO.** Una búsqueda es un `fetch` same-origin (~2,3 s) y escala; leer el catálogo de un anunciante son **dos navegaciones** y es lo que bloquea: medido en esta máquina (IP residencial directa, sin proxy), **~11 lecturas seguidas** bastan para que Meta empiece a devolver payloads sin nodos. `storedProfiles` reusa los ya medidos, así que el costo marginal cae al repetirse — el primer ranking de un nicho nuevo es el caro.
 
+### Consolidación: 842 → 157 nichos (`data/nichos-consolidados.json`)
+
+842 diccionarios eran demasiados para repartir un presupuesto de scraping escaso: el bandit gastaba tanto en "alveolos" como en "faja lumbar". El plan de consolidación vive en un JSON revisable y lo ejecuta `scripts/consolidate-niches.ts` (con `--dry-run`).
+
+**Medido, y esto es lo que cambia:** el barrido pasa de **15.919 a 9.820 queries** (79.605 → 49.100 búsquedas, 53 h → 33 h).
+
+⚠️ **SE PROBARON TRES SEÑALES PARA PODAR CON DATOS Y NINGUNA SIRVE.** Está acá para que nadie las reintente:
+1. **Inventario del motor viejo** — de las 842, **ninguna scrapeada dio cero**: 514 tienen ≥10 anunciantes. No discrimina.
+2. **Solape de vocabulario** — **9.750 de 11.709 términos aparecen en un solo diccionario**, y solo 12 pares llegan a Jaccard 0,5. Los nichos casi no se pisan entre sí.
+3. **Monoproducto verificado** — 640 nichos tienen filas verificadas y solo 190 dieron un monoproducto, pero la lista de "cero" incluye **`hemorroides` con 178 filas verificadas, `creatina`, `cafetera`, `contorno de ojos` y `calcetines de compresion`**. Podar con esto habría borrado los mejores nichos.
+
+Convergen en lo mismo: **la reducción es editorial**, y por eso la decisión está escrita a mano, con su motivo, en un archivo aparte. Los tres motivos de descarte son `organo` (estructura interna sin producto de consumo), `abstraccion` ("amor", "salud", "moda") y `clinico` (se trata con receta, no con dropshipping).
+
+⚠️ **LO QUE SE DESCARTA NO SE BORRA DE LA BASE: `is_active = false`.** Eso lo saca del bandit, que es el objetivo, conservando su historial; un DELETE arrastraría en cascada `disc_keyword_country_state`, que costó corridas reales. Y el script **reactiva** lo que vuelve: re-aplicar un plan corregido devolvió 10 nichos a la vida que si no se habrían quedado con diccionario y fuera del bandit — invisibles.
+
+⚠️ **FUSIONAR NO PUEDE PERDER VOCABULARIO, y la primera versión lo perdía.** El superviviente hereda la UNIÓN de los términos, pero cuatro fusiones mías fueron tan gruesas que la unión superaba el tope por semilla: `blanqueamiento dental` (dental + sueño + cabeza + oído/nariz/garganta en un cajón), `multivitaminico` (los 24 suplementos juntos), `espirulina y superalimentos` y `coche de bebe`. Entre las cuatro **descartaban 888 queries**. Se partieron en familias reales (suplementos en cinco grupos, superalimentos en tres).
+
+⚠️ **`MAX_QUERIES_PER_SEED` SUBE DE 100 A 200 POR ESTO MISMO.** El 100 se dimensionó para diccionarios de 23 términos y no cortaba nunca; con nichos fusionados truncaba **24 de 157 semillas y 747 queries en silencio**. A 200: cero truncado, la semilla más grande queda en 178 y el barrido sube de 30 h a 33 h. El techo real no es el presupuesto sino el **tiempo de un job**: 178 búsquedas ≈ 7 min, por debajo del tope de 12 min del runner. Y el truncado ya no es silencioso — `expandKeywordInfo` reporta cuántas queries no entran.
+
+⚠️ **EL SCHEDULER EMITE UN JOB POR (TÉRMINO, PAÍS), y agrupar los países fue un bug.** Al fusionar, "faja lumbar" pasó de 10 a 86 queries: un job con sus 5 países eran ~430 búsquedas ≈ 17 min, por encima del tope de 12 min del runner y del plazo de 15 del reaper. El job moría, volvía a la cola y moría otra vez, para siempre.
+
+⚠️ **LOS SUFIJOS REGIONALES ERAN EL 12% DE LAS BÚSQUEDAS Y EL 3% DE LOS ANUNCIOS.** Medido sobre las búsquedas reales: `farmacia` 13,5 anuncios por búsqueda, `remedio casero` 8,4, `drogueria` 4,5 — pero `botica` 0,4 y **`cacharreria` y `chuchulucos` CERO** en 4 y 5 búsquedas. Se conservan los tres primeros.
+
+⚠️ **EL NOMBRE DEL SUPERVIVIENTE ES EL QUE VE EL USUARIO.** Se convierte en `disc_ranked.seed_query` y de ahí en la ficha de la herramienta, así que se elige el que nombra un PRODUCTO (`rodillera ortopedica`), no la parte del cuerpo (`rodilla`). El script **reapunta** las filas ya servidas: sin eso quedaba una ficha "rodilla" que no lleva a ningún nicho existente.
+
+**Guard de integridad:** el script rechaza el plan si un nombre no existe (cazó 14 inventados), si un nicho se absorbe dos veces, o si un superviviente está además en la lista de descarte; y avisa qué nichos con productos ya servidos o con yield medido quedan fuera.
+
 ### Cola, scheduler y vocabulario (spec §2.5, §2.6, §9, §10)
 
 Es lo que convierte "una corrida por consulta" en el inventario continuo del CONTEXT §4.2. Migración `20260822000002`.

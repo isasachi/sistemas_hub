@@ -1,0 +1,1013 @@
+{
+  "_comentario": [
+    "PLAN DE CONSOLIDACIÓN de los diccionarios. Se aplica con:",
+    "  npx tsx scripts/consolidate-niches.ts --dry-run",
+    "  npx tsx scripts/consolidate-niches.ts",
+    "",
+    "⚠️ ESTE ARCHIVO ES LA DECISIÓN; el script solo la ejecuta. Está separado a",
+    "propósito para que se pueda leer y discutir antes de que toque nada.",
+    "",
+    "⚠️ FUSIONAR NO PIERDE VOCABULARIO: el superviviente se queda con la UNIÓN de",
+    "los términos de todos los absorbidos. Una fusión que emitiera menos queries",
+    "que sus partes por separado sería perder descubrimiento, no simplificar.",
+    "",
+    "⚠️ EL NOMBRE DEL SUPERVIVIENTE ES EL QUE VE EL USUARIO: se convierte en",
+    "`disc_ranked.seed_query` y de ahí en el chip de la herramienta. Se elige",
+    "siempre el que nombra un PRODUCTO ('rodillera ortopedica'), no la parte del",
+    "cuerpo ('rodilla'), aunque la parte del cuerpo tenga más términos.",
+    "",
+    "⚠️ LOS DESCARTES NO SE BORRAN DE LA BASE: el script pone `is_active = false`",
+    "en `disc_keywords`, que es lo que los saca del bandit conservando su",
+    "historial de yield. Borrarlos arrastraría en cascada las filas de",
+    "`disc_keyword_country_state` que costaron corridas reales.",
+    "",
+    "MOTIVOS DE DESCARTE:",
+    "  organo      — estructura interna del cuerpo. No existe un producto de",
+    "                consumo que se compre 'para el páncreas'; su diccionario",
+    "                salió de la expansión con IA y derivó a términos genéricos",
+    "                de dolor y postura, que es lo que hace ruido.",
+    "  abstraccion — no es una cosa que se compre ('amor', 'salud', 'bienestar').",
+    "  clinico     — enfermedad que se trata con médico y receta, no con un",
+    "                producto de dropshipping.",
+    "",
+    "⚠️ NO SE DESCARTA POR FALTA DE RENDIMIENTO MEDIDO, y se probaron tres",
+    "señales antes de decidirlo a mano — están todas en AGENTS.md. La tercera",
+    "(nichos sin ningún monoproducto verificado) habría borrado 'hemorroides'",
+    "con 178 filas verificadas, 'creatina' y 'cafetera'. Ninguna sirve."
+  ],
+  "descartar": {
+    "alveolos": "organo",
+    "amigdalas": "organo",
+    "apendice": "organo",
+    "arterias": "organo",
+    "bazo": "organo",
+    "bronquios": "organo",
+    "bursas": "organo",
+    "capilares": "organo",
+    "cartilago": "organo",
+    "cerebro": "organo",
+    "colon": "organo",
+    "conductos biliares": "organo",
+    "conductos lagrimales": "organo",
+    "cornea": "organo",
+    "craneo": "organo",
+    "cristalino": "organo",
+    "cuerdas vocales": "organo",
+    "cuello uterino": "organo",
+    "diafragma": "organo",
+    "discos intervertebrales": "organo",
+    "endometrio": "organo",
+    "esofago": "organo",
+    "esternon": "organo",
+    "fascia": "organo",
+    "foliculos pilosos": "organo",
+    "fosas nasales": "organo",
+    "ganglios del cuello": "organo",
+    "glandulas salivales": "organo",
+    "glandulas sebaceas": "organo",
+    "glandulas sudoriparas": "organo",
+    "glandulas suprarrenales": "organo",
+    "globulos rojos": "organo",
+    "hipofisis": "organo",
+    "intestino delgado": "organo",
+    "laringe": "organo",
+    "ligamentos": "organo",
+    "mandibula": "organo",
+    "nervio optico": "organo",
+    "nervios perifericos": "organo",
+    "oido medio": "organo",
+    "omoplatos": "organo",
+    "ovarios": "organo",
+    "paladar": "organo",
+    "palmas": "organo",
+    "pancreas": "organo",
+    "paratiroides": "organo",
+    "peritoneo": "organo",
+    "pezones": "organo",
+    "plaquetas": "organo",
+    "pleura": "organo",
+    "pulmones": "organo",
+    "recto": "organo",
+    "retina": "organo",
+    "rinones": "organo",
+    "rotula": "organo",
+    "senos paranasales": "organo",
+    "sienes": "organo",
+    "sistema linfatico": "organo",
+    "sistema nervioso autonomo": "organo",
+    "tejido": "organo",
+    "tejido adiposo": "organo",
+    "tendones": "organo",
+    "traquea": "organo",
+    "trompas de falopio": "organo",
+    "ureteres": "organo",
+    "uretra": "organo",
+    "utero": "organo",
+    "vejiga": "organo",
+    "venas": "organo",
+    "vesicula biliar": "organo",
+    "corazon": "organo",
+    "estomago": "organo",
+    "higado": "organo",
+    "tiroides": "organo",
+    "huesos": "organo",
+    "musculos": "organo",
+    "isquiotibiales": "organo",
+    "cuadriceps": "organo",
+    "orina": "organo",
+    "hormonas sexuales": "organo",
+    "glucosa sanguinea": "organo",
+    "amor": "abstraccion",
+    "atraccion": "abstraccion",
+    "seduccion": "abstraccion",
+    "belleza": "abstraccion",
+    "salud": "abstraccion",
+    "bienestar": "abstraccion",
+    "moda": "abstraccion",
+    "tecnologia": "abstraccion",
+    "dolor": "abstraccion",
+    "infecciones": "abstraccion",
+    "inflamacion": "abstraccion",
+    "equilibrio": "abstraccion",
+    "memoria": "abstraccion",
+    "metabolismo": "abstraccion",
+    "hobbies nicho": "abstraccion",
+    "sostenibilidad": "abstraccion",
+    "tonificar": "abstraccion",
+    "audicion": "abstraccion",
+    "ergonomia": "abstraccion",
+    "estiramiento": "abstraccion",
+    "inmunidad": "abstraccion",
+    "sistema inmunitario": "abstraccion",
+    "circulacion": "abstraccion",
+    "digestion": "abstraccion",
+    "fertilidad": "abstraccion",
+    "libido": "abstraccion",
+    "mascotas": "abstraccion",
+    "gatos": "abstraccion",
+    "perros": "abstraccion",
+    "bebes": "abstraccion",
+    "ninos": "abstraccion",
+    "juguetes": "abstraccion",
+    "decoracion": "abstraccion",
+    "jardin": "abstraccion",
+    "closet": "abstraccion",
+    "camping": "abstraccion",
+    "playa": "abstraccion",
+    "bodas": "abstraccion",
+    "cumpleanos": "abstraccion",
+    "fiestas": "abstraccion",
+    "navidad": "abstraccion",
+    "halloween": "abstraccion",
+    "san valentin": "abstraccion",
+    "regalos": "abstraccion",
+    "coleccionables": "abstraccion",
+    "manualidades": "abstraccion",
+    "pintura arte": "abstraccion",
+    "fotografia": "abstraccion",
+    "instrumentos musicales": "abstraccion",
+    "pesca": "abstraccion",
+    "senderismo": "abstraccion",
+    "natacion": "abstraccion",
+    "yoga": "abstraccion",
+    "pilates": "abstraccion",
+    "running": "abstraccion",
+    "ciclismo": "abstraccion",
+    "crossfit": "abstraccion",
+    "boxeo": "abstraccion",
+    "moto": "abstraccion",
+    "gaming": "abstraccion",
+    "smart home": "abstraccion",
+    "home office": "abstraccion",
+    "iluminacion": "abstraccion",
+    "terraza": "abstraccion",
+    "meal prep": "abstraccion",
+    "reposteria": "abstraccion",
+    "costura": "abstraccion",
+    "juegos mesa": "abstraccion",
+    "cafe": "abstraccion",
+    "licuados": "abstraccion",
+    "detox": "abstraccion",
+    "limpieza hogar": "abstraccion",
+    "organizacion hogar": "abstraccion",
+    "seguridad infantil": "abstraccion",
+    "utiles escolares": "abstraccion",
+    "cancer": "clinico",
+    "diabetes": "clinico",
+    "asma": "clinico",
+    "anemia": "clinico",
+    "osteoporosis": "clinico",
+    "artritis": "clinico",
+    "gota": "clinico",
+    "candidiasis": "clinico",
+    "enfermedades autoinmunes": "clinico",
+    "hipertension": "clinico",
+    "presion arterial": "clinico",
+    "colesterol": "clinico",
+    "colesterol alto": "clinico",
+    "higado graso": "clinico",
+    "infeccion urinaria": "clinico",
+    "incontinencia urinaria": "clinico",
+    "disfuncion erectil": "clinico",
+    "colon irritable": "clinico",
+    "reflujo": "clinico",
+    "vertigo": "clinico",
+    "tinnitus": "clinico",
+    "rinitis": "clinico",
+    "congestion nasal": "clinico",
+    "ulceras por presion": "clinico",
+    "pie diabetico": "clinico",
+    "embarazo": "clinico",
+    "lactancia": "clinico",
+    "suelo pelvico": "clinico",
+    "fatiga cronica": "clinico",
+    "acidez estomacal": "clinico",
+    "gases": "clinico",
+    "heridas": "clinico",
+    "cicatrices": "clinico",
+    "esguinces": "clinico",
+    "bursitis": "clinico",
+    "bursitis cadera": "clinico",
+    "lumbago": "clinico",
+    "torticolis": "clinico",
+    "calambres": "clinico",
+    "recubrimiento y reparacion": "abstraccion",
+    "ropa": "abstraccion"
+  },
+  "fusionar": {
+    "_nota": "superviviente → nichos que absorbe. El superviviente conserva la unión de términos.",
+    "rodillera ortopedica": [
+      "rodilla",
+      "dolor de rodilla",
+      "artrosis de rodilla",
+      "rodillera para artrosis"
+    ],
+    "faja lumbar": [
+      "dolor lumbar",
+      "espalda baja",
+      "columna",
+      "espalda",
+      "dolor de espalda",
+      "espalda alta",
+      "espalda media",
+      "joroba"
+    ],
+    "corrector de postura": [
+      "mala postura",
+      "escoliosis"
+    ],
+    "collarin cervical": [
+      "cuello",
+      "dolor de cuello",
+      "cervical",
+      "contractura cervical",
+      "contracturas"
+    ],
+    "plantillas ortopedicas": [
+      "pie",
+      "pies",
+      "dolor de pies",
+      "pie plano",
+      "planta del pie",
+      "fascitis plantar",
+      "espolon calcaneo",
+      "talon",
+      "protector de talon"
+    ],
+    "tobillera ortopedica": [
+      "tobillo",
+      "dolor de tobillo",
+      "esguince de tobillo",
+      "tendon de aquiles"
+    ],
+    "munequera ortopedica": [
+      "muneca",
+      "dolor de muneca",
+      "tunel carpiano",
+      "munequera tunel carpiano",
+      "tendinitis muneca",
+      "dedo gatillo",
+      "inmovilizador de dedo"
+    ],
+    "codera ortopedica": [
+      "codo",
+      "codo de tenista",
+      "tendinitis",
+      "codera"
+    ],
+    "cabestrillo hombro": [
+      "hombro",
+      "dolor de hombro",
+      "cabestrillo",
+      "inmovilizador"
+    ],
+    "faja postparto": [
+      "body shaper",
+      "ropa interior moldeadora",
+      "faja sauna",
+      "sauna portatil y faja termica",
+      "sauna portatil"
+    ],
+    "medias de compresion": [
+      "calcetines de compresion",
+      "varices",
+      "piernas cansadas",
+      "dolor de piernas",
+      "pierna",
+      "retencion de liquidos"
+    ],
+    "cojin ortopedico": [
+      "cojin para coxis",
+      "hemorroides"
+    ],
+    "almohada cervical": [
+      "almohada ortopedica",
+      "almohada cervical ortopedica",
+      "almohadas",
+      "cojin masajeador"
+    ],
+    "masajeador muscular": [
+      "masajeador",
+      "dolor muscular",
+      "dolor articular",
+      "articulaciones",
+      "pistola de masaje",
+      "rodillo muscular",
+      "foam roller"
+    ],
+    "cadera": [
+      "dolor de cadera",
+      "ciatica",
+      "ingle"
+    ],
+    "abdomen": [
+      "cintura",
+      "grasa abdominal",
+      "hinchazon abdominal",
+      "hinchazon",
+      "abdominales"
+    ],
+    "brazo": [
+      "antebrazo",
+      "muslo",
+      "pantorrilla",
+      "mano",
+      "dedos de la mano",
+      "dedos del pie",
+      "costillas"
+    ],
+    "caida del cabello": [
+      "caida de cabello hombre",
+      "caida de cabello mujer",
+      "alopecia",
+      "calvicie",
+      "anticaida capilar",
+      "crecimiento del cabello",
+      "cabello",
+      "cabello fino",
+      "cuero cabelludo"
+    ],
+    "tratamiento capilar": [
+      "tratamiento para el cabello",
+      "cabello seco",
+      "frizz",
+      "botox capilar",
+      "alisado cabello",
+      "aceite capilar",
+      "shampoo",
+      "caspa"
+    ],
+    "tinte de cabello": [
+      "tinte para el cabello",
+      "canas"
+    ],
+    "plancha de cabello": [
+      "cepillo alisador",
+      "rizador",
+      "rizador de cabello"
+    ],
+    "secador de cabello": [
+      "secador cabello"
+    ],
+    "accesorios de cabello": [
+      "accesorios cabello"
+    ],
+    "serum vitamina c": [
+      "serum facial",
+      "cuidado facial",
+      "limpieza facial"
+    ],
+    "crema despigmentante": [
+      "manchas en la piel",
+      "manchas piel",
+      "melasma",
+      "lunares",
+      "verrugas"
+    ],
+    "tratamiento antiacne": [
+      "acne",
+      "acne hormonal",
+      "cicatrices de acne",
+      "poros",
+      "piel grasa"
+    ],
+    "crema hidratante": [
+      "piel seca",
+      "piel sensible",
+      "piel",
+      "dermatitis",
+      "eczema",
+      "crema corporal",
+      "aceite corporal"
+    ],
+    "contorno de ojos": [
+      "bolsas en los ojos",
+      "parpados caidos",
+      "ojos cansados",
+      "ojo",
+      "ojos"
+    ],
+    "mascarilla facial": [
+      "mascarillas faciales",
+      "mascarilla led",
+      "exfoliante facial",
+      "agua micelar",
+      "limpiador facial"
+    ],
+    "anticelulitico": [
+      "celulitis",
+      "flacidez",
+      "estrias"
+    ],
+    "protector solar": [
+      "protector solar facial",
+      "bronceado",
+      "autobronceante"
+    ],
+    "depiladora": [
+      "depilacion",
+      "depilacion laser",
+      "depiladora laser",
+      "vello corporal",
+      "vello facial",
+      "afeitado",
+      "axilas"
+    ],
+    "unas": [
+      "unas de las manos",
+      "unas de los pies",
+      "unas quebradizas",
+      "unas encarnadas",
+      "hongos en las unas",
+      "unas acrilicas",
+      "unas en gel"
+    ],
+    "labial": [
+      "labios",
+      "labios resecos"
+    ],
+    "mascara de pestanas": [
+      "pestanas",
+      "extensiones de pestanas"
+    ],
+    "cejas": [
+      "microblading"
+    ],
+    "arrugas frente": [
+      "frente",
+      "mejillas",
+      "rostro"
+    ],
+    "doble menton": [
+      "papada"
+    ],
+    "desodorante natural": [
+      "sudoracion excesiva",
+      "hiperhidrosis"
+    ],
+    "colageno hidrolizado": [
+      "colageno",
+      "glucosamina y condroitina",
+      "acido hialuronico oral",
+      "acido urico"
+    ],
+    "proteina en polvo": [
+      "proteina"
+    ],
+    "espirulina y superalimentos": [
+      "espirulina",
+      "moringa",
+      "maca",
+      "matcha",
+      "ginseng"
+    ],
+    "fibra y digestion": [
+      "fibra",
+      "enzimas digestivas",
+      "probioticos"
+    ],
+    "quemador de grasa": [
+      "bajar de peso",
+      "control de apetito",
+      "azucar"
+    ],
+    "multivitaminico": [
+      "vitaminas",
+      "vitamina c",
+      "vitamina d",
+      "complejo b",
+      "calcio",
+      "hierro",
+      "zinc",
+      "magnesio",
+      "acido folico",
+      "vitaminas para ninos"
+    ],
+    "arena para gatos": [
+      "arena aglomerante",
+      "arenero",
+      "pala y accesorios de arenero",
+      "alfombra sanitaria"
+    ],
+    "cama para perros": [
+      "cama ortopedica para perro",
+      "cama para gatos"
+    ],
+    "juguetes para perro": [
+      "juguetes para gato",
+      "juguetes para gatos"
+    ],
+    "cepillo para perro": [
+      "cepillo quitapelos",
+      "secador para mascotas",
+      "cortaunas para perro",
+      "cortaunas para mascotas"
+    ],
+    "comedero automatico": [
+      "bebedero automatico",
+      "bebedero para perro",
+      "fuente de agua para mascotas",
+      "comida para perros"
+    ],
+    "correa retractil": [
+      "pechera para perro",
+      "arnes para perro",
+      "arnes para gato",
+      "bozal para perro"
+    ],
+    "transportadora para mascotas": [
+      "escalera para perro",
+      "puerta para mascotas"
+    ],
+    "collar antipulgas": [
+      "repelente para mascotas",
+      "shampoo para mascotas"
+    ],
+    "gps para mascotas": [
+      "camara para mascotas"
+    ],
+    "jaula para aves": [
+      "aves",
+      "jaula para hamster"
+    ],
+    "acuario y peces": [
+      "acuario"
+    ],
+    "mancuernas ajustables": [
+      "mancuernas",
+      "kettlebell",
+      "discos y barras",
+      "chaleco con peso"
+    ],
+    "banda elastica de gluteos": [
+      "bandas de resistencia",
+      "gomas de pilates",
+      "levantamiento de gluteos",
+      "gluteos"
+    ],
+    "colchoneta de yoga": [
+      "mat de yoga",
+      "esterilla de acupresion"
+    ],
+    "bicicleta estatica": [
+      "bicicleta",
+      "bicicleta spinning",
+      "bicicleta electrica"
+    ],
+    "caminadora": [
+      "eliptica",
+      "maquina de remo",
+      "escalador y stepper",
+      "step de aerobicos",
+      "plataforma vibratoria"
+    ],
+    "electroestimulador muscular": [
+      "electroestimulador"
+    ],
+    "ropa deportiva mujer": [
+      "leggings deportivos",
+      "leggings",
+      "ropa deportiva",
+      "brasier deportivo"
+    ],
+    "gimnasio en casa": [
+      "gimnasio casa",
+      "banco de ejercicios",
+      "barra de dominadas",
+      "barras paralelas",
+      "trx y suspension"
+    ],
+    "guantes de gimnasio": [
+      "cinturon de levantamiento"
+    ],
+    "accesorios de boxeo": [
+      "boxeo"
+    ],
+    "aspiradora robot": [
+      "aspiradora",
+      "aspiradora de mano"
+    ],
+    "mopa giratoria": [
+      "mopa",
+      "trapeador",
+      "limpiador a vapor"
+    ],
+    "purificador de aire": [
+      "purificador aire",
+      "difusor de aromas",
+      "difusor",
+      "humidificador",
+      "deshumidificador"
+    ],
+    "organizador de closet": [
+      "organizadores",
+      "perchas",
+      "ganchos adhesivos",
+      "cajas organizadoras",
+      "zapatero",
+      "organizador de zapatos"
+    ],
+    "lampara led": [
+      "lamparas",
+      "luces led",
+      "lampara de sal",
+      "lampara sal",
+      "foco inteligente",
+      "linterna recargable"
+    ],
+    "cortinas blackout": [
+      "cortinas",
+      "cortina de bano"
+    ],
+    "alfombras": [
+      "alfombra"
+    ],
+    "espejos decorativos": [
+      "espejo decorativo",
+      "espejo con luz",
+      "espejos"
+    ],
+    "cuadros decorativos": [
+      "cuadros",
+      "cuadros y decoracion"
+    ],
+    "sabanas": [
+      "edredon y cobija",
+      "edredon",
+      "cobija",
+      "manta electrica",
+      "colchon y protector",
+      "colchon"
+    ],
+    "plantas y jardin": [
+      "plantas interior",
+      "plantas artificiales",
+      "macetas",
+      "huerto urbano",
+      "sistema de riego",
+      "herramientas de jardin"
+    ],
+    "seguridad para el hogar": [
+      "camara de seguridad",
+      "camara wifi"
+    ],
+    "herramientas del hogar": [
+      "herramientas",
+      "herramientas diy",
+      "taladro",
+      "destornillador electrico",
+      "nivel laser"
+    ],
+    "muebles plegables": [
+      "muebles compactos",
+      "estanteria",
+      "escalera plegable"
+    ],
+    "insecticida y plagas": [
+      "desinfectante",
+      "quitamanchas",
+      "limpiavidrios"
+    ],
+    "lavanderia": [
+      "basurero inteligente"
+    ],
+    "ahorro de energia": [
+      "enchufe inteligente"
+    ],
+    "sarten antiadherente": [
+      "olla a presion",
+      "juego de ollas",
+      "ollas",
+      "olla arrocera"
+    ],
+    "cuchillos de cocina": [
+      "set de cuchillos",
+      "tabla de cortar"
+    ],
+    "utensilios de cocina": [
+      "utensilios cocina",
+      "utensilios de silicona",
+      "gadgets cocina",
+      "escurridor y limpieza de cocina",
+      "organizador de cocina"
+    ],
+    "licuadora": [
+      "batidora",
+      "batidora de pedestal",
+      "procesador de alimentos",
+      "procesadora de alimentos",
+      "extractor de jugos"
+    ],
+    "cafetera": [
+      "hervidor electrico",
+      "termo y taza",
+      "termos",
+      "termo"
+    ],
+    "freidora de aire": [
+      "horno electrico",
+      "microondas",
+      "sandwichera y waflera",
+      "sandwichera",
+      "parrilla",
+      "estufa portatil",
+      "tabla y accesorios de asado"
+    ],
+    "recipientes hermeticos": [
+      "selladora al vacio",
+      "yogurtera y fermentados"
+    ],
+    "botella deportiva": [
+      "botellas de agua"
+    ],
+    "moldes de reposteria": [
+      "balanza de cocina"
+    ],
+    "vajilla": [
+      "dispensador de bebidas"
+    ],
+    "purificador de agua": [
+      "filtro de agua"
+    ],
+    "lentes de sol": [
+      "lentes sol"
+    ],
+    "lentes de descanso": [
+      "lentes con filtro azul",
+      "lentes de lectura"
+    ],
+    "relojes para hombre": [
+      "reloj para hombre"
+    ],
+    "relojes para mujer": [
+      "reloj para mujer"
+    ],
+    "smartwatch deportivo": [
+      "smartwatch",
+      "banda inteligente"
+    ],
+    "mochila antirrobo": [
+      "mochila deportiva",
+      "equipaje",
+      "maleta de viaje",
+      "rinonera"
+    ],
+    "bolso de mujer": [
+      "carteras"
+    ],
+    "joyeria de acero": [
+      "joyeria",
+      "collares",
+      "aretes",
+      "anillos"
+    ],
+    "zapatillas urbanas": [
+      "zapatillas",
+      "zapatillas deportivas",
+      "zapatillas para correr"
+    ],
+    "pijamas": [
+      "pijama",
+      "pantuflas"
+    ],
+    "traje de bano": [
+      "vestido casual",
+      "jeans",
+      "pantalon",
+      "camisa formal",
+      "taper"
+    ],
+    "medias y calcetines": [
+      "gorra y sombrero",
+      "bufanda y guantes",
+      "cinturon de cuero"
+    ],
+    "perfume": [
+      "perfumes"
+    ],
+    "billetera de hombre": [
+      "billetera antirrobo"
+    ],
+    "brasier sin costura": [
+      "busto",
+      "escote",
+      "levantamiento de busto"
+    ],
+    "audifonos bluetooth": [
+      "audifonos",
+      "audifonos inalambricos",
+      "audifonos gamer"
+    ],
+    "parlante bluetooth": [
+      "parlantes bluetooth",
+      "microfono"
+    ],
+    "proyectores": [
+      "proyector",
+      "tablet",
+      "webcam"
+    ],
+    "soporte para celular": [
+      "soporte para laptop",
+      "tripode",
+      "aro de luz"
+    ],
+    "cargador inalambrico": [
+      "power bank",
+      "cables",
+      "organizador de cables"
+    ],
+    "teclado mecanico": [
+      "teclados",
+      "mouse inalambrico",
+      "silla gamer"
+    ],
+    "accesorios para auto": [
+      "accesorios auto",
+      "camara de retroceso",
+      "detailing auto",
+      "camping auto"
+    ],
+    "casco de moto": [
+      "guantes de moto",
+      "candado para moto",
+      "scooter electrico"
+    ],
+    "biberones": [
+      "calienta biberones",
+      "esterilizador de biberones",
+      "extractor de leche"
+    ],
+    "coche de bebe": [
+      "andador",
+      "cuna",
+      "cambiador",
+      "banera para bebe",
+      "silla de comer",
+      "mochila portabebe"
+    ],
+    "blanqueamiento dental": [
+      "dientes",
+      "boca",
+      "encias",
+      "mal aliento",
+      "ortodoncia",
+      "bruxismo",
+      "lengua",
+      "sensibilidad dental"
+    ],
+    "cepillo dental electrico": [
+      "cuidado bucal estetico"
+    ],
+    "parche de calor": [
+      "bolsa de agua caliente",
+      "compresa termica",
+      "terapia frio calor"
+    ],
+    "hongos en los pies": [
+      "callos",
+      "juanetes",
+      "corrector juanetes"
+    ],
+    "silla ergonomica": [
+      "soporte de espalda para silla"
+    ],
+    "silla de ruedas": [
+      "muleta y baston",
+      "silla de bano para adulto mayor"
+    ],
+    "bota walker": [
+      "ferula nocturna",
+      "venda elastica",
+      "banda kinesiologica",
+      "soporte de pulgar",
+      "faja escrotal y hernia",
+      "hernia discal",
+      "hernia inguinal",
+      "hernia umbilical"
+    ],
+    "sandalias ortopedicas": [
+      "botas de mujer"
+    ],
+    "rodillo facial": [
+      "rutina coreana",
+      "retinol",
+      "serum de niacinamida",
+      "acido hialuronico facial",
+      "acido hialuronico",
+      "base de maquillaje",
+      "maquillaje",
+      "brochas de maquillaje",
+      "organizador de maquillaje"
+    ],
+    "cuerda para saltar": [
+      "rueda abdominal"
+    ],
+    "chaqueta impermeable": [
+      "ropa deportiva hombre"
+    ],
+    "dispensador de jabon": [
+      "accesorios de bano",
+      "organizador de bano",
+      "cabezal de ducha"
+    ],
+    "hidrolavadora": [
+      "ventilador",
+      "calefactor",
+      "aire acondicionado portatil"
+    ],
+    "mini impresora": [
+      "drones"
+    ],
+    "antifaz para dormir": [
+      "ronquidos",
+      "apnea del sueno",
+      "insomnio",
+      "ansiedad",
+      "dolor de cabeza",
+      "cabeza",
+      "dormir",
+      "sueno",
+      "estres"
+    ],
+    "dolor de garganta": [
+      "garganta",
+      "nariz",
+      "orejas",
+      "cera en los oidos"
+    ],
+    "melatonina": [
+      "ashwagandha",
+      "prenatal",
+      "menopausia",
+      "prostata"
+    ],
+    "creatina": [
+      "bcaa y aminoacidos",
+      "electrolitos"
+    ],
+    "omega 3": [
+      "coenzima q10",
+      "sustituto de comida"
+    ],
+    "curcuma": [
+      "jengibre",
+      "te verde",
+      "miel"
+    ],
+    "semillas de chia": [
+      "linaza",
+      "granola",
+      "frutos secos",
+      "stevia"
+    ],
+    "monitor de bebe": [
+      "aspirador nasal para bebe"
+    ],
+    "juguetes educativos": [
+      "juguetes para bebe",
+      "mordedores",
+      "chupetes"
+    ]
+  }
+}

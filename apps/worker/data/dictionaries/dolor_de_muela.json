@@ -1,36 +1,33 @@
 {
   "problem": [
-    "dolor de muela",
+    "dolor de muela"
+  ],
+  "symptom": [],
+  "intent": [],
+  "commercial": [],
+  "product": [
     "dolor dental",
     "dolor de dientes",
     "dolor de encias",
     "dolor en las encias",
-    "muela picada"
-  ],
-  "symptom": [
+    "muela picada",
     "diente sensible",
     "sensibilidad dental",
     "dolor al masticar",
     "dolor al comer",
     "encias inflamadas",
     "encias sangrantes",
-    "dolor dental nocturno"
-  ],
-  "intent": [
+    "dolor dental nocturno",
     "aliviar dolor de muela",
     "quitar dolor de muela",
     "como aliviar dolor dental",
     "remedio para dolor de muela",
-    "solucion para dolor dental"
-  ],
-  "commercial": [
+    "solucion para dolor dental",
     "alivio dental",
     "cuidado dental",
     "salud bucal",
     "tratamiento dental",
-    "higiene dental"
-  ],
-  "product": [
+    "higiene dental",
     "gel dental",
     "enjuague bucal",
     "pasta dental sensibilidad",

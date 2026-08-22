@@ -30,7 +30,7 @@ import {
 import { openPool, type PaginationToken } from '../browser/session'
 import { collectSearch, MAX_PAGES_PER_SEARCH } from '../meta/search'
 import { buildMatrix, type SearchJob } from '../discovery/matrix'
-import { expandKeyword, MAX_QUERIES_PER_SEED } from '../discovery/expand'
+import { expandKeywordInfo, MAX_QUERIES_PER_SEED } from '../discovery/expand'
 import { listDictionaries, loadDictionary } from '../discovery/dictionaries'
 import { normalizeAd } from '../normalization/ad'
 import { createRun, insertQueries, markQuery, saveDiscoveries, finishRun, runSummary } from '../db/discovery'
@@ -67,7 +67,7 @@ async function main() {
   const planOnly = args.includes('--plan')
 
   // ── Fase 3: keyword engine ────────────────────────────────────────────────
-  const queries = expandKeyword(seed)
+  const { queries, descartadas } = expandKeywordInfo(seed)
   const jobs = buildMatrix(seed, countries)
   const curated = !!loadDictionary(seed)
 
@@ -75,7 +75,8 @@ async function main() {
     `Semilla "${seed}" · diccionario ${curated ? 'curado' : 'FALLBACK (sin archivo curado)'}\n` +
     `${queries.length} queries (tope ${MAX_QUERIES_PER_SEED}) × ${countries.length} países ` +
     `(${countries.join('/')}) = ${jobs.length} jobs · ≤${MAX_PAGES_PER_SEARCH} pág/búsqueda · ` +
-    `conc ${CONCURRENCY}${dryRun ? ' · DRY-RUN' : ''}`,
+    `conc ${CONCURRENCY}${dryRun ? ' · DRY-RUN' : ''}` +
+    (descartadas ? `\n⚠️  ${descartadas} queries del diccionario NO se usan: no entran en el tope de ${MAX_QUERIES_PER_SEED}.` : ''),
   )
   if (planOnly) {
     console.log(`\nQueries:\n  ${queries.join('\n  ')}`)
