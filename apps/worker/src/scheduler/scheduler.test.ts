@@ -87,10 +87,11 @@ describe('vocabulario auto-alimentado (spec §10)', () => {
       productName: 'Rodillera ActiveLife',
     })
     const terminos = t.map((x) => x.term)
-    expect(terminos).toContain('rodilleras')
-    expect(terminos).toContain('soporte')
+    expect(terminos).toContain('rodilleras')   // product_type: la categoría del comerciante
+    expect(terminos).toContain('soporte')      // tag
     expect(terminos).toContain('rodillera activelife')
-    expect(terminos).toContain('rodillera')
+    // `rodillera` a secas NO: del nombre solo salen bigramas (ver el test de abajo).
+    expect(terminos).not.toContain('rodillera')
   })
 
   it('descarta la marca: buscarla solo devuelve a ese anunciante', () => {
@@ -109,6 +110,30 @@ describe('vocabulario auto-alimentado (spec §10)', () => {
     // Una palabra vacía EN EL MEDIO no descalifica: es un término real.
     expect(esTerminoUtil('aceite de coco')).toBe(true)
     expect(esTerminoUtil('crema para pies')).toBe(true)
+  })
+
+  it('del NOMBRE solo salen n-gramas de dos palabras', () => {
+    // Medido: de 485 términos auto-extraídos activos, 383 eran de una sola
+    // palabra — `and`, `the`, `pro`, `100ml`, marcas sueltas — y cada uno es una
+    // búsqueda pagada. Las palabras sueltas buenas (`faja`, `rodillera`) ya
+    // viven dentro de una semilla, así que no descubren un nicho nuevo.
+    const t = extraerTerminos({ productName: 'Cinturon Termico Lumbar' }).map((x) => x.term)
+    expect(t).toContain('cinturon termico')
+    expect(t).toContain('termico lumbar')
+    expect(t).not.toContain('cinturon')
+    expect(t).not.toContain('termico')
+  })
+
+  it('el product_type SÍ puede ser una palabra: es la categoría del comerciante', () => {
+    expect(extraerTerminos({ productType: 'Rodilleras' }).map((x) => x.term)).toContain('rodilleras')
+  })
+
+  it('descarta términos con un número suelto', () => {
+    // "30 capsulas", "1 par", "2 0" salen de los títulos de packaging.
+    expect(esTerminoUtil('30 capsulas')).toBe(false)
+    expect(esTerminoUtil('1 par')).toBe(false)
+    // Un número PEGADO a la palabra no es lo mismo: "omega3" es un producto.
+    expect(esTerminoUtil('omega3 vegetal')).toBe(true)
   })
 
   it('descarta ruido de packaging y números sueltos', () => {

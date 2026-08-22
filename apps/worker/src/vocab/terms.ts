@@ -66,6 +66,9 @@ function bordeVacio(t: string): boolean {
   return VACIAS.has(p[0]) || VACIAS.has(p[p.length - 1])
 }
 
+/** Un número suelto dentro del término: "30 capsulas", "1 par", "2 0". */
+const LLEVA_NUMERO = /(^|\s)\d+(\s|$)/
+
 /**
  * ¿Este término sirve como consulta de descubrimiento?
  *
@@ -76,6 +79,7 @@ export function esTerminoUtil(term: string, brand?: string | null): boolean {
   const t = term.trim()
   if (t.length < 3 || t.length > 40) return false
   if (SOLO_NUMEROS.test(t)) return false
+  if (LLEVA_NUMERO.test(t)) return false
   if (RUIDO.has(t)) return false
   if (bordeVacio(t)) return false
   // Una palabra suelta que es ruido dentro de un bigrama está bien; lo que se
@@ -114,9 +118,27 @@ export function extraerTerminos(l: LandingParaVocabulario): TerminoExtraido[] {
   // propio comerciante eligió, ya viene en singular y ya es una consulta.
   if (l.productType) push(l.productType, 'product_type')
   for (const tag of l.productTags ?? []) push(tag, 'tag')
-  // Del nombre salen n-gramas: el nombre completo casi nunca es una buena
-  // consulta ("Rodillera ActiveLife 2.0"), pero "rodillera" sí.
-  if (l.productName) for (const ng of ngramas(l.productName)) push(ng, 'product_name')
+  // Del nombre salen n-gramas, pero SOLO los de dos palabras.
+  //
+  // ⚠️ UNA PALABRA SUELTA DEL NOMBRE NO DESCUBRE NADA, y medido son casi todo el
+  // ruido: de 485 términos auto-extraídos activos, **383 eran de una sola
+  // palabra** — `and`, `the`, `pro`, `plus`, `100ml`, `mini`, y nombres de marca
+  // sueltos (`kneeflex`, `groundingwell`). Cada uno es una búsqueda pagada, y el
+  // daemon llegó a gastar ciclos en `multi` y `termica`.
+  //
+  // Las palabras sueltas que SÍ son buenas —`faja`, `rodillera`, `masajeador`,
+  // `colageno`— resultaron ser las frecuentes, y todas ya viven dentro de una
+  // semilla: buscarlas de nuevo no descubre un nicho nuevo, que es para lo que
+  // existe este vocabulario (spec §10). Lo que descubre es el nombre específico
+  // de dos palabras: `cinturon termico`, `colageno marino`.
+  //
+  // `product_type` queda exento: ahí la palabra suelta es la CATEGORÍA que el
+  // propio comerciante eligió ("Rodilleras"), no un fragmento de un título.
+  if (l.productName) {
+    for (const ng of ngramas(l.productName)) {
+      if (ng.includes(' ')) push(ng, 'product_name')
+    }
+  }
 
   // Un término puede salir por dos caminos; gana el más específico (el orden de
   // inserción ya es ese).
