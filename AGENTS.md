@@ -787,11 +787,13 @@ Leer el catálogo de un anunciante son dos navegaciones a Meta. `rank.ts` lee de
 
 ⚠️ **EL CUELLO DE BOTELLA NO ES EL DESCUBRIMIENTO, ES EL PERFILADO.** Una búsqueda es un `fetch` same-origin (~2,3 s) y escala; leer el catálogo de un anunciante son **dos navegaciones** y es lo que bloquea: medido en esta máquina (IP residencial directa, sin proxy), **~11 lecturas seguidas** bastan para que Meta empiece a devolver payloads sin nodos. `storedProfiles` reusa los ya medidos, así que el costo marginal cae al repetirse — el primer ranking de un nicho nuevo es el caro.
 
-### Consolidación: 842 → 157 nichos (`data/nichos-consolidados.json`)
+### Consolidación: 842 → 155 nichos (`data/nichos-consolidados.json`)
 
 842 diccionarios eran demasiados para repartir un presupuesto de scraping escaso: el bandit gastaba tanto en "alveolos" como en "faja lumbar". El plan de consolidación vive en un JSON revisable y lo ejecuta `scripts/consolidate-niches.ts` (con `--dry-run`).
 
-**Medido, y esto es lo que cambia:** el barrido pasa de **15.919 a 9.820 queries** (79.605 → 49.100 búsquedas, 53 h → 33 h).
+**Medido, y esto es lo que cambia:** el barrido pasa de **15.919 a 9.024 queries** (79.605 → 45.120 búsquedas, 53 h → 30 h).
+
+**Dos decisiones del dueño del repo sobre la lista final:** fuera **tecnología** y **auto/moto/herramientas** (10 supervivientes con todo lo que habían absorbido), y dentro, **como nicho propio**, ocho partes del cuerpo que la consolidación había absorbido: cabello, ojos, pies, espalda, oidos, rodilla, nariz y gluteos. ⚠️ Eso deshace a propósito la regla de "el superviviente nombra un producto" para esos ocho: la parte del cuerpo vuelve a ser una ficha de la UI, conviviendo con su producto (`rodilla` y `rodillera ortopedica` son dos nichos). `oidos` no existía y se creó en `nichos-curados.json`, absorbiendo `orejas` y `cera en los oidos`. La lista legible se genera fuera del repo, en `~/chamba/nichos-motor-descubrimiento.txt`.
 
 ⚠️ **SE PROBARON TRES SEÑALES PARA PODAR CON DATOS Y NINGUNA SIRVE.** Está acá para que nadie las reintente:
 1. **Inventario del motor viejo** — de las 842, **ninguna scrapeada dio cero**: 514 tienen ≥10 anunciantes. No discrimina.

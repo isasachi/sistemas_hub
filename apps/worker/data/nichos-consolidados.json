@@ -232,12 +232,51 @@
     "torticolis": "clinico",
     "calambres": "clinico",
     "recubrimiento y reparacion": "abstraccion",
-    "ropa": "abstraccion"
+    "ropa": "abstraccion",
+    "audifonos": "fuera de alcance",
+    "audifonos inalambricos": "fuera de alcance",
+    "audifonos gamer": "fuera de alcance",
+    "audifonos bluetooth": "fuera de alcance",
+    "parlantes bluetooth": "fuera de alcance",
+    "microfono": "fuera de alcance",
+    "parlante bluetooth": "fuera de alcance",
+    "proyector": "fuera de alcance",
+    "tablet": "fuera de alcance",
+    "webcam": "fuera de alcance",
+    "proyectores": "fuera de alcance",
+    "soporte para laptop": "fuera de alcance",
+    "tripode": "fuera de alcance",
+    "aro de luz": "fuera de alcance",
+    "soporte para celular": "fuera de alcance",
+    "power bank": "fuera de alcance",
+    "cables": "fuera de alcance",
+    "organizador de cables": "fuera de alcance",
+    "cargador inalambrico": "fuera de alcance",
+    "teclados": "fuera de alcance",
+    "mouse inalambrico": "fuera de alcance",
+    "silla gamer": "fuera de alcance",
+    "teclado mecanico": "fuera de alcance",
+    "drones": "fuera de alcance",
+    "mini impresora": "fuera de alcance",
+    "accesorios auto": "fuera de alcance",
+    "camara de retroceso": "fuera de alcance",
+    "detailing auto": "fuera de alcance",
+    "camping auto": "fuera de alcance",
+    "accesorios para auto": "fuera de alcance",
+    "guantes de moto": "fuera de alcance",
+    "candado para moto": "fuera de alcance",
+    "scooter electrico": "fuera de alcance",
+    "casco de moto": "fuera de alcance",
+    "herramientas": "fuera de alcance",
+    "herramientas diy": "fuera de alcance",
+    "taladro": "fuera de alcance",
+    "destornillador electrico": "fuera de alcance",
+    "nivel laser": "fuera de alcance",
+    "herramientas del hogar": "fuera de alcance"
   },
   "fusionar": {
     "_nota": "superviviente → nichos que absorbe. El superviviente conserva la unión de términos.",
     "rodillera ortopedica": [
-      "rodilla",
       "dolor de rodilla",
       "artrosis de rodilla",
       "rodillera para artrosis"
@@ -246,7 +285,6 @@
       "dolor lumbar",
       "espalda baja",
       "columna",
-      "espalda",
       "dolor de espalda",
       "espalda alta",
       "espalda media",
@@ -264,8 +302,6 @@
       "contracturas"
     ],
     "plantillas ortopedicas": [
-      "pie",
-      "pies",
       "dolor de pies",
       "pie plano",
       "planta del pie",
@@ -363,7 +399,6 @@
       "calvicie",
       "anticaida capilar",
       "crecimiento del cabello",
-      "cabello",
       "cabello fino",
       "cuero cabelludo"
     ],
@@ -423,9 +458,7 @@
     "contorno de ojos": [
       "bolsas en los ojos",
       "parpados caidos",
-      "ojos cansados",
-      "ojo",
-      "ojos"
+      "ojos cansados"
     ],
     "mascarilla facial": [
       "mascarillas faciales",
@@ -582,8 +615,7 @@
     "banda elastica de gluteos": [
       "bandas de resistencia",
       "gomas de pilates",
-      "levantamiento de gluteos",
-      "gluteos"
+      "levantamiento de gluteos"
     ],
     "colchoneta de yoga": [
       "mat de yoga",
@@ -690,13 +722,6 @@
     "seguridad para el hogar": [
       "camara de seguridad",
       "camara wifi"
-    ],
-    "herramientas del hogar": [
-      "herramientas",
-      "herramientas diy",
-      "taladro",
-      "destornillador electrico",
-      "nivel laser"
     ],
     "muebles plegables": [
       "muebles compactos",
@@ -833,46 +858,6 @@
       "escote",
       "levantamiento de busto"
     ],
-    "audifonos bluetooth": [
-      "audifonos",
-      "audifonos inalambricos",
-      "audifonos gamer"
-    ],
-    "parlante bluetooth": [
-      "parlantes bluetooth",
-      "microfono"
-    ],
-    "proyectores": [
-      "proyector",
-      "tablet",
-      "webcam"
-    ],
-    "soporte para celular": [
-      "soporte para laptop",
-      "tripode",
-      "aro de luz"
-    ],
-    "cargador inalambrico": [
-      "power bank",
-      "cables",
-      "organizador de cables"
-    ],
-    "teclado mecanico": [
-      "teclados",
-      "mouse inalambrico",
-      "silla gamer"
-    ],
-    "accesorios para auto": [
-      "accesorios auto",
-      "camara de retroceso",
-      "detailing auto",
-      "camping auto"
-    ],
-    "casco de moto": [
-      "guantes de moto",
-      "candado para moto",
-      "scooter electrico"
-    ],
     "biberones": [
       "calienta biberones",
       "esterilizador de biberones",
@@ -956,9 +941,6 @@
       "calefactor",
       "aire acondicionado portatil"
     ],
-    "mini impresora": [
-      "drones"
-    ],
     "antifaz para dormir": [
       "ronquidos",
       "apnea del sueno",
@@ -971,10 +953,7 @@
       "estres"
     ],
     "dolor de garganta": [
-      "garganta",
-      "nariz",
-      "orejas",
-      "cera en los oidos"
+      "garganta"
     ],
     "melatonina": [
       "ashwagandha",
@@ -1008,6 +987,16 @@
       "juguetes para bebe",
       "mordedores",
       "chupetes"
+    ],
+    "ojos": [
+      "ojo"
+    ],
+    "pies": [
+      "pie"
+    ],
+    "oidos": [
+      "orejas",
+      "cera en los oidos"
     ]
   }
 }

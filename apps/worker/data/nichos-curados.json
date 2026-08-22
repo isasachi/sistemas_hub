@@ -13,278 +13,1699 @@
     "5 países. Se prefieren 10-18 términos que de verdad aparezcan en anuncios antes que 40 de relleno;",
     "lo que falte lo agrega solo el vocabulario auto-alimentado (spec §10) desde las landings reales."
   ],
-
   "ortopedia": {
-    "rodillera ortopedica": ["rodillera", "rodillera ortopedica", "rodillera deportiva", "rodillera rotuliana", "soporte de rodilla", "banda rotuliana", "estabilizador de rodilla", "rodillera magnetica", "rodillera con imanes", "dolor de rodilla", "menisco", "rodillera compresion"],
-    "faja lumbar": ["faja lumbar", "faja ortopedica", "cinturon lumbar", "soporte lumbar", "faja para espalda", "corrector lumbar", "faja de descarga", "dolor lumbar", "hernia discal", "faja sacrolumbar"],
-    "tobillera ortopedica": ["tobillera", "tobillera ortopedica", "tobillera deportiva", "soporte de tobillo", "estabilizador de tobillo", "esguince de tobillo", "tobillera compresion", "vendaje tobillo"],
-    "muñequera ortopedica": ["muñequera", "muñequera ortopedica", "muñequera deportiva", "soporte de muneca", "ferula de muneca", "tunel carpiano", "muñequera con ferula", "dolor de muneca"],
-    "collarin cervical": ["collarin", "collarin cervical", "cuello ortopedico", "soporte cervical", "collarin blando", "dolor cervical", "torticolis", "inmovilizador cervical"],
-    "plantillas ortopedicas": ["plantillas ortopedicas", "plantillas para pies planos", "plantillas de gel", "plantillas con soporte de arco", "fascitis plantar", "plantillas amortiguadoras", "plantillas para zapatos", "pie plano"],
-    "corrector juanetes": ["corrector de juanetes", "juanetes", "separador de dedos", "protector de juanete", "ferula juanete", "hallux valgus", "corrector dedo gordo"],
-    "faja postparto": ["faja postparto", "faja post cesarea", "faja reductora postparto", "banda abdominal postparto", "recuperacion postparto", "faja para abdomen despues del parto"],
-    "muleta y baston": ["baston ortopedico", "muletas", "baston plegable", "andador para adultos", "baston con cuatro puntas", "ayuda para caminar", "baston regulable"],
-    "codera ortopedica": ["codera", "codera ortopedica", "codera deportiva", "epicondilitis", "codo de tenista", "soporte de codo", "banda para codo"],
-    "cabestrillo hombro": ["cabestrillo", "inmovilizador de hombro", "soporte de hombro", "cabestrillo ortopedico", "luxacion de hombro", "manguito rotador"],
-    "cojin ortopedico": ["cojin ortopedico", "cojin para coxis", "cojin de gel", "cojin lumbar para silla", "cojin memory foam", "cojin para hemorroides", "cojin donut"],
-    "medias de compresion": ["medias de compresion", "calcetines de compresion", "medias varices", "medias antivarices", "compresion graduada", "piernas cansadas", "circulacion piernas"],
-    "corrector de postura": ["corrector de postura", "corrector postural", "faja para postura", "espalda encorvada", "corrector de espalda", "postura corporal", "arnes postural"],
-    "ferula nocturna": ["ferula nocturna", "ferula para dormir", "ferula fascitis plantar", "ferula de descanso", "ortesis nocturna"],
-    "silla de ruedas": ["silla de ruedas", "silla de ruedas plegable", "silla de traslado", "silla para adulto mayor", "movilidad reducida"],
-    "almohada cervical ortopedica": ["almohada cervical", "almohada ortopedica", "almohada viscoelastica", "almohada para cuello", "almohada memory foam", "dolor de cuello al dormir"],
-    "banda kinesiologica": ["cinta kinesiologica", "kinesio tape", "vendaje neuromuscular", "cinta deportiva", "tape muscular"],
-    "soporte de espalda para silla": ["soporte lumbar para silla", "respaldo ergonomico", "cojin de respaldo", "silla de oficina lumbar", "apoyo lumbar auto"],
-    "faja escrotal y hernia": ["faja para hernia", "soporte inguinal", "braguero hernia", "faja hernia umbilical"],
-    "inmovilizador de dedo": ["ferula para dedo", "inmovilizador de dedo", "protector de dedo", "dedo en gatillo"],
-    "bota walker": ["bota ortopedica", "bota walker", "bota inmovilizadora", "fractura de pie", "bota para esguince"],
-    "silla de baño para adulto mayor": ["silla de bano", "banco de ducha", "asiento para ducha", "barra de apoyo bano", "seguridad bano adulto mayor"],
-    "rodillera para artrosis": ["rodillera artrosis", "rodillera descarga", "artrosis de rodilla", "rodillera con bisagras", "osteoartritis rodilla"],
-    "muñequera tunel carpiano": ["muñequera tunel carpiano", "ferula tunel carpiano", "soporte nocturno muneca", "hormigueo en la mano"],
-    "protector de talon": ["protector de talon", "talonera de gel", "espolon calcaneo", "dolor de talon", "taloneras siliconadas"],
-    "cinturon de levantamiento": ["cinturon lumbar de trabajo", "cinturon de carga", "faja para levantar peso", "proteccion lumbar laboral"],
-    "soporte de pulgar": ["soporte de pulgar", "muñequera con soporte de pulgar", "tendinitis de pulgar", "ferula pulgar"],
-    "venda elastica": ["venda elastica", "vendaje compresivo", "venda deportiva", "venda autoadherente"],
-    "escoliosis": ["corrector de escoliosis", "faja escoliosis", "columna desviada", "soporte para escoliosis"]
+    "rodillera ortopedica": [
+      "rodillera",
+      "rodillera ortopedica",
+      "rodillera deportiva",
+      "rodillera rotuliana",
+      "soporte de rodilla",
+      "banda rotuliana",
+      "estabilizador de rodilla",
+      "rodillera magnetica",
+      "rodillera con imanes",
+      "dolor de rodilla",
+      "menisco",
+      "rodillera compresion"
+    ],
+    "faja lumbar": [
+      "faja lumbar",
+      "faja ortopedica",
+      "cinturon lumbar",
+      "soporte lumbar",
+      "faja para espalda",
+      "corrector lumbar",
+      "faja de descarga",
+      "dolor lumbar",
+      "hernia discal",
+      "faja sacrolumbar"
+    ],
+    "tobillera ortopedica": [
+      "tobillera",
+      "tobillera ortopedica",
+      "tobillera deportiva",
+      "soporte de tobillo",
+      "estabilizador de tobillo",
+      "esguince de tobillo",
+      "tobillera compresion",
+      "vendaje tobillo"
+    ],
+    "muñequera ortopedica": [
+      "muñequera",
+      "muñequera ortopedica",
+      "muñequera deportiva",
+      "soporte de muneca",
+      "ferula de muneca",
+      "tunel carpiano",
+      "muñequera con ferula",
+      "dolor de muneca"
+    ],
+    "collarin cervical": [
+      "collarin",
+      "collarin cervical",
+      "cuello ortopedico",
+      "soporte cervical",
+      "collarin blando",
+      "dolor cervical",
+      "torticolis",
+      "inmovilizador cervical"
+    ],
+    "plantillas ortopedicas": [
+      "plantillas ortopedicas",
+      "plantillas para pies planos",
+      "plantillas de gel",
+      "plantillas con soporte de arco",
+      "fascitis plantar",
+      "plantillas amortiguadoras",
+      "plantillas para zapatos",
+      "pie plano"
+    ],
+    "corrector juanetes": [
+      "corrector de juanetes",
+      "juanetes",
+      "separador de dedos",
+      "protector de juanete",
+      "ferula juanete",
+      "hallux valgus",
+      "corrector dedo gordo"
+    ],
+    "faja postparto": [
+      "faja postparto",
+      "faja post cesarea",
+      "faja reductora postparto",
+      "banda abdominal postparto",
+      "recuperacion postparto",
+      "faja para abdomen despues del parto"
+    ],
+    "muleta y baston": [
+      "baston ortopedico",
+      "muletas",
+      "baston plegable",
+      "andador para adultos",
+      "baston con cuatro puntas",
+      "ayuda para caminar",
+      "baston regulable"
+    ],
+    "codera ortopedica": [
+      "codera",
+      "codera ortopedica",
+      "codera deportiva",
+      "epicondilitis",
+      "codo de tenista",
+      "soporte de codo",
+      "banda para codo"
+    ],
+    "cabestrillo hombro": [
+      "cabestrillo",
+      "inmovilizador de hombro",
+      "soporte de hombro",
+      "cabestrillo ortopedico",
+      "luxacion de hombro",
+      "manguito rotador"
+    ],
+    "cojin ortopedico": [
+      "cojin ortopedico",
+      "cojin para coxis",
+      "cojin de gel",
+      "cojin lumbar para silla",
+      "cojin memory foam",
+      "cojin para hemorroides",
+      "cojin donut"
+    ],
+    "medias de compresion": [
+      "medias de compresion",
+      "calcetines de compresion",
+      "medias varices",
+      "medias antivarices",
+      "compresion graduada",
+      "piernas cansadas",
+      "circulacion piernas"
+    ],
+    "corrector de postura": [
+      "corrector de postura",
+      "corrector postural",
+      "faja para postura",
+      "espalda encorvada",
+      "corrector de espalda",
+      "postura corporal",
+      "arnes postural"
+    ],
+    "ferula nocturna": [
+      "ferula nocturna",
+      "ferula para dormir",
+      "ferula fascitis plantar",
+      "ferula de descanso",
+      "ortesis nocturna"
+    ],
+    "silla de ruedas": [
+      "silla de ruedas",
+      "silla de ruedas plegable",
+      "silla de traslado",
+      "silla para adulto mayor",
+      "movilidad reducida"
+    ],
+    "almohada cervical ortopedica": [
+      "almohada cervical",
+      "almohada ortopedica",
+      "almohada viscoelastica",
+      "almohada para cuello",
+      "almohada memory foam",
+      "dolor de cuello al dormir"
+    ],
+    "banda kinesiologica": [
+      "cinta kinesiologica",
+      "kinesio tape",
+      "vendaje neuromuscular",
+      "cinta deportiva",
+      "tape muscular"
+    ],
+    "soporte de espalda para silla": [
+      "soporte lumbar para silla",
+      "respaldo ergonomico",
+      "cojin de respaldo",
+      "silla de oficina lumbar",
+      "apoyo lumbar auto"
+    ],
+    "faja escrotal y hernia": [
+      "faja para hernia",
+      "soporte inguinal",
+      "braguero hernia",
+      "faja hernia umbilical"
+    ],
+    "inmovilizador de dedo": [
+      "ferula para dedo",
+      "inmovilizador de dedo",
+      "protector de dedo",
+      "dedo en gatillo"
+    ],
+    "bota walker": [
+      "bota ortopedica",
+      "bota walker",
+      "bota inmovilizadora",
+      "fractura de pie",
+      "bota para esguince"
+    ],
+    "silla de baño para adulto mayor": [
+      "silla de bano",
+      "banco de ducha",
+      "asiento para ducha",
+      "barra de apoyo bano",
+      "seguridad bano adulto mayor"
+    ],
+    "rodillera para artrosis": [
+      "rodillera artrosis",
+      "rodillera descarga",
+      "artrosis de rodilla",
+      "rodillera con bisagras",
+      "osteoartritis rodilla"
+    ],
+    "muñequera tunel carpiano": [
+      "muñequera tunel carpiano",
+      "ferula tunel carpiano",
+      "soporte nocturno muneca",
+      "hormigueo en la mano"
+    ],
+    "protector de talon": [
+      "protector de talon",
+      "talonera de gel",
+      "espolon calcaneo",
+      "dolor de talon",
+      "taloneras siliconadas"
+    ],
+    "cinturon de levantamiento": [
+      "cinturon lumbar de trabajo",
+      "cinturon de carga",
+      "faja para levantar peso",
+      "proteccion lumbar laboral"
+    ],
+    "soporte de pulgar": [
+      "soporte de pulgar",
+      "muñequera con soporte de pulgar",
+      "tendinitis de pulgar",
+      "ferula pulgar"
+    ],
+    "venda elastica": [
+      "venda elastica",
+      "vendaje compresivo",
+      "venda deportiva",
+      "venda autoadherente"
+    ],
+    "escoliosis": [
+      "corrector de escoliosis",
+      "faja escoliosis",
+      "columna desviada",
+      "soporte para escoliosis"
+    ]
   },
-
   "mascotas": {
-    "collar antipulgas": ["collar antipulgas", "antipulgas para perro", "pipeta antipulgas", "pulgas y garrapatas", "collar antiparasitario", "shampoo antipulgas", "spray antipulgas"],
-    "comedero automatico": ["comedero automatico", "dispensador de comida para perro", "comedero programable", "alimentador automatico gato", "comedero antiansiedad", "plato lento para perro"],
-    "bebedero automatico": ["fuente de agua para gatos", "bebedero automatico", "dispensador de agua para perro", "fuente con filtro mascotas"],
-    "rascador para gatos": ["rascador para gatos", "poste rascador", "arbol para gatos", "rascador de carton", "gimnasio para gatos"],
-    "juguetes para perro": ["juguete para perro", "mordedor para perro", "pelota para perro", "juguete interactivo perro", "kong para perro", "juguete dental perro"],
-    "juguetes para gato": ["juguete para gatos", "juguete interactivo gato", "raton de juguete", "puntero laser gato", "tunel para gatos"],
-    "correa retractil": ["correa retractil", "correa extensible perro", "correa para perro", "correa antitirones", "correa doble para dos perros"],
-    "pechera para perro": ["pechera para perro", "arnes antitirones", "arnes para perro", "arnes acolchado", "chaleco para perro"],
-    "transportadora para mascotas": ["transportadora para perro", "canil de viaje", "bolso transportador gato", "mochila para mascotas", "jaula de viaje"],
-    "cepillo quitapelos": ["cepillo quitapelos", "cepillo para perro", "removedor de pelo mascota", "rastrillo deslanador", "guante quitapelos", "cepillo furminator"],
-    "cortauñas para mascotas": ["cortaunas para perro", "cortaunas para gato", "lima electrica mascota", "esmerilador de unas perro"],
-    "cama ortopedica para perro": ["cama para perro", "cama ortopedica perro", "colchon para perro", "cama antiestres", "cama calmante mascota", "sofa para perro"],
-    "ropa para perro": ["ropa para perro", "abrigo para perro", "impermeable para perro", "chaleco reflectivo perro", "sueter para perro"],
-    "shampoo para mascotas": ["shampoo para perro", "shampoo para gato", "shampoo hipoalergenico mascota", "acondicionador para perro", "toallitas para mascotas"],
-    "suplemento articular para perro": ["suplemento para perro", "condroitina para perro", "vitaminas para perro", "aceite de salmon para perro", "colageno para mascotas", "displasia de cadera perro"],
-    "snacks dentales perro": ["snack dental perro", "hueso dental", "cepillo dental para perro", "pasta dental perro", "mal aliento perro", "sarro en perros"],
-    "pañales para perro": ["panales para perro", "panal para perra en celo", "faja sanitaria perro", "panitos absorbentes mascota"],
-    "puerta para mascotas": ["puerta para perro", "puerta para gato", "puerta batiente mascota", "reja para perros", "corral para perros"],
-    "arnes para gato": ["arnes para gato", "correa para gato", "pechera gato", "paseo con gato"],
-    "arena aglomerante": ["arena aglomerante", "arena para gato", "arena de silice", "arena sin polvo", "arena biodegradable gato"],
-    "pala y accesorios de arenero": ["pala para arenero", "tapete atrapa arena", "desodorante para arenero", "bolsas para arenero"],
-    "acuario y peces": ["acuario", "pecera", "filtro para acuario", "bomba de aire acuario", "calentador de acuario", "alimento para peces"],
-    "jaula para aves": ["jaula para pajaros", "jaula para periquitos", "comedero para aves", "alpiste", "juguetes para loros"],
-    "jaula para hamster": ["jaula para hamster", "rueda para hamster", "bebedero hamster", "casa para conejo", "heno para conejo"],
-    "gps para mascotas": ["gps para perro", "localizador para mascotas", "collar con gps", "rastreador de mascotas", "placa identificadora perro"],
-    "camara para mascotas": ["camara para mascotas", "camara con dispensador de premios", "monitor de mascotas", "camara wifi perro"],
-    "adiestramiento canino": ["collar de adiestramiento", "clicker para perro", "silbato para perro", "spray educador", "collar antiladridos"],
-    "alfombra sanitaria": ["alfombra sanitaria perro", "panal de entrenamiento", "banito para perro", "cesped sintetico para perro"],
-    "repelente para mascotas": ["repelente para perros", "spray anti orina", "spray educador antimarcaje", "repelente natural mascotas"],
-    "bozal para perro": ["bozal para perro", "bozal de silicona", "bozal antimordidas", "bozal de canasta"],
-    "escalera para perro": ["escalera para perro", "rampa para perro", "rampa para auto mascota", "escalones para cama perro"],
-    "secador para mascotas": ["secador para perro", "sopladora para mascotas", "kit de peluqueria canina", "maquina de cortar pelo perro"]
+    "collar antipulgas": [
+      "collar antipulgas",
+      "antipulgas para perro",
+      "pipeta antipulgas",
+      "pulgas y garrapatas",
+      "collar antiparasitario",
+      "shampoo antipulgas",
+      "spray antipulgas"
+    ],
+    "comedero automatico": [
+      "comedero automatico",
+      "dispensador de comida para perro",
+      "comedero programable",
+      "alimentador automatico gato",
+      "comedero antiansiedad",
+      "plato lento para perro"
+    ],
+    "bebedero automatico": [
+      "fuente de agua para gatos",
+      "bebedero automatico",
+      "dispensador de agua para perro",
+      "fuente con filtro mascotas"
+    ],
+    "rascador para gatos": [
+      "rascador para gatos",
+      "poste rascador",
+      "arbol para gatos",
+      "rascador de carton",
+      "gimnasio para gatos"
+    ],
+    "juguetes para perro": [
+      "juguete para perro",
+      "mordedor para perro",
+      "pelota para perro",
+      "juguete interactivo perro",
+      "kong para perro",
+      "juguete dental perro"
+    ],
+    "juguetes para gato": [
+      "juguete para gatos",
+      "juguete interactivo gato",
+      "raton de juguete",
+      "puntero laser gato",
+      "tunel para gatos"
+    ],
+    "correa retractil": [
+      "correa retractil",
+      "correa extensible perro",
+      "correa para perro",
+      "correa antitirones",
+      "correa doble para dos perros"
+    ],
+    "pechera para perro": [
+      "pechera para perro",
+      "arnes antitirones",
+      "arnes para perro",
+      "arnes acolchado",
+      "chaleco para perro"
+    ],
+    "transportadora para mascotas": [
+      "transportadora para perro",
+      "canil de viaje",
+      "bolso transportador gato",
+      "mochila para mascotas",
+      "jaula de viaje"
+    ],
+    "cepillo quitapelos": [
+      "cepillo quitapelos",
+      "cepillo para perro",
+      "removedor de pelo mascota",
+      "rastrillo deslanador",
+      "guante quitapelos",
+      "cepillo furminator"
+    ],
+    "cortauñas para mascotas": [
+      "cortaunas para perro",
+      "cortaunas para gato",
+      "lima electrica mascota",
+      "esmerilador de unas perro"
+    ],
+    "cama ortopedica para perro": [
+      "cama para perro",
+      "cama ortopedica perro",
+      "colchon para perro",
+      "cama antiestres",
+      "cama calmante mascota",
+      "sofa para perro"
+    ],
+    "ropa para perro": [
+      "ropa para perro",
+      "abrigo para perro",
+      "impermeable para perro",
+      "chaleco reflectivo perro",
+      "sueter para perro"
+    ],
+    "shampoo para mascotas": [
+      "shampoo para perro",
+      "shampoo para gato",
+      "shampoo hipoalergenico mascota",
+      "acondicionador para perro",
+      "toallitas para mascotas"
+    ],
+    "suplemento articular para perro": [
+      "suplemento para perro",
+      "condroitina para perro",
+      "vitaminas para perro",
+      "aceite de salmon para perro",
+      "colageno para mascotas",
+      "displasia de cadera perro"
+    ],
+    "snacks dentales perro": [
+      "snack dental perro",
+      "hueso dental",
+      "cepillo dental para perro",
+      "pasta dental perro",
+      "mal aliento perro",
+      "sarro en perros"
+    ],
+    "pañales para perro": [
+      "panales para perro",
+      "panal para perra en celo",
+      "faja sanitaria perro",
+      "panitos absorbentes mascota"
+    ],
+    "puerta para mascotas": [
+      "puerta para perro",
+      "puerta para gato",
+      "puerta batiente mascota",
+      "reja para perros",
+      "corral para perros"
+    ],
+    "arnes para gato": [
+      "arnes para gato",
+      "correa para gato",
+      "pechera gato",
+      "paseo con gato"
+    ],
+    "arena aglomerante": [
+      "arena aglomerante",
+      "arena para gato",
+      "arena de silice",
+      "arena sin polvo",
+      "arena biodegradable gato"
+    ],
+    "pala y accesorios de arenero": [
+      "pala para arenero",
+      "tapete atrapa arena",
+      "desodorante para arenero",
+      "bolsas para arenero"
+    ],
+    "acuario y peces": [
+      "acuario",
+      "pecera",
+      "filtro para acuario",
+      "bomba de aire acuario",
+      "calentador de acuario",
+      "alimento para peces"
+    ],
+    "jaula para aves": [
+      "jaula para pajaros",
+      "jaula para periquitos",
+      "comedero para aves",
+      "alpiste",
+      "juguetes para loros"
+    ],
+    "jaula para hamster": [
+      "jaula para hamster",
+      "rueda para hamster",
+      "bebedero hamster",
+      "casa para conejo",
+      "heno para conejo"
+    ],
+    "gps para mascotas": [
+      "gps para perro",
+      "localizador para mascotas",
+      "collar con gps",
+      "rastreador de mascotas",
+      "placa identificadora perro"
+    ],
+    "camara para mascotas": [
+      "camara para mascotas",
+      "camara con dispensador de premios",
+      "monitor de mascotas",
+      "camara wifi perro"
+    ],
+    "adiestramiento canino": [
+      "collar de adiestramiento",
+      "clicker para perro",
+      "silbato para perro",
+      "spray educador",
+      "collar antiladridos"
+    ],
+    "alfombra sanitaria": [
+      "alfombra sanitaria perro",
+      "panal de entrenamiento",
+      "banito para perro",
+      "cesped sintetico para perro"
+    ],
+    "repelente para mascotas": [
+      "repelente para perros",
+      "spray anti orina",
+      "spray educador antimarcaje",
+      "repelente natural mascotas"
+    ],
+    "bozal para perro": [
+      "bozal para perro",
+      "bozal de silicona",
+      "bozal antimordidas",
+      "bozal de canasta"
+    ],
+    "escalera para perro": [
+      "escalera para perro",
+      "rampa para perro",
+      "rampa para auto mascota",
+      "escalones para cama perro"
+    ],
+    "secador para mascotas": [
+      "secador para perro",
+      "sopladora para mascotas",
+      "kit de peluqueria canina",
+      "maquina de cortar pelo perro"
+    ]
   },
-
   "fitness": {
-    "mancuernas ajustables": ["mancuernas", "mancuernas ajustables", "pesas para casa", "set de mancuernas", "mancuernas de neopreno", "pesas rusas", "kettlebell"],
-    "banda elastica de gluteos": ["banda elastica gluteos", "banda de resistencia", "mini bands", "banda de tela para gluteos", "ligas de ejercicio", "entrenamiento de gluteos"],
-    "colchoneta de yoga": ["mat de yoga", "colchoneta de yoga", "tapete de ejercicio", "esterilla yoga", "colchoneta antideslizante"],
-    "rueda abdominal": ["rueda abdominal", "ab roller", "rueda para abdominales", "ejercitador abdominal"],
-    "cuerda para saltar": ["cuerda para saltar", "soga de saltar", "cuerda de crossfit", "saltar la cuerda", "cuerda con contador"],
-    "banco de ejercicios": ["banco de ejercicios", "banco plano ajustable", "banco de pesas", "banco abdominal", "banco multifuncion"],
-    "rodillo muscular": ["foam roller", "rodillo muscular", "rodillo de espuma", "liberacion miofascial", "pelota de masaje muscular"],
-    "pistola de masaje": ["pistola de masaje", "masajeador muscular percusion", "masajeador deportivo", "recuperacion muscular"],
-    "eliptica": ["eliptica", "bicicleta eliptica", "maquina eliptica para casa", "eliptica compacta"],
-    "caminadora": ["caminadora", "trotadora", "caminadora plegable", "cinta de correr", "trotadora electrica"],
-    "step de aerobicos": ["step de aerobicos", "escalon de ejercicio", "plataforma step", "step regulable"],
-    "guantes de gimnasio": ["guantes de gimnasio", "guantes para pesas", "straps de agarre", "muñequeras de gimnasio", "agarraderas gym"],
-    "ropa deportiva mujer": ["licra deportiva", "leggings deportivos", "top deportivo", "conjunto deportivo mujer", "licra push up", "ropa de gimnasio mujer"],
-    "ropa deportiva hombre": ["short deportivo hombre", "playera deportiva", "conjunto deportivo hombre", "ropa de gym hombre", "camiseta de compresion"],
-    "botella deportiva": ["botella deportiva", "botella termica", "shaker proteina", "botella con motivador", "termo deportivo"],
-    "smartwatch deportivo": ["smartwatch deportivo", "reloj para correr", "pulsera de actividad", "monitor de frecuencia cardiaca", "reloj gps deportivo"],
-    "barras paralelas": ["barra de dominadas", "barra para puerta", "paralelas de push up", "barras para fondos"],
-    "maquina de remo": ["maquina de remo", "remo para casa", "remadora", "rowing machine"],
-    "chaleco con peso": ["chaleco con peso", "chaleco lastrado", "tobilleras con peso", "muñequeras con peso"],
-    "trx y suspension": ["trx", "entrenamiento en suspension", "correas de suspension", "kit trx"],
-    "sauna portatil y faja termica": ["faja reductora", "faja de sauna", "faja termica deportiva", "short reductor", "sudadera reductora"],
-    "corrector de nado y natacion": ["gafas de natacion", "gorro de natacion", "aletas de natacion", "tabla de natacion", "traje de bano deportivo"],
-    "bicicleta spinning": ["bicicleta de spinning", "bicicleta estatica", "bicicleta indoor", "spinning para casa"],
-    "accesorios de boxeo": ["guantes de boxeo", "saco de boxeo", "vendas de boxeo", "punching ball", "protector bucal"],
-    "discos y barras": ["discos de peso", "barra olimpica", "set de barra y discos", "collarines para barra"],
-    "plataforma vibratoria": ["plataforma vibratoria", "maquina vibratoria", "vibro shaper"],
-    "escalador y stepper": ["stepper", "escalador de ejercicio", "mini stepper", "simulador de escaleras"],
-    "gomas de pilates": ["pelota de pilates", "aro de pilates", "banda de pilates", "pelota suiza", "fitball"],
-    "mochila deportiva": ["mochila deportiva", "bolso de gimnasio", "maletin deportivo", "mochila impermeable deporte"],
-    "electroestimulador muscular": ["electroestimulador", "ems abdominal", "cinturon electroestimulador", "estimulador muscular"]
+    "mancuernas ajustables": [
+      "mancuernas",
+      "mancuernas ajustables",
+      "pesas para casa",
+      "set de mancuernas",
+      "mancuernas de neopreno",
+      "pesas rusas",
+      "kettlebell"
+    ],
+    "banda elastica de gluteos": [
+      "banda elastica gluteos",
+      "banda de resistencia",
+      "mini bands",
+      "banda de tela para gluteos",
+      "ligas de ejercicio",
+      "entrenamiento de gluteos"
+    ],
+    "colchoneta de yoga": [
+      "mat de yoga",
+      "colchoneta de yoga",
+      "tapete de ejercicio",
+      "esterilla yoga",
+      "colchoneta antideslizante"
+    ],
+    "rueda abdominal": [
+      "rueda abdominal",
+      "ab roller",
+      "rueda para abdominales",
+      "ejercitador abdominal"
+    ],
+    "cuerda para saltar": [
+      "cuerda para saltar",
+      "soga de saltar",
+      "cuerda de crossfit",
+      "saltar la cuerda",
+      "cuerda con contador"
+    ],
+    "banco de ejercicios": [
+      "banco de ejercicios",
+      "banco plano ajustable",
+      "banco de pesas",
+      "banco abdominal",
+      "banco multifuncion"
+    ],
+    "rodillo muscular": [
+      "foam roller",
+      "rodillo muscular",
+      "rodillo de espuma",
+      "liberacion miofascial",
+      "pelota de masaje muscular"
+    ],
+    "pistola de masaje": [
+      "pistola de masaje",
+      "masajeador muscular percusion",
+      "masajeador deportivo",
+      "recuperacion muscular"
+    ],
+    "eliptica": [
+      "eliptica",
+      "bicicleta eliptica",
+      "maquina eliptica para casa",
+      "eliptica compacta"
+    ],
+    "caminadora": [
+      "caminadora",
+      "trotadora",
+      "caminadora plegable",
+      "cinta de correr",
+      "trotadora electrica"
+    ],
+    "step de aerobicos": [
+      "step de aerobicos",
+      "escalon de ejercicio",
+      "plataforma step",
+      "step regulable"
+    ],
+    "guantes de gimnasio": [
+      "guantes de gimnasio",
+      "guantes para pesas",
+      "straps de agarre",
+      "muñequeras de gimnasio",
+      "agarraderas gym"
+    ],
+    "ropa deportiva mujer": [
+      "licra deportiva",
+      "leggings deportivos",
+      "top deportivo",
+      "conjunto deportivo mujer",
+      "licra push up",
+      "ropa de gimnasio mujer"
+    ],
+    "ropa deportiva hombre": [
+      "short deportivo hombre",
+      "playera deportiva",
+      "conjunto deportivo hombre",
+      "ropa de gym hombre",
+      "camiseta de compresion"
+    ],
+    "botella deportiva": [
+      "botella deportiva",
+      "botella termica",
+      "shaker proteina",
+      "botella con motivador",
+      "termo deportivo"
+    ],
+    "smartwatch deportivo": [
+      "smartwatch deportivo",
+      "reloj para correr",
+      "pulsera de actividad",
+      "monitor de frecuencia cardiaca",
+      "reloj gps deportivo"
+    ],
+    "barras paralelas": [
+      "barra de dominadas",
+      "barra para puerta",
+      "paralelas de push up",
+      "barras para fondos"
+    ],
+    "maquina de remo": [
+      "maquina de remo",
+      "remo para casa",
+      "remadora",
+      "rowing machine"
+    ],
+    "chaleco con peso": [
+      "chaleco con peso",
+      "chaleco lastrado",
+      "tobilleras con peso",
+      "muñequeras con peso"
+    ],
+    "trx y suspension": [
+      "trx",
+      "entrenamiento en suspension",
+      "correas de suspension",
+      "kit trx"
+    ],
+    "sauna portatil y faja termica": [
+      "faja reductora",
+      "faja de sauna",
+      "faja termica deportiva",
+      "short reductor",
+      "sudadera reductora"
+    ],
+    "corrector de nado y natacion": [
+      "gafas de natacion",
+      "gorro de natacion",
+      "aletas de natacion",
+      "tabla de natacion",
+      "traje de bano deportivo"
+    ],
+    "bicicleta spinning": [
+      "bicicleta de spinning",
+      "bicicleta estatica",
+      "bicicleta indoor",
+      "spinning para casa"
+    ],
+    "accesorios de boxeo": [
+      "guantes de boxeo",
+      "saco de boxeo",
+      "vendas de boxeo",
+      "punching ball",
+      "protector bucal"
+    ],
+    "discos y barras": [
+      "discos de peso",
+      "barra olimpica",
+      "set de barra y discos",
+      "collarines para barra"
+    ],
+    "plataforma vibratoria": [
+      "plataforma vibratoria",
+      "maquina vibratoria",
+      "vibro shaper"
+    ],
+    "escalador y stepper": [
+      "stepper",
+      "escalador de ejercicio",
+      "mini stepper",
+      "simulador de escaleras"
+    ],
+    "gomas de pilates": [
+      "pelota de pilates",
+      "aro de pilates",
+      "banda de pilates",
+      "pelota suiza",
+      "fitball"
+    ],
+    "mochila deportiva": [
+      "mochila deportiva",
+      "bolso de gimnasio",
+      "maletin deportivo",
+      "mochila impermeable deporte"
+    ],
+    "electroestimulador muscular": [
+      "electroestimulador",
+      "ems abdominal",
+      "cinturon electroestimulador",
+      "estimulador muscular"
+    ]
   },
-
   "moda": {
-    "reloj para hombre": ["reloj para hombre", "reloj analogico hombre", "reloj de acero", "reloj cronografo", "reloj minimalista"],
-    "reloj para mujer": ["reloj para mujer", "reloj dorado mujer", "reloj elegante mujer", "reloj de cuero mujer"],
-    "lentes de sol": ["lentes de sol", "gafas de sol", "lentes polarizados", "gafas uv400", "lentes de sol hombre", "lentes de sol mujer"],
-    "lentes de descanso": ["lentes con filtro azul", "lentes para computadora", "gafas antifatiga", "lentes de descanso"],
-    "mochila antirrobo": ["mochila antirrobo", "mochila con usb", "mochila para laptop", "mochila impermeable", "mochila urbana"],
-    "bolso de mujer": ["bolso de mujer", "cartera de mujer", "bolso cruzado", "bolso de mano", "bandolera mujer"],
-    "billetera de hombre": ["billetera para hombre", "billetera rfid", "billetera de cuero", "tarjetero", "billetera slim"],
-    "zapatillas urbanas": ["zapatillas urbanas", "tenis casuales", "zapatillas blancas", "sneakers", "zapatillas de moda"],
-    "zapatillas deportivas": ["zapatillas para correr", "tenis deportivos", "zapatillas running", "zapatillas de entrenamiento"],
-    "sandalias ortopedicas": ["sandalias ortopedicas", "sandalias comodas", "sandalias con plantilla", "sandalias anatomicas"],
-    "botas de mujer": ["botas para mujer", "botines de mujer", "botas de cuero", "botas altas"],
-    "ropa interior moldeadora": ["faja moldeadora", "body moldeador", "short faja", "panty reductora", "ropa interior moldeadora"],
-    "brasier deportivo": ["brasier deportivo", "top deportivo", "sujetador deportivo", "brasier sin aro", "brasier push up"],
-    "medias y calcetines": ["calcetines antideslizantes", "medias invisibles", "calcetines deportivos", "medias termicas"],
-    "pijama": ["pijama de mujer", "pijama de hombre", "bata de dormir", "conjunto de pijama", "pijama termica"],
-    "chaqueta impermeable": ["chaqueta impermeable", "cortavientos", "chaqueta para lluvia", "casaca impermeable"],
-    "gorra y sombrero": ["gorra", "gorra de beisbol", "sombrero de sol", "bucket hat", "gorro de lana"],
-    "bufanda y guantes": ["bufanda", "guantes termicos", "guantes tactiles", "cuello polar"],
-    "cinturon de cuero": ["cinturon de cuero", "cinturon reversible", "correa para pantalon", "cinturon automatico"],
-    "joyeria de acero": ["collar de acero", "pulsera de acero", "anillo de acero", "joyeria hipoalergenica", "cadena para hombre"],
-    "aretes": ["aretes", "pendientes", "aretes de plata", "aros para mujer", "aretes hipoalergenicos"],
-    "anillos": ["anillos para mujer", "anillo de compromiso", "anillo ajustable", "set de anillos"],
-    "maleta de viaje": ["maleta de viaje", "valija con ruedas", "maleta rigida", "set de maletas", "organizador de maleta"],
-    "riñonera": ["rinonera", "canguro", "bolso de cintura", "rinonera cruzada"],
-    "traje de bano": ["traje de bano", "bikini", "vestido de bano", "banador mujer", "short de bano hombre"],
-    "vestido casual": ["vestido casual", "vestido de verano", "vestido largo", "vestido elegante"],
-    "jeans": ["jeans de mujer", "jeans de hombre", "pantalon de mezclilla", "jeans levanta cola"],
-    "camisa formal": ["camisa formal", "camisa de vestir", "camisa slim fit", "camisa de lino"],
-    "accesorios de cabello": ["scrunchies", "pinzas para cabello", "vinchas", "accesorios para el cabello", "banda para el pelo"],
-    "pantuflas": ["pantuflas", "pantuflas de casa", "zapatillas de estar en casa", "pantuflas termicas"]
+    "reloj para hombre": [
+      "reloj para hombre",
+      "reloj analogico hombre",
+      "reloj de acero",
+      "reloj cronografo",
+      "reloj minimalista"
+    ],
+    "reloj para mujer": [
+      "reloj para mujer",
+      "reloj dorado mujer",
+      "reloj elegante mujer",
+      "reloj de cuero mujer"
+    ],
+    "lentes de sol": [
+      "lentes de sol",
+      "gafas de sol",
+      "lentes polarizados",
+      "gafas uv400",
+      "lentes de sol hombre",
+      "lentes de sol mujer"
+    ],
+    "lentes de descanso": [
+      "lentes con filtro azul",
+      "lentes para computadora",
+      "gafas antifatiga",
+      "lentes de descanso"
+    ],
+    "mochila antirrobo": [
+      "mochila antirrobo",
+      "mochila con usb",
+      "mochila para laptop",
+      "mochila impermeable",
+      "mochila urbana"
+    ],
+    "bolso de mujer": [
+      "bolso de mujer",
+      "cartera de mujer",
+      "bolso cruzado",
+      "bolso de mano",
+      "bandolera mujer"
+    ],
+    "billetera de hombre": [
+      "billetera para hombre",
+      "billetera rfid",
+      "billetera de cuero",
+      "tarjetero",
+      "billetera slim"
+    ],
+    "zapatillas urbanas": [
+      "zapatillas urbanas",
+      "tenis casuales",
+      "zapatillas blancas",
+      "sneakers",
+      "zapatillas de moda"
+    ],
+    "zapatillas deportivas": [
+      "zapatillas para correr",
+      "tenis deportivos",
+      "zapatillas running",
+      "zapatillas de entrenamiento"
+    ],
+    "sandalias ortopedicas": [
+      "sandalias ortopedicas",
+      "sandalias comodas",
+      "sandalias con plantilla",
+      "sandalias anatomicas"
+    ],
+    "botas de mujer": [
+      "botas para mujer",
+      "botines de mujer",
+      "botas de cuero",
+      "botas altas"
+    ],
+    "ropa interior moldeadora": [
+      "faja moldeadora",
+      "body moldeador",
+      "short faja",
+      "panty reductora",
+      "ropa interior moldeadora"
+    ],
+    "brasier deportivo": [
+      "brasier deportivo",
+      "top deportivo",
+      "sujetador deportivo",
+      "brasier sin aro",
+      "brasier push up"
+    ],
+    "medias y calcetines": [
+      "calcetines antideslizantes",
+      "medias invisibles",
+      "calcetines deportivos",
+      "medias termicas"
+    ],
+    "pijama": [
+      "pijama de mujer",
+      "pijama de hombre",
+      "bata de dormir",
+      "conjunto de pijama",
+      "pijama termica"
+    ],
+    "chaqueta impermeable": [
+      "chaqueta impermeable",
+      "cortavientos",
+      "chaqueta para lluvia",
+      "casaca impermeable"
+    ],
+    "gorra y sombrero": [
+      "gorra",
+      "gorra de beisbol",
+      "sombrero de sol",
+      "bucket hat",
+      "gorro de lana"
+    ],
+    "bufanda y guantes": [
+      "bufanda",
+      "guantes termicos",
+      "guantes tactiles",
+      "cuello polar"
+    ],
+    "cinturon de cuero": [
+      "cinturon de cuero",
+      "cinturon reversible",
+      "correa para pantalon",
+      "cinturon automatico"
+    ],
+    "joyeria de acero": [
+      "collar de acero",
+      "pulsera de acero",
+      "anillo de acero",
+      "joyeria hipoalergenica",
+      "cadena para hombre"
+    ],
+    "aretes": [
+      "aretes",
+      "pendientes",
+      "aretes de plata",
+      "aros para mujer",
+      "aretes hipoalergenicos"
+    ],
+    "anillos": [
+      "anillos para mujer",
+      "anillo de compromiso",
+      "anillo ajustable",
+      "set de anillos"
+    ],
+    "maleta de viaje": [
+      "maleta de viaje",
+      "valija con ruedas",
+      "maleta rigida",
+      "set de maletas",
+      "organizador de maleta"
+    ],
+    "riñonera": [
+      "rinonera",
+      "canguro",
+      "bolso de cintura",
+      "rinonera cruzada"
+    ],
+    "traje de bano": [
+      "traje de bano",
+      "bikini",
+      "vestido de bano",
+      "banador mujer",
+      "short de bano hombre"
+    ],
+    "vestido casual": [
+      "vestido casual",
+      "vestido de verano",
+      "vestido largo",
+      "vestido elegante"
+    ],
+    "jeans": [
+      "jeans de mujer",
+      "jeans de hombre",
+      "pantalon de mezclilla",
+      "jeans levanta cola"
+    ],
+    "camisa formal": [
+      "camisa formal",
+      "camisa de vestir",
+      "camisa slim fit",
+      "camisa de lino"
+    ],
+    "accesorios de cabello": [
+      "scrunchies",
+      "pinzas para cabello",
+      "vinchas",
+      "accesorios para el cabello",
+      "banda para el pelo"
+    ],
+    "pantuflas": [
+      "pantuflas",
+      "pantuflas de casa",
+      "zapatillas de estar en casa",
+      "pantuflas termicas"
+    ]
   },
-
   "cocina": {
-    "sarten antiadherente": ["sarten antiadherente", "sarten de granito", "juego de sartenes", "sarten ceramica", "sarten sin teflon"],
-    "olla a presion": ["olla a presion", "olla express", "olla a presion electrica", "olla multiuso"],
-    "freidora de aire": ["freidora de aire", "air fryer", "freidora sin aceite", "freidora electrica"],
-    "juego de ollas": ["juego de ollas", "bateria de cocina", "set de ollas", "ollas de acero inoxidable"],
-    "licuadora": ["licuadora", "licuadora portatil", "licuadora de vaso", "batidora de mano", "minipimer"],
-    "procesador de alimentos": ["procesador de alimentos", "picador de verduras", "cortador de vegetales", "picadora electrica"],
-    "cuchillos de cocina": ["juego de cuchillos", "cuchillo de chef", "cuchillo ceramico", "afilador de cuchillos", "tabla de picar"],
-    "organizador de cocina": ["organizador de cocina", "especiero", "organizador de gabinete", "porta utensilios", "escurridor de platos"],
-    "recipientes hermeticos": ["recipientes hermeticos", "tapers", "envases para alimentos", "set de contenedores", "frascos hermeticos"],
-    "selladora al vacio": ["selladora al vacio", "envasadora al vacio", "bolsas al vacio", "conservacion de alimentos"],
-    "cafetera": ["cafetera", "cafetera electrica", "cafetera italiana", "prensa francesa", "molinillo de cafe", "cafetera de capsulas"],
-    "hervidor electrico": ["hervidor electrico", "pava electrica", "tetera electrica", "calentador de agua"],
-    "sandwichera y waflera": ["sandwichera", "waflera", "grill electrico", "plancha para asar", "parrilla electrica"],
-    "horno electrico": ["horno electrico", "horno tostador", "mini horno", "horno de conveccion"],
-    "microondas": ["microondas", "horno microondas", "microondas digital"],
-    "batidora de pedestal": ["batidora de pedestal", "batidora amasadora", "batidora planetaria", "amasadora"],
-    "extractor de jugos": ["extractor de jugos", "exprimidor", "juguera", "extractor de frio", "exprimidor de citricos"],
-    "termo y taza": ["termo para cafe", "taza termica", "vaso termico", "termo de acero"],
-    "utensilios de silicona": ["utensilios de silicona", "espatula de silicona", "set de utensilios", "cuchara de cocina"],
-    "balanza de cocina": ["balanza de cocina", "bascula digital cocina", "peso de cocina"],
-    "moldes de reposteria": ["moldes de reposteria", "molde para torta", "manga pastelera", "moldes de silicona", "set de reposteria"],
-    "purificador de agua": ["filtro de agua", "purificador de agua", "jarra con filtro", "filtro para grifo"],
-    "dispensador de bebidas": ["dispensador de bebidas", "jarra dispensadora", "hielera", "cubeteras de silicona"],
-    "vajilla": ["juego de vajilla", "platos de ceramica", "vasos de vidrio", "set de cubiertos", "copas de vino"],
-    "estufa portatil": ["cocina portatil", "anafre", "estufa electrica portatil", "cocina de induccion"],
-    "campana y purificador de cocina": ["campana extractora", "extractor de cocina", "purificador de humo"],
-    "olla arrocera": ["olla arrocera", "vaporera electrica", "cocedor de arroz", "vaporera de bambu"],
-    "yogurtera y fermentados": ["yogurtera", "kefir", "frascos para fermentar", "hacer yogurt en casa"],
-    "tabla y accesorios de asado": ["parrilla portatil", "accesorios para asado", "termometro de cocina", "pinzas para asado"],
-    "escurridor y limpieza de cocina": ["escurridor de vajilla", "organizador de fregadero", "estropajo magico", "cepillo para ollas"]
+    "sarten antiadherente": [
+      "sarten antiadherente",
+      "sarten de granito",
+      "juego de sartenes",
+      "sarten ceramica",
+      "sarten sin teflon"
+    ],
+    "olla a presion": [
+      "olla a presion",
+      "olla express",
+      "olla a presion electrica",
+      "olla multiuso"
+    ],
+    "freidora de aire": [
+      "freidora de aire",
+      "air fryer",
+      "freidora sin aceite",
+      "freidora electrica"
+    ],
+    "juego de ollas": [
+      "juego de ollas",
+      "bateria de cocina",
+      "set de ollas",
+      "ollas de acero inoxidable"
+    ],
+    "licuadora": [
+      "licuadora",
+      "licuadora portatil",
+      "licuadora de vaso",
+      "batidora de mano",
+      "minipimer"
+    ],
+    "procesador de alimentos": [
+      "procesador de alimentos",
+      "picador de verduras",
+      "cortador de vegetales",
+      "picadora electrica"
+    ],
+    "cuchillos de cocina": [
+      "juego de cuchillos",
+      "cuchillo de chef",
+      "cuchillo ceramico",
+      "afilador de cuchillos",
+      "tabla de picar"
+    ],
+    "organizador de cocina": [
+      "organizador de cocina",
+      "especiero",
+      "organizador de gabinete",
+      "porta utensilios",
+      "escurridor de platos"
+    ],
+    "recipientes hermeticos": [
+      "recipientes hermeticos",
+      "tapers",
+      "envases para alimentos",
+      "set de contenedores",
+      "frascos hermeticos"
+    ],
+    "selladora al vacio": [
+      "selladora al vacio",
+      "envasadora al vacio",
+      "bolsas al vacio",
+      "conservacion de alimentos"
+    ],
+    "cafetera": [
+      "cafetera",
+      "cafetera electrica",
+      "cafetera italiana",
+      "prensa francesa",
+      "molinillo de cafe",
+      "cafetera de capsulas"
+    ],
+    "hervidor electrico": [
+      "hervidor electrico",
+      "pava electrica",
+      "tetera electrica",
+      "calentador de agua"
+    ],
+    "sandwichera y waflera": [
+      "sandwichera",
+      "waflera",
+      "grill electrico",
+      "plancha para asar",
+      "parrilla electrica"
+    ],
+    "horno electrico": [
+      "horno electrico",
+      "horno tostador",
+      "mini horno",
+      "horno de conveccion"
+    ],
+    "microondas": [
+      "microondas",
+      "horno microondas",
+      "microondas digital"
+    ],
+    "batidora de pedestal": [
+      "batidora de pedestal",
+      "batidora amasadora",
+      "batidora planetaria",
+      "amasadora"
+    ],
+    "extractor de jugos": [
+      "extractor de jugos",
+      "exprimidor",
+      "juguera",
+      "extractor de frio",
+      "exprimidor de citricos"
+    ],
+    "termo y taza": [
+      "termo para cafe",
+      "taza termica",
+      "vaso termico",
+      "termo de acero"
+    ],
+    "utensilios de silicona": [
+      "utensilios de silicona",
+      "espatula de silicona",
+      "set de utensilios",
+      "cuchara de cocina"
+    ],
+    "balanza de cocina": [
+      "balanza de cocina",
+      "bascula digital cocina",
+      "peso de cocina"
+    ],
+    "moldes de reposteria": [
+      "moldes de reposteria",
+      "molde para torta",
+      "manga pastelera",
+      "moldes de silicona",
+      "set de reposteria"
+    ],
+    "purificador de agua": [
+      "filtro de agua",
+      "purificador de agua",
+      "jarra con filtro",
+      "filtro para grifo"
+    ],
+    "dispensador de bebidas": [
+      "dispensador de bebidas",
+      "jarra dispensadora",
+      "hielera",
+      "cubeteras de silicona"
+    ],
+    "vajilla": [
+      "juego de vajilla",
+      "platos de ceramica",
+      "vasos de vidrio",
+      "set de cubiertos",
+      "copas de vino"
+    ],
+    "estufa portatil": [
+      "cocina portatil",
+      "anafre",
+      "estufa electrica portatil",
+      "cocina de induccion"
+    ],
+    "campana y purificador de cocina": [
+      "campana extractora",
+      "extractor de cocina",
+      "purificador de humo"
+    ],
+    "olla arrocera": [
+      "olla arrocera",
+      "vaporera electrica",
+      "cocedor de arroz",
+      "vaporera de bambu"
+    ],
+    "yogurtera y fermentados": [
+      "yogurtera",
+      "kefir",
+      "frascos para fermentar",
+      "hacer yogurt en casa"
+    ],
+    "tabla y accesorios de asado": [
+      "parrilla portatil",
+      "accesorios para asado",
+      "termometro de cocina",
+      "pinzas para asado"
+    ],
+    "escurridor y limpieza de cocina": [
+      "escurridor de vajilla",
+      "organizador de fregadero",
+      "estropajo magico",
+      "cepillo para ollas"
+    ]
   },
-
   "suplementos": {
-    "proteina en polvo": ["proteina en polvo", "whey protein", "proteina de suero", "batido de proteina", "proteina vegana", "proteina para aumentar masa muscular"],
-    "creatina": ["creatina", "creatina monohidratada", "creatina en polvo", "suplemento de fuerza"],
-    "colageno hidrolizado": ["colageno hidrolizado", "colageno con vitamina c", "colageno en polvo", "colageno bebible", "colageno para articulaciones", "colageno para la piel"],
-    "omega 3": ["omega 3", "aceite de pescado", "capsulas de omega 3", "epa dha", "omega 3 para el corazon"],
-    "magnesio": ["magnesio", "citrato de magnesio", "magnesio para calambres", "cloruro de magnesio", "magnesio y potasio"],
-    "vitamina d": ["vitamina d", "vitamina d3", "vitamina d3 k2", "deficiencia de vitamina d"],
-    "vitamina c": ["vitamina c", "vitamina c en polvo", "acido ascorbico", "vitamina c para defensas"],
-    "complejo b": ["complejo b", "vitamina b12", "vitaminas del complejo b", "b12 sublingual"],
-    "hierro": ["suplemento de hierro", "hierro con vitamina c", "anemia por falta de hierro", "hierro liposomal"],
-    "zinc": ["zinc", "suplemento de zinc", "zinc para defensas", "zinc y magnesio"],
-    "multivitaminico": ["multivitaminico", "multivitaminas", "complejo multivitaminico", "vitaminas diarias"],
-    "probioticos": ["probioticos", "lactobacillus", "salud intestinal", "flora intestinal", "probiotico y prebiotico"],
-    "melatonina": ["melatonina", "gomitas de melatonina", "suplemento para dormir", "melatonina 10mg"],
-    "ashwagandha": ["ashwagandha", "adaptogeno", "suplemento para el estres", "ashwagandha ksm 66"],
-    "cafeina y preentreno": ["preentreno", "pre workout", "suplemento de energia", "cafeina en capsulas", "beta alanina"],
-    "bcaa y aminoacidos": ["bcaa", "aminoacidos esenciales", "glutamina", "eaa suplemento"],
-    "quemador de grasa": ["quemador de grasa", "termogenico", "suplemento para bajar de peso", "acelerador metabolico"],
-    "fibra y digestion": ["fibra en polvo", "psyllium", "suplemento de fibra", "digestion lenta", "estrenimiento"],
-    "biotina": ["biotina", "biotina para el cabello", "vitaminas para el cabello", "gomitas de biotina"],
-    "acido hialuronico oral": ["acido hialuronico bebible", "colageno con acido hialuronico", "suplemento para la piel"],
-    "coenzima q10": ["coenzima q10", "ubiquinol", "q10 para el corazon"],
-    "espirulina y superalimentos": ["espirulina", "chlorella", "maca", "superalimentos en polvo", "moringa"],
-    "cúrcuma": ["curcuma", "curcumina", "curcuma con pimienta negra", "antiinflamatorio natural"],
-    "glucosamina y condroitina": ["glucosamina", "condroitina", "msm", "suplemento para articulaciones"],
-    "vitaminas para ninos": ["vitaminas para ninos", "gomitas vitaminicas infantiles", "multivitaminico infantil", "defensas para ninos"],
-    "prenatal": ["vitaminas prenatales", "acido folico embarazo", "suplemento para embarazadas", "dha prenatal"],
-    "menopausia": ["suplemento para menopausia", "isoflavonas", "sofocos menopausia", "equilibrio hormonal femenino"],
-    "prostata": ["suplemento para prostata", "saw palmetto", "salud prostatica"],
-    "electrolitos": ["electrolitos", "sales de rehidratacion", "bebida isotonica en polvo", "hidratacion deportiva"],
-    "sustituto de comida": ["batido sustituto de comida", "meal replacement", "batido saciante", "control de apetito"]
+    "proteina en polvo": [
+      "proteina en polvo",
+      "whey protein",
+      "proteina de suero",
+      "batido de proteina",
+      "proteina vegana",
+      "proteina para aumentar masa muscular"
+    ],
+    "creatina": [
+      "creatina",
+      "creatina monohidratada",
+      "creatina en polvo",
+      "suplemento de fuerza"
+    ],
+    "colageno hidrolizado": [
+      "colageno hidrolizado",
+      "colageno con vitamina c",
+      "colageno en polvo",
+      "colageno bebible",
+      "colageno para articulaciones",
+      "colageno para la piel"
+    ],
+    "omega 3": [
+      "omega 3",
+      "aceite de pescado",
+      "capsulas de omega 3",
+      "epa dha",
+      "omega 3 para el corazon"
+    ],
+    "magnesio": [
+      "magnesio",
+      "citrato de magnesio",
+      "magnesio para calambres",
+      "cloruro de magnesio",
+      "magnesio y potasio"
+    ],
+    "vitamina d": [
+      "vitamina d",
+      "vitamina d3",
+      "vitamina d3 k2",
+      "deficiencia de vitamina d"
+    ],
+    "vitamina c": [
+      "vitamina c",
+      "vitamina c en polvo",
+      "acido ascorbico",
+      "vitamina c para defensas"
+    ],
+    "complejo b": [
+      "complejo b",
+      "vitamina b12",
+      "vitaminas del complejo b",
+      "b12 sublingual"
+    ],
+    "hierro": [
+      "suplemento de hierro",
+      "hierro con vitamina c",
+      "anemia por falta de hierro",
+      "hierro liposomal"
+    ],
+    "zinc": [
+      "zinc",
+      "suplemento de zinc",
+      "zinc para defensas",
+      "zinc y magnesio"
+    ],
+    "multivitaminico": [
+      "multivitaminico",
+      "multivitaminas",
+      "complejo multivitaminico",
+      "vitaminas diarias"
+    ],
+    "probioticos": [
+      "probioticos",
+      "lactobacillus",
+      "salud intestinal",
+      "flora intestinal",
+      "probiotico y prebiotico"
+    ],
+    "melatonina": [
+      "melatonina",
+      "gomitas de melatonina",
+      "suplemento para dormir",
+      "melatonina 10mg"
+    ],
+    "ashwagandha": [
+      "ashwagandha",
+      "adaptogeno",
+      "suplemento para el estres",
+      "ashwagandha ksm 66"
+    ],
+    "cafeina y preentreno": [
+      "preentreno",
+      "pre workout",
+      "suplemento de energia",
+      "cafeina en capsulas",
+      "beta alanina"
+    ],
+    "bcaa y aminoacidos": [
+      "bcaa",
+      "aminoacidos esenciales",
+      "glutamina",
+      "eaa suplemento"
+    ],
+    "quemador de grasa": [
+      "quemador de grasa",
+      "termogenico",
+      "suplemento para bajar de peso",
+      "acelerador metabolico"
+    ],
+    "fibra y digestion": [
+      "fibra en polvo",
+      "psyllium",
+      "suplemento de fibra",
+      "digestion lenta",
+      "estrenimiento"
+    ],
+    "biotina": [
+      "biotina",
+      "biotina para el cabello",
+      "vitaminas para el cabello",
+      "gomitas de biotina"
+    ],
+    "acido hialuronico oral": [
+      "acido hialuronico bebible",
+      "colageno con acido hialuronico",
+      "suplemento para la piel"
+    ],
+    "coenzima q10": [
+      "coenzima q10",
+      "ubiquinol",
+      "q10 para el corazon"
+    ],
+    "espirulina y superalimentos": [
+      "espirulina",
+      "chlorella",
+      "maca",
+      "superalimentos en polvo",
+      "moringa"
+    ],
+    "cúrcuma": [
+      "curcuma",
+      "curcumina",
+      "curcuma con pimienta negra",
+      "antiinflamatorio natural"
+    ],
+    "glucosamina y condroitina": [
+      "glucosamina",
+      "condroitina",
+      "msm",
+      "suplemento para articulaciones"
+    ],
+    "vitaminas para ninos": [
+      "vitaminas para ninos",
+      "gomitas vitaminicas infantiles",
+      "multivitaminico infantil",
+      "defensas para ninos"
+    ],
+    "prenatal": [
+      "vitaminas prenatales",
+      "acido folico embarazo",
+      "suplemento para embarazadas",
+      "dha prenatal"
+    ],
+    "menopausia": [
+      "suplemento para menopausia",
+      "isoflavonas",
+      "sofocos menopausia",
+      "equilibrio hormonal femenino"
+    ],
+    "prostata": [
+      "suplemento para prostata",
+      "saw palmetto",
+      "salud prostatica"
+    ],
+    "electrolitos": [
+      "electrolitos",
+      "sales de rehidratacion",
+      "bebida isotonica en polvo",
+      "hidratacion deportiva"
+    ],
+    "sustituto de comida": [
+      "batido sustituto de comida",
+      "meal replacement",
+      "batido saciante",
+      "control de apetito"
+    ]
   },
-
   "belleza_skincare": {
-    "serum vitamina c": ["serum de vitamina c", "vitamina c para el rostro", "serum antioxidante", "serum para manchas"],
-    "serum de niacinamida": ["niacinamida", "serum de niacinamida", "poros dilatados", "control de grasa facial"],
-    "retinol": ["retinol", "serum de retinol", "crema con retinol", "antiarrugas retinol", "renovacion celular"],
-    "acido hialuronico facial": ["serum de acido hialuronico", "crema hidratante facial", "hidratacion profunda piel"],
-    "protector solar facial": ["protector solar facial", "bloqueador solar", "protector solar con color", "fps 50 rostro", "protector solar coreano"],
-    "limpiador facial": ["limpiador facial", "gel limpiador", "espuma limpiadora", "jabon facial", "agua micelar"],
-    "exfoliante facial": ["exfoliante facial", "peeling facial", "acido glicolico", "acido salicilico", "exfoliante quimico"],
-    "mascarilla facial": ["mascarilla facial", "mascarilla de arcilla", "mascarilla coreana", "parches para ojeras", "mascarilla hidratante"],
-    "contorno de ojos": ["contorno de ojos", "crema para ojeras", "serum para bolsas", "crema antiarrugas ojos"],
-    "tratamiento antiacne": ["tratamiento para el acne", "parches para granos", "gel antiacne", "peroxido de benzoilo", "marcas de acne"],
-    "crema despigmentante": ["crema despigmentante", "manchas en la cara", "melasma", "crema aclaradora", "paño facial"],
-    "rutina coreana": ["skincare coreano", "rutina coreana", "esencia facial", "toner facial", "cosmetica coreana"],
-    "rodillo facial": ["rodillo facial", "gua sha", "masajeador facial", "rodillo de jade"],
-    "depiladora": ["depiladora electrica", "depiladora laser", "depilacion definitiva", "afeitadora para mujer", "cera depilatoria"],
-    "plancha de cabello": ["plancha de cabello", "alisadora", "plancha de titanio", "cepillo alisador"],
-    "secador de cabello": ["secador de cabello", "secador con difusor", "secador profesional", "cepillo secador"],
-    "rizador de cabello": ["rizador de cabello", "ondulador", "tenaza para rizos", "rulos termicos"],
-    "tratamiento para el cabello": ["tratamiento capilar", "mascarilla para el cabello", "aceite de argan", "keratina", "ampollas capilares"],
-    "anticaida capilar": ["anticaida del cabello", "shampoo anticaida", "minoxidil", "serum para crecimiento capilar", "alopecia"],
-    "tinte para el cabello": ["tinte para el cabello", "coloracion sin amoniaco", "cubre canas", "decolorante"],
-    "base de maquillaje": ["base de maquillaje", "bb cream", "corrector de ojeras", "primer facial", "polvo compacto"],
-    "labial": ["labial", "labial matte", "gloss labial", "tinte para labios", "balsamo labial"],
-    "mascara de pestanas": ["mascara de pestanas", "rimel", "serum para pestanas", "pestanas postizas", "rizador de pestanas"],
-    "cejas": ["gel para cejas", "jabon para cejas", "tinte de cejas", "laminado de cejas", "lapiz de cejas"],
-    "unas": ["esmalte semipermanente", "lampara uv unas", "kit de unas acrilicas", "limas para unas", "unas postizas"],
-    "crema corporal": ["crema corporal", "manteca corporal", "crema hidratante cuerpo", "aceite corporal", "piel seca"],
-    "anticelulitico": ["crema anticelulitica", "celulitis", "crema reductora", "masajeador anticelulitico"],
-    "estrias": ["crema para estrias", "aceite para estrias", "estrias en el embarazo", "rosa mosqueta"],
-    "desodorante natural": ["desodorante natural", "desodorante sin aluminio", "antitranspirante", "sudoracion excesiva"],
-    "perfume": ["perfume de mujer", "perfume de hombre", "perfume arabe", "body mist", "perfume duradero"],
-    "cuidado bucal estetico": ["blanqueador dental", "tiras blanqueadoras", "carbon activado dientes", "kit blanqueamiento dental"],
-    "cepillo dental electrico": ["cepillo dental electrico", "irrigador bucal", "hilo dental a presion", "waterpik"],
-    "espejo con luz": ["espejo con luz led", "espejo de maquillaje", "espejo con aumento", "tocador con luz"],
-    "organizador de maquillaje": ["organizador de maquillaje", "neceser", "brochas de maquillaje", "limpiador de brochas"]
+    "serum vitamina c": [
+      "serum de vitamina c",
+      "vitamina c para el rostro",
+      "serum antioxidante",
+      "serum para manchas"
+    ],
+    "serum de niacinamida": [
+      "niacinamida",
+      "serum de niacinamida",
+      "poros dilatados",
+      "control de grasa facial"
+    ],
+    "retinol": [
+      "retinol",
+      "serum de retinol",
+      "crema con retinol",
+      "antiarrugas retinol",
+      "renovacion celular"
+    ],
+    "acido hialuronico facial": [
+      "serum de acido hialuronico",
+      "crema hidratante facial",
+      "hidratacion profunda piel"
+    ],
+    "protector solar facial": [
+      "protector solar facial",
+      "bloqueador solar",
+      "protector solar con color",
+      "fps 50 rostro",
+      "protector solar coreano"
+    ],
+    "limpiador facial": [
+      "limpiador facial",
+      "gel limpiador",
+      "espuma limpiadora",
+      "jabon facial",
+      "agua micelar"
+    ],
+    "exfoliante facial": [
+      "exfoliante facial",
+      "peeling facial",
+      "acido glicolico",
+      "acido salicilico",
+      "exfoliante quimico"
+    ],
+    "mascarilla facial": [
+      "mascarilla facial",
+      "mascarilla de arcilla",
+      "mascarilla coreana",
+      "parches para ojeras",
+      "mascarilla hidratante"
+    ],
+    "contorno de ojos": [
+      "contorno de ojos",
+      "crema para ojeras",
+      "serum para bolsas",
+      "crema antiarrugas ojos"
+    ],
+    "tratamiento antiacne": [
+      "tratamiento para el acne",
+      "parches para granos",
+      "gel antiacne",
+      "peroxido de benzoilo",
+      "marcas de acne"
+    ],
+    "crema despigmentante": [
+      "crema despigmentante",
+      "manchas en la cara",
+      "melasma",
+      "crema aclaradora",
+      "paño facial"
+    ],
+    "rutina coreana": [
+      "skincare coreano",
+      "rutina coreana",
+      "esencia facial",
+      "toner facial",
+      "cosmetica coreana"
+    ],
+    "rodillo facial": [
+      "rodillo facial",
+      "gua sha",
+      "masajeador facial",
+      "rodillo de jade"
+    ],
+    "depiladora": [
+      "depiladora electrica",
+      "depiladora laser",
+      "depilacion definitiva",
+      "afeitadora para mujer",
+      "cera depilatoria"
+    ],
+    "plancha de cabello": [
+      "plancha de cabello",
+      "alisadora",
+      "plancha de titanio",
+      "cepillo alisador"
+    ],
+    "secador de cabello": [
+      "secador de cabello",
+      "secador con difusor",
+      "secador profesional",
+      "cepillo secador"
+    ],
+    "rizador de cabello": [
+      "rizador de cabello",
+      "ondulador",
+      "tenaza para rizos",
+      "rulos termicos"
+    ],
+    "tratamiento para el cabello": [
+      "tratamiento capilar",
+      "mascarilla para el cabello",
+      "aceite de argan",
+      "keratina",
+      "ampollas capilares"
+    ],
+    "anticaida capilar": [
+      "anticaida del cabello",
+      "shampoo anticaida",
+      "minoxidil",
+      "serum para crecimiento capilar",
+      "alopecia"
+    ],
+    "tinte para el cabello": [
+      "tinte para el cabello",
+      "coloracion sin amoniaco",
+      "cubre canas",
+      "decolorante"
+    ],
+    "base de maquillaje": [
+      "base de maquillaje",
+      "bb cream",
+      "corrector de ojeras",
+      "primer facial",
+      "polvo compacto"
+    ],
+    "labial": [
+      "labial",
+      "labial matte",
+      "gloss labial",
+      "tinte para labios",
+      "balsamo labial"
+    ],
+    "mascara de pestanas": [
+      "mascara de pestanas",
+      "rimel",
+      "serum para pestanas",
+      "pestanas postizas",
+      "rizador de pestanas"
+    ],
+    "cejas": [
+      "gel para cejas",
+      "jabon para cejas",
+      "tinte de cejas",
+      "laminado de cejas",
+      "lapiz de cejas"
+    ],
+    "unas": [
+      "esmalte semipermanente",
+      "lampara uv unas",
+      "kit de unas acrilicas",
+      "limas para unas",
+      "unas postizas"
+    ],
+    "crema corporal": [
+      "crema corporal",
+      "manteca corporal",
+      "crema hidratante cuerpo",
+      "aceite corporal",
+      "piel seca"
+    ],
+    "anticelulitico": [
+      "crema anticelulitica",
+      "celulitis",
+      "crema reductora",
+      "masajeador anticelulitico"
+    ],
+    "estrias": [
+      "crema para estrias",
+      "aceite para estrias",
+      "estrias en el embarazo",
+      "rosa mosqueta"
+    ],
+    "desodorante natural": [
+      "desodorante natural",
+      "desodorante sin aluminio",
+      "antitranspirante",
+      "sudoracion excesiva"
+    ],
+    "perfume": [
+      "perfume de mujer",
+      "perfume de hombre",
+      "perfume arabe",
+      "body mist",
+      "perfume duradero"
+    ],
+    "cuidado bucal estetico": [
+      "blanqueador dental",
+      "tiras blanqueadoras",
+      "carbon activado dientes",
+      "kit blanqueamiento dental"
+    ],
+    "cepillo dental electrico": [
+      "cepillo dental electrico",
+      "irrigador bucal",
+      "hilo dental a presion",
+      "waterpik"
+    ],
+    "espejo con luz": [
+      "espejo con luz led",
+      "espejo de maquillaje",
+      "espejo con aumento",
+      "tocador con luz"
+    ],
+    "organizador de maquillaje": [
+      "organizador de maquillaje",
+      "neceser",
+      "brochas de maquillaje",
+      "limpiador de brochas"
+    ]
   },
-
   "hogar": {
-    "aspiradora robot": ["aspiradora robot", "robot de limpieza", "aspiradora automatica", "robot trapeador"],
-    "aspiradora de mano": ["aspiradora de mano", "aspiradora portatil", "aspiradora para auto", "aspiradora inalambrica"],
-    "mopa giratoria": ["mopa giratoria", "trapeador con escurridor", "mopa de microfibra", "balde con escurridor"],
-    "limpiador a vapor": ["limpiador a vapor", "vaporeta", "limpieza con vapor", "mopa a vapor"],
-    "hidrolavadora": ["hidrolavadora", "lavadora a presion", "pistola de agua a presion", "limpiar patio"],
-    "purificador de aire": ["purificador de aire", "filtro hepa", "purificador para alergias", "ionizador de aire"],
-    "humidificador": ["humidificador", "difusor de aromas", "humidificador ultrasonico", "vaporizador ambiental"],
-    "deshumidificador": ["deshumidificador", "absorbe humedad", "antihumedad closet", "humedad en la casa"],
-    "ventilador": ["ventilador de torre", "ventilador de pie", "ventilador sin aspas", "ventilador portatil"],
-    "calefactor": ["calefactor electrico", "estufa electrica", "calentador de ambiente", "panel calefactor"],
-    "aire acondicionado portatil": ["aire acondicionado portatil", "enfriador de aire", "climatizador evaporativo"],
-    "organizador de closet": ["organizador de closet", "cajas organizadoras", "bolsas al vacio para ropa", "organizador de zapatos", "colgadores multiples"],
-    "estanteria": ["estanteria", "repisa flotante", "estante organizador", "libreria modular"],
-    "organizador de bano": ["organizador de bano", "repisa de ducha", "porta shampoo", "organizador bajo lavabo"],
-    "cortina de bano": ["cortina de bano", "cortina antimoho", "alfombra de bano", "tapete antideslizante bano"],
-    "sabanas": ["juego de sabanas", "sabanas de microfibra", "sabanas ajustables", "fundas de almohada"],
-    "edredon y cobija": ["edredon", "cobija termica", "cobertor de invierno", "manta electrica", "frazada"],
-    "colchon y protector": ["protector de colchon", "topper de colchon", "cubrecolchon impermeable", "colchon inflable"],
-    "almohadas": ["almohada viscoelastica", "almohada de plumas", "almohada antironquidos", "almohada para embarazadas"],
-    "lampara led": ["lampara led", "tira led", "luz nocturna", "lampara de escritorio", "luces inteligentes"],
-    "cortinas blackout": ["cortina blackout", "cortina termica", "persiana enrollable", "riel de cortina"],
-    "alfombra": ["alfombra para sala", "tapete decorativo", "alfombra antideslizante", "alfombra lavable"],
-    "espejo decorativo": ["espejo decorativo", "espejo de cuerpo entero", "espejo de pared"],
-    "cuadros y decoracion": ["cuadros decorativos", "vinilos decorativos", "adornos para sala", "portarretratos"],
-    "plantas y jardin": ["macetas", "riego automatico", "herramientas de jardin", "fertilizante para plantas", "jardin vertical"],
-    "insecticida y plagas": ["mata mosquitos electrico", "repelente ultrasonico", "trampa para insectos", "insecticida casero", "control de plagas hogar"],
-    "seguridad para el hogar": ["camara de seguridad", "timbre inteligente", "sensor de movimiento", "cerradura inteligente", "alarma para casa"],
-    "herramientas del hogar": ["set de herramientas", "taladro inalambrico", "destornillador electrico", "caja de herramientas"],
-    "escalera plegable": ["escalera plegable", "escalera de tijera", "banquito plegable"],
-    "lavanderia": ["tendedero plegable", "canasto de ropa", "quitapelusas", "bolsas para lavar ropa", "plancha a vapor vertical"],
-    "basurero inteligente": ["basurero automatico", "bote de basura con sensor", "basurero de reciclaje", "compactador de basura"],
-    "muebles plegables": ["mesa plegable", "silla plegable", "mueble multiuso", "banco con almacenamiento"],
-    "recubrimiento y reparacion": ["cinta adhesiva doble faz", "sellador de silicona", "pintura en aerosol", "papel tapiz autoadhesivo"],
-    "ahorro de energia": ["enchufe inteligente", "regleta con usb", "medidor de consumo electrico", "foco led inteligente"]
+    "aspiradora robot": [
+      "aspiradora robot",
+      "robot de limpieza",
+      "aspiradora automatica",
+      "robot trapeador"
+    ],
+    "aspiradora de mano": [
+      "aspiradora de mano",
+      "aspiradora portatil",
+      "aspiradora para auto",
+      "aspiradora inalambrica"
+    ],
+    "mopa giratoria": [
+      "mopa giratoria",
+      "trapeador con escurridor",
+      "mopa de microfibra",
+      "balde con escurridor"
+    ],
+    "limpiador a vapor": [
+      "limpiador a vapor",
+      "vaporeta",
+      "limpieza con vapor",
+      "mopa a vapor"
+    ],
+    "hidrolavadora": [
+      "hidrolavadora",
+      "lavadora a presion",
+      "pistola de agua a presion",
+      "limpiar patio"
+    ],
+    "purificador de aire": [
+      "purificador de aire",
+      "filtro hepa",
+      "purificador para alergias",
+      "ionizador de aire"
+    ],
+    "humidificador": [
+      "humidificador",
+      "difusor de aromas",
+      "humidificador ultrasonico",
+      "vaporizador ambiental"
+    ],
+    "deshumidificador": [
+      "deshumidificador",
+      "absorbe humedad",
+      "antihumedad closet",
+      "humedad en la casa"
+    ],
+    "ventilador": [
+      "ventilador de torre",
+      "ventilador de pie",
+      "ventilador sin aspas",
+      "ventilador portatil"
+    ],
+    "calefactor": [
+      "calefactor electrico",
+      "estufa electrica",
+      "calentador de ambiente",
+      "panel calefactor"
+    ],
+    "aire acondicionado portatil": [
+      "aire acondicionado portatil",
+      "enfriador de aire",
+      "climatizador evaporativo"
+    ],
+    "organizador de closet": [
+      "organizador de closet",
+      "cajas organizadoras",
+      "bolsas al vacio para ropa",
+      "organizador de zapatos",
+      "colgadores multiples"
+    ],
+    "estanteria": [
+      "estanteria",
+      "repisa flotante",
+      "estante organizador",
+      "libreria modular"
+    ],
+    "organizador de bano": [
+      "organizador de bano",
+      "repisa de ducha",
+      "porta shampoo",
+      "organizador bajo lavabo"
+    ],
+    "cortina de bano": [
+      "cortina de bano",
+      "cortina antimoho",
+      "alfombra de bano",
+      "tapete antideslizante bano"
+    ],
+    "sabanas": [
+      "juego de sabanas",
+      "sabanas de microfibra",
+      "sabanas ajustables",
+      "fundas de almohada"
+    ],
+    "edredon y cobija": [
+      "edredon",
+      "cobija termica",
+      "cobertor de invierno",
+      "manta electrica",
+      "frazada"
+    ],
+    "colchon y protector": [
+      "protector de colchon",
+      "topper de colchon",
+      "cubrecolchon impermeable",
+      "colchon inflable"
+    ],
+    "almohadas": [
+      "almohada viscoelastica",
+      "almohada de plumas",
+      "almohada antironquidos",
+      "almohada para embarazadas"
+    ],
+    "lampara led": [
+      "lampara led",
+      "tira led",
+      "luz nocturna",
+      "lampara de escritorio",
+      "luces inteligentes"
+    ],
+    "cortinas blackout": [
+      "cortina blackout",
+      "cortina termica",
+      "persiana enrollable",
+      "riel de cortina"
+    ],
+    "alfombra": [
+      "alfombra para sala",
+      "tapete decorativo",
+      "alfombra antideslizante",
+      "alfombra lavable"
+    ],
+    "espejo decorativo": [
+      "espejo decorativo",
+      "espejo de cuerpo entero",
+      "espejo de pared"
+    ],
+    "cuadros y decoracion": [
+      "cuadros decorativos",
+      "vinilos decorativos",
+      "adornos para sala",
+      "portarretratos"
+    ],
+    "plantas y jardin": [
+      "macetas",
+      "riego automatico",
+      "herramientas de jardin",
+      "fertilizante para plantas",
+      "jardin vertical"
+    ],
+    "insecticida y plagas": [
+      "mata mosquitos electrico",
+      "repelente ultrasonico",
+      "trampa para insectos",
+      "insecticida casero",
+      "control de plagas hogar"
+    ],
+    "seguridad para el hogar": [
+      "camara de seguridad",
+      "timbre inteligente",
+      "sensor de movimiento",
+      "cerradura inteligente",
+      "alarma para casa"
+    ],
+    "herramientas del hogar": [
+      "set de herramientas",
+      "taladro inalambrico",
+      "destornillador electrico",
+      "caja de herramientas"
+    ],
+    "escalera plegable": [
+      "escalera plegable",
+      "escalera de tijera",
+      "banquito plegable"
+    ],
+    "lavanderia": [
+      "tendedero plegable",
+      "canasto de ropa",
+      "quitapelusas",
+      "bolsas para lavar ropa",
+      "plancha a vapor vertical"
+    ],
+    "basurero inteligente": [
+      "basurero automatico",
+      "bote de basura con sensor",
+      "basurero de reciclaje",
+      "compactador de basura"
+    ],
+    "muebles plegables": [
+      "mesa plegable",
+      "silla plegable",
+      "mueble multiuso",
+      "banco con almacenamiento"
+    ],
+    "recubrimiento y reparacion": [
+      "cinta adhesiva doble faz",
+      "sellador de silicona",
+      "pintura en aerosol",
+      "papel tapiz autoadhesivo"
+    ],
+    "ahorro de energia": [
+      "enchufe inteligente",
+      "regleta con usb",
+      "medidor de consumo electrico",
+      "foco led inteligente"
+    ]
+  },
+  "salud": {
+    "oidos": [
+      "oidos",
+      "limpiador de oidos",
+      "removedor de cera",
+      "gotas para oidos",
+      "tapones para oidos",
+      "tapones para dormir",
+      "audifono para sordera",
+      "amplificador de sonido",
+      "dolor de oido",
+      "zumbido en el oido",
+      "otoscopio",
+      "secador de oidos"
+    ]
   }
 }
