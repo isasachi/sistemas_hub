@@ -1,0 +1,24 @@
+{
+  "problem": [
+    "cabeza"
+  ],
+  "symptom": [],
+  "intent": [],
+  "commercial": [],
+  "product": [
+    "dolor cabeza",
+    "migranas",
+    "cefaleas",
+    "mareos",
+    "vertigo",
+    "presion cabeza",
+    "cuello rigido",
+    "hombros tensos",
+    "nuca",
+    "estres laboral",
+    "pantalla computadora",
+    "postura",
+    "banda frontal",
+    "casco masaje"
+  ]
+}

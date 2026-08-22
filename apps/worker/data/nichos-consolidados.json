@@ -284,7 +284,6 @@
     "faja lumbar": [
       "dolor lumbar",
       "espalda baja",
-      "columna",
       "dolor de espalda",
       "espalda alta",
       "espalda media",
@@ -295,7 +294,6 @@
       "escoliosis"
     ],
     "collarin cervical": [
-      "cuello",
       "dolor de cuello",
       "cervical",
       "contractura cervical",
@@ -332,7 +330,6 @@
       "codera"
     ],
     "cabestrillo hombro": [
-      "hombro",
       "dolor de hombro",
       "cabestrillo",
       "inmovilizador"
@@ -377,7 +374,6 @@
       "ingle"
     ],
     "abdomen": [
-      "cintura",
       "grasa abdominal",
       "hinchazon abdominal",
       "hinchazon",
@@ -496,7 +492,6 @@
       "unas en gel"
     ],
     "labial": [
-      "labios",
       "labios resecos"
     ],
     "mascara de pestanas": [
@@ -872,7 +867,6 @@
       "mochila portabebe"
     ],
     "blanqueamiento dental": [
-      "dientes",
       "boca",
       "encias",
       "mal aliento",
@@ -946,8 +940,6 @@
       "apnea del sueno",
       "insomnio",
       "ansiedad",
-      "dolor de cabeza",
-      "cabeza",
       "dormir",
       "sueno",
       "estres"
@@ -997,6 +989,9 @@
     "oidos": [
       "orejas",
       "cera en los oidos"
+    ],
+    "columna vertebral": [
+      "columna"
     ]
   }
 }
