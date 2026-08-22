@@ -200,19 +200,34 @@ AS $$
     WITH encolados AS (
         INSERT INTO disc_jobs (kind, payload, priority, dedup_key)
         SELECT 'audit',
-               jsonb_build_object('page_id', page_id, 'country', COALESCE(country, 'CO')),
-               CASE crawl_tier WHEN 'hot' THEN 1 WHEN 'warm' THEN 4 ELSE 7 END,
-               'audit:' || page_id || ':' || COALESCE(country, 'CO') || ':' ||
+               jsonb_build_object('page_id', a.page_id, 'country', COALESCE(a.country, 'CO')),
+               CASE a.crawl_tier WHEN 'hot' THEN 1 WHEN 'warm' THEN 4 ELSE 7 END,
+               'audit:' || a.page_id || ':' || COALESCE(a.country, 'CO') || ':' ||
                to_char(NOW(), 'YYYYMMDDHH24')
-        FROM disc_advertisers
-        WHERE crawl_tier <> 'archived'
-          AND (last_audited_at IS NULL
-               OR last_audited_at < NOW() - (CASE crawl_tier
+        FROM disc_advertisers a
+        WHERE a.crawl_tier <> 'archived'
+          AND (a.last_audited_at IS NULL
+               OR a.last_audited_at < NOW() - (CASE a.crawl_tier
                     WHEN 'hot'        THEN interval '24 hours'
                     WHEN 'warm'       THEN interval '72 hours'
                     WHEN 'cold'       THEN interval '168 hours'
                     ELSE                   interval '336 hours' END))
-        ORDER BY last_audited_at NULLS FIRST
+          -- ⚠️ UN ANUNCIANTE QUE YA ESPERA EN LA COLA NO SE VUELVE A ENCOLAR.
+          -- El `dedup_key` lleva la hora dentro para que el recrawl de mañana no
+          -- choque con el de hoy, pero eso mismo permitía que uno todavía sin
+          -- drenar se encolara otra vez a la hora siguiente: sigue vencido
+          -- porque nadie lo miró aún. Medido en 2 h de daemon: 5 anunciantes se
+          -- auditaron dos y hasta TRES veces (`…:2026082218` y `…:2026082220` y
+          -- `…:2026082221` del mismo page_id), y cada repetición son 2
+          -- navegaciones contra Meta tiradas — el recurso más escaso que tiene
+          -- este motor.
+          AND NOT EXISTS (
+              SELECT 1 FROM disc_jobs j
+              WHERE j.kind = 'audit'
+                AND j.status IN ('pending', 'running')
+                AND j.payload->>'page_id' = a.page_id
+          )
+        ORDER BY a.last_audited_at NULLS FIRST
         LIMIT p_limit
         ON CONFLICT (dedup_key) DO NOTHING
         RETURNING 1
