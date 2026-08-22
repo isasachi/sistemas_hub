@@ -96,7 +96,9 @@ while true; do
   # `rank` SÍ toca Meta (dos navegaciones por anunciante NUEVO; los ya medidos
   # salen de `disc_advertisers` sin navegar), así que se salta si hubo bloqueo.
 
-  if [ "$BLOQUEADO" -eq 0 ]; then
+  # MAX_RANK=0 salta el paso entero. Hace falta explícito porque `run-jobs`
+  # acota `--max` a 1 como mínimo: pasarle 0 correría un ranking igual.
+  if [ "$BLOQUEADO" -eq 0 ] && [ "$MAX_RANK" -gt 0 ]; then
     SALIDA_RANK=$(timeout "$STEP_TIMEOUT" npx tsx src/cli/run-jobs.ts --kind rank --max "$MAX_RANK" 2>&1)
     echo "$SALIDA_RANK"
     echo "$SALIDA_RANK" | grep -q "PH_PERSISTENT_BLOCK" && BLOQUEADO=1

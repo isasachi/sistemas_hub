@@ -49,6 +49,16 @@ export interface DiscoveryRow {
   score: number | null
 }
 
+/**
+ * ⚠️ SE SIRVE LA VISTA, NO LA TABLA. `disc_ranked_activo` excluye a los
+ * anunciantes que el recrawl mandó a `archived` (dos pasadas seguidas sin un
+ * solo anuncio activo). Leyendo `disc_ranked` a secas, un anunciante muerto
+ * seguía apareciendo con sus números CONGELADOS y su sello "Monoproducto 100%"
+ * para siempre: medido, se archivó uno y la respuesta de la API no cambió ni una
+ * fila. Es la cláusula que el §11 del spec ya tenía.
+ */
+const TABLA = 'disc_ranked_activo'
+
 const COLS =
   'dedupe_key,seed_query,page_id,advertiser,product_name,headline,body,landing,' +
   'countries,bucket,advertiser_ads,product_ads,product_share,monoproduct,days_active,score'
@@ -65,7 +75,7 @@ export async function getDiscoveryRanked(
   seed?: string | null,
   filters?: RawFilters,
 ): Promise<DiscoveryRow[]> {
-  let q = db().from('disc_ranked').select(COLS)
+  let q = db().from(TABLA).select(COLS)
     .eq('bucket', DISC_BUCKET[bucket])
     .order('score', { ascending: false })
     .limit(limit)
@@ -91,7 +101,7 @@ export async function getDiscoveryRanked(
  * `disc_search_runs`, no acá.
  */
 export async function getDiscoverySeeds(): Promise<string[]> {
-  const { data, error } = await db().from('disc_ranked').select('seed_query').limit(5000)
+  const { data, error } = await db().from(TABLA).select('seed_query').limit(5000)
   if (error) throw new Error(`disc_ranked seeds: ${error.message}`)
   const rows = (data ?? []) as { seed_query: string }[]
   return [...new Set(rows.map((r) => r.seed_query))].sort()

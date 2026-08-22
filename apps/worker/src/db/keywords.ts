@@ -82,11 +82,21 @@ export async function refrescarYield(): Promise<number> {
  * países y no rindieron en ninguno. Devuelve cuántos apagó.
  */
 export async function podar(minRuns = 5, minYield = 0.01): Promise<string[]> {
-  const { data: estados, error } = await db().from('disc_keyword_country_state')
-    .select('term,runs,yield_rate').gte('runs', minRuns).limit(20_000)
-  if (error) throw new Error(`podar: ${error.message}`)
+  // ⚠️ PAGINADO. PostgREST corta en 1000 filas AUNQUE se le pida más: un
+  // `.limit(20_000)` devuelve 1000 y no avisa. Con el vocabulario creciendo,
+  // eso dejaba de podar todo lo que quedara fuera de esas primeras 1000 —
+  // silenciosamente, que es el peor modo de fallo posible para una poda.
+  const estados: { term: string; runs: number; yield_rate: number | null }[] = []
+  for (let i = 0; ; i += 1000) {
+    const { data, error } = await db().from('disc_keyword_country_state')
+      .select('term,runs,yield_rate').gte('runs', minRuns).range(i, i + 999)
+    if (error) throw new Error(`podar: ${error.message}`)
+    if (!data?.length) break
+    estados.push(...(data as typeof estados))
+    if (data.length < 1000) break
+  }
   const porTermino = new Map<string, { runs: number; yieldRate: number | null }[]>()
-  for (const e of (estados ?? []) as { term: string; runs: number; yield_rate: number | null }[]) {
+  for (const e of estados) {
     if (!porTermino.has(e.term)) porTermino.set(e.term, [])
     porTermino.get(e.term)!.push({ runs: e.runs, yieldRate: e.yield_rate })
   }
@@ -99,12 +109,27 @@ export async function podar(minRuns = 5, minYield = 0.01): Promise<string[]> {
   return apagar
 }
 
-/** Recalcula el IDF de los términos contra el corpus de landings (spec §10). */
-export async function actualizarIdf(scores: { term: string; idf: number }[]): Promise<void> {
-  for (let i = 0; i < scores.length; i += 100) {
-    await Promise.all(scores.slice(i, i + 100).map(async (s) => {
-      await db().from('disc_keywords')
-        .update({ idf_score: Number(s.idf.toFixed(4)) }).eq('term', s.term)
+export interface IdfScore { term: string; term_norm: string; source: string; idf: number }
+
+/**
+ * Recalcula el IDF de los términos contra el corpus de landings (spec §10).
+ *
+ * ⚠️ EN LOTES, NO UN UPDATE POR TÉRMINO. La versión anterior mandaba una
+ * petición HTTP por término: con 842 en el vocabulario eran 842 round-trips en
+ * CADA ciclo del loop, y medido dejaba el paso `vocab` corriendo minutos —
+ * creciendo con el vocabulario, que es justo lo que este motor hace crecer. El
+ * upsert necesita la fila completa (`term_norm` y `source` son NOT NULL), así
+ * que quien llama los trae del mismo SELECT con el que arma la lista.
+ */
+export async function actualizarIdf(scores: IdfScore[]): Promise<void> {
+  for (let i = 0; i < scores.length; i += 500) {
+    const filas = scores.slice(i, i + 500).map((s) => ({
+      term: s.term,
+      term_norm: s.term_norm,
+      source: s.source,
+      idf_score: Number(s.idf.toFixed(4)),
     }))
+    const { error } = await db().from('disc_keywords').upsert(filas, { onConflict: 'term' })
+    if (error) throw new Error(`actualizarIdf: ${error.message}`)
   }
 }

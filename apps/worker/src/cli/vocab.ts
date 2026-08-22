@@ -76,13 +76,27 @@ async function calcularIdf(): Promise<void> {
   for (const l of landings) {
     for (const t of extraerTerminos(l)) ocurrencias.set(t.term, (ocurrencias.get(t.term) ?? 0) + 1)
   }
-  const { data } = await db().from('disc_keywords').select('term').limit(50_000)
-  const terminos = ((data ?? []) as { term: string }[]).map((r) => r.term)
+  // Se traen `term_norm` y `source` porque el upsert en lote los necesita: son
+  // NOT NULL y el update por término (una petición HTTP cada uno) era lo que
+  // hacía que este paso durara minutos.
+  // ⚠️ PAGINADO: PostgREST corta en 1000 filas aunque se le pida más, y no
+  // avisa. Medido — con 1.034 términos en el vocabulario, el `.limit(50_000)`
+  // devolvía 1000 y los demás se quedaban sin IDF para siempre, o sea el bandit
+  // los puntuaba con el default.
+  const terminos: { term: string; term_norm: string; source: string }[] = []
+  for (let i = 0; ; i += 1000) {
+    const { data, error } = await db().from('disc_keywords')
+      .select('term,term_norm,source').range(i, i + 999)
+    if (error) throw new Error(`disc_keywords: ${error.message}`)
+    if (!data?.length) break
+    terminos.push(...(data as typeof terminos))
+    if (data.length < 1000) break
+  }
   // Un término del vocabulario que NO aparece en ninguna landing es el caso
   // raro y por tanto el más distintivo: `idf(total, 0)` ya lo trata así porque
   // el denominador se acota a 1.
-  const scores = terminos.map((term) => ({
-    term, idf: idf(landings.length, ocurrencias.get(term) ?? 0),
+  const scores = terminos.map((t) => ({
+    ...t, idf: idf(landings.length, ocurrencias.get(t.term) ?? 0),
   }))
   await actualizarIdf(scores)
   console.log(`idf · ${scores.length} términos puntuados contra ${landings.length} landings`)

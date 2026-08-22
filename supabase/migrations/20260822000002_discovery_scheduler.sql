@@ -303,3 +303,23 @@ AS $$
     )
     SELECT COALESCE(count(*), 0)::INT FROM upsert;
 $$;
+
+-- ⚠️ EL RECRAWL SACABA A LOS MUERTOS DE `disc_advertisers` Y LA UI SEGUÍA
+-- SIRVIÉNDOLOS. `disc_ranked` no tiene `crawl_tier` ni FK al anunciante, así que
+-- un anunciante que el scheduler mandó a `archived` —dos pasadas sin un solo
+-- anuncio activo— seguía apareciendo con sus números CONGELADOS y su sello
+-- "Monoproducto 100%". Medido: se archivó a "Rodillera ActiveLife 2.0" y la
+-- respuesta de la API no cambió ni una fila.
+--
+-- Es la cláusula que el §11 del spec ya tenía (`WHERE a.crawl_tier <> 'archived'`)
+-- y que se había perdido al no poder usar su vista tal cual.
+--
+-- ⚠️ LEFT JOIN, NO INNER. Una fila rankeada cuyo anunciante todavía no está en
+-- `disc_advertisers` (o que se borró al limpiar perfiles en ceros) es válida: el
+-- INNER la haría desaparecer del catálogo sin que nadie lo pida. Solo se excluye
+-- lo que está EXPLÍCITAMENTE archivado.
+CREATE OR REPLACE VIEW disc_ranked_activo AS
+SELECT r.*
+FROM disc_ranked r
+LEFT JOIN disc_advertisers a ON a.page_id = r.page_id
+WHERE a.crawl_tier IS DISTINCT FROM 'archived';
