@@ -1,0 +1,16 @@
+-- ⚠️ REVIERTE `SET statement_timeout` EN LA FUNCIÓN: NO FUNCIONA, y dejarlo
+-- sería peor que no tenerlo — una red que alguien va a creer que existe.
+--
+-- Postgres arma el temporizador de `statement_timeout` al INICIO de la sentencia
+-- y no lo re-arma cuando el GUC cambia a mitad de camino, así que un `SET` en la
+-- función no extiende el plazo de la llamada en curso. **Probado**: con la
+-- sesión en 150 ms la llamada se canceló igual, y el error trae
+-- `CONTEXT: SQL function "disc_refresh_yield" statement 1` — o sea entró a la
+-- función (no fue inlineada) y el tope viejo siguió mandando.
+--
+-- Lo que sí protege al motor está en el worker y no depende de Postgres:
+-- `scheduler.ts` corre el mantenimiento (rescate, yield, poda, huérfanos) con
+-- `mantenimiento()`, que loguea el fallo y sigue encolando. El bandit tolera
+-- números de un ciclo atrás —es una prioridad, no un saldo—; quedarse sin
+-- repartir trabajo, no.
+ALTER FUNCTION disc_refresh_yield(INTERVAL, TEXT[]) RESET statement_timeout;

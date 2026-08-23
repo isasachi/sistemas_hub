@@ -24,6 +24,31 @@ function dedupKey(term: string, country: string, ahora: Date): string {
   return `discover:${term}:${country}:${h}`
 }
 
+/**
+ * Corre un paso de MANTENIMIENTO sin que su fallo pare el ciclo.
+ *
+ * ⚠️ EL PRINCIPIO: descubrir es el trabajo; rescatar, refrescar el yield, podar
+ * y limpiar huérfanos son mantenimiento. Todos corren ANTES de encolar, así que
+ * una excepción en cualquiera dejaba el ciclo sin repartir trabajo — la cola se
+ * drenaba y nada volvía a llenarla. Pasó tres veces con `refrescarYield` y un
+ * `statement_timeout`, y cada arreglo puntual solo movía el umbral: el costo de
+ * ese refresco crece con lo que el daemon descubre, que es justo lo que este
+ * motor maximiza.
+ *
+ * El mantenimiento saltado se recupera solo en el ciclo siguiente. Encolar, no.
+ * Se loguea fuerte para que un fallo persistente se vea en vez de degradar en
+ * silencio.
+ */
+async function mantenimiento<T>(nombre: string, fn: () => Promise<T>, siFalla: T): Promise<T> {
+  try {
+    return await fn()
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    console.error(`⚠️  ${nombre} saltado este ciclo (se sigue encolando): ${msg}`)
+    return siFalla
+  }
+}
+
 async function main() {
   const args = process.argv.slice(2)
   const val = (f: string) => { const i = args.indexOf(f); return i !== -1 ? args[i + 1] : undefined }
@@ -33,18 +58,28 @@ async function main() {
   // 1. Rescatar lo que quedó tomado por un worker que murió. Va PRIMERO: sin
   //    esto, un job trabado ocupa lugar en la cola para siempre y su semilla no
   //    se vuelve a mirar nunca.
-  const rescatados = dryRun ? 0 : await reap(15)
+  const rescatados = dryRun ? 0 : await mantenimiento('rescate de jobs', () => reap(15), 0)
 
   // 2. Refrescar el rendimiento medido y apagar lo que no rinde. También va
   //    antes de elegir: el bandit tiene que decidir con los números de hoy, no
   //    con los del ciclo pasado.
-  const combinaciones = dryRun ? 0 : await refrescarYield()
-  const apagados = dryRun ? [] : await podar()
+  //
+  //
+  // ⚠️ La poda va en el MISMO paso que el refresco, no en uno propio: sin
+  //    refresco decidiría sobre números viejos, y apagar un término es una
+  //    puerta de una sola dirección.
+  const { combinaciones, apagados } = dryRun
+    ? { combinaciones: 0, apagados: [] as string[] }
+    : await mantenimiento(
+      'yield/poda',
+      async () => ({ combinaciones: await refrescarYield(), apagados: await podar() }),
+      { combinaciones: 0, apagados: [] as string[] },
+    )
 
   // 2b. Y se tira lo que la poda (o una consolidación anterior) dejó huérfano en
   //     la cola: un job de un término apagado es trabajo que ya se decidió no
   //     hacer, y si es un `rank` es el paso más caro del motor.
-  const huerfanos = dryRun ? 0 : await limpiarHuerfanos()
+  const huerfanos = dryRun ? 0 : await mantenimiento('limpieza de huérfanos', limpiarHuerfanos, 0)
 
   // 3. Reparto fijo de capacidad (spec §9).
   const { descubrir, recrawl } = repartoCiclo(capacidad)
