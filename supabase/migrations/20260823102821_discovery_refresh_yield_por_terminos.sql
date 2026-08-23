@@ -10,8 +10,10 @@
 --
 -- El camino alcanzable es la deriva ya documentada: una página descubierta bajo
 -- el término A y rankeada bajo el B refresca a B y no a A. Si A quedó en
--- `runs >= 5, yield_rate = 0`, la poda apaga un término que sí rendía. Medido en
--- vivo: `rodillera ajustable`/PE con yield 0 y 3 filas en `disc_ranked`.
+-- `runs >= 5, yield_rate = 0`, la poda apaga un término que sí rendía.
+--
+-- ⚠️ NO HAY UNA INSTANCIA OBSERVADA (acotando por país, cero filas): la guarda
+-- se justifica por el razonamiento y porque el modo de fallo es irreversible.
 --
 -- Por eso `podar` refresca SUS candidatos —un puñado de términos, no 78.000
 -- descubrimientos— y recién entonces decide. Se acota por término en vez de

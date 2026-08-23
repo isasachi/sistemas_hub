@@ -104,8 +104,9 @@ export async function refrescarYield(desde: string | null = '2 hours', terminos?
  * ventana → su cero viejo no se corrige NUNCA. Puerta de una sola dirección.
  *
  * El camino es la deriva documentada en `refrescarYield`: una página descubierta
- * bajo el término A y rankeada bajo el B refresca a B y no a A. Medido en vivo:
- * `rodillera ajustable`/PE con `yield_rate = 0` y 3 filas en `disc_ranked`.
+ * bajo el término A y rankeada bajo el B refresca a B y no a A. Hoy no hay
+ * ninguna instancia observada; lo que sí está medido es que refrescar cambia el
+ * veredicto: 41 candidatos → 39, 2 salvados.
  *
  * Por eso los candidatos se refrescan y se vuelven a filtrar antes de escribir.
  * Acotado a esos términos y no al recálculo completo: el completo son 3,4 s de
