@@ -85,6 +85,59 @@ export async function reap(minutos = 15): Promise<number> {
   return (data as number) ?? 0
 }
 
+/**
+ * Devuelve el job a la cola SIN gastarle un intento.
+ *
+ * ⚠️ NO ES `fail`. Un job que todavía no puede correr —su corrida espera el
+ * análisis— no falló: si se le contara el intento, a los 3 aplazamientos
+ * quedaría `dead` y su nicho no se rankearía jamás.
+ */
+export async function aplazar(job: Job, minutos: number, motivo: string): Promise<void> {
+  const { error } = await db().from('disc_jobs').update({
+    status: 'pending',
+    attempts: Math.max(0, job.attempts - 1),
+    locked_at: null,
+    locked_by: null,
+    last_error: motivo.slice(0, 500),
+    run_after: new Date(Date.now() + minutos * 60_000).toISOString(),
+  }).eq('id', job.id)
+  if (error) throw new Error(`aplazar: ${error.message}`)
+}
+
+/**
+ * ¿Cuántos anuncios de esta corrida siguen SIN analizar?
+ *
+ * ⚠️ ES LO QUE EVITA RANKEAR DE MÁS TEMPRANO. El job de `rank` se encola en
+ * cuanto termina el descubrimiento, pero `analyze` drena un backlog GLOBAL de
+ * miles: la corrida nueva puede seguir entera sin analizar cuando su ranking
+ * llega a la cola. Medido, con esto roto: "monitor de bebe" descubrió 416
+ * anuncios, rankeó 0 y el job quedó `done` — el nicho entero se perdía en
+ * silencio, y con él "callos" (158 aceptados) y "cepillo para perro" (162).
+ */
+export async function sinAnalizarDeLaCorrida(runId: string): Promise<number> {
+  const { data: qs } = await db().from('disc_search_queries').select('id').eq('run_id', runId)
+  const qids = ((qs ?? []) as { id: string }[]).map((q) => q.id)
+  if (!qids.length) return 0
+
+  const ads = new Set<string>()
+  for (let i = 0; i < qids.length; i += 100) {
+    const { data } = await db().from('disc_ad_discoveries')
+      .select('ad_id').in('query_id', qids.slice(i, i + 100)).limit(20_000)
+    for (const d of (data ?? []) as { ad_id: string }[]) ads.add(d.ad_id)
+  }
+  if (!ads.size) return 0
+
+  const ids = [...ads]
+  let sinAnalizar = 0
+  for (let i = 0; i < ids.length; i += 200) {
+    const { count } = await db().from('disc_ads')
+      .select('*', { count: 'exact', head: true })
+      .in('id', ids.slice(i, i + 200)).is('analyzed_at', null)
+    sinAnalizar += count ?? 0
+  }
+  return sinAnalizar
+}
+
 export async function pendientes(kind: JobKind): Promise<number> {
   const { count } = await db().from('disc_jobs')
     .select('id', { count: 'exact', head: true })

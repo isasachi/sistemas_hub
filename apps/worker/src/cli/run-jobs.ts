@@ -17,7 +17,10 @@ import { execFile } from 'node:child_process'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { hostname } from 'node:os'
-import { claim, complete, enqueue, fail, type Job, type JobKind } from '../db/jobs'
+import {
+  claim, complete, enqueue, fail, aplazar, sinAnalizarDeLaCorrida,
+  type Job, type JobKind,
+} from '../db/jobs'
 
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '../..')
 const WORKER = `${hostname()}:${process.pid}`
@@ -49,7 +52,7 @@ function correr(script: string, args: string[]): Promise<Salida> {
   })
 }
 
-async function ejecutar(job: Job): Promise<void> {
+async function ejecutar(job: Job): Promise<'ok' | 'aplazado'> {
   if (job.kind === 'discover') {
     const term = String(job.payload.term ?? '')
     const countries = (job.payload.countries as string[] | undefined) ?? []
@@ -79,20 +82,32 @@ async function ejecutar(job: Job): Promise<void> {
       // resultados). Se dice, en vez de dejar el embudo cortado en silencio.
       console.log('  (sin run_id: no se encoló ranking)')
     }
-    return
+    return 'ok'
   }
 
   if (job.kind === 'rank') {
     const term = String(job.payload.term ?? '')
     const runId = String(job.payload.run_id ?? '')
     if (!term || !runId) throw new Error('job rank sin término o sin run_id')
+
+    // ⚠️ NO SE RANKEA UNA CORRIDA A MEDIO ANALIZAR. El ranking solo mira los
+    // anuncios que pasaron las fases 5-6, y `analyze` drena un backlog GLOBAL
+    // de miles: la corrida recién descubierta puede seguir entera sin analizar
+    // cuando su job llega a la cola. Rankearla ahí devuelve 0 productos, el job
+    // queda `done` y el nicho NO SE VUELVE A RANKEAR NUNCA.
+    const sinAnalizar = await sinAnalizarDeLaCorrida(runId)
+    if (sinAnalizar > 0) {
+      await aplazar(job, 20, `${sinAnalizar} anuncios de la corrida sin analizar`)
+      console.log(`  ⏸ aplazado: ${sinAnalizar} anuncios de "${term}" siguen sin analizar`)
+      return 'aplazado'
+    }
     const { code, stdout } = await correr('src/cli/rank.ts', ['--query', term, '--run', runId])
     if (stdout.includes('PH_PERSISTENT_BLOCK')) throw new Error('Meta bloqueó: se reintenta con backoff')
     // `DISC_RANK_EMPTY` = no había anuncios aceptados de esa corrida. Es un
     // resultado válido del embudo (el nicho no dio nada), no un fallo.
-    if (stdout.includes('DISC_RANK_EMPTY')) { console.log('  (nada que rankear)'); return }
+    if (stdout.includes('DISC_RANK_EMPTY')) { console.log('  (nada que rankear)'); return 'ok' }
     if (code !== 0 && code !== 2) throw new Error(`rank salió con código ${code}`)
-    return
+    return 'ok'
   }
 
   if (job.kind === 'audit') {
@@ -105,9 +120,9 @@ async function ejecutar(job: Job): Promise<void> {
     // catálogo, no se clasificó a nadie y el anunciante sigue vencido, así que
     // el propio scheduler lo vuelve a encolar. Marcarlo `dead` a los 3 intentos
     // sacaría del recrawl a un anunciante sano por un mal día de la IP.
-    if (code === 2) { console.log(`  (inconcluso — vuelve a encolarse solo)`); return }
+    if (code === 2) { console.log(`  (inconcluso — vuelve a encolarse solo)`); return 'ok' }
     if (code !== 0) throw new Error(`audit salió con código ${code}`)
-    return
+    return 'ok'
   }
 
   throw new Error(`kind desconocido: ${job.kind}`)
@@ -119,14 +134,16 @@ async function main() {
   const kind = (val('--kind') ?? 'discover') as JobKind
   const max = Math.max(1, Number(val('--max') ?? 5))
 
-  let hechos = 0, fallados = 0
+  let hechos = 0, fallados = 0, aplazados = 0
   for (let i = 0; i < max; i++) {
     const job = await claim(kind, WORKER)
     if (!job) { console.log(`Cola de ${kind} vacía. DISC_QUEUE_EMPTY`); break }
     const etiqueta = `${job.kind}#${job.id} ${JSON.stringify(job.payload)}`
     console.log(`\n▶ ${etiqueta} (intento ${job.attempts}/${job.max_attempts})`)
     try {
-      await ejecutar(job)
+      const r = await ejecutar(job)
+      // Un job aplazado ya volvió a la cola: cerrarlo lo daría por hecho.
+      if (r === 'aplazado') { aplazados++; continue }
       await complete(job.id)
       hechos++
     } catch (e) {
@@ -136,7 +153,7 @@ async function main() {
       console.error(`✗ ${etiqueta}: ${motivo}`)
     }
   }
-  console.log(`\n${hechos} jobs completados · ${fallados} fallados`)
+  console.log(`\n${hechos} jobs completados · ${fallados} fallados${aplazados ? ` · ${aplazados} aplazados` : ''}`)
   if (fallados && !hechos) process.exitCode = 2
 }
 
