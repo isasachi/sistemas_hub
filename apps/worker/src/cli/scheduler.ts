@@ -11,7 +11,7 @@
 // trabajo.
 import '../../scripts/bootstrap'
 import { db } from '../db/client'
-import { enqueue, reap, pendientes, limpiarHuerfanos } from '../db/jobs'
+import { enqueue, reap, pendientes, limpiarHuerfanos, yaEnCola } from '../db/jobs'
 import { pickNextBatch, podar, refrescarYield, EPSILON } from '../db/keywords'
 import { repartoCiclo } from '../scheduler/budget'
 
@@ -58,7 +58,14 @@ async function main() {
   // del plazo de 15 min del reaper. El job moría, volvía a la cola y moría otra
   // vez, para siempre. Con un país por job el peor caso es el tope de queries
   // (100) × 1 país ≈ 4 min.
-  const picks = await pickNextBatch(descubrir)
+  const todos = await pickNextBatch(descubrir)
+  // ⚠️ Lo que ya espera en la cola NO se vuelve a encolar. El bandit sigue
+  // eligiendo una combinación mientras su `last_run_at` sea null, y eso solo se
+  // llena cuando la corrida ocurre de verdad: sin este filtro, una combinación
+  // que tarda en drenarse se encola otra vez cada hora. Medido: "juguetes
+  // educativos"/PE se descubrió dos veces, 158 páginas contra Meta repetidas.
+  const enCola = await yaEnCola(todos)
+  const picks = todos.filter((p) => !enCola.has(`${p.term}|${p.country}`))
   const ahora = new Date()
   const jobs = picks.map((p) => ({
     kind: 'discover' as const,
@@ -82,7 +89,8 @@ async function main() {
     `(${descubrir} descubrir / ${recrawl} recrawl · ε=${EPSILON})\n` +
     `  ${rescatados} jobs rescatados · ${combinaciones} combinaciones con yield al día · ` +
     `${apagados.length} términos apagados · ${huerfanos} jobs huérfanos borrados\n` +
-    `  ${encolados} jobs de descubrimiento (uno por término×país)\n` +
+    `  ${encolados} jobs de descubrimiento (uno por término×país` +
+    `${todos.length > picks.length ? `, ${todos.length - picks.length} ya en cola` : ''})\n` +
     `  ${recrawls} auditorías de recrawl`,
   )
   if (apagados.length) console.log(`  apagados: ${apagados.slice(0, 10).join(', ')}${apagados.length > 10 ? '…' : ''}`)

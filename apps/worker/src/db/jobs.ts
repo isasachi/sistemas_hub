@@ -138,6 +138,33 @@ export async function sinAnalizarDeLaCorrida(runId: string): Promise<number> {
   return sinAnalizar
 }
 
+/**
+ * De una lista de (término, país), los que YA tienen un job de descubrimiento
+ * esperando o corriendo.
+ *
+ * ⚠️ MISMO FALLO QUE TENÍA EL RECRAWL, en la otra cola. El `dedup_key` lleva la
+ * hora dentro para que la corrida de mañana no choque con la de hoy — pero eso
+ * deja que una combinación todavía sin drenar se encole otra vez a la hora
+ * siguiente, porque el bandit la sigue viendo pendiente (su `last_run_at` sigue
+ * null hasta que la corrida ocurre). Medido: "juguetes educativos"/PE se
+ * descubrió DOS veces —1.883 anuncios y 158 páginas contra Meta repetidas— y
+ * "cojin ortopedico"/AR tenía dos jobs en cola.
+ */
+export async function yaEnCola(
+  picks: { term: string; country: string }[],
+): Promise<Set<string>> {
+  const out = new Set<string>()
+  if (!picks.length) return out
+  const { data } = await db().from('disc_jobs')
+    .select('payload').eq('kind', 'discover').in('status', ['pending', 'running']).limit(5000)
+  for (const j of (data ?? []) as { payload: { term?: string; countries?: string[] } }[]) {
+    const t = j.payload?.term
+    if (!t) continue
+    for (const c of j.payload?.countries ?? []) out.add(`${t}|${c}`)
+  }
+  return out
+}
+
 export async function pendientes(kind: JobKind): Promise<number> {
   const { count } = await db().from('disc_jobs')
     .select('id', { count: 'exact', head: true })
