@@ -1,7 +1,7 @@
 // Vocabulario y bandit (spec §2.5 y §10).
 import { db } from './client'
 import { normalizeQuery } from '../discovery/normalize-query'
-import { debePodarse, type TermSource } from '../vocab/terms'
+import { debePodarse, podaConfirmada, type TermSource } from '../vocab/terms'
 
 export interface Combinacion { term: string; country: string }
 
@@ -84,8 +84,10 @@ export async function pickNextBatch(n: number): Promise<Combinacion[]> {
  * El daemon duerme 10 min entre ciclos, así que 2 h son 12× de margen. Medido:
  * 15 términos y 0,10 s contra 3,4 s del recálculo completo.
  */
-export async function refrescarYield(desde = '2 hours'): Promise<number> {
-  const { data, error } = await db().rpc('disc_refresh_yield', { p_since: desde })
+export async function refrescarYield(desde: string | null = '2 hours', terminos?: string[]): Promise<number> {
+  const { data, error } = await db().rpc('disc_refresh_yield', {
+    p_since: desde, p_terms: terminos ?? null,
+  })
   if (error) throw new Error(`refrescarYield: ${error.message}`)
   return (data as number) ?? 0
 }
@@ -93,6 +95,21 @@ export async function refrescarYield(desde = '2 hours'): Promise<number> {
 /**
  * Poda (spec §10): apaga los términos que corrieron lo suficiente en todos sus
  * países y no rindieron en ninguno. Devuelve cuántos apagó.
+ *
+ * ⚠️ ESTO NO ES EL BANDIT, Y POR ESO NO PUEDE LEER UN `yield_rate` VIEJO. La
+ * ventana de `refrescarYield` se justifica con que el yield es una PRIORIDAD:
+ * un número algo atrasado hace que el bandit elija un poco peor y se corrige
+ * solo. Acá el mismo número se convierte en `is_active = false`, y un término
+ * apagado sale del bandit → no vuelve a correr → no vuelve a entrar en la
+ * ventana → su cero viejo no se corrige NUNCA. Puerta de una sola dirección.
+ *
+ * El camino es la deriva documentada en `refrescarYield`: una página descubierta
+ * bajo el término A y rankeada bajo el B refresca a B y no a A. Medido en vivo:
+ * `rodillera ajustable`/PE con `yield_rate = 0` y 3 filas en `disc_ranked`.
+ *
+ * Por eso los candidatos se refrescan y se vuelven a filtrar antes de escribir.
+ * Acotado a esos términos y no al recálculo completo: el completo son 3,4 s de
+ * un presupuesto de 8 y crece con la tabla — una válvula que caduca sola.
  */
 export async function podar(minRuns = 5, minYield = 0.01): Promise<string[]> {
   // ⚠️ PAGINADO. PostgREST corta en 1000 filas AUNQUE se le pida más: un
@@ -113,9 +130,36 @@ export async function podar(minRuns = 5, minYield = 0.01): Promise<string[]> {
     if (!porTermino.has(e.term)) porTermino.set(e.term, [])
     porTermino.get(e.term)!.push({ runs: e.runs, yieldRate: e.yield_rate })
   }
-  const apagar = [...porTermino.entries()]
+  const candidatos = [...porTermino.entries()]
     .filter(([, es]) => debePodarse(es, minRuns, minYield))
     .map(([t]) => t)
+
+  // Segunda vuelta sobre números frescos. Sin candidatos no se refresca nada:
+  // el caso normal de un ciclo es podar cero.
+  let apagar = candidatos
+  if (candidatos.length) {
+    await refrescarYield(null, candidatos)
+    const frescos: typeof estados = []
+    for (let i = 0; i < candidatos.length; i += 200) {
+      const { data, error } = await db().from('disc_keyword_country_state')
+        // El mismo `.gte(runs)` que la primera vuelta: `debePodarse` exige
+        // `runs >= minRuns` en CADA fila, así que traer también los países con
+        // pocas corridas cambiaría el criterio de contrabando.
+        .select('term,runs,yield_rate').gte('runs', minRuns)
+        .in('term', candidatos.slice(i, i + 200))
+      if (error) throw new Error(`podar: ${error.message}`)
+      frescos.push(...((data ?? []) as typeof estados))
+    }
+    const porTerminoFresco = new Map<string, { runs: number; yieldRate: number | null }[]>()
+    for (const e of frescos) {
+      if (!porTerminoFresco.has(e.term)) porTerminoFresco.set(e.term, [])
+      porTerminoFresco.get(e.term)!.push({ runs: e.runs, yieldRate: e.yield_rate })
+    }
+    apagar = podaConfirmada(candidatos, porTerminoFresco, minRuns, minYield)
+    const salvados = candidatos.length - apagar.length
+    if (salvados) console.log(`  ${salvados} términos salvados de la poda al refrescar su yield`)
+  }
+
   for (let i = 0; i < apagar.length; i += 200) {
     await db().from('disc_keywords').update({ is_active: false }).in('term', apagar.slice(i, i + 200))
   }

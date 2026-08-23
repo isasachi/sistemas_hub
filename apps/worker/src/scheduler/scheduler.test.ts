@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { nextTier, venció, TIER_HORAS, type EstadoAnunciante } from './tiers'
-import { extraerTerminos, esTerminoUtil, ngramas, idf, debePodarse } from '../vocab/terms'
+import { extraerTerminos, esTerminoUtil, ngramas, idf, debePodarse, podaConfirmada } from '../vocab/terms'
 import { repartoCiclo } from './budget'
 
 const adv = (o: Partial<EstadoAnunciante> = {}): EstadoAnunciante =>
@@ -167,4 +167,22 @@ describe('vocabulario auto-alimentado (spec §10)', () => {
     // Poco corrido: todavía no hay evidencia para apagarlo.
     expect(debePodarse([{ runs: 2, yieldRate: 0 }])).toBe(false)
   })
+
+  it('la segunda vuelta de la poda no apaga sin números frescos', () => {
+    // El refresco por término confirma que sigue en cero → se apaga.
+    expect(podaConfirmada(['muerto'], new Map([
+      ['muerto', [{ runs: 9, yieldRate: 0 }]],
+    ]))).toEqual(['muerto'])
+
+    // El refresco lo salva: rendía, y el cero era un estado viejo (la deriva de
+    // una página descubierta bajo un término y rankeada bajo otro).
+    expect(podaConfirmada(['salvado'], new Map([
+      ['salvado', [{ runs: 9, yieldRate: 0.08 }]],
+    ]))).toEqual([])
+
+    // Sin estado fresco NO se apaga: apagar es una puerta de una sola dirección.
+    expect(podaConfirmada(['sin datos'], new Map())).toEqual([])
+    expect(podaConfirmada(['vacio'], new Map([['vacio', []]]))).toEqual([])
+  })
+
 })

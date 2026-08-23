@@ -173,3 +173,24 @@ export function debePodarse(
   if (!estados.length) return false
   return estados.every((e) => e.runs >= minRuns && (e.yieldRate ?? 0) < minYield)
 }
+
+/**
+ * Segunda vuelta de la poda, sobre `yield_rate` ya refrescado.
+ *
+ * ⚠️ UN CANDIDATO SIN ESTADO FRESCO NO SE APAGA. Apagar es una puerta de una
+ * sola dirección —el término sale del bandit, no vuelve a correr, su yield no
+ * se vuelve a calcular— así que el fail-safe es no cruzarla. Sin esto, un
+ * término que perdió su fila (o cuya lectura falló) se apagaría por ausencia de
+ * datos, que es el peor motivo posible.
+ */
+export function podaConfirmada(
+  candidatos: string[],
+  frescos: Map<string, { runs: number; yieldRate: number | null }[]>,
+  minRuns = 5,
+  minYield = 0.01,
+): string[] {
+  return candidatos.filter((t) => {
+    const es = frescos.get(t)
+    return es?.length ? debePodarse(es, minRuns, minYield) : false
+  })
+}
