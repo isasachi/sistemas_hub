@@ -91,3 +91,38 @@ export async function pendientes(kind: JobKind): Promise<number> {
     .eq('kind', kind).eq('status', 'pending')
   return count ?? 0
 }
+
+/**
+ * Borra los jobs pendientes cuyo término ya no está activo en el vocabulario.
+ *
+ * ⚠️ VA EN EL SCHEDULER, NO EN CADA SCRIPT QUE DESACTIVA. Un término se apaga
+ * por tres caminos —la consolidación, la purga de vocabulario y la `podar()` del
+ * bandit, que corre CADA CICLO— y los tres dejarían jobs huérfanos. Uno de
+ * `discover` correría con el fallback de semilla pelada y parecería una búsqueda
+ * que funciona; uno de `rank` haría el deep crawl de sus anunciantes, que es el
+ * paso más caro contra Meta. Medido: 5 rankings pendientes de nichos ya
+ * jubilados (`multi`, `termica`, `cancer`, `camara de seguridad`, `callos`).
+ */
+export async function limpiarHuerfanos(): Promise<number> {
+  const activos = new Set<string>()
+  for (let i = 0; ; i += 1000) {
+    const { data } = await db().from('disc_keywords')
+      .select('term').eq('is_active', true).range(i, i + 999)
+    if (!data?.length) break
+    for (const r of data as { term: string }[]) activos.add(r.term)
+    if (data.length < 1000) break
+  }
+  // Sin vocabulario activo NO se borra nada: sería tomar un fallo de lectura por
+  // "todos los términos están apagados" y vaciar la cola entera.
+  if (!activos.size) return 0
+
+  const { data: jobs } = await db().from('disc_jobs')
+    .select('id,payload').in('kind', ['discover', 'rank']).eq('status', 'pending').limit(5000)
+  const muertos = ((jobs ?? []) as { id: number; payload: { term?: string } }[])
+    .filter((j) => j.payload?.term && !activos.has(j.payload.term))
+    .map((j) => j.id)
+  for (let i = 0; i < muertos.length; i += 200) {
+    await db().from('disc_jobs').delete().in('id', muertos.slice(i, i + 200))
+  }
+  return muertos.length
+}

@@ -11,7 +11,7 @@
 // trabajo.
 import '../../scripts/bootstrap'
 import { db } from '../db/client'
-import { enqueue, reap, pendientes } from '../db/jobs'
+import { enqueue, reap, pendientes, limpiarHuerfanos } from '../db/jobs'
 import { pickNextBatch, podar, refrescarYield, EPSILON } from '../db/keywords'
 import { repartoCiclo } from '../scheduler/budget'
 
@@ -40,6 +40,11 @@ async function main() {
   //    con los del ciclo pasado.
   const combinaciones = dryRun ? 0 : await refrescarYield()
   const apagados = dryRun ? [] : await podar()
+
+  // 2b. Y se tira lo que la poda (o una consolidación anterior) dejó huérfano en
+  //     la cola: un job de un término apagado es trabajo que ya se decidió no
+  //     hacer, y si es un `rank` es el paso más caro del motor.
+  const huerfanos = dryRun ? 0 : await limpiarHuerfanos()
 
   // 3. Reparto fijo de capacidad (spec §9).
   const { descubrir, recrawl } = repartoCiclo(capacidad)
@@ -76,7 +81,7 @@ async function main() {
     `${dryRun ? '[DRY-RUN] ' : ''}ciclo · capacidad ${capacidad} ` +
     `(${descubrir} descubrir / ${recrawl} recrawl · ε=${EPSILON})\n` +
     `  ${rescatados} jobs rescatados · ${combinaciones} combinaciones con yield al día · ` +
-    `${apagados.length} términos apagados\n` +
+    `${apagados.length} términos apagados · ${huerfanos} jobs huérfanos borrados\n` +
     `  ${encolados} jobs de descubrimiento (uno por término×país)\n` +
     `  ${recrawls} auditorías de recrawl`,
   )

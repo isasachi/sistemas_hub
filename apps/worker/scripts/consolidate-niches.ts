@@ -185,10 +185,13 @@ async function main() {
         .eq('is_active', false).select('term')
       reactivados += data?.length ?? 0
     }
-    // Jobs pendientes de un término que ya no resuelve: correrían con el
-    // fallback de semilla pelada y parecerían una búsqueda que funciona.
+    // Jobs pendientes de un término que ya no resuelve: un `discover` correría
+    // con el fallback de semilla pelada y parecería una búsqueda que funciona,
+    // y un `rank` haría el DEEP CRAWL de sus anunciantes —el paso más caro
+    // contra Meta— para un nicho ya jubilado. Medido: 5 rankings pendientes de
+    // términos retirados sobrevivían a la consolidación.
     const { data: jobs } = await db().from('disc_jobs')
-      .select('id,payload').eq('kind', 'discover').eq('status', 'pending')
+      .select('id,payload').in('kind', ['discover', 'rank']).eq('status', 'pending')
     const muertos = ((jobs ?? []) as { id: number; payload: { term?: string } }[])
       .filter((j) => j.payload?.term && fuera.has(j.payload.term)).map((j) => j.id)
     for (let i = 0; i < muertos.length; i += 200) {

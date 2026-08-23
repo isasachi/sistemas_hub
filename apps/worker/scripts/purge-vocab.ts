@@ -54,10 +54,11 @@ async function main() {
       if (error) throw new Error(error.message)
     }
     // Los jobs ya encolados de esos términos correrían igual: se borran. Un job
-    // pendiente de un término apagado es una búsqueda que el bandit ya decidió
-    // no hacer.
+    // pendiente de un término apagado es trabajo que el bandit ya decidió no
+    // hacer — y si es un `rank`, es además el deep crawl de sus anunciantes,
+    // que es lo más caro que hace este motor.
     const { data: jobs } = await db().from('disc_jobs')
-      .select('id,payload').eq('kind', 'discover').eq('status', 'pending')
+      .select('id,payload').in('kind', ['discover', 'rank']).eq('status', 'pending')
     const muertos = ((jobs ?? []) as { id: number; payload: { term?: string } }[])
       .filter((j) => j.payload?.term && fuera.includes(j.payload.term)).map((j) => j.id)
     for (let i = 0; i < muertos.length; i += 200) {
