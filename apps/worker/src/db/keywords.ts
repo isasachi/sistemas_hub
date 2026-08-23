@@ -63,16 +63,29 @@ export async function pickNextBatch(n: number): Promise<Combinacion[]> {
 }
 
 /**
- * Recalcula el estado de TODAS las combinaciones término×país desde los datos.
+ * Recalcula el estado de las combinaciones término×país desde los datos.
  *
  * ⚠️ SE DERIVA, NO SE ACUMULA. `qualified_pages` no se conoce al terminar el
  * descubrimiento —hace falta analizar landings y perfilar catálogos, horas más
  * tarde—, así que un contador que se incrementa al cerrar la corrida se
  * quedaría en cero y el bandit leería "este nicho no rinde" sobre todos.
  * Derivarlo también lo hace idempotente.
+ *
+ * ⚠️ PERO RECALCULARLO ENTERO NO ESCALA, Y EL TECHO SON 8 SEGUNDOS: el worker
+ * habla por PostgREST con `service_role`, que hereda el `statement_timeout` de
+ * `authenticator`. Con 78.000 descubrimientos el recálculo completo tarda 3,4 s
+ * y este motor existe para que esa tabla crezca — ya se pasó una vez, y no
+ * falla solo este paso: el scheduler lanza ANTES de encolar, así que el motor
+ * deja de repartir trabajo. `desde` acota a los términos que cambiaron (corrida
+ * o fila rankeada nuevas); el resto conserva su valor, que ya es el correcto.
+ *
+ * ⚠️ LA VENTANA TIENE QUE CUBRIR EL PEOR CICLO, no el típico: un término cuya
+ * corrida cerró fuera de la ventana no se refresca hasta que vuelva a correr.
+ * El daemon duerme 10 min entre ciclos, así que 2 h son 12× de margen. Medido:
+ * 15 términos y 0,10 s contra 3,4 s del recálculo completo.
  */
-export async function refrescarYield(): Promise<number> {
-  const { data, error } = await db().rpc('disc_refresh_yield')
+export async function refrescarYield(desde = '2 hours'): Promise<number> {
+  const { data, error } = await db().rpc('disc_refresh_yield', { p_since: desde })
   if (error) throw new Error(`refrescarYield: ${error.message}`)
   return (data as number) ?? 0
 }
