@@ -57,6 +57,19 @@ SLEEP_SECONDS="${DISC_SLEEP:-300}"
 # muerta).
 BLOCK_SLEEP="${DISC_BLOCK_SLEEP:-3600}"
 STEP_TIMEOUT="${DISC_STEP_TIMEOUT:-1800}"
+# Anuncios que `analyze` procesa por ciclo.
+#
+# ⚠️ ESTE NÚMERO TIENE QUE IR POR DELANTE DEL DESCUBRIMIENTO, y con 400 no iba.
+# Los nichos consolidados traen 1.000-2.300 anuncios por job y el ciclo corre dos
+# jobs: medido, la cola de análisis pasó de 3.000 a 11.000 en tres horas y la
+# salida de productos cayó de ~25/h a 3/h — el ranking se aplazaba porque sus
+# anuncios nunca llegaban a analizarse.
+#
+# Subirlo es barato: `analyze` NO toca Meta (pide landings a tiendas de terceros,
+# con su propio pool) y su concurrencia es fija en 8, así que un lote más grande
+# alarga el paso, no lo hace más pesado. Medido: 400 anuncios tardan 36-39 s
+# contra un tope de paso de 1.800 s.
+ANALYZE_LIMIT="${DISC_ANALYZE_LIMIT:-2000}"
 
 log() { echo "[$(date '+%F %T')] $*"; }
 
@@ -91,7 +104,7 @@ while true; do
   # `analyze` NO toca Meta: pide landings de tiendas de terceros, con su propio
   # pool y sus propios límites. Por eso corre incluso con la IP bloqueada — es
   # justo el trabajo que se puede adelantar mientras Meta descansa.
-  paso "analyze" npx tsx src/cli/analyze.ts --limit 400
+  paso "analyze" npx tsx src/cli/analyze.ts --limit "$ANALYZE_LIMIT"
 
   # `rank` SÍ toca Meta (dos navegaciones por anunciante NUEVO; los ya medidos
   # salen de `disc_advertisers` sin navegar), así que se salta si hubo bloqueo.
