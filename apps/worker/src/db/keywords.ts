@@ -138,26 +138,39 @@ export async function podar(minRuns = 5, minYield = 0.01): Promise<string[]> {
   // el caso normal de un ciclo es podar cero.
   let apagar = candidatos
   if (candidatos.length) {
-    await refrescarYield(null, candidatos)
-    const frescos: typeof estados = []
-    for (let i = 0; i < candidatos.length; i += 200) {
+    const porTerminoFresco = new Map<string, { runs: number; yieldRate: number | null }[]>()
+    // ⚠️ EL LOTE SE MIDE EN TÉRMINOS Y EL TOPE DE POSTGREST EN FILAS, y un
+    // término trae UNA FILA POR PAÍS. Con 200 términos y 5 países son 1000
+    // filas, o sea justo el corte silencioso contra el que advierte el
+    // comentario de la primera vuelta — y muerde precisamente acá, porque un
+    // candidato a poda tiene `runs >= 5` en todos los países en los que
+    // aparece: son los términos con MÁS filas. A 100 × 6 países quedan 600, con
+    // margen para que la cobertura por país siga creciendo (que es lo que el
+    // bandit existe para hacer).
+    const LOTE = 100
+    for (let i = 0; i < candidatos.length; i += LOTE) {
+      const lote = candidatos.slice(i, i + LOTE)
+      // Se refresca POR LOTE y no todo junto: en un ciclo de poda masiva (acá se
+      // apagaron 420 términos de una) refrescarlos todos se acerca al recálculo
+      // completo, y esto corre en la misma fase pre-encolado que acaba de morir
+      // por pasarse de los 8 s.
+      await refrescarYield(null, lote)
       const { data, error } = await db().from('disc_keyword_country_state')
         // El mismo `.gte(runs)` que la primera vuelta: `debePodarse` exige
         // `runs >= minRuns` en CADA fila, así que traer también los países con
         // pocas corridas cambiaría el criterio de contrabando.
-        .select('term,runs,yield_rate').gte('runs', minRuns)
-        .in('term', candidatos.slice(i, i + 200))
+        .select('term,runs,yield_rate').gte('runs', minRuns).in('term', lote)
       if (error) throw new Error(`podar: ${error.message}`)
-      frescos.push(...((data ?? []) as typeof estados))
-    }
-    const porTerminoFresco = new Map<string, { runs: number; yieldRate: number | null }[]>()
-    for (const e of frescos) {
-      if (!porTerminoFresco.has(e.term)) porTerminoFresco.set(e.term, [])
-      porTerminoFresco.get(e.term)!.push({ runs: e.runs, yieldRate: e.yield_rate })
+      for (const e of (data ?? []) as typeof estados) {
+        if (!porTerminoFresco.has(e.term)) porTerminoFresco.set(e.term, [])
+        porTerminoFresco.get(e.term)!.push({ runs: e.runs, yieldRate: e.yield_rate })
+      }
     }
     apagar = podaConfirmada(candidatos, porTerminoFresco, minRuns, minYield)
-    const salvados = candidatos.length - apagar.length
-    if (salvados) console.log(`  ${salvados} términos salvados de la poda al refrescar su yield`)
+    // Sin condicionar a que haya salvados: un lote truncado no salva a nadie y
+    // el ciclo imprimiría `0 términos apagados`, idéntico a "no había nada que
+    // podar". Es el mismo no-op silencioso que costó 23 corridas.
+    console.log(`  poda · ${candidatos.length} candidatos → ${apagar.length} apagados (${candidatos.length - apagar.length} salvados al refrescar su yield)`)
   }
 
   for (let i = 0; i < apagar.length; i += 200) {

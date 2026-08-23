@@ -864,6 +864,12 @@ Es lo que convierte "una corrida por consulta" en el inventario continuo del CON
 
 ⚠️ **LA SEGUNDA VUELTA LLEVA EL MISMO `.gte('runs', minRuns)` QUE LA PRIMERA.** `debePodarse` exige `runs >= minRuns` en CADA fila, así que releer también los países con pocas corridas cambiaría el criterio de contrabando: un término con cuatro países maduros y uno tierno dejaría de podarse sin que nadie lo decidiera.
 
+⚠️ **Y SE PAGINA DE A 100 TÉRMINOS, NO 200: EL LOTE SE MIDE EN TÉRMINOS Y EL TOPE DE POSTGREST EN FILAS.** Un término trae una fila POR PAÍS, así que 200 términos × 5 países son 1000 filas — el corte silencioso contra el que advierte el comentario de la primera vuelta, entrando por la puerta de atrás. Y muerde justo acá: un candidato a poda tiene `runs >= 5` en todos los países en los que aparece, o sea es de los términos con MÁS filas. El refresco va **por lote** por lo mismo: refrescar 420 candidatos de una (ya pasó) se acerca al recálculo completo, dentro de la misma fase pre-encolado que acaba de morir por pasarse de los 8 s.
+
+⚠️ **La línea de la poda se imprime SIEMPRE que haya candidatos**, no solo cuando salva a alguno: un lote truncado no salva a nadie y el ciclo diría `0 términos apagados`, idéntico a "no había nada que podar" — el mismo no-op silencioso que costó 23 corridas.
+
+✅ **Medido contra la base real** (umbral laxo para fabricar candidatos, sin escribir): **41 candidatos → 39 confirmados, 2 salvados** por el refresco. La segunda vuelta no es teórica: ya rescata términos que la primera habría apagado.
+
 ⚠️ **AGREGAR UN PARÁMETRO NO REEMPLAZA LA FUNCIÓN: LA DUPLICA.** Postgres sobrecarga por firma, así que el `CREATE OR REPLACE` que agregó `p_terms` dejó viva también `disc_refresh_yield(interval)` — verificado contra `pg_proc` — y con las dos, una llamada por `p_since` a secas es ambigua: PostgREST responde *"function is not unique"* y el scheduler vuelve a morir antes de encolar, que es exactamente el fallo que todo esto vino a arreglar. Hay que `DROP` de la firma vieja, y esto ya pasó dos veces en el mismo día.
 
 ✅ **VERIFICADO: el loop corre solo.** Tres ciclos completos seguidos (scheduler → discover → audit → analyze → vocab → "ciclo listo"), ~2-3 min cada uno, sin intervención. En el tercero el bandit ya estaba explorando **"rodillera ajustable"**, un término que el propio motor extrajo de una landing: el ciclo del §10 se cierra.
