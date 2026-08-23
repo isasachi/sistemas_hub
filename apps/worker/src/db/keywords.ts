@@ -79,6 +79,13 @@ export async function pickNextBatch(n: number): Promise<Combinacion[]> {
  * deja de repartir trabajo. `desde` acota a los términos que cambiaron (corrida
  * o fila rankeada nuevas); el resto conserva su valor, que ya es el correcto.
  *
+ * ⚠️ Y EL ACOTE NO SIRVE SI POSTGRES PLANIFICA SIN MIRAR EL PARÁMETRO. PostgREST
+ * reusa prepared statements y desde la SEXTA llamada Postgres usa el plan
+ * genérico, que no puede podar por la ventana y escanea todo: medido, 5.237 ms
+ * contra ~100 ms. El scheduler siguió muriendo con el mismo timeout DESPUÉS de
+ * acotar la ventana, y ningún probe manual lo veía (conexión fría = plan
+ * propio). Lo arregla `plan_cache_mode = 'force_custom_plan'` en la función.
+ *
  * ⚠️ LA VENTANA TIENE QUE CUBRIR EL PEOR CICLO, no el típico: un término cuya
  * corrida cerró fuera de la ventana no se refresca hasta que vuelva a correr.
  * El daemon duerme 10 min entre ciclos, así que 2 h son 12× de margen. Medido:

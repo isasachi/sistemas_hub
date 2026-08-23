@@ -1,0 +1,27 @@
+-- ⚠️ EL ACOTE POR PARÁMETRO NO SIRVE DE NADA SI POSTGRES PLANIFICA SIN MIRARLO.
+--
+-- PostgREST reusa prepared statements, y a partir de la sexta ejecución Postgres
+-- cambia al PLAN GENÉRICO: planifica sin conocer `p_since` / `p_terms`, así que
+-- no puede podar por la ventana y arma el escaneo completo de
+-- `disc_ad_discoveries` y `disc_ads`. Verificado con `EXPLAIN (GENERIC_PLAN)`:
+-- `Seq Scan on disc_ad_discoveries (rows=76536)` + `Seq Scan on disc_ads
+-- (rows=48081)`, con el filtro del término aplicado demasiado tarde para podar.
+--
+-- Medido con `plan_cache_mode = force_generic_plan`: **5.237 ms** contra ~100 ms
+-- con plan propio, y creciendo con las tablas. Por eso el scheduler siguió
+-- muriendo con `canceling statement due to statement timeout` DESPUÉS de acotar
+-- la ventana a 16 términos y 493 consultas, mientras cada probe manual daba
+-- 0,10 s: los probes caían en conexiones frías (plan propio) y el daemon en una
+-- caliente (plan genérico). La causa nunca fue la forma de la consulta.
+--
+-- `force_custom_plan` en la función la obliga a replanificar con los valores
+-- reales en cada llamada. Los 27 ms de planificación no se notan al lado de los
+-- 5 s que evita. Post-fix, con el plan genérico forzado a nivel de sesión y
+-- siete ejecuciones seguidas: **68 ms**.
+--
+-- ⚠️ LA MISMA TRAMPA APLICA A CUALQUIER RPC DE ESTE MOTOR QUE PODE POR
+-- PARÁMETRO. Hoy ninguna otra se pasa del tope, pero el modo de fallo es este:
+-- rápida en las primeras cinco llamadas y lenta desde la sexta, o sea rápida en
+-- todo probe manual y lenta solo en producción.
+ALTER FUNCTION disc_refresh_yield(INTERVAL, TEXT[])
+    SET plan_cache_mode = 'force_custom_plan';
