@@ -36,6 +36,7 @@ export async function POST(
 
   const precision = ((formData.get('prompt') as string | null) ?? '').trim()
   const productName = (formData.get('productName') as string | null)?.trim()
+  const whatItIs = (formData.get('whatItIs') as string | null)?.trim()
   const whatItDoes = (formData.get('whatItDoes') as string | null)?.trim()
   const targetAudience = (formData.get('targetAudience') as string | null)?.trim()
 
@@ -65,6 +66,7 @@ export async function POST(
         `Reference ad style: ${refAnalysis.style}`,
         `Reference composition: ${refAnalysis.composition.join(', ')}`,
         `Product name: ${productName}`,
+        `What it is: ${whatItIs || 'not provided'}`,
         `What it does: ${whatItDoes}`,
         `Target audience: ${targetAudience}`,
         // ⚠️ El logo entra como imagen 2 y el scan lo confundía con el producto: medido en la
@@ -103,6 +105,9 @@ export async function POST(
     logo_url: logoUrl,
     product_scan: scan,
     product_name: productName,
+    // ponytail: opcional en el servidor a propósito — el formulario lo exige, pero meterlo en el
+    // 400 de arriba rompería cualquier cliente/sesión anterior a este campo.
+    what_it_is: whatItIs || null,
     what_it_does: whatItDoes,
     target_audience: targetAudience,
   })

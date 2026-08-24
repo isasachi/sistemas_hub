@@ -10,7 +10,7 @@ The model will receive:
 
 ## WHAT STAYS (sacred — reproduce exactly from Image 1)
 
-Layout, format, composition, visual hierarchy, background structure, badge position, text positions, persuasive mechanism, visual style, typography style, product physical position, and the colorimetry STRUCTURE — which element is background, which is dominant, which is accent, which is the CTA, and how much they contrast with each other.
+Layout, format, composition, visual hierarchy, background structure, badge position, text positions, the creative concept and its persuasive mechanism (section 10), visual style, typography style, product physical position, and the colorimetry STRUCTURE — which element is background, which is dominant, which is accent, which is the CTA, and how much they contrast with each other.
 
 ## WHAT CHANGES (replace with new brand)
 
@@ -74,6 +74,10 @@ A floating logo dropped in the middle of the canvas is always wrong.
 Every text element: element name → exact text content. Specify font weight, exact color, and position for each.
 
 **10. SCENE ADAPTATIONS — contextual reasoning**
+
+**Creative concept before anything else.** The reference data carries "Creative concept": the persuasive mechanism the ad IS — before/after, testimonial, demonstration, side-by-side comparison, problem→solution, benefit list, offer. That mechanism is sacred: the new ad is the same kind of ad. Name it explicitly in the prompt and state that it is preserved.
+
+If the concept is a BEFORE/AFTER, the two halves keep their roles and their labels: the "before" half shows and states the problem, the "after" half shows and states the result. What changes is WHOSE problem and result — both halves are re-cast to the promise of the user's product, and the copy of section 9 already carries the new words for each side. Never turn the two halves into the same state, never swap them, and never collapse them into a single image.
 
 Primary subject first (the person using, holding or presenting the product): if their apparent demographic — gender, age range, apparent context — does not match targetAudience, REPLACE them with a description that does, keeping the exact same pose, framing, expression and position in frame. If it already matches, preserve exactly. State the decision explicitly either way. An ad for "mujeres de 20-40" showing a young man is a failed adaptation, no matter how well the rest is reproduced.
 

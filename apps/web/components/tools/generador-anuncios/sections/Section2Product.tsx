@@ -9,19 +9,20 @@ const btnPrimary = 'h-11 w-full rounded-xl jr-cta text-[13px] font-bold disabled
 const inputClass = 'jr-field w-full h-10 rounded-xl px-3 text-[13px]'
 
 export default function Section2Product() {
-  const { sessionId, productUrl, logoUrl: storedLogoUrl, productName: storedName, whatItDoes: storedWhatItDoes, targetAudience: storedAudience, setProductData, setLoading, isLoading } = useWizardStore()
+  const { sessionId, productUrl, logoUrl: storedLogoUrl, productName: storedName, whatItIs: storedWhatItIs, whatItDoes: storedWhatItDoes, targetAudience: storedAudience, setProductData, setLoading, isLoading } = useWizardStore()
   const [productFile, setProductFile] = useState<File | null>(null)
   const [productPreview, setProductPreview] = useState<string | null>(productUrl)
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [logoPreview, setLogoPreview] = useState<string | null>(storedLogoUrl)
   const [answers, setAnswers] = useState({
     productName: storedName ?? '',
+    whatItIs: storedWhatItIs ?? '',
     whatItDoes: storedWhatItDoes ?? '',
     targetAudience: storedAudience ?? '',
   })
   const [error, setError] = useState<string | null>(null)
 
-  const canSubmit = (!!productFile || !!productUrl) && !!answers.productName && !!answers.whatItDoes && !!answers.targetAudience
+  const canSubmit = (!!productFile || !!productUrl) && !!answers.productName && !!answers.whatItIs && !!answers.whatItDoes && !!answers.targetAudience
 
   async function handleSubmit() {
     if (!sessionId || !canSubmit || isLoading) return
@@ -45,6 +46,7 @@ export default function Section2Product() {
         form.append('logo', new File([blob], 'logo', { type: blob.type || 'image/png' }))
       }
       form.append('productName', answers.productName)
+      form.append('whatItIs', answers.whatItIs)
       form.append('whatItDoes', answers.whatItDoes)
       form.append('targetAudience', answers.targetAudience)
 
@@ -56,6 +58,7 @@ export default function Section2Product() {
         logoUrl: data.logoUrl ?? null,
         productScan: data.scan!,
         productName: answers.productName,
+        whatItIs: answers.whatItIs,
         whatItDoes: answers.whatItDoes,
         targetAudience: answers.targetAudience,
       })
@@ -77,9 +80,10 @@ export default function Section2Product() {
         <FileUpload label="Subir logo" onFile={(f) => { setLogoFile(f); setLogoPreview(URL.createObjectURL(f)) }} preview={logoPreview} variant="ghost" />
       </div>
       <div className="flex flex-col gap-3 pt-1">
-        <p className="text-[12px] text-[#c9b4ae]">Tres preguntas rápidas:</p>
+        <p className="text-[12px] text-[#c9b4ae]">Cuatro preguntas rápidas:</p>
         {[
           { key: 'productName', placeholder: '¿Cómo se llama tu producto?' },
+          { key: 'whatItIs', placeholder: '¿Qué es?' },
           { key: 'whatItDoes', placeholder: '¿Qué hace? (una frase corta)' },
           { key: 'targetAudience', placeholder: '¿Para quién es?' },
         ].map(({ key, placeholder }, i) => (
