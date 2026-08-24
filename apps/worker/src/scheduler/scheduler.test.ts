@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { nextTier, venció, TIER_HORAS, type EstadoAnunciante } from './tiers'
 import { extraerTerminos, esTerminoUtil, ngramas, idf, debePodarse, podaConfirmada } from '../vocab/terms'
+import { parseVentanaMs } from '../db/keywords'
 import { repartoCiclo } from './budget'
 
 const adv = (o: Partial<EstadoAnunciante> = {}): EstadoAnunciante =>
@@ -185,4 +186,20 @@ describe('vocabulario auto-alimentado (spec §10)', () => {
     expect(podaConfirmada(['vacio'], new Map([['vacio', []]]))).toEqual([])
   })
 
+})
+
+describe('parseVentanaMs', () => {
+  it('traduce las ventanas que usa el motor', () => {
+    expect(parseVentanaMs('2 hours')).toBe(7_200_000)
+    expect(parseVentanaMs('45 minutes')).toBe(2_700_000)
+    expect(parseVentanaMs('1 hour')).toBe(3_600_000)
+    expect(parseVentanaMs('30 seconds')).toBe(30_000)
+  })
+
+  it('lanza en vez de adivinar', () => {
+    // Un multiplicador equivocado movería la ventana en silencio, y la ventana
+    // decide qué términos se refrescan: fallar ruidoso es lo correcto.
+    expect(() => parseVentanaMs('2 semanas')).toThrow()
+    expect(() => parseVentanaMs('')).toThrow()
+  })
 })

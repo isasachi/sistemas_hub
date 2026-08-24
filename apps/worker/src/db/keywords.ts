@@ -92,11 +92,84 @@ export async function pickNextBatch(n: number): Promise<Combinacion[]> {
  * 15 términos y 0,10 s contra 3,4 s del recálculo completo.
  */
 export async function refrescarYield(desde: string | null = '2 hours', terminos?: string[]): Promise<number> {
+  // Con lista explícita se respeta: quien llama ya decidió el alcance (lo usa
+  // `podar`, que necesita SUS candidatos y nada más).
+  if (terminos) return rpcYield(null, terminos)
+
+  // ⚠️ UN TÉRMINO POR SENTENCIA, CON PRESUPUESTO DE RELOJ. El costo de refrescar
+  //    un término es el de su historial ENTERO, y ese historial solo crece:
+  //    medido, `multivitaminico` (5.496 descubrimientos) cuesta 2,55 s y
+  //    `gafas de natacion` (36) cuesta 0,19 s. Dos o tres nichos gordos en la
+  //    misma ventana pasan de los 8 s del `statement_timeout` — y eso es lo que
+  //    pasó: el refresco falló en TODOS los ciclos desde las 23:32.
+  //
+  //    Encoger la ventana NO lo arregla y está medido: 45 min con 6 términos dio
+  //    4,54 s porque cayó un gordo, mientras 20 min con 4 dio 0,16 s. No escala
+  //    con la cantidad de términos sino con CUÁL entró.
+  //
+  //    Refrescando de a uno, el peor caso de una sentencia es un término gordo,
+  //    no la suma. Lo que no entra en el presupuesto se refresca en el ciclo
+  //    siguiente: el bandit tolera un número de un ciclo atrás —es una
+  //    prioridad, no un saldo— y `podar` refresca sus candidatos aparte.
+  const tocados = await terminosTocados(desde ?? '2 hours')
+  let total = 0
+  const t0 = Date.now()
+  for (const t of tocados) {
+    if (Date.now() - t0 > PRESUPUESTO_YIELD_MS) {
+      console.log(`  yield: ${tocados.length - tocados.indexOf(t)} términos quedan para el próximo ciclo`)
+      break
+    }
+    total += await rpcYield(null, [t])
+  }
+  return total
+}
+
+/** Presupuesto de reloj del refresco por ciclo. El daemon duerme 600 s. */
+const PRESUPUESTO_YIELD_MS = 20_000
+
+async function rpcYield(desde: string | null, terminos: string[] | null): Promise<number> {
   const { data, error } = await db().rpc('disc_refresh_yield', {
-    p_since: desde, p_terms: terminos ?? null,
+    p_since: desde, p_terms: terminos,
   })
   if (error) throw new Error(`refrescarYield: ${error.message}`)
   return (data as number) ?? 0
+}
+
+/**
+ * Los términos con actividad en la ventana: corrida nueva (cambia `new_pages`) o
+ * fila rankeada nueva (cambia `qualified_pages`). Son dos lecturas sobre tablas
+ * chicas e indexadas, no sobre los descubrimientos.
+ *
+ * Se ordenan del más reciente al más viejo: si el presupuesto no alcanza, lo que
+ * se corta es lo que hace más tiempo que no cambia.
+ */
+async function terminosTocados(desde: string): Promise<string[]> {
+  const corte = new Date(Date.now() - parseVentanaMs(desde)).toISOString()
+  const vistos = new Map<string, string>()
+  const { data: runs, error: e1 } = await db().from('disc_search_runs')
+    .select('seed_query,created_at').gt('created_at', corte).order('created_at', { ascending: false })
+  if (e1) throw new Error(`refrescarYield: ${e1.message}`)
+  for (const r of (runs ?? []) as { seed_query: string; created_at: string }[]) {
+    if (!vistos.has(r.seed_query)) vistos.set(r.seed_query, r.created_at)
+  }
+  const { data: rank, error: e2 } = await db().from('disc_ranked')
+    .select('seed_query,ranked_at').gt('ranked_at', corte).order('ranked_at', { ascending: false })
+  if (e2) throw new Error(`refrescarYield: ${e2.message}`)
+  for (const r of (rank ?? []) as { seed_query: string; ranked_at: string }[]) {
+    const previo = vistos.get(r.seed_query)
+    if (!previo || r.ranked_at > previo) vistos.set(r.seed_query, r.ranked_at)
+  }
+  return [...vistos.entries()].sort((a, b) => (a[1] < b[1] ? 1 : -1)).map(([t]) => t)
+}
+
+/** `'2 hours'` / `'45 minutes'` → milisegundos. Solo las formas que usa el motor. */
+export function parseVentanaMs(v: string): number {
+  const m = /^\s*(\d+)\s*(second|minute|hour|day)s?\s*$/i.exec(v)
+  if (!m) throw new Error(`ventana de yield no reconocida: ${v}`)
+  const n = Number(m[1])
+  const unidad = m[2].toLowerCase()
+  const ms = { second: 1000, minute: 60_000, hour: 3_600_000, day: 86_400_000 }[unidad]!
+  return n * ms
 }
 
 /**
