@@ -68,7 +68,6 @@ describe('generateImage', () => {
  */
 describe('generateImage — no se puede colgar', () => {
   it('el presupuesto se agota aunque KIE nunca conteste', async () => {
-    process.env.KIE_API_KEY = 'k'
     // El stub REJECTA como lo haría `AbortSignal.timeout`, en vez de dejar una promesa
     // colgada y esperar al temporizador real. Lo que se prueba es que el bucle TERMINA
     // cuando la petición no devuelve nada, no la mecánica del AbortSignal — y así el test
@@ -80,21 +79,53 @@ describe('generateImage — no se puede colgar', () => {
       }
       throw Object.assign(new Error('timeout'), { name: 'TimeoutError' })
     }))
-    await expect(generateImage({ prompt: 'x' }, { timeoutMs: 300, pollMs: 1 }))
+    await expect(generateImage({ prompt: 'x' }, 'key-del-usuario', { timeoutMs: 300, pollMs: 1 }))
       .rejects.toThrow(/no respondió/)
   })
 
   it('un estado `fail` corta el bucle sin esperar al presupuesto', async () => {
-    process.env.KIE_API_KEY = 'k'
     vi.stubGlobal('fetch', vi.fn(async (url: string) =>
       new Response(JSON.stringify(
         String(url).includes('createTask')
           ? { code: 200, data: { taskId: 't1' } }
           : { data: { state: 'fail', failMsg: 'content rejected' } },
       ), { status: 200 })))
-    await expect(generateImage({ prompt: 'x' }, { timeoutMs: 60_000, pollMs: 5 }))
+    await expect(generateImage({ prompt: 'x' }, 'key-del-usuario', { timeoutMs: 60_000, pollMs: 5 }))
       .rejects.toThrow(/content rejected/)
   })
 })
 
 afterEach(() => vi.unstubAllGlobals())
+
+/**
+ * ⚠️ El avatar y los frames son tareas PAGADAS de KIE igual que el render, y hasta
+ * 2026-08-24 salían de `process.env.KIE_API_KEY`: los pagaba el hub mientras el render
+ * iba a la cuenta del usuario. Ya no hay key global — sin la del usuario, esto lanza
+ * antes de tocar la API.
+ */
+describe('generateImage — BYOK estricto', () => {
+  it('sin key del usuario lanza y NO llama a KIE, aunque el entorno tenga una', async () => {
+    vi.stubEnv('KIE_API_KEY', 'key-del-hub')
+    const f = vi.fn()
+    vi.stubGlobal('fetch', f)
+    await expect(generateImage({ prompt: 'x' }, null)).rejects.toThrow(/API key de KIE/)
+    expect(f).not.toHaveBeenCalled()
+    vi.unstubAllEnvs()
+  })
+
+  it('firma con la key del usuario, no con la del entorno', async () => {
+    vi.stubEnv('KIE_API_KEY', 'key-del-hub')
+    const f = vi.fn(async (url: string, init?: RequestInit) =>
+      new Response(JSON.stringify(
+        String(url).includes('createTask')
+          ? { code: 200, data: { taskId: 't1' } }
+          : { data: { state: 'fail', failMsg: 'basta' } },
+      ), { status: 200 }))
+    vi.stubGlobal('fetch', f)
+    await expect(generateImage({ prompt: 'x' }, 'key-del-usuario', { pollMs: 1 })).rejects.toThrow(/basta/)
+    const auths = f.mock.calls.map((c) => (c[1] as RequestInit)?.headers as Record<string, string>)
+      .map((h) => h?.Authorization)
+    expect(auths.every((a) => a === 'Bearer key-del-usuario')).toBe(true)
+    vi.unstubAllEnvs()
+  })
+})

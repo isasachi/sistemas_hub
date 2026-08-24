@@ -5,6 +5,8 @@ import { generateImage } from '@/lib/video-ads/nano-banana'
 import { uploadToStorage, fetchAsBase64 } from '@/lib/storage'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
+import { currentKieKey } from '@/lib/user-settings'
+import { SIN_KEY } from '@/lib/video-ads/kie'
 import { IdentidadesSchema, buildIdentityInstruction, buildCharacterParts } from '@/lib/video-ads/character'
 import { personajesDe, resolvePersonaje } from '@/lib/video-ads/personajes'
 import { nicheSpec } from '@/lib/video-ads/niches'
@@ -34,6 +36,13 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
+
+  // ⚠️ La key se resuelve y se valida ANTES del gate de cuota, igual que en
+  // `generate-lotes` y por el mismo motivo: al revés, `checkGenQuota` ya habría escrito
+  // la fila de `video-character` y la generación del avatar moriría con un 401 de KIE —
+  // el usuario perdería una generación de su cuota por no haber cargado una key.
+  const kieKey = await currentKieKey()
+  if (!kieKey) return NextResponse.json({ error: SIN_KEY }, { status: 400 })
 
   const { blocked } = await checkGenQuota(id, 'video-character')
   if (blocked) return blocked
@@ -109,7 +118,7 @@ export async function POST(
         prompt: identidad.promptCreacion,
         imageUrls: referencias,
         aspectRatio: '9:16',
-      })
+      }, kieKey)
       return uploadToStorage(id, bytes, 'image/png', `avatar-${personaje.id}`)
     }))
 

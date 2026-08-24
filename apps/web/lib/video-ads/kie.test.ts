@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import {
   buildTaskBody, snapDuration, resolutionFor, parseTaskDetail, createVideoTask,
-  DURATIONS, KIE_PROMPT_MAX,
+  DURATIONS, KIE_PROMPT_MAX, resolveKey,
 } from './kie'
 import { CPS_MAX, CPS_MIN } from './forensic'
 
@@ -177,18 +177,35 @@ describe('createVideoTask', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(body), { status: 200 })))
 
   it('devuelve el taskId cuando la creación es real', async () => {
-    process.env.KIE_API_KEY = 'k'
     ok({ code: 200, msg: 'success', data: { taskId: 'veo_1' } })
-    await expect(createVideoTask({ images: IMAGES, prompt: 'x', durationSec: 6 })).resolves.toBe('veo_1')
+    await expect(createVideoTask({ images: IMAGES, prompt: 'x', durationSec: 6 }, 'key-del-usuario'))
+      .resolves.toBe('veo_1')
   })
 
   it('un 422 que viene DENTRO de un HTTP 200 tiene que lanzar', async () => {
     // Veo devuelve status 200 con `code: 422` en los errores de validación. Mirar solo
     // `res.ok` dejaría pasar el fallo como éxito, y el polling esperaría para siempre un
     // taskId que no existe — el lote quedaría "generando" sin nada detrás.
-    process.env.KIE_API_KEY = 'k'
     ok({ code: 422, msg: 'Duration must be 4, 6 or 8 seconds' })
-    await expect(createVideoTask({ images: IMAGES, prompt: 'x', durationSec: 6 }))
+    await expect(createVideoTask({ images: IMAGES, prompt: 'x', durationSec: 6 }, 'key-del-usuario'))
       .rejects.toThrow(/422/)
+  })
+})
+
+/**
+ * BYOK estricto: `resolveKey` ya NO cae a `process.env.KIE_API_KEY`. El fallback hacía
+ * que el hub pagara renders ajenos en silencio — el peor modo de fallo posible para un
+ * control de costo.
+ */
+describe('resolveKey', () => {
+  it('sin key del usuario lanza aunque el entorno tenga una', () => {
+    vi.stubEnv('KIE_API_KEY', 'key-del-hub')
+    expect(() => resolveKey(null)).toThrow(/API key de KIE/)
+    expect(() => resolveKey('   ')).toThrow(/API key de KIE/)
+    vi.unstubAllEnvs()
+  })
+
+  it('devuelve la del usuario, recortada', () => {
+    expect(resolveKey('  key-del-usuario  ')).toBe('key-del-usuario')
   })
 })

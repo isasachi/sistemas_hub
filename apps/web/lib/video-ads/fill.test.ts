@@ -512,17 +512,23 @@ describe('acceptRewrite', () => {
     expect(r.fidelidad).toBeLessThan(0.85)
   })
 
-  // La reescritura es texto libre: no pasa por `rejectBadValues`. Caso real — afirmó que
-  // unas gomitas de melatonina llevan "vitamina B6", que no está en ningún dato.
-  it('rechaza la reescritura que afirma algo que no está en ninguna fuente', () => {
+  // ⚠️ ESTE TEST AFIRMABA LO CONTRARIO Y SE INVIRTIÓ A PROPÓSITO (2026-08-24). El guard
+  // `ungrounded` rechazaba toda palabra de contenido que no estuviera ya en la plantilla,
+  // los inputs, los valores o la etiqueta — o sea exactamente lo que ahora se le PIDE al
+  // modelo: autocompletar el hueco deduciendo del contexto. Con el guard puesto, cada
+  // reescritura autocompletada caía al relleno determinista y el guión volvía a salir con
+  // `[PENDIENTE: …]`: la función nueva no haría nada.
+  //
+  // Lo que sostiene "la plantilla no se inventa" es `FIDELIDAD_MIN` sobre el ANDAMIAJE,
+  // que el test de arriba fija — no el vocabulario de los huecos.
+  it('acepta un valor deducido que no aparece literal en las fuentes', () => {
     const r = acceptRewrite({
       plantilla: 'Número dos, tiene [ingrediente 2] que también ayuda a [beneficio 2]',
       piso: 'Número dos, tiene melatonina que también ayuda a dormir',
       propuesta: 'Número dos, tiene vitamina B6 que también ayuda a dormir',
       fuentes: ['gomitas de melatonina', 'Melatonin 10mg Per Serving'],
     })
-    expect(r.ok).toBe(false)
-    expect(r.ok === false && r.motivo).toContain('vitamina')
+    expect(r.ok).toBe(true)
   })
 
   // La flexión no es invención: la libertad gramatical es justo lo que esto viene a ganar.

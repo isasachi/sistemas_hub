@@ -139,7 +139,11 @@ export default function Section6Lotes() {
           </p>
         </div>
         {error && <div className={errorBox}>{error}</div>}
-        <button onClick={() => submit(false)} disabled={submitting} className={btnPrimary}>
+        {/* `running` además de `submitting`: el POST vuelve enseguida (crea las tareas
+            y responde), pero el render sigue corriendo minutos después. Sin esto, un
+            click de más encadena otra petición y agota los créditos de KIE del usuario.
+            El servidor ya responde 409 al duplicado — esto es para que no llegue. */}
+        <button onClick={() => submit(false)} disabled={submitting || running} className={btnPrimary}>
           {submitting ? <><span className={spinner} />Iniciando el render...</> : `Generar los ${preview.length} lotes →`}
         </button>
       </div>
@@ -220,7 +224,7 @@ export default function Section6Lotes() {
           confundiría "seguimos reintentando solos" con "algo requiere tu acción". */}
       {error && !running && <div className={errorBox}>{error}</div>}
       {stuck && (
-        <button onClick={() => submit(true)} disabled={submitting} className={btnPrimary}>
+        <button onClick={() => submit(true)} disabled={submitting || running} className={btnPrimary}>
           {submitting ? <><span className={spinner} />Reintentando...</> : 'Reintentar el render →'}
         </button>
       )}
@@ -235,7 +239,7 @@ export default function Section6Lotes() {
             adáptalo otra vez antes de generar de nuevo — si no cambia nada, este botón
             no crea una versión distinta.
           </p>
-          <button onClick={() => submit(true)} disabled={submitting} className={btnGhost}>
+          <button onClick={() => submit(true)} disabled={submitting || running} className={btnGhost}>
             {submitting ? <><span className={spinner} />Generando...</> : 'Generar otra versión →'}
           </button>
         </div>

@@ -19,7 +19,7 @@
  *   - `aspect_ratio` incluye 9:16 y 2:3; `resolution` 1K | 2K | 4K; `output_format` png | jpg.
  */
 
-import { fetchKie, KIE_HTTP_TIMEOUT_MS } from './kie'
+import { fetchKie, KIE_HTTP_TIMEOUT_MS, resolveKey } from './kie'
 
 const KIE_BASE = 'https://api.kie.ai/api/v1/jobs'
 const MODEL = 'nano-banana-pro'
@@ -80,10 +80,15 @@ export function parseImageTask(data: unknown): ImageTaskDetail {
   }
 }
 
-function apiKey(): string {
-  const key = process.env.KIE_API_KEY
-  if (!key) throw new Error('KIE_API_KEY no está configurada')
-  return key
+/**
+ * ⚠️ La key la pone el USUARIO, igual que en el render (`resolveKey`, kie.ts). Antes
+ * esto leía `process.env.KIE_API_KEY` sin más, así que el avatar y los frames —que
+ * también son tareas pagadas de KIE— se cobraban a la cuenta del hub mientras el
+ * render sí iba a la del usuario. Ya no hay key global: sin key del usuario esto
+ * lanza antes de tocar la API.
+ */
+function apiKey(userKey?: string | null): string {
+  return resolveKey(userKey)
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
@@ -97,6 +102,8 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
  */
 export async function generateImage(
   input: ImageTaskInput,
+  // La API key de KIE del usuario. Obligatoria: no hay key del hub a la que caer.
+  userKey?: string | null,
   // ⚠️ El tiempo VARÍA mucho: lo típico medido son ~56 s, pero una corrida se pasó de
   // 240 s y la siguiente con el mismo prompt volvió a 56 s. Como los frames se generan
   // en paralelo, el tope de la ruta lo marca el más lento, así que 240 s es lo máximo
@@ -113,7 +120,7 @@ export async function generateImage(
 
   const res = await fetchKie(`${KIE_BASE}/createTask`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey()}`, 'Content-Type': 'application/json' },
+    headers: { Authorization: `Bearer ${apiKey(userKey)}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(buildImageTaskBody(input)),
   })
   const json = (await res.json().catch(() => null)) as
@@ -138,7 +145,7 @@ export async function generateImage(
     // petición no puede sobrevivir al plazo total que se supone que respeta.
     const r = await fetchKie(
       `${KIE_BASE}/recordInfo?taskId=${encodeURIComponent(taskId)}`,
-      { headers: { Authorization: `Bearer ${apiKey()}` } },
+      { headers: { Authorization: `Bearer ${apiKey(userKey)}` } },
       Math.max(1_000, Math.min(KIE_HTTP_TIMEOUT_MS, limite - Date.now())),
     )
     const body = (await r.json().catch(() => null)) as { data?: unknown } | null

@@ -576,14 +576,18 @@ describe('POST generate-lotes — BYOK: la API key de KIE es del usuario', () =>
     expect(vi.mocked(claimFreshLotes)).not.toHaveBeenCalled()
   })
 
-  // El env sigue siendo el respaldo del hub (dev, y quien todavía no cargó la suya).
-  it('sin key del usuario pero con KIE_API_KEY en el entorno: renderiza igual', async () => {
+  // ⚠️ ESTE TEST AFIRMABA LO CONTRARIO Y SE INVIRTIÓ A PROPÓSITO (2026-08-24). El env
+  // `KIE_API_KEY` ERA el respaldo del hub, y ese respaldo es justamente el agujero: un
+  // usuario sin key renderizaba a costa de la cuenta del hub, en silencio y sin que nada
+  // lo reportara. `resolveKey` ya no lo mira, ni en dev.
+  it('con KIE_API_KEY en el entorno pero sin key del usuario: 400 igual, no renderiza', async () => {
     vi.mocked(currentKieKey).mockResolvedValue(null)
     vi.stubEnv('KIE_API_KEY', 'key-del-hub')
 
     const res = await POST(req(), ctx())
-    expect(res.status).toBe(200)
-    expect(vi.mocked(createVideoTask)).toHaveBeenCalled()
+    expect(res.status).toBe(400)
+    expect(vi.mocked(createVideoTask)).not.toHaveBeenCalled()
+    expect(vi.mocked(checkGenQuota)).not.toHaveBeenCalled()
     vi.unstubAllEnvs()
   })
 })

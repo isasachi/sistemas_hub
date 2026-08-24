@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getVideoSession, updateVideoSession, claimFreshLotes } from '@/lib/video-ads/db'
-import { createVideoTask, resolveKey, snapDuration, KIE_PROMPT_MAX, type VideoImage } from '@/lib/video-ads/kie'
+import { createVideoTask, resolveKey, snapDuration, KIE_PROMPT_MAX, SIN_KEY, type VideoImage } from '@/lib/video-ads/kie'
 import { currentKieKey } from '@/lib/user-settings'
 import { frameSpecs, pairFrames, generateBoundaryFrames } from '@/lib/video-ads/frames'
 import { personajesDe, hablantesPorTiempo, vozEnOffPorTiempo } from '@/lib/video-ads/personajes'
@@ -234,7 +234,7 @@ export async function POST(
     kieKey = resolveKey(await currentKieKey())
   } catch {
     return NextResponse.json(
-      { error: 'Falta tu API key de KIE. Cárgala en Ajustes y vuelve a intentar.' },
+      { error: SIN_KEY },
       { status: 400 },
     )
   }
@@ -334,7 +334,9 @@ export async function POST(
         productUrl: session.product_url,
         productDesc,
         specs: jobs,
-        generate: (input) => generateImage({ ...input, aspectRatio: '9:16' }),
+        // ⚠️ Con la key del USUARIO. Los frames son tareas pagadas de KIE igual que el
+        // render; hasta 2026-08-24 iban por `process.env.KIE_API_KEY` y las pagaba el hub.
+        generate: (input) => generateImage({ ...input, aspectRatio: '9:16' }, kieKey),
         upload: (bytes, nombre) => uploadToStorage(id, bytes, 'image/png', nombre),
       })
     } catch (err) {

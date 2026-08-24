@@ -156,17 +156,24 @@ export async function fetchKie(url: string, init: RequestInit = {}, timeoutMs = 
 }
 
 /**
- * La key con la que se llama a KIE. BYOK: el render lo paga el usuario con SU
- * cuenta, así que la key sale de `user_settings` y se pasa por parámetro; el env
- * `KIE_API_KEY` queda como respaldo del hub (dev, y las sesiones de quien todavía
- * no cargó la suya).
+ * La key con la que se llama a KIE. BYOK ESTRICTO: el render lo paga el usuario con
+ * SU cuenta, así que la key sale de `user_settings` y se pasa por parámetro.
+ *
+ * ⚠️ YA NO HAY KEY GLOBAL. Hasta 2026-08-24 esto caía a `process.env.KIE_API_KEY`
+ * cuando el usuario no había cargado la suya: el hub terminaba pagando renders,
+ * avatares y frames ajenos sin que nada lo reportara. El fallback se quitó entero
+ * —también para dev— porque un respaldo silencioso es exactamente el modo de fallo
+ * que hay que evitar: si la key falta, se ve.
  *
  * ⚠️ Se resuelve por parámetro y no leyendo la sesión acá adentro para que este
  * módulo siga siendo el cliente HTTP puro que ya era — testeable sin cookies.
  */
+export const SIN_KEY =
+  'Para generar video necesitas tu propia API key de KIE. Cárgala en Mi cuenta y vuelve a intentarlo.'
+
 export function resolveKey(userKey?: string | null): string {
-  const key = (userKey ?? '').trim() || process.env.KIE_API_KEY
-  if (!key) throw new Error('Falta la API key de KIE: cárgala en Ajustes.')
+  const key = (userKey ?? '').trim()
+  if (!key) throw new Error('Falta tu API key de KIE: cárgala en Mi cuenta.')
   return key
 }
 

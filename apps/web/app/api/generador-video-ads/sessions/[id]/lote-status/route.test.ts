@@ -15,6 +15,10 @@ vi.mock('@/lib/storage', () => ({
 // Las rutas resuelven la identidad para acotar la sesión a su dueño; `cookies()`
 // no existe fuera de una request, así que la identidad se fija acá.
 vi.mock('@/lib/product-hunter/session', () => ({ readUserId: async () => 'u1' }))
+// BYOK estricto: en KIE una tarea solo la ve la cuenta que la creó, así que sin key del
+// usuario la ruta ni sondea (ver el `continue` de `route.ts`). Los casos de acá SÍ
+// sondean, así que la key tiene que existir.
+vi.mock('@/lib/user-settings', () => ({ currentKieKey: async () => 'key-del-usuario' }))
 
 import { NextRequest } from 'next/server'
 import { GET } from './route'

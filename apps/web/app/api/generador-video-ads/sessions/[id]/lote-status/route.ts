@@ -70,7 +70,12 @@ export async function GET(
       continue
     }
 
-    if (!l.taskId) { lotes.push(l); continue }
+    // Sin `taskId` no hay nada que consultar; sin key TAMPOCO, porque en KIE una tarea
+    // solo la ve la cuenta que la creó. Se salta el sondeo y se conserva el lote tal
+    // cual — pasa con los renders creados cuando existía la key global del hub. Ojo:
+    // solo se salta el SONDEO, no el resto de la ruta, que sigue recalculando `done` y
+    // corrigiendo la columna cacheada `render_done`.
+    if (!l.taskId || !kieKey) { lotes.push(l); continue }
 
     try {
       const d = await getTaskDetail(l.taskId, kieKey)

@@ -583,15 +583,15 @@ export function acceptRewrite(args: {
   propuesta: string
   /**
    * Todo lo que el usuario entregó: inputs, texto de la etiqueta y los valores elegidos.
-   * La reescritura es TEXTO LIBRE y por tanto esquiva `rejectBadValues`, así que este es
-   * el único punto donde se puede comprobar que no aparezca contenido de la nada. Medido:
-   * sin esto, una reescritura afirmó que unas gomitas de melatonina llevan "vitamina B6"
-   * —que no está ni en los inputs ni en la etiqueta— y otra convirtió la "hoja verde" del
-   * logo en un ingrediente.
+   *
+   * ponytail: hoy NO se usa — alimentaba el guard de invención que se quitó arriba. Se
+   * conserva el parámetro (opcional) para no tocar los dos call sites ni los tests, y
+   * porque es el enganche natural si algún día hace falta un guard acotado (por ejemplo,
+   * solo contra premios y avales médicos, que el prompt sí sigue prohibiendo).
    */
-  fuentes: string[]
+  fuentes?: string[]
 }): { ok: true; fidelidad: number } | { ok: false; motivo: string; fidelidad: number } {
-  const { plantilla, piso, propuesta, fuentes } = args
+  const { plantilla, piso, propuesta } = args
   const t = propuesta.trim()
   const fidelidad = scaffoldFidelity(plantilla, t)
   if (!t) return { ok: false, motivo: 'vacía', fidelidad }
@@ -613,8 +613,18 @@ export function acceptRewrite(args: {
   const eco = repeticionInmediata(t)
   if (eco) return { ok: false, motivo: `repite "${eco}" dos veces seguidas`, fidelidad }
 
-  const inventada = ungrounded(t, [plantilla, piso, ...fuentes])
-  if (inventada) return { ok: false, motivo: `afirma "${inventada}", que no está en ningún dato`, fidelidad }
+  // ⚠️ ACÁ HABÍA UN GUARD DE INVENCIÓN (`ungrounded`) Y SE QUITÓ A PROPÓSITO
+  // (2026-08-24, decisión del dueño del repo). Rechazaba toda palabra de contenido que
+  // no estuviera ya en la plantilla, los inputs, los valores o la etiqueta — o sea,
+  // exactamente lo que ahora se le PIDE al modelo: autocompletar los huecos deduciendo
+  // del contexto y, si no alcanza, aproximando. Dejarlo puesto habría hecho que cada
+  // reescritura autocompletada cayera al relleno determinista y el guión volviera a
+  // salir con `[PENDIENTE: …]`: la función nueva no haría nada y el síntoma sería
+  // "no cambió nada", que es el peor modo de fallo posible.
+  //
+  // Lo que NO se quitó, porque es la otra mitad de la orden ("la plantilla no se
+  // inventa"): `FIDELIDAD_MIN` sobre el andamiaje, el eco y el conteo de pendientes.
+  // Es el andamiaje lo que tiene que sobrevivir intacto, no el vocabulario.
 
   return { ok: true, fidelidad }
 }

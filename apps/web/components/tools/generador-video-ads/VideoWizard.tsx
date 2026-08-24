@@ -84,7 +84,7 @@ export default function VideoWizard() {
     {
       label: 'Validación',
       title: 'Antes de seguir, confirmemos los datos',
-      hint: 'Nada se rellena por suposición. Si algo falta, el proceso se detiene aquí.',
+      hint: 'Revisemos juntos que esté todo. Si falta algo importante, mejor lo completas ahora que descubrirlo en el video terminado.',
     },
     {
       label: 'Plantilla',
@@ -94,7 +94,7 @@ export default function VideoWizard() {
     {
       label: 'Guión',
       title: 'Tu guión, con la estructura del original',
-      hint: 'Solo cambian las variables: producto, ángulo, avatar y problema. El resto es literal.',
+      hint: 'Completamos los huecos con tu producto, tu ángulo y tu público. La estructura del original no se toca: solo cambia lo que va dentro.',
     },
     {
       label: 'Lotes',

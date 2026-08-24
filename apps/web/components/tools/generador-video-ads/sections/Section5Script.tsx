@@ -6,7 +6,7 @@ import type { AdaptedScript } from '@/lib/video-ads/adapt'
 import type { VoiceProfile } from '@/lib/video-ads/character'
 import { STEP } from '@/lib/video-ads/steps'
 import { extractPending } from '@/lib/video-ads/pending'
-import { segmentar, unir } from '@/lib/video-ads/segments'
+import { aTextoPlano, deTextoPlano } from '@/lib/video-ads/guion-plano'
 import { btnPrimary, btnGhost, errorBox, spinner, seg } from './shared'
 
 // FASE 3 en pantalla + FASE 4/4.5 encadenadas: el personaje y la voz se construyen
@@ -19,17 +19,16 @@ export default function Section5Script() {
   // construir el personaje falla, mezclar los dos mensajes en un solo `error` haría
   // parecer que nada se guardó — cuando en realidad el guión nuevo ya está en la base.
   const [characterError, setCharacterError] = useState<string | null>(null)
-  // Ediciones del usuario, por FRASE: la clave es `posiciónDeToma:posiciónDeFrase`.
-  // El dato guardado sigue siendo UNA locución por toma — las frases son solo para
-  // editar, y se vuelven a unir al guardar (`unir`, segments.ts). Un video sin cortes da
-  // una sola toma con el guión entero, y trabajar eso en un único textarea de 700
-  // caracteres era impracticable.
-  const [ediciones, setEdiciones] = useState<Record<string, string>>({})
+  // El guión se LEE por defecto y se edita cuando el usuario lo pide: ahora llega
+  // autocompletado, así que lo primero que hay que hacer con él es leerlo entero. Al
+  // entrar en edición se vuelca a UN solo textarea (`borrador`) con una cabecera por
+  // toma; al guardar, esas cabeceras son las que lo devuelven a una locución por toma.
+  const [borrador, setBorrador] = useState<string | null>(null)
   const [guardando, setGuardando] = useState(false)
 
   async function run() {
     if (!sessionId) return
-    setLoading(true); setError(null); setCharacterError(null); setEdiciones({})
+    setLoading(true); setError(null); setCharacterError(null); setBorrador(null)
     try {
       const a = await fetch(`/api/generador-video-ads/sessions/${sessionId}/adapt-script`, {
         method: 'POST',
@@ -75,7 +74,7 @@ export default function Section5Script() {
 
   // Guarda el texto editado. No llama a ningún modelo: reescribe las locuciones y
   // recalcula caracteres, diferencia y marcadores pendientes en el servidor.
-  async function guardar() {
+  async function guardar(tramos: string[]) {
     if (!sessionId) return
     setGuardando(true); setError(null)
     try {
@@ -83,16 +82,15 @@ export default function Section5Script() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          // Se manda una locución por toma, con las frases ya unidas: el dato nunca
-          // deja de ser un string por toma, la partición es solo de pantalla.
-          locuciones: [...new Set(Object.keys(ediciones).map((k) => Number(k.split(':')[0])))]
-            .map((indice) => ({ indice, texto: lineas[indice].texto })),
+          // Una locución por toma, siempre: el textarea único es de pantalla, el dato
+          // guardado nunca deja de ser un string por toma (ver `guion-plano.ts`).
+          locuciones: tramos.map((texto, indice) => ({ indice, texto })),
         }),
       })
       const d = (await r.json()) as { adapted?: AdaptedScript; error?: string }
       if (!r.ok) throw new Error(d.error ?? 'No se pudo guardar el guión')
       patch({ adapted: d.adapted! })
-      setEdiciones({})
+      setBorrador(null)
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -116,19 +114,19 @@ export default function Section5Script() {
     )
   }
 
-  // El texto que el usuario está viendo: cada toma partida en frases, con lo que haya
-  // editado pisando lo guardado. `texto` es la toma entera re-unida — es lo que se
-  // persiste y lo que alimenta todos los contadores.
-  const lineas = adapted.tomas.map((t, i) => {
-    const frases = segmentar(t.locucion).map((f, j) => ediciones[`${i}:${j}`] ?? f)
-    return { ...t, i, frases, texto: unir(frases) }
-  })
+  // En lectura, lo guardado. En edición, lo que hay escrito en el textarea único — si
+  // sus cabeceras siguen cuadrando (`deTextoPlano`); si no, los contadores se quedan en
+  // lo guardado y el aviso de abajo explica qué se rompió.
+  const tramos = borrador === null ? null : deTextoPlano(borrador, adapted.tomas.length)
+  const lineas = adapted.tomas.map((t, i) => ({ ...t, i, texto: tramos?.[i] ?? t.locucion }))
   const guionActual = lineas.map((l) => l.texto).join(' ')
   // Del TEXTO, no de `adapted.variablesPendientes`: el modelo no mantiene esa lista
   // sincronizada con los marcadores que deja (ver `extractPending`), y acá además el
   // usuario los está borrando a mano mientras escribe.
   const pendientes = extractPending(guionActual)
-  const sucio = Object.keys(ediciones).length > 0
+  // Sucio = hay un borrador abierto y distinto de lo guardado. Bloquea avanzar: el
+  // render lee `adapted` de la BASE, no del store.
+  const sucio = borrador !== null && borrador !== aTextoPlano(adapted.tomas)
   // El largo del original no viaja al cliente, pero se despeja de lo que sí: la
   // diferencia guardada es `adaptado - original`, así que `adaptado - diferencia` es el
   // original. Permite mover el contador mientras se escribe, que es la métrica que pide
@@ -140,9 +138,7 @@ export default function Section5Script() {
   // toma viene del análisis forense y NO se recalcula con el texto nuevo: el clip que se
   // le pide a KIE dura esos segundos pase lo que pase. Así que una línea que creció el
   // doble tiene que decirse al doble de velocidad, y una que se acortó deja al modelo
-  // rellenando silencio. Eso es lo que se escuchó como "una habla muy rápido y la otra
-  // muy lento": el contador global de caracteres puede estar bien y aun así cada toma
-  // ir a un ritmo distinto, porque hasta ahora nada se medía por toma.
+  // rellenando silencio.
   //
   // Se muestra, no se bloquea: recalcular las duraciones para que el texto entre haría
   // crecer el número de lotes, y cada lote es una llamada pagada. Cuánto recortar es
@@ -160,84 +156,118 @@ export default function Section5Script() {
         <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[#c9a227]">
           Guión final adaptado
         </div>
-        {/* El spec de la FASE 3 dice "No preguntes nada": lo que no se puede completar
-            con seguridad queda marcado en el guión y lo escribe el usuario. Antes había
-            un formulario con un campo por variable pendiente — preguntaba justo lo que
-            el spec prohíbe y, encima, no dejaba tocar el resto de la frase cuando el
-            modelo elegía un valor que no concordaba ("un efecto iluminadora"). Editar la
-            línea cubre los dos casos con un solo mecanismo. */}
+        {/* El guión llega AUTOCOMPLETADO: los huecos se rellenan deduciendo de todo lo
+            que la sesión recogió y, cuando no alcanza, con lo más aproximado para un
+            producto de esta categoría. Lo que NO se inventa es la plantilla — el texto
+            que rodea a los huecos sigue siendo el del anuncio original. Por eso lo
+            primero que se ve es el guión para leerlo; la edición se abre cuando el
+            usuario la pide. Antes esto era una caja de texto por frase: con huecos que
+            había que rellenar a mano tenía sentido, con el guión ya completo lo que
+            estorba es el formulario. */}
         <p className="mb-3 text-[11.5px] leading-relaxed text-[#8b8b8b]">
-          Una línea por toma, en el orden del original. Edítalas si algo no suena natural.
-          Lo que quedó entre corchetes no lo inventamos: escríbelo tú.
+          Lo completamos con lo que nos diste y con lo que se deduce de ello. Léelo de
+          corrido: donde hayamos aproximado, cámbialo por lo que de verdad dice tu producto.
         </p>
 
-        <div className="flex flex-col gap-4">
-          {lineas.map((l) => {
-            const falta = l.texto.includes('[PENDIENTE:')
-            const cabe = cabenEn(l.duracionSeg)
-            // El andamiaje es copia literal del original salvo en este caso, así que se
-            // muestra el ANTES: la razón de permitir el cambio es que sea auditable, y
-            // un aviso de que "algo cambió" no le sirve de nada a quien tiene que juzgarlo.
-            const ajuste = adapted.ajustesAndamiaje?.find((a) => a.n === l.n)
-            const largo = holgado(l)
-            // ⚠️ Una toma MUDA es un caso legítimo, no un campo sin llenar. El forense
-            // marcaba los cortes sin habla con el marcador "No aparece" y el render lo
-            // pronunciaba; ahora se limpia a cadena vacía (`limpiarDialogo`), y sin
-            // decirlo acá la caja vacía se lee como "te faltó escribir esto". El riesgo
-            // no es cosmético: si el usuario la rellena, le agrega al anuncio diálogo que
-            // el original no tenía, que es justo lo que la adaptación literal prohíbe.
-            const muda = !l.texto.trim()
-            return (
-              <div key={l.i} className="flex flex-col gap-1">
-                <div className="flex items-center justify-between text-[11px] text-[#8b8b8b]">
-                  <span>Toma {l.n} · {seg(l.duracionSeg)}</span>
-                  <span className="flex items-center gap-2">
-                    {muda ? (
-                      <span className="text-[#8b8b8b]" title="En el video original nadie habla durante esta toma">
-                        sin diálogo
+        {borrador === null ? (
+          <>
+            <div className="flex flex-col gap-3.5">
+              {lineas.map((l) => {
+                const falta = l.texto.includes('[PENDIENTE:')
+                const cabe = cabenEn(l.duracionSeg)
+                // El andamiaje es copia literal del original salvo en este caso, así que
+                // se muestra el ANTES: la razón de permitir el cambio es que sea
+                // auditable, y "algo cambió" no le sirve a quien tiene que juzgarlo.
+                const ajuste = adapted.ajustesAndamiaje?.find((a) => a.n === l.n)
+                const largo = holgado(l)
+                // ⚠️ Una toma MUDA es un caso legítimo, no un campo sin llenar: el
+                // original no tenía habla ahí. Si se lee como un hueco, el usuario le
+                // agrega al anuncio diálogo que el original no tenía.
+                const muda = !l.texto.trim()
+                return (
+                  <div key={l.i} className="flex flex-col gap-1">
+                    <div className="flex items-center justify-between text-[11px] text-[#8b8b8b]">
+                      <span>Toma {l.n} · {seg(l.duracionSeg)}</span>
+                      <span className="flex items-center gap-2">
+                        {muda ? (
+                          <span title="En el video original nadie habla durante esta toma">sin diálogo</span>
+                        ) : cpsOriginal > 0 && (
+                          <span
+                            className={largo ? 'text-amber-400' : ''}
+                            title="Caracteres que caben en esta toma al ritmo del video original"
+                          >
+                            {l.texto.length}/{cabe} car
+                          </span>
+                        )}
+                        {falta && <span className="text-amber-400">falta completar</span>}
                       </span>
-                    ) : cpsOriginal > 0 && (
-                      <span className={largo ? 'text-amber-400' : ''} title="Caracteres que caben en esta toma al ritmo del video original">
-                        {l.texto.length}/{cabe} car
-                      </span>
+                    </div>
+                    {ajuste && (
+                      <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.06] px-2.5 py-2 text-[11px] leading-relaxed">
+                        <div className="text-amber-400">Se ajustó la redacción — {ajuste.motivo}</div>
+                        <div className="mt-1 text-[#8b8b8b]">
+                          antes: <span className="line-through">{ajuste.antes}</span>
+                        </div>
+                      </div>
                     )}
-                    {falta && <span className="text-amber-400">falta completar</span>}
-                  </span>
-                </div>
-                {ajuste && (
-                  <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.06] px-2.5 py-2 text-[11px] leading-relaxed">
-                    <div className="text-amber-400">Se ajustó la redacción — {ajuste.motivo}</div>
-                    <div className="mt-1 text-[#8b8b8b]">antes: <span className="line-through">{ajuste.antes}</span></div>
-                  </div>
-                )}
-                {/* Una caja por frase. El corte va por punto natural — el mismo criterio
-                    con el que `splitLongToma` reparte en clips — así lo que se edita por
-                    separado se parece a lo que después se renderiza por separado. */}
-                <div className="flex flex-col gap-1.5">
-                  {l.frases.map((f, j) => (
-                    <textarea
-                      key={j}
-                      value={f}
-                      onChange={(e) => setEdiciones({ ...ediciones, [`${l.i}:${j}`]: e.target.value })}
-                      placeholder={muda ? 'En el original nadie habla acá. Déjala vacía para que el clip salga en silencio.' : undefined}
-                      rows={2}
-                      className={`jr-field rounded-lg px-3 py-2 text-[13px] leading-relaxed ${
-                        f.includes('[PENDIENTE:') ? 'border-amber-500/40' : ''
+                    <p
+                      className={`text-[13.5px] leading-relaxed ${
+                        muda ? 'italic text-[#8b8b8b]' : falta ? 'text-amber-200' : 'text-[#F6F2EB]'
                       }`}
-                    />
-                  ))}
-                </div>
+                    >
+                      {muda ? 'Sin diálogo: el clip sale en silencio, como el original.' : l.texto}
+                    </p>
+                  </div>
+                )
+              })}
+            </div>
+            <button
+              onClick={() => setBorrador(aTextoPlano(adapted.tomas))}
+              className={`${btnGhost} mt-4`}
+            >
+              Editar el guión
+            </button>
+          </>
+        ) : (
+          <>
+            {/* UN solo textarea con todo el guión. Las cabeceras de toma son lo que lo
+                devuelve a una locución por toma al guardar: sin ellas no hay forma de
+                saber qué texto va con qué clip, y cada clip tiene su propia duración.
+                Por eso, si no cuadran, se avisa en vez de adivinar (guion-plano.ts). */}
+            <textarea
+              value={borrador}
+              onChange={(e) => setBorrador(e.target.value)}
+              rows={Math.min(34, 6 + borrador.split('\n').length)}
+              spellCheck
+              className="jr-field w-full rounded-lg px-3 py-2 font-mono text-[13px] leading-relaxed"
+            />
+            <p className="mt-2 text-[11.5px] leading-relaxed text-[#8b8b8b]">
+              No borres ni muevas las líneas que separan las tomas: son las que reparten el
+              texto entre los clips.
+            </p>
+            {tramos === null && (
+              <div className="mt-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[12px] leading-relaxed text-amber-300">
+                Faltan o sobran separadores de toma, así que no se puede saber qué texto va
+                en cada clip. Deja exactamente {adapted.tomas.length}{' '}
+                {adapted.tomas.length === 1 ? 'separador' : 'separadores'} y podrás guardar.
               </div>
-            )
-          })}
-        </div>
+            )}
+            <button onClick={() => setBorrador(null)} disabled={guardando} className={`${btnGhost} mt-3`}>
+              Descartar los cambios
+            </button>
+          </>
+        )}
 
         <p className="mt-3 text-[11.5px] text-[#8b8b8b]">
           {guionActual.length} caracteres ({diferencia >= 0 ? '+' : ''}{diferencia} vs. el original)
         </p>
 
         {sucio && (
-          <button onClick={guardar} disabled={guardando} className={`${btnPrimary} mt-3`}>
+          <button
+            onClick={() => tramos && guardar(tramos)}
+            disabled={guardando || tramos === null}
+            className={`${btnPrimary} mt-3`}
+          >
             {guardando ? <><span className={spinner} />Guardando...</> : 'Guardar los cambios'}
           </button>
         )}
@@ -246,8 +276,9 @@ export default function Section5Script() {
       {!!pendientes.length && (
         <div className="rounded-2xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-[12.5px] leading-relaxed text-amber-300">
           {pendientes.length === 1 ? 'Queda un dato' : `Quedan ${pendientes.length} datos`} sin
-          completar. No los inventamos porque no estaban en lo que nos diste, y el video los
-          leería en voz alta tal cual. Escríbelos arriba y guarda.
+          completar. Son los que no podemos aproximar sin comprometerte —premios, avales
+          médicos, estudios, certificaciones o garantías—, y el video los leería en voz alta
+          tal cual. Edita el guión, escríbelos y guarda.
         </div>
       )}
 
@@ -256,7 +287,7 @@ export default function Section5Script() {
           {apretados === 1 ? 'Una toma tiene' : `${apretados} tomas tienen`} más texto del que
           entra en sus segundos. La duración de cada toma la fija el video de referencia y no
           se estira: si sobra texto, el personaje lo dice atropellado y se desincroniza de la
-          imagen. Recorta esas líneas hasta acercarlas a su cuenta.
+          imagen. Edita el guión y recorta esas tomas hasta acercarlas a su cuenta.
         </div>
       )}
 
@@ -280,8 +311,7 @@ export default function Section5Script() {
         <div className={errorBox}>{characterError}</div>
       )}
       {/* `sucio` bloquea también: el render lee `adapted` de la BASE, no del store, así
-          que avanzar con ediciones sin guardar renderizaría el texto viejo — incluidos
-          los corchetes que el usuario acaba de reemplazar en pantalla. */}
+          que avanzar con ediciones sin guardar renderizaría el texto viejo. */}
       <button
         onClick={() => patch({ step: STEP.LOTES })}
         disabled={!!pendientes.length || sucio}
