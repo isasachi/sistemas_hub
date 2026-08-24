@@ -7,6 +7,10 @@ import type { CopyElement } from '@/lib/types'
 
 const btnPrimary = 'h-11 w-full rounded-xl jr-cta text-[13px] font-bold disabled:opacity-40 transition-all duration-200 cursor-pointer border-0 font-sans flex items-center justify-center gap-2'
 
+export function mismosTextos(a: CopyElement[], b: CopyElement[]): boolean {
+  return a.length === b.length && a.every((el, i) => el.text === b[i].text)
+}
+
 function CopyCard({
   version,
   label,
@@ -64,10 +68,11 @@ export default function Section4Copy() {
   // deberían coincidir nunca: si coinciden, el modelo no templó y las dos
   // tarjetas dicen lo mismo. Se sigue detectando para no prometer en pantalla una
   // diferencia que no está.
+  // ⚠️ Se comparan los TEXTOS, no los elementos: A trae `template: null` y B lo llena, así que
+  // comparar los objetos enteros da siempre "distintas" y la guarda no detecta nada.
   // ponytail: comparación literal; si difieren en un espacio, se tratan como
   // distintas, que es el lado seguro.
-  const iguales =
-    JSON.stringify(copyVersions.versionA) === JSON.stringify(copyVersions.versionB)
+  const iguales = mismosTextos(copyVersions.versionA, copyVersions.versionB)
 
   async function handleConfirm() {
     if (!sessionId || !selected || isLoading) return
