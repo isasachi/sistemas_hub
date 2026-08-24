@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getVideoSession, updateVideoSession, claimFreshLotes } from '@/lib/video-ads/db'
-import { createVideoTask, resolveKey, snapDuration, KIE_PROMPT_MAX, SIN_KEY, type VideoImage } from '@/lib/video-ads/kie'
+import { createVideoTask, resolveKey, clampDuration, KIE_PROMPT_MAX, SIN_KEY, type VideoImage } from '@/lib/video-ads/kie'
 import { currentKieKey } from '@/lib/user-settings'
-import { frameSpecs, pairFrames, generateBoundaryFrames } from '@/lib/video-ads/frames'
+import { anchorSpecs, generateAnchorImages } from '@/lib/video-ads/anchors'
 import { personajesDe, hablantesPorTiempo, vozEnOffPorTiempo } from '@/lib/video-ads/personajes'
 import { enProsa } from '@/lib/video-ads/forensic'
-import { generateImage } from '@/lib/video-ads/nano-banana'
-import { uploadToStorage } from '@/lib/storage'
+import { uploadToStorage, fetchAsBase64 } from '@/lib/storage'
+import { openaiGenerateImage } from '@/lib/llm-openai'
 import { planoPorTiempoDe, groupIntoLotes, buildLotePrompt, camaraDeLote, type Lote } from '@/lib/video-ads/lotes'
 import { totalDuration, resumeSeed, mergeRescue, isPaidResume, scriptFingerprint, renderDone } from '@/lib/video-ads/render-lotes'
 import { AdaptedScriptSchema, type AdaptedScript } from '@/lib/video-ads/adapt'
@@ -130,11 +130,16 @@ export async function POST(
   const cortes = session.forensic_analysis?.cortes ?? []
   const camaraFallback = cortes[0]?.camara?.trim() || 'primer plano, cámara en mano'
 
-  // Un lote es un clip CONTINUO: si abarca dos encuadres le estamos pidiendo un corte
-  // de montaje dentro de un plano-secuencia, y el render devuelve uno solo de los dos
-  // (medido). Cerrar el lote donde el original corta el plano es además donde el montaje
-  // pone el corte — el entregable son N clips independientes. Cuesta más lotes, o sea
-  // más llamadas pagadas, y por eso está acá y no escondido en `groupIntoLotes`.
+  // ⚠️ EL MAPA DE PLANOS YA NO CIERRA LOTES por defecto (2026-08-24): `groupIntoLotes`
+  // pasó a `maxPlanos = Infinity`, así que un clip de hasta 30 s concatena varias escenas
+  // del original. Lo que hace viable ese cambio son las IMÁGENES ANCLA — cada escena
+  // nueva del clip lleva su propio fotograma de referencia, que es justo lo que faltaba
+  // cuando se midió que un clip con dos encuadres se renderizaba con uno.
+  //
+  // El mapa se sigue pasando porque es el dial: bajar `maxPlanos` a 1 devuelve el corte
+  // por encuadre (máxima fidelidad, ~4× llamadas pagadas) sin tocar nada más. Y lo
+  // consumen igual `anchorSpecs` (para saber dónde empieza cada escena) y el plano por
+  // toma del prompt.
   const planoPorTiempo = planoPorTiempoDe(cortes)
   const agrupados = groupIntoLotes(adapted.tomas, planoPorTiempo)
   if (!agrupados.length) return NextResponse.json({ error: 'El guión no tiene tomas' }, { status: 409 })
@@ -308,45 +313,102 @@ export async function POST(
   }
 
   /**
-   * FRAMES FRONTERA. `frames[i]` cierra el lote i y abre el i+1; el avatar abre el
-   * primero, así que hacen falta N y no N+1.
+   * IMÁGENES ANCLA (`anchors.ts`). Reemplazan a los frames frontera de Veo.
    *
-   * Se REUSAN los guardados cuando esto es una reanudación real y coinciden en cantidad.
-   * Regenerarlos sería el peor de los fallos silenciosos de este modo: el clip pendiente
-   * arrancaría en una pose distinta de donde terminó el que ya se pagó, y la continuidad
-   * —el motivo entero de usar keyframes— se rompería sin que nada lo reporte.
+   * Un clip puede durar 30 s y contener varias escenas del original. La primera escena
+   * de cada lote arranca del avatar; cada escena SIGUIENTE necesita un fotograma que le
+   * diga cómo se ve, o el modelo la inventa y devuelve el mismo encuadre de antes.
+   *
+   * Se REUSAN las guardadas cuando esto es una reanudación real y coinciden en cantidad:
+   * regenerarlas cambiaría el aspecto de un clip pendiente respecto de los que ya se
+   * pagaron, sin que nada lo reporte. Se guardan en la misma columna `frames` que usaba
+   * el sistema anterior —es un array de URLs y sirve igual—, así que no hay migración.
+   *
+   * ⚠️ La lista es PLANA y se reparte por lote con `porLote`: `frames` es un `string[]`
+   * en la base, y meterle una estructura anidada obligaría a migrar la columna.
    */
-  // `jobs` incluye un frame de cierre por lote MÁS uno de apertura en cada lote cuya
-  // escena no continúa la del anterior (ver `frameSpecs`), así que puede haber más
-  // frames que lotes. Por eso la comprobación de reutilización va contra `jobs.length`.
-  // `quien` (a quién retrata cada frame y quién dice qué) y `enOff` (qué tomas son
-  // narración por encima, para que el render no le mueva la boca a nadie donde el
-  // original solo mostraba el producto) se resuelven más arriba, antes de la huella.
-  const jobs = frameSpecs(seed, quien, enOff)
-  let cierres: string[]
-  const guardados = session.frames
-  if (reanuda && Array.isArray(guardados) && guardados.length === jobs.length) {
-    cierres = guardados
+  const specsPorLote = seed.map((l) =>
+    anchorSpecs({
+      lote: l,
+      quien,
+      planoPorTiempo,
+      vozEnOff: enOff,
+      productDesc,
+      personajes: gente,
+    }),
+  )
+  const totalAnclas = specsPorLote.reduce((n, s) => n + s.length, 0)
+  let anclasPlanas: string[]
+  const guardadas = session.frames
+  if (reanuda && Array.isArray(guardadas) && guardadas.length === totalAnclas) {
+    anclasPlanas = guardadas
   } else {
     try {
-      cierres = await generateBoundaryFrames({
-        avatarUrl: personaUrl,
-        productUrl: session.product_url,
-        productDesc,
-        specs: jobs,
-        // ⚠️ Con la key del USUARIO. Los frames son tareas pagadas de KIE igual que el
-        // render; hasta 2026-08-24 iban por `process.env.KIE_API_KEY` y las pagaba el hub.
-        generate: (input) => generateImage({ ...input, aspectRatio: '9:16' }, kieKey),
-        upload: (bytes, nombre) => uploadToStorage(id, bytes, 'image/png', nombre),
-      })
+      // Por lote y en paralelo dentro de cada uno. Las anclas son independientes entre sí
+      // (no hay cadena que encadenar, al revés que con los keyframes), así que el tiempo
+      // total es el de la más lenta y no la suma.
+      const porLote = await Promise.all(
+        specsPorLote.map((specs, i) =>
+          generateAnchorImages({
+            avatarUrl: personaUrl,
+            productUrl: session.product_url!,
+            specs,
+            lote: seed[i].n,
+            // ⚠️ gpt-image-2: lo paga el HUB, no el usuario. Ver AGENTS.md — es la
+            // reversión deliberada del BYOK de imagen.
+            generate: async (input) => {
+              const refs = await Promise.all(input.imageUrls.map((u) => fetchAsBase64(u)))
+              const b64 = await openaiGenerateImage(
+                [
+                  ...refs.map((r) => ({ inlineData: { mimeType: r.mimeType, data: r.data } })),
+                  { text: input.prompt },
+                ],
+                3,
+                { aspectRatio: '9:16' },
+              )
+              return Buffer.from(b64, 'base64')
+            },
+            upload: (bytes, nombre) => uploadToStorage(id, bytes, 'image/png', nombre),
+          }),
+        ),
+      )
+      anclasPlanas = porLote.flat()
     } catch (err) {
       // Falla ANTES de crear ninguna tarea de video, así que no hay nada pagado que
       // rescatar — 502 y el usuario reintenta.
-      console.error('[video-ads/generate-lotes] frames:', err)
-      return NextResponse.json({ error: 'No se pudieron generar los fotogramas del video.' }, { status: 502 })
+      console.error('[video-ads/generate-lotes] anclas:', err)
+      return NextResponse.json({ error: 'No se pudieron generar los fotogramas de referencia.' }, { status: 502 })
     }
   }
-  const pares = pairFrames(personaUrl, jobs, cierres)
+
+  /** Reparte la lista plana de anclas de vuelta a su lote, en el mismo orden en que se generó. */
+  const anclasDe = (i: number): string[] => {
+    const desde = specsPorLote.slice(0, i).reduce((n, s) => n + s.length, 0)
+    return anclasPlanas.slice(desde, desde + specsPorLote[i].length)
+  }
+
+
+  /**
+   * Las imágenes que recibe el lote `i`, en el orden en que el prompt las cita:
+   * avatar, producto y después sus fotogramas ancla.
+   *
+   * ⚠️ EL ORDEN ES EL CONTRATO. La leyenda del prompt (`@image(1) = …`) se arma
+   * recorriendo este mismo array, y `anclasPorTiempo` calcula el índice de cada ancla
+   * asumiendo que las dos primeras plazas son avatar y producto. Reordenar acá le da a
+   * una toma la imagen de otra.
+   *
+   * El total nunca pasa de `MAX_IMAGES` porque `anchorSpecs` ya se topa en
+   * `MAX_IMAGES - 2` justamente para dejar estas dos plazas libres.
+   */
+  const imagenesDe = (i: number): VideoImage[] => [
+    { url: personaUrl, role: 'the person (identity reference)' },
+    { url: session.product_url!, role: 'the product (must be reproduced exactly)' },
+    ...anclasDe(i).map((url, j) => ({ url, role: specsPorLote[i][j].role })),
+  ]
+
+  /** `tiempoOriginal` → índice 1-based de su ancla dentro de `imagenesDe(i)`. */
+  const anclasPorTiempo = (i: number): Map<string, number> =>
+    new Map(specsPorLote[i].map((spec, j) => [spec.tiempo, j + 3])) // +3: avatar y producto ocupan 1 y 2
 
   const lotes: Lote[] = []
   // Distinto de un fallo de red/KIE (500): un prompt que no entra ni al piso es un
@@ -373,7 +435,7 @@ export async function POST(
       // una duración legal en la que el texto no quepa a CPS_MAX, porque eso sale como
       // diálogo atropellado o cortado a mitad de frase.
       const locucionChars = lote.tomas.reduce((n, t) => n + (t.locucion ?? '').length, 0)
-      const durationSec = snapDuration(lote.duracionSeg, locucionChars)
+      const durationSec = clampDuration(lote.duracionSeg, locucionChars, lote.tomas.length)
       const loteParaPrompt = durationSec === lote.duracionSeg ? lote : { ...lote, duracionSeg: durationSec }
 
       let prompt: string
@@ -389,11 +451,8 @@ export async function POST(
           personajes: gente,
           quien,
           vozEnOff: enOff,
-          images: [
-            { url: pares[i].inicio, role: 'el primer fotograma' },
-            { url: pares[i].fin, role: 'el último fotograma' },
-          ],
-          mode: 'frames',
+          images: imagenesDe(i),
+          anclas: anclasPorTiempo(i),
           niche: session.niche,
           // Para el plano POR TOMA cuando el lote mezcla más de uno: `camaras[i]` ya
           // viene deduplicado y concatenado, así que solo desde los cortes se puede
@@ -419,11 +478,7 @@ export async function POST(
       }
 
       const taskId = await createVideoTask({
-        images: [
-          { url: pares[i].inicio, role: 'el primer fotograma' },
-          { url: pares[i].fin, role: 'el último fotograma' },
-        ],
-        prompt, durationSec, locucionChars, mode: 'frames',
+        images: imagenesDe(i), prompt, durationSec, locucionChars, tomas: lote.tomas.length,
       }, kieKey)
       creados++
       lotes.push({ ...lote, duracionSeg: durationSec, prompt, taskId, status: 'waiting', videoUrl: null, failMsg: null })
@@ -450,7 +505,7 @@ export async function POST(
     // (`done = lotes.every(...)` sobre un array corto) y la sesión quedaba marcada
     // terminada con dos tercios del video sin renderizar, sin salida para terminarla.
     const rescatados = mergeRescue(seed, lotes)
-    await saveRescue(id, rescatados, cierres)
+    await saveRescue(id, rescatados, anclasPlanas)
     return NextResponse.json({ error: promptError, lotes: rescatados }, { status: 400 })
   }
 
@@ -459,7 +514,7 @@ export async function POST(
     // Mismo rescate que en la rama de arriba: lo que sí arrancó (con taskId real) más
     // lo que queda como placeholder idle, para que la sesión sea reanudable.
     const rescatados = mergeRescue(seed, lotes)
-    await saveRescue(id, rescatados, cierres)
+    await saveRescue(id, rescatados, anclasPlanas)
     return NextResponse.json({ error: 'No se pudo iniciar el render de todos los lotes.' }, { status: 500 })
   }
 
@@ -470,6 +525,6 @@ export async function POST(
   // pagadas y huérfanas, sin que `lote-status` supiera que existen. El patch es
   // idéntico al que escribía acá (`step`, `lotes`, `duration`, `render_done`), así
   // que el camino feliz no cambia; sólo se suma el log si la escritura falla.
-  await saveRescue(id, lotes, cierres)
+  await saveRescue(id, lotes, anclasPlanas)
   return NextResponse.json({ lotes })
 }

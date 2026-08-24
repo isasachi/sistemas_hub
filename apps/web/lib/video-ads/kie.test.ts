@@ -1,17 +1,18 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import {
-  buildTaskBody, snapDuration, resolutionFor, parseTaskDetail, createVideoTask,
-  DURATIONS, KIE_PROMPT_MAX, resolveKey,
+  buildTaskBody, clampDuration, resolutionFor, parseTaskDetail, createVideoTask,
+  MIN_DURATION, MAX_DURATION, MAX_IMAGES, KIE_PROMPT_MAX, resolveKey,
 } from './kie'
 import { CPS_MAX, CPS_MIN } from './forensic'
 
 // Sin API key no se puede probar el render en vivo, así que lo que se verifica acá es el
-// CONTRATO con Veo 3.1 — las reglas que, si se rompen, devuelven 422 con la cuota ya
-// gastada o un video silenciosamente malo. Todas fueron MEDIDAS contra la API real el
-// 2026-08-19; los números no son de la documentación, salen de respuestas verdaderas:
-//   - duración EXACTAMENTE 4, 6 u 8 ("Duration must be 4, 6 or 8 seconds");
-//   - prompt <= 60000 ("The prompt word cannot exceed 60000 characters");
-//   - generationType decide qué significan las imágenes, y los modos son excluyentes.
+// CONTRATO con `grok-imagine/image-to-video` — las reglas que, si se rompen, devuelven
+// 422 con la cuota ya gastada o un video silenciosamente malo:
+//   - `duration` es STRING y va entre 6 y 30 (el grok viejo era INTEGER 1–15, Veo era
+//     el conjunto {4,6,8}: los tres contratos son distintos);
+//   - `prompt` <= 5000 caracteres;
+//   - hasta 7 imágenes, y `aspect_ratio` es inválido con UNA sola;
+//   - `nsfw_checker: true` = filtro ACTIVADO (el default de la API es false, que lo apaga).
 // Si alguien cambia MODEL, estos asserts tienen que cambiar con él.
 
 const IMAGES = [
@@ -21,154 +22,161 @@ const IMAGES = [
 
 afterEach(() => vi.unstubAllGlobals())
 
-describe('snapDuration', () => {
-  it('solo devuelve duraciones que Veo acepta', () => {
-    for (const sec of [0.6, 1, 3.4, 4, 5.5, 6, 7.2, 8, 11.9, 30, 0, -4, NaN, Infinity]) {
-      expect(DURATIONS).toContain(snapDuration(sec))
+describe('clampDuration', () => {
+  it('nunca sale del rango legal del modelo', () => {
+    for (const sec of [0.6, 1, 3.4, 6, 12.5, 29, 30, 44, 0, -4, NaN, Infinity]) {
+      const d = clampDuration(sec)
+      expect(d).toBeGreaterThanOrEqual(MIN_DURATION)
+      expect(d).toBeLessThanOrEqual(MAX_DURATION)
+      expect(Number.isInteger(d)).toBe(true)
     }
   })
 
-  it('elige la duración legal más cercana a la de la toma', () => {
-    expect(snapDuration(4.2)).toBe(4)
-    expect(snapDuration(5.4)).toBe(6)
-    expect(snapDuration(7.9)).toBe(8)
-    // Una toma de menos de 4 s no existe en Veo: el piso legal la levanta a 4. Es lo que
-    // hace desaparecer los clips de ~1 s que daba grok (tres de siete en la prueba real).
-    expect(snapDuration(0.6)).toBe(4)
+  it('conserva la duración de la toma cuando ya es legal', () => {
+    expect(clampDuration(12)).toBe(12)
+    expect(clampDuration(29.4)).toBe(29)
+    // El cap nuevo es 30: una toma de 24 s ya NO se parte en cuatro clips como con Veo.
+    expect(clampDuration(24)).toBe(24)
+  })
+
+  it('sube al mínimo del modelo lo que dura menos de 6 s', () => {
+    // Un lote de cola corta existe; el mínimo de la API es 6 y deja algo de aire, que es
+    // preferible a no poder renderizarlo.
+    expect(clampDuration(0.6)).toBe(MIN_DURATION)
+    expect(clampDuration(3)).toBe(MIN_DURATION)
   })
 
   it('nunca elige una duración en la que la locución no entre a CPS_MAX', () => {
-    // 140 caracteres necesitan >= 7 s a 20 car/s: 4 y 6 quedan descartadas aunque la
-    // toma durara 4 s. Preferir el silencio a cortar diálogo a mitad de frase.
-    const texto = 140
-    expect(texto / CPS_MAX).toBeGreaterThan(6)
-    expect(snapDuration(4, texto)).toBe(8)
+    // 400 caracteres necesitan >= 20 s a 20 car/s, aunque la toma durase 8.
+    expect(clampDuration(8, 400)).toBeGreaterThanOrEqual(400 / CPS_MAX)
+    // Y el piso duro gana al techo blando cuando chocan.
+    expect(clampDuration(6, 700)).toBe(MAX_DURATION)
   })
 
-  // ⚠️ EL OTRO LADO DEL MISMO PROBLEMA, medido en un render real. El lote 2 de la sesión
-  // `02fa1205` tenía 23 caracteres en 6 s (3,8 car/s) y Veo dijo la frase DOS VECES para
-  // llenar el audio: "Y es nuestro mural y es nuestro top mural". Antes solo se
-  // comprobaba que el texto CUPIERA, nunca que no sobrara demasiado.
-  it('una locución muy corta baja a la duración legal más chica en vez de dejar hueco', () => {
-    // El caso real, con sus números: 23 car, toma de 5.4 s → antes daba 6.
-    expect(snapDuration(5.4, 23)).toBe(4)
-    expect(23 / 4).toBeGreaterThan(23 / 6) // y queda más densa que antes
+  // ⚠️ EL OTRO LADO DEL MISMO PROBLEMA, medido en un render real de la época de Veo: 23
+  // caracteres en 6 s (3,8 car/s) hicieron que el modelo dijera la frase DOS VECES para
+  // llenar el audio. La lección sobrevive al cambio de modelo, PERO acotada a un clip de
+  // UNA escena, que es el caso en el que se midió.
+  it('una locución corta no deja medio vacío un clip de UNA escena', () => {
+    const d = clampDuration(28, 120, 1)
+    expect(120 / d).toBeGreaterThanOrEqual(CPS_MIN)
   })
 
-  it('no toca las locuciones de densidad normal — no pelea con la variación real', () => {
-    // Los otros cuatro lotes de esa misma sesión, que salieron bien.
-    expect(snapDuration(5.1, 65)).toBe(6)
-    expect(snapDuration(5.2, 83)).toBe(6)
-    expect(snapDuration(6.0, 84)).toBe(6)
+  // ⚠️ Y ACÁ ESTÁ EL ACOTE, que con el cap de 30 s es obligatorio. Sin él, el techo
+  // blando recorta el clip a lo que "merece" su texto y descarta en silencio las escenas
+  // de más — justo las que ya tienen su imagen ancla generada y pagada.
+  it('un clip de VARIAS escenas conserva su duración aunque el diálogo sea escaso', () => {
+    // Los dos casos medidos: sin el acote caían a 22 s y a 13 s respectivamente.
+    expect(clampDuration(30, 200, 5)).toBe(30)
+    expect(clampDuration(30, 120, 8)).toBe(30)
+  })
+
+  it('el piso duro sigue mandando con varias escenas: el texto tiene que poder decirse', () => {
+    // 700 caracteres no entran en 20 s a CPS_MAX, así que sube igual.
+    expect(clampDuration(20, 700, 6)).toBe(MAX_DURATION)
   })
 
   it('una toma MUDA conserva su duración: no hay audio que rellenar', () => {
-    // Sin habla no hay nada que repetir, y la duración es un beat visual del original.
-    expect(snapDuration(5.3, 0)).toBe(6)
-    expect(snapDuration(7.8, 0)).toBe(8)
+    expect(clampDuration(19, 0)).toBe(19)
+    expect(clampDuration(30, 0)).toBe(30)
   })
 
-  it('la densidad resultante nunca queda por debajo del piso, salvo que sea imposible', () => {
-    // 60 car: el rango bueno es [3, 6.67] → 4 y 6 sirven.
-    for (const [sec, chars] of [[5.4, 60], [7.5, 90], [4.2, 40]] as const) {
-      const d = snapDuration(sec, chars)
-      const cps = chars / d
+  it('la densidad resultante se queda dentro de la banda decible', () => {
+    for (const [sec, chars] of [[12, 200], [20, 340], [8, 120]] as const) {
+      const cps = chars / clampDuration(sec, chars)
       expect(cps).toBeLessThanOrEqual(CPS_MAX)
       expect(cps).toBeGreaterThanOrEqual(CPS_MIN)
     }
   })
 
-  it('con empate se queda con la más corta, para no inflar el anuncio', () => {
-    expect(snapDuration(5)).toBe(4)
-    expect(snapDuration(7)).toBe(6)
-  })
-
-  it('devuelve el techo cuando el texto no entra ni en 8 s', () => {
-    // Caso de toma que tendría que haberse partido antes (`splitLongToma`). Acá no se
-    // puede arreglar: se devuelve el máximo legal en vez de inventar una duración.
-    expect(snapDuration(8, 400)).toBe(8)
-  })
-
   // `generate-lotes` ajusta una vez para el texto del prompt y `buildTaskBody` vuelve a
   // ajustar para el body. Si no coincidieran, el prompt prometería una duración y el
   // modelo renderizaría otra, y el audio saldría cortado.
-  //
-  // Ojo: la propiedad es que ajustar DOS VECES da lo mismo que una, no que una duración
-  // ya legal quede intacta — con el piso de densidad, una duración legal pero demasiado
-  // larga para su texto SÍ tiene que bajar, y ese es justamente el arreglo.
   it('aplicarla dos veces da lo mismo que una', () => {
-    for (const sec of [0.6, 4, 5.4, 6, 7.9, 11.2]) {
-      for (const chars of [0, 23, 30, 65, 84, 140, 400]) {
-        const una = snapDuration(sec, chars)
-        expect(snapDuration(una, chars)).toBe(una)
+    for (const sec of [0.6, 6, 12.5, 24, 29.9, 40]) {
+      for (const chars of [0, 23, 120, 200, 400, 700]) {
+        const una = clampDuration(sec, chars)
+        expect(clampDuration(una, chars)).toBe(una)
       }
     }
   })
 })
 
 describe('buildTaskBody', () => {
-  it('manda el contrato de Veo 3.1 fast vertical', () => {
-    const b = buildTaskBody({ images: IMAGES, prompt: 'hola', durationSec: 6 })
-    expect(b.model).toBe('veo3_fast')
-    expect(b.aspect_ratio).toBe('9:16')
-    expect(b.resolution).toBe('720p')
-    expect(b.imageUrls).toEqual(IMAGES.map((i) => i.url))
-    expect(DURATIONS).toContain(b.duration)
+  it('manda el contrato del marketplace de grok, vertical y 720p', () => {
+    const b = buildTaskBody({ images: IMAGES, prompt: 'hola', durationSec: 12 })
+    expect(b.model).toBe('grok-imagine/image-to-video')
+    // ⚠️ Todo cuelga de `input`, no de la raíz — Veo era plano y grok anida.
+    expect(b.input.aspect_ratio).toBe('9:16')
+    expect(b.input.resolution).toBe('720p')
+    expect(b.input.image_urls).toEqual(IMAGES.map((i) => i.url))
+    expect(b.input.mode).toBe('normal')
   })
 
-  it('traduce el modo al generationType correcto — son excluyentes', () => {
-    const frames = buildTaskBody({ images: IMAGES, prompt: 'x', durationSec: 4, mode: 'frames' })
-    expect(frames.generationType).toBe('FIRST_AND_LAST_FRAMES_2_VIDEO')
-    const ref = buildTaskBody({ images: IMAGES, prompt: 'x', durationSec: 4, mode: 'reference' })
-    expect(ref.generationType).toBe('REFERENCE_2_VIDEO')
-    // Sin `mode` explícito se comporta como el render de hoy, no como el nuevo.
-    expect(buildTaskBody({ images: IMAGES, prompt: 'x', durationSec: 4 }).generationType)
-      .toBe('REFERENCE_2_VIDEO')
+  // El fallo silencioso más caro de este contrato: number pasa el typecheck del objeto
+  // pero la API lo rechaza con 422 y la cuota ya gastada.
+  it('la duración viaja como STRING, no como número', () => {
+    const b = buildTaskBody({ images: IMAGES, prompt: 'x', durationSec: 12 })
+    expect(typeof b.input.duration).toBe('string')
+    expect(b.input.duration).toBe('12')
+  })
+
+  // ⚠️ `false` DESACTIVA el filtro y es el default de la API. Queremos lo contrario.
+  it('deja el filtro de contenido ACTIVADO', () => {
+    expect(buildTaskBody({ images: IMAGES, prompt: 'x', durationSec: 6 }).input.nsfw_checker).toBe(true)
   })
 
   it('respeta la locución al elegir la duración del body', () => {
-    const b = buildTaskBody({ images: IMAGES, prompt: 'x', durationSec: 4, locucionChars: 140 })
-    expect(b.duration).toBe(8)
+    const b = buildTaskBody({ images: IMAGES, prompt: 'x', durationSec: 6, locucionChars: 400 })
+    expect(Number(b.input.duration)).toBeGreaterThanOrEqual(400 / CPS_MAX)
   })
 
-  it('resolutionFor es 720p fijo', () => {
+  it('resolutionFor es 720p fijo — 1080p además exige una sola imagen', () => {
     expect(resolutionFor()).toBe('720p')
   })
 
-  it('el tope de prompt es el medido, no el de grok', () => {
-    expect(KIE_PROMPT_MAX).toBe(60000)
+  it('los topes son los de ESTE modelo, no los de Veo ni los del grok viejo', () => {
+    expect(KIE_PROMPT_MAX).toBe(5000)
+    expect(MAX_IMAGES).toBe(7)
+    expect(MIN_DURATION).toBe(6)
+    expect(MAX_DURATION).toBe(30)
   })
 })
 
 describe('parseTaskDetail', () => {
-  it('successFlag 1 con las URLs en response.resultUrls (array, no string JSON)', () => {
+  // ⚠️ El marketplace usa `state` STRING y `resultJson` como STRING con JSON adentro.
+  // Veo usaba `successFlag` numérico y un array. Mezclar los parsers deja el polling
+  // esperando para siempre un video que ya está listo.
+  it('lee el estado del campo `state` y la URL de `resultJson` parseado', () => {
     const d = parseTaskDetail({
-      successFlag: 1,
-      response: { resultUrls: ['https://cdn.test/v.mp4'] },
+      state: 'success',
+      resultJson: JSON.stringify({ resultUrls: ['https://cdn.test/v.mp4'] }),
     })
     expect(d.state).toBe('success')
     expect(d.videoUrl).toBe('https://cdn.test/v.mp4')
   })
 
-  it('successFlag 0 es "en curso", no un fallo', () => {
-    expect(parseTaskDetail({ successFlag: 0 }).state).toBe('generating')
-    // Sin campo alguno tampoco puede leerse como terminado: el polling seguiría.
-    expect(parseTaskDetail({}).state).toBe('generating')
-    expect(parseTaskDetail(null).state).toBe('generating')
-  })
-
-  it('successFlag 2 y 3 son fallo y propagan el motivo', () => {
-    for (const flag of [2, 3]) {
-      const d = parseTaskDetail({ successFlag: flag, errorMessage: 'content rejected' })
-      expect(d.state).toBe('fail')
-      expect(d.failMsg).toBe('content rejected')
-      expect(d.videoUrl).toBeNull()
+  it('los estados en curso no se leen como terminados', () => {
+    for (const s of ['waiting', 'queuing', 'generating']) {
+      expect(parseTaskDetail({ state: s }).state).toBe(s)
+      expect(parseTaskDetail({ state: s }).videoUrl).toBeNull()
     }
+    // Sin campo alguno tampoco puede leerse como terminado: el polling seguiría.
+    expect(parseTaskDetail({}).state).toBe('waiting')
+    expect(parseTaskDetail(null).state).toBe('waiting')
   })
 
-  it('un éxito sin URL utilizable no inventa una', () => {
-    expect(parseTaskDetail({ successFlag: 1, response: { resultUrls: [] } }).videoUrl).toBeNull()
-    expect(parseTaskDetail({ successFlag: 1, response: {} }).videoUrl).toBeNull()
+  it('`fail` propaga el motivo', () => {
+    const d = parseTaskDetail({ state: 'fail', failMsg: 'content rejected' })
+    expect(d.state).toBe('fail')
+    expect(d.failMsg).toBe('content rejected')
+    expect(d.videoUrl).toBeNull()
+  })
+
+  it('un resultJson corrupto o vacío no inventa una URL', () => {
+    expect(parseTaskDetail({ state: 'success', resultJson: '{{{' }).videoUrl).toBeNull()
+    expect(parseTaskDetail({ state: 'success', resultJson: '{"resultUrls":[]}' }).videoUrl).toBeNull()
+    expect(parseTaskDetail({ state: 'success' }).videoUrl).toBeNull()
   })
 })
 
@@ -177,17 +185,17 @@ describe('createVideoTask', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(body), { status: 200 })))
 
   it('devuelve el taskId cuando la creación es real', async () => {
-    ok({ code: 200, msg: 'success', data: { taskId: 'veo_1' } })
-    await expect(createVideoTask({ images: IMAGES, prompt: 'x', durationSec: 6 }, 'key-del-usuario'))
-      .resolves.toBe('veo_1')
+    ok({ code: 200, msg: 'success', data: { taskId: 'grok_1' } })
+    await expect(createVideoTask({ images: IMAGES, prompt: 'x', durationSec: 12 }, 'key-del-usuario'))
+      .resolves.toBe('grok_1')
   })
 
-  it('un 422 que viene DENTRO de un HTTP 200 tiene que lanzar', async () => {
-    // Veo devuelve status 200 con `code: 422` en los errores de validación. Mirar solo
-    // `res.ok` dejaría pasar el fallo como éxito, y el polling esperaría para siempre un
-    // taskId que no existe — el lote quedaría "generando" sin nada detrás.
-    ok({ code: 422, msg: 'Duration must be 4, 6 or 8 seconds' })
-    await expect(createVideoTask({ images: IMAGES, prompt: 'x', durationSec: 6 }, 'key-del-usuario'))
+  it('un error que viene DENTRO de un HTTP 200 tiene que lanzar', async () => {
+    // KIE devuelve status 200 con `code` de error adentro. Mirar solo `res.ok` dejaría
+    // pasar el fallo como éxito, y el polling esperaría para siempre un taskId que no
+    // existe — el lote quedaría "generando" sin nada detrás.
+    ok({ code: 422, msg: 'duration must be between 6 and 30' })
+    await expect(createVideoTask({ images: IMAGES, prompt: 'x', durationSec: 12 }, 'key-del-usuario'))
       .rejects.toThrow(/422/)
   })
 })

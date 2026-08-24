@@ -149,6 +149,17 @@ export function buildIdentityInstruction(
           'estructura del rostro, cabello (corte y color), complexión, rasgos distintivos',
           'visibles y edad aparente. No mezcles rasgos con otros personajes. Si un rasgo',
           'no puede observarse con certeza, no inventes ese rasgo.',
+          // ⚠️ EL AVATAR ES UNA PERSONA NUEVA, NO LA DE LA FOTO. La foto la puede haber
+          // sacado el usuario de cualquier lado, así que reproducir esa cara sería
+          // publicar la imagen de alguien que no dio permiso. Se toma el TIPO físico
+          // —edad, complexión, tono de piel, estilo de cabello— y se construye a otra
+          // persona con él, combinándolo con lo que el usuario describió en el brief.
+          'IMPORTANTE — NO CLONES LA CARA DE LA FOTO. El avatar es una persona NUEVA que',
+          'comparte el TIPO físico de la referencia (rango de edad, complexión, tono de',
+          'piel, estilo y color de cabello), no sus facciones exactas: distinta forma de',
+          'nariz, boca, ojos y mandíbula. La foto marca el tipo; el brief del usuario',
+          'manda sobre el resto. Es un requisito legal, no estético: la persona de esa',
+          'foto no dio permiso para aparecer en un anuncio.',
           'De la foto SOLO se leen rasgos observables (edad aparente, tono de piel,',
           'cabello, facciones, complexión). NUNCA infieras de la foto la etnia, el',
           'origen cultural ni el acento del personaje: esos dos datos vienen',
@@ -200,6 +211,19 @@ export function buildIdentityInstruction(
     'La imagen es el primer fotograma de un video vertical de redes: encuádrala como una',
     'foto de teléfono real (plano medio, ángulo levemente bajo), no como un retrato de',
     'estudio. Sin teléfonos, cámaras ni trípodes a la vista.',
+    // ⚠️ REALISMO ESTRICTO, exigido por el dueño del repo. Es el fallo más visible de un
+    // generador de imagen sobre personas: devuelve piel de plástico, luz uniforme y cara
+    // de render 3D, y eso delata el anuncio como generado antes de que nadie lo escuche.
+    // Y acá pesa el doble, porque este fotograma define cómo se ve el clip entero: una
+    // piel acartonada acá contamina todas las tomas que salgan de ella.
+    'REALISMO FOTOGRÁFICO ESTRICTO — y esto manda sobre cualquier otra consideración',
+    'estética. Piel real con su textura: poros, vello fino, lunares, pequeñas',
+    'irregularidades, brillo natural donde la piel es grasa y líneas de expresión propias',
+    'de la edad. Iluminación real y desigual, con sombras que caen donde tienen que caer.',
+    'PROHIBIDO: piel suavizada o retocada, tonos pastel, acabado acartonado o de plástico,',
+    'aspecto de ilustración, de render 3D, de muñeco o de personaje de videojuego,',
+    'estilización, glamour de estudio, aerógrafo, filtro de belleza y luz perfecta.',
+    'Tiene que poder pasar por un fotograma de un video grabado con un teléfono.',
     spec.wornProduct
       ? 'Sin texto, sin logos y sin watermarks. El producto SÍ va en el encuadre: el personaje lo lleva puesto, tal como se ve en su imagen.'
       : 'Sin texto, sin logos, sin watermarks y sin el producto en el encuadre.',

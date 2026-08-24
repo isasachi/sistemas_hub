@@ -20,35 +20,35 @@ describe('groupIntoLotes', () => {
   // La regla: si agregar la siguiente supera el tope, NO la agregues; esa toma abre el
   // lote siguiente. Nunca se parte una toma entre dos lotes.
   it('corta antes de pasarse y arranca el siguiente lote con esa toma', () => {
-    const l = groupIntoLotes([toma(1, 4), toma(2, 4), toma(3, 4)])
+    const l = groupIntoLotes([toma(1, 12), toma(2, 12), toma(3, 12)])
     expect(l).toHaveLength(2)
     expect(l[0].tomas.map((t) => t.n)).toEqual([1, 2])
-    expect(l[0].duracionSeg).toBe(8)
+    expect(l[0].duracionSeg).toBe(24)
     expect(l[1].tomas.map((t) => t.n)).toEqual([3])
-    expect(l[1].duracionSeg).toBe(4)
+    expect(l[1].duracionSeg).toBe(12)
   })
 
   it('permite el lote que suma exactamente el tope', () => {
-    const l = groupIntoLotes([toma(1, 4), toma(2, 4), toma(3, 1)])
+    const l = groupIntoLotes([toma(1, 15), toma(2, 15), toma(3, 1)])
     expect(l[0].tomas.map((t) => t.n)).toEqual([1, 2])
     expect(l[0].duracionSeg).toBe(LOTE_MAX_SEC)
     expect(l[1].tomas.map((t) => t.n)).toEqual([3])
   })
 
   it('numera los lotes desde 1 y en orden', () => {
-    const l = groupIntoLotes([toma(1, 8), toma(2, 8), toma(3, 8)])
+    const l = groupIntoLotes([toma(1, 30), toma(2, 30), toma(3, 30)])
     expect(l.map((x) => x.n)).toEqual([1, 2, 3])
   })
 
   it('nunca produce un lote de más largo que el tope', () => {
-    const tomas = Array.from({ length: 20 }, (_, i) => toma(i + 1, 4))
+    const tomas = Array.from({ length: 20 }, (_, i) => toma(i + 1, 14))
     for (const l of groupIntoLotes(tomas)) expect(l.duracionSeg).toBeLessThanOrEqual(LOTE_MAX_SEC)
   })
 
   // Excepción del spec: "Si una única Toma supera 15 segundos, divídela solamente en
   // puntos naturales de acción o diálogo sin alterar el contenido."
   it('parte una toma larga en frases, sin perder texto', () => {
-    const larga = toma(1, 24, 'Primera frase completa. Segunda frase completa. Tercera frase completa.')
+    const larga = toma(1, 80, 'Primera frase completa. Segunda frase completa. Tercera frase completa.')
     const l = groupIntoLotes([larga])
     expect(l.length).toBeGreaterThan(1)
     for (const x of l) expect(x.duracionSeg).toBeLessThanOrEqual(LOTE_MAX_SEC)
@@ -57,8 +57,8 @@ describe('groupIntoLotes', () => {
     expect(texto).toContain('Tercera frase completa')
   })
 
-  it('una toma larga sin puntos igual se acota a 15 s por lote', () => {
-    const l = groupIntoLotes([toma(1, 40, 'una sola frase larguísima sin puntuación alguna')])
+  it('una toma larga sin puntos igual se acota al tope por lote', () => {
+    const l = groupIntoLotes([toma(1, 140, 'una sola frase larguísima sin puntuación alguna')])
     for (const x of l) expect(x.duracionSeg).toBeLessThanOrEqual(LOTE_MAX_SEC)
   })
 
@@ -133,20 +133,20 @@ describe('groupIntoLotes', () => {
   // y el guard nunca disparaba: 1 lote en vez de 2. El disparador no es exótico — el
   // análisis forense deriva duraciones de marcas de tiempo de video, así que dos
   // decimales son lo normal, no el caso raro.
-  it('dos tomas de 7.51 s (15.02 reales) SÍ se parten en dos lotes', () => {
-    const l = groupIntoLotes([toma(1, 7.51), toma(2, 7.51)])
+  it('dos tomas de 15.01 s (30.02 reales) SÍ se parten en dos lotes', () => {
+    const l = groupIntoLotes([toma(1, 15.01), toma(2, 15.01)])
     expect(l).toHaveLength(2)
     for (const x of l) expect(x.duracionSeg).toBeLessThanOrEqual(LOTE_MAX_SEC)
   })
 
-  it('cinco tomas de 3.04 s (15.20 reales) no caben en un solo lote', () => {
-    const l = groupIntoLotes(Array.from({ length: 5 }, (_, i) => toma(i + 1, 3.04)))
+  it('cinco tomas de 6.04 s (30.20 reales) no caben en un solo lote', () => {
+    const l = groupIntoLotes(Array.from({ length: 5 }, (_, i) => toma(i + 1, 6.04)))
     expect(l.length).toBeGreaterThan(1)
     for (const x of l) expect(x.duracionSeg).toBeLessThanOrEqual(LOTE_MAX_SEC)
   })
 
-  it('quince tomas de 1.04 s (15.60 reales) no caben en un solo lote', () => {
-    const l = groupIntoLotes(Array.from({ length: 15 }, (_, i) => toma(i + 1, 1.04)))
+  it('quince tomas de 2.04 s (30.60 reales) no caben en un solo lote', () => {
+    const l = groupIntoLotes(Array.from({ length: 15 }, (_, i) => toma(i + 1, 2.04)))
     expect(l.length).toBeGreaterThan(1)
     for (const x of l) expect(x.duracionSeg).toBeLessThanOrEqual(LOTE_MAX_SEC)
   })
@@ -197,7 +197,7 @@ describe('camaraDeLote', () => {
 
   it('toma los planos de SUS cortes, no los del primer corte del video', () => {
     const [l1, l2] = groupIntoLotes([
-      conTiempo(1, 4, '00:00 - 00:06'), conTiempo(2, 4, '00:06 - 00:12'), conTiempo(3, 8, '00:12 - 00:20'),
+      conTiempo(1, 12, '00:00 - 00:06'), conTiempo(2, 12, '00:06 - 00:12'), conTiempo(3, 12, '00:12 - 00:20'),
     ])
     expect(camaraDeLote(l1, CORTES, 'fallback')).toBe('Primer plano, altura de ojos · Plano medio, cámara fija')
     expect(camaraDeLote(l2, CORTES, 'fallback')).toBe('Plano detalle del producto')
@@ -214,7 +214,7 @@ describe('camaraDeLote', () => {
   // `tiempoOriginal`, que los fragmentos heredan intacto.
   it('sigue emparejando bien después de que una toma larga se parte en fragmentos', () => {
     const lotes = groupIntoLotes([
-      conTiempo(1, 22, '00:00 - 00:22 Primero. Segundo. Tercero.'),
+      conTiempo(1, 80, '00:00 - 00:22 Primero. Segundo. Tercero.'),
       conTiempo(2, 5, '00:22 - 00:27'),
     ])
     const cortes = [
@@ -275,14 +275,16 @@ describe('buildLotePrompt', () => {
   })
 
   it('prohíbe todo overlay', () => {
-    expect(p).toMatch(/TEXTO \/ OVERLAY: NINGUNO/)
+    expect(p).toMatch(/NO TEXT \/ NO OVERLAY/)
     expect(p).toMatch(/watermark/i)
-    expect(p).toMatch(/subt[ií]tulos|captions/i)
+    expect(p).toMatch(/captions/i)
   })
 
   it('numera las imágenes en el orden del array', () => {
     expect(p).toContain('@image(1) = la persona')
     expect(p).toContain('@image(2) = el producto')
+    // El orden del array ES el contrato: la leyenda y `anclas` lo asumen (ver la ruta).
+    expect(p.indexOf('@image(1)')).toBeLessThan(p.indexOf('@image(2)'))
   })
 
   it('incluye el perfil de voz completo', () => {
@@ -295,14 +297,14 @@ describe('buildLotePrompt', () => {
   // rótulo — sacarla a un campo propio obligaría a re-correr el análisis forense de
   // cada sesión guardada, que es el paso caro.
   it('rotula la iluminación junto al escenario', () => {
-    expect(p).toContain(`ESCENARIO E ILUMINACIÓN: ${ARGS.escenario}`)
+    expect(p).toContain(`SETTING AND LIGHTING: ${ARGS.escenario}`)
   })
 
   // Bloque "Continuidad" del spec: qué debe permanecer idéntico durante todo el lote.
   it('declara qué no puede cambiar dentro del clip', () => {
-    expect(p).toContain('CONTINUIDAD:')
-    for (const invariante of ['personaje', 'producto', 'vestuario', 'escenario', 'iluminación']) {
-      expect(p.slice(p.indexOf('CONTINUIDAD:'), p.indexOf('PERFIL DE VOZ'))).toContain(invariante)
+    expect(p).toContain('CONTINUITY:')
+    for (const invariante of ['character', 'product', 'wardrobe', 'setting', 'lighting']) {
+      expect(p.slice(p.indexOf('CONTINUITY:'), p.indexOf('VOICE AND ACCENT'))).toContain(invariante)
     }
   })
 
@@ -316,17 +318,20 @@ describe('buildLotePrompt', () => {
     expect(buildLotePrompt({ lote: largo, ...ARGS }).length).toBeLessThanOrEqual(KIE_PROMPT_MAX)
   })
 
-  // Fix round 1 — el test anterior usa `accionVisual` sintético de ~9 caracteres
-  // (`accion ${n}`), muy por debajo del detalle forense real (AGENTS.md: ~6300 chars
-  // con ~11 beats). Este caso fuerza la degradación de verdad: bloque de consistencia
-  // y descripción de producto verbosos, y 8 tomas con `accionVisual` largo (secuencial:
-  // posición inicial, movimiento, manos, mirada, expresión, posición final).
-  it('con contenido de tamaño realista NO recorta nada — ni la coreografía ni el guión', () => {
-    // Este es el caso que con grok forzaba la degradación: bloque de consistencia y
-    // producto verbosos, y 8 tomas con `accionVisual` secuencial completa (posición
-    // inicial, movimiento, manos, mirada, expresión, posición final). En 4096 caracteres
-    // la coreografía se truncaba a mitad de palabra —medido: 78 de 266 por toma— y era
-    // la causa mecánica de "no copia los movimientos". Con los 60.000 de Veo entra todo.
+  // ⚠️ ESTE TEST AFIRMABA "NO RECORTA NADA" Y AHORA AFIRMA LO CONTRARIO, a propósito.
+  // Con los 60.000 caracteres de Veo entraba todo; con los 5.000 de grok no entra, y
+  // encima los clips pasaron de 8 a 30 s (o sea ~4× las tomas en el mismo prompt). Lo
+  // que se fija ahora no es "nada se pierde" sino EL ORDEN EN QUE SE CEDE, que es lo que
+  // la escalera de degradación existe para garantizar:
+  //
+  //   sobreviven  → identidad del personaje, cámara, y la línea hablada de CADA toma
+  //   se recortan → el guión global repetido, el párrafo de overlay, la etiqueta del
+  //                 producto y, en último lugar, la coreografía
+  //
+  // La línea hablada por toma es la que nunca se suelta: es la única señal de qué frase
+  // va con qué acción y en cuántos segundos. Cuando se perdió en un lote y no en los
+  // otros, el resultado medido fue "una habla muy rápido y la otra muy lento".
+  it('bajo presión de presupuesto cede en el orden correcto: identidad y diálogo sobreviven', () => {
     const bloqueLargo = 'Mujer de 25 años, latina peruana, cabello negro liso recogido en moño bajo, piel clara, ojos marrón claro, complexión delgada, cejas pobladas naturales, nariz recta, labios medianos, polo blanco de algodón sin estampado ni logo, pantalón deportivo gris, sin joyas visibles, manicura natural, uñas cortas. '.repeat(2)
     const productoLargo = 'Frasco de vidrio celeste translúcido de 30 ml con gotero de plástico blanco, tapa rosca plateada, etiqueta blanca centrada con el texto "EUNOIA" en tipografía serif dorada, borde dorado fino alrededor de la etiqueta, sin otros textos ni logos adicionales. '.repeat(2)
     const accionLarga = 'La modelo empieza de pie frente al espejo del baño con las manos a los costados, gira lentamente el torso hacia la cámara, levanta la mano derecha y toma el frasco del producto desde la repisa con dos dedos, lo sostiene a la altura del pecho, lo inclina levemente para mostrar la etiqueta, mira directo a cámara con expresión cálida y sonríe, termina con el frasco cerca del rostro y la mirada fija en el lente. '
@@ -336,17 +341,23 @@ describe('buildLotePrompt', () => {
       ({ ...toma(i + 1, 1, `Frase número ${i + 1} del guión adaptado, bastante larga también, para sumar presión de caracteres sobre el presupuesto del prompt.`), accionVisual: accionLarga })))[0]
 
     const p = buildLotePrompt({ lote: muchasTomas, ...argsLargos })
+
+    // 1. Entra. Es la razón de ser de la escalera: sin ella esto lanzaría.
     expect(p.length).toBeLessThanOrEqual(KIE_PROMPT_MAX)
-    expect(p).toContain(argsLargos.camara)
+
+    // 2. La identidad del personaje sobrevive ÍNTEGRA. Recortarla es lo que hace que el
+    //    lote 3 salga con otra cara que el lote 1, y ese es el fallo que todo el diseño
+    //    de contexto absoluto existe para evitar.
     expect(p).toContain(bloqueLargo)
-    expect(p).toContain(productoLargo)
-    // Lo que antes se perdía: la coreografía COMPLETA de cada toma, sin puntos suspensivos.
-    expect(p).not.toContain('…')
-    for (const t of muchasTomas.tomas) expect(p).toContain(t.accionVisual)
-    // Y el guión global, que era lo primero que se soltaba bajo presión.
-    expect(p).toContain('GUION DE LOCUCIÓN FINAL')
-    expect(p).toContain('Locución: “Frase número 8')
+    expect(p).toContain(argsLargos.camara)
+
+    // 3. Las 8 líneas habladas, cada una con su toma. Ninguna se suelta.
     for (let i = 1; i <= 8; i++) expect(p).toContain(`Frase número ${i}`)
+    expect([...p.matchAll(/Spoken line \(Latin American Spanish, verbatim\)/g)]).toHaveLength(8)
+
+    // 4. Y algo SÍ se cedió — si no, este test no estaría probando la escalera.
+    const cedioAlgo = p.includes('…') || !p.includes(productoLargo) || !p.includes('FULL SPOKEN SCRIPT')
+    expect(cedioAlgo).toBe(true)
   })
 
   // `duracionSeg` sale de un reparto proporcional y llegaba cruda al prompt: medido,
@@ -355,13 +366,13 @@ describe('buildLotePrompt', () => {
   it('no imprime la duración con la basura del float', () => {
     const sucio = groupIntoLotes([{ ...toma(1, 0.8854477611940298), accionVisual: 'gesto' }])[0]
     const p = buildLotePrompt({ lote: sucio, ...ARGS })
-    expect(p).toContain('### Toma 1 — 0.9 s')
+    expect(p).toContain('### Shot 1 — 0.9s')
     expect(p).not.toContain('0.8854477611940298')
   })
 
   it('la cámara que recibe es la que sale en el prompt, no una fija del video', () => {
     expect(buildLotePrompt({ lote, ...ARGS, camara: 'Plano medio, cámara fija en trípode' }))
-      .toContain('CÁMARA: Plano medio, cámara fija en trípode.')
+      .toContain('CAMERA: Plano medio, cámara fija en trípode.')
   })
 
   it('si ni el bloque de consistencia por sí solo entra en el tope, lanza un error explicando el exceso', () => {
@@ -384,24 +395,23 @@ describe('buildLotePrompt', () => {
 // El tercer artefacto bloqueado, junto al bloque de consistencia y la voz. Va en CADA
 // lote por la misma REGLA DE CONTEXTO ABSOLUTO: un personaje que se mueve distinto en el
 // lote 3 que en el 1 es el mismo fallo que uno que cambia de cara.
-// ⚠️ `forensic.fondo` describe el VIDEO ENTERO y ninguna limpieza de texto lo acota a un
-// clip: filtrar los valores que empiezan describiendo otro corte deja pasar los que lo
-// mencionan a mitad de frase — medido, el campo `texturas` de la sesión de ropa decía
-// "Paredes lisas, tela suave del sillón, baldosas pulidas". Con keyframes el escenario
-// son las dos imágenes, así que describirlo otra vez solo puede contradecirlas.
-describe('buildLotePrompt — el escenario en modo frames', () => {
+// ⚠️ EL MODO KEYFRAMES SE ELIMINÓ con la vuelta a grok (2026-08-24). Ya no hay un par de
+// fotogramas que definan la escena, así que el escenario vuelve a viajar como texto en
+// TODOS los lotes: es lo único que la define.
+//
+// La deuda que esto reabre está documentada y es real: `forensic.fondo` describe el VIDEO
+// ENTERO y ninguna limpieza de texto lo acota a un clip (medido, el campo `texturas` de la
+// sesión de ropa decía "Paredes lisas, tela suave del sillón, baldosas pulidas", con el
+// sillón a mitad de frase). Lo que la contiene ahora es otra cosa: las IMÁGENES ANCLA le
+// dan al modelo la escena en píxeles, que le gana a cualquier descripción.
+describe('buildLotePrompt — el escenario', () => {
   const lote = groupIntoLotes([toma(1, 4, 'Hola.')])[0]
   const conSillon = 'Pared lisa. Paredes lisas, tela suave del sillón, baldosas pulidas.'
 
-  it('con keyframes NO manda la descripción del fondo — la mandan los fotogramas', () => {
-    const p = buildLotePrompt({ lote, ...ARGS, escenario: conSillon, mode: 'frames' })
-    expect(p).not.toContain('sillón')
-    expect(p).toMatch(/exactamente los del primer y el último fotograma/)
-  })
-
-  it('sin keyframes sigue mandándola: ahí es lo único que define la escena', () => {
+  it('manda la descripción del fondo: es lo único que define la escena', () => {
     const p = buildLotePrompt({ lote, ...ARGS, escenario: conSillon })
     expect(p).toContain(conSillon)
+    expect(p).toContain('SETTING AND LIGHTING')
   })
 })
 
@@ -417,12 +427,12 @@ describe('buildLotePrompt — cómo se mueve', () => {
     expect(p).toContain(movimiento.calidadMovimiento)
     expect(p).toContain(movimiento.manerismos)
     // Y dice que vale ENTRE gesto y gesto, que es justo lo que `accionVisual` no cubre.
-    expect(p).toMatch(/entre gesto y gesto/)
+    expect(p).toMatch(/between gestures/)
   })
 
   it('sin perfil no emite el bloque — las sesiones anteriores se comportan igual', () => {
     const p = buildLotePrompt({ lote, ...ARGS })
-    expect(p).not.toMatch(/CÓMO SE MUEVE/)
+    expect(p).not.toMatch(/HOW THEY MOVE/)
     expect(buildLotePrompt({ lote, ...ARGS, movimiento: null })).toBe(p)
   })
 })
@@ -438,21 +448,21 @@ describe('buildLotePrompt — plano por toma', () => {
 
   it('anuncia el plano solo cuando CAMBIA — no en cada toma', () => {
     const p = buildLotePrompt({ lote, ...ARGS, cortes: DOS_PLANOS })
-    expect([...p.matchAll(/^Cámara: /gm)]).toHaveLength(2)
-    expect(p).toContain('Cámara: Plano medio frontal, estático')
-    expect(p).toContain('Cámara: Primer plano del rostro')
+    expect([...p.matchAll(/^Camera: /gm)]).toHaveLength(2)
+    expect(p).toContain('Camera: Plano medio frontal, estático')
+    expect(p).toContain('Camera: Primer plano del rostro')
   })
 
   it('no gasta presupuesto cuando todo el lote comparte un plano — la línea global ya lo dice', () => {
     const unSoloPlano = DOS_PLANOS.map((c) => ({ ...c, camara: 'Plano medio' }))
     const p = buildLotePrompt({ lote, ...ARGS, cortes: unSoloPlano })
-    expect(p).not.toMatch(/^Cámara: /m)
+    expect(p).not.toMatch(/^Camera: /m)
     // La línea global (que viene por `camara`, ya deduplicada por `camaraDeLote`) sigue ahí.
-    expect(p).toContain(`CÁMARA: ${ARGS.camara}`)
+    expect(p).toContain(`CAMERA: ${ARGS.camara}`)
   })
 
   it('sin cortes se comporta como antes (sesiones y callers que no los pasan)', () => {
-    expect(buildLotePrompt({ lote, ...ARGS })).not.toMatch(/^Cámara: /m)
+    expect(buildLotePrompt({ lote, ...ARGS })).not.toMatch(/^Camera: /m)
   })
 })
 
@@ -467,13 +477,16 @@ describe('groupIntoLotes — frontera de plano', () => {
     const tomas = [conT(1, 2, 't1'), conT(2, 2, 't2'), conT(3, 2, 't3'), conT(4, 2, 't4')]
     // Sin el mapa los 8 s entran holgados en un solo lote.
     expect(groupIntoLotes(tomas)).toHaveLength(1)
-    // Con el mapa: un lote por encuadre, y las dos tomas del mismo plano siguen juntas.
-    const lotes = groupIntoLotes(tomas, MAPA)
+    // ⚠️ Y CON el mapa TAMBIÉN, porque el default pasó a ser "sin límite de encuadres":
+    // con 30 s de techo y las imágenes ancla, concatenar escenas es lo que se quiere.
+    expect(groupIntoLotes(tomas, MAPA)).toHaveLength(1)
+    // La frontera sigue existiendo y se pide explícitamente — es el dial de costo.
+    const lotes = groupIntoLotes(tomas, MAPA, 1)
     expect(lotes.map((l) => l.tomas.length)).toEqual([2, 1, 1])
   })
 
   it('cada lote queda con un solo encuadre', () => {
-    const lotes = groupIntoLotes([conT(1, 2, 't1'), conT(2, 2, 't3'), conT(3, 2, 't2')], MAPA)
+    const lotes = groupIntoLotes([conT(1, 2, 't1'), conT(2, 2, 't3'), conT(3, 2, 't2')], MAPA, 1)
     for (const l of lotes) {
       expect(new Set(l.tomas.map((t) => MAPA.get(t.tiempoOriginal))).size).toBe(1)
     }
@@ -483,7 +496,7 @@ describe('groupIntoLotes — frontera de plano', () => {
 
   it('sigue respetando el tope de 15 s dentro de un mismo encuadre', () => {
     const mismo = new Map([['t', 'Plano medio']])
-    const lotes = groupIntoLotes(Array.from({ length: 5 }, (_, i) => conT(i + 1, 4, 't')), mismo)
+    const lotes = groupIntoLotes(Array.from({ length: 5 }, (_, i) => conT(i + 1, 14, 't')), mismo)
     expect(lotes.length).toBeGreaterThan(1)
     for (const l of lotes) expect(l.duracionSeg).toBeLessThanOrEqual(LOTE_MAX_SEC)
   })
@@ -510,9 +523,15 @@ describe('groupIntoLotes — maxPlanos', () => {
   const MAPA = new Map([['a', 'Plano medio'], ['b', 'Primer plano'], ['c', 'Plano general']])
   const TOMAS = [conT(1, 2, 'a'), conT(2, 2, 'b'), conT(3, 2, 'c'), conT(4, 2, 'a')]
 
-  it('el default es 1: un encuadre por clip', () => {
-    expect(groupIntoLotes(TOMAS, MAPA)).toEqual(groupIntoLotes(TOMAS, MAPA, 1))
-    expect(groupIntoLotes(TOMAS, MAPA)).toHaveLength(4)
+  // ⚠️ EL DEFAULT SE INVIRTIÓ (2026-08-24): era 1 (un encuadre por clip, máxima fidelidad
+  // y máximo costo) y pasa a ser "sin límite". La medición que justificaba el 1 seguía
+  // siendo cierta pero su PREMISA cambió: se hizo sobre Veo, sin imágenes ancla, y ahí un
+  // clip con dos encuadres devolvía uno solo. Ahora cada escena lleva su propio fotograma
+  // de referencia y el prompt describe el corte entre ellas.
+  it('el default ya NO corta por encuadre: concatena escenas en un mismo clip', () => {
+    expect(groupIntoLotes(TOMAS, MAPA)).toHaveLength(1)
+    // El comportamiento viejo sigue disponible pidiéndolo explícitamente.
+    expect(groupIntoLotes(TOMAS, MAPA, 1)).toHaveLength(4)
   })
 
   it('K=2 admite dos encuadres por clip y nunca un tercero', () => {
@@ -530,8 +549,8 @@ describe('groupIntoLotes — maxPlanos', () => {
     expect(lotes).toHaveLength(1)
   })
 
-  it('el tope de 15 s sigue mandando por encima de maxPlanos', () => {
-    const largo = Array.from({ length: 6 }, (_, i) => conT(i + 1, 4, 'a'))
+  it('el tope de duración sigue mandando por encima de maxPlanos', () => {
+    const largo = Array.from({ length: 6 }, (_, i) => conT(i + 1, 14, 'a'))
     for (const l of groupIntoLotes(largo, MAPA, 9)) expect(l.duracionSeg).toBeLessThanOrEqual(LOTE_MAX_SEC)
   })
 })
@@ -565,10 +584,10 @@ describe('buildLotePrompt — varios personajes', () => {
     const l = groupIntoLotes([conT(1, 4, 't1', 'Hola.')])[0]
     const quien = new Map([['t1', [hijo]]])
     const p = buildLotePrompt({ lote: l, ...ARGS, personajes: [hijo, padre], quien })
-    expect(p).toContain('P1 (hijo) dice: “Hola.”')
+    expect(p).toContain('P1 (hijo) says (Latin American Spanish, verbatim): “Hola.”')
     // Un solo presente: sigue el formato de siempre, sin el encabezado de varios.
-    expect(p).not.toMatch(/EN ESTE CLIP SALEN/)
-    expect(p).toContain('PERFIL DE VOZ Y ACENTO:')
+    expect(p).not.toMatch(/THERE ARE \d+ PEOPLE/)
+    expect(p).toContain('VOICE AND ACCENT PROFILE:')
   })
 
   it('con DOS presentes emite un bloque por persona y atribuye cada línea', () => {
@@ -576,9 +595,9 @@ describe('buildLotePrompt — varios personajes', () => {
     const quien = new Map([['t1', [hijo]], ['t2', [padre]]])
     const p = buildLotePrompt({ lote: l, ...ARGS, personajes: [hijo, padre], quien })
 
-    expect(p).toMatch(/EN ESTE CLIP SALEN 2 PERSONAS/)
-    expect(p).toContain('PERSONAJE P1 (hijo)')
-    expect(p).toContain('PERSONAJE P2 (padre)')
+    expect(p).toMatch(/THERE ARE 2 PEOPLE IN THIS CLIP/)
+    expect(p).toContain('CHARACTER P1 (hijo)')
+    expect(p).toContain('CHARACTER P2 (padre)')
     expect(p).toContain('Bloque de hijo')
     expect(p).toContain('Bloque de padre')
     // Cada uno con SU voz y SU movimiento: darle a uno la voz del otro es el fallo.
@@ -586,8 +605,8 @@ describe('buildLotePrompt — varios personajes', () => {
     expect(p).toContain('acento de padre')
     expect(p).toContain('movimiento de padre')
     // Y cada línea dicha por quien corresponde.
-    expect(p).toContain('P1 (hijo) dice: “Papá, lo logré.”')
-    expect(p).toContain('P2 (padre) dice: “Estoy orgulloso.”')
+    expect(p).toContain('P1 (hijo) says (Latin American Spanish, verbatim): “Papá, lo logré.”')
+    expect(p).toContain('P2 (padre) says (Latin American Spanish, verbatim): “Estoy orgulloso.”')
   })
 
   it('con varios NO manda el bloque global de voz: cada uno lleva la suya', () => {
@@ -595,16 +614,16 @@ describe('buildLotePrompt — varios personajes', () => {
     const quien = new Map([['t1', [hijo]], ['t2', [padre]]])
     const p = buildLotePrompt({ lote: l, ...ARGS, personajes: [hijo, padre], quien })
     // Un perfil global contradiría los dos de arriba: el modelo no sabría cuál usar.
-    expect(p).not.toContain('PERFIL DE VOZ Y ACENTO:')
-    expect(p).toMatch(/no le des a una la voz de otra/)
+    expect(p).not.toContain('VOICE AND ACCENT PROFILE:')
+    expect(p).toMatch(/do not give one the other’s voice/)
   })
 
   it('una toma con DOS hablantes no se atribuye a uno solo', () => {
     const l = groupIntoLotes([conT(1, 4, 't1', 'Tome. No se preocupe.')])[0]
     const quien = new Map([['t1', [hijo, padre]]])
     const p = buildLotePrompt({ lote: l, ...ARGS, personajes: [hijo, padre], quien })
-    expect(p).toContain('Locución: “Tome. No se preocupe.”')
-    expect(p).not.toContain('P1 (hijo) dice:')
+    expect(p).toContain('Spoken line (Latin American Spanish, verbatim): “Tome. No se preocupe.”')
+    expect(p).not.toContain('P1 (hijo) says')
   })
 })
 
@@ -621,25 +640,25 @@ describe('buildLotePrompt — voz en off', () => {
   it('la línea no se le atribuye a nadie en cuadro', () => {
     const l = groupIntoLotes([conT(1, 't1', 'Este modelo se agotó en un día.')])[0]
     const p = buildLotePrompt({ lote: l, ...ARGS, vozEnOff: new Set(['t1']) })
-    expect(p).toContain('VOZ EN OFF (nadie habla en cuadro): “Este modelo se agotó en un día.”')
-    expect(p).not.toMatch(/^Locución:/m)
+    expect(p).toContain('VOICE-OVER, nobody speaks on camera (Latin American Spanish, verbatim): “Este modelo se agotó en un día.”')
+    expect(p).not.toMatch(/^Spoken line/m)
   })
 
   it('declara que ninguna boca se mueve — es lo que evita el lip-sync', () => {
     const l = groupIntoLotes([conT(1, 't1', 'Hola.')])[0]
     const p = buildLotePrompt({ lote: l, ...ARGS, vozEnOff: new Set(['t1']) })
-    expect(p).toMatch(/NINGUNA boca se mueve/)
-    expect(p).toMatch(/hay presentador/)
-    expect(p).toMatch(/GUION DE LA VOZ EN OFF/)
+    expect(p).toMatch(/NO mouth moves in this clip/)
+    expect(p).toMatch(/there is no/)
+    expect(p).toMatch(/FULL VOICE-OVER SCRIPT/)
   })
 
   it('un lote MIXTO no se declara en off: alguien sí habla en cuadro', () => {
     const l = groupIntoLotes([conT(1, 't1', 'Mirá esto.'), conT(2, 't2', 'Se agotó.')])[0]
     const p = buildLotePrompt({ lote: l, ...ARGS, vozEnOff: new Set(['t2']) })
-    expect(p).not.toMatch(/NINGUNA boca se mueve/)
+    expect(p).not.toMatch(/NO mouth moves in this clip/)
     // …pero cada línea conserva su propio rótulo.
-    expect(p).toContain('Locución: “Mirá esto.”')
-    expect(p).toContain('VOZ EN OFF (nadie habla en cuadro): “Se agotó.”')
+    expect(p).toContain('Spoken line (Latin American Spanish, verbatim): “Mirá esto.”')
+    expect(p).toContain('VOICE-OVER, nobody speaks on camera (Latin American Spanish, verbatim): “Se agotó.”')
   })
 
   it('sin el set el prompt es IDÉNTICO al de antes', () => {

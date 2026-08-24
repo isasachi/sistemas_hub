@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getVideoSession, updateVideoSession } from '@/lib/video-ads/db'
 import { callVideoAds } from '@/lib/video-ads/llm'
-import { generateImage } from '@/lib/video-ads/nano-banana'
+import { openaiGenerateImage } from '@/lib/llm-openai'
 import { uploadToStorage, fetchAsBase64 } from '@/lib/storage'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
@@ -37,10 +37,12 @@ export async function POST(
 ) {
   const { id } = await params
 
-  // ⚠️ La key se resuelve y se valida ANTES del gate de cuota, igual que en
-  // `generate-lotes` y por el mismo motivo: al revés, `checkGenQuota` ya habría escrito
-  // la fila de `video-character` y la generación del avatar moriría con un 401 de KIE —
-  // el usuario perdería una generación de su cuota por no haber cargado una key.
+  // ⚠️ El avatar ya NO se genera en KIE (pasó a gpt-image-2, que paga el hub), así que
+  // esta comprobación dejó de ser "sin key esta llamada falla" y pasa a ser un gate de
+  // COSTO DEL HUB: sin key de KIE el usuario no va a poder renderizar el video, y
+  // generarle igual el avatar sería gastar dinero nuestro en algo que no va a usar.
+  // Sigue yendo ANTES de `checkGenQuota` para no cobrarle una generación de su cuota por
+  // un paso que vamos a rechazar de todos modos.
   const kieKey = await currentKieKey()
   if (!kieKey) return NextResponse.json({ error: SIN_KEY }, { status: 400 })
 
@@ -114,12 +116,23 @@ export async function POST(
     const avatares = await Promise.all(conIdentidad.map(async ({ personaje, identidad }) => {
       const referencias = [personaje.fotoUrl, spec.wornProduct ? session.product_url : null]
         .filter((u): u is string => !!u)
-      const bytes = await generateImage({
-        prompt: identidad.promptCreacion,
-        imageUrls: referencias,
-        aspectRatio: '9:16',
-      }, kieKey)
-      return uploadToStorage(id, bytes, 'image/png', `avatar-${personaje.id}`)
+      // ⚠️ gpt-image-2, no Nano Banana Pro (2026-08-24). Con imágenes de referencia,
+      // `openaiGenerateImage` usa `images.edit`, así que el avatar se GENERA A PARTIR de
+      // la foto real en vez de describirla — que es lo que sostiene el parecido de tipo
+      // físico sin clonar la cara.
+      //
+      // ⚠️ CONSECUENCIA DE COSTO: esto lo paga el HUB (key de OpenAI), no el usuario.
+      // Nano Banana corría en KIE con la key del usuario. Ver AGENTS.md.
+      const refs = await Promise.all(referencias.map((u) => fetchAsBase64(u)))
+      const b64 = await openaiGenerateImage(
+        [
+          ...refs.map((r) => ({ inlineData: { mimeType: r.mimeType, data: r.data } })),
+          { text: identidad.promptCreacion },
+        ],
+        3,
+        { aspectRatio: '9:16' },
+      )
+      return uploadToStorage(id, Buffer.from(b64, 'base64'), 'image/png', `avatar-${personaje.id}`)
     }))
 
     const personajes = conIdentidad.map(({ personaje, identidad }, i) => ({
