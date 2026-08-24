@@ -17,7 +17,7 @@ import {
 } from '../../lib/product-hunter/scraper'
 import { openSsrSession } from '../../lib/product-hunter/ssr-fetch'
 import { profileAdvertiser } from '../advertisers/aggregate'
-import { saveAdvertiser, estadoRecrawl, guardarAuditoria } from '../db/advertisers'
+import { saveAdvertiser, estadoRecrawl, guardarAuditoria, marcarInconcluso } from '../db/advertisers'
 import { nextTier } from '../scheduler/tiers'
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
@@ -42,9 +42,20 @@ async function main() {
     noteNavResult(prof ? prof.distribution.sample : 0)
 
     if (!prof) {
-      // Inconcluso: ni tier ni fecha. El anunciante vuelve a vencer y se
-      // reintenta, que es lo correcto — no sabemos nada nuevo de él.
-      console.log(`? ${pageId} inconcluso (no se pudo leer el catálogo) — no se clasifica`)
+      // Inconcluso: ni tier ni `last_audited_at`. No sabemos nada nuevo de él y
+      // escribir una medición falsa lo mandaría a cuarentena estando sano.
+      //
+      // ⚠️ PERO SÍ SE ANOTA QUE LA LECTURA FALLÓ. Sin eso el anunciante queda
+      // permanentemente vencido para `disc_enqueue_recrawls` y vuelve cada
+      // ventana —encima al frente, por el `NULLS FIRST`—, quemando dos
+      // navegaciones contra Meta cada vez. La racha alimenta el backoff
+      // exponencial: se deja de preguntar tan seguido, sin concluir nada sobre
+      // el anunciante.
+      const racha = await marcarInconcluso(pageId)
+      console.log(
+        `? ${pageId} inconcluso (no se pudo leer el catálogo) — no se clasifica` +
+        (racha >= 3 ? ` · ${racha} seguidas, entra en backoff` : ''),
+      )
       process.exitCode = 2
       return
     }

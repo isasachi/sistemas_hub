@@ -362,6 +362,37 @@ export async function guardarAuditoria(
     crawl_tier: t.tier,
     consecutive_misses: t.consecutiveMisses,
     last_audited_at: new Date().toISOString(),
+    // Una auditoría que cierra bien borra la racha de inconclusos: el problema
+    // era de la IP, no del anunciante, y ya se resolvió.
+    inconclusive_streak: 0,
+    last_inconclusive_at: null,
   }).eq('page_id', pageId)
   if (error) throw new Error(`guardarAuditoria: ${error.message}`)
+}
+
+/**
+ * Registra que NO se pudo leer el catálogo de este anunciante.
+ *
+ * ⚠️ NO ES UNA AUDITORÍA Y NO DEBE PARECERLO: no toca `crawl_tier`,
+ * `active_ads_count` ni `last_audited_at`. Escribir "auditado hoy, 0 anuncios"
+ * sobre un bloqueo manda a cuarentena a un anunciante sano — el fallo que dejó
+ * 19 perfiles en ceros. Lo único que se anota es que la lectura falló.
+ *
+ * Existe porque sin esto el anunciante quedaba permanentemente vencido para
+ * `disc_enqueue_recrawls` y volvía a la cola cada ventana, encima AL FRENTE por
+ * el `NULLS FIRST`. La racha alimenta el backoff exponencial de esa función:
+ * dejamos de preguntar tan seguido, sin concluir nada sobre él.
+ */
+export async function marcarInconcluso(pageId: string): Promise<number> {
+  const { data, error } = await db().from('disc_advertisers')
+    .select('inconclusive_streak').eq('page_id', pageId).maybeSingle()
+  if (error) throw new Error(`marcarInconcluso: ${error.message}`)
+  const racha = ((data as { inconclusive_streak: number | null } | null)?.inconclusive_streak ?? 0) + 1
+
+  const { error: e2 } = await db().from('disc_advertisers').update({
+    inconclusive_streak: racha,
+    last_inconclusive_at: new Date().toISOString(),
+  }).eq('page_id', pageId)
+  if (e2) throw new Error(`marcarInconcluso: ${e2.message}`)
+  return racha
 }
