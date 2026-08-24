@@ -130,6 +130,14 @@ describe('normalizeUrl', () => {
 describe('dedupeKey', () => {
   const base = { page_id: '1', title: 't', body: 'b' } as unknown as SsrAd
 
+  // ⚠️ ESTE TEST SOSTIENE UNA DECISIÓN DE ESQUEMA, no solo el formato de la
+  // clave. `disc_ads` tenía un UNIQUE en `ad_archive_id` ADEMÁS del de
+  // `dedupe_key`, y con dos constraints el `ON CONFLICT (dedupe_key) DO NOTHING`
+  // del upsert lanzaba en vez de saltar, perdiendo la tanda entera de esa
+  // búsqueda. Se borró el redundante porque `dedupe_key` ES `aid:<archive_id>`
+  // y por tanto ya garantiza esa unicidad. Si alguien cambia esto y la clave
+  // deja de incorporar el archive id, la garantía se cae en silencio: hay que
+  // volver a poner el constraint.
   it('usa el ad_archive_id cuando existe', () => {
     expect(dedupeKey({ ...base, ad_archive_id: '99' } as SsrAd, null)).toBe('aid:99')
   })

@@ -1,0 +1,35 @@
+-- ⚠️ DOS CONSTRAINTS ÚNICOS Y UN SOLO ÁRBITRO: SE PERDÍAN ANUNCIOS YA
+-- DESCUBIERTOS.
+--
+-- `saveDiscoveries` guarda con `upsert(..., { onConflict: 'dedupe_key',
+-- ignoreDuplicates: true })`, o sea `ON CONFLICT (dedupe_key) DO NOTHING`. En
+-- Postgres eso **solo absorbe conflictos en ESE índice**: si la fila viola
+-- además `disc_ads_ad_archive_id_key`, la sentencia LANZA en vez de saltar. Con
+-- búsquedas concurrentes de la misma corrida encontrando el mismo anuncio,
+-- pasa. La excepción se lleva la tanda entera de esa búsqueda: se cuenta en
+-- `stats.errores`, se loguea con `✗` y NO se reintenta. Observado dos veces en
+-- un día ("comedero automatico"/EC y "sarten antiadherente"/AR).
+--
+-- ⚠️ EL CONSTRAINT NO APORTA NADA: `dedupe_key` es literalmente
+-- `'aid:' || ad_archive_id` cuando hay archive id, así que el UNIQUE de
+-- `dedupe_key` YA garantiza la unicidad del archive id. Verificado sobre las
+-- 91.317 filas del momento del cambio: 0 discrepancias, 0 `ad_archive_id`
+-- nulos, 0 claves `h:` de respaldo.
+--
+-- Y para el caso que hoy no ocurre —un anuncio sin archive id— tampoco
+-- protegía: ahí la clave pasa a `h:<hash>`, `ad_archive_id` queda NULL, y
+-- UNIQUE permite múltiples NULL igual.
+--
+-- ⚠️ LA GARANTÍA CUELGA DE `dedupeKey` (normalization/ad.ts). Si alguien cambia
+-- esa función y la clave deja de incorporar el archive id, esta redundancia se
+-- cae en silencio y hay que volver a poner el constraint. Por eso el test
+-- `'usa el ad_archive_id cuando existe'` lleva un comentario que lo dice.
+--
+-- Se descartó la alternativa de manejar los dos conflictos: PostgREST no deja
+-- declarar dos árbitros, habría que mover el insert a una función SQL. Más
+-- trabajo para el mismo resultado.
+ALTER TABLE disc_ads DROP CONSTRAINT IF EXISTS disc_ads_ad_archive_id_key;
+
+-- El índice se va con el constraint, pero `ad_archive_id` se sigue consultando:
+-- se conserva como índice NO único.
+CREATE INDEX IF NOT EXISTS disc_ads_archive_idx ON disc_ads (ad_archive_id);
