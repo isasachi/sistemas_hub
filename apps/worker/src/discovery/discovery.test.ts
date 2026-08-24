@@ -15,6 +15,21 @@ describe('normalizeQuery', () => {
     expect(normalizeQuery('DOLOR DE MUÉLA')).toBe('dolor de muela')
     expect(normalizeQuery('  ¿Dolor,  dental?  ')).toBe('dolor dental')
   })
+
+  it('pliega la falsa negrita del copy de Meta (NFKD, no NFD)', () => {
+    // Términos REALES que entraron al vocabulario y nunca podían coincidir:
+    // son el bloque Unicode matemático, no letras acentuadas, así que NFD los
+    // dejaba pasar tal cual.
+    expect(normalizeQuery('𝑃𝑖𝑒𝑙 𝐼𝑚𝑝𝑒𝑐𝑎𝑏𝑙𝑒'))
+      .toBe('piel impecable')
+    // Otras dos formas de compatibilidad que NFD tampoco pliega: ligadura y
+    // ancho completo. Las tres entran por el mismo camino.
+    expect(normalizeQuery('ﬁltro de agua')).toBe('filtro de agua')
+    expect(normalizeQuery('Ｃｒｅｍａ')).toBe('crema')
+    // Y el ASCII de siempre no se mueve: es lo que garantiza que los 164
+    // diccionarios en disco conserven su nombre.
+    expect(dictionaryKey('faja lumbar')).toBe('faja_lumbar')
+  })
   it('da la clave de archivo del diccionario', () => {
     expect(dictionaryKey('Dolor de Muela')).toBe('dolor_de_muela')
   })

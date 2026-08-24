@@ -17,9 +17,18 @@
 import './bootstrap'
 import { db } from '../src/db/client'
 import { esTerminoUtil } from '../src/vocab/terms'
+import { normalizeQuery } from '../src/discovery/normalize-query'
 
-/** Las mismas dos reglas que `extraerTerminos` aplica hoy al nombre del producto. */
+/** Las reglas que `extraerTerminos` aplica hoy al nombre del producto. */
 function aceptableHoy(term: string, source: string): boolean {
+  // ⚠️ UN TÉRMINO QUE NO ESTÁ EN SU PROPIA FORMA NORMALIZADA NO PUEDE COINCIDIR
+  // CON NADA. La extracción normaliza con `normalizeQuery`, así que si el
+  // término guardado difiere de su normalización es que entró con reglas
+  // viejas. Fue el caso de la falsa negrita del copy de Meta (`Piel Impecable`
+  // escrito con el bloque Unicode matemático): 8 términos buscando literalmente
+  // esos caracteres. Esta comprobación los caza a todos sin nombrar ninguno, y
+  // se mantiene sola si la normalización vuelve a endurecerse.
+  if (normalizeQuery(term) !== term) return false
   if (!esTerminoUtil(term)) return false
   // Del NOMBRE solo se aceptan bigramas; `product_type` y `tag` pueden ser de
   // una palabra (son categorías, no fragmentos de un título).

@@ -7,7 +7,21 @@
 // Meta.
 export function normalizeQuery(input: string): string {
   return input
-    .normalize('NFD')
+    // ⚠️ NFKD, NO NFD — y la diferencia la puso el copy de los anuncios. Meta
+    // está lleno de falsa negrita hecha con el bloque Unicode matemático
+    // (`Piel Impecable`, `Tienda Oficial` escritos con esos code points), que
+    // `NFD` deja intacto porque no son letras acentuadas sino caracteres
+    // distintos. Así entraron 8 términos al vocabulario que buscaban
+    // literalmente esos caracteres y nunca podían coincidir con copy normal.
+    // `NFKD` los pliega a ASCII y de paso normaliza ligaduras y anchos
+    // completos.
+    //
+    // ⚠️ NO toca la clave de dedupe: esa usa `normalizeText`
+    // (normalization/text.ts), otro módulo, y cambiarla reescribiría claves ya
+    // guardadas. Tampoco renombra diccionarios: `dictionaryKey` cuelga de acá,
+    // pero los 164 archivos en disco son ASCII y para ASCII NFKD ≡ NFD
+    // (verificado antes de cambiarlo).
+    .normalize('NFKD')
     .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
     .replace(/[^\p{L}\p{N}\s]/gu, ' ')
