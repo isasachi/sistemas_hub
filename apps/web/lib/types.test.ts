@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { z } from 'zod'
-import { ReferenceAnalysisSchema, ProductScanSchema } from './types'
+import { ReferenceAnalysisSchema, ProductScanSchema, CopyElementSchema } from './types'
 
 // Los tres campos nuevos (bodyFocus, attentionMarkers, brandColors) son `.nullable().catch(null)`
 // y NO `.nullish()`, que es la diferencia entera:
@@ -72,5 +72,36 @@ describe('zona del cuerpo y colores de marca', () => {
     expect(ref.attentionMarkers).toHaveLength(1)
     expect(ProductScanSchema.parse({ ...scanBase, brandColors: ['#BD1347', '#F6F2EB'] }).brandColors)
       .toEqual(['#BD1347', '#F6F2EB'])
+  })
+})
+
+// Mismo razonamiento, dos campos más: el concepto creativo de la referencia y la plantilla
+// fill-in-the-blank de cada slot de copy. Si cualquiera de los dos sale del `required`, el eje
+// entero queda en no-op — el concepto vuelve a ser una etiqueta genérica y la versión B se
+// convierte en una segunda reescritura libre, que es el bug que vinieron a arreglar.
+describe('concepto creativo y plantilla del copy', () => {
+  it('una sesión guardada ANTES de estos campos sigue parseando, con null', () => {
+    expect(ReferenceAnalysisSchema.parse(refBase).creativeConcept).toBeNull()
+    expect(CopyElementSchema.parse({ element: 'headline', text: 'Grasa que no se va' }).template)
+      .toBeNull()
+  })
+
+  it('el modelo está OBLIGADO a emitirlos', () => {
+    expect(required(ReferenceAnalysisSchema)).toContain('creativeConcept')
+    expect(required(CopyElementSchema)).toContain('template')
+  })
+
+  it('los valores buenos pasan intactos', () => {
+    const ref = ReferenceAnalysisSchema.parse({
+      ...refBase,
+      creativeConcept: 'antes/después: dos siluetas de la misma mujer, la izquierda rotulada ANTES',
+    })
+    expect(ref.creativeConcept).toMatch(/antes\/después/)
+    const el = CopyElementSchema.parse({
+      element: 'headline',
+      text: 'Flacidez que no se va',
+      template: '[problema común] que no se va',
+    })
+    expect(el.template).toBe('[problema común] que no se va')
   })
 })
