@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildDiffusionInstruction, MULTI_UNIT_SECTIONS, PAYMENT_SECTIONS, NO_TALENT_SECTIONS } from './instructions'
+import { buildDiffusionInstruction, MULTI_UNIT_SECTIONS, PAYMENT_SECTIONS, NO_TALENT_SECTIONS, enDosLineas } from './instructions'
 import type { SectionCopy, SectionType, LandingDna, Offer, TrustBlock } from './types'
 import { assignPoses } from './demographics'
 import { COPPER } from './palette-derive'
@@ -690,5 +690,21 @@ describe('antes-despues — la nota de encuadre y la pose no se contradicen', ()
     })
     expect(out).toContain('Sentadilla profunda')
     expect(out).toContain('los DOS paneles encuadran')
+  })
+})
+
+describe('enDosLineas', () => {
+  // ⚠️ Verificado en un render real: pasándole el string crudo, el modelo hacía las dos líneas bien
+  // Y ADEMÁS imprimía el guion al final de la primera ("Energiza con sabor —").
+  it('parte el bullet en dos líneas rotuladas y NO manda el separador', () => {
+    const out = enDosLineas('Energiza con sabor — y motiva sus juegos')
+    expect(out).toContain('LINE 1 (bold): "Energiza con sabor"')
+    expect(out).toContain('LINE 2 (light): "y motiva sus juegos"')
+    expect(out).not.toContain(' — ')
+  })
+
+  // La lista de ✗/✓ de antes-despues es de UNA línea: sin segunda parte no hay LINE 2 que dibujar.
+  it('un bullet sin separador no declara segunda línea', () => {
+    expect(enDosLineas('Snacks duros y secos')).toBe('  • LINE 1 (bold): "Snacks duros y secos"')
   })
 })
