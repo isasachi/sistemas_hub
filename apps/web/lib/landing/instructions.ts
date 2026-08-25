@@ -72,7 +72,16 @@ function copyBlock(raw: SectionCopy): string {
   if (copy.cta) lines.push(`Call-to-action button label: "${copy.cta}".`)
   if (copy.kicker) lines.push(`Kicker (subtítulo dorado con guiones laterales "— TEXTO —"): "${copy.kicker}".`)
   if (copy.closingBold) lines.push(`Closing card — frase bold: "${copy.closingBold}"${copy.closingSub ? `; subcopy: "${copy.closingSub}"` : ''}.`)
-  if (copy.closingStrip) lines.push(`Franja de cierre inferior (mayúsculas, reemplaza la barra de confianza): "${copy.closingStrip}".`)
+  // ⚠️ UNA SOLA BANDA, Y ESO HAY QUE DECIRLO. Verificado en un render real de `antes-despues`: el
+  // modelo dibujó DOS franjas apiladas y le escribió a la de arriba un texto propio ("EL CAMBIO QUE
+  // TU PERRO NECESITA."), con el closingStrip real debajo. Es el mismo modo de fallo que el bullet a
+  // medias —un carril que la plantilla dibuja y el prompt no llena del todo se llena solo—, y acá lo
+  // dispara el "reemplaza a la barra de confianza": el modelo pone las dos.
+  if (copy.closingStrip) lines.push(
+    `Franja de cierre inferior: EXACTAMENTE UNA banda sólida al pie, en mayúsculas, con este texto y` +
+    ` nada más: "${copy.closingStrip}". Reemplaza a la barra de confianza — no dibujes las dos, ni` +
+    ` apiles una segunda banda, ni agregues una línea de texto propia encima o debajo de ella.`,
+  )
   if (copy.socialProof) lines.push(`Banda de prueba social (con escudo): "${copy.socialProof}".`)
   if (copy.ctaHeadline) lines.push(`Bloque CTA — titular en mayúsculas: "${copy.ctaHeadline}"${copy.ctaSub ? `; subcopy: "${copy.ctaSub}"` : ''}.`)
   return lines.join('\n')
