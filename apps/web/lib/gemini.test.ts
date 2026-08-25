@@ -67,6 +67,22 @@ describe('refinePrompt', () => {
     expect(p).toContain('copy ONLY the layout, never who appears in it')
   })
 
+  // ⚠️ Mismo hueco, tercera vez. STEP5 congela el tratamiento tipográfico de la referencia y deja
+  // que solo cambie el COLOR del texto; refine no lee ese instructivo. Sin el candado, la
+  // regeneración re-tipografía el anuncio "para que combine con la marca" y deja de espejar a la
+  // referencia, que es lo único que esta tool promete replicar. La rama SIN feedback es la más
+  // expuesta: ahí se pide una variación, y la tipografía es lo primero que un modelo entiende por
+  // "otra versión".
+  for (const [caso, feedback] of [['sin feedback', ''], ['con feedback', 'titular en blanco']] as const) {
+    it(`${caso}: congela la tipografía y deja pasar solo el color`, () => {
+      const p = refinePrompt(4, feedback)
+      expect(p).toContain('typographic treatment in image 4')
+      expect(p).toMatch(/Only the text COLOR may differ/)
+      expect(p).toMatch(/Never restyle, re-set or "modernize" the type/)
+      expect(p).toMatch(/never resize one text block relative to another/)
+    })
+  }
+
   // Mismo hueco, segunda mitad: STEP5 re-apunta los marcadores a la zona del producto y
   // recolorea con la marca del usuario. Sin nombrarlos, la imagen 1 los tira de vuelta.
   for (const [caso, feedback] of [['sin feedback', ''], ['con feedback', 'titular en blanco']] as const) {

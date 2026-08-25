@@ -10,11 +10,13 @@ The model will receive:
 
 ## WHAT STAYS (sacred — reproduce exactly from Image 1)
 
-Layout, format, composition, visual hierarchy, background structure, badge position, text positions, the creative concept and its persuasive mechanism (section 10), visual style, typography style, product physical position, and the colorimetry STRUCTURE — which element is background, which is dominant, which is accent, which is the CTA, and how much they contrast with each other.
+Layout, format, composition, visual hierarchy, background structure, badge position, text positions, the creative concept and its persuasive mechanism (section 10), visual style, product physical position, the TYPOGRAPHIC TREATMENT of every text block (section 6), and the colorimetry STRUCTURE — which element is background, which is dominant, which is accent, which is the CTA, and how much they contrast with each other.
 
 ## WHAT CHANGES (replace with new brand)
 
-Product, brand name, logo, copy text, the colorimetry HUES (section 5), and the body zone the ad points at (section 10).
+Product, brand name, logo, the WORDS of the copy, the colorimetry HUES (section 5) — including the color of the text — and the body zone the ad points at (section 10).
+
+The text is the clearest case of this split: **what it SAYS changes, how it LOOKS does not.** New words, same typeface, same weight, same case, same alignment, same size hierarchy, same effects — only the color may move, and only to the brand hue that section 5 assigns to that role.
 
 ## NEVER INVENT
 
@@ -52,8 +54,12 @@ If brandColors are not provided, keep the reference palette exactly as it is. Ne
 
 Two things the recolor never touches: the product itself and its label, which are reproduced from Image 2 exactly as photographed (section 7), and text legibility — no copy ends up on a background it cannot be read against.
 
-**6. TYPOGRAPHY**
-Font style, weight, case, alignment, size hierarchy, color. Fixed from reference.
+**6. TYPOGRAPHY — the form is frozen, only the color moves**
+Reproduce the reference's typographic treatment exactly, block by block: typeface character (the family as seen — geometric sans, grotesque, high-contrast serif, condensed, script…), weight, case, letter-spacing, line-height, alignment, size hierarchy between blocks, and any effect on the letters (outline, drop shadow, highlight box, curved or angled baseline, italics, underline). Copy it as photographed. Do NOT modernize it, do NOT "clean it up", do NOT swap it for a font that suits the new brand better, and do NOT change how big one block is relative to another.
+
+The ONE thing that may change is the text COLOR, and only to the hue section 5 assigns to that element's role. Everything else about how the letters look is reproduced from Image 1.
+
+State this explicitly in the prompt, per block: which typographic treatment is being preserved and which color it takes.
 
 **7. PRODUCT (Image 2)**
 Describe product appearance accurately: shape, format, main colors, finish. Place it exactly per its physical position. The product's label — all text, graphics, and colors printed on it — must be reproduced exactly as it appears in Image 2. Do NOT simplify, alter, or omit any label detail.
@@ -71,7 +77,7 @@ If a logo is provided (Image 3), first decide WHERE the reference's own brand ac
 A floating logo dropped in the middle of the canvas is always wrong.
 
 **9. COPY**
-Every text element: element name → exact text content. Specify font weight, exact color, and position for each.
+Every text element: element name → exact text content. For each one, specify the typographic treatment being preserved from the reference (typeface character, weight, case, alignment, relative size, effects), its exact color, and its position. The words are new; the way they are set is not.
 
 **10. SCENE ADAPTATIONS — contextual reasoning**
 

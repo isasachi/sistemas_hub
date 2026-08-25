@@ -385,6 +385,20 @@ export function refinePrompt(resultImageNumber: number, feedback: string): strin
     `before/after halves — already point at the body zone this product acts on, and its color ` +
     `palette is already this brand's. Keep both exactly as they are in image ${resultImageNumber}. ` +
     `NEVER re-aim them at the zone shown in image 1, and never restore image 1's colors.`
+  // ⚠️ TERCER CANDADO, MISMO HUECO. STEP5 congela el tratamiento tipográfico de la referencia y
+  // deja que solo cambie el COLOR del texto; refine no lee ese instructivo, así que sin nombrarlo
+  // acá la regeneración re-tipografía el anuncio — cambia la familia, el peso o la caja "para que
+  // combine con la marca" y el anuncio deja de espejar a la referencia, que es lo único que esta
+  // tool promete replicar.
+  //
+  // ⚠️ Ojo con la rama SIN feedback: ahí se pide una variación de tratamiento visual, y sin este
+  // candado la tipografía es justo lo primero que un modelo entiende por "otra versión".
+  const typographyLock =
+    `The typographic treatment in image ${resultImageNumber} — typeface, weight, case, ` +
+    `letter-spacing, alignment, the size hierarchy between blocks, and any effect on the letters ` +
+    `(outline, shadow, highlight box, angled baseline) — was copied from the reference on purpose. ` +
+    `Reproduce it exactly. Only the text COLOR may differ, and it already does. Never restyle, ` +
+    `re-set or "modernize" the type, and never resize one text block relative to another.`
   // Con feedback el cambio es SAGRADO y EXCLUSIVO: solo eso, el resto pixel-idéntico
   // (no redibujar ni "mejorar" lo no pedido). Sin feedback, una variación fresca
   // (el botón "Regenerar" sin texto debe dar algo distinto, no un eco de la misma).
@@ -397,6 +411,7 @@ export function refinePrompt(resultImageNumber: number, feedback: string): strin
         `anything not asked.`,
         identityLock,
         adaptationLock,
+        typographyLock,
         `Change request: ${feedback.trim()}`,
       ].join(' ')
     : [
@@ -408,6 +423,7 @@ export function refinePrompt(resultImageNumber: number, feedback: string): strin
         `image 1 (the reference ad) — from image 1 copy ONLY the layout, never who appears in it.`,
         identityLock,
         adaptationLock,
+        typographyLock,
         `Vary only the visual treatment — lighting, framing detail, background texture, and how`,
         `strongly the accents read WITHIN that same palette — so it reads as a different take of`,
         `the same ad, never a redesign.`,
