@@ -66,7 +66,18 @@ describe('kieGeminiStructured', () => {
     expect(calls).toHaveLength(3)
   })
 
-  it('recorta los strings que se pasan del .max() en vez de tirar la respuesta', async () => {
+  // ⚠️ EL RECORTE ES EL ÚLTIMO RECURSO. Recortar en el primer intento repara en silencio lo que el
+  // modelo escribió de más y el copy sale amputado ("…con ingredientes de alta ") aunque un
+  // segundo intento lo habría escrito completo. Primero se reintenta.
+  it('un texto sobre el .max() se REINTENTA antes de recortarse', async () => {
+    let n = 0
+    const Corto = z.object({ nombre: z.string().max(10) })
+    stubFetch(() => ok(++n === 1 ? JSON.stringify({ nombre: 'palabra '.repeat(20) }) : JSON.stringify({ nombre: 'entra' }))())
+    expect(await kieGeminiStructured('t', Corto, [{ text: 'x' }], 3, 'S')).toEqual({ nombre: 'entra' })
+    expect(calls).toHaveLength(2) // el primero se descartó entero, no se recortó
+  })
+
+  it('en el ÚLTIMO intento sí recorta, para devolver algo en vez de tirar', async () => {
     stubFetch(ok(JSON.stringify({ nombre: 'palabra '.repeat(20) })))
     const out = await kieGeminiStructured('t', z.object({ nombre: z.string().max(10) }), [{ text: 'x' }], 1, 'S')
     expect(out.nombre.length).toBeLessThanOrEqual(10)

@@ -41,7 +41,19 @@ function copyBlock(raw: SectionCopy): string {
   if (copy.accentWord) lines.push(`Emphasis: within the headline, render the words "${copy.accentWord}" in the brand ACCENT COLOR only — same font and size, NO brackets, quotes, underline or box around them.`)
   if (copy.subheadline) lines.push(`Subheadline: "${copy.subheadline}".`)
   if (copy.kind === 'antes-despues') lines.push(`Label the left/before state "ANTES" and the right/after state "DESPUÉS" (those exact Spanish words, not "before/after").`)
-  if (copy.bullets?.length) lines.push(`${copy.kind === 'antes-despues' ? 'ANTES column — problems, each with a red ✗' : 'Bullets'}:\n${copy.bullets.map((b) => `  • ${b}`).join('\n')}`)
+  // ⚠️ EL RENDER NO PUEDE COMPLETAR UN BULLET. Su composición dibuja DOS líneas por bullet (acción
+  // en bold + complemento en light) y el copy trae las dos partidas por " — ". Cuando el copy llegó
+  // con una sola parte, el modelo de imagen inventó la segunda — y distinta en cada sección: la
+  // misma landing salió con "Ideal para perros pequeños / y razas mini" en el hero y
+  // "…/ y de todas las razas" en beneficios, que además se contradice sola. Lo que se dibuja es lo
+  // que hay; sin complemento, la segunda línea va vacía.
+  if (copy.bullets?.length) lines.push(
+    `${copy.kind === 'antes-despues' ? 'ANTES column — problems, each with a red ✗' : 'Bullets'}:\n` +
+    `${copy.bullets.map((b) => `  • ${b}`).join('\n')}\n` +
+    `  Render each bullet EXACTLY as written. Where a bullet contains " — ", the part before it is` +
+    ` the bold line and the part after it is the light line. A bullet with no " — " has NO second` +
+    ` line: leave it empty. NEVER write words of your own into a bullet.`,
+  )
   if (copy.bulletsAfter?.length) lines.push(`AFTER column — results, each with a green ✓ (paired beside the BEFORE column):\n${copy.bulletsAfter.map((b) => `  • ${b}`).join('\n')}`)
   if (copy.cards?.length)
     lines.push(`Cards:\n${copy.cards.map((c) => `  - "${c.title}": "${c.body}"`).join('\n')}`)

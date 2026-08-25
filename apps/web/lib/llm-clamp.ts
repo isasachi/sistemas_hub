@@ -5,13 +5,31 @@ import { z } from 'zod'
 // `gemini.ts` importa a ese: dejarlos allá era un ciclo. `gemini.ts` los re-exporta, así que sus
 // importadores no cambiaron. Mismo criterio que `lib/body-focus.ts`.
 
-/** Recorta a `max` en LÍMITE DE PALABRA — nunca a mitad, que dejaba basura visible ("Sient."). */
+/**
+ * Recorta a `max` sin dejar basura VISIBLE ni SEMÁNTICA.
+ *
+ * Empezó cortando a secas y dejaba palabras partidas ("Sient.", "absor…"), así que pasó a cortar
+ * en límite de palabra. ⚠️ Pero eso no alcanza cuando el texto son VARIAS FRASES: medido en una
+ * landing real, un titular de cierre de tres frases quedó en exactamente 90 caracteres —el tope
+ * del schema— terminando en *"…Un placer saludable para su día a día. Hazlo 5"*. "Hazlo 5" es
+ * un muñón: entero como palabra, sin sentido como frase, y se imprimió dentro de la imagen.
+ *
+ * Por eso el corte prefiere el LÍMITE DE FRASE: si al recortar queda un punto (o un ! / ?) pasada
+ * la mitad del cupo, se corta ahí y la frase incompleta se cae entera. Solo si no hay ninguno se
+ * cae al límite de palabra, que es el comportamiento anterior.
+ */
 export function sliceToWord(s: string, max: number): string {
   if (s.length <= max) return s
-  let cut = s.slice(0, max)
+  const cut = s.slice(0, max)
+
+  // Fin de frase = puntuación seguida de espacio/salto, o al final del recorte.
+  const finFrase = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('! '), cut.lastIndexOf('? '),
+    cut.lastIndexOf('.\n'), cut.lastIndexOf('!\n'), cut.lastIndexOf('?\n'))
+  if (finFrase > max * 0.5) return cut.slice(0, finFrase + 1)
+
   const lastSpace = cut.lastIndexOf(' ')
-  if (lastSpace > max * 0.5) cut = cut.slice(0, lastSpace)
-  return cut.replace(/[\s,;:.–—-]+$/, '')
+  const porPalabra = lastSpace > max * 0.5 ? cut.slice(0, lastSpace) : cut
+  return porPalabra.replace(/[\s,;:.–—-]+$/, '')
 }
 
 function valueAtPath(obj: unknown, path: readonly (string | number | symbol)[]): unknown {

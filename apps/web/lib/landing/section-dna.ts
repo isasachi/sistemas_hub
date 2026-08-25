@@ -33,7 +33,7 @@ export const SECTION_DNA: Record<SectionType, SectionDna> = {
       'Barra de confianza inferior + pastilla inferior "Recomendado por expertos"',
       'SIN botón CTA — el hero solo presenta',
     ],
-    copy: 'headline: 2-3 cláusulas MUY cortas separadas por coma, ≤50 caracteres EN TOTAL, siempre una frase COMPLETA (nunca la dejes a medias ni la cortes). accentWord: 1-2 palabras del titular = el PROBLEMA o la TRANSFORMACIÓN (nunca la marca). subheadline: 1-2 líneas cortas, ≤75 caracteres, completa. bullets: EXACTAMENTE 4, cada uno una acción de 2-4 palabras (línea bold) + un complemento de 2-4 palabras (línea light). SIN cta. Prioriza que TODO el texto entre completo antes que meter más palabras.',
+    copy: 'headline: 2-3 cláusulas MUY cortas separadas por coma, ≤50 caracteres EN TOTAL, siempre una frase COMPLETA (nunca la dejes a medias ni la cortes). accentWord: 1-2 palabras del titular = el PROBLEMA o la TRANSFORMACIÓN (nunca la marca). subheadline: 1-2 líneas cortas, ≤75 caracteres, completa. bullets: EXACTAMENTE 4, cada uno con SUS DOS PARTES unidas por " — ": la acción de 2-4 palabras (línea bold) y su complemento de 2-4 palabras (línea light), ej "Premia con amor — y refuerza el vínculo". Un bullet sin su complemento hace que el render lo INVENTE. SIN cta. Prioriza que TODO el texto entre completo antes que meter más palabras.',
     requires: { bullets: 4 },
   },
   beneficios: {
@@ -44,7 +44,7 @@ export const SECTION_DNA: Record<SectionType, SectionDna> = {
       'Talento a la derecha, producto centro-derecha',
       'Barra de confianza inferior + pastilla "Recomendado por expertos"',
     ],
-    copy: 'headline. kicker: frase corta en mayúsculas para la banda dorada (ej "— RESULTADOS REALES —"). bullets: EXACTAMENTE 5 con el mismo patrón bold+light del hero (los primeros 4 = los del hero). closingBold: frase de cierre en bold. closingSub: subcopy de una línea que la acompaña.',
+    copy: 'headline. kicker: frase corta en mayúsculas para la banda dorada (ej "— RESULTADOS REALES —"). bullets: EXACTAMENTE 5 con el mismo patrón "acción — complemento" del hero, las DOS partes escritas (los primeros 4 = los del hero, idénticos). closingBold: frase de cierre en bold. closingSub: subcopy de una línea que la acompaña.',
     requires: { bullets: 5 },
   },
   'antes-despues': {
@@ -56,7 +56,7 @@ export const SECTION_DNA: Record<SectionType, SectionDna> = {
       'Producto centrado en la parte inferior',
       'Franja de cierre inferior (banda sólida, texto en mayúsculas) — REEMPLAZA a la barra de confianza; sin pastilla de expertos',
     ],
-    copy: 'headline: 2 líneas. kicker. bullets: EXACTAMENTE 4 = problemas del estado ANTES (frases cortas). bulletsAfter: EXACTAMENTE 4 = resultados del estado DESPUÉS, pareados 1:1 con los ANTES. closingStrip: una frase en MAYÚSCULAS para la franja de cierre.',
+    copy: 'headline: 2 líneas — NO empieces con "Antes"/"Después" ni los nombres: la composición ya dibuja esas dos pills y repetirlo desperdicia el titular (medido: "Antes. Snacks difíciles de masticar."). accentWord: la palabra del PROBLEMA o de la TRANSFORMACIÓN, nunca una genérica como el tipo de producto. kicker. bullets: EXACTAMENTE 4 = problemas del estado ANTES (frases cortas). bulletsAfter: EXACTAMENTE 4 = resultados del estado DESPUÉS, pareados 1:1 con los ANTES. closingStrip: una frase de CIERRE PERSUASIVO en MAYÚSCULAS — nunca una instrucción de uso ("¡DÁMSELAS A PRIMERA HORA!" es un modo de empleo inventado, no un cierre).',
     requires: { bullets: 4, bulletsAfter: 4 },
   },
   testimonios: {
@@ -124,7 +124,7 @@ export const SECTION_DNA: Record<SectionType, SectionDna> = {
       'Refuerzo de garantía (sello) + barra de confianza inferior + pastilla "Recomendado por expertos"',
       'SIN persona alguna; franja superior reservada para el lockup de marca (se compone aparte)',
     ],
-    copy: 'headline: 3 líneas. subheadline. bullets: EXACTAMENTE 4 = los MISMOS del hero (los sincroniza shareBullets, no los reescribas distinto). ctaHeadline: llamada en MAYÚSCULAS (ej "¡PIDE EL TUYO AHORA!"). ctaSub: 1 línea. cta: etiqueta corta del botón.',
+    copy: 'headline: hasta 3 líneas cortas, ≤80 caracteres EN TOTAL, TODAS frases completas — al tope del esquema el recorte tira la última y deja un muñón impreso ("… Hazlo 5", medido). subheadline. bullets: EXACTAMENTE 4 = los MISMOS del hero (los sincroniza shareBullets, no los reescribas distinto), cada uno "acción — complemento". ctaHeadline: llamada en MAYÚSCULAS (ej "¡PIDE EL TUYO AHORA!"). ctaSub: 1 línea. cta: etiqueta corta del botón.',
     requires: { bullets: 4 },
   },
 }

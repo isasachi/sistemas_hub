@@ -123,7 +123,17 @@ async function geminiDirectoStructured<T>(
       const obj = JSON.parse(res.text ?? '')
       let parsed = schema.safeParse(obj)
       // Recupera el caso común: strings sobre el límite → recorta y reintenta el parse (no la API).
-      if (!parsed.success && clampTooBigStrings(obj, parsed.error)) parsed = schema.safeParse(obj)
+      // ⚠️ EL RECORTE ES EL ÚLTIMO RECURSO, NO EL PRIMERO. Recortar en el primer intento REPARA en
+      // silencio lo que el modelo escribió de más, y así nunca se le vuelve a pedir: el copy sale
+      // amputado aunque un segundo intento lo habría escrito completo. Medido en una landing real
+      // —"…con ingredientes de alta " y un titular cortado en "¡Espera a ver"— con el system
+      // prompt diciéndole explícitamente que no llegue al tope.
+      //
+      // Ahora un `too_big` deja fallar el parse y se reintenta; solo en el ÚLTIMO intento se
+      // recorta, para devolver algo en vez de tirar (que es el 500 tras tres intentos que este
+      // recorte vino a evitar en su día).
+      const ultimo = i === maxRetries - 1
+      if (!parsed.success && ultimo && clampTooBigStrings(obj, parsed.error)) parsed = schema.safeParse(obj)
       if (parsed.success) return parsed.data
       lastError = parsed.error
     } catch (e) {
