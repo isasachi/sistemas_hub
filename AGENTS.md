@@ -54,9 +54,18 @@ sistemas_hub/                (git root — package.json con "workspaces": ["apps
 | **Imagen** (`gpt-image-2` + `nano-banana-2`) | **KIE** — `lib/kie-image.ts` | ✅ migrado |
 | Texto y visión de OpenAI (`gpt-4o-mini`) | SDK de OpenAI | 🔒 **se queda ahí** — decisión del dueño del repo (2026-08-25) |
 | Render de video (`grok-imagine`) | KIE, key del USUARIO | ya estaba |
-| Worker (`claude-haiku-4-5`) | Anthropic directo | fuera de alcance |
+| Worker (`claude-haiku-4-5`) | Anthropic directo | 🔒 **se queda ahí** — decisión del dueño del repo (2026-08-25) |
+| Moderación (`omni-moderation-latest`) | OpenAI directo | 🔒 **se queda ahí** — decisión del dueño del repo (2026-08-25) |
 
-🔒 **`gpt-4o-mini` NO se migra: se queda en el SDK de OpenAI por decisión del dueño del repo.** No es un pendiente ni un "todavía no" — es el estado final buscado, así que el hub queda con DOS proveedores a propósito: OpenAI directo para su mitad y KIE para la de Gemini. Consecuencia práctica: `@anthropic-ai/sdk` aparte, `openai` sigue siendo dependencia de `apps/web` y `isPermanentOpenAiError`, `sizeFor` y el resto de `llm-openai.ts` siguen siendo código VIVO, no legado. Lo que este documento midió sobre `gpt-5-6-luna` como reemplazo de gpt-4o-mini queda archivado: no se va a usar.
+🔒 **TRES RECURSOS NO SE MIGRAN, y es el estado final buscado — no un pendiente.** Con esto la migración queda CERRADA: no hay nada más en la lista.
+
+1. **`gpt-4o-mini`** se queda en el SDK de OpenAI.
+2. **La moderación (`omni-moderation-latest`)** se queda en OpenAI. Es gratis, fail-open y KIE no tiene equivalente; meterla en un modelo de chat sería pagar por algo que hoy no cuesta y perder el veredicto binario.
+3. **El worker (`buscador-productos`, `claude-haiku-4-5`)** se queda en Anthropic directo. `anthropic.ts` corre **Batches (−50 %) + `cache_control` sobre un system prompt fijo grande (lecturas a 0,1×)** con mensajes de usuario chicos: es exactamente la forma donde perder el caché duele más, y KIE anuncia 30-50 % bajo lista **sin batching ni caché**. Con 66k filas pendientes en el barrido, moverlo sería plausiblemente un AUMENTO de costo. (Y su endpoint `/claude` devolvía 500 la última vez que se probó, pero ese no es el motivo: el motivo es el costo.)
+
+⚠️ **Consecuencia práctica de la 1 y la 2:** `openai` sigue siendo dependencia de `apps/web` y `llm-openai.ts` es código VIVO, no legado. Lo que este documento midió sobre `gpt-5-6-luna` como reemplazo de gpt-4o-mini queda archivado: no se va a usar.
+
+**Detalle de `gpt-4o-mini`:** El hub queda con dos proveedores de texto a propósito: OpenAI directo para su mitad y KIE para la de Gemini. `isPermanentOpenAiError` y el resto de `llm-openai.ts` siguen en uso; lo que ya NO se usa es `sizeFor`, que se jubiló con el ratio nativo de la imagen.
 
 **Lo que NO cambió al migrar el recurso de Gemini:** el orden de proveedores. `callStructured`/`callReasoning` siguen siendo OpenAI-primario, con `preferGemini` invirtiéndolo en los sitios de siempre. Lo único que cambió es por dónde sale Gemini.
 
