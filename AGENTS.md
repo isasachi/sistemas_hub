@@ -51,10 +51,12 @@ sistemas_hub/                (git root — package.json con "workspaces": ["apps
 | recurso | dónde vive hoy | estado |
 |---|---|---|
 | **Texto y visión de Gemini** (`gemini-2.5-flash`) | **KIE** — `lib/kie-gemini.ts` | ✅ migrado |
-| Texto y visión de OpenAI (`gpt-4o-mini`) | SDK de OpenAI | sin migrar |
+| Texto y visión de OpenAI (`gpt-4o-mini`) | SDK de OpenAI | 🔒 **se queda ahí** — decisión del dueño del repo (2026-08-25) |
 | Imagen (`gpt-image-2`, `gemini-3.1-flash-image`) | SDKs directos | sin migrar |
 | Render de video (`grok-imagine`) | KIE, key del USUARIO | ya estaba |
 | Worker (`claude-haiku-4-5`) | Anthropic directo | fuera de alcance |
+
+🔒 **`gpt-4o-mini` NO se migra: se queda en el SDK de OpenAI por decisión del dueño del repo.** No es un pendiente ni un "todavía no" — es el estado final buscado, así que el hub queda con DOS proveedores a propósito: OpenAI directo para su mitad y KIE para la de Gemini. Consecuencia práctica: `@anthropic-ai/sdk` aparte, `openai` sigue siendo dependencia de `apps/web` y `isPermanentOpenAiError`, `sizeFor` y el resto de `llm-openai.ts` siguen siendo código VIVO, no legado. Lo que este documento midió sobre `gpt-5-6-luna` como reemplazo de gpt-4o-mini queda archivado: no se va a usar.
 
 **Lo que NO cambió al migrar el recurso de Gemini:** el orden de proveedores. `callStructured`/`callReasoning` siguen siendo OpenAI-primario, con `preferGemini` invirtiéndolo en los sitios de siempre. Lo único que cambió es por dónde sale Gemini.
 
