@@ -22,7 +22,7 @@ import { launchScraperContext, runPool } from '../lib/product-hunter/scraper'
 import { openSsrSession, readConnection, advertiserUrl, type SsrAd } from '../lib/product-hunter/ssr-fetch'
 import { esperarTurno } from '../lib/product-hunter/scan-verify'
 import { productKey } from '../lib/product-hunter/product-key'
-import { writeFileSync } from 'node:fs'
+import { writeFileSync, readFileSync } from 'node:fs'
 
 const arg = (n: string, d: number) => {
   const i = process.argv.indexOf(`--${n}`)
@@ -43,11 +43,14 @@ interface Salida extends Fila { muestra: number; distintos: number; clusters: Cl
 // Estratificado a propósito: `pendiente` es la población sin medir (el punto),
 // y las otras dos son los CONTROLES ETIQUETADOS — un umbral de fusión tiene que
 // respetar las dos a la vez, así que hay que muestrear de los dos lados.
-async function muestra(status: string, n: number): Promise<Fila[]> {
-  const { data, error } = await db
-    .from('ph_raw_products')
-    .select('niche,page_id,ad_count,status,name')
-    .eq('status', status).gte('ad_count', 40).limit(n * 4)
+// ⚠️ SIN `--ids`, ESTO NO ES UNA MUESTRA ALEATORIA. PostgREST devuelve el slice
+// que le da el planner, así que el `.limit()` toma un arbitrario, no un azar.
+// Sirve para tantear; para un número que se vaya a citar, pasá `--ids` con
+// page_ids sacados de un `order by random()`.
+async function muestra(status: string, n: number, ids?: string[]): Promise<Fila[]> {
+  let q = db.from('ph_raw_products').select('niche,page_id,ad_count,status,name').eq('status', status)
+  q = ids ? q.in('page_id', ids) : q.gte('ad_count', 40).limit(n * 4)
+  const { data, error } = await q
   if (error) throw new Error(error.message)
   const vistos = new Set<string>()
   const out: Fila[] = []
@@ -80,8 +83,12 @@ async function main() {
     ['descartado', arg('descartado', 60)],
     ['monoproducto', arg('monoproducto', 60)],
   ]
+  const idsArg = process.argv.indexOf('--ids')
+  const ids = idsArg >= 0
+    ? readFileSync(process.argv[idsArg + 1], 'utf8').split(',').map((s) => s.trim()).filter(Boolean)
+    : undefined
   const filas: Fila[] = []
-  for (const [s, n] of plan) if (n > 0) filas.push(...(await muestra(s, n)))
+  for (const [s, n] of plan) if (n > 0) filas.push(...(await muestra(s, n, ids)))
   console.log(`[medir] ${filas.length} anunciantes: ` +
     plan.map(([s, n]) => `${s} ${filas.filter((f) => f.status === s).length}/${n}`).join(' · '))
 
