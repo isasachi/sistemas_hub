@@ -7,24 +7,24 @@ import { mismosTextos } from './Section4Copy'
 describe('mismosTextos', () => {
   it('mismo texto y distinta plantilla SÍ es la misma copia', () => {
     expect(mismosTextos(
-      [{ element: 'headline', text: 'Flacidez que no se va', template: null }],
-      [{ element: 'headline', text: 'Flacidez que no se va', template: '[problema] que no se va' }]
+      [{ element: 'headline', text: 'Flacidez que no se va', template: null, source: null }],
+      [{ element: 'headline', text: 'Flacidez que no se va', template: '[problema] que no se va', source: null }]
     )).toBe(true)
   })
 
   it('textos distintos no', () => {
     expect(mismosTextos(
-      [{ element: 'headline', text: 'Adiós a la flacidez', template: null }],
-      [{ element: 'headline', text: 'Flacidez que no se va', template: '[problema] que no se va' }]
+      [{ element: 'headline', text: 'Adiós a la flacidez', template: null, source: null }],
+      [{ element: 'headline', text: 'Flacidez que no se va', template: '[problema] que no se va', source: null }]
     )).toBe(false)
   })
 
   it('distinto número de slots no', () => {
     expect(mismosTextos(
-      [{ element: 'headline', text: 'A', template: null }],
+      [{ element: 'headline', text: 'A', template: null, source: null }],
       [
-        { element: 'headline', text: 'A', template: null },
-        { element: 'cta', text: 'B', template: null },
+        { element: 'headline', text: 'A', template: null, source: null },
+        { element: 'cta', text: 'B', template: null, source: null },
       ]
     )).toBe(false)
   })

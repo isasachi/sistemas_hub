@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { transcribeLaReferencia } from './anuncios/copy-check'
 import { BodyFocus } from '@/lib/body-focus'
 
 // ─── Step 1: Reference ────────────────────────────────────────────────────────
@@ -65,12 +66,34 @@ export const CopyElementSchema = z.object({
   // paso de templating — sin ella B se vuelve otra reescritura libre y las dos versiones colapsan
   // en la misma. Se guarda y no se muestra; `scaffoldFidelity` la mide contra el texto final.
   template: z.string().nullable().catch(null),
+  /**
+   * ⚠️ LA TRANSCRIPCIÓN LITERAL DE LA REFERENCIA (etapa 1 de la versión B), y existe por el mismo
+   * motivo que `template`: exigirla obliga al modelo a HACER el paso en vez de afirmar que lo hizo,
+   * y de paso le da al código con qué verificar. Sin ella nadie podía comprobar que los VALORES
+   * cambiaran —`scaffoldFidelity` mide el andamiaje, no los datos— y B podía devolver el copy de la
+   * referencia palabra por palabra, que es publicidad de la otra marca.
+   *
+   * `.nullable().catch(null)` por lo mismo que `template`: con `.nullish()` sale del `required` y
+   * el modelo lo omite en silencio; con `.nullable()` a secas revienta el parse de toda sesión
+   * guardada antes de este cambio.
+   */
+  source: z.string().nullable().catch(null),
 })
 export type CopyElement = z.infer<typeof CopyElementSchema>
 
 export const CopyVersionsSchema = z.object({
   versionA: z.array(CopyElementSchema).min(1),
   versionB: z.array(CopyElementSchema).min(1),
+// ⚠️ B NO PUEDE DEVOLVER EL COPY DE LA REFERENCIA TAL CUAL — es publicidad de la otra marca, y se
+// imprime dentro del anuncio del usuario. Medido en una sesión real: referencia de peso y salud,
+// producto de creatina para glúteos, y B devolvió "PANZA HINCHADA, INSOMNIO…" y "7 KILOS MENOS DE
+// CORTISOL EN 30 DÍAS". `scaffoldFidelity` no lo veía porque mide el ANDAMIAJE y ese template era
+// un slot entero entre corchetes, sin andamiaje que medir.
+//
+// Va como `.refine` y no como un log: `callStructured` lo valida post-hoc, así que se REINTENTA la
+// generación en vez de ofrecerle al usuario una versión que anuncia a otra marca.
+}).refine((d) => !d.versionB.some(transcribeLaReferencia), {
+  message: 'la versión B transcribió el copy de la referencia en vez de rellenar sus huecos',
 })
 export type CopyVersions = z.infer<typeof CopyVersionsSchema>
 
