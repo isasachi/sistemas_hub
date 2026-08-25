@@ -156,3 +156,23 @@ describe('pinUserPrice', () => {
     expect(pinUserPrice(base, 'S/89 · Envío gratis · 2x1')).toBe(base)
   })
 })
+
+describe('missingStructure — campos escalares', () => {
+  // Un array corto se nota; un closingStrip ausente no: la composición dibuja la franja igual y el
+  // modelo de imagen le inventa el texto. Medido en 1 de 6 corridas de la misma sesión.
+  const completo = {
+    kind: 'antes-despues' as const, headline: 'h',
+    bullets: ['a', 'b', 'c', 'd'], bulletsAfter: ['e', 'f', 'g', 'h'], closingStrip: 'CIERRE',
+  }
+
+  it('reclama el campo que la composición dibuja y el modelo omitió', () => {
+    const { closingStrip: _, ...sinFranja } = completo
+    expect(missingStructure(['antes-despues'], [sinFranja])).toEqual([
+      '"antes-despues" necesita el campo "closingStrip", que la composición dibuja.',
+    ])
+  })
+
+  it('no reclama nada cuando está', () => {
+    expect(missingStructure(['antes-despues'], [completo])).toEqual([])
+  })
+})

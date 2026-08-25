@@ -5,7 +5,7 @@ import path from 'path'
 import { openaiCallStructured, openaiCallReasoning, openaiGenerateImage } from './llm-openai'
 import { kieGeminiStructured, kieGeminiReasoning } from './kie-gemini'
 import { kieGenerateImage, type ModeloImagen } from './kie-image'
-import { clampTooBigStrings, sliceToWord } from './llm-clamp'
+import { clampTooBigStrings, correccionDeLargo, sliceToWord } from './llm-clamp'
 
 // Re-exportados desde el módulo hoja `llm-clamp.ts`: los necesita también `kie-gemini.ts`, y este
 // archivo lo importa a él — dejarlos acá era un ciclo. Los importadores no cambiaron.
@@ -109,11 +109,13 @@ async function geminiDirectoStructured<T>(
   systemInstruction: string,
 ): Promise<T> {
   let lastError: unknown = new Error(`geminiCallStructured(${schemaName}): no attempts`)
+  // El reintento NO puede mandar el mismo prompt: ver `correccionDeLargo`.
+  let correccion: string | null = null
   for (let i = 0; i < maxRetries; i++) {
     try {
       const res = await getAI().models.generateContent({
         model: 'gemini-2.5-flash',
-        contents: [{ role: 'user', parts }],
+        contents: [{ role: 'user', parts: correccion ? [...parts, { text: correccion }] : parts }],
         config: {
           systemInstruction,
           responseMimeType: 'application/json',
@@ -136,6 +138,7 @@ async function geminiDirectoStructured<T>(
       if (!parsed.success && ultimo && clampTooBigStrings(obj, parsed.error)) parsed = schema.safeParse(obj)
       if (parsed.success) return parsed.data
       lastError = parsed.error
+      correccion = correccionDeLargo(parsed.error)
     } catch (e) {
       lastError = e
     }

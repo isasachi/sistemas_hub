@@ -20,7 +20,11 @@ export interface SectionDna {
   // Y la validación post-generación (`missingStructure` en copy.ts) — si el modelo devuelve menos,
   // se hace un retry correctivo. Se validan DESPUÉS de `shareBullets` (que sincroniza cta-final←hero).
   // oferta no lleva `requires`: sus tiers los produce el flujo OfferGenSchema, no generateLandingCopy.
-  requires?: { bullets?: number; bulletsAfter?: number; cards?: number }
+  // `fields`: campos ESCALARES que la composición dibuja y el modelo omite en silencio. Un array
+  // corto se nota; un `closingStrip` ausente no — la franja se dibuja igual y el modelo de imagen
+  // le INVENTA el texto, que es el mismo defecto que un bullet a medias. Medido: `antes-despues`
+  // volvió sin franja en una de seis corridas de la misma sesión.
+  requires?: { bullets?: number; bulletsAfter?: number; cards?: number; fields?: string[] }
 }
 
 export const SECTION_DNA: Record<SectionType, SectionDna> = {
@@ -57,7 +61,7 @@ export const SECTION_DNA: Record<SectionType, SectionDna> = {
       'Franja de cierre inferior (banda sólida, texto en mayúsculas) — REEMPLAZA a la barra de confianza; sin pastilla de expertos',
     ],
     copy: 'headline: 2 líneas — NO empieces con "Antes"/"Después" ni los nombres: la composición ya dibuja esas dos pills y repetirlo desperdicia el titular (medido: "Antes. Snacks difíciles de masticar."). accentWord: la palabra del PROBLEMA o de la TRANSFORMACIÓN, nunca una genérica como el tipo de producto. kicker. bullets: EXACTAMENTE 4 = problemas del estado ANTES (frases cortas). bulletsAfter: EXACTAMENTE 4 = resultados del estado DESPUÉS, pareados 1:1 con los ANTES. closingStrip: una frase de CIERRE PERSUASIVO en MAYÚSCULAS — nunca una instrucción de uso ("¡DÁMSELAS A PRIMERA HORA!" es un modo de empleo inventado, no un cierre).',
-    requires: { bullets: 4, bulletsAfter: 4 },
+    requires: { bullets: 4, bulletsAfter: 4, fields: ['closingStrip'] },
   },
   testimonios: {
     composition: [

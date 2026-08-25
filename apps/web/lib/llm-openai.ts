@@ -2,6 +2,7 @@ import OpenAI, { toFile } from 'openai'
 import type { ChatCompletionContentPart } from 'openai/resources/chat/completions'
 import { z } from 'zod'
 import type { Part } from '@google/genai'
+import { correccionDeTope, stringsEnElTope } from './llm-clamp'
 
 // ─── Motor de IA PRIMARIO: OpenAI SDK ────────────────────────────────────────
 // Estas funciones son el motor principal (2026-07-23): `lib/gemini.ts` (callStructured/
@@ -157,13 +158,15 @@ export async function openaiCallStructured<T>(
     json_schema: { name: schemaName, schema: toStrictSchema(z.toJSONSchema(schema)) as Record<string, unknown>, strict: true },
   }
   let lastError: unknown = new Error(`openaiCallStructured(${schemaName}): no attempts`)
+  // El reintento NO puede mandar el mismo prompt: ver `stringsEnElTope`.
+  let correccion: string | null = null
   for (let i = 0; i < maxRetries; i++) {
     try {
       const res = await client().chat.completions.create({
         model: TEXT_MODEL,
         messages: [
           { role: 'system', content: systemInstruction },
-          { role: 'user', content: toChatContent(parts) },
+          { role: 'user', content: correccion ? [...toChatContent(parts), { type: 'text' as const, text: correccion }] : toChatContent(parts) },
         ],
         response_format,
       })
@@ -171,7 +174,18 @@ export async function openaiCallStructured<T>(
       // Output truncado por límite de tokens → JSON incompleto; reintenta en vez de parsear a medias.
       if (choice?.finish_reason === 'length') { lastError = new Error(`openaiCallStructured(${schemaName}): respuesta truncada (length)`); continue }
       const parsed = schema.safeParse(stripNulls(JSON.parse(choice?.message?.content ?? '')))
-      if (parsed.success) return parsed.data
+      if (parsed.success) {
+        // ⚠️ Un parse exitoso NO significa que el texto esté entero: OpenAI aplica los `maxLength`
+        // al decodificar, así que el corte llega DENTRO del tope y zod lo acepta. Se reintenta
+        // nombrando los campos; en el último intento se devuelve lo que haya (un muñón se lee
+        // mal, un 500 no se lee).
+        const enElTope = stringsEnElTope(parsed.data, response_format.json_schema.schema)
+        if (!enElTope.length || i === maxRetries - 1) return parsed.data
+        console.warn(`[llm] ${schemaName}: campos cortados en su tope (${enElTope.join(', ')}) → reintento`)
+        correccion = correccionDeTope(enElTope)
+        lastError = new Error(`openaiCallStructured(${schemaName}): texto cortado en el tope`)
+        continue
+      }
       lastError = parsed.error
     } catch (e) {
       if (isPermanentOpenAiError(e)) throw e // billing/cuota/auth → fail-fast → fallback a Gemini

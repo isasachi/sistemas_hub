@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { sliceToWord } from './llm-clamp'
+import { z } from 'zod'
+import { correccionDeLargo, sliceToWord, stringsEnElTope } from './llm-clamp'
 
 // ⚠️ EL CASO MEDIDO EN UNA LANDING REAL. El titular de cierre traía tres frases y el recorte lo
 // dejó en exactamente 90 caracteres —el tope del schema— terminando en "Hazlo 5": entero como
@@ -26,5 +27,57 @@ describe('sliceToWord', () => {
     const out = sliceToWord('Ya. Una frase larga que sigue y sigue sin puntuación alguna', 40)
     expect(out).not.toBe('Ya.')
     expect(out.length).toBeLessThanOrEqual(40)
+  })
+})
+
+describe('stringsEnElTope', () => {
+  const esquema = {
+    type: 'object',
+    properties: {
+      headline: { type: 'string', maxLength: 90 },
+      bullets: { type: 'array', items: { type: 'string', maxLength: 20 } },
+      cards: { type: 'array', items: { type: 'object', properties: { body: { type: 'string', maxLength: 10 } } } },
+    },
+  }
+
+  // OpenAI aplica los maxLength al decodificar: el texto llega CORTADO y exactamente en el tope,
+  // así que zod lo acepta y nada lo ve. Ése es el caso real de producción.
+  it('marca el string que aterriza EXACTO en su tope', () => {
+    expect(stringsEnElTope({ headline: 'x'.repeat(90) }, esquema)).toEqual(['headline'])
+  })
+
+  it('no marca el que queda por debajo', () => {
+    expect(stringsEnElTope({ headline: 'x'.repeat(89) }, esquema)).toEqual([])
+  })
+
+  it('entra en arrays y en objetos anidados', () => {
+    const obj = { bullets: ['ok', 'y'.repeat(20)], cards: [{ body: 'z'.repeat(10) }] }
+    expect(stringsEnElTope(obj, esquema)).toEqual(['bullets.1', 'cards.0.body'])
+  })
+
+  it('ignora las claves que el schema no declara', () => {
+    expect(stringsEnElTope({ otro: 'x'.repeat(90) }, esquema)).toEqual([])
+  })
+})
+
+describe('correccionDeLargo', () => {
+  it('nombra el campo y su tope', () => {
+    const r = z.object({ h: z.string().max(5) }).safeParse({ h: 'demasiado largo' })
+    expect(correccionDeLargo(r.error!)).toContain('"h": máximo 5 caracteres')
+  })
+
+  // Reintentar con la misma orden es lo correcto cuando el fallo no es de largo.
+  it('devuelve null si no hay ningún too_big', () => {
+    const r = z.object({ h: z.string() }).safeParse({ h: 7 })
+    expect(correccionDeLargo(r.error!)).toBeNull()
+  })
+})
+
+describe('sliceToWord con titulares multilínea', () => {
+  // El ADN pide "headline: 3 líneas" y llegan como líneas SIN punto: sin tratar el salto como
+  // límite, el recorte dejaba el muñón "¡No te quedes a".
+  it('corta en el salto de línea aunque no haya puntuación', () => {
+    const t = 'Mima a tu mejor amigo con snacks deliciosos\nPara perros pequeños y felices\n¡No te quedes atrás!'
+    expect(sliceToWord(t, 90)).toBe('Mima a tu mejor amigo con snacks deliciosos\nPara perros pequeños y felices')
   })
 })

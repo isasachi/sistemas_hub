@@ -176,6 +176,36 @@ const plano = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').
 // "DESCANSO ESTA" es una versión suave del mismo bug — un string que no aparece así en el titular.
 // El recorte se verifica antes de usarlo (`plano` puede no preservar índices con caracteres raros);
 // si no cuadra se conserva el string del modelo, que igual está en el titular salvo caso/acentos.
+/**
+ * ⚠️ EL COPY VIAJA A UN MODELO DE IMAGEN, QUE DIBUJA LO QUE LEE — el marcado no es invisible, se
+ * IMPRIME. Medido en la landing de snacks: `cta-final.subheadline` volvió como
+ * *"Con snacks blandos de pollo,<br> ideales para perros pequeños."*, con el `<br>` dentro. En la
+ * misma corrida `garantia.headline` salió *"Prueba Buddy sin preocupaciones —"*, con el conector
+ * colgando: un fragmento, no un titular. Los dos son mecánicos, así que los limpia el código en vez
+ * de pedírselos al prompt una cuarta vez.
+ *
+ * Se limpia CADA string del copy —un `<br>` es igual de visible en un bullet que en un titular— y
+ * solo eso: no se reescribe nada, no se recorta nada.
+ */
+export function limpiarMarcado(s: string): string {
+  return s
+    .replace(/<br\s*\/?>/gi, ' ')       // el salto que el modelo cree que va en HTML
+    .replace(/<\/?[a-z][^>]*>/gi, '')    // cualquier otra etiqueta suelta
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\s+([,.;:!?])/g, '$1')
+    .replace(/[\s]*[–—-]\s*$/, '')      // conector colgando al final
+    .trim()
+}
+
+export function limpiarCopy<T extends Record<string, unknown>>(copy: T): T {
+  const limpio = (v: unknown): unknown =>
+    typeof v === 'string' ? limpiarMarcado(v)
+    : Array.isArray(v) ? v.map(limpio)
+    : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, limpio(x)]))
+    : v
+  return limpio(copy) as T
+}
+
 export function cleanAccentWord<T extends { headline?: string; accentWord?: string }>(copy: T): T {
   const acc = copy.accentWord?.trim()
   if (!acc) return copy

@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import type { Part } from '@google/genai'
 import { toChatContent } from './llm-openai'
-import { clampTooBigStrings } from './llm-clamp'
+import { clampTooBigStrings, correccionDeLargo } from './llm-clamp'
 
 /**
  * PRIMER RECURSO MIGRADO A KIE: el modelo de TEXTO Y VISIÓN de Gemini (2026-08-25).
@@ -160,13 +160,15 @@ export async function kieGeminiStructured<T>(
   }
 
   let lastError: unknown = new Error(`kieGeminiStructured(${schemaName}): sin intentos`)
+  // El reintento NO puede mandar el mismo prompt: ver `correccionDeLargo`.
+  let correccion: string | null = null
   for (let i = 0; i < maxRetries; i++) {
     try {
       const raw = await kieChat({
         model: KIE_GEMINI_MODEL,
         messages: [
           { role: 'system', content: systemInstruction },
-          { role: 'user', content: contenido(parts) },
+          { role: 'user', content: correccion ? [...contenido(parts), { type: 'text', text: correccion }] : contenido(parts) },
         ],
         // ⚠️ Los dos vienen en TRUE por defecto en este endpoint (lo dice la doc). Con `stream` la
         // respuesta llega como SSE y no como JSON; con `include_thoughts` el razonamiento viaja
@@ -192,6 +194,7 @@ export async function kieGeminiStructured<T>(
       if (!parsed.success && ultimo && clampTooBigStrings(obj, parsed.error)) parsed = schema.safeParse(obj)
       if (parsed.success) return parsed.data
       lastError = parsed.error
+      correccion = correccionDeLargo(parsed.error)
     } catch (e) {
       lastError = e
     }

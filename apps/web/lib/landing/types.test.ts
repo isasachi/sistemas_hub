@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { NicheId, DemographicId, LandingDnaSchema, NicheClassification, SECTION_REF, SECTION_SPEC_KEY, SectionType } from './types'
+import { NicheId, DemographicId, LandingDnaSchema, NicheClassification, SECTION_REF, SECTION_SPEC_KEY, SectionType, limpiarCopy, limpiarMarcado } from './types'
 
 import { z } from 'zod'
 import { SectionCopySchema, OfferGenSchema, aKind } from './types'
@@ -86,5 +86,28 @@ describe('compat del renombre type → kind', () => {
     for (const [nombre, schema] of [['landing_copy', SectionCopySchema], ['landing_offer', OfferGenSchema]] as const) {
       expect(schemaAceptado(z.toJSONSchema(schema)), nombre).toBe(true)
     }
+  })
+})
+
+describe('limpiarCopy', () => {
+  // El copy lo dibuja un modelo de IMAGEN: una etiqueta HTML no es invisible, se imprime.
+  it('quita el <br> que el modelo cree que es un salto de línea', () => {
+    expect(limpiarMarcado('Con snacks blandos de pollo,<br> ideales para perros pequeños.'))
+      .toBe('Con snacks blandos de pollo, ideales para perros pequeños.')
+  })
+
+  it('quita el conector que queda colgando al final', () => {
+    expect(limpiarMarcado('Prueba Buddy sin preocupaciones —')).toBe('Prueba Buddy sin preocupaciones')
+  })
+
+  // ⚠️ El " — " INTERNO es la estructura de los bullets: tocarlo rompería la segunda línea.
+  it('conserva el " — " que separa las dos partes de un bullet', () => {
+    expect(limpiarMarcado('Premia con alegría — y fortalece el vínculo'))
+      .toBe('Premia con alegría — y fortalece el vínculo')
+  })
+
+  it('limpia también dentro de arrays y de cards', () => {
+    const c = { headline: 'Hola <b>mundo</b>', bullets: ['uno<br>dos'], cards: [{ title: 'T —', body: 'B' }] }
+    expect(limpiarCopy(c)).toEqual({ headline: 'Hola mundo', bullets: ['uno dos'], cards: [{ title: 'T', body: 'B' }] })
   })
 })
