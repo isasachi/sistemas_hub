@@ -4,6 +4,7 @@ import fs from 'fs'
 import path from 'path'
 import { openaiCallStructured, openaiCallReasoning, openaiGenerateImage } from './llm-openai'
 import { kieGeminiStructured, kieGeminiReasoning } from './kie-gemini'
+import { kieGenerateImage, type ModeloImagen } from './kie-image'
 import { clampTooBigStrings, sliceToWord } from './llm-clamp'
 
 // Re-exportados desde el módulo hoja `llm-clamp.ts`: los necesita también `kie-gemini.ts`, y este
@@ -35,6 +36,17 @@ export function geminiEsDirecto(): boolean {
 }
 function viaDirecta(): boolean {
   return geminiEsDirecto()
+}
+
+// ─── Recurso migrado a KIE: la IMAGEN (2026-08-25) ──────────────────────────
+// `gpt-image-2` y `gemini-3.1-flash-image` (en KIE, `nano-banana-2`) salen por el marketplace.
+// El par no cambia: gpt-image-2 primario, nano-banana-2 de respaldo, y `preferGemini` lo invierte.
+//
+// ⚠️ `IMAGE_VIA=direct` devuelve el recurso a los SDK sin desplegar. Va aparte de `GEMINI_VIA`
+// porque son dos recursos distintos: se puede tener el texto en KIE y la imagen en los SDK, o al
+// revés, que es justo el punto de migrar de a uno.
+function imagenDirecta(): boolean {
+  return process.env.IMAGE_VIA === 'direct'
 }
 
 // ⚠️ Latencia de imagen (constraint de despliegue, NO se resuelve solo con este cableado):
@@ -243,6 +255,29 @@ export async function generateImage(
   opts?: { aspectRatio?: string; imageSize?: string; preferGemini?: boolean }
 ): Promise<string> {
   const allParts: Part[] = [...parts, { text: SPANISH_RULE }]
+
+  // Por KIE los dos modelos hablan el mismo protocolo, así que el par se arma acá y el orden es el
+  // de siempre: `preferGemini` pone a nano-banana-2 (gemini-3.1-flash-image) de primario. Lo usan
+  // la placa de zona de landing —donde gpt-image-2 modera el encuadre de cuerpo sin rostro en 4 de
+  // 4 corridas— y el avatar y las anclas del video.
+  if (!imagenDirecta() && !geminiForced()) {
+    const [primero, segundo]: ModeloImagen[] = opts?.preferGemini
+      ? ['nano-banana-2', 'gpt-image-2']
+      : ['gpt-image-2', 'nano-banana-2']
+    try {
+      const out = await kieGenerateImage(primero, allParts, maxRetries, opts)
+      if (out) return out
+      console.warn(`[llm] imagen ${primero} vacía → respaldo ${segundo}`)
+    } catch (e) {
+      // Una imagen rechazada por MODERACIÓN cae acá igual que un fallo de red, y el respaldo es la
+      // respuesta correcta: está medido que gpt-image-2 rechaza ~1 de cada 3 sobre una foto de
+      // persona, con la misma foto y el mismo prompt. Reintentar con el que ya dijo que no es
+      // repetirle la pregunta.
+      console.warn(`[llm] imagen ${primero} falló → respaldo ${segundo}`, e)
+    }
+    return kieGenerateImage(segundo, allParts, maxRetries, opts)
+  }
+
   if (geminiForced()) return geminiGenerateImage(allParts, maxRetries, opts)
   // `preferGemini` invierte el orden de proveedores para UNA llamada, igual que en callStructured.
   // Existe porque hay imágenes que gpt-image-2 rechaza SIEMPRE por política de contenido — la placa

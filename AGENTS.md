@@ -51,8 +51,8 @@ sistemas_hub/                (git root — package.json con "workspaces": ["apps
 | recurso | dónde vive hoy | estado |
 |---|---|---|
 | **Texto y visión de Gemini** (`gemini-2.5-flash`) | **KIE** — `lib/kie-gemini.ts` | ✅ migrado |
+| **Imagen** (`gpt-image-2` + `nano-banana-2`) | **KIE** — `lib/kie-image.ts` | ✅ migrado |
 | Texto y visión de OpenAI (`gpt-4o-mini`) | SDK de OpenAI | 🔒 **se queda ahí** — decisión del dueño del repo (2026-08-25) |
-| Imagen (`gpt-image-2`, `gemini-3.1-flash-image`) | SDKs directos | sin migrar |
 | Render de video (`grok-imagine`) | KIE, key del USUARIO | ya estaba |
 | Worker (`claude-haiku-4-5`) | Anthropic directo | fuera de alcance |
 
@@ -81,6 +81,27 @@ sistemas_hub/                (git root — package.json con "workspaces": ["apps
 ⚠️ **El JSON vuelve a veces envuelto en ```` ```json ```` aunque se haya pedido `response_format`** — sin quitar la cerca, `JSON.parse` tira y se queman los reintentos por una respuesta correcta (`parseJsonLoose`).
 
 ✅ **Verificado contra la API por el camino real:** visión con campo opcional y razonamiento (5 s), el copy de la landing —el schema que antes daba 422— (4 s), el análisis forense con el video real por URL (15 s, 5 cortes) y el análisis de referencia de anuncios, cuyo `bodyFocus` nullable vuelve como `null` en vez de faltar (6 s).
+
+
+### La IMAGEN por KIE (`lib/kie-image.ts`)
+
+`gpt-image-2` y `gemini-3.1-flash-image` —que en KIE se llama **`nano-banana-2`**— salen por el marketplace: `jobs/createTask` + polling de `recordInfo`. **El par no cambia**: gpt-image-2 primario, nano-banana-2 de respaldo, y `preferGemini` lo invierte. Quien orquesta el par sigue siendo `generateImage`; `kie-image.ts` es el transporte de UN modelo.
+
+⚠️ **`IMAGE_VIA=direct` devuelve el recurso a los SDK sin desplegar**, y va aparte de `GEMINI_VIA`: son dos recursos, y se puede tener uno en KIE y el otro no — que es el punto de migrar de a uno.
+
+⚠️ **EL AVATAR Y LAS ANCLAS DEL VIDEO SALEN POR GEMINI 3.1 FLASH IMAGE** (decisión del dueño del repo). Van con `preferGemini`, o sea nano-banana-2 de primario y gpt-image-2 de respaldo — y ese orden importa: está medido que **gpt-image-2 rechaza ~1 de cada 3 avatares por moderación** con la MISMA foto y el MISMO prompt, así que de primario sería un peaje sistemático y de respaldo es una segunda oportunidad. Lo sigue pagando el HUB; lo del usuario es el render del clip.
+
+⚠️ **CADA MODELO NOMBRA DISTINTO EL CAMPO DE REFERENCIAS Y EQUIVOCARSE NO FALLA RUIDOSO.** `gpt-image-2-image-to-image` usa `input_urls` (máx 16) y `nano-banana-2` usa `image_input` (máx 14, 30 MB c/u). Mandando el equivocado, KIE crea la tarea, la termina con `state: success` y entrega una imagen generada **solo desde el prompt** — un text-to-image disfrazado de edición. Hay test que fija el body de cada modelo.
+
+⚠️ **ACÁ LA BASE64 NO SIRVE, al revés que en el chat.** El campo pide *"File URL after upload, not file content"* y un data URI devuelve `500 File type not supported`. Las referencias inline se suben al bucket con el **hash del contenido** por nombre, así la misma foto en cinco pasos del wizard sube una vez. ⚠️ Una referencia que YA vive en un bucket público (`fileData.fileUri`) se pasa tal cual: el avatar y las anclas del video bajaban su propia imagen para volver a subirla. **El orden se conserva mezclando los dos tipos** — el prompt de las anclas cita `@image(n)`, así que reordenar le da a una toma la imagen de otra.
+
+⚠️ **`output_format: 'png'` explícito.** El default de `nano-banana-2` es **jpg**, y los call sites suben lo que vuelve como `image/png`: sin esto se guardarían bytes jpg con nombre `.png`.
+
+⚠️ **El ratio va NATIVO y por eso `sizeFor` se jubila.** Medido: pidiendo `9:16` devuelve **1152x2048 (0.563)** y pidiendo `4:5`, **1122x1402 (0.800)** — contra los tres buckets de múltiplos de 16 que aplastaban todo portrait. `auto` y los ratios 5:4/4:5 solo existen en 1K, y eso lo respeta `imageResolution`.
+
+⚠️ **EL STREAM DE BRANDING NO ENTRA EN SECUENCIA CON LA IMAGEN ASÍNCRONA.** Cada pieza pasa a ser `createTask` + polling (~45-65 s medidos) y las 4 seguidas dan **5,8 minutos** contra el `maxDuration = 300` de esa ruta: la función muere antes de terminar y el usuario se queda con el kit a medias y la cuota de cada etapa ya cobrada. Las tres piezas que derivan de la identidad son independientes ENTRE SÍ, así que corren en `Promise.all` detrás de ella: **5,8 min → 2,9 min medidos**. `correrEtapa` atrapa sus propios errores, así que una pieza caída no tumba a las otras dos.
+
+✅ **Verificado contra la API por el camino real (`scripts/probe-kie-image.ts`):** texto→imagen con gpt-image-2 (9:16 exacto, 53 s), referencia REMOTA con nano-banana-2 (46 s, sin volver a subir el archivo) y referencia INLINE con gpt-image-2 (4:5 exacto, 65 s incluyendo la subida). En el último se comprobó en píxeles que la referencia **se usó**: mismo frasco y misma etiqueta, con el texto traducido al español por la `SPANISH_RULE`.
 
 
 ## Tool: Generador de Anuncios (`generador-anuncios`)

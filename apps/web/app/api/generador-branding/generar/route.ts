@@ -113,13 +113,22 @@ export async function POST(req: NextRequest) {
         const urls: Partial<Record<Stage, string>> = {}
         const failed: Stage[] = []
 
-        for (const stage of stages) {
+        // ⚠️ LA IDENTIDAD PRIMERO Y EL RESTO EN PARALELO — con la imagen en KIE ya no cabe en
+        // secuencia. Cada pieza pasa a ser `createTask` + polling (~45-60 s medidos), y las 4
+        // seguidas dieron **5,8 minutos** contra el `maxDuration = 300` de esta ruta: en Vercel el
+        // stream muere antes de terminar y el usuario se queda con un kit a medias y la cuota de
+        // cada etapa ya cobrada. Medido también el arreglo: 5,8 min → **2,9 min**, mismas 4 piezas.
+        //
+        // Las tres piezas que derivan de la identidad son independientes ENTRE SÍ: todas la reciben
+        // a ella como referencia y ninguna mira a las otras. El cliente lleva el estado por etapa
+        // (`setState({...s, [stage]: …})`), así que los eventos SSE fuera de orden se pintan bien.
+        const correrEtapa = async (stage: Stage) => {
           const kind = `branding-${stage}`
           const { blocked } = await checkGenQuota(sessionId, kind, creditOwner)
           if (blocked) {
             send({ status: 'stage_failed', stage, message: 'Llegaste al límite de regeneraciones de este paso' })
             failed.push(stage)
-            continue
+            return
           }
 
           send({ status: 'stage', stage })
@@ -171,6 +180,12 @@ export async function POST(req: NextRequest) {
             send({ status: 'stage_failed', stage, message: String(err) })
           }
         }
+
+        const [primera, ...derivadas] = stages
+        if (primera) await correrEtapa(primera)
+        // `correrEtapa` atrapa sus propios errores y no rechaza, así que una pieza que falla se
+        // anota en `failed` y no puede tumbar a las otras dos.
+        if (derivadas.length) await Promise.all(derivadas.map(correrEtapa))
 
         await updateBrandingSession(sessionId, {
           generation_status: failed.length ? 'partial' : 'done',

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getVideoSession, updateVideoSession } from '@/lib/video-ads/db'
 import { callVideoAds } from '@/lib/video-ads/llm'
-import { openaiGenerateImage } from '@/lib/llm-openai'
+import { generateImage } from '@/lib/gemini'
 import { uploadToStorage, fetchAsBase64 } from '@/lib/storage'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
@@ -116,21 +116,23 @@ export async function POST(
     const avatares = await Promise.all(conIdentidad.map(async ({ personaje, identidad }) => {
       const referencias = [personaje.fotoUrl, spec.wornProduct ? session.product_url : null]
         .filter((u): u is string => !!u)
-      // ⚠️ gpt-image-2, no Nano Banana Pro (2026-08-24). Con imágenes de referencia,
-      // `openaiGenerateImage` usa `images.edit`, así que el avatar se GENERA A PARTIR de
-      // la foto real en vez de describirla — que es lo que sostiene el parecido de tipo
-      // físico sin clonar la cara.
+      // ⚠️ GEMINI 3.1 FLASH IMAGE (en KIE, `nano-banana-2`), no gpt-image-2 — decisión del dueño
+      // del repo al migrar la imagen (2026-08-25). `preferGemini` lo pone de PRIMARIO y deja a
+      // gpt-image-2 de respaldo, que es el orden que conviene acá: está medido que gpt-image-2
+      // rechaza ~1 de cada 3 avatares por moderación con la MISMA foto y el MISMO prompt, así que
+      // de primario sería un peaje sistemático y de respaldo es una segunda oportunidad.
       //
-      // ⚠️ CONSECUENCIA DE COSTO: esto lo paga el HUB (key de OpenAI), no el usuario.
-      // Nano Banana corría en KIE con la key del usuario. Ver AGENTS.md.
-      const refs = await Promise.all(referencias.map((u) => fetchAsBase64(u)))
-      const b64 = await openaiGenerateImage(
+      // ⚠️ Las referencias van como `fileData`, no bajadas a base64: ya viven en nuestro bucket y
+      // el transporte pasa esas URLs tal cual. Se ahorra bajarlas y volver a subirlas.
+      //
+      // ⚠️ CONSECUENCIA DE COSTO: esto lo paga el HUB, no el usuario. Lo del usuario es el render.
+      const b64 = await generateImage(
         [
-          ...refs.map((r) => ({ inlineData: { mimeType: r.mimeType, data: r.data } })),
+          ...referencias.map((u) => ({ fileData: { fileUri: u, mimeType: 'image/jpeg' } })),
           { text: identidad.promptCreacion },
         ],
         3,
-        { aspectRatio: '9:16' },
+        { aspectRatio: '9:16', preferGemini: true },
       )
       return uploadToStorage(id, Buffer.from(b64, 'base64'), 'image/png', `avatar-${personaje.id}`)
     }))

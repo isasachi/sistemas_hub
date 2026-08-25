@@ -6,7 +6,7 @@ import { anchorSpecs, generateAnchorImages } from '@/lib/video-ads/anchors'
 import { personajesDe, hablantesPorTiempo, vozEnOffPorTiempo } from '@/lib/video-ads/personajes'
 import { enProsa } from '@/lib/video-ads/forensic'
 import { uploadToStorage, fetchAsBase64 } from '@/lib/storage'
-import { openaiGenerateImage } from '@/lib/llm-openai'
+import { generateImage } from '@/lib/gemini'
 import { planoPorTiempoDe, groupIntoLotes, buildLotePrompt, camaraDeLote, type Lote } from '@/lib/video-ads/lotes'
 import { totalDuration, resumeSeed, mergeRescue, isPaidResume, scriptFingerprint, renderDone } from '@/lib/video-ads/render-lotes'
 import { AdaptedScriptSchema, type AdaptedScript } from '@/lib/video-ads/adapt'
@@ -354,17 +354,19 @@ export async function POST(
             productUrl: session.product_url!,
             specs,
             lote: seed[i].n,
-            // ⚠️ gpt-image-2: lo paga el HUB, no el usuario. Ver AGENTS.md — es la
-            // reversión deliberada del BYOK de imagen.
+            // ⚠️ Gemini 3.1 Flash Image (`nano-banana-2` en KIE) de primario y gpt-image-2 de
+            // respaldo — mismo criterio que el avatar. Las referencias ya están en el bucket, así
+            // que van como `fileData` y el transporte pasa la URL sin bajarla ni resubirla; el
+            // ORDEN se conserva porque el prompt las cita como `@image(n)`.
+            // ⚠️ Lo paga el HUB, no el usuario: lo del usuario es el render del clip.
             generate: async (input) => {
-              const refs = await Promise.all(input.imageUrls.map((u) => fetchAsBase64(u)))
-              const b64 = await openaiGenerateImage(
+              const b64 = await generateImage(
                 [
-                  ...refs.map((r) => ({ inlineData: { mimeType: r.mimeType, data: r.data } })),
+                  ...input.imageUrls.map((u) => ({ fileData: { fileUri: u, mimeType: 'image/jpeg' } })),
                   { text: input.prompt },
                 ],
                 3,
-                { aspectRatio: '9:16' },
+                { aspectRatio: '9:16', preferGemini: true },
               )
               return Buffer.from(b64, 'base64')
             },

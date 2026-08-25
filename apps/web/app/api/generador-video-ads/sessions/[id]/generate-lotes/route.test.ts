@@ -24,8 +24,11 @@ vi.mock('@/lib/gen-quota', async (importOriginal) => ({
 // Las imágenes ancla son generaciones PAGADAS de gpt-image-2: si no se mockean, cada test
 // intentaría crearlas de verdad. ⚠️ Y desde 2026-08-24 las paga el HUB, no el usuario —
 // salieron de KIE (Nano Banana Pro) y pasaron a OpenAI.
-vi.mock('@/lib/llm-openai', () => ({
-  openaiGenerateImage: vi.fn(async () => Buffer.from('png').toString('base64')),
+// ⚠️ Se mockea `@/lib/gemini`, no `llm-openai`: desde que la imagen salió a KIE (2026-08-25) las
+// anclas van por `generateImage` con `preferGemini` — Gemini 3.1 Flash Image de primario. Mockear
+// el módulo viejo dejaba la aserción de abajo pasando trivialmente, que es un test vacío.
+vi.mock('@/lib/gemini', () => ({
+  generateImage: vi.fn(async () => Buffer.from('png').toString('base64')),
 }))
 vi.mock('@/lib/storage', () => ({
   uploadToStorage: vi.fn(async (_id: string, _b: Buffer, _m: string, nombre: string) => `https://cdn.test/${nombre}.png`),
@@ -46,7 +49,7 @@ import { NextRequest } from 'next/server'
 import { POST } from './route'
 import { getVideoSession, updateVideoSession, claimFreshLotes } from '@/lib/video-ads/db'
 import { createVideoTask } from '@/lib/video-ads/kie'
-import { openaiGenerateImage } from '@/lib/llm-openai'
+import { generateImage } from '@/lib/gemini'
 import { checkGenQuota, checkGlobalBackstop, recordGenQuota } from '@/lib/gen-quota'
 import type { VideoSessionResponse } from '@/lib/video-ads/types'
 import type { Lote } from '@/lib/video-ads/lotes'
@@ -229,11 +232,11 @@ describe('POST generate-lotes — fix round 2: cuota por video, no por lote', ()
         frames: [],
       } as never),
     )
-    vi.mocked(openaiGenerateImage).mockClear()
+    vi.mocked(generateImage).mockClear()
 
     const res = await POST(req({ resume: true }), ctx())
     expect(res.status).toBe(200)
-    expect(openaiGenerateImage).not.toHaveBeenCalled()
+    expect(generateImage).not.toHaveBeenCalled()
     // El lote pendiente sigue recibiendo avatar y producto, en ese orden: es el contrato
     // del que dependen la leyenda `@image(n)` y el índice de cada ancla.
     const [creado] = vi.mocked(createVideoTask).mock.calls.slice(-1)
