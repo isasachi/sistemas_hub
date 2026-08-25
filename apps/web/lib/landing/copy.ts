@@ -18,13 +18,13 @@ const LANDING_SYSTEM_PROMPT = fs.readFileSync(
 // no vacío entre hero→beneficios como canónico (4), lo pone en hero y cta-final; beneficios
 // conserva su 5.º si lo tiene. $0, sin columna DB — se distribuye en generación.
 export function shareBullets(sections: SectionCopy[]): SectionCopy[] {
-  const source = sections.find((s) => s.type === 'hero')?.bullets
-    ?? sections.find((s) => s.type === 'beneficios')?.bullets
+  const source = sections.find((s) => s.kind === 'hero')?.bullets
+    ?? sections.find((s) => s.kind === 'beneficios')?.bullets
   if (!source?.length) return sections
   const canon = source.slice(0, 4)
   return sections.map((s) => {
-    if (s.type === 'hero' || s.type === 'cta-final') return { ...s, bullets: canon }
-    if (s.type === 'beneficios') return { ...s, bullets: [...canon, ...(s.bullets ?? []).slice(4)] }
+    if (s.kind === 'hero' || s.kind === 'cta-final') return { ...s, bullets: canon }
+    if (s.kind === 'beneficios') return { ...s, bullets: [...canon, ...(s.bullets ?? []).slice(4)] }
     return s
   })
 }
@@ -49,7 +49,7 @@ export function missingStructure(sections: SectionType[], copy: SectionCopy[]): 
   for (const s of sections) {
     const req = SECTION_DNA[s].requires
     if (!req) continue
-    const c = copy.find((x) => x.type === s)
+    const c = copy.find((x) => x.kind === s)
     if (!c) { gaps.push(`Falta la sección "${s}" completa.`); continue }
     const short = (have: number, need: number, field: string) => { if (have < need) gaps.push(`"${s}" necesita ${need} ${field} (tiene ${have}).`) }
     if (req.bullets !== undefined) short(c.bullets?.length ?? 0, req.bullets, 'bullets')
@@ -113,7 +113,7 @@ async function generateOneSection(session: LandingSessionResponse, s: SectionTyp
   // la coacciona a `s` (per-sección pedimos exactamente `s`, así que esa única ES `s`); si no, null —
   // nunca guarda un objeto de OTRO type bajo la clave `s` (corrompería shareBullets/render por type).
   const pick = (r: { sections: SectionCopy[] }): SectionCopy | null => {
-    const hit = r.sections.find((x) => x.type === s) ?? (r.sections.length === 1 ? { ...r.sections[0], type: s } : null)
+    const hit = r.sections.find((x) => x.kind === s) ?? (r.sections.length === 1 ? { ...r.sections[0], kind: s } : null)
     return hit && cleanAccentWord(hit)
   }
   const parts = copyPromptParts(session, [s], feedback)
@@ -150,10 +150,10 @@ export async function generateLandingCopy(
   for (let attempt = 0; attempt < 2; attempt++) {
     // "Corta" = falta la sección entera (generateOneSection devolvió null — incluye oferta y demás sin
     // `requires`, que missingStructure no chequea) O le faltan arrays del ADN.
-    const shortSections = sections.filter((s) => !out.some((c) => c.type === s) || missingStructure([s], out.filter((c) => c.type === s)).length > 0)
+    const shortSections = sections.filter((s) => !out.some((c) => c.kind === s) || missingStructure([s], out.filter((c) => c.kind === s)).length > 0)
     if (!shortSections.length) break
     await Promise.all(shortSections.map(async (s) => {
-      const gaps = missingStructure([s], out.filter((c) => c.type === s))
+      const gaps = missingStructure([s], out.filter((c) => c.kind === s))
       // Con gaps de arrays → mensaje correctivo. Sin gaps (sección faltó entera, ej fallo transitorio
       // de una sin `requires`) → simple re-generación con el feedback original.
       const fb = gaps.length
@@ -307,6 +307,6 @@ export async function generateOfferCopy(
   const gen = await callStructured('landing_offer_copy', OfferGenSchema, parts, 3, LANDING_SYSTEM_PROMPT)
   return {
     offer: recomputeSavings(pinUserPrice({ tiers: gen.tiers, urgency: gen.urgency }, session.price)),
-    copy: { type: 'oferta', headline: gen.headline, subheadline: gen.subheadline },
+    copy: { kind: 'oferta', headline: gen.headline, subheadline: gen.subheadline },
   }
 }

@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { aKind } from './types'
 import type { LandingSessionResponse, LandingSection } from './types'
 
 // Cliente lazy singleton dedicado al wizard de landing (espeja branding/db.ts).
@@ -63,7 +64,27 @@ export async function getLandingSession(id: string, uid: string | null): Promise
     .eq('user_id', uid)
     .single()
   if (error) return null
-  return data as LandingSessionResponse
+  return normalizarCopy(data as LandingSessionResponse)
+}
+
+/**
+ * ⚠️ ÚNICA PUERTA DE COMPATIBILIDAD DEL RENOMBRE `type` → `kind` (2026-08-25).
+ *
+ * El campo se renombró porque el validador de schemas del chat de KIE confunde una propiedad
+ * llamada `type` con la palabra reservada del JSON Schema y devuelve un 422. Las sesiones YA
+ * guardadas traen `type` en el jsonb, así que se normalizan al LEER —acá, en un solo sitio— y el
+ * resto del código solo ve `kind`. Sin esto no hacía falta migrar el jsonb, y con esto tampoco:
+ * una sesión vieja se lee igual que una nueva.
+ *
+ * `LandingSection.type` NO se toca: es almacenamiento nuestro y nunca viaja a un modelo.
+ */
+function normalizarCopy(s: LandingSessionResponse): LandingSessionResponse {
+  return {
+    ...s,
+    copy: s.copy ? s.copy.map((c) => aKind(c)) : s.copy,
+    offer_copy: s.offer_copy ? aKind(s.offer_copy) : s.offer_copy,
+    sections: s.sections ? s.sections.map((sec) => ({ ...sec, copy: aKind(sec.copy) })) : s.sections,
+  }
 }
 
 // Claim ATÓMICO de la clasificación (2026-08-15). Espeja `claimFreshLotes` de video-ads.

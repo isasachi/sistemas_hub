@@ -189,8 +189,17 @@ export function cleanAccentWord<T extends { headline?: string; accentWord?: stri
   return plano(literal) === plano(acc) ? { ...copy, accentWord: literal } : copy
 }
 
+// ⚠️ SE LLAMA `kind` Y NO `type`, Y ES UN REQUISITO DEL TRANSPORTE, NO UN GUSTO. El validador
+// de schemas del chat de KIE confunde una PROPIEDAD llamada `type` con la palabra reservada del
+// JSON Schema y responde `422 …properties.type must be string or array` — medido en
+// `gemini-2.5-flash` y en `gemini-3-flash`. Con el campo así, este copy no podía generarse por
+// Gemini ni siquiera como fallback.
+//
+// Las sesiones GUARDADAS traen `type`: `getLandingSession` las normaliza al leerlas (`aKind`),
+// así que no hizo falta migrar el jsonb ni tocar `LandingSection.type`, que es almacenamiento
+// nuestro y nunca viaja a un modelo.
 export const SectionCopySchema = z.object({
-  type: SectionType,
+  kind: SectionType,
   headline: z.string().max(90),
   // Sub-cadena EXACTA del headline a resaltar en color de marca (ADN: 1 palabra/frase acento).
   accentWord: z.string().max(40).optional(),
@@ -250,8 +259,9 @@ export type Offer = z.infer<typeof OfferSchema>
 // (sesión); la sección los CONSUME vía resolveOffer, no los posee.
 export const OfferCopySchema = z.object({
   // enum (no literal): z.toJSONSchema emite `const` para literal y Gemini lo IGNORA (solo
-  // respeta `enum`) → el modelo omitía `type` y fallaba la validación. enum de un valor lo fuerza.
-  type: z.enum(['oferta']),
+  // respeta `enum`) → el modelo omitía el campo y fallaba la validación. enum de un valor lo fuerza.
+  // El nombre es `kind` por lo mismo que en SectionCopySchema.
+  kind: z.enum(['oferta']),
   headline: z.string().max(90),
   subheadline: z.string().max(120).optional(),
 })
@@ -261,7 +271,7 @@ export type OfferCopy = z.infer<typeof OfferCopySchema>
 // session.offer (tiers/urgency) y session.offer_copy (headline/subheadline). También valida el
 // offer_copy LEGADO (pre-F5 guardaba los tiers acá) → resolveOffer los recupera de ahí.
 export const OfferGenSchema = z.object({
-  type: z.enum(['oferta']),
+  kind: z.enum(['oferta']),
   headline: z.string().max(90),
   subheadline: z.string().max(120).optional(),
   urgency: z.string().max(30).optional(),
@@ -276,7 +286,9 @@ export type OfferGen = z.infer<typeof OfferGenSchema>
 export function resolveOffer(session: Pick<LandingSessionResponse, 'offer' | 'offer_copy'>): Offer | null {
   const cur = OfferSchema.safeParse(session.offer)
   if (cur.success) return cur.data
-  const legacy = OfferGenSchema.safeParse(session.offer_copy)
+  // `aKind`: el offer_copy legado se guardó con `type`, que es el nombre que el chat de KIE no
+  // acepta. Se normaliza al leer, igual que el copy de las secciones.
+  const legacy = OfferGenSchema.safeParse(aKind(session.offer_copy))
   return legacy.success ? { tiers: legacy.data.tiers, urgency: legacy.data.urgency } : null
 }
 
@@ -301,6 +313,19 @@ export const TrustBlockSchema = z.object({
   freeShipping:   z.boolean().default(false),
 })
 export type TrustBlock = z.infer<typeof TrustBlockSchema>
+
+/**
+ * Sesiones guardadas antes del renombre traen `type` dentro del copy. Se normaliza al LEER, en un
+ * solo sitio (`getLandingSession`), así el resto del código solo ve `kind` y no hizo falta migrar
+ * el jsonb. Idempotente: un copy que ya tiene `kind` pasa intacto.
+ */
+export function aKind<T>(copy: T): T {
+  if (!copy || typeof copy !== 'object') return copy
+  const c = copy as Record<string, unknown>
+  if ('kind' in c || !('type' in c)) return copy
+  const { type, ...resto } = c
+  return { ...resto, kind: type } as T
+}
 
 // Sección renderizada: copy + imagen.
 export interface LandingSection {

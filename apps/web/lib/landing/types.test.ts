@@ -1,12 +1,14 @@
 import { describe, it, expect } from 'vitest'
 import { NicheId, DemographicId, LandingDnaSchema, NicheClassification, SECTION_REF, SECTION_SPEC_KEY, SectionType } from './types'
 
-import { SectionCopySchema } from './types'
+import { z } from 'zod'
+import { SectionCopySchema, OfferGenSchema, aKind } from './types'
+import { schemaAceptado } from '../kie-gemini'
 
 describe('contrato landing (spec 2026-07-23)', () => {
   it('SectionCopySchema acepta los campos nuevos del motor de plantillas', () => {
     const parsed = SectionCopySchema.parse({
-      type: 'beneficios', headline: 'H',
+      kind: 'beneficios', headline: 'H',
       kicker: 'RESULTADOS REALES', closingBold: 'Tu piel refleja tu equilibrio',
       closingSub: 'Cuídate desde dentro', closingStrip: 'CUIDA TU PIEL HOY',
       socialProof: 'Miles de personas…', ctaHeadline: 'PIDE EL TUYO', ctaSub: 'No lo dejes pasar',
@@ -56,5 +58,33 @@ describe('contrato landing (spec 2026-07-23)', () => {
     }
     expect(LandingDnaSchema.safeParse(dna).success).toBe(true)
     expect(LandingDnaSchema.safeParse({ ...dna, palette: undefined }).success).toBe(false)
+  })
+})
+
+// ⚠️ El campo se llama `kind` y no `type` porque el validador de schemas del chat de KIE confunde
+// una PROPIEDAD llamada `type` con la palabra reservada del JSON Schema (`422 …properties.type must
+// be string or array`, medido). Las sesiones guardadas traen `type`: se normalizan al leer.
+describe('compat del renombre type → kind', () => {
+  it('aKind mueve el campo legado y deja el resto intacto', () => {
+    expect(aKind({ type: 'hero', headline: 'H' })).toEqual({ kind: 'hero', headline: 'H' })
+  })
+
+  it('es idempotente y no toca un copy que ya tiene kind', () => {
+    const nuevo = { kind: 'hero', headline: 'H' }
+    expect(aKind(nuevo)).toEqual(nuevo)
+    expect(aKind(aKind({ type: 'hero', headline: 'H' }))).toEqual({ kind: 'hero', headline: 'H' })
+  })
+
+  it('un copy legado pasa el schema después de normalizarlo', () => {
+    expect(SectionCopySchema.safeParse({ type: 'hero', headline: 'H' }).success).toBe(false)
+    expect(SectionCopySchema.safeParse(aKind({ type: 'hero', headline: 'H' })).success).toBe(true)
+  })
+
+  // El guard que hace falta para que esto no se rompa solo: ningún schema que viaje a Gemini
+  // puede volver a tener una propiedad llamada `type`.
+  it('los schemas que van al modelo no llevan una propiedad "type"', () => {
+    for (const [nombre, schema] of [['landing_copy', SectionCopySchema], ['landing_offer', OfferGenSchema]] as const) {
+      expect(schemaAceptado(z.toJSONSchema(schema)), nombre).toBe(true)
+    }
   })
 })

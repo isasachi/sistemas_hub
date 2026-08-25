@@ -11,7 +11,7 @@ const ALL: SectionType[] = [
 ]
 
 function copyFor(type: SectionType): SectionCopy {
-  return { type, headline: 'ACNE-HEADLINE-XYZ', subheadline: 'sub', cta: 'Compra Ya' }
+  return { kind: type, headline: 'ACNE-HEADLINE-XYZ', subheadline: 'sub', cta: 'Compra Ya' }
 }
 
 const DNA: LandingDna = {
@@ -426,7 +426,7 @@ describe('buildDiffusionInstruction — DNA-driven (spec 2026-07-23)', () => {
 
   it('renderiza los campos de copy nuevos cuando están presentes', () => {
     const out = buildDiffusionInstruction({
-      section: 'cta-final', copy: { type: 'cta-final', headline: 'H', ctaHeadline: 'PIDE EL TUYO', ctaSub: 'ya' },
+      section: 'cta-final', copy: { kind: 'cta-final', headline: 'H', ctaHeadline: 'PIDE EL TUYO', ctaSub: 'ya' },
       dna: DNA, productLabels: null, hasTalent: false,
     })
     expect(out).toContain('PIDE EL TUYO')
@@ -616,20 +616,20 @@ describe('accentWord — sub-cadena del headline', () => {
     buildDiffusionInstruction({ section: 'beneficios', copy, dna: DNA, productLabels: null, hasTalent: true })
 
   it('NO emite la línea de Emphasis si el acento no está en el headline', () => {
-    const out = build({ type: 'beneficios', headline: 'Descansa mejor cada noche', accentWord: 'dormir mejor' })
+    const out = build({ kind: 'beneficios', headline: 'Descansa mejor cada noche', accentWord: 'dormir mejor' })
     expect(out).not.toContain('Emphasis:')
     expect(out).not.toContain('dormir mejor')
     expect(out).toContain('Descansa mejor cada noche')
   })
 
   it('SÍ la emite cuando el acento está en el headline (el caso bueno no se rompe)', () => {
-    const out = build({ type: 'beneficios', headline: 'Duerme mejor, despierta renovada', accentWord: 'Duerme mejor' })
+    const out = build({ kind: 'beneficios', headline: 'Duerme mejor, despierta renovada', accentWord: 'Duerme mejor' })
     expect(out).toContain('Emphasis:')
     expect(out).toContain('"Duerme mejor"')
   })
 
   it('tolera diferencia de mayúsculas y acentos al comparar', () => {
-    const out = build({ type: 'beneficios', headline: 'Tu descanso está asegurado', accentWord: 'DESCANSO ESTA' })
+    const out = build({ kind: 'beneficios', headline: 'Tu descanso está asegurado', accentWord: 'DESCANSO ESTA' })
     expect(out).toContain('Emphasis:')
   })
 })
@@ -637,7 +637,7 @@ describe('accentWord — sub-cadena del headline', () => {
 describe('antes/despues — cuerpo_completo NO toma la rama de zona', () => {
   const build = (bodyFocus: 'cuerpo_completo' | 'gluteos_piernas') =>
     buildDiffusionInstruction({
-      section: 'antes-despues', copy: { type: 'antes-despues', headline: 'H' },
+      section: 'antes-despues', copy: { kind: 'antes-despues', headline: 'H' },
       dna: DNA, productLabels: null, hasTalent: true, bodyFocus,
     })
 
@@ -658,7 +658,7 @@ describe('accentWord — se emite el recorte LITERAL del titular', () => {
   it('no le pide a la difusión un string que el titular no tiene así', () => {
     const out = buildDiffusionInstruction({
       section: 'beneficios', dna: DNA, productLabels: null, hasTalent: true,
-      copy: { type: 'beneficios', headline: 'Tu descanso está asegurado', accentWord: 'DESCANSO ESTA' },
+      copy: { kind: 'beneficios', headline: 'Tu descanso está asegurado', accentWord: 'DESCANSO ESTA' },
     })
     expect(out).toContain('"descanso está"')
     expect(out).not.toContain('DESCANSO ESTA')
@@ -673,7 +673,7 @@ describe('antes-despues — la nota de encuadre y la pose no se contradicen', ()
       'De pie en la habitación, brazos estirados hacia arriba en un estiramiento matutino',
     ])
     const out = buildDiffusionInstruction({
-      section: 'antes-despues', copy: { type: 'antes-despues', headline: 'H' },
+      section: 'antes-despues', copy: { kind: 'antes-despues', headline: 'H' },
       dna: { ...DNA, poses }, productLabels: null, hasTalent: true, bodyFocus: 'cuerpo_completo',
     })
     expect(out).toContain('el mismo rostro ya resuelto')   // la nota manda
@@ -685,7 +685,7 @@ describe('antes-despues — la nota de encuadre y la pose no se contradicen', ()
       'Sentadilla profunda, glúteos contraídos',
     ])
     const out = buildDiffusionInstruction({
-      section: 'antes-despues', copy: { type: 'antes-despues', headline: 'H' },
+      section: 'antes-despues', copy: { kind: 'antes-despues', headline: 'H' },
       dna: { ...DNA, poses }, productLabels: null, hasTalent: true, bodyFocus: 'gluteos_piernas',
     })
     expect(out).toContain('Sentadilla profunda')

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { z } from 'zod'
 
 const mockGenerateContent = vi.fn()
@@ -11,10 +11,16 @@ vi.mock('@google/genai', () => ({
 }))
 
 // Force re-import each test to get fresh module (clears singleton)
+// ⚠️ `GEMINI_VIA=direct` es obligatorio acá desde que el texto/visión de Gemini se cableó a KIE
+// (2026-08-25): sin él estas llamadas salen por `lib/kie-gemini.ts` y este archivo dejaría de
+// ejercitar el camino que dice ejercitar — el de `@google/genai`, que es lo que mockea. El camino
+// de KIE tiene sus propios tests en `lib/kie-gemini.test.ts`.
 beforeEach(() => {
   vi.clearAllMocks()
   vi.resetModules()
+  vi.stubEnv('GEMINI_VIA', 'direct')
 })
+afterEach(() => vi.unstubAllEnvs())
 
 describe('callStructured', () => {
   it('returns parsed data when Gemini response is valid JSON', async () => {

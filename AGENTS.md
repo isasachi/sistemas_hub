@@ -39,10 +39,47 @@ sistemas_hub/                (git root — package.json con "workspaces": ["apps
 - **Lógica:** en `apps/web/lib/` (web) o `apps/worker/lib/` (worker); la capa DB/tipos compartida en `packages/shared/` (`@ph/shared`).
 - **Prompts:** archivos `.md` en `apps/web/lib/prompts/` (Gemini) o `apps/worker/lib/prompts/` (worker), leídos con `fs.readFileSync(path.join(process.cwd(), 'lib/prompts/...'))`.
 - **DB:** Supabase con `SUPABASE_SERVICE_ROLE_KEY` (bypassa RLS). Cliente lazy singleton: `@ph/shared` (`db.ts`) para buscador-productos; `apps/web/lib/db.ts` para el resto del hub.
-- **LLM:** Gemini (`@google/genai`) para las tools de imágenes/texto (en `apps/web`). Anthropic (`@anthropic-ai/sdk`) solo para `buscador-productos` (en `apps/worker`).
+- **LLM:** OpenAI primario (gpt-4o-mini + gpt-image-2) con Gemini de fallback; el **texto/visión de Gemini sale por KIE** (`lib/kie-gemini.ts`) — ver "Motor de modelos". Anthropic (`@anthropic-ai/sdk`) solo para `buscador-productos` (en `apps/worker`).
 - **UI:** tema oscuro sobre el granate de la marca. **El sistema de diseño está en `BRANDBOOK.md` (raíz) y se implementa en `apps/web/app/globals.css` — léelo antes de tocar color o tipografía.** En corto: granate `#1E0811` de lienzo, carmesí `#BD1347` de acción (solo relleno; para texto va `#E8467A`), crema `#F6F2EB` de tinta y prestigio; Poppins de titulares (h1–h6 y `.lp-serif`), Lato de cuerpo/UI/cifras y Bodoni Moda **solo** para el logotipo. Cada tool tiene su `accentColor`. Iconos de `lucide-react`. Strings de usuario en español.
   ⚠️ **Las fuentes se piden con `<link>` en `apps/web/app/layout.tsx`, NO con `@import` en `globals.css`:** Turbopack elimina los `@import url(...)` externos al compilar la hoja y el sitio se servía sin un solo `@font-face`, cayendo entero a la serif por defecto del navegador (medido: las familias del chrome daban exactamente el mismo ancho que `serif`). **Poppins y Lato van en el PRIMER `<link>`**, el del chrome: son las dos fuentes de render crítico. El segundo `<link>` es el catálogo tipográfico del contenido que se genera para el cliente (`lib/landing/niches.ts`); borrarlo rompe esas previews, pero ya no se lleva puesta la tipografía del sitio.
 - **Tests:** Vitest por workspace (`npm test -w apps/web`, `npm test -w apps/worker`; `npm test` corre ambos).
+
+## Motor de modelos — migración a KIE, recurso por recurso
+
+⚠️ **La migración de TODO el hub a KIE de una vez se intentó y se revirtió (2026-08-25): produjo demasiados bugs encadenados.** Se rehace por partes, y cada parte se mide contra la API antes de cablearse. Lo que sigue es el estado real, no el plan.
+
+| recurso | dónde vive hoy | estado |
+|---|---|---|
+| **Texto y visión de Gemini** (`gemini-2.5-flash`) | **KIE** — `lib/kie-gemini.ts` | ✅ migrado |
+| Texto y visión de OpenAI (`gpt-4o-mini`) | SDK de OpenAI | sin migrar |
+| Imagen (`gpt-image-2`, `gemini-3.1-flash-image`) | SDKs directos | sin migrar |
+| Render de video (`grok-imagine`) | KIE, key del USUARIO | ya estaba |
+| Worker (`claude-haiku-4-5`) | Anthropic directo | fuera de alcance |
+
+**Lo que NO cambió al migrar el recurso de Gemini:** el orden de proveedores. `callStructured`/`callReasoning` siguen siendo OpenAI-primario, con `preferGemini` invirtiéndolo en los sitios de siempre. Lo único que cambió es por dónde sale Gemini.
+
+⚠️ **`GEMINI_VIA=direct` devuelve este recurso al SDK de Google sin desplegar nada.** Es lo que hace reversible un slice: si KIE se cae para este modelo, se cambia una variable. `LLM_PROVIDER=gemini` (Gemini-only) sigue existiendo y es ortogonal.
+
+**Lo medido contra la API, que es lo que hay que respetar al cablear el resto:**
+
+⚠️ **EL SCHEMA VA PLANO, SIN `toStrictSchema`.** Esa transformación —todo en `required` + los opcionales marcados nullable— es un requisito de los structured outputs de OpenAI, y el camino directo de Gemini NUNCA la usó: mandaba `z.toJSONSchema` tal cual. Aplicarla obliga al modelo a rellenar campos que el schema dice que puede omitir, y como la unión no se hace cumplir, inventa: medido, `bulletsAfter` —un array opcional que solo tiene sentido en la sección antes/después— volvió como el STRING *"Apto para todo tipo de pieles"* dentro de un hero. Verificado además que este endpoint acepta `strict: true` con un `required` incompleto, así que el truco de OpenAI no hace falta. El diseño de los schemas del repo ya cuenta con esto: lo que el modelo DEBE llenar se declara `.nullable()`, no `.nullish()`.
+
+⚠️ **`type: ["string","null"]` NO se acepta** — `400 "The 'type' property must be a single string, not an array"`, con `strict` en true y en false. Lo produce el `.nullable()` de zod. `toSingleTypes` lo convierte en `anyOf`, y **los hermanos del `type` van DENTRO de la rama**: `{type:['array','null'], items:X}` tiene que quedar como `{anyOf:[{type:'array', items:X},{type:'null'}]}` — dejando `items` afuera, el modelo lee "un array de cualquier cosa".
+
+⚠️ **UNA PROPIEDAD LLAMADA `type` ROMPE EL VALIDADOR.** Devuelve `422 …properties.type must be string or array`, confundiendo la clave con la palabra reservada. Por eso `SectionCopy.type` pasó a llamarse **`kind`** (y con él `OfferCopy`/`OfferGen`). Las sesiones guardadas traen `type`: se normalizan al LEER con `aKind`, en una sola puerta (`getLandingSession` y `resolveOffer`), así que **no hizo falta migrar el jsonb**. `LandingSection.type` NO se tocó: es almacenamiento nuestro y nunca viaja a un modelo. Hay un test que fija que ningún schema que va al modelo vuelva a tener esa propiedad.
+
+⚠️ **`stream` e `include_thoughts` vienen en `true` por defecto** (lo dice la doc). Con el primero la respuesta llega como SSE y no como JSON; con el segundo el razonamiento viaja dentro del contenido y rompe el parse del structured output. Los dos se mandan en `false`.
+
+⚠️ **Sin `max_tokens` explícito la salida larga vuelve truncada, y `finish_reason` no lo dice.** Medido: el reporte forense volvió cortado a mitad de string en tres intentos; con el tope puesto vuelve completo.
+
+⚠️ **La base64 SÍ funciona, contra lo que dice la doc** ("solo URLs http"): verificado con imágenes y con video. Por eso el formato `Part[]` interno no cambió. ⚠️ **Pero un video grande MÁS un schema revienta:** medido sobre el mismo video de 13,6 MB, `schema + base64` falla a los ~69 s con un `400 "The server is currently being maintained"` que miente, y `schema + URL` responde. Por eso el análisis forense manda `fileData.fileUri` y KIE se baja el archivo; el allowlist de host y el tope de `MAX_VIDEO_MB` pasan a comprobarse con un **HEAD**.
+
+⚠️ **KIE devuelve HTTP 200 con el error DENTRO del cuerpo** (`{code:400,…}`): mirar solo `res.ok` deja pasar el fallo como éxito. Y como en Node `fetch` no tiene timeout propio, toda petición lleva `AbortSignal.timeout`.
+
+⚠️ **El JSON vuelve a veces envuelto en ```` ```json ```` aunque se haya pedido `response_format`** — sin quitar la cerca, `JSON.parse` tira y se queman los reintentos por una respuesta correcta (`parseJsonLoose`).
+
+✅ **Verificado contra la API por el camino real:** visión con campo opcional y razonamiento (5 s), el copy de la landing —el schema que antes daba 422— (4 s), el análisis forense con el video real por URL (15 s, 5 cortes) y el análisis de referencia de anuncios, cuyo `bodyFocus` nullable vuelve como `null` en vez de faltar (6 s).
+
 
 ## Tool: Generador de Anuncios (`generador-anuncios`)
 

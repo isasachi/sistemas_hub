@@ -106,6 +106,28 @@ export function storagePublicUrl(path: string): string {
 export class PayloadTooLargeError extends Error {}
 
 /**
+ * HEAD contra el bucket: valida el host y el tamaño SIN bajar el archivo.
+ *
+ * Lo usa el análisis forense desde que el texto/visión de Gemini sale por KIE: ya no baja el
+ * video, le pasa la URL pública y KIE la lee. Eso deja sin efecto los dos guards que vivían dentro
+ * de `fetchAsBase64` —el allowlist anti-SSRF y el tope de tamaño— y los dos siguen haciendo falta:
+ * el primero porque ahora la URL se la damos a un tercero para que la busque, y el segundo porque
+ * un video enorme gasta una llamada pagada para fallar.
+ */
+export async function headStorageFile(url: string, maxBytes: number): Promise<{ mimeType: string }> {
+  let host: string
+  try { host = new URL(url).host } catch { throw new Error('Invalid file URL') }
+  if (!allowedHosts().has(host)) throw new Error(`Refused to fetch non-storage URL: ${host}`)
+  const res = await fetch(url, { method: 'HEAD' })
+  if (!res.ok) throw new Error(`Failed to head file: ${res.status}`)
+  const len = Number(res.headers.get('content-length'))
+  if (len > 0 && len > maxBytes) {
+    throw new PayloadTooLargeError(`El archivo pesa más de ${Math.round(maxBytes / (1024 * 1024))} MB.`)
+  }
+  return { mimeType: res.headers.get('content-type') ?? 'video/mp4' }
+}
+
+/**
  * @param maxBytes Opcional. Si se pasa, valida `content-length` ANTES de bufferear
  *   el archivo entero en memoria (`arrayBuffer()` + base64 lo infla 4/3). Lo usa
  *   el análisis forense del video de referencia: el tope de 14 MB

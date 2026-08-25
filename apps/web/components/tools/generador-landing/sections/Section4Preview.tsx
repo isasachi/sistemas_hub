@@ -184,24 +184,24 @@ export default function Section4Preview() {
     const doneTypes = new Set(sections.filter((s) => s.imageUrl).map((s) => s.type))
     const targets = copy
       .map((c, i) => ({ c, order: i }))
-      .filter(({ c }) => !opts?.resume || !doneTypes.has(c.type))
+      .filter(({ c }) => !opts?.resume || !doneTypes.has(c.kind))
 
     // Estado inicial: las ya hechas 'done', las que vamos a generar 'pending'.
     const initial: Record<string, GenStatus> = {}
-    for (const c of copy) initial[c.type] = doneTypes.has(c.type) ? 'done' : 'pending'
+    for (const c of copy) initial[c.kind] = doneTypes.has(c.kind) ? 'done' : 'pending'
     setStatus(initial)
 
     let failed = 0
     await runPool(targets, 3, async ({ c, order }) => {
-      setStatus((s) => ({ ...s, [c.type]: 'generating' }))
+      setStatus((s) => ({ ...s, [c.kind]: 'generating' }))
       try {
-        const { section, regensLeft } = await genWithRetry(sessionId, c.type, c, order)
+        const { section, regensLeft } = await genWithRetry(sessionId, c.kind, c, order)
         setSectionImage(section)
-        if (typeof regensLeft === 'number') setRegen(`landing-section:${c.type}`, regensLeft)
-        setStatus((s) => ({ ...s, [c.type]: 'done' }))
+        if (typeof regensLeft === 'number') setRegen(`landing-section:${c.kind}`, regensLeft)
+        setStatus((s) => ({ ...s, [c.kind]: 'done' }))
       } catch (err) {
         failed++
-        setStatus((s) => ({ ...s, [c.type]: 'error' }))
+        setStatus((s) => ({ ...s, [c.kind]: 'error' }))
         console.error(err)
       }
     })
@@ -277,10 +277,10 @@ export default function Section4Preview() {
               muestran un placeholder con su estado (Fase 6 · progreso real). */}
           <div className={`mx-auto w-full ${frameWidth} rounded-2xl overflow-hidden border border-white/[0.08] bg-white transition-all duration-300`}>
             {copy.map((c) => {
-              const s = sections.find((x) => x.type === c.type && x.imageUrl)
+              const s = sections.find((x) => x.type === c.kind && x.imageUrl)
               return s
-                ? <SectionCard key={c.type} section={s} />
-                : <SectionSkeleton key={c.type} type={c.type} status={status[c.type] ?? 'pending'} />
+                ? <SectionCard key={c.kind} section={s} />
+                : <SectionSkeleton key={c.kind} type={c.kind} status={status[c.kind] ?? 'pending'} />
             })}
           </div>
 

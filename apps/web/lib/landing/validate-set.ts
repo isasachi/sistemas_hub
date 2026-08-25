@@ -94,14 +94,14 @@ export function validateSet(session: Pick<LandingSessionResponse, 'offer' | 'off
       // R1: todo precio mencionado existe en los tiers.
       for (const m of prices) {
         if (!tierPrices.has(normPrice(m)))
-          issues.push({ rule: 'price-not-in-tiers', severity: 'error', section: c.type, message: `La sección "${c.type}" menciona el precio ${m.trim()}, que no existe en los tiers de la oferta.` })
+          issues.push({ rule: 'price-not-in-tiers', severity: 'error', section: c.kind, message: `La sección "${c.kind}" menciona el precio ${m.trim()}, que no existe en los tiers de la oferta.` })
       }
       // R5: un precio ANCLA (priceBefore) mostrado sin enmarcarlo como "antes" se lee como precio
       // real → el bug del ADN (el inflado aparece suelto en otra pieza). El precio real de un tier
       // sí puede referenciarse suelto (C5.1 lo habilita para hero/cta-final); el ancla no.
       for (const a of anchors) {
         if (normd.includes(a.before) && !ANCHOR_FRAME_RE.test(low)) {
-          issues.push({ rule: 'anchor-missing', severity: 'warning', section: c.type, message: `La sección "${c.type}" muestra un precio ancla ("antes") sin marcarlo como tal — se leería como precio real y contradice el descuento de la oferta.` })
+          issues.push({ rule: 'anchor-missing', severity: 'warning', section: c.kind, message: `La sección "${c.kind}" muestra un precio ancla ("antes") sin marcarlo como tal — se leería como precio real y contradice el descuento de la oferta.` })
           break
         }
       }
@@ -112,21 +112,21 @@ export function validateSet(session: Pick<LandingSessionResponse, 'offer' | 'off
       const allowed = new Set(trust.paymentMethods)
       for (const [method, re] of Object.entries(PAYMENT_KEYWORDS) as [PaymentMethod, RegExp][]) {
         if (re.test(low) && !allowed.has(method))
-          issues.push({ rule: 'payment-not-configured', severity: 'warning', section: c.type, message: `La sección "${c.type}" menciona "${method}", que no está en los medios de pago configurados.` })
+          issues.push({ rule: 'payment-not-configured', severity: 'warning', section: c.kind, message: `La sección "${c.kind}" menciona "${method}", que no está en los medios de pago configurados.` })
       }
       // R4: no mencionar garantía si no hay días de garantía.
       if (!trust.guaranteeDays && GUARANTEE_RE.test(low))
-        issues.push({ rule: 'guarantee-without-days', severity: 'warning', section: c.type, message: `La sección "${c.type}" menciona garantía/reembolso, pero no configuraste una garantía (días = 0).` })
+        issues.push({ rule: 'guarantee-without-days', severity: 'warning', section: c.kind, message: `La sección "${c.kind}" menciona garantía/reembolso, pero no configuraste una garantía (días = 0).` })
       // R6: no prometer contraentrega si no la ofreces (acceptance #3).
       if (!trust.codDelivery && COD_RE.test(low))
-        issues.push({ rule: 'cod-not-offered', severity: 'warning', section: c.type, message: `La sección "${c.type}" menciona pago contraentrega, pero no lo ofreces (contraentrega desactivada).` })
+        issues.push({ rule: 'cod-not-offered', severity: 'warning', section: c.kind, message: `La sección "${c.kind}" menciona pago contraentrega, pero no lo ofreces (contraentrega desactivada).` })
       // R2: el plazo de entrega es el mismo en toda sección que lo mencione.
       if (trust.deliveryTime) {
         const allowedNums = new Set(timeNums(trust.deliveryTime))
         for (const m of text.match(DELIVERY_RE) ?? []) {
           const nums = timeNums(m)
           if (nums.length && !nums.every((n) => allowedNums.has(n)))
-            issues.push({ rule: 'delivery-inconsistent', severity: 'warning', section: c.type, message: `La sección "${c.type}" menciona un plazo ("${m.trim()}") distinto al configurado ("${trust.deliveryTime}").` })
+            issues.push({ rule: 'delivery-inconsistent', severity: 'warning', section: c.kind, message: `La sección "${c.kind}" menciona un plazo ("${m.trim()}") distinto al configurado ("${trust.deliveryTime}").` })
         }
       }
     }

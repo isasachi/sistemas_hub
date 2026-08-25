@@ -3,6 +3,12 @@ import { z } from 'zod'
 import fs from 'fs'
 import path from 'path'
 import { openaiCallStructured, openaiCallReasoning, openaiGenerateImage } from './llm-openai'
+import { kieGeminiStructured, kieGeminiReasoning } from './kie-gemini'
+import { clampTooBigStrings, sliceToWord } from './llm-clamp'
+
+// Re-exportados desde el módulo hoja `llm-clamp.ts`: los necesita también `kie-gemini.ts`, y este
+// archivo lo importa a él — dejarlos acá era un ciclo. Los importadores no cambiaron.
+export { clampTooBigStrings, sliceToWord }
 
 function getAI() {
   return new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY! })
@@ -15,6 +21,20 @@ function getAI() {
 // gemini` fuerza Gemini-only (sin tocar OpenAI) — útil para costo o si OpenAI está caído.
 function geminiForced(): boolean {
   return process.env.LLM_PROVIDER === 'gemini'
+}
+
+// ─── Recurso migrado a KIE: el texto/visión de Gemini (2026-08-25) ───────────
+// `gemini-2.5-flash` sale por `api.kie.ai` en vez del SDK de Google. Es UN recurso: gpt-4o-mini
+// sigue primario donde lo era, la IMAGEN de Gemini (`gemini-3.1-flash-image`) sigue en el SDK, y
+// el render de video y el worker no se tocan.
+//
+// ⚠️ `GEMINI_VIA=direct` lo devuelve al SDK sin revertir código. Es lo que hace reversible el
+// slice: si KIE se cae PARA ESTE RECURSO, se cambia una variable y no hay que desplegar nada.
+export function geminiEsDirecto(): boolean {
+  return process.env.GEMINI_VIA === 'direct'
+}
+function viaDirecta(): boolean {
+  return geminiEsDirecto()
 }
 
 // ⚠️ Latencia de imagen (constraint de despliegue, NO se resuelve solo con este cableado):
@@ -52,40 +72,6 @@ export const BRANDING_SYSTEM_PROMPT = fs.readFileSync(
   'utf-8'
 )
 
-// Gemini IGNORA los maxLength del responseSchema y a veces devuelve strings más largos que el
-// `.max()` del esquema → el safeParse estricto tiraba ZodError (y 500-eaba /copy tras 3 reintentos).
-// Los `.max()` de copy son una defensa contra texto largo, no una validación dura: recortamos los
-// strings 'too_big' a su máximo y reintentamos el parse en vez de rechazar. Solo toca strings
-// (un array/número 'too_big' no se recorta → se deja fallar como antes). Puro y testeable.
-function valueAtPath(obj: unknown, path: readonly (string | number | symbol)[]): unknown {
-  return path.reduce<unknown>((o, k) => (o == null ? o : (o as Record<string | number, unknown>)[k as string | number]), obj)
-}
-// Recorta a `max` pero en LÍMITE DE PALABRA (nunca a mitad de palabra, que dejaba basura visible
-// como "Sient." o "absor…"): corta, retrocede al último espacio si no perdés demasiado, y quita
-// separadores finales (coma, punto, guiones). Exportada: la reusa el post-trim de copy.ts.
-export function sliceToWord(s: string, max: number): string {
-  if (s.length <= max) return s
-  let cut = s.slice(0, max)
-  const lastSpace = cut.lastIndexOf(' ')
-  if (lastSpace > max * 0.5) cut = cut.slice(0, lastSpace)
-  return cut.replace(/[\s,;:.–—-]+$/, '')
-}
-
-export function clampTooBigStrings(obj: unknown, error: z.ZodError): boolean {
-  let changed = false
-  for (const issue of error.issues) {
-    if (issue.code !== 'too_big' || typeof issue.maximum !== 'number' || issue.path.length === 0) continue
-    const parent = valueAtPath(obj, issue.path.slice(0, -1))
-    const key = issue.path[issue.path.length - 1] as string | number
-    const cur = parent == null ? undefined : (parent as Record<string | number, unknown>)[key]
-    if (typeof cur === 'string' && cur.length > issue.maximum) {
-      ;(parent as Record<string | number, unknown>)[key] = sliceToWord(cur, issue.maximum)
-      changed = true
-    }
-  }
-  return changed
-}
-
 // Gemini structured (fallback). Contiene la lógica de recuperación de strings 'too_big'.
 // Exportada también como entrada directa para el análisis forense de video:
 // `callStructured` es OpenAI-primario y gpt-4o-mini no acepta partes de video, así que
@@ -96,6 +82,19 @@ export async function geminiCallStructured<T>(
   parts: Part[],
   maxRetries = 3,
   systemInstruction: string = SYSTEM_PROMPT,
+): Promise<T> {
+  return viaDirecta()
+    ? geminiDirectoStructured(schemaName, schema, parts, maxRetries, systemInstruction)
+    : kieGeminiStructured(schemaName, schema, parts, maxRetries, systemInstruction)
+}
+
+/** El camino de siempre por `@google/genai`. Solo se usa con `GEMINI_VIA=direct`. */
+async function geminiDirectoStructured<T>(
+  schemaName: string,
+  schema: z.ZodSchema<T>,
+  parts: Part[],
+  maxRetries: number,
+  systemInstruction: string,
 ): Promise<T> {
   let lastError: unknown = new Error(`geminiCallStructured(${schemaName}): no attempts`)
   for (let i = 0; i < maxRetries; i++) {
@@ -153,6 +152,11 @@ export async function callStructured<T>(
 
 // Texto libre (razonamiento): OpenAI primario, Gemini fallback.
 async function geminiCallReasoning(systemPrompt: string, userMessage: string): Promise<string> {
+  return viaDirecta() ? geminiDirectoReasoning(systemPrompt, userMessage) : kieGeminiReasoning(systemPrompt, userMessage)
+}
+
+/** El camino de siempre por `@google/genai`. Solo se usa con `GEMINI_VIA=direct`. */
+async function geminiDirectoReasoning(systemPrompt: string, userMessage: string): Promise<string> {
   const res = await getAI().models.generateContent({
     model: 'gemini-2.5-flash',
     contents: [{ role: 'user', parts: [{ text: userMessage }] }],
