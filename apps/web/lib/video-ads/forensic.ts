@@ -328,6 +328,10 @@ export function corteMuestraPersona(c: { accion: string; micro?: Micro | null })
 }
 
 export function muestraPersona(accion: string): boolean {
+  // Defensivo: los cortes vienen de un jsonb guardado y `accion` puede faltar. Sin
+  // acción no hay evidencia de persona, y el fail-safe correcto es `false` (no fusionar,
+  // no compartir fotograma) — nunca reventar el render entero.
+  if (!accion) return false
   const t = accion
     .toLowerCase()
     .normalize('NFD')
@@ -1032,9 +1036,29 @@ export function buildForensicInstruction(): string {
     '  Escribir ahí "No aparece" hace que el generador de video lo LEA EN VOZ ALTA: es',
     '  texto hablado, y todo lo que esté en ese campo se pronuncia.',
     '',
+    '⚠️ EL ENCUADRE SE DECLARA POR DÓNDE CORTA EL CUADRO, NO POR UNA ETIQUETA.',
+    '  Medido: un anuncio grabado en primer plano se etiquetó "plano medio" en 3 de 4',
+    '  cortes, el render obedeció y el video salió con la persona mucho más lejos que el',
+    '  original. La etiqueta sola no es medible; el punto de corte sí. Empieza SIEMPRE por',
+    '  el punto de corte y después, si quieres, el nombre:',
+    '    "corta a la altura de los hombros" → primerísimo primer plano',
+    '    "corta a la altura del pecho o las axilas" → primer plano',
+    '    "corta a la altura del esternón" → plano medio corto',
+    '    "corta a la altura de la cintura" → plano medio',
+    '    "corta a la altura de los muslos" → plano americano',
+    '    "se ve el cuerpo entero" → plano general',
+    '  Si en cuadro NO hay persona (detalle de producto, flat-lay), di qué llena el cuadro',
+    '  y cuánto: "el frasco ocupa dos tercios del alto del cuadro".',
+    '  Agrega después la posición de cámara (frontal, ligeramente baja o alta, cenital), si',
+    '  está fija o en mano, y el movimiento (zoom, acercamiento, paneo).',
+    '',
+    '⚠️ Y DÓNDE CAE CADA COSA EN EL CUADRO, en la misma línea: "persona centrada",',
+    '  "desplazada al tercio izquierdo", "el frasco entra por el borde inferior derecho",',
+    '  "a la altura del mentón". Referencias del encuadre, nunca medidas ni píxeles.',
+    '',
     'CORTES (`cortes`): uno por corte real, en orden. Para cada uno:',
     '  `tiempo` "MM:SS - MM:SS", `duracionSeg`, `accion` (descripción literal de lo',
-    '  que sucede), `camara` (plano, posición, movimiento, zoom), `dialogo` (texto',
+    '  que sucede), `camara` (ver la escala de abajo), `dialogo` (texto',
     '  hablado durante ese corte), `textoOverlay` (o "No aparece") y `transicion`',
     '  (jump cut / corte directo / continuidad / zoom digital).',
     '',

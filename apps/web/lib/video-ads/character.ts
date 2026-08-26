@@ -179,9 +179,23 @@ export function buildIdentityInstruction(
           '',
         ].join('\n')
       : '',
+    // ⚠️ ESTE BLOQUE SE COPIA, NO SE INTERPRETA — y decía lo contrario. Medido sobre un
+    // anuncio de serum: el forense leyó bien el original ("jersey tejido rosa pálido",
+    // "pared crema, marco de puerta de madera oscura") y el avatar salió con **blusa
+    // blanca sobre top negro en una cocina moderna**, porque la instrucción pedía
+    // "vestuario equivalente" y "el mismo TIPO de lugar". El modelo tomó esa latitud.
+    //
+    // Y el daño no queda en el avatar: esa imagen es `@image(1)` en TODOS los lotes, y la
+    // imagen le gana al texto. Los cuatro clips salieron con la ropa equivocada, uno
+    // transcurrió literalmente en la cocina del avatar, y los otros tres en habitaciones
+    // distintas entre sí porque el texto `SETTING` y la imagen se contradecían.
+    //
+    // Lo que NO se copia es la CARA: el avatar es una persona nueva por requisito legal.
+    // El vestuario y el lugar no son identidad — son la escenografía del anuncio que se
+    // está replicando, y replicarlos es justamente el trabajo.
     spec.wornProduct
-      ? 'CONTEXTO DEL VIDEO ORIGINAL (solo para encuadre; el vestuario NO se copia):'
-      : 'CONTEXTO DEL VIDEO ORIGINAL (solo para encuadre y vestuario equivalente):',
+      ? 'CONTEXTO DEL VIDEO ORIGINAL — se COPIA el escenario; el vestuario NO (es el producto):'
+      : 'CONTEXTO DEL VIDEO ORIGINAL — el vestuario y el escenario se COPIAN, no se reinterpretan:',
     `  Sujeto observado: ${enProsa(forensic.sujeto)}`,
     `  Vestuario observado: ${enProsa(forensic.vestuario)}`,
     // ⚠️ En ropa/zapatos el PRODUCTO Y EL VESTUARIO SON EL MISMO OBJETO. Sin esta
@@ -253,9 +267,16 @@ export function buildIdentityInstruction(
     // manera fiable de acotar a un clip un texto que describe el video entero), así que
     // si la escena no está EN LA IMAGEN no está en ningún lado.
     'ESCENARIO — la imagen es el primer fotograma del anuncio, no un retrato de estudio:',
-    'sitúa al personaje EN EL MISMO TIPO DE LUGAR que el video original, con su misma',
-    `iluminación. Lugar observado: ${enProsa(forensic.fondo) || 'interior con luz natural'}`,
-    'Reproduce el TIPO de espacio y su luz, no los objetos concretos de una toma suelta.',
+    'sitúa al personaje EN EL LUGAR OBSERVADO, con su misma iluminación.',
+    `  Lugar observado: ${enProsa(forensic.fondo) || 'interior con luz natural'}`,
+    // ⚠️ "reproduce el TIPO de espacio" era la puerta por la que se coló una cocina donde
+    // el original tiene una pared crema con una puerta de madera oscura. Se copian los
+    // ELEMENTOS que el forense nombró (superficies, colores, muebles, temperatura de luz);
+    // lo que no se exige es la disposición exacta de una toma suelta.
+    'Reproduce los ELEMENTOS que ese texto nombra —superficies, colores, muebles, tipo y',
+    'temperatura de luz—, no un lugar "del mismo estilo". Si dice pared crema y puerta de',
+    'madera oscura, eso es lo que va detrás: no lo cambies por otra habitación que te',
+    'parezca equivalente. Lo único que no se exige es la disposición exacta de los objetos.',
     // ⚠️ Sin esto el modelo abre el plano para "mostrar" el lugar: medido, el avatar
     // pasó de plano medio a cuerpo entero en cuanto se le nombró la tienda. El escenario
     // va DETRÁS y desenfocado; el encuadre lo manda el original, no el decorado.
@@ -292,6 +313,11 @@ export function buildIdentityInstruction(
     'anterior produce otra persona.',
     'Debe ser autosuficiente y describir edad, etnia (la del usuario), rostro, cabello,',
     'piel, ojos, complexión, vestuario y accesorios.',
+    // ⚠️ El vestuario del avatar termina dentro del bloque de consistencia y viaja a cada
+    // lote: si acá se inventa, el anuncio entero sale vestido de otra cosa.
+    spec.wornProduct
+      ? ''
+      : 'VESTUARIO: copia el observado en el original —prenda, color, tejido, cuello, largo— y también sus accesorios (aretes, collares). No lo sustituyas por otra prenda "parecida" ni por una más favorecedora: es la escenografía del anuncio que se replica, no una elección de estilo.',
     spec.wornProduct
       ? 'El vestuario que describas ES EL PRODUCTO: detalla la prenda del usuario (corte, color, tejido, cuello, mangas, puños, largo) como parte de la identidad bloqueada. Es lo único que mantiene la misma prenda en el lote 1 y en el 5.'
       : '',

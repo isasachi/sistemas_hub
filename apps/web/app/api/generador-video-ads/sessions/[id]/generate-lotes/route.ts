@@ -4,7 +4,7 @@ import { createVideoTask, resolveKey, clampDuration, KIE_PROMPT_MAX, SIN_KEY, ty
 import { currentKieKey } from '@/lib/user-settings'
 import { anchorSpecs, generateAnchorImages } from '@/lib/video-ads/anchors'
 import { personajesDe, hablantesPorTiempo, vozEnOffPorTiempo } from '@/lib/video-ads/personajes'
-import { enProsa } from '@/lib/video-ads/forensic'
+import { enProsa, corteMuestraPersona } from '@/lib/video-ads/forensic'
 import { uploadToStorage, fetchAsBase64 } from '@/lib/storage'
 import { generateImage } from '@/lib/gemini'
 import { planoPorTiempoDe, groupIntoLotes, buildLotePrompt, camaraDeLote, type Lote } from '@/lib/video-ads/lotes'
@@ -141,7 +141,11 @@ export async function POST(
   // consumen igual `anchorSpecs` (para saber dónde empieza cada escena) y el plano por
   // toma del prompt.
   const planoPorTiempo = planoPorTiempoDe(cortes)
-  const agrupados = groupIntoLotes(adapted.tomas, planoPorTiempo)
+  // ⚠️ La CLASE de toma (persona / solo producto) cierra el lote: un beat de b-roll que
+  // comparte clip con una toma hablada se lo come el habla. Medido sobre 25 sesiones: los
+  // lotes mezclados pasan de 8 a 0 por 1,07× de llamadas. Ver `clasePorTiempo`.
+  const clasePorTiempo = new Map(cortes.map((c) => [c.tiempo, corteMuestraPersona(c)] as const))
+  const agrupados = groupIntoLotes(adapted.tomas, planoPorTiempo, undefined, clasePorTiempo)
   if (!agrupados.length) return NextResponse.json({ error: 'El guión no tiene tomas' }, { status: 409 })
 
   // Una cámara por lote, con los planos de SUS cortes: el spec pide replicar el

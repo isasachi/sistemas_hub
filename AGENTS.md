@@ -404,6 +404,27 @@ Cuatro condiciones, todas COMPARACIONES y no criterios — es la "matemática" q
 
 ⚠️ **LAS MANOS DEGRADAN DESPUÉS QUE EL DETALLE.** `micro` se recorta ya en `NIVEL_MICRO_CORTO`; el recorrido de las manos solo en el piso de la búsqueda binaria. El pelo y el fondo son textura; el estado de la tapa es lo que impide que un objeto reaparezca en el aire. Costo medido de sumar el bloque: de 85/87 lotes con el detalle completo se pasa a **75/89**, con 14 recortados y ninguno sin emitir.
 
+⚠️ **EL AVATAR CONTRADECÍA AL ORIGINAL, Y EL AVATAR LE GANA AL TEXTO.** Es la causa raíz de *"no se parece ni un poco al original"*, y explica la mitad de los demás síntomas. Medido sobre un anuncio de serum: el forense leyó BIEN el original —*"jersey tejido rosa pálido"*, *"pared crema, marco de puerta de madera oscura"*— y el prompt del avatar salió pidiendo *"a white loose-fitting blouse over a black top"* en *"a bright, modern residential kitchen background"*. Nadie pidió una cocina: la instrucción decía *"vestuario equivalente"* y *"reproduce el TIPO de espacio"*, y el modelo tomó esa latitud.
+
+El daño no queda en el avatar. Esa imagen es `@image(1)` en TODOS los lotes y **la imagen le gana al texto**: los cuatro clips salieron con la ropa equivocada, uno transcurrió literalmente en la cocina del avatar, y los otros tres en habitaciones distintas entre sí — porque el bloque `SETTING AND LIGHTING` del prompt y la imagen se contradecían y el modelo resolvió el empate distinto cada vez.
+
+**El vestuario y el escenario se COPIAN; lo único que no se copia es la CARA** (el avatar es una persona nueva por requisito legal). No son identidad: son la escenografía del anuncio que se está replicando. La instrucción ahora pide reproducir los ELEMENTOS que el forense nombró —superficies, colores, muebles, temperatura de luz— y dice explícitamente que no se sustituyan por un lugar "del mismo estilo". En ropa/zapatos el vestuario sigue sin copiarse: ahí es el producto.
+
+⚠️ **EL ENCUADRE SE DECLARA POR DÓNDE CORTA EL CUADRO, NO POR UNA ETIQUETA.** En ese mismo anuncio, grabado en primer plano, el forense escribió *"Plano medio, frontal"* en 3 de 4 cortes; el render obedeció y el video salió con la persona mucho más lejos que el original. La etiqueta sola no es medible y cada modelo la usa distinto. El prompt ahora exige empezar por el punto de corte —*"corta a la altura del pecho"*, *"corta a la altura de la cintura"*— con la escala completa de hombros a cuerpo entero, y para un plano sin persona, qué llena el cuadro y cuánto.
+
+⚠️ **UNA TOMA DE PRODUCTO NO PUEDE COMPARTIR CLIP CON UNA DE PERSONA (`clasePorTiempo`).** El original dedica **8 segundos seguidos** al frasco casi a pantalla completa; esa toma terminó compartiendo lote con una toma hablada de 19 s y quedó en **~1,5 s de los 8**. En un clip con 371 caracteres de locución el modelo se pasa el tiempo hablando — y le pasa a cualquier b-roll de cualquier UGC, no a este video.
+
+⚠️ **Y LA FRONTERA DE PLANO ESTABA MUERTA EN PRODUCCIÓN.** `generate-lotes` calculaba `planoPorTiempo`, se lo pasaba a `groupIntoLotes`… y nunca pasaba `maxPlanos`, que por defecto es `Infinity`. O sea el mapa se computaba y no cerraba nada. Medido sobre las 25 sesiones con guión, las tres opciones:
+
+| | lotes | que mezclan persona y producto | costo |
+|---|---|---|---|
+| como estaba (sin frontera) | 108 | 8 | 1× |
+| `maxPlanos = 2` | 112 | 8 | 1,04× |
+| `maxPlanos = 1` | 137 | 2 | 1,27× |
+| **frontera de CLASE** | **116** | **0** | **1,07×** |
+
+La frontera de clase gana porque ataca el defecto exacto: cierra cuando cambia QUÉ SE MUESTRA (persona / solo producto), no ante cualquier cambio de encuadre — dos planos de la misma persona hablando siguen compartiendo clip. `maxPlanos` se queda como parámetro, sin usar.
+
 ⚠️ **EL PRODUCTO SALÍA FLOTANDO A PANTALLA COMPLETA, y es un problema de LEYENDA, no de contenido.** `@image(2) = the product` declaraba qué ES la imagen y nada sobre cómo puede USARSE, así que animar hacia la foto de referencia es una lectura legal del input. El prompt ahora declara que las referencias definen **apariencia** y no son tomas a reproducir, y que el producto existe dentro de la escena —en las manos o sobre una superficie— nunca como recorte flotante, inserto de producto ni imagen a pantalla completa. Protege igual a `@image(1)`.
 
 ⚠️ **COORDENADAS EN PÍXELES: NO — Y EL VOCABULARIO QUE LAS REEMPLAZA NECESITÓ SU PROPIA CASILLA.** El dueño del repo preguntó si servirían unos `x1,y1`. `grok-imagine` es un modelo de difusión de video, no un detector: no los honra y gastarían caracteres que la escalera ya se está comiendo. Lo que **sí** entiende es el vocabulario relativo al encuadre — *"tercio derecho a la altura del pecho"*, *"entra por el borde inferior"*, *"sale por arriba"*.

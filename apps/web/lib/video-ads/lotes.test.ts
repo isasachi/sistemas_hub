@@ -777,3 +777,33 @@ describe('buildLotePrompt — la puesta en cuadro', () => {
     expect(p).toContain('CAMERA: Primer plano, persona centrada, frasco en el tercio derecho')
   })
 })
+
+describe('groupIntoLotes — la clase de toma cierra el lote', () => {
+  const conClase = (n: number, dur: number, t: string, loc = `linea ${n}`) => ({ ...toma(n, dur, loc), tiempoOriginal: t })
+
+  // ⚠️ EL CASO MEDIDO: el original dedica 8 segundos seguidos al frasco casi a pantalla
+  // completa, y esa toma compartió clip con una toma hablada de 19 s. En un clip con 371
+  // caracteres de locución el modelo se pasa el tiempo hablando: el beat de producto quedó
+  // en ~1,5 s de los 8. Le pasa a cualquier b-roll de cualquier UGC.
+  it('una toma de producto no comparte clip con una de persona', () => {
+    const clase = new Map([['t1', true], ['t2', false], ['t3', true]])
+    const l = groupIntoLotes(
+      [conClase(1, 4, 't1'), conClase(2, 3, 't2', ''), conClase(3, 4, 't3')],
+      undefined, undefined, clase,
+    )
+    expect(l).toHaveLength(3)
+    expect(l[1].tomas.map((t) => t.tiempoOriginal)).toEqual(['t2'])
+  })
+
+  it('dos tomas de la misma clase siguen compartiendo clip', () => {
+    const clase = new Map([['t1', true], ['t2', true]])
+    const l = groupIntoLotes([conClase(1, 4, 't1'), conClase(2, 4, 't2')], undefined, undefined, clase)
+    expect(l).toHaveLength(1)
+  })
+
+  // Sin el mapa, el comportamiento es exactamente el de antes.
+  it('sin clasePorTiempo agrupa como siempre', () => {
+    const l = groupIntoLotes([conClase(1, 4, 't1'), conClase(2, 3, 't2'), conClase(3, 4, 't3')])
+    expect(l).toHaveLength(1)
+  })
+})

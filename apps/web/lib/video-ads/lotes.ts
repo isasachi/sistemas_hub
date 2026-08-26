@@ -290,6 +290,23 @@ export function groupIntoLotes(
    * las llamadas.
    */
   maxPlanos = Infinity,
+  /**
+   * ⚠️ UNA TOMA DE PRODUCTO NO PUEDE COMPARTIR CLIP CON UNA DE PERSONA.
+   *
+   * `tiempoOriginal` → ¿este corte muestra a la persona? (`corteMuestraPersona`). Cuando
+   * cambia, el lote CIERRA. No es lo mismo que `maxPlanos`: aquel cierra ante cualquier
+   * cambio de encuadre —dos planos de la misma persona hablando también—, y esto solo ante
+   * el cambio de CLASE, que es donde está el defecto.
+   *
+   * Medido sobre un anuncio de serum: el original dedica 8 segundos seguidos al frasco casi
+   * a pantalla completa, y esa toma terminó compartiendo clip con una toma hablada de 19 s.
+   * En un clip con 371 caracteres de locución el modelo se pasa el tiempo hablando, y el
+   * beat de producto quedó en ~1,5 s de los 8. Lo mismo le pasa a cualquier b-roll.
+   *
+   * Medido sobre las 25 sesiones con guión: los lotes que mezclan persona y producto pasan
+   * de 8 a 0, y cuesta 1,06× llamadas — contra 1,27× de `maxPlanos = 1`, que arregla menos.
+   */
+  clasePorTiempo?: Map<string, boolean>,
 ): Lote[] {
   // Renumeramos TODA la secuencia expandida en orden: si una toma se divide, sus
   // fragmentos no pueden compartir el `n` original (colisionarían al rotular "Toma N"
@@ -332,6 +349,11 @@ export function groupIntoLotes(
     // (recursivamente), así que una toma sola SIEMPRE entra en un lote propio aunque
     // el lote esté vacío — el guard de abajo solo protege la SUMA con lo ya acumulado.
     if (actual.length && excedeTope(acumulado + t.duracionSeg)) cerrar()
+    // …y también cuando cambia la CLASE de toma: ver `clasePorTiempo`.
+    else if (
+      actual.length && clasePorTiempo
+      && clasePorTiempo.get(t.tiempoOriginal) !== clasePorTiempo.get(actual[actual.length - 1].tiempoOriginal)
+    ) cerrar()
     // …y también por CARACTERES: ver `LOTE_MAX_CHARS`. Sin esto el piso de habla de
     // `clampDuration` devuelve una duración por encima del cap y el clip sale más largo
     // de lo que este módulo promete.
