@@ -189,7 +189,15 @@ export function scriptFingerprint(input: {
     // cambio pegaría un clip de Veo a uno de grok jurando que es el mismo contenido — que
     // es exactamente el fallo que esta versión existe para evitar. Los parciales
     // anteriores pasan a contar como generación nueva, fail-closed.
-    'v9',
+    // v9 → v10: EL CAP DE CLIP BAJA DE 30 A 15 s y con él cambia el reparto entero, la
+    // plantilla del prompt se comprime (el andamiaje fijo se reescribió en telegrama para
+    // liberar los ~2.500 caracteres que se comía), aparece el bloque de DETALLE ATÓMICO
+    // por toma y la voz deja de venir del usuario para salir de `VOZ_POR_DEFECTO`. La
+    // huella hashea INSUMOS, no el texto producido, así que el cambio de plantilla es
+    // invisible para ella: sin este bump, reanudar a través del cambio pegaría un clip de
+    // 30 s con la voz vieja a uno de 15 s con la nueva mientras `isPaidResume` jura que es
+    // el mismo contenido. Los parciales anteriores cuentan como generación nueva.
+    'v10',
     // Pasa por `toNiche`: un nicho BLOQUEADO se renderiza como suplementos, así que su
     // huella tiene que ser la de suplementos. Sin esto, una sesión guardada como 'ropa'
     // con lotes ya pagados reanudaría pegando un clip del camino de prenda a uno del

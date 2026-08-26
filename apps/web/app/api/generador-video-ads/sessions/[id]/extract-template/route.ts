@@ -7,7 +7,8 @@ import { readUserId } from '@/lib/product-hunter/session'
 import { TemplateDraftSchema, buildTemplateInstruction } from '@/lib/video-ads/template'
 import { validateTemplate, assembleTemplate, normalizeSlots } from '@/lib/video-ads/fill'
 import { canProceed } from '@/lib/video-ads/validation'
-import { repairCutTiming, mergeMicroCortes, MIN_TOMA_SEG, limpiarDialogos, verificarHablantes } from '@/lib/video-ads/forensic'
+import { repairCutTiming, mergeMicroCortes, unirTomasContinuas, MIN_TOMA_SEG, limpiarDialogos, verificarHablantes } from '@/lib/video-ads/forensic'
+import { LOTE_MAX_SEC, LOTE_MAX_CHARS } from '@/lib/video-ads/lotes'
 import { resyncTomaDurations } from '@/lib/video-ads/adapt'
 import { STEP } from '@/lib/video-ads/steps'
 
@@ -75,6 +76,23 @@ export async function POST(
         fusiones.map((f) => `${f.tiempo} (${f.deCortes} cortes, ${f.duracionSeg.toFixed(1)}s)`),
       )
       base = fusionado
+    }
+
+    // …y DESPUÉS une los cortes que ya eran la misma toma. El orden importa: fusionar
+    // micro-cortes primero deja tramos renderizables, y recién sobre esos tiene sentido
+    // preguntar si dos consecutivos son en realidad una toma continua. Al revés, un
+    // corte de 1 s podría absorber a su vecino largo por continuidad y dejar sin
+    // material a la fusión de micro-cortes.
+    //
+    // Esto NO sacrifica nada (mismo plano, misma clase, mismo objeto en la mano): lo que
+    // compra es presupuesto de prompt, que es lo que financia el detalle atómico.
+    const { report: continuo, fusiones: unidas } = unirTomasContinuas(base, LOTE_MAX_SEC, LOTE_MAX_CHARS)
+    if (unidas.length) {
+      console.info(
+        `[video-ads/extract-template] sesión ${id}: ${base.cortes.length} → ${continuo.cortes.length} cortes tras unir tomas continuas:`,
+        unidas.map((f) => `${f.tiempo} (${f.deCortes} cortes, ${f.duracionSeg.toFixed(1)}s)`),
+      )
+      base = continuo
     }
   }
 

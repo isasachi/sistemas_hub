@@ -1,6 +1,8 @@
 import { z } from 'zod'
 import type { TomaFinal } from './adapt'
 import type { MotionProfile, VoiceProfile } from './character'
+import type { Micro } from './forensic'
+import { CPS_MAX } from './forensic'
 import { KIE_PROMPT_MAX } from './kie'
 import { nicheSpec } from './niches'
 import { etiqueta, type Personaje } from './personajes'
@@ -12,10 +14,14 @@ import { etiqueta, type Personaje } from './personajes'
  * lo volvería no determinista justo donde importa que no lo sea (el tope es el techo
  * duro del modelo de KIE).
  *
- * ⚠️ EL TOPE LO PONE EL MODELO, NO EL SPEC, y con `grok-imagine/image-to-video` pasa a
- * ser **30 s** — por encima de los 15 del spec. Es 3,75× el techo de Veo (8 s), y el
- * efecto es directo sobre el dinero: los mismos cortes caben en muchos menos lotes, y
- * cada lote es una llamada PAGADA. La duración final de cada lote la fija
+ * ⚠️ EL TOPE LO PONE LA CONSISTENCIA DEL MODELO, NO LA API. `grok-imagine/image-to-video`
+ * acepta hasta 30 s y durante un tiempo ese fue el cap; el dueño del repo lo bajó a
+ * **15 s** (2026-08-25) porque grok pierde la consistencia del personaje y del entorno
+ * en clips largos. Vuelve a coincidir con los 15 s del spec, por otro camino.
+ *
+ * El efecto sobre el dinero es directo y va en contra: los mismos cortes caben en el
+ * doble de lotes, y cada lote es una llamada PAGADA. Lo que se compra a ese precio es
+ * que el clip se parezca al personaje. La duración final de cada lote la fija
  * `clampDuration` (kie.ts), que es donde se decide qué se pierde al ajustar.
  *
  * INVARIANTE QUE ESTE MÓDULO EXISTE PARA GARANTIZAR: ningún `Lote` devuelto por
@@ -27,7 +33,28 @@ import { etiqueta, type Personaje } from './personajes'
  * en el caso feliz.
  */
 
-export const LOTE_MAX_SEC = 30
+export const LOTE_MAX_SEC = 15
+
+/**
+ * Presupuesto de HABLA de un lote, en caracteres. Es el cap de segundos traducido al
+ * único otro eje que puede estirar un clip.
+ *
+ * ⚠️ EL PISO DE `clampDuration` PERFORA EL CAP, y con 30 s eso no se veía. Ese piso es
+ * `ceil(caracteres / CPS_MAX)` y manda sobre todo lo demás a propósito: el texto tiene
+ * que poder decirse, y violarlo corta el diálogo a mitad de frase. Con el techo en 30 s
+ * un lote nunca llegaba a rozarlo; con 15 s, un lote de 400 caracteres devuelve **20 s**
+ * y se renderiza un clip que pasa el cap que este módulo publica.
+ *
+ * Y esos 400 caracteres son un caso REAL, no teórico: `repairCutTiming` garantiza el
+ * ritmo sobre los cortes del FORENSE, pero FASE 3 reescribe la locución y el usuario la
+ * edita a mano — AGENTS.md tiene medido un corte que pasó de 82 a 272 caracteres en los
+ * mismos 5 s. Así que el lote cierra también por caracteres, con la misma aritmética.
+ *
+ * ⚠️ Una toma que SOLA pasa el presupuesto no se puede arreglar cerrando el lote, y ahí
+ * el piso gana: sale un clip más largo que el cap antes que uno con la frase cortada.
+ * Es la misma jerarquía que dentro de `clampDuration`.
+ */
+export const LOTE_MAX_CHARS = LOTE_MAX_SEC * CPS_MAX
 
 export const LoteSchema = z.object({
   n: z.number(),
@@ -210,6 +237,7 @@ export function groupIntoLotes(
   const lotes: Lote[] = []
   let actual: TomaFinal[] = []
   let acumulado = 0
+  let chars = 0
 
   const cerrar = () => {
     if (!actual.length) return
@@ -231,6 +259,7 @@ export function groupIntoLotes(
     })
     actual = []
     acumulado = 0
+    chars = 0
   }
 
   for (const t of expandidas) {
@@ -240,6 +269,10 @@ export function groupIntoLotes(
     // (recursivamente), así que una toma sola SIEMPRE entra en un lote propio aunque
     // el lote esté vacío — el guard de abajo solo protege la SUMA con lo ya acumulado.
     if (actual.length && excedeTope(acumulado + t.duracionSeg)) cerrar()
+    // …y también por CARACTERES: ver `LOTE_MAX_CHARS`. Sin esto el piso de habla de
+    // `clampDuration` devuelve una duración por encima del cap y el clip sale más largo
+    // de lo que este módulo promete.
+    else if (actual.length && chars + t.locucion.length > LOTE_MAX_CHARS) cerrar()
     // …y también si cambia el encuadre: el clip que sale de acá es continuo (ver la
     // cabecera). Solo se compara contra la toma anterior DEL LOTE ABIERTO, así que un
     // plano que vuelve más adelante abre su propio lote, igual que en el original.
@@ -257,6 +290,7 @@ export function groupIntoLotes(
     }
     actual.push(t)
     acumulado += t.duracionSeg
+    chars += t.locucion.length
   }
   cerrar()
 
@@ -373,7 +407,8 @@ const NIVEL_OVERLAY_COMPACTO = 3
  * a costa del único texto que describe qué hace el cuerpo. Medido en su momento: la
  * coreografía conservada pasó de 46 % a 84 % en el lote 1.
  */
-const NIVEL_PRODUCTO_FISICO = 4
+const NIVEL_MICRO_CORTO = 4
+const NIVEL_PRODUCTO_FISICO = 5
 
 /** Las dos primeras oraciones: la forma del envase, sin la transcripción de la etiqueta. */
 function productoFisico(desc: string): string {
@@ -386,11 +421,46 @@ function productoFisico(desc: string): string {
 function bloqueOverlay(nivel: number): string[] {
   if (nivel >= NIVEL_OVERLAY_COMPACTO)
     return [
-      'NO TEXT / NO OVERLAY: no captions, subtitles, on-screen text, graphics, watermarks',
-      'or UI. Only text physically printed on the product or on real props. No recording',
-      'gear on camera. Do not invent dialogue to fill time.',
+      'NO TEXT / NO OVERLAY: no captions, subtitles, on-screen text, graphics, watermarks or UI.',
+      'Only text physically printed on the product or real props. No recording gear on camera.',
+      'Do not invent dialogue to fill time.',
     ]
   return BLOQUE_OVERLAY_EN
+}
+
+/**
+ * EL DETALLE ATÓMICO DE UNA TOMA, en una línea.
+ *
+ * Pedido del dueño del repo (2026-08-25): que el prompt copie *"cada movimiento, cada
+ * expresión, el lipsync, el cabello, el vaivén de las manos, el balanceo del cuerpo, más
+ * rigidez si no se mueve mucho, el movimiento del entorno"*. `accion` dice QUÉ hace el
+ * cuerpo; esto dice CÓMO, y es la capa que separa un video que se parece de uno que es
+ * el mismo.
+ *
+ * ⚠️ VA EN UNA SOLA LÍNEA CON ETIQUETAS DE UNA PALABRA, y eso no es cosmético: son cinco
+ * campos POR TOMA dentro de un prompt topado en 5000 caracteres. Medido sobre las 22
+ * sesiones reales, antes de comprimir el andamiaje quedaban ~21 caracteres libres por
+ * toma — o sea esto no entraba de ninguna forma. Cada etiqueta larga ("Body movement:")
+ * se paga cinco veces por toma y otra vez por cada toma del lote.
+ *
+ * `cap` lo fija la escalera de degradación: recorta cada campo antes que soltar el
+ * bloque entero, porque medio detalle sigue siendo más de lo que había.
+ */
+function microDe(m: Micro | undefined, cap: number | null): string {
+  if (!m) return ''
+  const corto = (x: string) => {
+    const t = x.trim()
+    if (!t) return ''
+    return cap != null && t.length > cap ? `${t.slice(0, cap).trimEnd()}…` : t
+  }
+  const partes = [
+    m.cuerpo && `body ${corto(m.cuerpo)}`,
+    m.manos && `hands ${corto(m.manos)}`,
+    m.rostro && `face ${corto(m.rostro)}`,
+    m.cabello && `hair ${corto(m.cabello)}`,
+    m.entorno && `bg ${corto(m.entorno)}`,
+  ].filter(Boolean)
+  return partes.length ? `Micro-detail (reproduce exactly): ${partes.join(' · ')}` : ''
 }
 
 export function buildLotePrompt(args: {
@@ -404,7 +474,7 @@ export function buildLotePrompt(args: {
   movimiento?: MotionProfile | null
   images: LoteImage[]
   /** Los cortes del forense, para poder decir QUÉ plano va con QUÉ toma (ver abajo). */
-  cortes?: { tiempo: string; camara: string }[]
+  cortes?: { tiempo: string; camara: string; micro?: Micro }[]
   /** Nicho de la sesión: en ropa/zapatos el producto se LLEVA PUESTO, y el bloque que
    *  lo describe como "un objeto" contradice al bloque de consistencia. Ver niches.ts. */
   niche?: unknown
@@ -445,11 +515,14 @@ export function buildLotePrompt(args: {
    * mientras una voz narraba por encima.
    */
   const dice = (t: { tiempoOriginal: string }) => {
-    if (off.has(t.tiempoOriginal)) return 'VOICE-OVER, nobody speaks on camera (Latin American Spanish, verbatim)'
+    // ⚠️ La etiqueta se acortó (2026-08-25): la cabecera del prompt ya dice que TODO lo
+    // entrecomillado es español latino literal, así que repetir "(Latin American Spanish,
+    // verbatim)" en cada toma cuesta ~47 caracteres por toma sin agregar ninguna regla —
+    // y ese presupuesto es justo el que financia el detalle atómico. Lo que NO se toca es
+    // que la línea EXISTA por toma: es la sincronización audio↔imagen.
+    if (off.has(t.tiempoOriginal)) return 'VOICE-OVER (nobody on camera)'
     const gente = quien.get(t.tiempoOriginal) ?? []
-    return gente.length === 1
-      ? `${etiqueta(gente[0])} says (Latin American Spanish, verbatim)`
-      : 'Spoken line (Latin American Spanish, verbatim)'
+    return gente.length === 1 ? `${etiqueta(gente[0])} says` : 'Says'
   }
   /** El lote entero es narración por encima: ninguna de sus tomas se dice en cuadro. */
   const todoEnOff = lote.tomas.length > 0
@@ -488,6 +561,9 @@ export function buildLotePrompt(args: {
    * contenido, el mismo argumento que la línea hablada.
    */
   const porTiempo = new Map((cortes ?? []).map((c) => [c.tiempo, c.camara.trim()]))
+  // El detalle atómico de cada corte, por la MISMA clave que el plano (`tiempoOriginal`,
+  // nunca `n`: `groupIntoLotes` renumera después de `splitLongToma`).
+  const microPorTiempo = new Map((cortes ?? []).flatMap((c) => (c.micro ? [[c.tiempo, c.micro] as const] : [])))
   const planos = lote.tomas.map((t) => porTiempo.get(t.tiempoOriginal) ?? '')
   const mezclaPlanos = new Set(planos.filter(Boolean)).size >= 2
   const planoPorToma = (i: number) =>
@@ -533,6 +609,16 @@ export function buildLotePrompt(args: {
           // Ver `planoPorToma`: nunca se degrada, por el mismo motivo que la línea hablada.
           plano ? `Camera: ${plano}` : '',
           accionVisual,
+          // Debajo de la coreografía a propósito: primero QUÉ hace el cuerpo, después CÓMO.
+          // ⚠️ El detalle atómico se ENCOGE con la búsqueda binaria del piso, no se
+          // suelta: medido sobre las 87 combinaciones reales, soltarlo dejaba 7 lotes sin
+          // prompt válido (la función lanza y la cuota ya está gastada). Medio detalle
+          // sigue siendo más de lo que había, y el modo de fallo pasa a ser "menos
+          // detalle" en vez de "no se puede renderizar".
+          microDe(
+            microPorTiempo.get(t.tiempoOriginal),
+            capAccion != null ? capAccion : nivel >= NIVEL_MICRO_CORTO ? 60 : null,
+          ),
           // NUNCA se suelta, en ningún nivel de degradación. Esta línea es lo único que
           // le dice al generador QUÉ FRASE va con QUÉ ACCIÓN y en cuántos segundos: es la
           // sincronización audio↔imagen, no una copia del guion global. Con el tope viejo
@@ -555,8 +641,7 @@ export function buildLotePrompt(args: {
       `Vertical 9:16 UGC video, ${lote.duracionSeg} seconds total, shot on a phone.`,
       // La única línea del prompt que habla de idiomas. Sin ella, un prompt en inglés con
       // frases en español entrecomilladas es ambiguo: el modelo puede traducirlas.
-      'All instructions below are in English. The quoted spoken lines are in Latin',
-      'American Spanish and must be spoken EXACTLY as written, without translating them.',
+      'Instructions in English. Quoted lines are Latin American Spanish: speak them EXACTLY, never translate.',
       '',
       legend,
       '',
@@ -568,7 +653,7 @@ export function buildLotePrompt(args: {
             '',
             ...presentes.map(bloqueDe),
           ]
-        : ['CHARACTER (full description, no external references):', consistencyBlock]),
+        : ['CHARACTER (no external references):', consistencyBlock]),
       '',
       spec.productBlockEn,
       nivel >= NIVEL_PRODUCTO_FISICO ? productoFisico(productDesc) : productDesc,
@@ -578,8 +663,7 @@ export function buildLotePrompt(args: {
       // todos los prompts mientras el formato UGC se define por lo contrario: teléfono en
       // mano o apoyado, ángulo bajo, micro-temblor. Era pedirle trípode a un lenguaje
       // visual que no lo tiene.
-      `CAMERA: ${camara.replace(/\.\s*$/, '')}. Vertical 9:16, handheld phone with natural`,
-      'micro-shake, focus on the character and the product.',
+      `CAMERA: ${camara.replace(/\.\s*$/, '')}. Handheld phone, natural micro-shake, focus on character and product.`,
       // ⚠️ ACÁ ESTÁ EL CAMBIO DE ARQUITECTURA. Con Veo el clip era un plano único y este
       // bloque decía "TOMA CONTINUA, sin cortes internos". Ahora un clip de hasta 30 s
       // abarca varias escenas del original a propósito, así que hay que decir cómo se
@@ -587,22 +671,17 @@ export function buildLotePrompt(args: {
       // delata un video generado, y un cambio de entorno no pedido rompe la continuidad.
       ...(variasEscenas
         ? [
-            'CUTS: this clip contains several shots from the same piece. Move between them',
-            'with straight, natural hard cuts — the way a real edit cuts. NO crossfades, no',
-            'dissolves, no whip pans, no zoom transitions, no morphing, no speed ramps and',
-            'no camera fly-throughs between shots.',
-            'Across every cut the person, their wardrobe, the product, the room and the',
-            'lighting stay THE SAME. Only the framing and the action change. Do not move',
-            'the scene to another place and do not redecorate it.',
+            'CUTS: several shots from the same piece, joined by straight hard cuts like a real edit.',
+            'NO crossfades, dissolves, whip pans, zoom transitions, morphing, speed ramps or fly-throughs.',
+            'Across every cut the person, wardrobe, product, room and lighting stay THE SAME — only framing',
+            'and action change. Never move or redecorate the scene.',
           ]
         : [
-            'CONTINUOUS TAKE: one single shot from start to finish, no internal cuts, no jump',
-            'cuts and no scene changes inside the clip.',
+            'CONTINUOUS TAKE: one single shot, no internal cuts, no jump cuts, no scene changes.',
           ]),
-      'CONTINUITY: character, product, wardrobe, setting and lighting stay identical from',
-      'start to finish, exactly as described above. Only the action below advances.',
+      'CONTINUITY: character, product, wardrobe, setting and lighting identical throughout, exactly as above. Only the action advances.',
       '',
-      varios ? '' : 'VOICE AND ACCENT PROFILE:',
+      varios ? '' : 'VOICE PROFILE:',
       varios ? '' : `  Idioma: ${voz.idioma} · Variante: ${voz.varianteRegional} · Acento: ${voz.acento}`,
       varios ? '' : `  Pronunciación: ${voz.pronunciacion} · Ritmo: ${voz.ritmo} · Velocidad: ${voz.velocidad}`,
       varios ? '' : `  Entonación: ${voz.entonacion} · Energía: ${voz.energia} · Pausas: ${voz.pausas}`,
@@ -614,7 +693,7 @@ export function buildLotePrompt(args: {
       // fallo que uno que cambia de cara.
       ...(movimiento && !varios
         ? [
-            'HOW THEY MOVE (applies for the whole clip, also between gestures):',
+            'MOVEMENT (whole clip, also between gestures):',
             `  Calidad del movimiento: ${movimiento.calidadMovimiento}`,
             `  Manerismos: ${movimiento.manerismos}`,
             '',
@@ -651,6 +730,7 @@ export function buildLotePrompt(args: {
     NIVEL_SIN_OVERLAY_POR_TOMA,
     NIVEL_SIN_GUION_GLOBAL,
     NIVEL_OVERLAY_COMPACTO,
+    NIVEL_MICRO_CORTO,
     NIVEL_PRODUCTO_FISICO,
   ]) {
     const prompt = render(nivel, null)

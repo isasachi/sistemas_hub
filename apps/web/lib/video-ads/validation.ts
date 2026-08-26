@@ -9,8 +9,14 @@ import type { UserInputs } from './types'
  * sería caro y, peor, abriría la puerta a que "rellene" lo que falta — exactamente
  * lo que la REGLA DE NO-ASUNCIÓN prohíbe.
  *
- * Las dos filas que NUNCA pueden marcarse CONFIRMADA desde la referencia son etnia
- * y acento: el spec es explícito en que deben venir del usuario.
+ * ⚠️ LA FILA DE ACENTO SE ELIMINÓ (2026-08-25, decisión del dueño del repo). El acento y
+ * la voz eran dos campos del wizard —uno obligatorio y BLOQUEANTE— y ahora la voz sale de
+ * un perfil fijo en español (`VOZ_POR_DEFECTO`, character.ts). Revierte a propósito una
+ * regla que este repo tenía como dura.
+ *
+ * La ETNIA no se tocó y sigue siendo la fila que NUNCA puede marcarse CONFIRMADA desde la
+ * referencia: es lo que sostiene la REGLA DE NO-ASUNCIÓN, y con varios personajes es lo
+ * que mantiene vivo el gate uno por uno.
  */
 
 /** Literal del spec. Se guarda tal cual en el valor de una fila pendiente. */
@@ -57,10 +63,9 @@ export function buildValidationMatrix(
     : row('Personaje', inputs.characterDesc, 'USUARIO')
 
   /**
-   * ⚠️ CON VARIOS PERSONAJES LA FASE 0 BLOQUEA POR CADA UNO. Etnia y acento son los dos
-   * campos que el spec prohíbe inferir, y que uno los tenga no cubre al otro: un anuncio
-   * con el padre sin acento saldría con una voz genérica que nadie eligió. El nombre de
-   * cada fila lleva el rol para que el usuario sepa a quién le falta qué.
+   * ⚠️ CON VARIOS PERSONAJES LA FASE 0 BLOQUEA POR CADA UNO. La etnia es el campo que el
+   * spec prohíbe inferir, y que un personaje la tenga no cubre al otro. El nombre de cada
+   * fila lleva el rol para que el usuario sepa a quién le falta qué.
    */
   const varios = (inputs.personajes?.length ?? 0) > 1
   const filasDePersonajes: ValidationRow[] = varios
@@ -72,13 +77,11 @@ export function buildValidationMatrix(
             : row(`Personaje · ${quien}`, p.desc, 'USUARIO'),
           // Fuente USUARIO aunque haya imagen: una foto no confirma origen cultural.
           row(`Raza / etnia / origen cultural · ${quien}`, p.etnia, 'USUARIO'),
-          row(`Acento · ${quien}`, p.acento, 'USUARIO'),
         ]
       })
     : [
         personaje,
         row('Raza / etnia / origen cultural', inputs.characterEthnicity, 'USUARIO'),
-        row('Acento', inputs.accent, 'USUARIO'),
       ]
 
   const rows: ValidationRow[] = [

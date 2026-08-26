@@ -79,7 +79,7 @@ export default function VideoWizard() {
     {
       label: 'Personaje',
       title: '¿Quién habla a cámara?',
-      hint: 'Etnia y acento los defines tú: no los deducimos de una foto ni del video de referencia.',
+      hint: 'La etnia la defines tú: no la deducimos de una foto ni del video de referencia. La voz sale de un perfil fijo en español.',
     },
     {
       label: 'Validación',

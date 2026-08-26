@@ -7,7 +7,7 @@ import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 import { currentKieKey } from '@/lib/user-settings'
 import { SIN_KEY } from '@/lib/video-ads/kie'
-import { IdentidadesSchema, buildIdentityInstruction, buildCharacterParts } from '@/lib/video-ads/character'
+import { IdentidadesSchema, buildIdentityInstruction, buildCharacterParts, vozDe } from '@/lib/video-ads/character'
 import { personajesDe, resolvePersonaje } from '@/lib/video-ads/personajes'
 import { nicheSpec } from '@/lib/video-ads/niches'
 
@@ -141,7 +141,8 @@ export async function POST(
       ...personaje,
       avatarUrl: avatares[i],
       consistencyBlock: identidad.bloqueConsistencia,
-      voiceProfile: identidad.voz,
+      // La voz sale del perfil fijo de su sexo (`VOZ_POR_DEFECTO`), no del modelo.
+      voiceProfile: vozDe(identidad),
       motionProfile: identidad.movimiento,
     }))
     const [principal] = personajes

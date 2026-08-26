@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { groupIntoLotes, LOTE_MAX_SEC, LoteSchema, buildLotePrompt, camaraDeLote } from './lotes'
+import { groupIntoLotes, LOTE_MAX_SEC, LOTE_MAX_CHARS, LoteSchema, buildLotePrompt, camaraDeLote } from './lotes'
+import { clampDuration } from './kie'
 import type { TomaFinal } from './adapt'
 import { KIE_PROMPT_MAX } from './kie'
 
@@ -20,24 +21,47 @@ describe('groupIntoLotes', () => {
   // La regla: si agregar la siguiente supera el tope, NO la agregues; esa toma abre el
   // lote siguiente. Nunca se parte una toma entre dos lotes.
   it('corta antes de pasarse y arranca el siguiente lote con esa toma', () => {
-    const l = groupIntoLotes([toma(1, 12), toma(2, 12), toma(3, 12)])
+    const l = groupIntoLotes([toma(1, 6), toma(2, 6), toma(3, 6)])
     expect(l).toHaveLength(2)
     expect(l[0].tomas.map((t) => t.n)).toEqual([1, 2])
-    expect(l[0].duracionSeg).toBe(24)
+    expect(l[0].duracionSeg).toBe(12)
     expect(l[1].tomas.map((t) => t.n)).toEqual([3])
-    expect(l[1].duracionSeg).toBe(12)
+    expect(l[1].duracionSeg).toBe(6)
   })
 
   it('permite el lote que suma exactamente el tope', () => {
-    const l = groupIntoLotes([toma(1, 15), toma(2, 15), toma(3, 1)])
+    const l = groupIntoLotes([toma(1, 7.5), toma(2, 7.5), toma(3, 1)])
     expect(l[0].tomas.map((t) => t.n)).toEqual([1, 2])
     expect(l[0].duracionSeg).toBe(LOTE_MAX_SEC)
     expect(l[1].tomas.map((t) => t.n)).toEqual([3])
   })
 
   it('numera los lotes desde 1 y en orden', () => {
-    const l = groupIntoLotes([toma(1, 30), toma(2, 30), toma(3, 30)])
+    const l = groupIntoLotes([toma(1, 15), toma(2, 15), toma(3, 15)])
     expect(l.map((x) => x.n)).toEqual([1, 2, 3])
+  })
+
+  // ⚠️ EL PISO DE HABLA DE `clampDuration` PERFORA EL CAP DE SEGUNDOS, y con 30 s no se
+  // veía. Un lote de 400 caracteres devuelve 20 s aunque el cap diga 15: el texto tiene
+  // que poder decirse y ese piso manda. Por eso el lote cierra también por caracteres.
+  it('cierra el lote por CARACTERES, no solo por segundos', () => {
+    const linea = 'x'.repeat(160)
+    const l = groupIntoLotes([toma(1, 3, linea), toma(2, 3, linea), toma(3, 3, linea)])
+    expect(l.length).toBeGreaterThan(1)
+    for (const x of l) {
+      const chars = x.tomas.reduce((n, t) => n + t.locucion.length, 0)
+      expect(chars).toBeLessThanOrEqual(LOTE_MAX_CHARS)
+      // Lo que el presupuesto compra: la duración que se le pide a la API no pasa el cap.
+      expect(clampDuration(x.duracionSeg, chars, x.tomas.length)).toBeLessThanOrEqual(LOTE_MAX_SEC)
+    }
+  })
+
+  // La excepción honesta: una toma que SOLA se pasa del presupuesto no se arregla
+  // cerrando el lote, y ahí gana el piso — un clip largo de más antes que una frase
+  // cortada a la mitad. Misma jerarquía que dentro de `clampDuration`.
+  it('una sola toma que se pasa del presupuesto sigue en su lote', () => {
+    const l = groupIntoLotes([toma(1, 10, 'x'.repeat(LOTE_MAX_CHARS + 200))])
+    expect(l).toHaveLength(1)
   })
 
   it('nunca produce un lote de más largo que el tope', () => {
@@ -197,7 +221,7 @@ describe('camaraDeLote', () => {
 
   it('toma los planos de SUS cortes, no los del primer corte del video', () => {
     const [l1, l2] = groupIntoLotes([
-      conTiempo(1, 12, '00:00 - 00:06'), conTiempo(2, 12, '00:06 - 00:12'), conTiempo(3, 12, '00:12 - 00:20'),
+      conTiempo(1, 6, '00:00 - 00:06'), conTiempo(2, 6, '00:06 - 00:12'), conTiempo(3, 6, '00:12 - 00:20'),
     ])
     expect(camaraDeLote(l1, CORTES, 'fallback')).toBe('Primer plano, altura de ojos · Plano medio, cámara fija')
     expect(camaraDeLote(l2, CORTES, 'fallback')).toBe('Plano detalle del producto')
@@ -337,8 +361,10 @@ describe('buildLotePrompt', () => {
     const accionLarga = 'La modelo empieza de pie frente al espejo del baño con las manos a los costados, gira lentamente el torso hacia la cámara, levanta la mano derecha y toma el frasco del producto desde la repisa con dos dedos, lo sostiene a la altura del pecho, lo inclina levemente para mostrar la etiqueta, mira directo a cámara con expresión cálida y sonríe, termina con el frasco cerca del rostro y la mirada fija en el lente. '
 
     const argsLargos = { ...ARGS, consistencyBlock: bloqueLargo, productDesc: productoLargo }
-    const muchasTomas = groupIntoLotes(Array.from({ length: 8 }, (_, i) =>
-      ({ ...toma(i + 1, 1, `Frase número ${i + 1} del guión adaptado, bastante larga también, para sumar presión de caracteres sobre el presupuesto del prompt.`), accionVisual: accionLarga })))[0]
+    // ⚠️ Con `LOTE_MAX_CHARS` un lote ya no puede llevar 8 líneas largas — el reparto lo
+    // impide antes. La presión ahora viene de la COREOGRAFÍA, que es donde va a estar.
+    const muchasTomas = groupIntoLotes(Array.from({ length: 5 }, (_, i) =>
+      ({ ...toma(i + 1, 3, `Frase número ${i + 1} del guión adaptado.`), accionVisual: accionLarga.repeat(2) })))[0]
 
     const p = buildLotePrompt({ lote: muchasTomas, ...argsLargos })
 
@@ -352,8 +378,8 @@ describe('buildLotePrompt', () => {
     expect(p).toContain(argsLargos.camara)
 
     // 3. Las 8 líneas habladas, cada una con su toma. Ninguna se suelta.
-    for (let i = 1; i <= 8; i++) expect(p).toContain(`Frase número ${i}`)
-    expect([...p.matchAll(/Spoken line \(Latin American Spanish, verbatim\)/g)]).toHaveLength(8)
+    for (let i = 1; i <= 5; i++) expect(p).toContain(`Frase número ${i}`)
+    expect([...p.matchAll(/Says/g)]).toHaveLength(5)
 
     // 4. Y algo SÍ se cedió — si no, este test no estaría probando la escalera.
     const cedioAlgo = p.includes('…') || !p.includes(productoLargo) || !p.includes('FULL SPOKEN SCRIPT')
@@ -584,10 +610,10 @@ describe('buildLotePrompt — varios personajes', () => {
     const l = groupIntoLotes([conT(1, 4, 't1', 'Hola.')])[0]
     const quien = new Map([['t1', [hijo]]])
     const p = buildLotePrompt({ lote: l, ...ARGS, personajes: [hijo, padre], quien })
-    expect(p).toContain('P1 (hijo) says (Latin American Spanish, verbatim): “Hola.”')
+    expect(p).toContain('P1 (hijo) says: “Hola.”')
     // Un solo presente: sigue el formato de siempre, sin el encabezado de varios.
     expect(p).not.toMatch(/THERE ARE \d+ PEOPLE/)
-    expect(p).toContain('VOICE AND ACCENT PROFILE:')
+    expect(p).toContain('VOICE PROFILE:')
   })
 
   it('con DOS presentes emite un bloque por persona y atribuye cada línea', () => {
@@ -605,8 +631,8 @@ describe('buildLotePrompt — varios personajes', () => {
     expect(p).toContain('acento de padre')
     expect(p).toContain('movimiento de padre')
     // Y cada línea dicha por quien corresponde.
-    expect(p).toContain('P1 (hijo) says (Latin American Spanish, verbatim): “Papá, lo logré.”')
-    expect(p).toContain('P2 (padre) says (Latin American Spanish, verbatim): “Estoy orgulloso.”')
+    expect(p).toContain('P1 (hijo) says: “Papá, lo logré.”')
+    expect(p).toContain('P2 (padre) says: “Estoy orgulloso.”')
   })
 
   it('con varios NO manda el bloque global de voz: cada uno lleva la suya', () => {
@@ -614,7 +640,7 @@ describe('buildLotePrompt — varios personajes', () => {
     const quien = new Map([['t1', [hijo]], ['t2', [padre]]])
     const p = buildLotePrompt({ lote: l, ...ARGS, personajes: [hijo, padre], quien })
     // Un perfil global contradiría los dos de arriba: el modelo no sabría cuál usar.
-    expect(p).not.toContain('VOICE AND ACCENT PROFILE:')
+    expect(p).not.toContain('VOICE PROFILE:')
     expect(p).toMatch(/do not give one the other’s voice/)
   })
 
@@ -622,7 +648,7 @@ describe('buildLotePrompt — varios personajes', () => {
     const l = groupIntoLotes([conT(1, 4, 't1', 'Tome. No se preocupe.')])[0]
     const quien = new Map([['t1', [hijo, padre]]])
     const p = buildLotePrompt({ lote: l, ...ARGS, personajes: [hijo, padre], quien })
-    expect(p).toContain('Spoken line (Latin American Spanish, verbatim): “Tome. No se preocupe.”')
+    expect(p).toContain('Says: “Tome. No se preocupe.”')
     expect(p).not.toContain('P1 (hijo) says')
   })
 })
@@ -640,8 +666,8 @@ describe('buildLotePrompt — voz en off', () => {
   it('la línea no se le atribuye a nadie en cuadro', () => {
     const l = groupIntoLotes([conT(1, 't1', 'Este modelo se agotó en un día.')])[0]
     const p = buildLotePrompt({ lote: l, ...ARGS, vozEnOff: new Set(['t1']) })
-    expect(p).toContain('VOICE-OVER, nobody speaks on camera (Latin American Spanish, verbatim): “Este modelo se agotó en un día.”')
-    expect(p).not.toMatch(/^Spoken line/m)
+    expect(p).toContain('VOICE-OVER (nobody on camera): “Este modelo se agotó en un día.”')
+    expect(p).not.toMatch(/^Says/m)
   })
 
   it('declara que ninguna boca se mueve — es lo que evita el lip-sync', () => {
@@ -657,8 +683,8 @@ describe('buildLotePrompt — voz en off', () => {
     const p = buildLotePrompt({ lote: l, ...ARGS, vozEnOff: new Set(['t2']) })
     expect(p).not.toMatch(/NO mouth moves in this clip/)
     // …pero cada línea conserva su propio rótulo.
-    expect(p).toContain('Spoken line (Latin American Spanish, verbatim): “Mirá esto.”')
-    expect(p).toContain('VOICE-OVER, nobody speaks on camera (Latin American Spanish, verbatim): “Se agotó.”')
+    expect(p).toContain('Says: “Mirá esto.”')
+    expect(p).toContain('VOICE-OVER (nobody on camera): “Se agotó.”')
   })
 
   it('sin el set el prompt es IDÉNTICO al de antes', () => {

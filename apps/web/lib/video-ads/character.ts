@@ -39,6 +39,50 @@ export const VoiceProfileSchema = z.object({
 export type VoiceProfile = z.infer<typeof VoiceProfileSchema>
 
 /**
+ * ⚠️ LA VOZ YA NO SE PREGUNTA NI SE INVENTA: sale de acá (2026-08-25).
+ *
+ * Revierte una regla que este repo tenía como dura —*"etnia y acento NUNCA se marcan
+ * confirmados desde la referencia"*— y es decisión del dueño del repo. El acento y la
+ * voz eran dos campos del wizard, uno obligatorio y bloqueante y el otro opcional; el
+ * anuncio es para el mercado peruano y la respuesta útil era siempre la misma, así que
+ * pedirla era fricción que además podía trabar la FASE 0.
+ *
+ * **La ETNIA no se tocó** y sigue siendo obligatoria por personaje: es lo que sostiene la
+ * REGLA DE NO-ASUNCIÓN y el gate de FASE 0 con varios personajes.
+ *
+ * Dos perfiles, uno por sexo, siempre en español latino neutro. Lo que sigue viniendo del
+ * modelo son `edadVocal` y `timbre` (ver `CharacterIdentitySchema`): sin eso, dos
+ * personajes del mismo sexo sonarían idénticos en el mismo anuncio.
+ */
+export const VOZ_POR_DEFECTO: Record<'hombre' | 'mujer', VoiceProfile> = {
+  hombre: {
+    idioma: 'Español', varianteRegional: 'Latinoamericano neutro', acento: 'Español latino neutro',
+    pronunciacion: 'Clara y articulada', ritmo: 'Conversacional', velocidad: 'Moderada',
+    entonacion: 'Natural y cercana, sin locución publicitaria', energia: 'Media-alta',
+    pausas: 'Cortas, donde caen en el habla real', tono: 'Cálido y directo',
+    timbre: 'Masculino adulto, medio', edadVocal: '30-40 años', estilo: 'Conversacional, de persona real hablándole a la cámara',
+  },
+  mujer: {
+    idioma: 'Español', varianteRegional: 'Latinoamericano neutro', acento: 'Español latino neutro',
+    pronunciacion: 'Clara y articulada', ritmo: 'Conversacional', velocidad: 'Moderada',
+    entonacion: 'Natural y cercana, sin locución publicitaria', energia: 'Media-alta',
+    pausas: 'Cortas, donde caen en el habla real', tono: 'Cálido y cercano',
+    timbre: 'Femenino adulto, claro', edadVocal: '25-35 años', estilo: 'Conversacional, de persona real hablándole a la cámara',
+  },
+}
+
+/** La voz de un personaje: el perfil fijo de su sexo, con lo que el modelo pudo aportar
+ *  para diferenciarlo de los demás. */
+export function vozDe(id: { sexoVocal: 'hombre' | 'mujer'; edadVocal?: string; timbre?: string }): VoiceProfile {
+  const base = VOZ_POR_DEFECTO[id.sexoVocal] ?? VOZ_POR_DEFECTO.mujer
+  return {
+    ...base,
+    edadVocal: id.edadVocal?.trim() || base.edadVocal,
+    timbre: id.timbre?.trim() || base.timbre,
+  }
+}
+
+/**
  * FASE 4.6 — CÓMO SE MUEVE. El tercer artefacto bloqueado, junto al bloque de
  * consistencia (cómo se ve) y el perfil de voz (cómo suena).
  *
@@ -64,7 +108,20 @@ export type MotionProfile = z.infer<typeof MotionProfileSchema>
 export const CharacterIdentitySchema = z.object({
   promptCreacion: z.string(),
   bloqueConsistencia: z.string(),
-  voz: VoiceProfileSchema,
+  /**
+   * ⚠️ EL MODELO OBSERVA EL SEXO, EL CÓDIGO CONSTRUYE LA VOZ (2026-08-25, decisión del
+   * dueño del repo). Antes el modelo devolvía el `VoiceProfile` entero y el usuario le
+   * daba el acento a mano; los dos campos del wizard se eliminaron y ahora la voz sale de
+   * `VOZ_POR_DEFECTO`, fija y siempre en español.
+   *
+   * Lo único que hace falta preguntarle es a cuál de los dos perfiles corresponde, y eso
+   * SÍ es una observación (está en la foto y en el video). Los campos expresivos que el
+   * modelo todavía puede aportar —edad vocal y timbre— siguen viniendo de él: con varios
+   * personajes son lo que impide que dos hombres suenen exactamente igual.
+   */
+  sexoVocal: z.enum(['hombre', 'mujer']),
+  edadVocal: z.string(),
+  timbre: z.string(),
   movimiento: MotionProfileSchema,
 })
 
@@ -96,8 +153,6 @@ export function buildIdentityInstruction(
   const datos = (p: Personaje) => [
     `  Personaje: ${p.desc || '[VARIABLE PENDIENTE]'}`,
     `  Raza / etnia / origen cultural: ${p.etnia || '[VARIABLE PENDIENTE]'}`,
-    `  Acento: ${p.acento.trim() || ACENTO_PENDIENTE}`,
-    p.voz ? `  Voz: ${p.voz}` : '',
   ].filter(Boolean).join('\n')
   return [
     'Actúa como director creativo de anuncios UGC.',
@@ -117,9 +172,10 @@ export function buildIdentityInstruction(
       ? [
           '⚠️ SON PERSONAS DISTINTAS Y TIENEN QUE VERSE DISTINTAS. Diferéncialos en rasgos',
           'CONCRETOS —edad, complexión, forma del rostro, cabello, piel, vestuario— y no en',
-          'adjetivos vagos. Y también tienen que SONAR distinto: dos perfiles de voz',
-          'idénticos hacen que el anuncio parezca doblado por la misma persona.',
-          'Respeta el acento que el usuario dio a CADA UNO: no los uniformes.',
+          'adjetivos vagos. Y también tienen que SONAR distinto: la voz base es la misma',
+          'para todos los de un mismo sexo, así que `edadVocal` y `timbre` son lo ÚNICO que',
+          'los separa — dános valores realmente distintos o el anuncio parecerá doblado por',
+          'la misma persona.',
           '',
         ].join('\n')
       : '',
@@ -240,17 +296,14 @@ export function buildIdentityInstruction(
       ? 'El vestuario que describas ES EL PRODUCTO: detalla la prenda del usuario (corte, color, tejido, cuello, mangas, puños, largo) como parte de la identidad bloqueada. Es lo único que mantiene la misma prenda en el lote 1 y en el 5.'
       : '',
     '',
-    '`voz`: perfil vocal completo — idioma, variante regional, acento, pronunciación,',
-    'ritmo, velocidad, entonación, energía, pausas, tono, timbre, edad vocal aproximada',
-    'y estilo conversacional.',
-    // El acento es POR PERSONAJE: uniformarlos borraría justamente el dato que la FASE 0
-    // exige confirmar uno por uno.
-    varios
-      ? 'El acento de cada uno es el que su bloque de DATOS DEL USUARIO indica, tal cual. No los uniformes.'
-      : `El acento debe ser explícito y estable: usa "${personajes[0].acento.trim() || ACENTO_PENDIENTE}" tal cual.`,
-    personajes.some((p) => !p.acento.trim())
-      ? 'NO sustituyas un acento pendiente por uno genérico ni "neutro": propaga el marcador.'
-      : '',
+    // ⚠️ EL PERFIL DE VOZ YA NO SE PIDE: sale de `VOZ_POR_DEFECTO`, fijo y en español.
+    // Lo único que se observa es a cuál de los dos corresponde, más los dos campos que
+    // diferencian a personajes del mismo sexo.
+    '`sexoVocal`: "hombre" o "mujer", según se ve y se oye en la referencia. Es lo único',
+    'que decide qué voz se usa; el idioma es SIEMPRE español latino neutro y no se elige.',
+    '`edadVocal`: rango aproximado ("28-35 años"). `timbre`: cómo suena esa voz en concreto',
+    '(grave y con aire, clara y brillante, algo nasal…). Los dos salen de lo que se OYE en',
+    'el video original.',
     '',
     '`movimiento`: CÓMO SE MUEVE el personaje, leído del video original. Son DOS campos',
     'separados y no se pueden mezclar:',

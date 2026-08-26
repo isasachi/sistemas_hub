@@ -31,20 +31,18 @@ describe('buildIdentityInstruction', () => {
     expect(p).toMatch(/no.*reemplac/i)
   })
 
-  it('usa la etnia y el acento del usuario, literales', () => {
-    const p = buildIdentityInstruction(INPUTS, FORENSIC, [SIN_FOTO])
-    expect(p).toContain('Latina peruana')
-    expect(p).toContain('Español peruano de Lima')
+  it('usa la etnia del usuario, literal', () => {
+    expect(buildIdentityInstruction(INPUTS, FORENSIC, [SIN_FOTO])).toContain('Latina peruana')
   })
 
-  it('marca el acento pendiente en vez de poner uno genérico', () => {
+  // ⚠️ El acento salió del wizard (2026-08-25): la voz es un perfil FIJO en español
+  // (`VOZ_POR_DEFECTO`). El prompt ya no lo pide ni propaga un marcador — y no debe
+  // pedirlo, porque el usuario no tiene dónde escribirlo.
+  it('ya no pide el acento ni lo propaga: la voz es fija', () => {
     const p = buildIdentityInstruction(INPUTS, FORENSIC, [{ ...SIN_FOTO, acento: '' }])
-    expect(p).toContain(ACENTO_PENDIENTE)
-  })
-
-  it('no marca el acento como pendiente cuando el usuario sí lo confirmó', () => {
-    const p = buildIdentityInstruction(INPUTS, FORENSIC, [SIN_FOTO])
     expect(p).not.toContain(ACENTO_PENDIENTE)
+    expect(p).toContain('sexoVocal')
+    expect(p).toMatch(/siempre español latino neutro/i)
   })
 
   it('con imagen de referencia manda observar, no inventar', () => {
@@ -155,12 +153,9 @@ describe('CharacterIdentitySchema', () => {
     const ok = CharacterIdentitySchema.safeParse({
       promptCreacion: 'Retrato vertical de mujer de 25 años, cabello negro...',
       bloqueConsistencia: 'Mujer de 25 años, latina peruana, cabello negro liso recogido en moño bajo, piel clara, ojos marrón claro, complexión delgada, polo blanco de algodón sin estampado.',
-      voz: {
-        idioma: 'Español', varianteRegional: 'Perú - Lima', acento: 'Limeño neutro',
-        pronunciacion: 'Clara, seseo', ritmo: 'Conversacional', velocidad: 'Media',
-        entonacion: 'Ascendente en preguntas', energia: 'Media-alta', pausas: 'Naturales',
-        tono: 'Cálido', timbre: 'Claro', edadVocal: '25 años', estilo: 'Amiga que recomienda',
-      },
+      sexoVocal: 'mujer',
+      edadVocal: '25-30 años',
+      timbre: 'Claro y algo aniñado',
       movimiento: {
         calidadMovimiento: 'Movimientos continuos y pausados, sin cortes bruscos entre gestos; el peso se desplaza de una pierna a la otra al hablar y las manos siguen vivas cuando no señalan nada.',
         manerismos: 'Se acomoda el pelo detrás de la oreja al empezar cada frase y ladea la cabeza al escuchar.',
@@ -296,9 +291,10 @@ describe('buildIdentityInstruction — varios personajes', () => {
     expect(p).toMatch(/No inventes personajes que no estén en la lista ni omitas ninguno/)
   })
 
-  it('NO uniforma los acentos: cada uno lleva el suyo', () => {
-    expect(p).toContain('Español mexicano rural')
-    expect(p).toMatch(/No los uniformes/)
+  // Con la voz fija por sexo, `edadVocal` y `timbre` son lo ÚNICO que separa a dos
+  // personajes del mismo sexo: sin eso el anuncio suena doblado por la misma persona.
+  it('exige diferenciar la voz por edad y timbre', () => {
+    expect(p).toMatch(/edadVocal. y .timbre. son lo ÚNICO que/)
   })
 
   it('con un solo personaje no aparece nada de todo eso', () => {
@@ -308,10 +304,9 @@ describe('buildIdentityInstruction — varios personajes', () => {
     expect(uno).toMatch(/UNA sola entrada/)
   })
 
-  it('propaga el marcador si a CUALQUIERA le falta el acento', () => {
-    // La FASE 0 exige etnia y acento por personaje; que uno los tenga no cubre al otro.
+  it('un acento vacío ya no cambia nada del prompt', () => {
     const conHueco = buildIdentityInstruction(INPUTS, FORENSIC, [hijo, { ...padre, acento: '' }])
-    expect(conHueco).toMatch(/propaga el marcador/)
+    expect(conHueco).toBe(buildIdentityInstruction(INPUTS, FORENSIC, [hijo, padre]))
   })
 })
 

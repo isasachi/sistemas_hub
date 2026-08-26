@@ -82,7 +82,7 @@ const toma = (n: number, duracionSeg: number) => ({
 // 2 lotes reales — es el caso que prueba que la cuota nueva cobra 1 vez, no 2.
 const ADAPTED_2_LOTES = {
   guionFinal: 'x', caracteresAdaptado: 1, diferenciaCaracteres: 0,
-  tomas: [toma(1, 20), toma(2, 20)],
+  tomas: [toma(1, 10), toma(2, 10)],
   variablesPendientes: [] as string[],
 }
 
@@ -93,8 +93,8 @@ const ADAPTED_2_LOTES = {
 const ADAPTED_2_LOTES_OTRO_TEXTO = {
   ...ADAPTED_2_LOTES,
   tomas: [
-    { ...toma(1, 20), accionVisual: 'la mujer hace otra acción distinta', locucion: 'otro guión completamente distinto' },
-    { ...toma(2, 20), accionVisual: 'la mujer hace la segunda acción distinta', locucion: 'segunda línea distinta' },
+    { ...toma(1, 10), accionVisual: 'la mujer hace otra acción distinta', locucion: 'otro guión completamente distinto' },
+    { ...toma(2, 10), accionVisual: 'la mujer hace la segunda acción distinta', locucion: 'segunda línea distinta' },
   ],
 }
 

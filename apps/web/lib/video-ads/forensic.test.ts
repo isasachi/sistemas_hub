@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildForensicInstruction, ForensicReportSchema, repairCutTiming, mergeMicroCortes, muestraPersona, CPS_MAX, type ForensicReport, enProsa, limpiarDialogo, verificarHablantes } from './forensic'
+import { buildForensicInstruction, ForensicReportSchema, repairCutTiming, mergeMicroCortes, muestraPersona, CPS_MAX, type ForensicReport, type Corte, enProsa, limpiarDialogo, verificarHablantes, unirTomasContinuas } from './forensic'
 
 // El prompt es el contrato con Gemini. Estos asserts fijan las reglas del spec que,
 // si se caen, producen el bug que ya vimos en producción: cortes inventados por
@@ -641,5 +641,100 @@ describe('muestraPersona — la negación manda', () => {
 
   it('un plano sin personas mencionadas sigue siendo de producto', () => {
     expect(muestraPersona('Placa final con el logotipo de la marca sobre fondo blanco')).toBe(false)
+  })
+})
+
+describe('unirTomasContinuas', () => {
+  const micro = { cuerpo: 'quieto', manos: 'sube', rostro: 'sonríe', cabello: 'fijo', entorno: 'nada' }
+  const corte = (n: number, p: Partial<Corte> = {}): Corte => ({
+    n, tiempo: `00:0${n - 1} - 00:0${n}`, duracionSeg: 3,
+    accion: 'La mujer sostiene el frasco', camara: 'Primer plano', dialogo: `linea ${n}`,
+    textoOverlay: 'No aparece', transicion: 'corte directo',
+    objetoEnMano: { inicio: 'frasco', fin: 'frasco' }, micro,
+    ...p,
+  })
+  const base = (cortes: Corte[]): ForensicReport => ({
+    duracionTotalSeg: cortes.reduce((n, c) => n + c.duracionSeg, 0),
+    caracteresGuion: 0, guionOriginal: '', sujeto: '', vestuario: '', producto: '', fondo: '',
+    elementosGraficos: '', cortes,
+    tomas: cortes.map((c) => ({ n: c.n, encuadre: '', posicion: '', accionFisica: '', objeto: '', dialogo: c.dialogo, duracionSeg: c.duracionSeg })),
+    edicion: { sincronizacion: '', textoOverlay: '', escalaZoom: '', cortes: '', ritmo: '', corteFinal: '' },
+    resumenParaUsuario: '',
+  })
+
+  it('une cortes consecutivos que son la misma toma', () => {
+    const { report, fusiones } = unirTomasContinuas(base([corte(1), corte(2)]), 15, 300)
+    expect(report.cortes).toHaveLength(1)
+    expect(report.cortes[0].duracionSeg).toBe(6)
+    expect(report.cortes[0].tiempo).toBe('00:00 - 00:02')
+    expect(report.cortes[0].dialogo).toBe('linea 1 linea 2')
+    expect(fusiones).toHaveLength(1)
+  })
+
+  // ⚠️ LA CONDICIÓN QUE JUSTIFICA TODA LA FUNCIÓN. En el original ese salto es un corte
+  // de montaje; dentro de un clip continuo es un gotero teletransportándose.
+  it('NO une si lo que hay en la mano cambia entre un corte y el otro', () => {
+    const a = corte(1, { objetoEnMano: { inicio: 'nada', fin: 'gotero' } })
+    const b = corte(2, { objetoEnMano: { inicio: 'nada', fin: 'nada' } })
+    expect(unirTomasContinuas(base([a, b]), 15, 300).report.cortes).toHaveLength(2)
+  })
+
+  it('tolera el artículo y las mayúsculas al comparar el objeto', () => {
+    const a = corte(1, { objetoEnMano: { inicio: 'nada', fin: 'El frasco' } })
+    const b = corte(2, { objetoEnMano: { inicio: 'frasco', fin: 'frasco' } })
+    expect(unirTomasContinuas(base([a, b]), 15, 300).report.cortes).toHaveLength(1)
+  })
+
+  it('NO une planos distintos: la toma continua necesitaría un corte adentro', () => {
+    expect(unirTomasContinuas(base([corte(1), corte(2, { camara: 'Plano medio' })]), 15, 300)
+      .report.cortes).toHaveLength(2)
+  })
+
+  it('NO une un plano de persona con uno sin persona', () => {
+    const b = corte(2, { accion: 'Detalle del frasco, sin persona en cuadro' })
+    expect(unirTomasContinuas(base([corte(1), b]), 15, 300).report.cortes).toHaveLength(2)
+  })
+
+  it('NO une voz en off con habla a cámara', () => {
+    expect(unirTomasContinuas(base([corte(1), corte(2, { vozEnOff: true })]), 15, 300)
+      .report.cortes).toHaveLength(2)
+  })
+
+  // Fail-closed: toda sesión analizada antes de que el campo existiera cae acá.
+  it('sin objetoEnMano no une nada, y devuelve el MISMO objeto', () => {
+    const r = base([corte(1, { objetoEnMano: undefined }), corte(2, { objetoEnMano: undefined })])
+    const out = unirTomasContinuas(r, 15, 300)
+    expect(out.report).toBe(r)
+    expect(out.fusiones).toEqual([])
+  })
+
+  it('respeta el cap de segundos y el de caracteres', () => {
+    const largos = [corte(1, { duracionSeg: 9 }), corte(2, { duracionSeg: 9 })]
+    expect(unirTomasContinuas(base(largos), 15, 300).report.cortes).toHaveLength(2)
+    const habladores = [corte(1, { dialogo: 'x'.repeat(200) }), corte(2, { dialogo: 'x'.repeat(200) })]
+    expect(unirTomasContinuas(base(habladores), 15, 300).report.cortes).toHaveLength(2)
+  })
+
+  // ⚠️ Unir A+B habilita AB+C, así que una pasada no es un punto fijo — y dos listas de
+  // cortes para el mismo contenido son dos scriptFingerprint distintas.
+  it('converge y es idempotente', () => {
+    const { report } = unirTomasContinuas(base([corte(1), corte(2), corte(3), corte(4)]), 15, 300)
+    expect(report.cortes).toHaveLength(1)
+    expect(report.cortes[0].duracionSeg).toBe(12)
+    expect(unirTomasContinuas(report, 15, 300).report).toBe(report)
+  })
+
+  it('concatena el detalle atómico en vez de quedarse con la mitad', () => {
+    const b = corte(2, { micro: { ...micro, manos: 'baja' } })
+    const { report } = unirTomasContinuas(base([corte(1), b]), 15, 300)
+    expect(report.cortes[0].micro?.manos).toBe('sube; después baja')
+    expect(report.cortes[0].micro?.cuerpo).toBe('quieto')
+  })
+
+  it('la toma resultante abarca de la primera mano a la última', () => {
+    const a = corte(1, { objetoEnMano: { inicio: 'nada', fin: 'frasco' } })
+    const b = corte(2, { objetoEnMano: { inicio: 'frasco', fin: 'frasco abierto' } })
+    const { report } = unirTomasContinuas(base([a, b]), 15, 300)
+    expect(report.cortes[0].objetoEnMano).toEqual({ inicio: 'nada', fin: 'frasco abierto' })
   })
 })

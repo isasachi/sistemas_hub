@@ -25,17 +25,18 @@ describe('buildValidationMatrix', () => {
   })
 
   it('marca PENDIENTE lo que falta y usa el literal del spec', () => {
+    // ⚠️ El acento salió del wizard (2026-08-25): la voz es un perfil fijo en español.
+    // Sin fila, un acento vacío ya no puede trabar la FASE 0.
     const m = buildValidationMatrix({ ...FULL, accent: '' }, false)
-    const acento = m.rows.find((r) => r.variable === 'Acento')!
-    expect(acento.estado).toBe('PENDIENTE')
-    expect(acento.valor).toBe(`${CONFIRMACION_REQUERIDA} Acento`)
+    expect(m.rows.some((r) => r.variable.startsWith('Acento'))).toBe(false)
+    expect(m.pending).not.toContain('Acento')
   })
 
   // El spec: "nunca infieras raza/etnia, origen cultural o acento únicamente a
   // partir de la apariencia visual. Deben provenir del usuario."
-  it('etnia y acento NUNCA salen de la referencia, ni con imagen de personaje', () => {
+  it('la etnia NUNCA sale de la referencia, ni con imagen de personaje', () => {
     const m = buildValidationMatrix({ ...FULL, characterEthnicity: '', accent: '' }, true)
-    for (const v of ['Raza / etnia / origen cultural', 'Acento']) {
+    for (const v of ['Raza / etnia / origen cultural']) {
       const row = m.rows.find((r) => r.variable === v)!
       expect(row.estado).toBe('PENDIENTE')
       expect(row.fuente).toBe('USUARIO')
@@ -69,12 +70,12 @@ describe('canProceed', () => {
 
   it('bloquea con una sola crítica pendiente', () => {
     expect(canProceed(buildValidationMatrix({ ...FULL, angle: '' }, false))).toBe(false)
-    expect(canProceed(buildValidationMatrix({ ...FULL, accent: '' }, false))).toBe(false)
+    expect(canProceed(buildValidationMatrix({ ...FULL, characterEthnicity: '' }, false))).toBe(false)
   })
 
   it('lista las pendientes para mostrarlas en el wizard', () => {
-    const m = buildValidationMatrix({ ...FULL, accent: '', problem: '' }, false)
-    expect(m.pending.sort()).toEqual(['Acento', 'Problema / deseo'])
+    const m = buildValidationMatrix({ ...FULL, characterEthnicity: '', problem: '' }, false)
+    expect(m.pending.sort()).toEqual(['Problema / deseo', 'Raza / etnia / origen cultural'])
   })
 })
 
@@ -84,7 +85,7 @@ describe('canProceed', () => {
 // matriz hubiera vuelto a PENDIENTE. `capMaxReached` es el tope que cierra ese hueco.
 describe('capMaxReached', () => {
   const OK = buildValidationMatrix(FULL, false)
-  const PENDING = buildValidationMatrix({ ...FULL, accent: '' }, false)
+  const PENDING = buildValidationMatrix({ ...FULL, characterEthnicity: '' }, false)
   const VALIDATION_STEP = 3
 
   it('con la matriz OK, no topa nada: se puede llegar hasta donde ya se llegó', () => {
@@ -105,9 +106,8 @@ describe('capMaxReached', () => {
 })
 
 /**
- * ⚠️ CON VARIOS PERSONAJES LA FASE 0 BLOQUEA POR CADA UNO. Etnia y acento son los dos
- * campos que el spec prohíbe inferir, y que uno los tenga no cubre al otro: un anuncio
- * con el padre sin acento saldría con una voz genérica que nadie eligió.
+ * ⚠️ CON VARIOS PERSONAJES LA FASE 0 BLOQUEA POR CADA UNO. La etnia es el campo que el
+ * spec prohíbe inferir, y que un personaje la tenga no cubre al otro.
  */
 describe('buildValidationMatrix — varios personajes', () => {
   const completos = {
@@ -125,16 +125,17 @@ describe('buildValidationMatrix — varios personajes', () => {
       { ...completos, personajes: [p(), p({ id: 'P2', rol: 'padre' })] } as never, false,
     )
     expect(m.pending).toEqual([])
-    expect(m.rows.some((r) => r.variable === 'Acento · hijo')).toBe(true)
-    expect(m.rows.some((r) => r.variable === 'Acento · padre')).toBe(true)
+    expect(m.rows.some((r) => r.variable === 'Raza / etnia / origen cultural · hijo')).toBe(true)
+    expect(m.rows.some((r) => r.variable === 'Raza / etnia / origen cultural · padre')).toBe(true)
+    expect(m.rows.some((r) => r.variable.startsWith('Acento'))).toBe(false)
   })
 
-  it('si al SEGUNDO le falta el acento, la FASE 0 lo bloquea y dice de quién', () => {
+  it('si al SEGUNDO le falta la etnia, la FASE 0 lo bloquea y dice de quién', () => {
     const m = buildValidationMatrix(
-      { ...completos, personajes: [p(), p({ id: 'P2', rol: 'padre', acento: '' })] } as never, false,
+      { ...completos, personajes: [p(), p({ id: 'P2', rol: 'padre', etnia: '' })] } as never, false,
     )
-    expect(m.pending).toContain('Acento · padre')
-    expect(m.pending).not.toContain('Acento · hijo')
+    expect(m.pending).toContain('Raza / etnia / origen cultural · padre')
+    expect(m.pending).not.toContain('Raza / etnia / origen cultural · hijo')
   })
 
   it('la foto confirma la APARIENCIA de ese personaje, nunca su etnia', () => {
@@ -152,7 +153,7 @@ describe('buildValidationMatrix — varios personajes', () => {
 
   it('con UN solo personaje la matriz es la de siempre — sin sufijos de rol', () => {
     const m = buildValidationMatrix({ ...completos, personajes: [p()] } as never, false)
-    expect(m.rows.some((r) => r.variable === 'Acento')).toBe(true)
+    expect(m.rows.some((r) => r.variable === 'Raza / etnia / origen cultural')).toBe(true)
     expect(m.rows.some((r) => r.variable.includes('·'))).toBe(false)
   })
 

@@ -29,6 +29,62 @@ export const HablanteSchema = z.object({
   texto: z.string(),
 })
 
+/**
+ * ⚠️ QUÉ HAY EN LAS MANOS AL EMPEZAR Y AL TERMINAR EL CORTE.
+ *
+ * Existe para UNA cosa: decidir en código si dos cortes se pueden fusionar en una sola
+ * toma continua. El fallo que evita lo nombró el dueño del repo — *"en un momento tiene
+ * un objeto en su mano, al siguiente ya no lo tiene, o se está aplicando un serum con un
+ * gotero y el gotero desaparece mágicamente"*. En el original ese salto es un CORTE de
+ * montaje y se lee como tal; dentro de un clip continuo es un objeto teletransportándose.
+ *
+ * Va como CAMPO y no se deduce de `accion` con búsqueda de texto: la continuidad es una
+ * comparación exacta entre dos estados, y adivinarla leyendo prosa es justo la clase de
+ * heurística que este repo ya pagó cara. Manos vacías se escribe "nada".
+ *
+ * Opcional: el forense es el paso CARO, así que toda sesión guardada lo trae ausente y
+ * sin él la fusión agresiva simplemente no ocurre (fail-closed).
+ */
+export const ObjetoEnManoSchema = z.object({
+  inicio: z.string(),
+  fin: z.string(),
+})
+
+/**
+ * ⚠️ EL DETALLE ATÓMICO — lo que se nota sin poder nombrarlo.
+ *
+ * `accion` es la coreografía: qué hace el cuerpo, en orden. Esto es la capa de abajo, la
+ * que separa un video que "se parece" de uno que ES el mismo: el balanceo del cuerpo, el
+ * vaivén de las manos, cuánto se abre la boca al hablar, si el pelo se mueve o está
+ * quieto, si algo se mueve en el fondo. Pedido explícito del dueño del repo (2026-08-25).
+ *
+ * ⚠️ SON CINCO CAMPOS Y NO UNO, por el mismo motivo que `calidadMovimiento` y
+ * `manerismos` no se pudieron colapsar: con un solo campo el modelo cubre un eje y se
+ * olvida de los otros cuatro. Cinco casillas fuerzan cinco observaciones.
+ *
+ * ⚠️ Y SE ESCRIBEN EN TELEGRAMA, sin artículos ni verbos de relleno. No es estilo: el
+ * prompt del render topa en 5000 caracteres y este es el bloque que más crece con el
+ * número de tomas. *"mano derecha sube al mentón, dedos índice y medio extendidos"* dice
+ * lo mismo que *"La modelo sube su mano derecha hasta la altura del mentón, con los dedos
+ * índice y medio extendidos"* en la mitad del espacio.
+ *
+ * ⚠️ LA QUIETUD ES UNA OBSERVACIÓN, NO UN CAMPO VACÍO. Un cuerpo que casi no se mueve es
+ * un dato tan renderizable como uno que se mueve mucho, y omitirlo hace que el generador
+ * invente movimiento. "torso casi inmóvil, solo respiración" es una respuesta correcta.
+ */
+export const MicroSchema = z.object({
+  /** Balanceo, peso, torsión, respiración. La rigidez SE DECLARA. */
+  cuerpo: z.string(),
+  /** Vaivén, gesto que acompaña al habla, qué hacen cuando no hacen nada. */
+  manos: z.string(),
+  /** Cejas, párpados, mirada, y cuánto se articula la boca al hablar. */
+  rostro: z.string(),
+  /** Si se mueve con la cabeza, si cae sobre la cara, si está fijo. */
+  cabello: z.string(),
+  /** Qué se mueve DETRÁS: cortinas, ropa, reflejos, gente, nada. */
+  entorno: z.string(),
+})
+
 export const CorteSchema = z.object({
   n: z.number(),
   tiempo: z.string(),          // "00:00 - 00:03"
@@ -53,6 +109,10 @@ export const CorteSchema = z.object({
   vozEnOff: z.boolean().optional(),
   textoOverlay: z.string(),    // "No aparece" si no hay
   transicion: z.string(),      // jump cut / corte directo / continuidad / zoom digital
+  /** Ver `ObjetoEnManoSchema`: la continuidad de props entre cortes, para la fusión. */
+  objetoEnMano: ObjetoEnManoSchema.optional(),
+  /** Ver `MicroSchema`: el detalle atómico del movimiento. */
+  micro: MicroSchema.optional(),
 })
 
 /** Una persona con voz propia en el video de referencia. */
@@ -63,6 +123,7 @@ export const PersonajeForenseSchema = z.object({
   vestuario: z.string(),
 })
 export type Corte = z.infer<typeof CorteSchema>
+export type Micro = z.infer<typeof MicroSchema>
 
 export const TomaSchema = z.object({
   n: z.number(),
@@ -184,6 +245,173 @@ export function muestraPersona(accion: string): boolean {
   return /\b(mujer|hombre|chica|chico|muchacha|muchacho|modelo|persona|sujeto|joven|senor|senora|ella|el sujeto|protagonista)\b/.test(t)
 }
 
+/**
+ * El detalle atómico de dos cortes que se vuelven uno. Se CONCATENA en vez de quedarse
+ * con el del corte dominante: la toma fusionada dura lo que duran los dos, así que
+ * describir solo la mitad deja al generador inventando la otra — el mismo argumento por
+ * el que `accion` también se concatena.
+ */
+function unirMicro(a?: Micro, b?: Micro): Micro | undefined {
+  if (!a || !b) return a ?? b
+  const par = (x: string, y: string) => {
+    const [i, j] = [x.trim(), y.trim()]
+    if (!i) return j
+    if (!j || i === j) return i
+    return `${i}; después ${j}`
+  }
+  return {
+    cuerpo: par(a.cuerpo, b.cuerpo),
+    manos: par(a.manos, b.manos),
+    rostro: par(a.rostro, b.rostro),
+    cabello: par(a.cabello, b.cabello),
+    entorno: par(a.entorno, b.entorno),
+  }
+}
+
+/** Normaliza para comparar dos estados de mano o dos planos: el modelo escribe "El
+ *  frasco" en un corte y "frasco" en el siguiente, y eso es el MISMO objeto. Mismo
+ *  criterio que `resolveSlotId` y `resolvePersonaje`. */
+const normObj = (x: string) =>
+  x.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/^(el|la|los|las|un|una|unos|unas)\s+/, '')
+    .replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim()
+
+/**
+ * ¿Se pueden unir estos dos cortes en UNA sola toma continua?
+ * ---------------------------------------------------------------------------
+ * Todo lo de acá es una comparación, no un criterio: es la "matemática" que pidió el
+ * dueño del repo para decidirlo con precisión en vez de a ojo.
+ *
+ * Las cuatro condiciones, y por qué cada una:
+ *
+ *  1. MISMA CLASE (`muestraPersona`). Un plano de producto y uno de persona no se
+ *     encadenan sin un corte de montaje. Ya lo exigía `mergeMicroCortes`.
+ *  2. MISMO ENCUADRE. Si los planos son distintos, la toma "continua" resultante
+ *     necesitaría un corte adentro — que es exactamente lo que estamos evitando. Con
+ *     encuadres distintos la fusión sigue siendo posible por micro-corte (ahí se
+ *     sacrifica el encuadre del más corto a propósito), pero no por esta vía.
+ *  3. CONTINUIDAD DE PROPS: lo que hay en las manos al terminar el primero tiene que ser
+ *     lo mismo que hay al empezar el segundo. ⚠️ ES LA CONDICIÓN QUE JUSTIFICA TODO
+ *     ESTO. Sin ella se produce el fallo que el dueño del repo describió: *"se está
+ *     aplicando un serum con un gotero y el gotero desaparece mágicamente"*. En el
+ *     original ese salto es un corte de montaje y se lee como tal; dentro de un clip
+ *     continuo es un objeto teletransportándose.
+ *  4. VOZ EN OFF IGUAL. Unir un tramo narrado en off con uno hablado a cámara obliga a
+ *     una boca a empezar a moverse a mitad de plano.
+ *
+ * ⚠️ FAIL-CLOSED: sin `objetoEnMano` en los dos cortes no se fusiona. Toda sesión
+ * analizada antes de que el campo existiera cae acá, y su comportamiento es el de
+ * siempre — que es lo correcto: no tenemos con qué probar la continuidad, y la fusión
+ * equivocada es más cara que la fusión que no ocurre.
+ */
+export function puedenUnirse(a: Corte, b: Corte): boolean {
+  if (muestraPersona(a.accion) !== muestraPersona(b.accion)) return false
+  if (normObj(a.camara) !== normObj(b.camara)) return false
+  if (!!a.vozEnOff !== !!b.vozEnOff) return false
+  if (!a.objetoEnMano || !b.objetoEnMano) return false
+  return normObj(a.objetoEnMano.fin) === normObj(b.objetoEnMano.inicio)
+}
+
+/**
+ * Une cortes CONSECUTIVOS en tomas largas mientras la continuidad lo permita.
+ * ---------------------------------------------------------------------------
+ * Pedido del dueño del repo (2026-08-25): *"combinar varios cuts para crear una sola
+ * toma larga y ahorrar tokens, sin que los cortes se vean forzados o raros"*.
+ *
+ * El ahorro es concreto y es de PRESUPUESTO DE PROMPT, no de dinero: cada toma cuesta su
+ * cabecera (`### Shot N — Xs`), su línea de cámara y su bloque `micro` dentro de un
+ * prompt topado en 5000 caracteres. Cuatro cortes que son la misma toma con el mismo
+ * plano y el mismo objeto en la mano gastan cuatro veces eso para decir una sola cosa —
+ * y lo que se come es justo la coreografía que este cambio existe para poder mandar.
+ *
+ * ⚠️ NO ES `mergeMicroCortes` CON OTRO NOMBRE, y las dos tienen que existir:
+ *   - `mergeMicroCortes` arregla cortes DEMASIADO CORTOS para renderizar (1 s), y para
+ *     lograrlo SACRIFICA el encuadre del más corto. Es una concesión.
+ *   - Esta une cortes que YA SON la misma toma. No sacrifica nada: mismo plano, misma
+ *     clase, mismo objeto en la mano. Si algo de eso no cuadra, no une.
+ *
+ * ⚠️ CONVERGE ADENTRO, y eso es lo que la hace idempotente. Unir A+B puede habilitar
+ * AB+C, así que una sola pasada no es un punto fijo — y dos listas de cortes distintas
+ * para el mismo contenido son dos `scriptFingerprint` distintas, que es el bug de dinero
+ * que este repo ya documenta. Al salir, ningún par consecutivo cumple `puedenUnirse`
+ * dentro del cap, así que una segunda llamada devuelve el MISMO objeto.
+ *
+ * Los topes llegan por parámetro y no importados de `lotes.ts`: ese módulo importa a
+ * éste (`CPS_MAX`) y al revés sería un ciclo.
+ */
+export function unirTomasContinuas(
+  report: ForensicReport,
+  maxSeg: number,
+  maxChars: number,
+): { report: ForensicReport; fusiones: Fusion[] } {
+  const cortes = report.cortes ?? []
+  if (cortes.length < 2) return { report, fusiones: [] }
+
+  let actual = cortes.map((c) => ({ ...c }))
+  const origen = new Map<string, number>(actual.map((c) => [c.tiempo, 1]))
+  let hubo = false
+
+  // Hasta converger: se recorre de izquierda a derecha uniendo el primer par elegible y
+  // se vuelve a empezar. Determinista, que es lo que la huella necesita.
+  for (let cambio = true; cambio; ) {
+    cambio = false
+    for (let i = 0; i + 1 < actual.length; i++) {
+      const a = actual[i]
+      const b = actual[i + 1]
+      if (!puedenUnirse(a, b)) continue
+      // El cap manda: unir por encima de él solo obliga a `splitLongToma` a volver a
+      // partir la toma más adelante, y ahí el reparto lo decide la duración y no la
+      // continuidad — o sea se perdería justo lo que esta función acaba de proteger.
+      if (a.duracionSeg + b.duracionSeg > maxSeg) continue
+      if (a.dialogo.length + b.dialogo.length > maxChars) continue
+
+      const tiempo = `${a.tiempo.split('-')[0]?.trim() ?? a.tiempo} - ${b.tiempo.split('-').slice(1).join('-').trim() || b.tiempo}`
+      const unido: Corte = {
+        ...a,
+        tiempo,
+        duracionSeg: a.duracionSeg + b.duracionSeg,
+        accion: [a.accion, b.accion].map((x) => x.trim()).filter(Boolean).join(' Luego, '),
+        dialogo: [a.dialogo, b.dialogo].map((x) => x.trim()).filter(Boolean).join(' '),
+        hablantes: [...(a.hablantes ?? []), ...(b.hablantes ?? [])].length
+          ? [...(a.hablantes ?? []), ...(b.hablantes ?? [])]
+          : undefined,
+        textoOverlay: [a.textoOverlay, b.textoOverlay].find((x) => x && x !== 'No aparece') ?? a.textoOverlay,
+        objetoEnMano: { inicio: a.objetoEnMano!.inicio, fin: b.objetoEnMano!.fin },
+        micro: unirMicro(a.micro, b.micro),
+      }
+      origen.set(tiempo, (origen.get(a.tiempo) ?? 1) + (origen.get(b.tiempo) ?? 1))
+      actual = [...actual.slice(0, i), unido, ...actual.slice(i + 2)]
+      cambio = true
+      hubo = true
+      break
+    }
+  }
+
+  if (!hubo) return { report, fusiones: [] }
+
+  actual = actual.map((c, k) => ({ ...c, n: k + 1 }))
+  const fusiones: Fusion[] = actual
+    .filter((c) => (origen.get(c.tiempo) ?? 1) > 1)
+    .map((c) => ({ tiempo: c.tiempo, deCortes: origen.get(c.tiempo) ?? 1, duracionSeg: c.duracionSeg }))
+
+  // `tomas` empareja 1-a-1 con `cortes`: mismo motivo y misma reconstrucción que en
+  // `mergeMicroCortes` — dejarla apuntando a la lista vieja desincroniza el guión.
+  const tomas = actual.map((c, k) => {
+    const previa = report.tomas?.[k]
+    return {
+      n: k + 1,
+      encuadre: previa?.encuadre ?? c.camara,
+      posicion: previa?.posicion ?? '',
+      accionFisica: c.accion,
+      objeto: previa?.objeto ?? '',
+      dialogo: c.dialogo,
+      duracionSeg: c.duracionSeg,
+    }
+  })
+
+  return { report: { ...report, cortes: actual, tomas }, fusiones }
+}
+
 /** Un corte que se fusionó con su vecino, para poder mostrar qué se juntó. */
 export interface Fusion {
   tiempo: string
@@ -285,6 +513,12 @@ export function mergeMicroCortes(
         ? [...(a.hablantes ?? []), ...(b.hablantes ?? [])]
         : undefined,
       textoOverlay: [a.textoOverlay, b.textoOverlay].find((x) => x && x !== 'No aparece') ?? a.textoOverlay,
+      // La toma resultante empieza donde empezaba la primera y termina donde terminaba
+      // la segunda. Sin esto la continuidad de props se perdería justo al fusionar.
+      objetoEnMano: a.objetoEnMano && b.objetoEnMano
+        ? { inicio: a.objetoEnMano.inicio, fin: b.objetoEnMano.fin }
+        : a.objetoEnMano ?? b.objetoEnMano,
+      micro: unirMicro(a.micro, b.micro),
     }
     origen.set(tiempo, (origen.get(a.tiempo) ?? 1) + (origen.get(b.tiempo) ?? 1))
     const lo = Math.min(i, j)
@@ -528,6 +762,93 @@ export function buildForensicInstruction(): string {
     'etiqueta quede al frente; la mano izquierda queda fuera de cuadro; mira al producto',
     'y después a la cámara". Frente a eso, "muestra el producto" es inservible.',
     'Si en un corte el producto NO aparece, dilo explícitamente.',
+    '',
+    '⚠️ EL DETALLE ATÓMICO: `micro`, en CADA corte. Es el pedido central de este análisis.',
+    '  `accion` dice qué HACE el cuerpo. `micro` dice CÓMO, al nivel que se nota sin poder',
+    '  nombrarlo — y es lo que separa un video que "se parece" de uno que ES el mismo.',
+    '  Cinco casillas, las cinco obligatorias, ninguna vacía:',
+    '    `cuerpo`: balanceo, desplazamiento del peso, torsión del torso, hombros,',
+    '      respiración visible, cuánto se acerca o aleja de la cámara.',
+    '    `manos`: vaivén, qué gesto acompaña a qué palabra, qué hacen cuando no hacen nada,',
+    '      si se tocan entre sí, dedos abiertos o cerrados.',
+    '    `rostro`: cejas, párpados, parpadeo, adónde va la mirada y cuándo cambia, y cuánto',
+    '      se ABRE LA BOCA al hablar (articulación marcada, labios apenas separados, sonrisa',
+    '      mientras habla, labios que se aprietan entre frases).',
+    '    `cabello`: si se mueve con la cabeza, si cae sobre la cara, si lo aparta, si está',
+    '      fijo y no se mueve nada.',
+    '    `entorno`: qué se mueve DETRÁS de la persona — cortinas, plantas, ropa colgada,',
+    '      reflejos, gente al fondo, luz que cambia. Si el fondo está completamente quieto,',
+    '      escribe exactamente eso.',
+    '',
+    '  ⚠️ LA QUIETUD ES UNA OBSERVACIÓN, NO UNA CASILLA VACÍA. Un cuerpo que casi no se',
+    '  mueve es un dato tan útil como uno que se mueve mucho: si lo omites, el generador',
+    '  inventa movimiento que el original no tiene. "torso casi inmóvil, solo respiración" y',
+    '  "fondo completamente quieto" son respuestas correctas y esperadas.',
+    '',
+    '  ⚠️ ESCRÍBELO EN TELEGRAMA. Sin artículos, sin "la modelo", sin verbos de relleno,',
+    '  separando observaciones con comas. Cada casilla, 15 palabras como mucho.',
+    '    ASÍ: "mano derecha sube al mentón, dedos índice y medio extendidos, izquierda quieta".',
+    '    ASÍ NO: "La modelo sube su mano derecha hasta la altura del mentón, mientras que',
+    '    los dedos índice y medio permanecen extendidos y la mano izquierda queda quieta".',
+    '  Dicen lo mismo y la segunda ocupa el doble. El prompt de render topa en 5000',
+    '  caracteres y este bloque es el que más crece: lo que sobra de palabras se paga',
+    '  perdiendo observaciones.',
+    '',
+    '  ⚠️ NO INVENTES NADA. Todo sale del video. Si un detalle no se alcanza a ver —el',
+    '  fondo está desenfocado, las manos quedan fuera de cuadro— dilo ("manos fuera de',
+    '  cuadro"), no lo completes con lo que sería razonable.',
+    '',
+    '⚠️ CONTINUIDAD DE OBJETOS: `objetoEnMano`, en CADA corte.',
+    '  Qué sostiene la persona AL EMPEZAR el corte (`inicio`) y AL TERMINARLO (`fin`).',
+    '  Nómbralo igual siempre a lo largo del video ("frasco", "gotero", "bolsa") y usa',
+    '  "nada" cuando las manos están vacías. Si hay un objeto en cada mano, sepáralos con',
+    '  coma en el mismo orden en los dos campos.',
+    '  Sirve para decidir en CÓDIGO si dos cortes se pueden unir en una toma continua, así',
+    '  que lo único que importa es que el nombre sea consistente, no que sea elegante.',
+    '  Ejemplo: un corte que empieza con las manos vacías y termina con el frasco tomado de',
+    '  la repisa es `{inicio: "nada", fin: "frasco"}`.',
+    '  ⚠️ El equipo de grabación NO va acá tampoco (micrófono, teléfono, trípode): si la',
+    '  mano sostiene equipo, para este campo esa mano está vacía.',
+    '',
+    '⚠️ QUÉ HAY EN LAS MANOS: `objetoEnMano` = { inicio, fin }.',
+    '  Qué sostiene la persona al EMPEZAR el corte y qué sostiene al TERMINARLO. Manos',
+    '  vacías se escribe "nada". Si no se ven las manos, "fuera de cuadro".',
+    '  Nómbralo igual siempre dentro del mismo video: el frasco es "frasco" en los seis',
+    '  cortes, no "el producto" en uno y "el envase" en otro — se compara en código.',
+    '  ⚠️ Para qué sirve: con esto el sistema decide si dos cortes se pueden unir en una',
+    '  sola toma continua. Si el corte 3 termina con el gotero en la mano y el 4 empieza',
+    '  con las manos vacías, unirlos haría que el gotero desaparezca en el aire.',
+    '',
+    'EL DETALLE ATÓMICO (`micro`) — lo que se nota sin poder nombrarlo.',
+    '  `accion` dice QUÉ hace el cuerpo. `micro` dice CÓMO, al nivel que separa un video',
+    '  que "se parece" de uno que es el mismo. Cinco casillas, todas obligatorias cuando',
+    '  el corte muestra a una persona:',
+    '    `cuerpo`: balanceo, desplazamiento del peso, torsión del torso, respiración.',
+    '    `manos`: vaivén, qué gesto acompaña a qué palabra, qué hacen cuando no hacen nada.',
+    '    `rostro`: cejas, párpados, adónde va la mirada y CUÁNTO SE ABRE LA BOCA al hablar',
+    '      (articulación marcada, labios apenas separados, sonríe mientras habla…).',
+    '    `cabello`: si se mueve con la cabeza, si cae sobre la cara, si está fijo.',
+    '    `entorno`: qué se mueve DETRÁS — cortinas, ropa colgada, reflejos, gente, hojas.',
+    '',
+    '  ⚠️ LA QUIETUD ES UNA OBSERVACIÓN, NO UNA CASILLA VACÍA. Un cuerpo que casi no se',
+    '  mueve es un dato tan renderizable como uno que se mueve mucho: "torso casi inmóvil,',
+    '  solo respiración" y "fondo completamente quieto" son respuestas CORRECTAS. Dejarlo',
+    '  vacío hace que el generador invente movimiento que el original no tiene.',
+    '',
+    '  ⚠️ ESCRÍBELO EN TELEGRAMA. Sin artículos, sin "se puede observar que", sin verbos de',
+    '  relleno, separando observaciones con comas. Máximo unas 120 caracteres por casilla.',
+    '  No es estilo: esto viaja a un generador con un tope duro de espacio, y la prosa',
+    '  gasta el doble para decir lo mismo.',
+    '    ASÍ: "peso en pierna izquierda, hombro derecho baja al inhalar, torso quieto"',
+    '    NO ASÍ: "La modelo apoya su peso sobre la pierna izquierda mientras su hombro',
+    '    derecho desciende levemente cada vez que inhala."',
+    '',
+    '  ⚠️ SOLO LO QUE ESTÁ EN EL VIDEO. Es la regla de siempre y acá pesa más, porque el',
+    '  nivel de detalle invita a rellenar: si el pelo está recogido y no se mueve, eso es',
+    '  lo que va; no inventes un mechón cayendo porque quedaría bien.',
+    '  Si un corte no muestra a la persona (plano de producto, flat-lay), `cuerpo`,',
+    '  `manos`, `rostro` y `cabello` dicen "no aparece" y `entorno` describe lo que sí',
+    '  se mueve en cuadro.',
     '',
     'CRONOMETRAJE — se mide, no se estima:',
     '  `duracionSeg` lleva DECIMALES (4.3, no 5). No redondees a números redondos ni',
