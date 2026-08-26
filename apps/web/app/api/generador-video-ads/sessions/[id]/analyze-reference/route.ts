@@ -6,7 +6,7 @@ import { geminiCallStructured, geminiEsDirecto } from '@/lib/gemini'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 import { ForensicReportSchema } from '@/lib/video-ads/types'
-import { buildForensicInstruction, repairCutTiming, limpiarDialogos, verificarHablantes } from '@/lib/video-ads/forensic'
+import { buildForensicInstruction, repairCutTiming, reconciliarConVentana, MIN_TOMA_SEG, limpiarDialogos, verificarHablantes } from '@/lib/video-ads/forensic'
 import { MAX_VIDEO_MB } from '@/lib/video-ads/limits'
 import { STEP } from '@/lib/video-ads/steps'
 import type { Part } from '@google/genai'
@@ -82,7 +82,24 @@ export async function POST(
     if (descartados.length) {
       console.warn(`[video-ads/analyze-reference] sesión ${id}: el reparto por hablante no reproducía el diálogo en los cortes ${descartados.join(', ')} — se descartó su atribución`)
     }
-    const { report: reparado, ajustes } = repairCutTiming(atribuido)
+    // ⚠️ RECONCILIAR ANTES DE REPARAR, y SOLO acá. El modelo declara la duración dos
+    // veces (la ventana `tiempo` y `duracionSeg`) y se contradice en el 15 % de los
+    // cortes, siempre contra el b-roll: 9 de los 12 cortes mudos de la base están por
+    // debajo de 3 s. Las ventanas sí forman una línea coherente, así que mandan. En
+    // `extract-template` NO se repite: allá las duraciones ya pasaron por la reparación.
+    const { report: conVentana, ajustes: reconciliados } = reconciliarConVentana(atribuido)
+    if (reconciliados.length)
+      console.warn(
+        `[video-ads/analyze-reference] sesión ${id}: ${reconciliados.length} cortes cuya duración no coincidía con su ventana, reconciliados:`,
+        reconciliados.map((a) => `corte ${a.n}: ${a.de.toFixed(1)}s → ${a.a.toFixed(1)}s`),
+      )
+    // ⚠️ Y CON PISO VISIBLE, o la reconciliación no sirve de nada. Un corte MUDO tiene
+    // mínimo de habla 0, así que para el reparto es holgura pura y lo puede vaciar entero
+    // para financiar a los hablados. Sin este piso, el b-roll que la línea de arriba acaba
+    // de levantar a su duración real se drena en la línea siguiente. El piso se acota a la
+    // duración que el corte YA tiene (ver `repairCutTiming`), así que no infla nada: solo
+    // impide el vaciado.
+    const { report: reparado, ajustes } = repairCutTiming(conVentana, MIN_TOMA_SEG)
     if (ajustes.length)
       console.warn(
         `[video-ads/analyze-reference] sesión ${id}: ${ajustes.length} cortes con diálogo indecible en su duración, recronometrados:`,

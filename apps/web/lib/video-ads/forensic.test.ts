@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { z } from 'zod'
-import { buildForensicInstruction, ForensicReportSchema, repairCutTiming, mergeMicroCortes, muestraPersona, corteMuestraPersona, CPS_MAX, type ForensicReport, type Corte, enProsa, limpiarDialogo, verificarHablantes, unirTomasContinuas, ObjetoEnManoSchema, MicroSchema, CorteSchema } from './forensic'
+import { buildForensicInstruction, ForensicReportSchema, repairCutTiming, mergeMicroCortes, muestraPersona, corteMuestraPersona, CPS_MAX, type ForensicReport, type Corte, enProsa, limpiarDialogo, verificarHablantes, unirTomasContinuas, reconciliarConVentana, MIN_TOMA_SEG, ObjetoEnManoSchema, MicroSchema, CorteSchema } from './forensic'
 
 // El prompt es el contrato con Gemini. Estos asserts fijan las reglas del spec que,
 // si se caen, producen el bug que ya vimos en producción: cortes inventados por
@@ -843,5 +843,110 @@ describe('ObjetoEnManoSchema — por qué NO son .optional()', () => {
   it('una sesión vieja sin los campos sigue parseando', () => {
     const out = ObjetoEnManoSchema.parse({ inicio: 'frasco', fin: 'frasco' })
     expect(out).toEqual({ inicio: 'frasco', fin: 'frasco', accesorios: '' })
+  })
+})
+
+describe('reconciliarConVentana', () => {
+  const corte = (n: number, tiempo: string, duracionSeg: number, dialogo = ''): Corte => ({
+    n, tiempo, duracionSeg, accion: 'x', camara: 'y', dialogo,
+    textoOverlay: 'No aparece', transicion: 'corte', objetoEnMano: null, micro: null,
+  })
+  const rep = (cortes: Corte[], total?: number): ForensicReport => ({
+    duracionTotalSeg: total ?? cortes.reduce((n, c) => n + c.duracionSeg, 0),
+    caracteresGuion: 0, guionOriginal: '', sujeto: '', vestuario: '', producto: '', fondo: '',
+    elementosGraficos: '', cortes,
+    tomas: cortes.map((c) => ({ n: c.n, encuadre: '', posicion: '', accionFisica: '', objeto: '', dialogo: c.dialogo, duracionSeg: c.duracionSeg })),
+    edicion: { sincronizacion: '', textoOverlay: '', escalaZoom: '', cortes: '', ritmo: '', corteFinal: '' },
+    resumenParaUsuario: '',
+  })
+
+  // ⚠️ EL CASO REAL: el anuncio de serum dedica ~8 s al frasco a pantalla completa; el
+  // forense declaró la ventana 00:10-00:15 y una duración de 3,4 s. La ventana manda.
+  it('levanta el corte mudo que el modelo subestimó', () => {
+    const { report, ajustes } = reconciliarConVentana(rep([
+      corte(1, '00:00 - 00:10', 10, 'hablando'),
+      corte(2, '00:10 - 00:15', 3.4),
+      corte(3, '00:15 - 00:20', 5, 'más'),
+    ], 20))
+    expect(report.cortes[1].duracionSeg).toBe(5)
+    expect(ajustes).toEqual([{ n: 2, de: 3.4, a: 5 }])
+    // `tomas` empareja 1-a-1 con `cortes` y tiene que seguirlas.
+    expect(report.tomas[1].duracionSeg).toBe(5)
+  })
+
+  // Fail-closed: sin una línea de tiempo coherente no hay motivo para creerle a la ventana.
+  it('no toca nada si las ventanas dejan un hueco', () => {
+    const r = rep([corte(1, '00:00 - 00:05', 3), corte(2, '00:09 - 00:14', 3)])
+    expect(reconciliarConVentana(r).report).toBe(r)
+  })
+
+  it('no toca nada si las ventanas se solapan', () => {
+    const r = rep([corte(1, '00:00 - 00:10', 3), corte(2, '00:05 - 00:15', 3)])
+    expect(reconciliarConVentana(r).report).toBe(r)
+  })
+
+  it('no toca nada si la suma no se parece a la duración total declarada', () => {
+    const r = rep([corte(1, '00:00 - 00:05', 5), corte(2, '00:05 - 00:10', 5)], 40)
+    expect(reconciliarConVentana(r).report).toBe(r)
+  })
+
+  it('no toca nada si alguna ventana es ilegible', () => {
+    const r = rep([corte(1, 'inicio - fin', 5), corte(2, '00:05 - 00:10', 5)])
+    expect(reconciliarConVentana(r).report).toBe(r)
+  })
+
+  // Un desacuerdo menor a 1 s es ruido de redondeo del formato MM:SS, no un error.
+  it('tolera el desacuerdo de menos de un segundo', () => {
+    const r = rep([corte(1, '00:00 - 00:05', 4.6), corte(2, '00:05 - 00:10', 5)], 9.6)
+    expect(reconciliarConVentana(r).ajustes).toEqual([])
+  })
+
+  it('es idempotente', () => {
+    const { report } = reconciliarConVentana(rep([
+      corte(1, '00:00 - 00:10', 10, 'x'), corte(2, '00:10 - 00:15', 3.4),
+    ], 15))
+    expect(reconciliarConVentana(report).report).toBe(report)
+  })
+})
+
+describe('reconciliar + reparar: el b-roll sobrevive a las dos pasadas', () => {
+  const corte = (n: number, tiempo: string, duracionSeg: number, dialogo = ''): Corte => ({
+    n, tiempo, duracionSeg, accion: 'x', camara: 'y', dialogo,
+    textoOverlay: 'No aparece', transicion: 'corte', objetoEnMano: null, micro: null,
+  })
+  // El caso real del anuncio de serum: un beat de producto MUDO entre dos tomas habladas
+  // cuyo diálogo no entra en su duración, o sea el reparto va a buscar de dónde sacar.
+  const base = () => ({
+    duracionTotalSeg: 20, caracteresGuion: 0, guionOriginal: '', sujeto: '', vestuario: '',
+    producto: '', fondo: '', elementosGraficos: '',
+    cortes: [
+      corte(1, '00:00 - 00:10', 10, 'x'.repeat(240)),
+      corte(2, '00:10 - 00:15', 3.4),
+      corte(3, '00:15 - 00:20', 5, 'x'.repeat(120)),
+    ],
+    tomas: [1, 2, 3].map((n) => ({ n, encuadre: '', posicion: '', accionFisica: '', objeto: '', dialogo: '', duracionSeg: 1 })),
+    edicion: { sincronizacion: '', textoOverlay: '', escalaZoom: '', cortes: '', ritmo: '', corteFinal: '' },
+    resumenParaUsuario: '',
+  }) as ForensicReport
+
+  // ⚠️ SIN PISO VISIBLE, LA RECONCILIACIÓN NO SIRVE DE NADA: un corte mudo tiene mínimo de
+  // habla 0, así que el reparto lo vacía para financiar a los hablados en la línea
+  // siguiente a la que acaba de levantarlo.
+  it('sin piso, el reparto vacía el beat mudo que se acaba de levantar', () => {
+    const { report } = reconciliarConVentana(base())
+    expect(report.cortes[1].duracionSeg).toBe(5)
+    const sinPiso = repairCutTiming(report).report
+    expect(sinPiso.cortes[1].duracionSeg).toBeLessThan(5)
+  })
+
+  it('con piso, el beat mudo conserva su duración real', () => {
+    const { report } = reconciliarConVentana(base())
+    const conPiso = repairCutTiming(report, MIN_TOMA_SEG).report
+    expect(conPiso.cortes[1].duracionSeg).toBeGreaterThanOrEqual(MIN_TOMA_SEG)
+    // Y el diálogo de los cortes hablados sigue siendo decible: el piso no rompe eso.
+    for (const c of conPiso.cortes) {
+      if (!c.dialogo) continue
+      expect(c.dialogo.length / c.duracionSeg).toBeLessThanOrEqual(CPS_MAX + 0.01)
+    }
   })
 })

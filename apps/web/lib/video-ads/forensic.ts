@@ -737,6 +737,92 @@ const EPS = 1e-9
  * Es idempotente por construcción: al salir, todo corte cumple `duración >= mínimo`, así
  * que una segunda pasada encuentra déficit cero y devuelve la entrada sin tocarla.
  */
+/**
+ * La ventana `tiempo` de un corte, en segundos. `NaN` si no se puede leer.
+ * El formato es "MM:SS - MM:SS" (lo fija el prompt de FASE 1).
+ */
+function ventanaSeg(tiempo: string): { ini: number; fin: number } {
+  const [a, b] = String(tiempo).split('-')
+  const leer = (x: string) => {
+    const m = /(\d+)\s*:\s*(\d+)/.exec(x ?? '')
+    return m ? Number(m[1]) * 60 + Number(m[2]) : NaN
+  }
+  return { ini: leer(a), fin: leer(b) }
+}
+
+/**
+ * ⚠️ EL MODELO DECLARA LA MISMA COSA DOS VECES Y SE CONTRADICE — y el b-roll es el que paga.
+ * ---------------------------------------------------------------------------
+ * Cada corte trae `tiempo` ("00:10 - 00:15", su ventana en el video) y `duracionSeg`. Son
+ * el mismo dato medido dos veces, y en **34 de 222 cortes** de la base no coinciden.
+ *
+ * Cuál de los dos miente se puede decidir con evidencia, no a ojo: medido sobre las 33
+ * sesiones guardadas, las ventanas **encadenan sin un solo hueco ni un solo solape** y su
+ * suma da la duración total del video en 32 de 33. O sea forman una línea de tiempo
+ * coherente. `duracionSeg` es la estimación suelta, y es la que se desvía.
+ *
+ * ⚠️ Y SE DESVÍA CONTRA LOS CORTES MUDOS. De los 12 cortes sin diálogo de la base, **9
+ * están por debajo de 3 segundos**, con desacuerdos como ventana 8 s → duración 3,5 s, o
+ * ventana 5 s → 3,4 s. El modelo estima la duración a partir del habla, así que un plano
+ * de producto o un b-roll nace hambriento — antes de que el reparto lo toque. Ése es el
+ * origen de que los 8 segundos de frasco a pantalla completa del anuncio de serum
+ * llegaran al render como 3,4 s (y de ahí, a ~1,5 s de video).
+ *
+ * Esto corre ANTES de `repairCutTiming` y SOLO en la primera puerta (`analyze-reference`),
+ * que es donde llegan los números crudos del modelo. En `extract-template` NO se vuelve a
+ * aplicar: ahí las duraciones ya pasaron por la reparación —que las mueve a propósito para
+ * que el diálogo se pueda decir, sin tocar `tiempo`— y reconciliarlas otra vez con la
+ * ventana desharía ese trabajo y devolvería diálogo impronunciable.
+ *
+ * ⚠️ FAIL-CLOSED: si las ventanas NO forman una línea coherente (alguna ilegible, un hueco
+ * o un solape de más de medio segundo, o una suma que no se parece al total declarado), no
+ * se toca nada. Sin esa coherencia no hay motivo para creerle a la ventana más que a la
+ * duración, y el modo de fallo seguro es dejar el análisis como vino.
+ */
+export function reconciliarConVentana(
+  report: ForensicReport,
+): { report: ForensicReport; ajustes: AjusteTiempo[] } {
+  const cortes = report.cortes ?? []
+  if (cortes.length < 1) return { report, ajustes: [] }
+
+  const v = cortes.map((c) => ventanaSeg(c.tiempo))
+  if (v.some((x) => !Number.isFinite(x.ini) || !Number.isFinite(x.fin) || x.fin < x.ini))
+    return { report, ajustes: [] }
+
+  // La línea de tiempo tiene que encadenar: el fin de uno es el inicio del siguiente.
+  for (let i = 1; i < v.length; i++) {
+    if (Math.abs(v[i].ini - v[i - 1].fin) > 0.5) return { report, ajustes: [] }
+  }
+
+  const suma = v.reduce((n, x) => n + (x.fin - x.ini), 0)
+  const total = report.duracionTotalSeg
+  if (Number.isFinite(total) && total > 0 && Math.abs(suma - total) > 1.5)
+    return { report, ajustes: [] }
+
+  const ajustes: AjusteTiempo[] = []
+  const nuevos = cortes.map((c, i) => {
+    const dur = v[i].fin - v[i].ini
+    // Una ventana de 0 s no es una duración: se conserva lo que declaró el modelo.
+    if (!(dur > 0) || Math.abs(dur - c.duracionSeg) <= 1.0) return c
+    ajustes.push({ n: c.n, de: c.duracionSeg, a: dur })
+    return { ...c, duracionSeg: dur }
+  })
+  if (!ajustes.length) return { report, ajustes: [] }
+
+  return {
+    report: {
+      ...report,
+      cortes: nuevos,
+      // `tomas` empareja 1-a-1 con `cortes` y su duración tiene que seguirlas.
+      tomas: (report.tomas ?? []).map((t, i) =>
+        nuevos[i] ? { ...t, duracionSeg: nuevos[i].duracionSeg } : t,
+      ),
+      duracionTotalSeg: nuevos.reduce((n, c) => n + c.duracionSeg, 0),
+    },
+    ajustes,
+  }
+}
+
 export function repairCutTiming(
   report: ForensicReport,
   /**
