@@ -543,6 +543,9 @@ function microDe(m: Micro | undefined, cap: number | null): string {
     m.rostro && `face ${corto(m.rostro)}`,
     m.cabello && `hair ${corto(m.cabello)}`,
     m.entorno && `bg ${corto(m.entorno)}`,
+    // La puesta en cuadro. Va última porque es la que menos duele perder si el nivel de
+    // degradación recorta, y primera en utilidad cuando entra entera.
+    m.posicion && `framing ${corto(m.posicion)}`,
   ].filter(Boolean)
   return partes.length ? `Micro-detail (reproduce exactly): ${partes.join(' · ')}` : ''
 }
@@ -558,7 +561,7 @@ export function buildLotePrompt(args: {
   movimiento?: MotionProfile | null
   images: LoteImage[]
   /** Los cortes del forense, para poder decir QUÉ plano va con QUÉ toma (ver abajo). */
-  cortes?: { tiempo: string; camara: string; micro?: Micro; objetoEnMano?: ObjetoEnMano }[]
+  cortes?: { tiempo: string; camara: string; micro?: Micro | null; objetoEnMano?: ObjetoEnMano | null }[]
   /** Nicho de la sesión: en ropa/zapatos el producto se LLEVA PUESTO, y el bloque que
    *  lo describe como "un objeto" contradice al bloque de consistencia. Ver niches.ts. */
   niche?: unknown

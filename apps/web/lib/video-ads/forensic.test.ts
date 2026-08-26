@@ -62,7 +62,7 @@ describe('repairCutTiming', () => {
   const corte = (n: number, duracionSeg: number, dialogo: string) => ({
     n, duracionSeg, dialogo,
     tiempo: `00:${String(n).padStart(2, '0')} - 00:${String(n + 1).padStart(2, '0')}`,
-    accion: 'a', camara: 'c', textoOverlay: 'No aparece', transicion: 'corte directo',
+    accion: 'a', camara: 'c', textoOverlay: 'No aparece', transicion: 'corte directo', micro: null,
   })
   const informe = (cortes: ReturnType<typeof corte>[]): ForensicReport => ({
     duracionTotalSeg: cortes.reduce((n, c) => n + c.duracionSeg, 0),
@@ -195,7 +195,7 @@ describe('ForensicReportSchema', () => {
         accion: 'Sostiene el frasco frente a la cámara',
         camara: 'Primer plano, altura de ojos, cámara en mano',
         dialogo: 'este suero de niacinamida', textoOverlay: 'este suero de niacinamida',
-        transicion: 'corte directo',
+        transicion: 'corte directo', micro: null,
       }],
       tomas: [{
         n: 1, encuadre: 'Primer plano', posicion: 'Frente a cámara',
@@ -230,7 +230,7 @@ describe('ForensicReportSchema', () => {
 describe('mergeMicroCortes', () => {
   const corte = (n: number, dur: number, camara: string, dialogo = `frase ${n}`) => ({
     n, tiempo: `00:${String(n).padStart(2, '0')} - 00:${String(n + 1).padStart(2, '0')}`,
-    duracionSeg: dur, accion: `accion ${n}`, camara, dialogo, textoOverlay: 'No aparece', transicion: 'corte directo',
+    duracionSeg: dur, accion: `accion ${n}`, camara, dialogo, textoOverlay: 'No aparece', transicion: 'corte directo', micro: null,
   })
   const rep = (cortes: ReturnType<typeof corte>[]): ForensicReport => ({
     duracionTotalSeg: cortes.reduce((a, c) => a + c.duracionSeg, 0),
@@ -325,7 +325,7 @@ describe('mergeMicroCortes', () => {
 describe('repairCutTiming — piso de duración visible', () => {
   const c = (n: number, dur: number, dialogo: string) => ({
     n, tiempo: `t${n}`, duracionSeg: dur, accion: 'a', camara: 'A', dialogo,
-    textoOverlay: 'No aparece', transicion: 'corte',
+    textoOverlay: 'No aparece', transicion: 'corte', micro: null,
   })
   const rep = (cortes: ReturnType<typeof c>[]): ForensicReport => ({
     duracionTotalSeg: cortes.reduce((a, x) => a + x.duracionSeg, 0), caracteresGuion: 0,
@@ -390,7 +390,7 @@ describe('muestraPersona', () => {
 describe('mergeMicroCortes — no cruza la frontera persona/producto', () => {
   const c = (n: number, dur: number, accion: string) => ({
     n, tiempo: `t${n}`, duracionSeg: dur, accion, camara: `C${n}`, dialogo: '',
-    textoOverlay: 'No aparece', transicion: 'corte',
+    textoOverlay: 'No aparece', transicion: 'corte', micro: null,
   })
   const rep = (cortes: ReturnType<typeof c>[]): ForensicReport => ({
     duracionTotalSeg: cortes.reduce((a, x) => a + x.duracionSeg, 0), caracteresGuion: 0,
@@ -435,7 +435,7 @@ describe('mergeMicroCortes — no cruza la frontera persona/producto', () => {
 describe('repairCutTiming — el piso no infla', () => {
   const c = (n: number, dur: number, dialogo: string) => ({
     n, tiempo: `t${n}`, duracionSeg: dur, accion: 'a', camara: 'A', dialogo,
-    textoOverlay: 'No aparece', transicion: 'corte',
+    textoOverlay: 'No aparece', transicion: 'corte', micro: null,
   })
   const rep = (cortes: ReturnType<typeof c>[]): ForensicReport => ({
     duracionTotalSeg: cortes.reduce((a, x) => a + x.duracionSeg, 0), caracteresGuion: 0,
@@ -555,7 +555,7 @@ describe('verificarHablantes', () => {
   const corte = (over: Record<string, unknown> = {}) => ({
     n: 1, tiempo: '00:00 - 00:05', duracionSeg: 5, accion: 'a', camara: 'plano medio',
     dialogo: 'Tome, doctorcito. No se preocupe por eso.',
-    textoOverlay: 'No aparece', transicion: 'corte', ...over,
+    textoOverlay: 'No aparece', transicion: 'corte', micro: null, ...over,
   })
   const rep = (cortes: unknown[]) => ({ cortes, tomas: [] } as never)
 
@@ -646,7 +646,7 @@ describe('muestraPersona — la negación manda', () => {
 })
 
 describe('unirTomasContinuas', () => {
-  const micro = { cuerpo: 'quieto', manos: 'sube', rostro: 'sonríe', cabello: 'fijo', entorno: 'nada' }
+  const micro = { cuerpo: 'quieto', manos: 'sube', rostro: 'sonríe', cabello: 'fijo', entorno: 'nada', posicion: 'centrada en el cuadro' }
   const corte = (n: number, p: Partial<Corte> = {}): Corte => ({
     n, tiempo: `00:0${n - 1} - 00:0${n}`, duracionSeg: 3,
     accion: 'La mujer sostiene el frasco', camara: 'Primer plano', dialogo: `linea ${n}`,
@@ -696,7 +696,7 @@ describe('unirTomasContinuas', () => {
   it('NO une un plano de persona con uno sin persona', () => {
     const b = corte(2, {
       accion: 'Detalle del frasco',
-      micro: { cuerpo: 'no aparece', manos: 'sostienen el frasco', rostro: 'no aparece', cabello: 'no aparece', entorno: 'fondo quieto' },
+      micro: { cuerpo: 'no aparece', manos: 'sostienen el frasco', rostro: 'no aparece', cabello: 'no aparece', entorno: 'fondo quieto', posicion: 'centrada en el cuadro' },
     })
     expect(unirTomasContinuas(base([corte(1), b]), 15, 300).report.cortes).toHaveLength(2)
   })
@@ -746,8 +746,8 @@ describe('unirTomasContinuas', () => {
 })
 
 describe('corteMuestraPersona', () => {
-  const sin = { cuerpo: 'no aparece', manos: 'sostienen el frasco', rostro: 'no aparece', cabello: 'no aparece', entorno: 'fondo quieto' }
-  const con = { cuerpo: 'torso erguido', manos: 'sube la mano', rostro: 'sonríe', cabello: 'fijo', entorno: 'quieto' }
+  const sin = { cuerpo: 'no aparece', manos: 'sostienen el frasco', rostro: 'no aparece', cabello: 'no aparece', entorno: 'fondo quieto', posicion: 'centrada en el cuadro' }
+  const con = { cuerpo: 'torso erguido', manos: 'sube la mano', rostro: 'sonríe', cabello: 'fijo', entorno: 'quieto', posicion: 'centrada en el cuadro' }
 
   // ⚠️ EL CASO QUE LO MOTIVÓ, medido sobre una sesión real: el forense escribe la acción
   // en telegrama y SIN SUJETO, así que buscar "mujer" en la prosa da false para un plano

@@ -114,6 +114,21 @@ export const MicroSchema = z.object({
   cabello: z.string(),
   /** Qué se mueve DETRÁS: cortinas, ropa, reflejos, gente, nada. */
   entorno: z.string(),
+  /**
+   * ⚠️ DÓNDE CAE CADA COSA EN EL CUADRO — la alternativa REAL a las coordenadas en píxeles.
+   *
+   * El dueño del repo preguntó si servirían unos `x1,y1`. No: `grok-imagine` es un modelo
+   * de difusión de video, no un detector — no los honra, y gastarían caracteres que la
+   * escalera ya se está comiendo. Lo que sí entiende es el vocabulario relativo al
+   * encuadre, que es el que usa cualquier shot list real.
+   *
+   * ⚠️ ESTO EMPEZÓ COMO UN BULLET DENTRO DE LAS REGLAS DE `accion` Y SALIÓ EN 0 DE 4 Y
+   * 0 DE 5 CORTES, en dos sesiones seguidas. Una instrucción sin campo que la haga cumplir
+   * es una sugerencia: el modelo la lee y sigue de largo. Como casilla propia entra en el
+   * `required` del schema, que es exactamente lo que acabó de arreglar `izquierda` y
+   * `derecha` (0/4 → 5/5) sin tocar una palabra del prompt.
+   */
+  posicion: z.string(),
 })
 
 export const CorteSchema = z.object({
@@ -143,7 +158,13 @@ export const CorteSchema = z.object({
   /** Ver `ObjetoEnManoSchema`: la continuidad de props entre cortes, para la fusión. */
   objetoEnMano: ObjetoEnManoSchema.optional(),
   /** Ver `MicroSchema`: el detalle atómico del movimiento. */
-  micro: MicroSchema.optional(),
+  /**
+   * ⚠️ `.nullable().catch(null)` y no `.optional()`, por lo mismo que `objetoEnMano`: un
+   * campo opcional sale del `required` y el modelo puede omitirlo entero. Hoy lo devuelve
+   * 5/5 porque el prompt insiste mucho, pero eso es suerte, no garantía — y si lo omite,
+   * el eje entero desaparece en silencio.
+   */
+  micro: MicroSchema.nullable().catch(null),
 })
 
 /** Una persona con voz propia en el video de referencia. */
@@ -285,7 +306,7 @@ export const MIN_TOMA_SEG = 4
  * Sin `micro` (toda sesión analizada antes de que el campo existiera) se cae al
  * heurístico de siempre, así que ninguna sesión guardada cambia de comportamiento.
  */
-export function corteMuestraPersona(c: { accion: string; micro?: Micro }): boolean {
+export function corteMuestraPersona(c: { accion: string; micro?: Micro | null }): boolean {
   if (!c.micro) return muestraPersona(c.accion)
   const ausente = (x: string) => /^\s*no aparece\s*\.?\s*$/i.test(x)
   // Basta con que UNA de las tres partes del cuerpo esté descrita: un plano de manos
@@ -331,8 +352,8 @@ function unirManos(a: ObjetoEnMano, b: ObjetoEnMano): ObjetoEnMano {
   }
 }
 
-function unirMicro(a?: Micro, b?: Micro): Micro | undefined {
-  if (!a || !b) return a ?? b
+function unirMicro(a?: Micro | null, b?: Micro | null): Micro | null {
+  if (!a || !b) return a ?? b ?? null
   const par = (x: string, y: string) => {
     const [i, j] = [x.trim(), y.trim()]
     if (!i) return j
@@ -345,6 +366,7 @@ function unirMicro(a?: Micro, b?: Micro): Micro | undefined {
     rostro: par(a.rostro, b.rostro),
     cabello: par(a.cabello, b.cabello),
     entorno: par(a.entorno, b.entorno),
+    posicion: par(a.posicion, b.posicion),
   }
 }
 
@@ -860,10 +882,6 @@ export function buildForensicInstruction(): string {
     '    cuello, centrado frente al pecho);',
     '  - dónde se aplica o se toca: qué zona concreta, con qué dedos, en qué dirección',
     '    (círculos, toques, deslizamiento hacia arriba);',
-    '  - DÓNDE cae cada cosa EN EL CUADRO, y por dónde entra y sale. Usa referencias del',
-    '    encuadre, no medidas: "tercio izquierdo", "centrado a la altura del mentón",',
-    '    "entra por abajo a la derecha", "sale por el borde superior". Es lo que hace que',
-    '    el gesto se reproduzca en el mismo sitio y no en cualquier parte del cuadro.',
     '  - qué hace la mano libre mientras tanto;',
     '  - hacia dónde mira: a la cámara, al producto, fuera de cuadro;',
     '  - qué expresión tiene y en qué posición empieza y termina el corte — el spec pide',
@@ -951,6 +969,11 @@ export function buildForensicInstruction(): string {
     '      (articulación marcada, labios apenas separados, sonríe mientras habla…).',
     '    `cabello`: si se mueve con la cabeza, si cae sobre la cara, si está fijo.',
     '    `entorno`: qué se mueve DETRÁS — cortinas, ropa colgada, reflejos, gente, hojas.',
+    '    `posicion`: DÓNDE cae cada cosa EN EL CUADRO y por dónde entra y sale. Referencias',
+    '      del encuadre, nunca medidas ni píxeles: "persona centrada, algo desplazada a la',
+    '      izquierda", "frasco en el tercio derecho a la altura del pecho", "la mano entra',
+    '      por el borde inferior", "el producto sale por arriba". Es lo que hace que el',
+    '      gesto se reproduzca EN EL MISMO SITIO del cuadro y no en cualquier parte.',
     '',
     '  ⚠️ LA QUIETUD ES UNA OBSERVACIÓN, NO UNA CASILLA VACÍA. Un cuerpo que casi no se',
     '  mueve es un dato tan renderizable como uno que se mueve mucho: "torso casi inmóvil,',

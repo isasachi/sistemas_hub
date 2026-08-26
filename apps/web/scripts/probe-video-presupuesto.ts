@@ -35,6 +35,7 @@ const MICRO_TIPO = {
   rostro: 'sonrisa comercial leve, boca abierta, mirada al producto y a cámara.',
   cabello: 'fijo sin movimiento.',
   entorno: 'fondo quieto, luz natural estable.',
+  posicion: 'persona centrada, frasco en tercio derecho a la altura del pecho.',
 }
 
 const db = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)

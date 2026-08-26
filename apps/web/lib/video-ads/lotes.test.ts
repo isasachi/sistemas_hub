@@ -769,3 +769,18 @@ describe('buildLotePrompt — las referencias no son tomas', () => {
     expect(p).toMatch(/floating cut-out/)
   })
 })
+
+describe('buildLotePrompt — la puesta en cuadro', () => {
+  // ⚠️ Como bullet dentro de las reglas de `accion` salió en 0/4 y 0/5 cortes, en dos
+  // sesiones seguidas. Como casilla propia entra en el `required` del schema — lo mismo
+  // que llevó `izquierda`/`derecha` de 0/4 a 5/5 sin tocar el prompt.
+  it('emite dónde cae cada cosa en el cuadro', () => {
+    const micro = {
+      cuerpo: 'torso quieto', manos: 'sube la mano', rostro: 'sonríe', cabello: 'fijo',
+      entorno: 'fondo quieto', posicion: 'persona centrada, frasco en el tercio derecho',
+    }
+    const lote = groupIntoLotes([{ ...toma(1, 6, 'Hola.'), tiempoOriginal: 't1' }])[0]
+    const p = buildLotePrompt({ lote, ...ARGS, cortes: [{ tiempo: 't1', camara: 'Primer plano', micro }] })
+    expect(p).toContain('framing persona centrada, frasco en el tercio derecho')
+  })
+})
