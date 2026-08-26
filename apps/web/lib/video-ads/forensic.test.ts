@@ -950,3 +950,28 @@ describe('reconciliar + reparar: el b-roll sobrevive a las dos pasadas', () => {
     }
   })
 })
+
+describe('buildForensicInstruction — la escala de encuadre vive donde se declara el campo', () => {
+  const p = buildForensicInstruction()
+
+  // ⚠️ Estaba como bloque FLOTANTE antes de la sección de cortes, y la definición del campo
+  // decía "ver la escala de abajo" apuntando hacia arriba. Medido en la sesión siguiente:
+  // el modelo siguió devolviendo la etiqueta ("Plano medio, frontal, fija") en vez del
+  // punto de corte. La lección de esta tanda es que la instrucción tiene que vivir donde se
+  // declara el campo — es lo que funcionó con `micro.manos`.
+  it('la escala aparece DESPUÉS de nombrar el campo, no antes', () => {
+    const campo = p.indexOf('`camara`, que se declara así')
+    const escala = p.indexOf('EL ENCUADRE SE DECLARA POR DÓNDE CORTA')
+    expect(campo).toBeGreaterThan(0)
+    expect(escala).toBeGreaterThan(campo)
+  })
+
+  it('no quedan referencias colgantes a una escala que no está', () => {
+    expect(p).not.toContain('ver la escala de abajo')
+  })
+
+  it('da la escala completa por punto de corte', () => {
+    for (const t of ['hombros', 'pecho', 'esternón', 'cintura', 'muslos', 'cuerpo entero'])
+      expect(p).toContain(t)
+  })
+})
