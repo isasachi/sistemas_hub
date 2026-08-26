@@ -254,7 +254,15 @@ Se arregla en dos lados porque uno solo no alcanza. **El prompt** ahora dice que
 
 Ahí está la lección: **el modelo no estaba inventando al azar, estaba completando de memoria**, así que una prohibición de intención no lo detiene — él no cree estar inventando. La regla tuvo que volverse de PROCEDIMIENTO: *búscalo en el texto de la etiqueta que tienes arriba; ¿no está ahí, tal cual? entonces no va*. Y con el criterio explícito de que **no importa si el ingrediente existe de verdad, importa si está en ESTA etiqueta**.
 
-⚠️ **PENDIENTE DE MEDIR:** la versión procedimental no se ha probado contra una corrida real. Las dos anteriores fallaron.
+✅ **La versión procedimental FUNCIONÓ:** la corrida siguiente devolvió *"niacinamida, PHE-Resorcinol y agua termal"* — los tres correctos para ese producto.
+
+⚠️ **PERO ACERTÓ POR MEMORIA, NO COPIANDO, Y ESO DESTAPÓ LA CAUSA RAÍZ.** La `brandingDescription` capturada de esa sesión **no nombraba un solo ingrediente**: decía *"La marca se identifica por el logotipo 'LA ROCHE-POSAY'… El estilo es minimalista, clínico y limpio, típico de productos dermatológicos de alta gama"*. O sea una descripción del ESTILO GRÁFICO, no una transcripción. El modelo no tenía de dónde copiar y volvió a completar de memoria; esta vez le salió bien.
+
+**El prompt del scan de video nunca pidió transcribir la etiqueta.** Decía *"describe the physical object precisely (shape, size in hand, label, colors, visible text)"* — una sola frase genérica para los dos campos. El de ANUNCIOS sí lo pide explícitamente (*"brandingDescription = only the text and graphics actually printed on the product"*), y la diferencia se mide: **anuncios transcribe en 19 de 31 scans y video solo en 10 de 27**, con 8 que devuelven estilo.
+
+Ahora el prompt de video separa los dos campos y exige la transcripción letra por letra —marca, nombre, claims, lista de ingredientes, dosis, volumen— con la advertencia de que **es la ÚNICA fuente que el guión tiene de lo que el producto contiene**. Sin eso, la regla de FASE 3 (*"copia el ingrediente de la etiqueta"*) es inejecutable por construcción.
+
+⚠️ **Sin medir:** el prompt nuevo del scan no se ha probado contra una foto real.
 
 ⚠️ **Y EL VALOR TIENE QUE FUNCIONAR EN SU FRASE, no solo responder a su etiqueta.** *"[aspecto a mejorar]"* con valor *"las manchas de acné"* produjo *"este serum esta cambiando las manchas de acné"*: correcto para la etiqueta del hueco, imposible con el verbo que lo precede. Es el mismo eje que ya cubre el corrector de coherencia —que lee el texto ARMADO— pero acá se pide en la primera pasada, que es más barato que corregirlo después.
 
