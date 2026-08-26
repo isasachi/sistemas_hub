@@ -262,7 +262,9 @@ Ahí está la lección: **el modelo no estaba inventando al azar, estaba complet
 
 Ahora el prompt de video separa los dos campos y exige la transcripción letra por letra —marca, nombre, claims, lista de ingredientes, dosis, volumen— con la advertencia de que **es la ÚNICA fuente que el guión tiene de lo que el producto contiene**. Sin eso, la regla de FASE 3 (*"copia el ingrediente de la etiqueta"*) es inejecutable por construcción.
 
-⚠️ **Sin medir:** el prompt nuevo del scan no se ha probado contra una foto real.
+✅ **VERIFICADO CONTRA UNA FOTO REAL, y cierra la clase entera.** Con el prompt nuevo, la misma foto devolvió: *"LA ROCHE-POSAY LABORATOIRE DERMATOLOGIQUE PURE NIACINAMIDE 10 SERUM CONCENTRADO ANTIMANCHAS REPARA. ILUMINA NIACINAMIDA PURA. PHE-RESORCINOL CON AGUA TERMAL DE LA ROCHE-POSAY"* — una transcripción, contra el *"El estilo es minimalista, clínico y limpio"* de antes.
+
+Y el guión que salió de ahí: *"contiene niacinamida pura, phe-resorcinol y agua termal"*, los tres **copiados** de la etiqueta y no completados de memoria. El nombre comercial también sale completo (*"Pure Niacinamide 10"*, antes *"Pure Niacinamide"*) y hasta el claim impreso llega al copy (*"Su concentrado antimanchas es para…"*). El ingrediente inventado no vuelve porque ahora hay de dónde copiar — que es lo que la regla de FASE 3 pedía desde el principio.
 
 ⚠️ **Y EL VALOR TIENE QUE FUNCIONAR EN SU FRASE, no solo responder a su etiqueta.** *"[aspecto a mejorar]"* con valor *"las manchas de acné"* produjo *"este serum esta cambiando las manchas de acné"*: correcto para la etiqueta del hueco, imposible con el verbo que lo precede. Es el mismo eje que ya cubre el corrector de coherencia —que lee el texto ARMADO— pero acá se pide en la primera pasada, que es más barato que corregirlo después.
 
