@@ -406,6 +406,10 @@ Cuatro condiciones, todas COMPARACIONES y no criterios — es la "matemática" q
 
 ⚠️ **COORDENADAS EN PÍXELES: NO — Y EL VOCABULARIO QUE LAS REEMPLAZA NECESITÓ SU PROPIA CASILLA.** El dueño del repo preguntó si servirían unos `x1,y1`. `grok-imagine` es un modelo de difusión de video, no un detector: no los honra y gastarían caracteres que la escalera ya se está comiendo. Lo que **sí** entiende es el vocabulario relativo al encuadre — *"tercio derecho a la altura del pecho"*, *"entra por el borde inferior"*, *"sale por arriba"*.
 
+⚠️ **Y EL `.catch(null)` VA EN CADA CASILLA, NUNCA EN EL OBJETO — la diferencia costó una corrida entera.** Al agregar `posicion` se puso `micro: MicroSchema.nullable().catch(null)` "por consistencia" con `objetoEnMano`. Efecto medido en vivo: el modelo llenó `objetoEnMano` **5/5** y `micro` volvió **`null` en los 5 cortes**. La causa es que `.catch` sobre el OBJETO convierte cualquier casilla omitida en la pérdida de las SEIS: falla el parse del objeto entero y el catch devuelve null. O sea que el detalle atómico que el modelo SÍ había producido se tiró en silencio — el peor modo de fallo posible, porque destruye dato bueno y no reporta nada.
+
+Con el `.catch` por casilla, cada una sigue en el `required` (el modelo debe responderlas) y una que falte queda en `null` sin arrastrar a las otras cinco; el objeto vuelve a `.optional()`, que es como venía funcionando 5/5. Con test que fija las dos mitades.
+
 ⚠️ **Pero puesto como un bullet dentro de las reglas de `accion` salió en 0 de 4 y 0 de 5 cortes, en dos sesiones seguidas.** Una instrucción sin campo que la haga cumplir es una sugerencia: el modelo la lee y sigue de largo. `Micro.posicion` es la sexta casilla y entra en el `required` del schema — exactamente lo que llevó a `izquierda`/`derecha` de 0/4 a **5/5** sin tocar una palabra del prompt. De paso, `micro` entero pasó de `.optional()` a `.nullable().catch(null)`: hoy vuelve 5/5 porque el prompt insiste mucho, pero eso es suerte y no garantía.
 
 Costo medido de la casilla: de 85/89 lotes con el detalle completo a **79/94**, 15 recortados y ninguno sin emitir.

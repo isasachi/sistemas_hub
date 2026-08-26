@@ -105,15 +105,15 @@ export const ObjetoEnManoSchema = z.object({
  */
 export const MicroSchema = z.object({
   /** Balanceo, peso, torsión, respiración. La rigidez SE DECLARA. */
-  cuerpo: z.string(),
+  cuerpo: z.string().nullable().catch(null),
   /** Vaivén, gesto que acompaña al habla, qué hacen cuando no hacen nada. */
-  manos: z.string(),
+  manos: z.string().nullable().catch(null),
   /** Cejas, párpados, mirada, y cuánto se articula la boca al hablar. */
-  rostro: z.string(),
+  rostro: z.string().nullable().catch(null),
   /** Si se mueve con la cabeza, si cae sobre la cara, si está fijo. */
-  cabello: z.string(),
+  cabello: z.string().nullable().catch(null),
   /** Qué se mueve DETRÁS: cortinas, ropa, reflejos, gente, nada. */
-  entorno: z.string(),
+  entorno: z.string().nullable().catch(null),
   /**
    * ⚠️ DÓNDE CAE CADA COSA EN EL CUADRO — la alternativa REAL a las coordenadas en píxeles.
    *
@@ -128,7 +128,7 @@ export const MicroSchema = z.object({
    * `required` del schema, que es exactamente lo que acabó de arreglar `izquierda` y
    * `derecha` (0/4 → 5/5) sin tocar una palabra del prompt.
    */
-  posicion: z.string(),
+  posicion: z.string().nullable().catch(null),
 })
 
 export const CorteSchema = z.object({
@@ -159,12 +159,18 @@ export const CorteSchema = z.object({
   objetoEnMano: ObjetoEnManoSchema.optional(),
   /** Ver `MicroSchema`: el detalle atómico del movimiento. */
   /**
-   * ⚠️ `.nullable().catch(null)` y no `.optional()`, por lo mismo que `objetoEnMano`: un
-   * campo opcional sale del `required` y el modelo puede omitirlo entero. Hoy lo devuelve
-   * 5/5 porque el prompt insiste mucho, pero eso es suerte, no garantía — y si lo omite,
-   * el eje entero desaparece en silencio.
+   * ⚠️ EL `.catch(null)` VA EN CADA CASILLA, NUNCA EN EL OBJETO — y la diferencia costó
+   * una corrida entera. Puesto sobre `micro`, cualquier casilla que el modelo omitiera
+   * hacía fallar el parse del objeto y `.catch` devolvía `null`: **se perdían las seis**.
+   * Medido en vivo al agregar `posicion` — el modelo llenó `objetoEnMano` 5/5 y `micro`
+   * volvió `null` en los 5 cortes, o sea el detalle atómico que SÍ había producido se tiró
+   * en silencio. Es el peor modo de fallo posible: destruye dato bueno y no reporta nada.
+   *
+   * Con el `.catch` por casilla, cada una sigue en el `required` (el modelo debe
+   * responderlas) y una que falte queda en `null` sin arrastrar a las otras cinco.
+   * El objeto vuelve a `.optional()`, que es como venía funcionando 5/5.
    */
-  micro: MicroSchema.nullable().catch(null),
+  micro: MicroSchema.optional(),
 })
 
 /** Una persona con voz propia en el video de referencia. */
@@ -308,7 +314,7 @@ export const MIN_TOMA_SEG = 4
  */
 export function corteMuestraPersona(c: { accion: string; micro?: Micro | null }): boolean {
   if (!c.micro) return muestraPersona(c.accion)
-  const ausente = (x: string) => /^\s*no aparece\s*\.?\s*$/i.test(x)
+  const ausente = (x: string | null) => !x || /^\s*no aparece\s*\.?\s*$/i.test(x)
   // Basta con que UNA de las tres partes del cuerpo esté descrita: un plano de manos
   // sigue siendo un plano de persona a efectos de continuidad y de fotograma.
   return !(ausente(c.micro.cuerpo) && ausente(c.micro.rostro) && ausente(c.micro.cabello))
@@ -352,11 +358,11 @@ function unirManos(a: ObjetoEnMano, b: ObjetoEnMano): ObjetoEnMano {
   }
 }
 
-function unirMicro(a?: Micro | null, b?: Micro | null): Micro | null {
-  if (!a || !b) return a ?? b ?? null
-  const par = (x: string, y: string) => {
-    const [i, j] = [x.trim(), y.trim()]
-    if (!i) return j
+function unirMicro(a?: Micro | null, b?: Micro | null): Micro | undefined {
+  if (!a || !b) return a ?? b ?? undefined
+  const par = (x: string | null, y: string | null) => {
+    const [i, j] = [(x ?? '').trim(), (y ?? '').trim()]
+    if (!i) return j || null
     if (!j || i === j) return i
     return `${i}; después ${j}`
   }

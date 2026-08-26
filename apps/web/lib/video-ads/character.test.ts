@@ -185,7 +185,7 @@ describe('buildIdentityInstruction — producto que se lleva puesto', () => {
     duracionTotalSeg: 28, caracteresGuion: 385, guionOriginal: 'x',
     sujeto: 'Mujer joven de cabello oscuro', vestuario: 'Camiseta rosa de manga larga',
     producto: 'Camisa', fondo: 'Pared blanca', elementosGraficos: 'Subtítulos',
-    cortes: [{ n: 1, tiempo: '00:00 - 00:01', duracionSeg: 1, accion: 'a', camara: 'Plano medio', dialogo: 'd', textoOverlay: 'No aparece', transicion: 'corte', micro: null }],
+    cortes: [{ n: 1, tiempo: '00:00 - 00:01', duracionSeg: 1, accion: 'a', camara: 'Plano medio', dialogo: 'd', textoOverlay: 'No aparece', transicion: 'corte' }],
     tomas: [{ n: 1, encuadre: 'Plano medio', posicion: 'De pie', accionFisica: 'a', objeto: 'camisa', dialogo: 'd', duracionSeg: 1 }],
     edicion: { sincronizacion: 'x', textoOverlay: 'x', escalaZoom: 'x', cortes: 'x', ritmo: 'x', corteFinal: 'x' },
     resumenParaUsuario: 'x',

@@ -32,8 +32,9 @@ async function main() {
     console.log(`   manos: ${c.objetoEnMano ? `${c.objetoEnMano.inicio} → ${c.objetoEnMano.fin}` : '⚠️ SIN CAMPO'}`)
     if (!c.micro) { console.log('   micro: ⚠️ SIN CAMPO'); continue }
     for (const [k, v] of Object.entries(c.micro)) {
-      largos.push(v.length)
-      console.log(`   ${k.padEnd(8)}(${String(v.length).padStart(3)}) ${v}`)
+      const t = v ?? '⚠️ VACÍA'
+      largos.push(t.length)
+      console.log(`   ${k.padEnd(8)}(${String(t.length).padStart(3)}) ${t}`)
     }
   }
 
