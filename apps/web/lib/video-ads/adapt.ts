@@ -337,10 +337,22 @@ export function buildAdaptInstruction(
     // el modelo intentó reproducir de memoria un componente de la etiqueta
     // (PHE-RESORCINOL) y lo destrozó. Un ingrediente es una afirmación verificable sobre
     // la fórmula: la escalera de deducción del punto 3 NO aplica.
-    '  - ⚠️ UN INGREDIENTE O COMPONENTE NO SE DEDUCE NI SE APROXIMA. Se copia de la',
-    '    etiqueta tal como está escrito, traducido si hace falta. Si no lo puedes leer con',
-    '    certeza, usa OTRO que sí esté en la etiqueta, o deja el hueco vacío. Nunca',
-    '    escribas un nombre "parecido": afirma una fórmula que el producto no tiene.',
+    '  - ⚠️ UN INGREDIENTE O COMPONENTE SE COPIA DE LA ETIQUETA, LETRA POR LETRA.',
+    '    No se deduce, no se aproxima y no se completa con lo que sabes de la categoría.',
+    '    Es una afirmación verificable sobre la fórmula: si el envase no lo dice, el',
+    '    producto no lo tiene.',
+    '    Antes de escribir un ingrediente, búscalo en el texto de la etiqueta que tienes',
+    '    arriba. ¿No está ahí, tal cual? Entonces NO va. Usa otro que sí esté, o deja el',
+    '    hueco vacío — un hueco es un minuto de trabajo para el usuario; un ingrediente',
+    '    falso es una devolución.',
+    // ⚠️ MEDIDO EN DOS CORRIDAS DE LA MISMA SESIÓN. Primero devolvió "hepéres", que no
+    // es una palabra. Con la regla puesta en una versión más suave, devolvió "HEPES" —
+    // un químico REAL que tampoco está en esa etiqueta. O sea el modelo no estaba
+    // inventando al azar: estaba completando de memoria, y prohibir "inventar" no lo
+    // detiene porque él no cree estar inventando. Por eso la regla ahora es de
+    // PROCEDIMIENTO (búscalo en la etiqueta) y no de intención (no inventes).
+    '    Un nombre que "suena" a ingrediente de esta categoría es la trampa: no importa si',
+    '    existe de verdad, importa si está en ESTA etiqueta.',
     // ⚠️ MEDIDO: "[aspecto a mejorar]" con valor "las manchas de acné" produjo "este serum
     // esta cambiando las manchas de acné" — el valor es correcto para su etiqueta y no
     // cuadra con el verbo que lo precede.

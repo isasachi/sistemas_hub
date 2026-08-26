@@ -193,7 +193,7 @@ export async function POST(
               return t
             }
             const v = acceptRewrite({ plantilla, piso: t.locucion, propuesta, fuentes })
-            return v.ok ? { ...t, locucion: quitarRotuloDeToma(propuesta.trim()) } : t
+            return v.ok ? { ...t, locucion: propuesta.trim() } : t
           }),
         }
         relleno = { ...relleno, guionFinal: relleno.tomas.map((t) => t.locucion).join(' ') }
@@ -219,9 +219,10 @@ export async function POST(
           console.warn(`[video-ads/adapt-script] sesión ${id}: ajuste ignorado, hueco "${a.idHueco}" no está en la toma ${a.n}`)
           continue
         }
+        const propuestaAjuste = quitarRotuloDeToma(a.locucion.trim())
         const veredicto = acceptScaffoldFix({
           original: toma.locucion,
-          propuesta: a.locucion,
+          propuesta: propuestaAjuste,
           // El valor del hueco NOMBRADO se excluye a propósito: el ajuste existe porque
           // ese valor no cabe en la frase, así que exigir que sobreviva bloquearía el
           // único caso para el que la excepción se abrió. Los demás valores de la toma
@@ -239,7 +240,7 @@ export async function POST(
         // Se guarda el texto de ANTES: la justificación de permitir esto es que el
         // usuario pueda ver qué se movió, no que se le avise de que algo se movió.
         andamiaje.push({ n: a.n, antes: toma.locucion, motivo: a.motivo })
-        toma.locucion = a.locucion.trim()
+        toma.locucion = propuestaAjuste
         console.info(`[video-ads/adapt-script] sesión ${id}: andamiaje de la toma ${a.n} ajustado (${a.motivo})`)
       }
       if (andamiaje.length) relleno = { ...relleno, guionFinal: relleno.tomas.map((t) => t.locucion).join(' ') }
@@ -265,7 +266,12 @@ export async function POST(
         accionVisual: porToma.get(t.n)?.trim() || t.accionVisual,
         personaje: session.character_desc ?? '',
         producto: session.product_scan?.productDescription ?? session.product_name ?? '',
-        locucion: t.locucion,
+        // ⚠️ EL SANEO VA ACÁ, EN EL PUNTO ÚNICO. Tres caminos distintos escriben
+        // `locucion` —la reescritura aceptada, la re-aplicación tras el corrector de
+        // coherencia y el ajuste de andamiaje— y parchear cada uno es exactamente cómo se
+        // escapó el rótulo: el tercero no estaba cubierto y "Toma 1:" llegó al guión
+        // guardado. Un rótulo en `locucion` se PRONUNCIA (ver `quitarRotuloDeToma`).
+        locucion: quitarRotuloDeToma(t.locucion),
       })),
       // Se derivan del texto, no se le preguntan al modelo: `fillTemplate` deja un
       // marcador por cada hueco que quedó sin valor.
