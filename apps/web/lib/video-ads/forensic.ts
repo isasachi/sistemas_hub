@@ -48,6 +48,26 @@ export const HablanteSchema = z.object({
 export const ObjetoEnManoSchema = z.object({
   inicio: z.string(),
   fin: z.string(),
+  /**
+   * ⚠️ EL ESTADO POR MANO Y EN ORDEN — un `{inicio, fin}` no alcanza, y está medido.
+   *
+   * El dueño del repo lo describió con el caso exacto: *"la mujer tiene el producto en la
+   * mano izquierda y mueve la mano derecha para destaparlo y aplicárselo, luego lo tapa,
+   * sigue sosteniendo el producto con la mano izquierda"*. Con un solo string para las dos
+   * manos y solo dos instantes, eso se aplasta a `frasco → frasco`: se pierde que la
+   * izquierda no suelta nunca, que la derecha hace tres cosas distintas, y sobre todo que
+   * **la tapa sale y vuelve**. De ahí el fallo que reportó: *"en el lote 1 la tapa
+   * reaparece mágicamente en el frasco"*.
+   *
+   * `izquierda` y `derecha` son la secuencia de esa mano dentro del corte. `accesorios` es
+   * el estado de las piezas que se separan del producto —tapa, gotero, cuchara— que es la
+   * clase de objeto que desaparece sin que nadie lo note.
+   *
+   * Opcionales: el forense es el paso CARO y ninguna sesión guardada los trae.
+   */
+  izquierda: z.string().optional(),
+  derecha: z.string().optional(),
+  accesorios: z.string().optional(),
 })
 
 /**
@@ -124,6 +144,7 @@ export const PersonajeForenseSchema = z.object({
 })
 export type Corte = z.infer<typeof CorteSchema>
 export type Micro = z.infer<typeof MicroSchema>
+export type ObjetoEnMano = z.infer<typeof ObjetoEnManoSchema>
 
 export const TomaSchema = z.object({
   n: z.number(),
@@ -282,6 +303,23 @@ export function muestraPersona(accion: string): boolean {
  * describir solo la mitad deja al generador inventando la otra — el mismo argumento por
  * el que `accion` también se concatena.
  */
+/** Dos cortes que se vuelven uno: la secuencia de cada mano se ENCADENA, igual que la
+ *  acción. Quedarse con la del corte dominante perdería la mitad del recorrido. */
+function unirManos(a: ObjetoEnMano, b: ObjetoEnMano): ObjetoEnMano {
+  const enc = (x?: string, y?: string) => {
+    const [i, j] = [(x ?? '').trim(), (y ?? '').trim()]
+    if (!i || !j) return i || j || undefined
+    return i === j ? i : `${i} → ${j}`
+  }
+  return {
+    inicio: a.inicio,
+    fin: b.fin,
+    izquierda: enc(a.izquierda, b.izquierda),
+    derecha: enc(a.derecha, b.derecha),
+    accesorios: enc(a.accesorios, b.accesorios),
+  }
+}
+
 function unirMicro(a?: Micro, b?: Micro): Micro | undefined {
   if (!a || !b) return a ?? b
   const par = (x: string, y: string) => {
@@ -340,8 +378,22 @@ export function puedenUnirse(a: Corte, b: Corte): boolean {
   if (normObj(a.camara) !== normObj(b.camara)) return false
   if (!!a.vozEnOff !== !!b.vozEnOff) return false
   if (!a.objetoEnMano || !b.objetoEnMano) return false
-  return normObj(a.objetoEnMano.fin) === normObj(b.objetoEnMano.inicio)
+  if (normObj(a.objetoEnMano.fin) !== normObj(b.objetoEnMano.inicio)) return false
+  // ⚠️ Y los ACCESORIOS: la tapa que sale y vuelve es lo que hace que un objeto
+  // reaparezca en el aire dentro de un clip continuo. Si el corte declara en qué estado
+  // termina y el siguiente en cuál empieza, tienen que coincidir; si no lo declaran, no
+  // bloquea (fail-open acá a propósito: `fin`/`inicio` ya cubren el caso grueso).
+  const finAcc = ultimoTramo(a.objetoEnMano.accesorios)
+  const iniAcc = primerTramo(b.objetoEnMano.accesorios)
+  if (finAcc && iniAcc && finAcc !== iniAcc) return false
+  return true
 }
+
+/** El último y el primer estado de una secuencia "a → b → c" (o "a, luego b"). */
+const tramos = (x?: string) =>
+  (x ?? '').split(/→|->|,\s*(?:luego|despu[eé]s)\s*|;/).map((t) => normObj(t)).filter(Boolean)
+const ultimoTramo = (x?: string) => tramos(x).at(-1) ?? ''
+const primerTramo = (x?: string) => tramos(x)[0] ?? ''
 
 /**
  * Une cortes CONSECUTIVOS en tomas largas mientras la continuidad lo permita.
@@ -407,7 +459,7 @@ export function unirTomasContinuas(
           ? [...(a.hablantes ?? []), ...(b.hablantes ?? [])]
           : undefined,
         textoOverlay: [a.textoOverlay, b.textoOverlay].find((x) => x && x !== 'No aparece') ?? a.textoOverlay,
-        objetoEnMano: { inicio: a.objetoEnMano!.inicio, fin: b.objetoEnMano!.fin },
+        objetoEnMano: unirManos(a.objetoEnMano!, b.objetoEnMano!),
         micro: unirMicro(a.micro, b.micro),
       }
       origen.set(tiempo, (origen.get(a.tiempo) ?? 1) + (origen.get(b.tiempo) ?? 1))
@@ -487,6 +539,16 @@ export interface Fusion {
 export function mergeMicroCortes(
   report: ForensicReport,
   minSeg = MIN_TOMA_SEG,
+  /**
+   * ⚠️ TOPE: la fusión no puede fabricar una toma que el reparto tenga que volver a
+   * partir. `MIN_TOMA_SEG` se calibró contra un cap de clip de 30 s; con 15 s, fusionar
+   * tres cortes en una toma de 17,4 s es pura pérdida — `splitLongToma` la vuelve a
+   * cortar enseguida, y en el camino ya se descartó el encuadre de los cortes absorbidos.
+   * Medido en la sesión que lo destapó: exactamente ese caso.
+   *
+   * `Infinity` por defecto para no cambiar el comportamiento de ningún caller existente.
+   */
+  maxSeg = Infinity,
 ): { report: ForensicReport; fusiones: Fusion[] } {
   const cortes = report.cortes ?? []
   // Con un solo corte no hay vecino: un video sin cortes se queda como está.
@@ -508,6 +570,8 @@ export function mergeMicroCortes(
   const clase = (k: number) => corteMuestraPersona(actual[k])
   const compatible = (k: number, v: number) =>
     v >= 0 && v < actual.length && clase(k) === clase(v)
+  const cabe = (k: number, v: number) =>
+    compatible(k, v) && actual[k].duracionSeg + actual[v].duracionSeg <= maxSeg
 
   while (actual.length > 1) {
     // El corte más corto que todavía no llega al piso Y TIENE con quién fusionarse. Un
@@ -517,13 +581,15 @@ export function mergeMicroCortes(
     for (let k = 0; k < actual.length; k++) {
       if (actual[k].duracionSeg >= minSeg) continue
       if (!compatible(k, k - 1) && !compatible(k, k + 1)) continue
+      // Un vecino con el que la suma se pasaría del tope no cuenta como vecino.
+      if (!cabe(k, k - 1) && !cabe(k, k + 1)) continue
       if (i < 0 || actual[k].duracionSeg < actual[i].duracionSeg) i = k
     }
     if (i < 0) break
 
     // Vecino más corto de los COMPATIBLES.
-    const izq = compatible(i, i - 1) ? actual[i - 1] : null
-    const der = compatible(i, i + 1) ? actual[i + 1] : null
+    const izq = cabe(i, i - 1) ? actual[i - 1] : null
+    const der = cabe(i, i + 1) ? actual[i + 1] : null
     const usarIzq = izq && (!der || izq.duracionSeg <= der.duracionSeg)
     const j = usarIzq ? i - 1 : i + 1
     const [a, b] = i < j ? [actual[i], actual[j]] : [actual[j], actual[i]]
@@ -547,7 +613,7 @@ export function mergeMicroCortes(
       // La toma resultante empieza donde empezaba la primera y termina donde terminaba
       // la segunda. Sin esto la continuidad de props se perdería justo al fusionar.
       objetoEnMano: a.objetoEnMano && b.objetoEnMano
-        ? { inicio: a.objetoEnMano.inicio, fin: b.objetoEnMano.fin }
+        ? unirManos(a.objetoEnMano, b.objetoEnMano)
         : a.objetoEnMano ?? b.objetoEnMano,
       micro: unirMicro(a.micro, b.micro),
     }
@@ -783,6 +849,10 @@ export function buildForensicInstruction(): string {
     '    cuello, centrado frente al pecho);',
     '  - dónde se aplica o se toca: qué zona concreta, con qué dedos, en qué dirección',
     '    (círculos, toques, deslizamiento hacia arriba);',
+    '  - DÓNDE cae cada cosa EN EL CUADRO, y por dónde entra y sale. Usa referencias del',
+    '    encuadre, no medidas: "tercio izquierdo", "centrado a la altura del mentón",',
+    '    "entra por abajo a la derecha", "sale por el borde superior". Es lo que hace que',
+    '    el gesto se reproduzca en el mismo sitio y no en cualquier parte del cuadro.',
     '  - qué hace la mano libre mientras tanto;',
     '  - hacia dónde mira: a la cámara, al producto, fuera de cuadro;',
     '  - qué expresión tiene y en qué posición empieza y termina el corte — el spec pide',
@@ -841,9 +911,19 @@ export function buildForensicInstruction(): string {
     '  ⚠️ El equipo de grabación NO va acá tampoco (micrófono, teléfono, trípode): si la',
     '  mano sostiene equipo, para este campo esa mano está vacía.',
     '',
-    '⚠️ QUÉ HAY EN LAS MANOS: `objetoEnMano` = { inicio, fin }.',
-    '  Qué sostiene la persona al EMPEZAR el corte y qué sostiene al TERMINARLO. Manos',
+    '⚠️ QUÉ HAY EN LAS MANOS: `objetoEnMano`.',
+    '  `inicio` / `fin`: qué sostiene al EMPEZAR el corte y qué al TERMINARLO. Manos',
     '  vacías se escribe "nada". Si no se ven las manos, "fuera de cuadro".',
+    '  `izquierda` / `derecha`: qué hace CADA mano, en orden, con flechas. Casi nunca hacen',
+    '    lo mismo: una suele sostener mientras la otra manipula.',
+    '    Ej: izquierda "sostiene frasco → sostiene frasco → sostiene frasco"',
+    '        derecha "destapa el frasco → aplica producto en mejilla → vuelve a tapar".',
+    '  `accesorios`: el estado de las piezas que SE SEPARAN del producto — tapa, gotero,',
+    '    cuchara, aplicador — también con flechas. Ej: "tapa puesta → tapa fuera, en la',
+    '    mano derecha → tapa puesta".',
+    '    ⚠️ Es el campo que evita el fallo más visible de todos: si no dices que la tapa',
+    '    salió y volvió, el video generado la hace REAPARECER en el frasco de la nada.',
+    '    Si el producto no tiene piezas separables, escribe "sin accesorios".',
     '  Nómbralo igual siempre dentro del mismo video: el frasco es "frasco" en los seis',
     '  cortes, no "el producto" en uno y "el envase" en otro — se compara en código.',
     '  ⚠️ Para qué sirve: con esto el sistema decide si dos cortes se pueden unir en una',

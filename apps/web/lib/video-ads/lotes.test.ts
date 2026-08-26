@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { groupIntoLotes, LOTE_MAX_SEC, LOTE_MAX_CHARS, LoteSchema, buildLotePrompt, camaraDeLote } from './lotes'
+import { groupIntoLotes, LOTE_MAX_SEC, LOTE_MAX_CHARS, LoteSchema, buildLotePrompt, camaraDeLote, repartirAccion } from './lotes'
 import { clampDuration } from './kie'
 import type { TomaFinal } from './adapt'
 import { KIE_PROMPT_MAX } from './kie'
@@ -691,5 +691,81 @@ describe('buildLotePrompt — voz en off', () => {
     const l = groupIntoLotes([conT(1, 't1', 'Hola.')])[0]
     expect(buildLotePrompt({ lote: l, ...ARGS, vozEnOff: new Set() }))
       .toBe(buildLotePrompt({ lote: l, ...ARGS }))
+  })
+})
+
+describe('repartirAccion', () => {
+  const a = 'Destapa el frasco Luego, aplica en la mejilla Luego, vuelve a taparlo'
+
+  // ⚠️ EL DEFECTO QUE MOTIVÓ ESTO: `splitLongToma` copiaba la coreografía ENTERA a cada
+  // fragmento, o sea le pedía al modelo los 17 s de movimiento en 3 s y otra vez en 8,7 s.
+  // Medido sobre la base: 21 de 119 tomas.
+  it('nunca deja un fragmento vacío teniendo tramos que darle', () => {
+    for (const durs of [[9, 1], [1, 9], [5, 5, 5], [10, 1, 1]]) {
+      const out = repartirAccion(a, durs)
+      if (durs.length <= 3) for (const x of out) expect(x).not.toBe('')
+      expect(out.join(' ').split('Luego,').length + out.filter(Boolean).length - 1).toBeGreaterThanOrEqual(3)
+    }
+  })
+
+  it('reparte los tramos entre los fragmentos, nunca los duplica', () => {
+    const out = repartirAccion(a, [5, 5, 5])
+    expect(out).toEqual(['Destapa el frasco', 'aplica en la mejilla', 'vuelve a taparlo'])
+    expect(new Set(out).size).toBe(3)
+  })
+
+  it('reparte proporcionalmente a la duración', () => {
+    const [uno, dos] = repartirAccion(a, [9, 1])
+    expect(uno).toContain('Destapa el frasco')
+    expect(uno).toContain('aplica en la mejilla')
+    expect(dos).toBe('vuelve a taparlo')
+  })
+
+  // Sin separador no hay tramos que repartir: la acción va al PRIMERO y los demás quedan
+  // sin línea. Una acción vacía omite una línea del prompt; una duplicada le pide al
+  // modelo hacer dos veces lo mismo en la mitad del tiempo.
+  it('sin separador la acción va al primer fragmento y no se copia', () => {
+    expect(repartirAccion('Sostiene el frasco', [5, 5])).toEqual(['Sostiene el frasco', ''])
+  })
+
+  it('un solo fragmento devuelve la acción intacta', () => {
+    expect(repartirAccion(a, [10])).toEqual([a])
+  })
+})
+
+describe('buildLotePrompt — manos y accesorios', () => {
+  const manos = {
+    inicio: 'frasco', fin: 'frasco',
+    izquierda: 'sostiene frasco → sostiene frasco',
+    derecha: 'destapa → aplica en mejilla → vuelve a tapar',
+    accesorios: 'tapa puesta → tapa fuera → tapa puesta',
+  }
+  const lote = groupIntoLotes([{ ...toma(1, 6, 'Hola.'), tiempoOriginal: 't1' }])[0]
+  const p = buildLotePrompt({
+    lote, ...ARGS,
+    cortes: [{ tiempo: 't1', camara: 'Primer plano', objetoEnMano: manos }],
+  })
+
+  // Sin esto el dato se extrae y no lo lee nadie — el defecto de `elementosGraficos`.
+  it('emite el recorrido de cada mano', () => {
+    expect(p).toContain('L: sostiene frasco → sostiene frasco')
+    expect(p).toContain('R: destapa → aplica en mejilla → vuelve a tapar')
+  })
+
+  // "la tapa reaparece mágicamente en el frasco": el modelo no puede conservar el estado
+  // de una pieza que nadie le nombró.
+  it('emite el estado de la tapa', () => {
+    expect(p).toContain('cap/parts: tapa puesta → tapa fuera → tapa puesta')
+    expect(p).toMatch(/parts never appear or vanish on their own/)
+  })
+})
+
+describe('buildLotePrompt — las referencias no son tomas', () => {
+  // Medido en un render real: el producto salió FLOTANDO a pantalla completa. La leyenda
+  // decía qué ES cada imagen y nada sobre cómo puede usarse.
+  it('declara que las imágenes definen apariencia, no una toma a reproducir', () => {
+    const p = buildLotePrompt({ lote: groupIntoLotes([toma(1, 5)])[0], ...ARGS })
+    expect(p).toMatch(/APPEARANCE ONLY/)
+    expect(p).toMatch(/floating cut-out/)
   })
 })

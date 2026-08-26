@@ -69,7 +69,8 @@ export async function POST(
   // evita por no tocar ese campo. Si ya hay guión, la lista de cortes está comprometida.
   let base = session.forensic_analysis
   if (!session.adapted) {
-    const { report: fusionado, fusiones } = mergeMicroCortes(base)
+    // El tope evita fabricar una toma que `splitLongToma` tenga que volver a partir.
+    const { report: fusionado, fusiones } = mergeMicroCortes(base, MIN_TOMA_SEG, LOTE_MAX_SEC)
     if (fusiones.length) {
       console.info(
         `[video-ads/extract-template] sesión ${id}: ${base.cortes.length} cortes → ${fusionado.cortes.length} tras fusionar micro-cortes:`,

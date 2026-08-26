@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import type { TomaFinal } from './adapt'
 import type { MotionProfile, VoiceProfile } from './character'
-import type { Micro } from './forensic'
+import type { Micro, ObjetoEnMano } from './forensic'
 import { CPS_MAX } from './forensic'
 import { KIE_PROMPT_MAX } from './kie'
 import { nicheSpec } from './niches'
@@ -127,6 +127,62 @@ const sanearDuracion = (d: number) => (Number.isFinite(d) && d > 0 ? d : DUR_FAL
  * el ajuste por construcción (`ceil` asegura `dur / minPartes <= LOTE_MAX_SEC`), así
  * que la recursión siempre termina ahí como mucho.
  */
+/**
+ * ⚠️ LA COREOGRAFÍA SE REPARTE ENTRE LOS FRAGMENTOS, NO SE DUPLICA.
+ *
+ * `splitLongToma` partía `locucion` por frases y copiaba `accionVisual` TAL CUAL a cada
+ * fragmento. O sea que una toma fusionada de 17 s partida en dos le pedía al modelo la
+ * coreografía COMPLETA de los 17 s en 3 s, y otra vez en 8,7 s. Es una instrucción
+ * imposible, y lo que el modelo hace con ella es una fracción arbitraria: de ahí el
+ * *"faltan movimientos y gestos"* que reportó el dueño del repo.
+ *
+ * Medido sobre la base: **21 de 119 tomas** llevaban la coreografía duplicada. (Contando
+ * por lote la cifra parece 5 de 85 — pero `splitLongToma` corre ANTES de `groupIntoLotes`,
+ * así que los fragmentos caen en lotes distintos y ahí el conteo por lote no los ve.)
+ *
+ * El separador ` Luego, ` no es una heurística sobre prosa: lo escribe `mergeMicroCortes`
+ * al fusionar, así que cada tramo es EXACTAMENTE un corte del original. Se reparten en
+ * orden y proporcionalmente a la duración de cada fragmento.
+ *
+ * Sin separador (una toma que nunca se fusionó) la acción entera va al PRIMER fragmento y
+ * los demás quedan sin línea de acción. Es peor que repartir y mucho mejor que duplicar:
+ * una acción vacía omite una línea del prompt, una duplicada le pide al modelo hacer dos
+ * veces lo mismo en la mitad del tiempo.
+ */
+export function repartirAccion(accion: string, duraciones: number[]): string[] {
+  const F = duraciones.length
+  if (F <= 1) return [accion]
+  const segs = accion.split(' Luego, ').map((x) => x.trim()).filter(Boolean)
+  if (segs.length <= 1) return duraciones.map((_, i) => (i === 0 ? accion : ''))
+
+  // Cuántos tramos le tocan a cada fragmento, proporcional a su duración y por resto
+  // mayor. ⚠️ Con al menos un tramo por fragmento cuando alcanza: un reparto puramente
+  // posicional deja fragmentos VACÍOS teniendo material que darles (medido con
+  // duraciones 9:1, los tres tramos caían en el primero).
+  const total = duraciones.reduce((a, b) => a + b, 0) || 1
+  const piso = segs.length >= F ? 1 : 0
+  const libres = segs.length - piso * F
+  const exactos = duraciones.map((d) => (libres * d) / total)
+  const cuenta = exactos.map((x) => piso + Math.floor(x))
+  // Los tramos que sobran por el redondeo van a los fragmentos con mayor resto.
+  const sobran = segs.length - cuenta.reduce((a, b) => a + b, 0)
+  exactos
+    .map((x, i) => ({ i, resto: x - Math.floor(x) }))
+    .sort((a, b) => b.resto - a.resto || a.i - b.i)
+    .slice(0, Math.max(0, sobran))
+    .forEach(({ i }) => { cuenta[i]++ })
+
+  const out: string[] = []
+  let j = 0
+  for (let i = 0; i < F; i++) {
+    out.push(segs.slice(j, j + cuenta[i]).join(' Luego, '))
+    j += cuenta[i]
+  }
+  // Lo que quede sin asignar por cualquier desajuste se pega al último: nunca se pierde.
+  if (j < segs.length) out[F - 1] = [out[F - 1], ...segs.slice(j)].filter(Boolean).join(' Luego, ')
+  return out
+}
+
 function splitLongToma(t: TomaFinal): TomaFinal[] {
   const dur = sanearDuracion(t.duracionSeg)
   // SIN r1 acá (fix round 2): esta es la salida de la inmensa mayoría de las tomas —
@@ -145,19 +201,26 @@ function splitLongToma(t: TomaFinal): TomaFinal[] {
     // Sin puntos que aprovechar: reparto uniforme conservando el texto en la primera.
     // `dur > LOTE_MAX_SEC` acá, así que `Math.ceil(dur / LOTE_MAX_SEC)` es siempre >= 2.
     const minPartes = Math.ceil(dur / LOTE_MAX_SEC)
-    return Array.from({ length: minPartes }, (_, i) => ({
+    const duraciones = Array.from({ length: minPartes }, () => r1(dur / minPartes))
+    const acciones = repartirAccion(t.accionVisual, duraciones)
+    return duraciones.map((d, i) => ({
       ...t,
-      duracionSeg: r1(dur / minPartes),
+      duracionSeg: d,
+      accionVisual: acciones[i],
       locucion: i === 0 ? t.locucion : '',
     }))
   }
 
   const totalChars = partes.reduce((n, p) => n + p.length, 0) || 1
+  const duraciones = partes.map((p) => r1((p.length / totalChars) * dur))
+  // La coreografía se REPARTE entre los fragmentos, no se copia a cada uno: ver
+  // `repartirAccion`. Es lo que evita pedirle al modelo los 17 s de movimiento en 3 s.
+  const acciones = repartirAccion(t.accionVisual, duraciones)
   // Reparto proporcional a caracteres — NO es garantía suficiente por sí solo (ver
   // comentario de la función), así que cada fragmento se vuelve a verificar
   // recursivamente antes de aceptarlo.
-  return partes.flatMap((p) =>
-    splitLongToma({ ...t, duracionSeg: r1((p.length / totalChars) * dur), locucion: p }),
+  return partes.flatMap((p, i) =>
+    splitLongToma({ ...t, duracionSeg: duraciones[i], accionVisual: acciones[i], locucion: p }),
   )
 }
 
@@ -446,6 +509,27 @@ function bloqueOverlay(nivel: number): string[] {
  * `cap` lo fija la escalera de degradación: recorta cada campo antes que soltar el
  * bloque entero, porque medio detalle sigue siendo más de lo que había.
  */
+/**
+ * EL RECORRIDO DE CADA MANO Y EL ESTADO DE LOS ACCESORIOS.
+ *
+ * ⚠️ Sin esto, el forense extraía el dato y nadie lo emitía — el defecto que este repo ya
+ * tiene documentado con `elementosGraficos` (generado, persistido y leído por nadie).
+ *
+ * `accesorios` es la línea que evita el fallo más visible: *"en el lote 1 la tapa
+ * reaparece mágicamente en el frasco"*. El modelo no puede conservar el estado de una
+ * pieza que nadie le nombró.
+ */
+function manosDe(m: ObjetoEnMano | undefined, cap: number | null): string {
+  if (!m) return ''
+  const corto = (x: string) => (cap != null && x.length > cap ? `${x.slice(0, cap).trimEnd()}…` : x)
+  const partes = [
+    m.izquierda?.trim() && `L: ${corto(m.izquierda.trim())}`,
+    m.derecha?.trim() && `R: ${corto(m.derecha.trim())}`,
+    m.accesorios?.trim() && `cap/parts: ${corto(m.accesorios.trim())}`,
+  ].filter(Boolean)
+  return partes.length ? `Hands (follow this order exactly; parts never appear or vanish on their own): ${partes.join(' · ')}` : ''
+}
+
 function microDe(m: Micro | undefined, cap: number | null): string {
   if (!m) return ''
   const corto = (x: string) => {
@@ -474,7 +558,7 @@ export function buildLotePrompt(args: {
   movimiento?: MotionProfile | null
   images: LoteImage[]
   /** Los cortes del forense, para poder decir QUÉ plano va con QUÉ toma (ver abajo). */
-  cortes?: { tiempo: string; camara: string; micro?: Micro }[]
+  cortes?: { tiempo: string; camara: string; micro?: Micro; objetoEnMano?: ObjetoEnMano }[]
   /** Nicho de la sesión: en ropa/zapatos el producto se LLEVA PUESTO, y el bloque que
    *  lo describe como "un objeto" contradice al bloque de consistencia. Ver niches.ts. */
   niche?: unknown
@@ -564,6 +648,8 @@ export function buildLotePrompt(args: {
   // El detalle atómico de cada corte, por la MISMA clave que el plano (`tiempoOriginal`,
   // nunca `n`: `groupIntoLotes` renumera después de `splitLongToma`).
   const microPorTiempo = new Map((cortes ?? []).flatMap((c) => (c.micro ? [[c.tiempo, c.micro] as const] : [])))
+  // El recorrido de cada mano y el estado de la tapa, por la misma clave.
+  const manosPorTiempo = new Map((cortes ?? []).flatMap((c) => (c.objetoEnMano ? [[c.tiempo, c.objetoEnMano] as const] : [])))
   const planos = lote.tomas.map((t) => porTiempo.get(t.tiempoOriginal) ?? '')
   const mezclaPlanos = new Set(planos.filter(Boolean)).size >= 2
   const planoPorToma = (i: number) =>
@@ -588,8 +674,16 @@ export function buildLotePrompt(args: {
    * lote. Repetirlos por toma duplicaría contenido y se comería justo el presupuesto que
    * esta función administra.
    */
-  const renderAcciones = (nivel: number, capAccion: number | null) =>
-    lote.tomas
+  // ⚠️ Dentro de UN clip, el detalle atómico no se repite. `microPorTiempo` va por
+  // `tiempoOriginal`, así que los dos fragmentos de una toma partida lo reciben idéntico —
+  // y pedirle al modelo el mismo detalle dos veces en el mismo clip es la versión chica del
+  // bug de la coreografía duplicada. Entre LOTES sí se repite, y debe: cada clip se
+  // renderiza sin memoria del anterior (REGLA DE CONTEXTO ABSOLUTO).
+  const microYaEmitido = new Set<string>()
+
+  const renderAcciones = (nivel: number, capAccion: number | null) => {
+    microYaEmitido.clear()
+    return lote.tomas
       .map((t, i) => {
         const accionVisual =
           capAccion != null && t.accionVisual.length > capAccion
@@ -615,10 +709,20 @@ export function buildLotePrompt(args: {
           // prompt válido (la función lanza y la cuota ya está gastada). Medio detalle
           // sigue siendo más de lo que había, y el modo de fallo pasa a ser "menos
           // detalle" en vez de "no se puede renderizar".
-          microDe(
-            microPorTiempo.get(t.tiempoOriginal),
-            capAccion != null ? capAccion : nivel >= NIVEL_MICRO_CORTO ? 60 : null,
-          ),
+          (() => {
+            if (microYaEmitido.has(t.tiempoOriginal)) return ''
+            microYaEmitido.add(t.tiempoOriginal)
+            // ⚠️ LAS MANOS DEGRADAN DESPUÉS QUE EL DETALLE. `micro` se recorta ya en
+            // `NIVEL_MICRO_CORTO`; el recorrido de las manos solo en el piso de la
+            // búsqueda binaria. No es una preferencia estética: el pelo y el fondo son
+            // textura, y el estado de la tapa es lo que impide que un objeto reaparezca
+            // en el aire — perder eso reintroduce el fallo que el campo vino a arreglar.
+            const capMicro = capAccion != null ? capAccion : nivel >= NIVEL_MICRO_CORTO ? 60 : null
+            return [
+              manosDe(manosPorTiempo.get(t.tiempoOriginal), capAccion),
+              microDe(microPorTiempo.get(t.tiempoOriginal), capMicro),
+            ].filter(Boolean).join('\n')
+          })(),
           // NUNCA se suelta, en ningún nivel de degradación. Esta línea es lo único que
           // le dice al generador QUÉ FRASE va con QUÉ ACCIÓN y en cuántos segundos: es la
           // sincronización audio↔imagen, no una copia del guion global. Con el tope viejo
@@ -635,6 +739,7 @@ export function buildLotePrompt(args: {
         ].filter(Boolean).join('\n')
       })
       .join('\n\n')
+  }
 
   const render = (nivel: number, capAccion: number | null) =>
     [
@@ -644,6 +749,13 @@ export function buildLotePrompt(args: {
       'Instructions in English. Quoted lines are Latin American Spanish: speak them EXACTLY, never translate.',
       '',
       legend,
+      // ⚠️ MEDIDO: en un render real el producto apareció FLOTANDO a pantalla completa.
+      // La leyenda declaraba qué ES cada imagen y nada sobre cómo puede usarse, así que
+      // animar hacia la foto de referencia es una interpretación legal del input. Las
+      // referencias definen APARIENCIA, no son tomas a reproducir.
+      'The reference images define APPEARANCE ONLY — they are not shots to reproduce.',
+      'The product exists inside the scene: in the hands or resting on a surface. NEVER show',
+      'it as a floating cut-out, an inserted product shot, or a full-frame image.',
       '',
       ...(varios
         ? [

@@ -21,6 +21,14 @@ import { VOZ_POR_DEFECTO } from '../lib/video-ads/character'
 // ⚠️ Valores REALES, no inventados: salen de correr `probe-forense-atomico.ts` contra un
 // video de producción. El modelo devuelve telegrama de verdad — mediana 37 caracteres por
 // casilla, cero sobre 120, cero en prosa.
+// Valores reales del caso que motivó el campo (serum con gotero y tapa).
+const MANOS_TIPO = {
+  inicio: 'frasco', fin: 'frasco',
+  izquierda: 'sostiene frasco → sostiene frasco → sostiene frasco',
+  derecha: 'destapa el frasco → aplica producto en mejilla → vuelve a tapar',
+  accesorios: 'tapa puesta → tapa fuera, en la mano derecha → tapa puesta',
+}
+
 const MICRO_TIPO = {
   cuerpo: 'torso balanceo leve, hombros activos.',
   manos: 'derecha sujeta frasco, izquierda sube índice para enumerar puntos.',
@@ -106,7 +114,7 @@ async function main() {
           voz: VOZ_POR_DEFECTO.mujer,
           movimiento: row.motion_profile as never,
           images: [{ url: 'https://x/a.png', role: 'character' }, { url: 'https://x/p.png', role: 'product' }],
-          cortes: cortes.map((c) => ({ ...c, micro: MICRO_TIPO })),
+                  cortes: cortes.map((c) => ({ ...c, micro: MICRO_TIPO, objetoEnMano: MANOS_TIPO })),
           niche: row.niche,
           personajes: gente,
         })
