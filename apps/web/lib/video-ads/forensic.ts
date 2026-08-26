@@ -63,11 +63,22 @@ export const ObjetoEnManoSchema = z.object({
    * el estado de las piezas que se separan del producto —tapa, gotero, cuchara— que es la
    * clase de objeto que desaparece sin que nadie lo note.
    *
-   * Opcionales: el forense es el paso CARO y ninguna sesión guardada los trae.
+   * ⚠️ SON `.nullable().catch(null)`, NO `.optional()` — y la diferencia decidió si el eje
+   * existe o es un no-op. Nacieron opcionales por el motivo correcto (ninguna sesión
+   * guardada los trae y un `.nullable()` a secas reventaría su `parse`), pero un campo
+   * opcional SALE del `required` del JSON Schema y **lo que no se le exige, el modelo lo
+   * omite en silencio**. Medido en la primera sesión analizada con el schema: `izquierda`
+   * y `derecha` volvieron en **0 de 4 cortes** — y no por falta de información, porque la
+   * misma `accion` decía *"Sujeta frasco con izquierda, saca gotero con derecha"*. El dato
+   * estaba; el campo no se llenaba.
+   *
+   * `.catch(null)` compra las dos cosas: entra en `required` (el modelo DEBE responderlo)
+   * y devuelve `null` para lo viejo y para un valor inválido. Es el mismo patrón que
+   * `bodyFocus` en anuncios y `template` en el copy A/B, por el mismo motivo.
    */
-  izquierda: z.string().optional(),
-  derecha: z.string().optional(),
-  accesorios: z.string().optional(),
+  izquierda: z.string().nullable().catch(null),
+  derecha: z.string().nullable().catch(null),
+  accesorios: z.string().nullable().catch(null),
 })
 
 /**
@@ -306,9 +317,9 @@ export function muestraPersona(accion: string): boolean {
 /** Dos cortes que se vuelven uno: la secuencia de cada mano se ENCADENA, igual que la
  *  acción. Quedarse con la del corte dominante perdería la mitad del recorrido. */
 function unirManos(a: ObjetoEnMano, b: ObjetoEnMano): ObjetoEnMano {
-  const enc = (x?: string, y?: string) => {
+  const enc = (x: string | null, y: string | null) => {
     const [i, j] = [(x ?? '').trim(), (y ?? '').trim()]
-    if (!i || !j) return i || j || undefined
+    if (!i || !j) return i || j || null
     return i === j ? i : `${i} → ${j}`
   }
   return {
@@ -390,10 +401,10 @@ export function puedenUnirse(a: Corte, b: Corte): boolean {
 }
 
 /** El último y el primer estado de una secuencia "a → b → c" (o "a, luego b"). */
-const tramos = (x?: string) =>
+const tramos = (x?: string | null) =>
   (x ?? '').split(/→|->|,\s*(?:luego|despu[eé]s)\s*|;/).map((t) => normObj(t)).filter(Boolean)
-const ultimoTramo = (x?: string) => tramos(x).at(-1) ?? ''
-const primerTramo = (x?: string) => tramos(x)[0] ?? ''
+const ultimoTramo = (x?: string | null) => tramos(x).at(-1) ?? ''
+const primerTramo = (x?: string | null) => tramos(x)[0] ?? ''
 
 /**
  * Une cortes CONSECUTIVOS en tomas largas mientras la continuidad lo permita.

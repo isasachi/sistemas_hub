@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { buildForensicInstruction, ForensicReportSchema, repairCutTiming, mergeMicroCortes, muestraPersona, corteMuestraPersona, CPS_MAX, type ForensicReport, type Corte, enProsa, limpiarDialogo, verificarHablantes, unirTomasContinuas } from './forensic'
+import { z } from 'zod'
+import { buildForensicInstruction, ForensicReportSchema, repairCutTiming, mergeMicroCortes, muestraPersona, corteMuestraPersona, CPS_MAX, type ForensicReport, type Corte, enProsa, limpiarDialogo, verificarHablantes, unirTomasContinuas, ObjetoEnManoSchema } from './forensic'
 
 // El prompt es el contrato con Gemini. Estos asserts fijan las reglas del spec que,
 // si se caen, producen el bug que ya vimos en producción: cortes inventados por
@@ -650,7 +651,7 @@ describe('unirTomasContinuas', () => {
     n, tiempo: `00:0${n - 1} - 00:0${n}`, duracionSeg: 3,
     accion: 'La mujer sostiene el frasco', camara: 'Primer plano', dialogo: `linea ${n}`,
     textoOverlay: 'No aparece', transicion: 'corte directo',
-    objetoEnMano: { inicio: 'frasco', fin: 'frasco' }, micro,
+    objetoEnMano: { inicio: 'frasco', fin: 'frasco', izquierda: null, derecha: null, accesorios: null }, micro,
     ...p,
   })
   const base = (cortes: Corte[]): ForensicReport => ({
@@ -674,14 +675,14 @@ describe('unirTomasContinuas', () => {
   // ⚠️ LA CONDICIÓN QUE JUSTIFICA TODA LA FUNCIÓN. En el original ese salto es un corte
   // de montaje; dentro de un clip continuo es un gotero teletransportándose.
   it('NO une si lo que hay en la mano cambia entre un corte y el otro', () => {
-    const a = corte(1, { objetoEnMano: { inicio: 'nada', fin: 'gotero' } })
-    const b = corte(2, { objetoEnMano: { inicio: 'nada', fin: 'nada' } })
+    const a = corte(1, { objetoEnMano: { inicio: 'nada', fin: 'gotero', izquierda: null, derecha: null, accesorios: null } })
+    const b = corte(2, { objetoEnMano: { inicio: 'nada', fin: 'nada', izquierda: null, derecha: null, accesorios: null } })
     expect(unirTomasContinuas(base([a, b]), 15, 300).report.cortes).toHaveLength(2)
   })
 
   it('tolera el artículo y las mayúsculas al comparar el objeto', () => {
-    const a = corte(1, { objetoEnMano: { inicio: 'nada', fin: 'El frasco' } })
-    const b = corte(2, { objetoEnMano: { inicio: 'frasco', fin: 'frasco' } })
+    const a = corte(1, { objetoEnMano: { inicio: 'nada', fin: 'El frasco', izquierda: null, derecha: null, accesorios: null } })
+    const b = corte(2, { objetoEnMano: { inicio: 'frasco', fin: 'frasco', izquierda: null, derecha: null, accesorios: null } })
     expect(unirTomasContinuas(base([a, b]), 15, 300).report.cortes).toHaveLength(1)
   })
 
@@ -737,10 +738,10 @@ describe('unirTomasContinuas', () => {
   })
 
   it('la toma resultante abarca de la primera mano a la última', () => {
-    const a = corte(1, { objetoEnMano: { inicio: 'nada', fin: 'frasco' } })
-    const b = corte(2, { objetoEnMano: { inicio: 'frasco', fin: 'frasco abierto' } })
+    const a = corte(1, { objetoEnMano: { inicio: 'nada', fin: 'frasco', izquierda: null, derecha: null, accesorios: null } })
+    const b = corte(2, { objetoEnMano: { inicio: 'frasco', fin: 'frasco abierto', izquierda: null, derecha: null, accesorios: null } })
     const { report } = unirTomasContinuas(base([a, b]), 15, 300)
-    expect(report.cortes[0].objetoEnMano).toEqual({ inicio: 'nada', fin: 'frasco abierto' })
+    expect(report.cortes[0].objetoEnMano).toEqual({ inicio: 'nada', fin: 'frasco abierto', izquierda: null, derecha: null, accesorios: null })
   })
 })
 
@@ -770,5 +771,23 @@ describe('corteMuestraPersona', () => {
   it('sin micro cae al heurístico de siempre', () => {
     expect(corteMuestraPersona({ accion: 'La mujer sostiene el frasco' })).toBe(true)
     expect(corteMuestraPersona({ accion: 'Detalle del zapato, sin persona en cuadro' })).toBe(false)
+  })
+})
+
+describe('ObjetoEnManoSchema — por qué NO son .optional()', () => {
+  // ⚠️ Un campo `.optional()` sale del `required` del JSON Schema, y lo que no se le exige
+  // al modelo lo omite en silencio. Medido en la primera sesión analizada con el schema:
+  // `izquierda` y `derecha` volvieron en 0 de 4 cortes, teniendo el dato en `accion`
+  // ("Sujeta frasco con izquierda, saca gotero con derecha"). El eje entero quedaba en
+  // no-op con el síntoma idéntico al bug que vino a arreglar.
+  it('los tres campos van en el `required` que se le manda al modelo', () => {
+    const req = (z.toJSONSchema(ObjetoEnManoSchema) as { required?: string[] }).required ?? []
+    for (const k of ['inicio', 'fin', 'izquierda', 'derecha', 'accesorios']) expect(req).toContain(k)
+  })
+
+  // Y la otra mitad: un `.nullable()` a secas reventaría el parse de toda sesión guardada.
+  it('una sesión vieja sin los campos sigue parseando', () => {
+    const out = ObjetoEnManoSchema.parse({ inicio: 'frasco', fin: 'frasco' })
+    expect(out).toEqual({ inicio: 'frasco', fin: 'frasco', izquierda: null, derecha: null, accesorios: null })
   })
 })

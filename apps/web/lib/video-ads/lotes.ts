@@ -523,9 +523,9 @@ function manosDe(m: ObjetoEnMano | undefined, cap: number | null): string {
   if (!m) return ''
   const corto = (x: string) => (cap != null && x.length > cap ? `${x.slice(0, cap).trimEnd()}…` : x)
   const partes = [
-    m.izquierda?.trim() && `L: ${corto(m.izquierda.trim())}`,
-    m.derecha?.trim() && `R: ${corto(m.derecha.trim())}`,
-    m.accesorios?.trim() && `cap/parts: ${corto(m.accesorios.trim())}`,
+    m.izquierda?.trim() ? `L: ${corto(m.izquierda.trim())}` : '',
+    m.derecha?.trim() ? `R: ${corto(m.derecha.trim())}` : '',
+    m.accesorios?.trim() ? `cap/parts: ${corto(m.accesorios.trim())}` : '',
   ].filter(Boolean)
   return partes.length ? `Hands (follow this order exactly; parts never appear or vanish on their own): ${partes.join(' · ')}` : ''
 }
