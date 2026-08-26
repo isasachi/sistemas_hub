@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import type { Part } from '@google/genai'
 import type { UserInputs } from './types'
-import { enProsa, type ForensicReport } from './forensic'
+import { corteMuestraPersona, enProsa, type ForensicReport } from './forensic'
 import { nicheSpec } from './niches'
 import type { Personaje } from './personajes'
 
@@ -140,6 +140,22 @@ export const IdentidadesSchema = z.object({
 })
 export type Identidades = z.infer<typeof IdentidadesSchema>
 export type CharacterIdentity = z.infer<typeof CharacterIdentitySchema>
+
+/**
+ * El encuadre con el que ABRE el anuncio, para que el avatar nazca con él.
+ *
+ * ⚠️ Se busca el primer corte que MUESTRA A UNA PERSONA, no el primero a secas: un anuncio
+ * que abre con un plano de detalle del producto no da un encuadre útil para un retrato, y
+ * copiarlo produciría un avatar que no sirve como referencia de identidad.
+ *
+ * Sin ningún corte con persona (un anuncio íntegramente en voz en off sobre b-roll), se
+ * cae al valor que esta línea tenía fijo desde siempre.
+ */
+function encuadreDeApertura(forensic: ForensicReport): string {
+  const c = (forensic.cortes ?? []).find((x) => corteMuestraPersona(x))
+  const t = c?.camara?.trim()
+  return t || 'plano medio, ángulo levemente bajo'
+}
 
 export function buildIdentityInstruction(
   inputs: UserInputs,
@@ -285,9 +301,18 @@ export function buildIdentityInstruction(
     // 9:16 y no el 2:3 de antes: con el modo de frames de Veo esta imagen no es "una
     // referencia más", es el PRIMER FOTOGRAMA del clip. El encuadre que tenga es el
     // encuadre con el que abre el anuncio.
-    'La imagen es el primer fotograma de un video vertical de redes: encuádrala como una',
-    'foto de teléfono real (plano medio, ángulo levemente bajo), no como un retrato de',
-    'estudio. Sin teléfonos, cámaras ni trípodes a la vista.',
+    // ⚠️ EL ENCUADRE SALE DEL ORIGINAL, NO DE UN VALOR FIJO. Esta línea decía "plano
+    // medio" a secas, sin mirar el video de referencia — y como esta imagen es `@image(1)`
+    // en todos los lotes y la imagen le gana al texto, ese plano medio se convertía en el
+    // encuadre del anuncio ENTERO. Medido sobre un anuncio grabado en primer plano: los
+    // cuatro clips salieron con la persona mucho más lejos que el original.
+    //
+    // Se toma el encuadre del PRIMER CORTE QUE MUESTRA A UNA PERSONA: esta imagen es el
+    // primer fotograma del anuncio, así que su encuadre es el de apertura. Si el anuncio
+    // abre con un plano de producto, ese corte no sirve de referencia para un retrato y se
+    // sigue buscando; sin ninguno, se cae al valor de siempre.
+    `La imagen es el primer fotograma de un video vertical de redes: encuádrala como una foto de teléfono real, con el MISMO encuadre con el que abre el original — ${encuadreDeApertura(forensic)}.`,
+    'Ese encuadre manda: no lo abras ni lo cierres. Sin teléfonos, cámaras ni trípodes a la vista.',
     // ⚠️ REALISMO ESTRICTO, exigido por el dueño del repo. Es el fallo más visible de un
     // generador de imagen sobre personas: devuelve piel de plástico, luz uniforme y cara
     // de render 3D, y eso delata el anuncio como generado antes de que nadie lo escuche.
@@ -338,6 +363,23 @@ export function buildIdentityInstruction(
     '  o entrecortado, su velocidad, cómo desplaza el peso de una pierna a otra, qué',
     '  hacen las manos y los brazos MIENTRAS NO HACEN NADA, y dónde descansa la mirada',
     '  entre una frase y la siguiente.',
+    '',
+    // ⚠️ EL RITMO DEL ORIGINAL SE COLAPSABA EN UNA ETIQUETA. Medido sobre seis sesiones
+    // guardadas: `calidadMovimiento` empezaba con "movimientos fluidos" en las SEIS, tanto
+    // en anuncios cuyo ritmo el forense describió como "rápido y dinámico" como en los que
+    // describió "pausado y conversacional". O sea el eje del ritmo no llegaba al render —
+    // este campo es el único camino por el que puede llegar, porque el prompt del lote no
+    // lee `edicion.ritmo`. Es el mismo modo de fallo que ya se corrigió pidiendo detalle
+    // reproducible en `style`, `typography` y `creativeConcept`: prohibir la etiqueta.
+    '  ⚠️ TIENE QUE REFLEJAR EL RITMO DEL ORIGINAL, que está arriba en "Ritmo de edición',
+    '  observado". Un anuncio rápido y uno pausado NO se mueven igual: cambia la velocidad',
+    '  del gesto, cuántas veces se mueve por frase y si se queda quieta entre una y otra.',
+    '  Dilo con esa concreción — "gesticula en casi cada frase, con las manos moviéndose',
+    '  rápido a la altura del pecho" contra "un gesto cada dos o tres frases, las manos',
+    '  vuelven al regazo y se quedan ahí".',
+    '  PROHIBIDO responder solo "movimientos fluidos y continuos" o cualquier variante: es',
+    '  la etiqueta que devuelve TODO video y no distingue nada. Si el movimiento es fluido,',
+    '  dilo Y agrega a qué velocidad y con qué frecuencia.',
     '',
     '  `manerismos` — los gestos involuntarios y repetidos de esa persona, los que no',
     '  cumplen ninguna función en el guión: acomodarse el pelo, tocarse la cara,',

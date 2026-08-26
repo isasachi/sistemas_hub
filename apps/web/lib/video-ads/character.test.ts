@@ -327,3 +327,58 @@ describe('buildCharacterParts — varias fotos', () => {
     expect(parts).toHaveLength(2)
   })
 })
+
+describe('buildIdentityInstruction — el encuadre sale del original', () => {
+  // ⚠️ Esta línea decía "plano medio" a secas, sin mirar la referencia. Como el avatar es
+  // @image(1) en todos los lotes y la imagen le gana al texto, ese plano medio se volvía el
+  // encuadre del anuncio ENTERO: medido sobre un anuncio grabado en primer plano, los
+  // cuatro clips salieron con la persona mucho más lejos que el original.
+  const conCortes = (cortes: { camara: string; accion: string }[]) => ({
+    ...FORENSIC,
+    cortes: cortes.map((c, i) => ({
+      n: i + 1, tiempo: `00:0${i} - 00:0${i + 1}`, duracionSeg: 1,
+      dialogo: '', textoOverlay: '', transicion: '', objetoEnMano: null, micro: null, ...c,
+    })),
+  } as ForensicReport)
+
+  it('toma el encuadre del primer corte con persona', () => {
+    const p = buildIdentityInstruction(INPUTS, conCortes([
+      { camara: 'corta a la altura del pecho, frontal', accion: 'La mujer habla a cámara' },
+    ]), [SIN_FOTO])
+    expect(p).toContain('corta a la altura del pecho, frontal')
+  })
+
+  // Un anuncio que abre con un plano de producto no da un encuadre útil para un retrato.
+  it('salta los cortes que no muestran a nadie', () => {
+    const p = buildIdentityInstruction(INPUTS, conCortes([
+      { camara: 'primerísimo del frasco', accion: 'Detalle del frasco, sin persona en cuadro' },
+      { camara: 'corta a la altura de los hombros', accion: 'La mujer mira a cámara' },
+    ]), [SIN_FOTO])
+    expect(p).toContain('corta a la altura de los hombros')
+    expect(p).not.toContain('primerísimo del frasco')
+  })
+
+  it('sin ningún corte con persona cae al valor de siempre', () => {
+    const p = buildIdentityInstruction(INPUTS, conCortes([
+      { camara: 'detalle del producto', accion: 'Plano del frasco, sin persona en cuadro' },
+    ]), [SIN_FOTO])
+    expect(p).toContain('plano medio, ángulo levemente bajo')
+  })
+})
+
+describe('buildIdentityInstruction — el ritmo tiene que llegar al movimiento', () => {
+  // ⚠️ Medido sobre seis sesiones guardadas: `calidadMovimiento` empezaba con "movimientos
+  // fluidos" en las SEIS, tanto en anuncios de ritmo "rápido y dinámico" como en los
+  // "pausado y conversacional". El eje del ritmo no llegaba al render, y este campo es su
+  // único camino: el prompt del lote no lee `edicion.ritmo`.
+  const p = buildIdentityInstruction(INPUTS, FORENSIC, [SIN_FOTO])
+
+  it('exige reflejar el ritmo del original en la calidad del movimiento', () => {
+    expect(p).toMatch(/RITMO DEL ORIGINAL/)
+    expect(p).toMatch(/Ritmo de edición observado/)
+  })
+
+  it('prohíbe la etiqueta genérica que devuelve todo video', () => {
+    expect(p).toMatch(/PROHIBIDO responder solo "movimientos fluidos y continuos"/)
+  })
+})

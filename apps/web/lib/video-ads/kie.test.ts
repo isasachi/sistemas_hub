@@ -217,3 +217,27 @@ describe('resolveKey', () => {
     expect(resolveKey('  key-del-usuario  ')).toBe('key-del-usuario')
   })
 })
+
+describe('clampDuration — el b-roll está exento del techo blando', () => {
+  // ⚠️ El techo blando existe porque un clip con MUCHO tiempo y POCO texto hace que el
+  // modelo repita la frase (medido: 23 caracteres en 6 s la dijo dos veces). Pero un beat
+  // sin habla no tiene nada que repetir, y recortarlo se lleva puesto justo el b-roll —
+  // que ya nace subestimado por el forense.
+  //
+  // Medido sobre las 116 combinaciones reales de la base: 0 lotes recortados, 0 segundos
+  // perdidos. Este test fija esa propiedad para que un cambio en `clampDuration` no la
+  // reintroduzca en silencio.
+  it('una toma MUDA conserva su duración', () => {
+    expect(clampDuration(12, 0, 1)).toBe(12)
+    expect(clampDuration(15, 0, 1)).toBe(15)
+  })
+
+  it('un clip de varias escenas tampoco tiene techo blando', () => {
+    expect(clampDuration(15, 40, 3)).toBe(15)
+  })
+
+  // Y la contraparte: con UNA escena y poco texto, el techo sí actúa. Es su razón de ser.
+  it('con una sola escena y poco texto, el techo recorta', () => {
+    expect(clampDuration(15, 40, 1)).toBeLessThan(15)
+  })
+})

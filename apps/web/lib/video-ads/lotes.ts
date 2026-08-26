@@ -772,7 +772,9 @@ export function buildLotePrompt(args: {
       // La leyenda declaraba qué ES cada imagen y nada sobre cómo puede usarse, así que
       // animar hacia la foto de referencia es una interpretación legal del input. Las
       // referencias definen APARIENCIA, no son tomas a reproducir.
-      'The reference images define APPEARANCE ONLY — they are not shots to reproduce.',
+      'The reference images define APPEARANCE ONLY — they are not shots to reproduce, and',
+      'they do NOT set the framing: the CAMERA line below does. If this clip is closer or',
+      'wider than the reference image, follow the CAMERA line.',
       'The product exists inside the scene: in the hands or resting on a surface. NEVER show',
       'it as a floating cut-out, an inserted product shot, or a full-frame image.',
       '',
