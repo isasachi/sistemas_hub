@@ -861,6 +861,8 @@ Efecto sobre la sesión de ropa: **29 cortes → 7 lotes**, dos de ellos los fla
 
 ⚠️ **Y EN DESARROLLO SE CREAN DE A DOS:** el StrictMode de React monta dos veces, y este efecto tiene un efecto de servidor. Se ve en los datos — las fantasma aparecen **en pareja con la sesión real y con el mismo minuto de creación**. Un `useRef` corta la segunda.
 
+⚠️ **PENDIENTE, Y ES LA RAÍZ: la fila debería nacer con el PRIMER INSUMO, no con el montaje.** Lo de arriba OCULTA las fantasma y corta la duplicación; no evita que se creen. El arreglo de verdad es mover `startNewSession()` del `useEffect` de montaje al primer upload real del paso 1. Hoy no está hecho porque el wizard necesita un `sessionId` para subir a `/upload-url`, así que el cambio toca los tres flujos a la vez (`VideoWizard`, `AdWizard`, `LandingWizard`) y su store. Marcado con `ponytail:` en los tres sitios.
+
 **El listado filtra al LEER y no se borra ninguna fila.** Cada `list*Sessions` exige que exista el primer insumo de su tool (`reference_video_url`, `reference_url`, `product_name`, `brand_name`). Borrarlas sería una migración destructiva para arreglar un problema de presentación, y son inofensivas donde están. ⚠️ El `step` NO sirve de discriminante: nace en 0 y una sesión real también pasa por 0.
 
 ## Tool: Calculadora de Costos (`calculadora-costos`)

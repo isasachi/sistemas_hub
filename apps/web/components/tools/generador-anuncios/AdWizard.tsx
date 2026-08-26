@@ -30,6 +30,11 @@ export default function AdWizard() {
   // pareja con la real y con el mismo minuto de creación.
   const arrancado = useRef(false)
 
+  // ponytail: la fila se crea al MONTAR, no en la primera acción real. El listado del
+  // dashboard filtra las vacías (ver `list*Sessions`), así que no molestan — pero se
+  // siguen creando. El upgrade es crear la sesión con el primer insumo (el upload del
+  // paso 1) en vez de acá; hoy no se hace porque el wizard necesita un id para subir a
+  // `/upload-url` y cambiarlo toca los tres flujos a la vez.
   useEffect(() => {
     if (arrancado.current) return
     arrancado.current = true
