@@ -332,6 +332,9 @@ export async function POST(
       lote: l,
       quien,
       planoPorTiempo,
+      // Lo que declara si la escena muestra a una persona. Sin esto, `clase` cae al
+      // heurístico sobre prosa, que el forense en telegrama rompe (ver `corteMuestraPersona`).
+      microPorTiempo: new Map(cortes.flatMap((c) => (c.micro ? [[c.tiempo, c.micro] as const] : []))),
       vozEnOff: enOff,
       productDesc,
       personajes: gente,

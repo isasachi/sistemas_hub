@@ -1,6 +1,6 @@
 import type { Lote } from './lotes'
 import { MAX_IMAGES } from './kie'
-import { muestraPersona } from './forensic'
+import { corteMuestraPersona, type Micro } from './forensic'
 import { etiqueta, type Personaje } from './personajes'
 
 /**
@@ -52,9 +52,14 @@ export function primeraAccion(accionVisual: string): string {
  *
  * `'—'` es el plano sin persona (un flat-lay del producto). `'persona'` es el plano de
  * persona sin atribución, o sea toda sesión anterior al soporte de varios personajes.
+ *
+ * ⚠️ Decide con `micro` cuando existe, y con la prosa solo si no: el forense escribe la
+ * acción en telegrama y sin sujeto ("Sujeta pipeta con mano derecha, mira a cámara"), así
+ * que buscar la palabra "mujer" ahí devuelve `false` para planos de persona evidentes.
+ * Ver `corteMuestraPersona`.
  */
-function clase(accion: string, gente: Personaje[] | undefined): string {
-  if (!muestraPersona(accion)) return '—'
+function clase(accion: string, micro: Micro | undefined, gente: Personaje[] | undefined): string {
+  if (!corteMuestraPersona({ accion, micro })) return '—'
   if (!gente?.length) return 'persona'
   return gente.map((p) => p.id).sort().join('+')
 }
@@ -87,6 +92,8 @@ export function anchorSpecs(args: {
   quien?: Map<string, Personaje[]>
   /** `tiempoOriginal` → encuadre del forense. Un cambio de encuadre abre escena nueva. */
   planoPorTiempo?: Map<string, string>
+  /** `tiempoOriginal` → detalle atómico del corte. Es lo que declara si hay persona. */
+  microPorTiempo?: Map<string, Micro>
   vozEnOff?: Set<string>
   productDesc: string
   personajes?: Personaje[]
@@ -95,13 +102,14 @@ export function anchorSpecs(args: {
   const quien = args.quien ?? new Map<string, Personaje[]>()
   const planos = args.planoPorTiempo ?? new Map<string, string>()
   const off = args.vozEnOff ?? new Set<string>()
+  const micros = args.microPorTiempo ?? new Map<string, Micro>()
 
   const specs: AnchorSpec[] = []
   let claseAnterior: string | null = null
   let planoAnterior: string | null = null
 
   for (const t of lote.tomas) {
-    const c = clase(t.accionVisual, quien.get(t.tiempoOriginal))
+    const c = clase(t.accionVisual, micros.get(t.tiempoOriginal), quien.get(t.tiempoOriginal))
     const plano = planos.get(t.tiempoOriginal) ?? ''
     const primera = claseAnterior === null
     const cambia = !primera && (c !== claseAnterior || (!!plano && plano !== planoAnterior))

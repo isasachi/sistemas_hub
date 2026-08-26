@@ -230,6 +230,37 @@ export const MIN_TOMA_SEG = 4
  * fusión, que es seguro—, así que la lista puede quedarse corta sin romper nada. Un
  * clasificador que hay que pagar y que puede alucinar sería peor en las dos puntas.
  */
+/**
+ * ⚠️ LA MISMA PREGUNTA, PERO PREGUNTÁNDOLE AL CAMPO QUE LA DECLARA.
+ *
+ * `muestraPersona` busca un sustantivo ("mujer", "modelo", "persona") dentro de la prosa
+ * de `accion`, y eso se rompió el día que el forense empezó a escribir en telegrama: la
+ * acción pasó a ser *"Sujeta pipeta con mano derecha, aplica producto en mejilla, mira a
+ * cámara"* — sin sujeto, porque el sujeto es obvio. Medido sobre una sesión real recién
+ * analizada: los TRES cortes daban `false` siendo los tres planos de persona hablando a
+ * cámara.
+ *
+ * El fallo es silencioso y caro: esta clasificación es lo que impide que un flat-lay se
+ * fusione con un plano de persona (`mergeMicroCortes`, `puedenUnirse`) y lo que decide si
+ * una imagen ancla lleva cara (`anchors.ts`). Con todo clasificado igual, el guard deja
+ * de guardar.
+ *
+ * `micro` lo resuelve porque el prompt le exige DECLARARLO: en un plano sin persona,
+ * `cuerpo`, `rostro` y `cabello` dicen "no aparece". Eso es una declaración explícita, no
+ * una inferencia sobre prosa — el mismo reparto de "el modelo observa, el código decide"
+ * que este repo ya usa para la polaridad de landing.
+ *
+ * Sin `micro` (toda sesión analizada antes de que el campo existiera) se cae al
+ * heurístico de siempre, así que ninguna sesión guardada cambia de comportamiento.
+ */
+export function corteMuestraPersona(c: { accion: string; micro?: Micro }): boolean {
+  if (!c.micro) return muestraPersona(c.accion)
+  const ausente = (x: string) => /^\s*no aparece\s*\.?\s*$/i.test(x)
+  // Basta con que UNA de las tres partes del cuerpo esté descrita: un plano de manos
+  // sigue siendo un plano de persona a efectos de continuidad y de fotograma.
+  return !(ausente(c.micro.cuerpo) && ausente(c.micro.rostro) && ausente(c.micro.cabello))
+}
+
 export function muestraPersona(accion: string): boolean {
   const t = accion
     .toLowerCase()
@@ -305,7 +336,7 @@ const normObj = (x: string) =>
  * equivocada es más cara que la fusión que no ocurre.
  */
 export function puedenUnirse(a: Corte, b: Corte): boolean {
-  if (muestraPersona(a.accion) !== muestraPersona(b.accion)) return false
+  if (corteMuestraPersona(a) !== corteMuestraPersona(b)) return false
   if (normObj(a.camara) !== normObj(b.camara)) return false
   if (!!a.vozEnOff !== !!b.vozEnOff) return false
   if (!a.objetoEnMano || !b.objetoEnMano) return false
@@ -474,7 +505,7 @@ export function mergeMicroCortes(
 
   // Un corte solo puede fusionarse con un vecino de SU MISMA CLASE (ver `muestraPersona`):
   // encadenar un plano de producto con uno de persona obliga a un corte dentro del clip.
-  const clase = (k: number) => muestraPersona(actual[k].accion)
+  const clase = (k: number) => corteMuestraPersona(actual[k])
   const compatible = (k: number, v: number) =>
     v >= 0 && v < actual.length && clase(k) === clase(v)
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildForensicInstruction, ForensicReportSchema, repairCutTiming, mergeMicroCortes, muestraPersona, CPS_MAX, type ForensicReport, type Corte, enProsa, limpiarDialogo, verificarHablantes, unirTomasContinuas } from './forensic'
+import { buildForensicInstruction, ForensicReportSchema, repairCutTiming, mergeMicroCortes, muestraPersona, corteMuestraPersona, CPS_MAX, type ForensicReport, type Corte, enProsa, limpiarDialogo, verificarHablantes, unirTomasContinuas } from './forensic'
 
 // El prompt es el contrato con Gemini. Estos asserts fijan las reglas del spec que,
 // si se caen, producen el bug que ya vimos en producción: cortes inventados por
@@ -690,8 +690,13 @@ describe('unirTomasContinuas', () => {
       .report.cortes).toHaveLength(2)
   })
 
+  // ⚠️ La clase la DECLARA `micro` ("no aparece"), no la prosa de `accion`: el forense
+  // escribe en telegrama y sin sujeto. Ver `corteMuestraPersona`.
   it('NO une un plano de persona con uno sin persona', () => {
-    const b = corte(2, { accion: 'Detalle del frasco, sin persona en cuadro' })
+    const b = corte(2, {
+      accion: 'Detalle del frasco',
+      micro: { cuerpo: 'no aparece', manos: 'sostienen el frasco', rostro: 'no aparece', cabello: 'no aparece', entorno: 'fondo quieto' },
+    })
     expect(unirTomasContinuas(base([corte(1), b]), 15, 300).report.cortes).toHaveLength(2)
   })
 
@@ -736,5 +741,34 @@ describe('unirTomasContinuas', () => {
     const b = corte(2, { objetoEnMano: { inicio: 'frasco', fin: 'frasco abierto' } })
     const { report } = unirTomasContinuas(base([a, b]), 15, 300)
     expect(report.cortes[0].objetoEnMano).toEqual({ inicio: 'nada', fin: 'frasco abierto' })
+  })
+})
+
+describe('corteMuestraPersona', () => {
+  const sin = { cuerpo: 'no aparece', manos: 'sostienen el frasco', rostro: 'no aparece', cabello: 'no aparece', entorno: 'fondo quieto' }
+  const con = { cuerpo: 'torso erguido', manos: 'sube la mano', rostro: 'sonríe', cabello: 'fijo', entorno: 'quieto' }
+
+  // ⚠️ EL CASO QUE LO MOTIVÓ, medido sobre una sesión real: el forense escribe la acción
+  // en telegrama y SIN SUJETO, así que buscar "mujer" en la prosa da false para un plano
+  // de persona evidente. Los tres cortes de esa sesión daban false.
+  it('la acción en telegrama sin sujeto ya no engaña al clasificador', () => {
+    const accion = 'Sujeta pipeta con mano derecha, aplica producto en mejilla, mira a cámara.'
+    expect(muestraPersona(accion)).toBe(false)
+    expect(corteMuestraPersona({ accion, micro: con })).toBe(true)
+  })
+
+  it('un plano de producto se declara sin persona', () => {
+    expect(corteMuestraPersona({ accion: 'Detalle del frasco', micro: sin })).toBe(false)
+  })
+
+  // Un plano de manos sigue siendo plano de persona a efectos de continuidad y fotograma.
+  it('basta con que UNA parte del cuerpo esté descrita', () => {
+    expect(corteMuestraPersona({ accion: 'x', micro: { ...sin, cabello: 'cae sobre la cara' } })).toBe(true)
+  })
+
+  // Sin `micro` (toda sesión anterior) el comportamiento es exactamente el de antes.
+  it('sin micro cae al heurístico de siempre', () => {
+    expect(corteMuestraPersona({ accion: 'La mujer sostiene el frasco' })).toBe(true)
+    expect(corteMuestraPersona({ accion: 'Detalle del zapato, sin persona en cuadro' })).toBe(false)
   })
 })
