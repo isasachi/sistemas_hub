@@ -18,12 +18,15 @@ import { VOZ_POR_DEFECTO } from '../lib/video-ads/character'
 // El detalle atómico tal como lo va a devolver el forense: cinco casillas en telegrama.
 // Sirve para PROYECTAR el prompt de una sesión nueva sobre datos viejos — las sesiones
 // guardadas no tienen `micro` (el forense es el paso caro) ni la voz fija.
+// ⚠️ Valores REALES, no inventados: salen de correr `probe-forense-atomico.ts` contra un
+// video de producción. El modelo devuelve telegrama de verdad — mediana 37 caracteres por
+// casilla, cero sobre 120, cero en prosa.
 const MICRO_TIPO = {
-  cuerpo: 'peso en pierna izquierda, torso gira 10° a cámara, hombro baja al inhalar',
-  manos: 'derecha sube al pecho con el frasco, izquierda apoyada en el muslo, dedos relajados',
-  rostro: 'cejas altas al enfatizar, parpadeo lento, boca muy articulada, sonrisa entre frases',
-  cabello: 'mechón derecho cae sobre la mejilla al girar, resto quieto',
-  entorno: 'cortina apenas se mueve al fondo, resto estático',
+  cuerpo: 'torso balanceo leve, hombros activos.',
+  manos: 'derecha sujeta frasco, izquierda sube índice para enumerar puntos.',
+  rostro: 'sonrisa comercial leve, boca abierta, mirada al producto y a cámara.',
+  cabello: 'fijo sin movimiento.',
+  entorno: 'fondo quieto, luz natural estable.',
 }
 
 const db = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
