@@ -6,7 +6,7 @@ import { geminiCallStructured, geminiEsDirecto } from '@/lib/gemini'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 import { ForensicReportSchema } from '@/lib/video-ads/types'
-import { buildForensicInstruction, repairCutTiming, reconciliarConVentana, MIN_TOMA_SEG, limpiarDialogos, verificarHablantes } from '@/lib/video-ads/forensic'
+import { buildForensicInstruction, repairCutTiming, reconciliarConVentana, coreografiaEscasa, MIN_TOMA_SEG, limpiarDialogos, verificarHablantes } from '@/lib/video-ads/forensic'
 import { MAX_VIDEO_MB } from '@/lib/video-ads/limits'
 import { STEP } from '@/lib/video-ads/steps'
 import type { Part } from '@google/genai'
@@ -104,6 +104,16 @@ export async function POST(
       console.warn(
         `[video-ads/analyze-reference] sesión ${id}: ${ajustes.length} cortes con diálogo indecible en su duración, recronometrados:`,
         ajustes.map((a) => `corte ${a.n}: ${a.de.toFixed(1)}s → ${a.a.toFixed(1)}s`),
+      )
+
+    // ⚠️ VISIBILIDAD, no corrección: el forense es el paso caro y no se re-llama por esto.
+    // El síntoma que llega al usuario es "el video no copia los movimientos", y su causa
+    // más común es que la coreografía de un corte largo se describió con dos frases.
+    const escasos = coreografiaEscasa(reparado)
+    if (escasos.length)
+      console.warn(
+        `[video-ads/analyze-reference] sesión ${id}: ${escasos.length} cortes con coreografía escasa para su duración —`,
+        escasos.map((e) => `corte ${e.n}: ${e.movimientos} movimientos en ${e.seg.toFixed(1)}s`),
       )
 
     await updateVideoSession(id, {

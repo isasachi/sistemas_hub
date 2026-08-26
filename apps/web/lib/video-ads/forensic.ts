@@ -779,6 +779,31 @@ function ventanaSeg(tiempo: string): { ini: number; fin: number } {
  * se toca nada. Sin esa coherencia no hay motivo para creerle a la ventana más que a la
  * duración, y el modo de fallo seguro es dejar el análisis como vino.
  */
+/**
+ * Cortes cuya coreografía es demasiado escasa para su duración.
+ *
+ * ⚠️ NO reintenta ni corrige: el forense es el paso CARO y no se vuelve a llamar por esto.
+ * Lo que hace es dar VISIBILIDAD, que es lo que faltaba — el síntoma que llega al usuario
+ * es *"el video no copia los movimientos"* y hasta ahora había que deducir de dónde venía.
+ *
+ * El piso es un movimiento cada 2 segundos, la misma cuenta que el prompt le pide al
+ * modelo. Medido sobre 226 cortes reales: la media global es 1,10 movimientos por segundo,
+ * pero los cortes LARGOS caen a 0,15-0,26 — el modelo escribe una frase por corte sin
+ * mirar cuánto dura.
+ */
+export const MOV_POR_SEG_MIN = 0.5
+
+export function coreografiaEscasa(report: ForensicReport): { n: number; seg: number; movimientos: number }[] {
+  const out: { n: number; seg: number; movimientos: number }[] = []
+  for (const c of report.cortes ?? []) {
+    if (!(c.duracionSeg >= 4)) continue
+    const m = String(c.accion).split(/[,.;]|\bluego\b|\bdespu[eé]s\b|\by\b/i)
+      .map((x) => x.trim()).filter((x) => x.length > 6).length
+    if (m / c.duracionSeg < MOV_POR_SEG_MIN) out.push({ n: c.n, seg: c.duracionSeg, movimientos: m })
+  }
+  return out
+}
+
 export function reconciliarConVentana(
   report: ForensicReport,
 ): { report: ForensicReport; ajustes: AjusteTiempo[] } {
@@ -987,6 +1012,17 @@ export function buildForensicInstruction(): string {
     '  - qué expresión tiene y en qué posición empieza y termina el corte — el spec pide',
     '    la secuencia completa (posición inicial → movimiento → interacción → posición',
     '    final), no solo el resultado.',
+    '⚠️ LA COREOGRAFÍA CRECE CON LA DURACIÓN DEL CORTE. Una toma de 3 segundos y una de 20',
+    'no se describen con el mismo número de frases: la de 20 tiene MÁS cosas pasando, y si',
+    'la describes con dos frases estás tirando 18 segundos de movimiento.',
+    'La cuenta: **un movimiento por cada 2 segundos de toma**, encadenados en el orden en',
+    'que ocurren. Un corte de 6 s necesita al menos 3; uno de 20 s, al menos 10.',
+    'Medido sobre videos reales: los cortes cortos se describen a ~1 movimiento por segundo',
+    'y los largos caen a 0,15 — o sea el modelo escribe una frase por corte sin mirar cuánto',
+    'dura, y el video generado se queda quieto el resto del tiempo.',
+    'Si de verdad no pasa nada durante varios segundos, DILO ("se queda quieta mirando a',
+    'cámara unos segundos"): la quietud declarada es un dato, un hueco no.',
+    '',
     'Un ejemplo del nivel esperado: "sostiene el frasco con la mano derecha por el cuerpo,',
     'lo levanta hasta la altura del mentón y lo gira un cuarto de vuelta para que la',
     'etiqueta quede al frente; la mano izquierda queda fuera de cuadro; mira al producto',

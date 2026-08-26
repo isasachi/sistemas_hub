@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { z } from 'zod'
-import { buildForensicInstruction, ForensicReportSchema, repairCutTiming, mergeMicroCortes, muestraPersona, corteMuestraPersona, CPS_MAX, type ForensicReport, type Corte, enProsa, limpiarDialogo, verificarHablantes, unirTomasContinuas, reconciliarConVentana, MIN_TOMA_SEG, ObjetoEnManoSchema, MicroSchema, CorteSchema } from './forensic'
+import { buildForensicInstruction, ForensicReportSchema, repairCutTiming, mergeMicroCortes, muestraPersona, corteMuestraPersona, CPS_MAX, type ForensicReport, type Corte, enProsa, limpiarDialogo, verificarHablantes, unirTomasContinuas, reconciliarConVentana, coreografiaEscasa, MIN_TOMA_SEG, ObjetoEnManoSchema, MicroSchema, CorteSchema } from './forensic'
 
 // El prompt es el contrato con Gemini. Estos asserts fijan las reglas del spec que,
 // si se caen, producen el bug que ya vimos en producción: cortes inventados por
@@ -973,5 +973,32 @@ describe('buildForensicInstruction — la escala de encuadre vive donde se decla
   it('da la escala completa por punto de corte', () => {
     for (const t of ['hombros', 'pecho', 'esternón', 'cintura', 'muslos', 'cuerpo entero'])
       expect(p).toContain(t)
+  })
+})
+
+describe('coreografiaEscasa', () => {
+  const corte = (n: number, duracionSeg: number, accion: string): Corte => ({
+    n, tiempo: '00:00 - 00:10', duracionSeg, accion, camara: '', dialogo: '',
+    textoOverlay: '', transicion: '', objetoEnMano: null, micro: null,
+  })
+  const rep = (cortes: Corte[]) => ({ cortes } as ForensicReport)
+
+  // ⚠️ EL CASO MEDIDO: un corte de 10 s descrito con dos frases. El original tiene seis o
+  // siete movimientos ahí, y el video generado se queda quieto el resto del tiempo.
+  it('marca el corte largo descrito con dos frases', () => {
+    const out = coreografiaEscasa(rep([corte(1, 10,
+      'Sostiene gotero con mano derecha, lo lleva a la mejilla. Luego, muestra el frasco frente al pecho')]))
+    expect(out).toHaveLength(1)
+    expect(out[0]).toMatchObject({ n: 1, seg: 10 })
+  })
+
+  it('no marca el corte con un movimiento cada dos segundos', () => {
+    expect(coreografiaEscasa(rep([corte(1, 6,
+      'levanta la mano derecha, destapa el frasco, aplica en la mejilla, baja la mano')]))).toEqual([])
+  })
+
+  // Un corte corto no tiene margen para muchos movimientos: no se le exige.
+  it('ignora los cortes de menos de 4 segundos', () => {
+    expect(coreografiaEscasa(rep([corte(1, 2, 'mira a cámara')]))).toEqual([])
   })
 })
