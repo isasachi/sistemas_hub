@@ -5,7 +5,7 @@ import { callVideoAds } from '@/lib/video-ads/llm'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 import { SlotValuesSchema, CoherenceSchema, buildAdaptInstruction, buildCoherenceInstruction } from '@/lib/video-ads/adapt'
-import { extractSlots, fillTemplate, rejectBadValues, resolveSlotId, acceptScaffoldFix, acceptRewrite } from '@/lib/video-ads/fill'
+import { extractSlots, fillTemplate, rejectBadValues, resolveSlotId, acceptScaffoldFix, acceptRewrite, quitarRotuloDeToma } from '@/lib/video-ads/fill'
 import { extractPending } from '@/lib/video-ads/pending'
 import { canProceed } from '@/lib/video-ads/validation'
 import { STEP } from '@/lib/video-ads/steps'
@@ -105,7 +105,8 @@ export async function POST(
           return t
         }
         reescritas.push(t.n)
-        return { ...t, locucion: propuesta.trim() }
+        // Mismo saneo que midió `acceptRewrite`: el rótulo de toma se pronuncia.
+        return { ...t, locucion: quitarRotuloDeToma(propuesta.trim()) }
       }),
     }
     relleno = { ...relleno, guionFinal: relleno.tomas.map((t) => t.locucion).join(' ') }
@@ -192,7 +193,7 @@ export async function POST(
               return t
             }
             const v = acceptRewrite({ plantilla, piso: t.locucion, propuesta, fuentes })
-            return v.ok ? { ...t, locucion: propuesta.trim() } : t
+            return v.ok ? { ...t, locucion: quitarRotuloDeToma(propuesta.trim()) } : t
           }),
         }
         relleno = { ...relleno, guionFinal: relleno.tomas.map((t) => t.locucion).join(' ') }

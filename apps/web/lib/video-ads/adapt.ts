@@ -333,6 +333,22 @@ export function buildAdaptInstruction(
     '  - Deja `valor` VACÍO solo si rellenarlo exigiría afirmar algo que el usuario',
     '    tendría que desmentir — un premio, un aval médico, un estudio clínico, una',
     '    certificación o una garantía que nadie mencionó.',
+    // ⚠️ MEDIDO: un hueco de ingrediente volvió como "hepéres", que no es una palabra —
+    // el modelo intentó reproducir de memoria un componente de la etiqueta
+    // (PHE-RESORCINOL) y lo destrozó. Un ingrediente es una afirmación verificable sobre
+    // la fórmula: la escalera de deducción del punto 3 NO aplica.
+    '  - ⚠️ UN INGREDIENTE O COMPONENTE NO SE DEDUCE NI SE APROXIMA. Se copia de la',
+    '    etiqueta tal como está escrito, traducido si hace falta. Si no lo puedes leer con',
+    '    certeza, usa OTRO que sí esté en la etiqueta, o deja el hueco vacío. Nunca',
+    '    escribas un nombre "parecido": afirma una fórmula que el producto no tiene.',
+    // ⚠️ MEDIDO: "[aspecto a mejorar]" con valor "las manchas de acné" produjo "este serum
+    // esta cambiando las manchas de acné" — el valor es correcto para su etiqueta y no
+    // cuadra con el verbo que lo precede.
+    '  - EL VALOR TIENE QUE FUNCIONAR EN SU FRASE, no solo responder a su etiqueta. Léela',
+    '    entera con el valor puesto antes de darla por buena: si el verbo o la preposición',
+    '    que lo rodean no admiten ese valor, elige otro que sí. "Este serum está cambiando',
+    '    [aspecto a mejorar]" pide algo que se pueda cambiar —la piel, la textura— no',
+    '    "las manchas de acné", que no se cambian sino que se atenúan.',
     '',
     '── EL GUION REESCRITO (`locuciones`) ──',
     'Además de los valores, devuelve la locución COMPLETA de cada toma ya adaptada: el',
