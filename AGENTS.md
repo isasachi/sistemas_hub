@@ -406,7 +406,17 @@ Cuatro condiciones, todas COMPARACIONES y no criterios — es la "matemática" q
 
 ⚠️ **COORDENADAS EN PÍXELES: NO — Y EL VOCABULARIO QUE LAS REEMPLAZA NECESITÓ SU PROPIA CASILLA.** El dueño del repo preguntó si servirían unos `x1,y1`. `grok-imagine` es un modelo de difusión de video, no un detector: no los honra y gastarían caracteres que la escalera ya se está comiendo. Lo que **sí** entiende es el vocabulario relativo al encuadre — *"tercio derecho a la altura del pecho"*, *"entra por el borde inferior"*, *"sale por arriba"*.
 
-⚠️ **Y EL `.catch(null)` VA EN CADA CASILLA, NUNCA EN EL OBJETO — la diferencia costó una corrida entera.** Al agregar `posicion` se puso `micro: MicroSchema.nullable().catch(null)` "por consistencia" con `objetoEnMano`. Efecto medido en vivo: el modelo llenó `objetoEnMano` **5/5** y `micro` volvió **`null` en los 5 cortes**. La causa es que `.catch` sobre el OBJETO convierte cualquier casilla omitida en la pérdida de las SEIS: falla el parse del objeto entero y el catch devuelve null. O sea que el detalle atómico que el modelo SÍ había producido se tiró en silencio — el peor modo de fallo posible, porque destruye dato bueno y no reporta nada.
+⚠️ **HACEN FALTA LAS DOS COSAS A LA VEZ, Y SE APRENDIERON UNA POR CORRIDA.** El campo tiene que estar en el `required` **y** su parse tiene que ser infalible. Con una sola de las dos, el eje desaparece:
+
+| qué se puso | qué pasó, medido |
+|---|---|
+| objeto `.optional()`, casillas `z.string()` | el modelo **omite el objeto entero**: `micro` y `objetoEnMano` volvieron con las claves AUSENTES en los 5 cortes |
+| objeto `.nullable().catch(null)`, casillas `z.string()` | una casilla omitida hace fallar el parse del objeto y el catch devuelve `null`: **se pierden las seis**, incluido el detalle que el modelo SÍ produjo |
+| **objeto `.nullable().catch(null)`, casillas `.nullable().catch(null)`** | ✅ el modelo las tiene que responder, y una que falte queda en `null` sin arrastrar al resto |
+
+La tercera fila funciona porque con el `.catch` por casilla el parse del objeto **no puede fallar** (`MicroSchema.safeParse({})` devuelve éxito con todo en null), así que el `.catch` de afuera nunca destruye nada: solo existe para meter el campo en el `required` sin romper las sesiones guardadas. Hay un test que fija esa infalibilidad — devolver una casilla a `z.string()` a secas reintroduce la fila 2.
+
+⚠️ **El `.catch(null)` sobre el objeto, con casillas obligatorias, es la trampa.** Al agregar `posicion` se puso `micro: MicroSchema.nullable().catch(null)` "por consistencia" con `objetoEnMano`. Efecto medido en vivo: el modelo llenó `objetoEnMano` **5/5** y `micro` volvió **`null` en los 5 cortes**. La causa es que `.catch` sobre el OBJETO convierte cualquier casilla omitida en la pérdida de las SEIS: falla el parse del objeto entero y el catch devuelve null. O sea que el detalle atómico que el modelo SÍ había producido se tiró en silencio — el peor modo de fallo posible, porque destruye dato bueno y no reporta nada.
 
 Con el `.catch` por casilla, cada una sigue en el `required` (el modelo debe responderlas) y una que falte queda en `null` sin arrastrar a las otras cinco; el objeto vuelve a `.optional()`, que es como venía funcionando 5/5. Con test que fija las dos mitades.
 

@@ -20,7 +20,7 @@ const TEMPLATE: ScriptTemplate = {
 const FORENSIC = {
   caracteresGuion: 58,
   guionOriginal: 'Si estás cansado de las marcas, necesitas probar este suero.',
-  cortes: [{ n: 1, tiempo: '00:00 - 00:06', duracionSeg: 6, accion: '', camara: '', dialogo: '', textoOverlay: '', transicion: '' }],
+  cortes: [{ n: 1, tiempo: '00:00 - 00:06', duracionSeg: 6, accion: '', camara: '', dialogo: '', textoOverlay: '', transicion: '', objetoEnMano: null, micro: null }],
 } as ForensicReport
 
 const INPUTS: UserInputs = {
@@ -46,7 +46,7 @@ describe('buildAdaptInstruction', () => {
     const ORIGINAL = 'Tres razones para tomar Gomi Energy para ella.'
     const forense = (dialogo: string) => ({
       caracteresGuion: ORIGINAL.length, guionOriginal: ORIGINAL,
-      cortes: [{ n: 1, tiempo: '00:00 - 00:05', duracionSeg: 5, accion: '', camara: '', dialogo, textoOverlay: '', transicion: '' }],
+      cortes: [{ n: 1, tiempo: '00:00 - 00:05', duracionSeg: 5, accion: '', camara: '', dialogo, textoOverlay: '', transicion: '', objetoEnMano: null, micro: null }],
     }) as ForensicReport
     const plantilla = (locucion: string): ScriptTemplate =>
       ({ ...TEMPLATE, tomas: [{ n: 1, accionVisual: 'Sostiene el frasco', locucion, duracionSeg: 5 }] })

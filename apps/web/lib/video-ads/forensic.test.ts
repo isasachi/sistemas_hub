@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { z } from 'zod'
-import { buildForensicInstruction, ForensicReportSchema, repairCutTiming, mergeMicroCortes, muestraPersona, corteMuestraPersona, CPS_MAX, type ForensicReport, type Corte, enProsa, limpiarDialogo, verificarHablantes, unirTomasContinuas, ObjetoEnManoSchema, MicroSchema } from './forensic'
+import { buildForensicInstruction, ForensicReportSchema, repairCutTiming, mergeMicroCortes, muestraPersona, corteMuestraPersona, CPS_MAX, type ForensicReport, type Corte, enProsa, limpiarDialogo, verificarHablantes, unirTomasContinuas, ObjetoEnManoSchema, MicroSchema, CorteSchema } from './forensic'
 
 // El prompt es el contrato con Gemini. Estos asserts fijan las reglas del spec que,
 // si se caen, producen el bug que ya vimos en producción: cortes inventados por
@@ -62,7 +62,7 @@ describe('repairCutTiming', () => {
   const corte = (n: number, duracionSeg: number, dialogo: string) => ({
     n, duracionSeg, dialogo,
     tiempo: `00:${String(n).padStart(2, '0')} - 00:${String(n + 1).padStart(2, '0')}`,
-    accion: 'a', camara: 'c', textoOverlay: 'No aparece', transicion: 'corte directo',
+    accion: 'a', camara: 'c', textoOverlay: 'No aparece', transicion: 'corte directo', objetoEnMano: null, micro: null,
   })
   const informe = (cortes: ReturnType<typeof corte>[]): ForensicReport => ({
     duracionTotalSeg: cortes.reduce((n, c) => n + c.duracionSeg, 0),
@@ -195,7 +195,7 @@ describe('ForensicReportSchema', () => {
         accion: 'Sostiene el frasco frente a la cámara',
         camara: 'Primer plano, altura de ojos, cámara en mano',
         dialogo: 'este suero de niacinamida', textoOverlay: 'este suero de niacinamida',
-        transicion: 'corte directo',
+        transicion: 'corte directo', objetoEnMano: null, micro: null,
       }],
       tomas: [{
         n: 1, encuadre: 'Primer plano', posicion: 'Frente a cámara',
@@ -230,7 +230,7 @@ describe('ForensicReportSchema', () => {
 describe('mergeMicroCortes', () => {
   const corte = (n: number, dur: number, camara: string, dialogo = `frase ${n}`) => ({
     n, tiempo: `00:${String(n).padStart(2, '0')} - 00:${String(n + 1).padStart(2, '0')}`,
-    duracionSeg: dur, accion: `accion ${n}`, camara, dialogo, textoOverlay: 'No aparece', transicion: 'corte directo',
+    duracionSeg: dur, accion: `accion ${n}`, camara, dialogo, textoOverlay: 'No aparece', transicion: 'corte directo', objetoEnMano: null, micro: null,
   })
   const rep = (cortes: ReturnType<typeof corte>[]): ForensicReport => ({
     duracionTotalSeg: cortes.reduce((a, c) => a + c.duracionSeg, 0),
@@ -325,7 +325,7 @@ describe('mergeMicroCortes', () => {
 describe('repairCutTiming — piso de duración visible', () => {
   const c = (n: number, dur: number, dialogo: string) => ({
     n, tiempo: `t${n}`, duracionSeg: dur, accion: 'a', camara: 'A', dialogo,
-    textoOverlay: 'No aparece', transicion: 'corte',
+    textoOverlay: 'No aparece', transicion: 'corte', objetoEnMano: null, micro: null,
   })
   const rep = (cortes: ReturnType<typeof c>[]): ForensicReport => ({
     duracionTotalSeg: cortes.reduce((a, x) => a + x.duracionSeg, 0), caracteresGuion: 0,
@@ -390,7 +390,7 @@ describe('muestraPersona', () => {
 describe('mergeMicroCortes — no cruza la frontera persona/producto', () => {
   const c = (n: number, dur: number, accion: string) => ({
     n, tiempo: `t${n}`, duracionSeg: dur, accion, camara: `C${n}`, dialogo: '',
-    textoOverlay: 'No aparece', transicion: 'corte',
+    textoOverlay: 'No aparece', transicion: 'corte', objetoEnMano: null, micro: null,
   })
   const rep = (cortes: ReturnType<typeof c>[]): ForensicReport => ({
     duracionTotalSeg: cortes.reduce((a, x) => a + x.duracionSeg, 0), caracteresGuion: 0,
@@ -435,7 +435,7 @@ describe('mergeMicroCortes — no cruza la frontera persona/producto', () => {
 describe('repairCutTiming — el piso no infla', () => {
   const c = (n: number, dur: number, dialogo: string) => ({
     n, tiempo: `t${n}`, duracionSeg: dur, accion: 'a', camara: 'A', dialogo,
-    textoOverlay: 'No aparece', transicion: 'corte',
+    textoOverlay: 'No aparece', transicion: 'corte', objetoEnMano: null, micro: null,
   })
   const rep = (cortes: ReturnType<typeof c>[]): ForensicReport => ({
     duracionTotalSeg: cortes.reduce((a, x) => a + x.duracionSeg, 0), caracteresGuion: 0,
@@ -555,7 +555,7 @@ describe('verificarHablantes', () => {
   const corte = (over: Record<string, unknown> = {}) => ({
     n: 1, tiempo: '00:00 - 00:05', duracionSeg: 5, accion: 'a', camara: 'plano medio',
     dialogo: 'Tome, doctorcito. No se preocupe por eso.',
-    textoOverlay: 'No aparece', transicion: 'corte', ...over,
+    textoOverlay: 'No aparece', transicion: 'corte', objetoEnMano: null, micro: null, ...over,
   })
   const rep = (cortes: unknown[]) => ({ cortes, tomas: [] } as never)
 
@@ -784,6 +784,28 @@ describe('MicroSchema — por qué el .catch va en la CASILLA y no en el objeto'
     const out = MicroSchema.parse({ cuerpo: 'torso quieto', manos: 'sube', rostro: 'sonríe', cabello: 'fijo', entorno: 'quieto' })
     expect(out.posicion).toBeNull()
     expect(Object.values(out).filter(Boolean)).toHaveLength(5)
+  })
+
+  // ⚠️ LA INFALIBILIDAD ES LO QUE PERMITE QUE EL OBJETO SEA REQUERIDO SIN RIESGO. Si
+  // alguien devuelve una casilla a `z.string()` a secas, el parse del objeto vuelve a poder
+  // fallar y el `.catch` de afuera lo convierte en null — se pierden las seis otra vez.
+  it('el objeto NO puede fallar: es lo que hace seguro el .catch de afuera', () => {
+    expect(MicroSchema.safeParse({}).success).toBe(true)
+    expect(ObjetoEnManoSchema.safeParse({}).success).toBe(true)
+  })
+
+  // Y la otra mitad: lo que no se le EXIGE al modelo, no lo manda. Medido — con los dos
+  // objetos en `.optional()`, una corrida entera volvió con las claves ausentes: 0/5.
+  it('los dos objetos van en el `required` del corte', () => {
+    const req = (z.toJSONSchema(CorteSchema) as { required?: string[] }).required ?? []
+    expect(req).toContain('micro')
+    expect(req).toContain('objetoEnMano')
+  })
+
+  it('una sesión guardada sin ninguno de los dos sigue parseando', () => {
+    const c = CorteSchema.parse({ n: 1, tiempo: 'a', duracionSeg: 1, accion: 'x', camara: 'y', dialogo: '', textoOverlay: '', transicion: '', objetoEnMano: null, micro: null })
+    expect(c.micro).toBeNull()
+    expect(c.objetoEnMano).toBeNull()
   })
 
   it('las seis casillas se le siguen exigiendo al modelo', () => {

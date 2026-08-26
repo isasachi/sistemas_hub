@@ -46,8 +46,8 @@ export const HablanteSchema = z.object({
  * sin él la fusión agresiva simplemente no ocurre (fail-closed).
  */
 export const ObjetoEnManoSchema = z.object({
-  inicio: z.string(),
-  fin: z.string(),
+  inicio: z.string().nullable().catch(null),
+  fin: z.string().nullable().catch(null),
   /**
    * ⚠️ EL ESTADO POR MANO Y EN ORDEN — un `{inicio, fin}` no alcanza, y está medido.
    *
@@ -155,22 +155,29 @@ export const CorteSchema = z.object({
   vozEnOff: z.boolean().optional(),
   textoOverlay: z.string(),    // "No aparece" si no hay
   transicion: z.string(),      // jump cut / corte directo / continuidad / zoom digital
-  /** Ver `ObjetoEnManoSchema`: la continuidad de props entre cortes, para la fusión. */
-  objetoEnMano: ObjetoEnManoSchema.optional(),
+  /** Ver `ObjetoEnManoSchema` y la nota de `micro`: requerido, e infalible por dentro. */
+  objetoEnMano: ObjetoEnManoSchema.nullable().catch(null),
   /** Ver `MicroSchema`: el detalle atómico del movimiento. */
   /**
-   * ⚠️ EL `.catch(null)` VA EN CADA CASILLA, NUNCA EN EL OBJETO — y la diferencia costó
-   * una corrida entera. Puesto sobre `micro`, cualquier casilla que el modelo omitiera
-   * hacía fallar el parse del objeto y `.catch` devolvía `null`: **se perdían las seis**.
-   * Medido en vivo al agregar `posicion` — el modelo llenó `objetoEnMano` 5/5 y `micro`
-   * volvió `null` en los 5 cortes, o sea el detalle atómico que SÍ había producido se tiró
-   * en silencio. Es el peor modo de fallo posible: destruye dato bueno y no reporta nada.
+   * ⚠️ DOS COSAS A LA VEZ, Y HACEN FALTA LAS DOS. Se aprendieron una por corrida:
    *
-   * Con el `.catch` por casilla, cada una sigue en el `required` (el modelo debe
-   * responderlas) y una que falte queda en `null` sin arrastrar a las otras cinco.
-   * El objeto vuelve a `.optional()`, que es como venía funcionando 5/5.
+   * 1. **El `.catch(null)` va en cada CASILLA, nunca solo en el objeto.** Puesto sobre
+   *    `micro` a secas, cualquier casilla omitida hacía fallar el parse del objeto y el
+   *    catch devolvía `null`: se perdían las SEIS. Medido — el modelo llenó `objetoEnMano`
+   *    5/5 y `micro` volvió null en los 5 cortes, tirando en silencio el detalle que SÍ
+   *    había producido.
+   * 2. **Y el objeto tiene que seguir siendo REQUERIDO.** Al arreglar (1) se lo pasó a
+   *    `.optional()`, y en la corrida siguiente el modelo omitió `micro` Y `objetoEnMano`
+   *    ENTEROS: 0/5 en los dos, con las claves ausentes del JSON. Lo que no se le exige, no
+   *    lo manda — la misma lección, un nivel más arriba.
+   *
+   * Se pueden tener las dos porque con el `.catch` por casilla el parse del objeto es
+   * INFALIBLE (`MicroSchema.safeParse({})` devuelve éxito con todo en null), así que el
+   * `.catch` de acá afuera no puede destruir nada: solo existe para que el campo entre en
+   * el `required` sin romper las sesiones guardadas. Hay un test que fija esa infalibilidad
+   * — si alguien devuelve una casilla a `z.string()` a secas, vuelve el bug de (1).
    */
-  micro: MicroSchema.optional(),
+  micro: MicroSchema.nullable().catch(null),
 })
 
 /** Una persona con voz propia en el video de referencia. */
@@ -358,8 +365,8 @@ function unirManos(a: ObjetoEnMano, b: ObjetoEnMano): ObjetoEnMano {
   }
 }
 
-function unirMicro(a?: Micro | null, b?: Micro | null): Micro | undefined {
-  if (!a || !b) return a ?? b ?? undefined
+function unirMicro(a?: Micro | null, b?: Micro | null): Micro | null {
+  if (!a || !b) return a ?? b ?? null
   const par = (x: string | null, y: string | null) => {
     const [i, j] = [(x ?? '').trim(), (y ?? '').trim()]
     if (!i) return j || null
@@ -416,7 +423,7 @@ export function puedenUnirse(a: Corte, b: Corte): boolean {
   if (corteMuestraPersona(a) !== corteMuestraPersona(b)) return false
   if (normObj(a.camara) !== normObj(b.camara)) return false
   if (!!a.vozEnOff !== !!b.vozEnOff) return false
-  if (!a.objetoEnMano || !b.objetoEnMano) return false
+  if (!a.objetoEnMano?.fin || !b.objetoEnMano?.inicio) return false
   if (normObj(a.objetoEnMano.fin) !== normObj(b.objetoEnMano.inicio)) return false
   // ⚠️ Y los ACCESORIOS: la tapa que sale y vuelve es lo que hace que un objeto
   // reaparezca en el aire dentro de un clip continuo. Si el corte declara en qué estado
@@ -653,7 +660,7 @@ export function mergeMicroCortes(
       // la segunda. Sin esto la continuidad de props se perdería justo al fusionar.
       objetoEnMano: a.objetoEnMano && b.objetoEnMano
         ? unirManos(a.objetoEnMano, b.objetoEnMano)
-        : a.objetoEnMano ?? b.objetoEnMano,
+        : a.objetoEnMano ?? b.objetoEnMano ?? null,
       micro: unirMicro(a.micro, b.micro),
     }
     origen.set(tiempo, (origen.get(a.tiempo) ?? 1) + (origen.get(b.tiempo) ?? 1))
