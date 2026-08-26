@@ -663,6 +663,10 @@ Dos mitades, las dos necesarias: **`fetchKie`** (kie.ts) le pone `AbortSignal.ti
 
 Con el cap en 15 s y las dos fusiones, los cortes largos son ahora el caso NORMAL, no la cola: por eso este defecto se volvió el principal. El prompt de FASE 1 pide ahora la cuenta explícita —**un movimiento por cada 2 segundos**, encadenados en orden; un corte de 6 s necesita 3, uno de 20 s necesita 10— y aclara que la quietud declarada (*"se queda quieta mirando a cámara unos segundos"*) es un dato válido, un hueco no.
 
+✅ **Medido tras el cambio, sobre un análisis nuevo del mismo video: 0,24 → 0,39 movimientos por segundo**, y los cortes cortos y medios pasan a cumplir el piso (3 s → 3 movimientos, 7 s → 4, 5 s → 3).
+
+⚠️ **Pero los cortes LARGOS se quedan en ~4 frases pase lo que pase** — 20 s con 4 movimientos, 11 s con 4. El modelo se topa en un número de cláusulas por respuesta, no en la instrucción: pedirle "más" otra vez no mueve la aguja. Lo que sí es otra tarea es darle una ESTRUCTURA donde colgarlas, así que **por encima de 10 segundos se le pide el corte por TRAMOS con su marca de tiempo** (*"0-4 s: …; 4-9 s: …"*), uno cada 4 o 5 segundos. Convierte *"describí más"* en *"describí cada tramo"*. ⚠️ Sin medir todavía.
+
 `coreografiaEscasa` lo comprueba en código y **solo LOGUEA**: el forense es el paso caro y no se re-llama por esto. Lo que aporta es visibilidad — el síntoma que llega al usuario es *"el video no copia los movimientos"* y hasta ahora había que deducir de dónde venía.
 
 ✅ **Y lo que SÍ funcionó, verificado en píxeles sobre el render siguiente:** el avatar salió con el **suéter rosa del original** (era blusa blanca sobre top negro), en la **habitación de muebles de madera oscura** (era una cocina moderna) y con el **encuadre cerrado** (era plano medio con la cintura en cuadro). Los tres arreglos del avatar se sostienen en los cinco clips.

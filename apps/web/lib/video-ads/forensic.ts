@@ -1023,6 +1023,20 @@ export function buildForensicInstruction(): string {
     'Si de verdad no pasa nada durante varios segundos, DILO ("se queda quieta mirando a',
     'cámara unos segundos"): la quietud declarada es un dato, un hueco no.',
     '',
+    // ⚠️ MEDIDO: con la cuenta sola, los cortes cortos y medios llegan al piso (3 s → 3
+    // movimientos, 7 s → 4) pero los LARGOS se quedan en ~4 frases pase lo que pase — 20 s
+    // con 4 movimientos, 11 s con 4. El modelo se topa en un número de cláusulas por
+    // respuesta, no en la instrucción. Pedirle "más" otra vez no mueve la aguja; darle una
+    // ESTRUCTURA donde colgarlas, sí: dividir el corte en tramos con su marca de tiempo
+    // convierte "describí más" en "describí cada tramo", que es una tarea distinta.
+    '⚠️ SI EL CORTE PASA DE 10 SEGUNDOS, DESCRÍBELO POR TRAMOS, con su marca de tiempo',
+    'dentro del corte y en orden. No es un pedido de estilo: sin la estructura, una toma de',
+    '20 segundos se describe con las mismas cuatro frases que una de 5, y se pierden 15',
+    'segundos de movimiento.',
+    '  Formato: "0-4 s: …; 4-9 s: …; 9-14 s: …; 14-20 s: …"',
+    '  Un tramo por cada 4 o 5 segundos, y dentro de cada uno el detalle de siempre: qué',
+    '  mano, cómo agarra, hacia dónde mira, dónde cae en el cuadro.',
+    '',
     'Un ejemplo del nivel esperado: "sostiene el frasco con la mano derecha por el cuerpo,',
     'lo levanta hasta la altura del mentón y lo gira un cuarto de vuelta para que la',
     'etiqueta quede al frente; la mano izquierda queda fuera de cuadro; mira al producto',

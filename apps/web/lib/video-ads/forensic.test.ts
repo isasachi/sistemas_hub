@@ -1002,3 +1002,21 @@ describe('coreografiaEscasa', () => {
     expect(coreografiaEscasa(rep([corte(1, 2, 'mira a cámara')]))).toEqual([])
   })
 })
+
+describe('buildForensicInstruction — los cortes largos van por tramos', () => {
+  // ⚠️ MEDIDO: con la cuenta de "un movimiento cada 2 segundos" sola, los cortes cortos y
+  // medios llegan al piso (3 s → 3 movimientos, 7 s → 4) pero los LARGOS se quedan en ~4
+  // frases pase lo que pase — 20 s con 4, 11 s con 4. El modelo se topa en un número de
+  // cláusulas por respuesta, no en la instrucción. La estructura por tramos convierte
+  // "describí más" en "describí cada tramo", que es otra tarea.
+  const p = buildForensicInstruction()
+
+  it('pide tramos con marca de tiempo por encima de 10 segundos', () => {
+    expect(p).toMatch(/SI EL CORTE PASA DE 10 SEGUNDOS, DESCRÍBELO POR TRAMOS/)
+    expect(p).toContain('0-4 s:')
+  })
+
+  it('mantiene la cuenta de movimientos por segundo', () => {
+    expect(p).toMatch(/un movimiento por cada 2 segundos/i)
+  })
+})
