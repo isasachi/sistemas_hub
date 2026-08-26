@@ -651,7 +651,7 @@ describe('unirTomasContinuas', () => {
     n, tiempo: `00:0${n - 1} - 00:0${n}`, duracionSeg: 3,
     accion: 'La mujer sostiene el frasco', camara: 'Primer plano', dialogo: `linea ${n}`,
     textoOverlay: 'No aparece', transicion: 'corte directo',
-    objetoEnMano: { inicio: 'frasco', fin: 'frasco', izquierda: null, derecha: null, accesorios: null }, micro,
+    objetoEnMano: { inicio: 'frasco', fin: 'frasco', izquierda: '', derecha: '', accesorios: '' }, micro,
     ...p,
   })
   const base = (cortes: Corte[]): ForensicReport => ({
@@ -675,14 +675,14 @@ describe('unirTomasContinuas', () => {
   // ⚠️ LA CONDICIÓN QUE JUSTIFICA TODA LA FUNCIÓN. En el original ese salto es un corte
   // de montaje; dentro de un clip continuo es un gotero teletransportándose.
   it('NO une si lo que hay en la mano cambia entre un corte y el otro', () => {
-    const a = corte(1, { objetoEnMano: { inicio: 'nada', fin: 'gotero', izquierda: null, derecha: null, accesorios: null } })
-    const b = corte(2, { objetoEnMano: { inicio: 'nada', fin: 'nada', izquierda: null, derecha: null, accesorios: null } })
+    const a = corte(1, { objetoEnMano: { inicio: 'nada', fin: 'gotero', izquierda: '', derecha: '', accesorios: '' } })
+    const b = corte(2, { objetoEnMano: { inicio: 'nada', fin: 'nada', izquierda: '', derecha: '', accesorios: '' } })
     expect(unirTomasContinuas(base([a, b]), 15, 300).report.cortes).toHaveLength(2)
   })
 
   it('tolera el artículo y las mayúsculas al comparar el objeto', () => {
-    const a = corte(1, { objetoEnMano: { inicio: 'nada', fin: 'El frasco', izquierda: null, derecha: null, accesorios: null } })
-    const b = corte(2, { objetoEnMano: { inicio: 'frasco', fin: 'frasco', izquierda: null, derecha: null, accesorios: null } })
+    const a = corte(1, { objetoEnMano: { inicio: 'nada', fin: 'El frasco', izquierda: '', derecha: '', accesorios: '' } })
+    const b = corte(2, { objetoEnMano: { inicio: 'frasco', fin: 'frasco', izquierda: '', derecha: '', accesorios: '' } })
     expect(unirTomasContinuas(base([a, b]), 15, 300).report.cortes).toHaveLength(1)
   })
 
@@ -738,10 +738,10 @@ describe('unirTomasContinuas', () => {
   })
 
   it('la toma resultante abarca de la primera mano a la última', () => {
-    const a = corte(1, { objetoEnMano: { inicio: 'nada', fin: 'frasco', izquierda: null, derecha: null, accesorios: null } })
-    const b = corte(2, { objetoEnMano: { inicio: 'frasco', fin: 'frasco abierto', izquierda: null, derecha: null, accesorios: null } })
+    const a = corte(1, { objetoEnMano: { inicio: 'nada', fin: 'frasco', izquierda: '', derecha: '', accesorios: '' } })
+    const b = corte(2, { objetoEnMano: { inicio: 'frasco', fin: 'frasco abierto', izquierda: '', derecha: '', accesorios: '' } })
     const { report } = unirTomasContinuas(base([a, b]), 15, 300)
-    expect(report.cortes[0].objetoEnMano).toEqual({ inicio: 'nada', fin: 'frasco abierto', izquierda: null, derecha: null, accesorios: null })
+    expect(report.cortes[0].objetoEnMano).toEqual({ inicio: 'nada', fin: 'frasco abierto', izquierda: '', derecha: '', accesorios: '' })
   })
 })
 
@@ -782,7 +782,7 @@ describe('MicroSchema — por qué el .catch va en la CASILLA y no en el objeto'
   // tiró en silencio.
   it('una casilla que falte no arrastra a las otras cinco', () => {
     const out = MicroSchema.parse({ cuerpo: 'torso quieto', manos: 'sube', rostro: 'sonríe', cabello: 'fijo', entorno: 'quieto' })
-    expect(out.posicion).toBeNull()
+    expect(out.posicion).toBe('')
     expect(Object.values(out).filter(Boolean)).toHaveLength(5)
   })
 
@@ -808,6 +808,20 @@ describe('MicroSchema — por qué el .catch va en la CASILLA y no en el objeto'
     expect(c.objetoEnMano).toBeNull()
   })
 
+  // ⚠️ LA SALIDA QUE EL SCHEMA LE OFRECÍA AL MODELO. `.nullable().catch(null)` emite
+  // {"default": null, "anyOf": [{"type":"string"},{"type":"null"}]} — o sea le dice que
+  // null es legal Y que es el default. Medido: con esa forma los objetos volvieron 6/6
+  // pero las cuatro casillas nuevas salieron null en los 6 cortes. `.catch('')` deja el
+  // campo en `required`, infalible, y SIN null donde escaparse.
+  it('ninguna casilla le ofrece `null` como respuesta legal', () => {
+    for (const esquema of [MicroSchema, ObjetoEnManoSchema]) {
+      const props = (z.toJSONSchema(esquema) as { properties: Record<string, unknown> }).properties
+      for (const [k, v] of Object.entries(props)) {
+        expect(JSON.stringify(v), `${k} le ofrece null al modelo`).not.toContain('null')
+      }
+    }
+  })
+
   it('las seis casillas se le siguen exigiendo al modelo', () => {
     const req = (z.toJSONSchema(MicroSchema) as { required?: string[] }).required ?? []
     for (const k of ['cuerpo', 'manos', 'rostro', 'cabello', 'entorno', 'posicion']) expect(req).toContain(k)
@@ -828,6 +842,6 @@ describe('ObjetoEnManoSchema — por qué NO son .optional()', () => {
   // Y la otra mitad: un `.nullable()` a secas reventaría el parse de toda sesión guardada.
   it('una sesión vieja sin los campos sigue parseando', () => {
     const out = ObjetoEnManoSchema.parse({ inicio: 'frasco', fin: 'frasco' })
-    expect(out).toEqual({ inicio: 'frasco', fin: 'frasco', izquierda: null, derecha: null, accesorios: null })
+    expect(out).toEqual({ inicio: 'frasco', fin: 'frasco', izquierda: '', derecha: '', accesorios: '' })
   })
 })

@@ -46,8 +46,8 @@ export const HablanteSchema = z.object({
  * sin él la fusión agresiva simplemente no ocurre (fail-closed).
  */
 export const ObjetoEnManoSchema = z.object({
-  inicio: z.string().nullable().catch(null),
-  fin: z.string().nullable().catch(null),
+  inicio: z.string().catch(''),
+  fin: z.string().catch(''),
   /**
    * ⚠️ EL ESTADO POR MANO Y EN ORDEN — un `{inicio, fin}` no alcanza, y está medido.
    *
@@ -63,8 +63,7 @@ export const ObjetoEnManoSchema = z.object({
    * el estado de las piezas que se separan del producto —tapa, gotero, cuchara— que es la
    * clase de objeto que desaparece sin que nadie lo note.
    *
-   * ⚠️ SON `.nullable().catch(null)`, NO `.optional()` — y la diferencia decidió si el eje
-   * existe o es un no-op. Nacieron opcionales por el motivo correcto (ninguna sesión
+   * ⚠️ SON `.catch('')`, y cada palabra de eso se pagó con una corrida. Nacieron opcionales por el motivo correcto (ninguna sesión
    * guardada los trae y un `.nullable()` a secas reventaría su `parse`), pero un campo
    * opcional SALE del `required` del JSON Schema y **lo que no se le exige, el modelo lo
    * omite en silencio**. Medido en la primera sesión analizada con el schema: `izquierda`
@@ -72,13 +71,20 @@ export const ObjetoEnManoSchema = z.object({
    * misma `accion` decía *"Sujeta frasco con izquierda, saca gotero con derecha"*. El dato
    * estaba; el campo no se llenaba.
    *
-   * `.catch(null)` compra las dos cosas: entra en `required` (el modelo DEBE responderlo)
-   * y devuelve `null` para lo viejo y para un valor inválido. Es el mismo patrón que
-   * `bodyFocus` en anuncios y `template` en el copy A/B, por el mismo motivo.
+   * ⚠️ Y NO `.nullable().catch(null)`, QUE FUE EL INTENTO ANTERIOR: eso emite
+   * `{"default": null, "anyOf": [{"type":"string"},{"type":"null"}]}`, o sea le dice al
+   * modelo que `null` es un valor legal Y que es el default. Medido: con esa forma, los
+   * objetos volvieron 6/6 pero `izquierda`, `derecha`, `accesorios` y `posicion` salieron
+   * **null en los 6 cortes** — el modelo tomó la salida que el schema le ofrecía.
+   *
+   * `.catch('')` emite `{"default": "", "type": "string"}`: sigue en el `required`, sigue
+   * siendo infalible (un `{}` parsea a cadena vacía, y una basura también), y **no hay
+   * ningún null donde escaparse**. La cadena vacía es falsy, así que todo el código que
+   * ya preguntaba `if (!x)` se comporta igual.
    */
-  izquierda: z.string().nullable().catch(null),
-  derecha: z.string().nullable().catch(null),
-  accesorios: z.string().nullable().catch(null),
+  izquierda: z.string().catch(''),
+  derecha: z.string().catch(''),
+  accesorios: z.string().catch(''),
 })
 
 /**
@@ -105,15 +111,15 @@ export const ObjetoEnManoSchema = z.object({
  */
 export const MicroSchema = z.object({
   /** Balanceo, peso, torsión, respiración. La rigidez SE DECLARA. */
-  cuerpo: z.string().nullable().catch(null),
+  cuerpo: z.string().catch(''),
   /** Vaivén, gesto que acompaña al habla, qué hacen cuando no hacen nada. */
-  manos: z.string().nullable().catch(null),
+  manos: z.string().catch(''),
   /** Cejas, párpados, mirada, y cuánto se articula la boca al hablar. */
-  rostro: z.string().nullable().catch(null),
+  rostro: z.string().catch(''),
   /** Si se mueve con la cabeza, si cae sobre la cara, si está fijo. */
-  cabello: z.string().nullable().catch(null),
+  cabello: z.string().catch(''),
   /** Qué se mueve DETRÁS: cortinas, ropa, reflejos, gente, nada. */
-  entorno: z.string().nullable().catch(null),
+  entorno: z.string().catch(''),
   /**
    * ⚠️ DÓNDE CAE CADA COSA EN EL CUADRO — la alternativa REAL a las coordenadas en píxeles.
    *
@@ -128,7 +134,7 @@ export const MicroSchema = z.object({
    * `required` del schema, que es exactamente lo que acabó de arreglar `izquierda` y
    * `derecha` (0/4 → 5/5) sin tocar una palabra del prompt.
    */
-  posicion: z.string().nullable().catch(null),
+  posicion: z.string().catch(''),
 })
 
 export const CorteSchema = z.object({
@@ -321,7 +327,7 @@ export const MIN_TOMA_SEG = 4
  */
 export function corteMuestraPersona(c: { accion: string; micro?: Micro | null }): boolean {
   if (!c.micro) return muestraPersona(c.accion)
-  const ausente = (x: string | null) => !x || /^\s*no aparece\s*\.?\s*$/i.test(x)
+  const ausente = (x: string) => !x || /^\s*no aparece\s*\.?\s*$/i.test(x)
   // Basta con que UNA de las tres partes del cuerpo esté descrita: un plano de manos
   // sigue siendo un plano de persona a efectos de continuidad y de fotograma.
   return !(ausente(c.micro.cuerpo) && ausente(c.micro.rostro) && ausente(c.micro.cabello))
@@ -351,9 +357,9 @@ export function muestraPersona(accion: string): boolean {
 /** Dos cortes que se vuelven uno: la secuencia de cada mano se ENCADENA, igual que la
  *  acción. Quedarse con la del corte dominante perdería la mitad del recorrido. */
 function unirManos(a: ObjetoEnMano, b: ObjetoEnMano): ObjetoEnMano {
-  const enc = (x: string | null, y: string | null) => {
-    const [i, j] = [(x ?? '').trim(), (y ?? '').trim()]
-    if (!i || !j) return i || j || null
+  const enc = (x: string, y: string) => {
+    const [i, j] = [x.trim(), y.trim()]
+    if (!i || !j) return i || j
     return i === j ? i : `${i} → ${j}`
   }
   return {
@@ -367,9 +373,9 @@ function unirManos(a: ObjetoEnMano, b: ObjetoEnMano): ObjetoEnMano {
 
 function unirMicro(a?: Micro | null, b?: Micro | null): Micro | null {
   if (!a || !b) return a ?? b ?? null
-  const par = (x: string | null, y: string | null) => {
-    const [i, j] = [(x ?? '').trim(), (y ?? '').trim()]
-    if (!i) return j || null
+  const par = (x: string, y: string) => {
+    const [i, j] = [x.trim(), y.trim()]
+    if (!i) return j
     if (!j || i === j) return i
     return `${i}; después ${j}`
   }
@@ -436,10 +442,10 @@ export function puedenUnirse(a: Corte, b: Corte): boolean {
 }
 
 /** El último y el primer estado de una secuencia "a → b → c" (o "a, luego b"). */
-const tramos = (x?: string | null) =>
+const tramos = (x?: string) =>
   (x ?? '').split(/→|->|,\s*(?:luego|despu[eé]s)\s*|;/).map((t) => normObj(t)).filter(Boolean)
-const ultimoTramo = (x?: string | null) => tramos(x).at(-1) ?? ''
-const primerTramo = (x?: string | null) => tramos(x)[0] ?? ''
+const ultimoTramo = (x?: string) => tramos(x).at(-1) ?? ''
+const primerTramo = (x?: string) => tramos(x)[0] ?? ''
 
 /**
  * Une cortes CONSECUTIVOS en tomas largas mientras la continuidad lo permita.
