@@ -733,30 +733,28 @@ describe('repartirAccion', () => {
   })
 })
 
-describe('buildLotePrompt — manos y accesorios', () => {
-  const manos = {
-    inicio: 'frasco', fin: 'frasco',
-    izquierda: 'sostiene frasco → sostiene frasco',
-    derecha: 'destapa → aplica en mejilla → vuelve a tapar',
-    accesorios: 'tapa puesta → tapa fuera → tapa puesta',
-  }
+describe('buildLotePrompt — el estado de las piezas', () => {
+  const manos = { inicio: 'frasco', fin: 'frasco', accesorios: 'tapa puesta → tapa fuera → tapa puesta' }
   const lote = groupIntoLotes([{ ...toma(1, 6, 'Hola.'), tiempoOriginal: 't1' }])[0]
   const p = buildLotePrompt({
     lote, ...ARGS,
     cortes: [{ tiempo: 't1', camara: 'Primer plano', objetoEnMano: manos }],
   })
 
-  // Sin esto el dato se extrae y no lo lee nadie — el defecto de `elementosGraficos`.
-  it('emite el recorrido de cada mano', () => {
-    expect(p).toContain('L: sostiene frasco → sostiene frasco')
-    expect(p).toContain('R: destapa → aplica en mejilla → vuelve a tapar')
+  // "la tapa reaparece mágicamente en el frasco": el modelo no puede conservar el estado
+  // de una pieza que nadie le nombró. Es lo único que `micro.manos` no puede decir, porque
+  // es un estado que VUELVE.
+  it('emite el estado de la tapa', () => {
+    expect(p).toContain('tapa puesta → tapa fuera → tapa puesta')
+    expect(p).toMatch(/never appear or vanish on their own/)
   })
 
-  // "la tapa reaparece mágicamente en el frasco": el modelo no puede conservar el estado
-  // de una pieza que nadie le nombró.
-  it('emite el estado de la tapa', () => {
-    expect(p).toContain('cap/parts: tapa puesta → tapa fuera → tapa puesta')
-    expect(p).toMatch(/parts never appear or vanish on their own/)
+  // El recorrido por mano ya no tiene campos propios: vive en `micro.manos`, que es donde
+  // el modelo lo escribía por su cuenta mientras los campos volvían vacíos.
+  it('el recorrido por mano llega por micro.manos', () => {
+    const micro = { cuerpo: 'torso quieto', manos: 'izquierda: sostiene frasco · derecha: destapa → aplica', rostro: 'sonríe', cabello: 'fijo', entorno: 'quieto' }
+    const q = buildLotePrompt({ lote, ...ARGS, cortes: [{ tiempo: 't1', camara: 'Primer plano', micro }] })
+    expect(q).toContain('hands izquierda: sostiene frasco · derecha: destapa → aplica')
   })
 })
 
@@ -771,16 +769,11 @@ describe('buildLotePrompt — las referencias no son tomas', () => {
 })
 
 describe('buildLotePrompt — la puesta en cuadro', () => {
-  // ⚠️ Como bullet dentro de las reglas de `accion` salió en 0/4 y 0/5 cortes, en dos
-  // sesiones seguidas. Como casilla propia entra en el `required` del schema — lo mismo
-  // que llevó `izquierda`/`derecha` de 0/4 a 5/5 sin tocar el prompt.
-  it('emite dónde cae cada cosa en el cuadro', () => {
-    const micro = {
-      cuerpo: 'torso quieto', manos: 'sube la mano', rostro: 'sonríe', cabello: 'fijo',
-      entorno: 'fondo quieto', posicion: 'persona centrada, frasco en el tercio derecho',
-    }
-    const lote = groupIntoLotes([{ ...toma(1, 6, 'Hola.'), tiempoOriginal: 't1' }])[0]
-    const p = buildLotePrompt({ lote, ...ARGS, cortes: [{ tiempo: 't1', camara: 'Primer plano', micro }] })
-    expect(p).toContain('framing persona centrada, frasco en el tercio derecho')
+  // ⚠️ `Micro.posicion` se ELIMINÓ: volvió vacía en 3 corridas porque solapa con `camara`,
+  // que el forense llena 5/5. El vocabulario de encuadre se pide dentro de `camara` y llega
+  // por la línea CAMERA que ya existía.
+  it('llega por la línea de cámara, que el forense sí llena', () => {
+    const p = buildLotePrompt({ lote: groupIntoLotes([toma(1, 5)])[0], ...ARGS, camara: 'Primer plano, persona centrada, frasco en el tercio derecho' })
+    expect(p).toContain('CAMERA: Primer plano, persona centrada, frasco en el tercio derecho')
   })
 })

@@ -415,6 +415,16 @@ Cuatro condiciones, todas COMPARACIONES y no criterios — es la "matemática" q
 | objeto `.nullable().catch(null)`, casillas `.nullable().catch(null)` | los objetos vuelven 6/6 **pero las casillas nuevas salen `null` en los 6 cortes**: el schema le ofrecía la salida |
 | **objeto `.nullable().catch(null)`, casillas `.catch('')`** | ✅ exigidas, infalibles y sin `null` donde escaparse |
 
+⚠️ **Y LA CAUSA REAL NO ERA EL SCHEMA: UN CAMPO QUE SOLAPA CON OTRO QUE EL MODELO YA LLENÓ VUELVE VACÍO.** Con las 11 casillas ya exigidas, infalibles y sin `null` donde escaparse, `izquierda`, `derecha`, `accesorios` y `posicion` **seguían saliendo vacías** — mientras la casilla `micro.manos` devolvía espontáneamente *"derecha aplica gota, izquierda sostiene frasco"* y `objetoEnMano.inicio` devolvía *"frasco, cuentagotas"*. El modelo no se negaba: **ya había contestado la pregunta y no la repetía en otro campo**. El prompt las pedía (verificado: las cuatro aparecen en la instrucción).
+
+La lección general, y la que hay que recordar antes de agregar el próximo campo al forense: **el arreglo es borrar el duplicado, no insistir en el schema.**
+
+- **`izquierda`/`derecha`: eliminados.** `micro.manos` es el hogar único del eje por mano, y su instrucción ahora pide la secuencia explícita (*"izquierda: sostiene frasco todo el corte · derecha: destapa → aplica → vuelve a tapar"*) más el estado de cualquier pieza separable.
+- **`Micro.posicion`: eliminado.** Solapaba con `camara`, que el forense llena 5/5. El vocabulario de encuadre se pide DENTRO de `camara` y llega por la línea `CAMERA:` que ya existía.
+- **`accesorios`: se queda.** Es el único campo estructurado que expresa un estado que VUELVE (tapa puesta → fuera → puesta), algo que `inicio`/`fin` no pueden por construcción, y es lo que lee `puedenUnirse`. Es fail-open: vacío no bloquea nada.
+
+✅ **Medido con `scripts/probe-forense-atomico.ts` tras la eliminación** (un forense real): `micro.manos` **7/7** y cargando el eje por mano, `objetoEnMano` 7/7, largo mediano 30 caracteres por casilla, 0 en prosa. Y la fusión por continuidad pasó de **0 uniones a 2** (7 cortes → 5): `inicio`/`fin` llenan de forma fiable, que es lo que ese guard necesita. Presupuesto: **84 de 94 lotes** con el detalle completo, 10 recortados, ninguno sin emitir.
+
 ⚠️ **LA CUARTA FILA EXISTE PORQUE `.nullable()` LE OFRECE AL MODELO UNA SALIDA LEGAL.** `z.string().nullable().catch(null)` emite `{"default": null, "anyOf": [{"type":"string"},{"type":"null"}]}` — o sea el schema le dice que `null` es un valor válido **y que es el default**. Medido: con esa forma los dos objetos volvieron 6/6 y las cinco casillas viejas se llenaron, pero `izquierda`, `derecha`, `accesorios` y `posicion` salieron `null` en los 6 cortes. El prompt las pedía —verificado, las cuatro aparecen en la instrucción—; el modelo simplemente tomó lo que el schema le ofrecía.
 
 `z.string().catch('')` emite `{"default": "", "type": "string"}`: sigue en el `required`, sigue siendo infalible (`{}` parsea a cadena vacía, una basura también) y **no hay ningún `null` donde escaparse**. La cadena vacía es falsy, así que todo el código que ya preguntaba `if (!x)` no cambia. Hay un test que recorre las propiedades de los dos schemas y falla si alguna vuelve a ofrecer `null`.

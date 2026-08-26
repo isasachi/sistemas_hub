@@ -522,12 +522,9 @@ function bloqueOverlay(nivel: number): string[] {
 function manosDe(m: ObjetoEnMano | undefined, cap: number | null): string {
   if (!m) return ''
   const corto = (x: string) => (cap != null && x.length > cap ? `${x.slice(0, cap).trimEnd()}…` : x)
-  const partes = [
-    m.izquierda?.trim() ? `L: ${corto(m.izquierda.trim())}` : '',
-    m.derecha?.trim() ? `R: ${corto(m.derecha.trim())}` : '',
-    m.accesorios?.trim() ? `cap/parts: ${corto(m.accesorios.trim())}` : '',
-  ].filter(Boolean)
-  return partes.length ? `Hands (follow this order exactly; parts never appear or vanish on their own): ${partes.join(' · ')}` : ''
+  const acc = m.accesorios?.trim()
+  if (!acc) return ''
+  return `Detachable parts (follow this order exactly; they never appear or vanish on their own): ${corto(acc)}`
 }
 
 function microDe(m: Micro | undefined, cap: number | null): string {
@@ -543,9 +540,6 @@ function microDe(m: Micro | undefined, cap: number | null): string {
     m.rostro && `face ${corto(m.rostro)}`,
     m.cabello && `hair ${corto(m.cabello)}`,
     m.entorno && `bg ${corto(m.entorno)}`,
-    // La puesta en cuadro. Va última porque es la que menos duele perder si el nivel de
-    // degradación recorta, y primera en utilidad cuando entra entera.
-    m.posicion && `framing ${corto(m.posicion)}`,
   ].filter(Boolean)
   return partes.length ? `Micro-detail (reproduce exactly): ${partes.join(' · ')}` : ''
 }

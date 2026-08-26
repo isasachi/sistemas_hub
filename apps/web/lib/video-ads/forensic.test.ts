@@ -71,7 +71,7 @@ describe('repairCutTiming', () => {
     sujeto: '', vestuario: '', producto: '', fondo: '', elementosGraficos: '',
     cortes,
     tomas: cortes.map((c) => ({
-      n: c.n, encuadre: '', posicion: '', accionFisica: '', objeto: '',
+      n: c.n, encuadre: '', posicion: 'x', accionFisica: '', objeto: '',
       dialogo: c.dialogo, duracionSeg: c.duracionSeg,
     })),
     edicion: { sincronizacion: '', textoOverlay: '', escalaZoom: '', cortes: '', ritmo: '', corteFinal: '' },
@@ -646,19 +646,19 @@ describe('muestraPersona — la negación manda', () => {
 })
 
 describe('unirTomasContinuas', () => {
-  const micro = { cuerpo: 'quieto', manos: 'sube', rostro: 'sonríe', cabello: 'fijo', entorno: 'nada', posicion: 'centrada en el cuadro' }
+  const micro = { cuerpo: 'quieto', manos: 'sube', rostro: 'sonríe', cabello: 'fijo', entorno: 'nada' }
   const corte = (n: number, p: Partial<Corte> = {}): Corte => ({
     n, tiempo: `00:0${n - 1} - 00:0${n}`, duracionSeg: 3,
     accion: 'La mujer sostiene el frasco', camara: 'Primer plano', dialogo: `linea ${n}`,
     textoOverlay: 'No aparece', transicion: 'corte directo',
-    objetoEnMano: { inicio: 'frasco', fin: 'frasco', izquierda: '', derecha: '', accesorios: '' }, micro,
+    objetoEnMano: { inicio: 'frasco', fin: 'frasco', accesorios: '' }, micro,
     ...p,
   })
   const base = (cortes: Corte[]): ForensicReport => ({
     duracionTotalSeg: cortes.reduce((n, c) => n + c.duracionSeg, 0),
     caracteresGuion: 0, guionOriginal: '', sujeto: '', vestuario: '', producto: '', fondo: '',
     elementosGraficos: '', cortes,
-    tomas: cortes.map((c) => ({ n: c.n, encuadre: '', posicion: '', accionFisica: '', objeto: '', dialogo: c.dialogo, duracionSeg: c.duracionSeg })),
+    tomas: cortes.map((c) => ({ n: c.n, encuadre: '', posicion: 'x', accionFisica: '', objeto: '', dialogo: c.dialogo, duracionSeg: c.duracionSeg })),
     edicion: { sincronizacion: '', textoOverlay: '', escalaZoom: '', cortes: '', ritmo: '', corteFinal: '' },
     resumenParaUsuario: '',
   })
@@ -675,14 +675,14 @@ describe('unirTomasContinuas', () => {
   // ⚠️ LA CONDICIÓN QUE JUSTIFICA TODA LA FUNCIÓN. En el original ese salto es un corte
   // de montaje; dentro de un clip continuo es un gotero teletransportándose.
   it('NO une si lo que hay en la mano cambia entre un corte y el otro', () => {
-    const a = corte(1, { objetoEnMano: { inicio: 'nada', fin: 'gotero', izquierda: '', derecha: '', accesorios: '' } })
-    const b = corte(2, { objetoEnMano: { inicio: 'nada', fin: 'nada', izquierda: '', derecha: '', accesorios: '' } })
+    const a = corte(1, { objetoEnMano: { inicio: 'nada', fin: 'gotero', accesorios: '' } })
+    const b = corte(2, { objetoEnMano: { inicio: 'nada', fin: 'nada', accesorios: '' } })
     expect(unirTomasContinuas(base([a, b]), 15, 300).report.cortes).toHaveLength(2)
   })
 
   it('tolera el artículo y las mayúsculas al comparar el objeto', () => {
-    const a = corte(1, { objetoEnMano: { inicio: 'nada', fin: 'El frasco', izquierda: '', derecha: '', accesorios: '' } })
-    const b = corte(2, { objetoEnMano: { inicio: 'frasco', fin: 'frasco', izquierda: '', derecha: '', accesorios: '' } })
+    const a = corte(1, { objetoEnMano: { inicio: 'nada', fin: 'El frasco', accesorios: '' } })
+    const b = corte(2, { objetoEnMano: { inicio: 'frasco', fin: 'frasco', accesorios: '' } })
     expect(unirTomasContinuas(base([a, b]), 15, 300).report.cortes).toHaveLength(1)
   })
 
@@ -696,7 +696,7 @@ describe('unirTomasContinuas', () => {
   it('NO une un plano de persona con uno sin persona', () => {
     const b = corte(2, {
       accion: 'Detalle del frasco',
-      micro: { cuerpo: 'no aparece', manos: 'sostienen el frasco', rostro: 'no aparece', cabello: 'no aparece', entorno: 'fondo quieto', posicion: 'centrada en el cuadro' },
+      micro: { cuerpo: 'no aparece', manos: 'sostienen el frasco', rostro: 'no aparece', cabello: 'no aparece', entorno: 'fondo quieto' },
     })
     expect(unirTomasContinuas(base([corte(1), b]), 15, 300).report.cortes).toHaveLength(2)
   })
@@ -738,16 +738,16 @@ describe('unirTomasContinuas', () => {
   })
 
   it('la toma resultante abarca de la primera mano a la última', () => {
-    const a = corte(1, { objetoEnMano: { inicio: 'nada', fin: 'frasco', izquierda: '', derecha: '', accesorios: '' } })
-    const b = corte(2, { objetoEnMano: { inicio: 'frasco', fin: 'frasco abierto', izquierda: '', derecha: '', accesorios: '' } })
+    const a = corte(1, { objetoEnMano: { inicio: 'nada', fin: 'frasco', accesorios: '' } })
+    const b = corte(2, { objetoEnMano: { inicio: 'frasco', fin: 'frasco abierto', accesorios: '' } })
     const { report } = unirTomasContinuas(base([a, b]), 15, 300)
-    expect(report.cortes[0].objetoEnMano).toEqual({ inicio: 'nada', fin: 'frasco abierto', izquierda: '', derecha: '', accesorios: '' })
+    expect(report.cortes[0].objetoEnMano).toEqual({ inicio: 'nada', fin: 'frasco abierto', accesorios: '' })
   })
 })
 
 describe('corteMuestraPersona', () => {
-  const sin = { cuerpo: 'no aparece', manos: 'sostienen el frasco', rostro: 'no aparece', cabello: 'no aparece', entorno: 'fondo quieto', posicion: 'centrada en el cuadro' }
-  const con = { cuerpo: 'torso erguido', manos: 'sube la mano', rostro: 'sonríe', cabello: 'fijo', entorno: 'quieto', posicion: 'centrada en el cuadro' }
+  const sin = { cuerpo: 'no aparece', manos: 'sostienen el frasco', rostro: 'no aparece', cabello: 'no aparece', entorno: 'fondo quieto' }
+  const con = { cuerpo: 'torso erguido', manos: 'sube la mano', rostro: 'sonríe', cabello: 'fijo', entorno: 'quieto' }
 
   // ⚠️ EL CASO QUE LO MOTIVÓ, medido sobre una sesión real: el forense escribe la acción
   // en telegrama y SIN SUJETO, así que buscar "mujer" en la prosa da false para un plano
@@ -781,9 +781,9 @@ describe('MicroSchema — por qué el .catch va en la CASILLA y no en el objeto'
   // `micro` volvió null en los 5 cortes — el detalle atómico que el modelo SÍ produjo se
   // tiró en silencio.
   it('una casilla que falte no arrastra a las otras cinco', () => {
-    const out = MicroSchema.parse({ cuerpo: 'torso quieto', manos: 'sube', rostro: 'sonríe', cabello: 'fijo', entorno: 'quieto' })
-    expect(out.posicion).toBe('')
-    expect(Object.values(out).filter(Boolean)).toHaveLength(5)
+    const out = MicroSchema.parse({ cuerpo: 'torso quieto', manos: 'sube', rostro: 'sonríe', cabello: 'fijo' })
+    expect(out.entorno).toBe('')
+    expect(Object.values(out).filter(Boolean)).toHaveLength(4)
   })
 
   // ⚠️ LA INFALIBILIDAD ES LO QUE PERMITE QUE EL OBJETO SEA REQUERIDO SIN RIESGO. Si
@@ -824,7 +824,7 @@ describe('MicroSchema — por qué el .catch va en la CASILLA y no en el objeto'
 
   it('las seis casillas se le siguen exigiendo al modelo', () => {
     const req = (z.toJSONSchema(MicroSchema) as { required?: string[] }).required ?? []
-    for (const k of ['cuerpo', 'manos', 'rostro', 'cabello', 'entorno', 'posicion']) expect(req).toContain(k)
+    for (const k of ['cuerpo', 'manos', 'rostro', 'cabello', 'entorno']) expect(req).toContain(k)
   })
 })
 
@@ -836,12 +836,12 @@ describe('ObjetoEnManoSchema — por qué NO son .optional()', () => {
   // no-op con el síntoma idéntico al bug que vino a arreglar.
   it('los tres campos van en el `required` que se le manda al modelo', () => {
     const req = (z.toJSONSchema(ObjetoEnManoSchema) as { required?: string[] }).required ?? []
-    for (const k of ['inicio', 'fin', 'izquierda', 'derecha', 'accesorios']) expect(req).toContain(k)
+    for (const k of ['inicio', 'fin', 'accesorios']) expect(req).toContain(k)
   })
 
   // Y la otra mitad: un `.nullable()` a secas reventaría el parse de toda sesión guardada.
   it('una sesión vieja sin los campos sigue parseando', () => {
     const out = ObjetoEnManoSchema.parse({ inicio: 'frasco', fin: 'frasco' })
-    expect(out).toEqual({ inicio: 'frasco', fin: 'frasco', izquierda: '', derecha: '', accesorios: '' })
+    expect(out).toEqual({ inicio: 'frasco', fin: 'frasco', accesorios: '' })
   })
 })

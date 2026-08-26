@@ -82,8 +82,6 @@ export const ObjetoEnManoSchema = z.object({
    * ningún null donde escaparse**. La cadena vacía es falsy, así que todo el código que
    * ya preguntaba `if (!x)` se comporta igual.
    */
-  izquierda: z.string().catch(''),
-  derecha: z.string().catch(''),
   accesorios: z.string().catch(''),
 })
 
@@ -112,7 +110,18 @@ export const ObjetoEnManoSchema = z.object({
 export const MicroSchema = z.object({
   /** Balanceo, peso, torsión, respiración. La rigidez SE DECLARA. */
   cuerpo: z.string().catch(''),
-  /** Vaivén, gesto que acompaña al habla, qué hacen cuando no hacen nada. */
+  /**
+   * ⚠️ EL EJE POR MANO VIVE ACÁ, Y NO EN CAMPOS PROPIOS. Hubo `objetoEnMano.izquierda` y
+   * `.derecha` durante tres corridas y volvieron VACÍOS las tres, mientras esta casilla
+   * devolvía espontáneamente *"derecha aplica gota, izquierda sostiene frasco"*. El modelo
+   * no se negaba: ya había contestado la pregunta y no la repetía en otro campo.
+   *
+   * La lección general —y es la que hay que recordar antes de agregar el próximo campo—
+   * es que **un campo que solapa con otro que el modelo ya llenó vuelve vacío**. Se
+   * arregla borrando el duplicado, no insistiendo en el schema.
+   *
+   * Vaivén, qué mano hace qué y en qué orden, y qué hacen cuando no hacen nada.
+   */
   manos: z.string().catch(''),
   /** Cejas, párpados, mirada, y cuánto se articula la boca al hablar. */
   rostro: z.string().catch(''),
@@ -120,21 +129,6 @@ export const MicroSchema = z.object({
   cabello: z.string().catch(''),
   /** Qué se mueve DETRÁS: cortinas, ropa, reflejos, gente, nada. */
   entorno: z.string().catch(''),
-  /**
-   * ⚠️ DÓNDE CAE CADA COSA EN EL CUADRO — la alternativa REAL a las coordenadas en píxeles.
-   *
-   * El dueño del repo preguntó si servirían unos `x1,y1`. No: `grok-imagine` es un modelo
-   * de difusión de video, no un detector — no los honra, y gastarían caracteres que la
-   * escalera ya se está comiendo. Lo que sí entiende es el vocabulario relativo al
-   * encuadre, que es el que usa cualquier shot list real.
-   *
-   * ⚠️ ESTO EMPEZÓ COMO UN BULLET DENTRO DE LAS REGLAS DE `accion` Y SALIÓ EN 0 DE 4 Y
-   * 0 DE 5 CORTES, en dos sesiones seguidas. Una instrucción sin campo que la haga cumplir
-   * es una sugerencia: el modelo la lee y sigue de largo. Como casilla propia entra en el
-   * `required` del schema, que es exactamente lo que acabó de arreglar `izquierda` y
-   * `derecha` (0/4 → 5/5) sin tocar una palabra del prompt.
-   */
-  posicion: z.string().catch(''),
 })
 
 export const CorteSchema = z.object({
@@ -365,8 +359,6 @@ function unirManos(a: ObjetoEnMano, b: ObjetoEnMano): ObjetoEnMano {
   return {
     inicio: a.inicio,
     fin: b.fin,
-    izquierda: enc(a.izquierda, b.izquierda),
-    derecha: enc(a.derecha, b.derecha),
     accesorios: enc(a.accesorios, b.accesorios),
   }
 }
@@ -385,7 +377,6 @@ function unirMicro(a?: Micro | null, b?: Micro | null): Micro | null {
     rostro: par(a.rostro, b.rostro),
     cabello: par(a.cabello, b.cabello),
     entorno: par(a.entorno, b.entorno),
-    posicion: par(a.posicion, b.posicion),
   }
 }
 
@@ -962,15 +953,14 @@ export function buildForensicInstruction(): string {
     '⚠️ QUÉ HAY EN LAS MANOS: `objetoEnMano`.',
     '  `inicio` / `fin`: qué sostiene al EMPEZAR el corte y qué al TERMINARLO. Manos',
     '  vacías se escribe "nada". Si no se ven las manos, "fuera de cuadro".',
-    '  `izquierda` / `derecha`: qué hace CADA mano, en orden, con flechas. Casi nunca hacen',
-    '    lo mismo: una suele sostener mientras la otra manipula.',
-    '    Ej: izquierda "sostiene frasco → sostiene frasco → sostiene frasco"',
-    '        derecha "destapa el frasco → aplica producto en mejilla → vuelve a tapar".',
-    '  `accesorios`: el estado de las piezas que SE SEPARAN del producto — tapa, gotero,',
+    '  ⚠️ El recorrido de CADA MANO no va acá: va en `micro.manos`. Acá solo QUÉ se sostiene.',
+    '  `accesorios`: el ESTADO de las piezas que se separan del producto — tapa, gotero,',
     '    cuchara, aplicador — también con flechas. Ej: "tapa puesta → tapa fuera, en la',
     '    mano derecha → tapa puesta".',
     '    ⚠️ Es el campo que evita el fallo más visible de todos: si no dices que la tapa',
     '    salió y volvió, el video generado la hace REAPARECER en el frasco de la nada.',
+    '    ⚠️ Una pieza nombrada en `inicio` TAMBIÉN necesita su estado acá: `inicio` dice qué',
+    '    se SOSTIENE, `accesorios` dice si está puesta o fuera, y eso cambia dentro del corte.',
     '    Si el producto no tiene piezas separables, escribe "sin accesorios".',
     '  Nómbralo igual siempre dentro del mismo video: el frasco es "frasco" en los seis',
     '  cortes, no "el producto" en uno y "el envase" en otro — se compara en código.',
@@ -983,16 +973,17 @@ export function buildForensicInstruction(): string {
     '  que "se parece" de uno que es el mismo. Cinco casillas, todas obligatorias cuando',
     '  el corte muestra a una persona:',
     '    `cuerpo`: balanceo, desplazamiento del peso, torsión del torso, respiración.',
-    '    `manos`: vaivén, qué gesto acompaña a qué palabra, qué hacen cuando no hacen nada.',
+    '    `manos`: QUÉ HACE CADA MANO Y EN QUÉ ORDEN, con flechas. Casi nunca hacen lo mismo:',
+    '      una sostiene mientras la otra manipula. Formato: "izquierda: sostiene frasco todo',
+    '      el corte · derecha: destapa → aplica en mejilla → vuelve a tapar". Incluye el',
+    '      vaivén, qué hacen cuando no hacen nada, y el estado de cualquier pieza que se',
+    '      separe (tapa, gotero): si sale y vuelve, dilo acá — es lo que evita que un objeto',
+    '      reaparezca de la nada en el video generado.',
     '    `rostro`: cejas, párpados, adónde va la mirada y CUÁNTO SE ABRE LA BOCA al hablar',
     '      (articulación marcada, labios apenas separados, sonríe mientras habla…).',
     '    `cabello`: si se mueve con la cabeza, si cae sobre la cara, si está fijo.',
     '    `entorno`: qué se mueve DETRÁS — cortinas, ropa colgada, reflejos, gente, hojas.',
-    '    `posicion`: DÓNDE cae cada cosa EN EL CUADRO y por dónde entra y sale. Referencias',
-    '      del encuadre, nunca medidas ni píxeles: "persona centrada, algo desplazada a la',
-    '      izquierda", "frasco en el tercio derecho a la altura del pecho", "la mano entra',
-    '      por el borde inferior", "el producto sale por arriba". Es lo que hace que el',
-    '      gesto se reproduzca EN EL MISMO SITIO del cuadro y no en cualquier parte.',
+
     '',
     '  ⚠️ LA QUIETUD ES UNA OBSERVACIÓN, NO UNA CASILLA VACÍA. Un cuerpo que casi no se',
     '  mueve es un dato tan renderizable como uno que se mueve mucho: "torso casi inmóvil,',

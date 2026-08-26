@@ -29,7 +29,8 @@ async function main() {
   console.log(`${report.cortes.length} cortes\n`)
   for (const c of report.cortes) {
     console.log(`── corte ${c.n} (${c.duracionSeg}s) · ${c.camara.slice(0, 50)}`)
-    console.log(`   manos: ${c.objetoEnMano ? `${c.objetoEnMano.inicio} → ${c.objetoEnMano.fin}` : '⚠️ SIN CAMPO'}`)
+    console.log(`   sostiene: ${c.objetoEnMano ? `${c.objetoEnMano.inicio} → ${c.objetoEnMano.fin}` : '⚠️ SIN CAMPO'}`)
+    console.log(`   piezas:   ${c.objetoEnMano?.accesorios || '⚠️ VACÍO'}`)
     if (!c.micro) { console.log('   micro: ⚠️ SIN CAMPO'); continue }
     for (const [k, v] of Object.entries(c.micro)) {
       const t = v ?? '⚠️ VACÍA'
@@ -38,6 +39,9 @@ async function main() {
     }
   }
 
+  const conAcc = report.cortes.filter((c) => c.objetoEnMano?.accesorios).length
+  const conManos = report.cortes.filter((c) => c.micro?.manos).length
+  console.log(`\naccesorios llenos: ${conAcc}/${report.cortes.length} · micro.manos llenos: ${conManos}/${report.cortes.length}`)
   const conObjeto = report.cortes.filter((c) => c.objetoEnMano).length
   const conMicro = report.cortes.filter((c) => c.micro).length
   const med = [...largos].sort((a, b) => a - b)[Math.floor(largos.length / 2)] ?? 0
