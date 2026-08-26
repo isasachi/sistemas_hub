@@ -43,10 +43,20 @@ export interface VideoListRow {
 }
 
 export async function listVideoSessions(userId: string): Promise<VideoListRow[]> {
+  // ⚠️ NO SE LISTAN LAS SESIONES VACÍAS. El wizard crea la fila al MONTAR la página, así
+  // que abrir la tool y no hacer nada deja una sesión en el historial — y en dev, con el
+  // StrictMode de React montando dos veces, deja DOS. Medido sobre la base: 22 de 57 sesiones de video, 103 de 144 de anuncios, 40 de 107 de branding y 25 de 89 de landing.
+  // Una sesión sin video de referencia es una que el usuario nunca empezó: no hay nada
+  // que abrir ni que borrar, solo ruido que empuja hacia abajo el trabajo real.
+  //
+  // Se filtra al LEER y no se borran filas: son inofensivas, y borrarlas es una migración
+  // destructiva para arreglar un problema de presentación. El `step` no sirve de
+  // discriminante (nace en 0 y una sesión real también pasa por 0).
   const { data, error } = await getDb()
     .from('video_sessions')
     .select('id, created_at, step, product_name, video_url, avatar_url, character_url, product_url, render_done')
     .eq('user_id', userId)
+    .not('reference_video_url', 'is', null)
     .order('created_at', { ascending: false })
     .limit(24)
   if (error) return []

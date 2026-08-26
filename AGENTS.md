@@ -855,6 +855,14 @@ Efecto sobre la sesión de ropa: **29 cortes → 7 lotes**, dos de ellos los fla
 
 **Schema:** `supabase/migrations/20260810000001_video_sessions.sql` (base de video_sessions) + `20260812000001_video_spec_rewire.sql` (columnas de INPUTS y VALIDATION) + `20260812000002_video_lotes.sql` (columnas de FASE 3/4/4.5/5: `adapted`, `character_prompt`, `consistency_block`, `voice_profile`, `lotes` jsonb) + `20260812000003_video_render_done.sql` (columna `render_done`, cacheada para el dashboard).
 
+### Sesiones fantasma en el dashboard
+
+⚠️ **EL WIZARD CREA LA FILA AL MONTAR LA PÁGINA, ASÍ QUE ABRIR UNA TOOL Y NO HACER NADA DEJA UNA SESIÓN.** Los tres wizards (`VideoWizard`, `AdWizard`, `LandingWizard`) llaman a `startNewSession()` desde el `useEffect` de montaje cuando no hay id en `localStorage`. Medido sobre la base: **103 de 144** filas de `sessions`, **40 de 107** de `branding_sessions`, **25 de 89** de `landing_sessions` y **22 de 57** de `video_sessions` no tienen ni siquiera su primer insumo. El dashboard las listaba todas, empujando el trabajo real hacia abajo.
+
+⚠️ **Y EN DESARROLLO SE CREAN DE A DOS:** el StrictMode de React monta dos veces, y este efecto tiene un efecto de servidor. Se ve en los datos — las fantasma aparecen **en pareja con la sesión real y con el mismo minuto de creación**. Un `useRef` corta la segunda.
+
+**El listado filtra al LEER y no se borra ninguna fila.** Cada `list*Sessions` exige que exista el primer insumo de su tool (`reference_video_url`, `reference_url`, `product_name`, `brand_name`). Borrarlas sería una migración destructiva para arreglar un problema de presentación, y son inofensivas donde están. ⚠️ El `step` NO sirve de discriminante: nace en 0 y una sesión real también pasa por 0.
+
 ## Tool: Calculadora de Costos (`calculadora-costos`)
 
 Las tres hojas de `ANALISIS FINANCIEROS- ACADEMY ECOM.xlsx` (el archivo maestro del dueño del repo) llenables desde el navegador. **No hay wizard**: cada hoja es UNA pantalla con todo a la vista, se edita cualquier casilla, todo se recalcula con cada tecla y al guardar se pasa a una vista de dashboard. La entrada bifurca en dos (`¿Qué deseas hacer hoy?`): **Establecer mi precio** (`/precio`, hoja COSTEO DE PRODUCTOS) y **Calcular mi rentabilidad** (`/rentabilidad`, hojas ANALISIS FINANCIERO). El wizard de 10 pasos que había antes se borró.

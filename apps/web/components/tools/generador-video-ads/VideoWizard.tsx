@@ -35,7 +35,15 @@ export default function VideoWizard() {
     startNewSession, hydrateFromSession, setStep, setRegens,
   } = useVideoStore()
 
+  // ⚠️ UNA SOLA VEZ, PASE LO QUE PASE CON EL MONTAJE. Este efecto CREA una sesión en el
+  // servidor, y el StrictMode de React monta dos veces en desarrollo: sin este candado se
+  // crean DOS filas por visita. Medido en la base, las sesiones fantasma aparecían en
+  // pareja con la real y con el mismo minuto de creación.
+  const arrancado = useRef(false)
+
   useEffect(() => {
+    if (arrancado.current) return
+    arrancado.current = true
     const saved = localStorage.getItem(SESSION_KEY)
     if (!saved) { startNewSession(); return }
     fetch(`/api/generador-video-ads/sessions/${saved}`)
