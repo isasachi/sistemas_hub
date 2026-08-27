@@ -302,20 +302,24 @@ describe('buildDiffusionInstruction — DNA-driven (spec 2026-07-23)', () => {
     expect(build('antes-despues', { trust: TRUST })).not.toContain('TRUST BAR')
   })
 
-  // Pedido del usuario 2026-08-07: la banda de confianza deja de re-tintarse por sección y pasa a
-  // ser SIEMPRE el mismo metal. Antes su color de fondo era explícitamente "lo único que varía".
+  // ⚠️ ESTE BLOQUE FIJABA LO CONTRARIO HASTA EL 2026-08-27: exigía que el prompt pintara la banda
+  // de un metal dorado. Esa línea convivía con "reproduce EXACTAMENTE la banda de la plantilla" y
+  // era la causa de que la banda saliera distinta en cada sección — medido sobre las 7 plantillas
+  // curadas, todas traen la MISMA banda azul esmerilada, así que el texto la estaba repintando.
+  // Ahora los tests guardan la AUSENCIA de esa segunda autoridad, que es lo que hay que proteger.
   describe('color de la banda de confianza', () => {
-    it('es el mismo metal dorado en las 6 secciones, y ya no se re-tinta', () => {
+    it('el prompt NO le da color propio a la banda: lo manda la plantilla', () => {
       const salidas = (['hero', 'beneficios', 'testimonios', 'faq', 'garantia', 'cta-final'] as SectionType[])
         .map((t) => build(t, { trust: TRUST }))
       for (const out of salidas) {
-        expect(out).toContain('#B8860B')
-        expect(out).toContain('#F5D372')
-        expect(out).toContain('NO se re-tinta')
+        const barra = out.match(/TRUST BAR[\s\S]*?(?=\n[A-ZÁÉÍÓÚ_]{4,}|$)/)![0]
+        // Ni tono, ni acabado, ni "degradado": la banda no se describe, se reproduce.
+        expect(barra).not.toMatch(/degradado|metálic|lámina|dorado|#[0-9A-Fa-f]{6}/)
+        expect(barra).toContain('plantilla')
       }
-      // La franja de color de la banda tiene que ser literalmente idéntica entre secciones.
-      const franja = salidas.map((o) => o.match(/COLOR DE LA BANDA[^\n]*/)![0])
-      expect(new Set(franja).size).toBe(1)
+      // La instrucción de la banda es literalmente la misma en las 6 secciones.
+      const barras = salidas.map((o) => o.match(/TRUST BAR[^\n]*/)![0])
+      expect(new Set(barras).size).toBe(1)
       // Y la vieja regla de "lo único que varía es el color de fondo" no puede seguir viva.
       for (const out of salidas) expect(out).not.toContain('re-tintado a la marca')
     })
@@ -475,10 +479,13 @@ describe('buildDiffusionInstruction — DNA-driven (spec 2026-07-23)', () => {
 describe('estilo de marca (style-dna)', () => {
   const conEstilo = (style: BrandStyle) => build('beneficios', { dna: { ...DNA, style } })
 
-  it('cada estilo emite SU acabado de card y su icono, no los del default', () => {
+  // ⚠️ `surface` SALIÓ DEL PROMPT el 2026-08-27: describía el acabado de la card sobre una plantilla
+  // que ya la muestra resuelta, y esa doble autoridad hacía que el borde saliera distinto en cada
+  // sección (hero casi invisible, beneficios con contorno oscuro y rellenos tintados, cta-final sin
+  // borde). Los otros cuatro ejes del estilo siguen vivos.
+  it('cada estilo emite SUS ejes (icono, fondo, luz, tipografía), no los del default', () => {
     for (const style of BrandStyle.options) {
       const out = conEstilo(style)
-      expect(out).toContain(STYLE_DNA[style].surface)
       expect(out).toContain(STYLE_DNA[style].icon)
       expect(out).toContain(STYLE_DNA[style].background)
       expect(out).toContain(STYLE_DNA[style].light)
@@ -486,7 +493,6 @@ describe('estilo de marca (style-dna)', () => {
       if (style !== 'glass_premium') {
         // el acabado histórico tiene que DESAPARECER, no convivir: dos materiales en el mismo
         // prompt es exactamente la contradicción que hace que la difusión elija el de la plantilla.
-        expect(out).not.toContain(STYLE_DNA.glass_premium.surface)
         expect(out).not.toContain(STYLE_DNA.glass_premium.icon)
       }
     }
@@ -497,9 +503,15 @@ describe('estilo de marca (style-dna)', () => {
     expect(legacy).toBe(conEstilo('glass_premium'))
   })
 
-  it('la GEOMETRÍA no la toca el estilo: el radio de card sigue siendo el de la plantilla', () => {
+  // Ni la geometría NI el acabado: la card entera la manda la plantilla, y ningún estilo la toca.
+  it('NINGÚN estilo describe el acabado de la card — eso lo manda la plantilla', () => {
     for (const style of BrandStyle.options) {
-      expect(conEstilo(style)).toContain('radio 28-32px')
+      const out = conEstilo(style)
+      expect(out).not.toContain(STYLE_DNA[style].surface)
+      const comp = out.match(/^Componentes[^\n]*/m)![0]
+      expect(comp).toContain('plantilla')
+      // Sin vocabulario de material: es justo lo que el modelo reinterpretaba por sección.
+      expect(comp).not.toMatch(/opacidad de|translúcid|esmerilad|glow|sombra dura|hairline/i)
     }
   })
 
@@ -538,11 +550,13 @@ describe('estilo de marca (style-dna)', () => {
   // paleta afirmaba "superficie de card al 75-85% de opacidad" — glassmorphism hardcodeado — aunque
   // el acabado de la marca pidiera un bloque sólido. Dos frases del mismo prompt diciendo cosas
   // opuestas es lo que hace que la difusión se quede con el acabado de la plantilla.
-  it('la OPACIDAD de la card la fija el acabado, no la línea de paleta', () => {
-    const solido = conEstilo('bold_impact')
-    expect(solido).toContain('100% opaco')
-    expect(solido).not.toContain('al 75-85% de opacidad')
-    expect(conEstilo('glass_premium')).toContain('al 75-85% de opacidad')
+  it('la línea de paleta aporta el COLOR de la card y nada más', () => {
+    for (const style of BrandStyle.options) {
+      const out = conEstilo(style)
+      expect(out).not.toContain('al 75-85% de opacidad')
+      expect(out).not.toContain('100% opaco')
+      expect(out).toContain(DNA.palette.color_surface)
+    }
   })
 
   // Misma clase de fallo por el otro lado: la línea de MODO OSCURO reimponía "el glassmorphism
@@ -555,11 +569,15 @@ describe('estilo de marca (style-dna)', () => {
     expect(oscuro).not.toContain('glassmorphism')
   })
 
-  it('el estilo NO toca la banda metálica de confianza (invariante declarada en dos lugares)', () => {
+  // ⚠️ EL METAL YA NO NOMBRA LA BANDA DE CONFIANZA. Estaba declarado en DOS lugares
+  // (`designSystemBlock` y `trustText`) y los dos la repintaban; arreglar uno solo la habría
+  // dejado igual entrando por la otra puerta. El metal sigue vivo para oferta, sellos y cintas.
+  it('el metal ya no alcanza a la banda de confianza, en ningún estilo', () => {
     for (const style of BrandStyle.options) {
       const out = build('beneficios', { dna: { ...DNA, style }, trust: TRUST })
-      expect(out).toContain('degradado metálico dorado')       // designSystemBlock
-      expect(out).toContain('NO se re-tinta')                   // trustText
+      const metal = out.match(/^Oferta\/premium\/sellos:[^\n]*/m)![0]
+      expect(metal).toContain('degradado metálico dorado')   // sigue existiendo…
+      expect(metal).not.toMatch(/BANDA DE CONFIANZA|banda de confianza/) // …pero no sobre la banda
     }
   })
 })
@@ -706,5 +724,35 @@ describe('enDosLineas', () => {
   // La lista de ✗/✓ de antes-despues es de UNA línea: sin segunda parte no hay LINE 2 que dibujar.
   it('un bullet sin separador no declara segunda línea', () => {
     expect(enDosLineas('Snacks duros y secos')).toBe('  • LINE 1 (bold): "Snacks duros y secos"')
+  })
+})
+
+// ─── Regla de canal: qué es copy y qué es dirección (2026-08-27) ─────────────
+// Medido en una sesión real: las tarjetas de testimonios salieron con la instrucción de casting
+// IMPRESA como cuerpo de texto ("piel trigueña, cabello oscuro liso, cara ovalada…", "piel clara
+// (más que Card 1)", "No se repiten rasgos, peinados ni colores de ropa") y beneficios con un
+// bullet que decía "No hay bloques de venta ni precios" — o sea `NO_SALES_BLOCK` vuelto copy.
+//
+// La regla vieja era una lista NEGRA de jerga ("nombres de capas", "ADN", "invariante") y por eso
+// no atajaba nada: lo que se filtró no parece jerga, parece copy. La nueva es una lista BLANCA.
+describe('disciplina de texto — solo se dibuja lo entrecomillado en COPY', () => {
+  const out = build('testimonios', { trust: TRUST })
+
+  it('la regla es una lista BLANCA, no una enumeración de jerga', () => {
+    expect(out).toMatch(/ÚNICO texto que se dibuja/i)
+    expect(out).toContain('ENTRECOMILLADO en el bloque COPY')
+    // Lo que hacía inútil a la versión anterior: enumerar ejemplos en vez de acotar el canal.
+    expect(out).not.toMatch(/nombres de capas/)
+  })
+
+  it('nombra explícitamente al casting como dirección, que es lo que se estaba imprimiendo', () => {
+    expect(out).toMatch(/casting/i)
+    expect(out).toMatch(/jamás letra sobre la pieza/i)
+  })
+
+  // El fallo real no fue que el modelo desobedeciera una prohibición, sino que no podía distinguir
+  // dos cosas escritas en el mismo español natural. La regla tiene que decir eso.
+  it('avisa de que una dirección puede sonar a copy', () => {
+    expect(out).toMatch(/suene a copy|parezca copy/i)
   })
 })
