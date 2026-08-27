@@ -661,6 +661,26 @@ Dos mitades, las dos necesarias: **`fetchKie`** (kie.ts) le pone `AbortSignal.ti
 
 ⚠️ **EL `escenario` VIAJABA COMO JSON CRUDO, Y ESE ERA EL ORIGEN DEL SILLÓN — arreglado (`enProsa`, forensic.ts).** Gemini devuelve objetos y arrays en campos declarados `z.string()` y el schema los coacciona a un string con JSON adentro; `fondo` llegaba al prompt de render como 731 caracteres de `{"localizacionAparente": …, "paredes": …}`, con llaves y camelCase. Lo grave no era la sintaxis sino que el texto describe el VIDEO ENTERO dentro de un prompt de un solo clip —*"muebles: En un corte, se observa un sillón tapizado en tela gris claro"*— mientras el bloque `CONTINUIDAD` promete que nada cambia. **De ahí salió el sillón que apareció en un clip de la prueba de ropa, que se reportó como deriva del modelo y no lo era: el prompt lo ofrecía.** `enProsa` aplana a prosa y descarta los valores que EMPIEZAN describiendo otro corte. ⚠️ **Eso solo no alcanza, y está medido:** verificado contra el dato real de `430c5961`, el campo `texturas` decía *"Paredes lisas, tela suave del sillón, baldosas pulidas"* — con el sillón a mitad de frase, donde ningún filtro por prefijo llega. Ninguna limpieza de texto acota de forma fiable a un clip una descripción del video entero. **Por eso en modo frames el bloque de escenario no se manda:** la habitación, la luz y los muebles son los que se ven en los dos fotogramas, y describirlos otra vez en palabras solo puede contradecirlos. `enProsa` sigue valiendo para el prompt de identidad (`sujeto`/`vestuario`/`fondo`), donde el JSON crudo era ruido, y para el modo `reference`, donde el texto es lo único que define la escena.
 
+⚠️ **EL TECHO DE 5000 NO ES LO QUE LIMITA LA CALIDAD — medido con dos renders reales (`scripts/probe-prompt-ab.ts`).**
+
+Primero, el dato que lo sugirió. De los 13 clips que el dueño del repo juzgó en tres tandas, **solo UNO salió de un prompt truncado**:
+
+| tanda | largos de los prompts | truncados |
+|---|---|---|
+| *"no se parecen ni un poco"* | 4815, 4666, 4437, 4173, 4451 | **0** |
+| *"mucho mejor, pero…"* | 4845, 4662, 4229, 4441 | **0** |
+| *"no se aplica el suero"* | 4998, 4912, 4681, 4893 | 1 |
+
+La tanda PEOR —cocina en vez de habitación, blusa blanca en vez de suéter rosa, producto flotando, tapa reapareciendo— **no tenía un solo prompt lleno**. Tenía entre 200 y 800 caracteres libres. Ninguno de esos defectos era falta de espacio.
+
+Después, la prueba directa: el MISMO lote renderizado dos veces, con el prompt completo (4896 caracteres) y con uno mínimo (1854, el **38 %**) que conserva identidad, producto, cámara, coreografía y línea hablada, y suelta voz, movimiento, detalle atómico, manos, escenario, guion global y el bloque largo de overlay.
+
+**Los dos clips son prácticamente el mismo**: los dos ejecutan la aplicación con el gotero durante los primeros ~2 segundos y después sostienen el frasco hablando los 8 restantes. Los 3042 caracteres extra no compraron nada observable.
+
+⚠️ **Y los dos se quedan quietos al mismo tiempo, lo que reubica el problema:** el límite no es cuánto le podemos contar a grok, es **cuánta coreografía ejecuta por clip** — parece agotarse tras el primer beat, con prompt largo o corto. Si eso se confirma, la palanca es **clips más cortos** (un beat por clip, más llamadas pagadas), no prompts más ricos.
+
+⚠️ **Dos observaciones más de la misma prueba:** (1) el clip B conservó la habitación y el suéter **sin el bloque `SETTING AND LIGHTING`**, o sea que ese bloque (358 caracteres de mediana) es probablemente redundante con la imagen del avatar — coherente con que la imagen le gane al texto; (2) `n = 1`: un lote, un seed. No prueba que el prompt largo nunca ayude, prueba que acá no ayudó.
+
 ⚠️ **Y AL DESCRIBIR MÁS, LA COREOGRAFÍA EMPEZÓ A NO ENTRAR — el truncado NO era aleatorio.** Medido sobre 125 lotes reales: los que llegaban con la coreografía cortada pedían **1332 caracteres** contra **259** los sanos. O sea el recorte caía justo en los lotes con MÁS movimiento que copiar, que son exactamente los que importan. Verificado en un render: el prompt decía *"aplica una gota en la…"* y el clip salió con la chica sosteniendo el frasco once segundos sin aplicarse nada.
 
 Tres cambios, medidos uno a uno sobre los mismos lotes:
