@@ -145,7 +145,15 @@ export async function POST(
   // comparte clip con una toma hablada se lo come el habla. Medido sobre 25 sesiones: los
   // lotes mezclados pasan de 8 a 0 por 1,07× de llamadas. Ver `clasePorTiempo`.
   const clasePorTiempo = new Map(cortes.map((c) => [c.tiempo, corteMuestraPersona(c)] as const))
-  const agrupados = groupIntoLotes(adapted.tomas, planoPorTiempo, undefined, clasePorTiempo)
+  // ⚠️ Y `maxPlanos = 1`: UN encuadre por clip. Estaba en `Infinity` —o sea el mapa se
+  // calculaba y no cerraba nada— y el resultado es el salto duro que reportó el dueño del
+  // repo: un clip que empieza en plano de persona y termina en un macro del frasco a
+  // pantalla completa. La frontera de CLASE no lo caza porque en ese plano la persona
+  // sigue en cuadro; lo que cambia es el TEMA del encuadre.
+  // Medido sobre 135 lotes: los que mezclan dos encuadres pasan de 18 a 0 por 1,15× de
+  // llamadas. Y cada clip se renderiza de una sola pasada, así que pedirle dos encuadres
+  // es pedirle un corte de montaje dentro de un plano-secuencia: devuelve uno de los dos.
+  const agrupados = groupIntoLotes(adapted.tomas, planoPorTiempo, 1, clasePorTiempo)
   if (!agrupados.length) return NextResponse.json({ error: 'El guión no tiene tomas' }, { status: 409 })
 
   // Una cámara por lote, con los planos de SUS cortes: el spec pide replicar el

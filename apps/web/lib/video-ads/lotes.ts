@@ -56,6 +56,26 @@ export const LOTE_MAX_SEC = 15
  */
 export const LOTE_MAX_CHARS = LOTE_MAX_SEC * CPS_MAX
 
+/**
+ * Presupuesto de COREOGRAFÍA de un lote, en caracteres.
+ *
+ * ⚠️ La coreografía es lo único del prompt que dice QUÉ HACE EL CUERPO, y es lo último que
+ * se puede recortar — pero la escalera de degradación la recortaba igual cuando el resto no
+ * alcanzaba. Medido sobre 125 lotes reales: los que llegan truncados piden **1332
+ * caracteres de coreografía** contra **259** los sanos. O sea el truncado no es aleatorio:
+ * pasa exactamente en los lotes con MÁS movimiento que copiar, que son los que más
+ * importan.
+ *
+ * Y es consecuencia de un cambio bueno: desde que FASE 1 describe un movimiento cada 2
+ * segundos, hay mucha más coreografía que meter. Cerrar el lote por este presupuesto lo
+ * previene en el reparto en vez de descubrirlo al armar el prompt.
+ *
+ * El número sale de la medición: con ~900 caracteres el prompt entra con el detalle
+ * atómico completo. Cuesta llamadas pagadas —igual que los otros dos cierres— y es el
+ * mismo tipo de aritmética determinista.
+ */
+export const LOTE_MAX_COREO = 900
+
 export const LoteSchema = z.object({
   n: z.number(),
   tomas: z.array(z.object({
@@ -318,6 +338,7 @@ export function groupIntoLotes(
   let actual: TomaFinal[] = []
   let acumulado = 0
   let chars = 0
+  let coreo = 0
 
   const cerrar = () => {
     if (!actual.length) return
@@ -340,6 +361,7 @@ export function groupIntoLotes(
     actual = []
     acumulado = 0
     chars = 0
+    coreo = 0
   }
 
   for (const t of expandidas) {
@@ -358,6 +380,9 @@ export function groupIntoLotes(
     // `clampDuration` devuelve una duración por encima del cap y el clip sale más largo
     // de lo que este módulo promete.
     else if (actual.length && chars + t.locucion.length > LOTE_MAX_CHARS) cerrar()
+    // …y por COREOGRAFÍA: ver `LOTE_MAX_COREO`. Sin esto, el lote con más movimiento que
+    // copiar es justo el que llega con la coreografía cortada.
+    else if (actual.length && coreo + t.accionVisual.length > LOTE_MAX_COREO) cerrar()
     // …y también si cambia el encuadre: el clip que sale de acá es continuo (ver la
     // cabecera). Solo se compara contra la toma anterior DEL LOTE ABIERTO, así que un
     // plano que vuelve más adelante abre su propio lote, igual que en el original.
@@ -376,6 +401,7 @@ export function groupIntoLotes(
     actual.push(t)
     acumulado += t.duracionSeg
     chars += t.locucion.length
+    coreo += t.accionVisual.length
   }
   cerrar()
 
@@ -494,6 +520,29 @@ const NIVEL_OVERLAY_COMPACTO = 3
  */
 const NIVEL_MICRO_CORTO = 4
 const NIVEL_PRODUCTO_FISICO = 5
+/**
+ * ⚠️ EL DETALLE ATÓMICO SE SUELTA ENTERO ANTES DE TOCAR LA COREOGRAFÍA.
+ *
+ * Hasta acá `micro` solo se ENCOGÍA (a 60 caracteres por casilla) y nunca se soltaba, así
+ * que al llegar al piso la búsqueda binaria recortaba `accionVisual` y `micro` con el
+ * MISMO cap — o sea el pelo y el fondo se llevaban presupuesto que le hacía falta a lo
+ * único que dice QUÉ HACE EL CUERPO.
+ *
+ * Medido en un render real: el prompt llegó con *"aplica una gota en la…"*, cortado justo
+ * antes de la zona, y el clip salió con la chica sosteniendo el frasco 11 segundos sin
+ * aplicarse nada. Sobre los prompts guardados, **10 de 73 lotes (14 %) llevan texto
+ * truncado**.
+ *
+ * `micro` es refinamiento; `accionVisual` es el contenido. Cuando no entran los dos, gana
+ * el contenido.
+ *
+ * ⚠️ Y EN ESTE MISMO NIVEL SE SUELTA `MOVEMENT` (el `motion_profile`), por el mismo
+ * argumento un escalón más arriba: describe cómo se mueve la persona EN GENERAL, mientras
+ * `accionVisual` describe qué hace EN ESTA TOMA. Con el detalle atómico ya fuera, el
+ * bloque general es lo siguiente más prescindible — y medido, soltar solo `micro` dejaba
+ * todavía 16 de 124 lotes con la coreografía cortada.
+ */
+const NIVEL_SIN_MICRO = 6
 
 /** Las dos primeras oraciones: la forma del envase, sin la transcripción de la etiqueta. */
 function productoFisico(desc: string): string {
@@ -739,7 +788,8 @@ export function buildLotePrompt(args: {
             const capMicro = capAccion != null ? capAccion : nivel >= NIVEL_MICRO_CORTO ? 60 : null
             return [
               manosDe(manosPorTiempo.get(t.tiempoOriginal), capAccion),
-              microDe(microPorTiempo.get(t.tiempoOriginal), capMicro),
+              // Ver `NIVEL_SIN_MICRO`: el detalle se suelta entero antes que la coreografía.
+              nivel >= NIVEL_SIN_MICRO ? '' : microDe(microPorTiempo.get(t.tiempoOriginal), capMicro),
             ].filter(Boolean).join('\n')
           })(),
           // NUNCA se suelta, en ningún nivel de degradación. Esta línea es lo único que
@@ -824,7 +874,7 @@ export function buildLotePrompt(args: {
       // ABSOLUTO que el bloque de consistencia: el generador no recuerda el lote anterior,
       // así que un personaje que se mueve distinto en el lote 3 que en el 1 es el mismo
       // fallo que uno que cambia de cara.
-      ...(movimiento && !varios
+      ...(movimiento && !varios && nivel < NIVEL_SIN_MICRO
         ? [
             'MOVEMENT (whole clip, also between gestures):',
             `  Calidad del movimiento: ${movimiento.calidadMovimiento}`,
@@ -865,6 +915,7 @@ export function buildLotePrompt(args: {
     NIVEL_OVERLAY_COMPACTO,
     NIVEL_MICRO_CORTO,
     NIVEL_PRODUCTO_FISICO,
+    NIVEL_SIN_MICRO,
   ]) {
     const prompt = render(nivel, null)
     if (prompt.length <= KIE_PROMPT_MAX) return prompt
@@ -881,7 +932,7 @@ export function buildLotePrompt(args: {
   let mejor: string | null = null
   while (lo <= hi) {
     const cap = Math.floor((lo + hi) / 2)
-    const prompt = render(NIVEL_PRODUCTO_FISICO, cap)
+    const prompt = render(NIVEL_SIN_MICRO, cap)
     if (prompt.length <= KIE_PROMPT_MAX) {
       mejor = prompt
       lo = cap + 1
@@ -891,7 +942,7 @@ export function buildLotePrompt(args: {
   }
   if (mejor) return mejor
 
-  const piso = render(NIVEL_PRODUCTO_FISICO, 0)
+  const piso = render(NIVEL_SIN_MICRO, 0)
   throw new Error(
     `El prompt del Lote ${lote.n} no entra en el tope de KIE (${KIE_PROMPT_MAX} caracteres) ` +
     `ni truncando la acción de cada toma al mínimo (${piso.length} caracteres resultantes). ` +

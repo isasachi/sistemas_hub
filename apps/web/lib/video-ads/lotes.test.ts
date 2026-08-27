@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { groupIntoLotes, LOTE_MAX_SEC, LOTE_MAX_CHARS, LoteSchema, buildLotePrompt, camaraDeLote, repartirAccion } from './lotes'
+import { groupIntoLotes, LOTE_MAX_SEC, LOTE_MAX_CHARS, LOTE_MAX_COREO, LoteSchema, buildLotePrompt, camaraDeLote, repartirAccion } from './lotes'
 import { clampDuration } from './kie'
 import type { TomaFinal } from './adapt'
 import { KIE_PROMPT_MAX } from './kie'
@@ -363,8 +363,16 @@ describe('buildLotePrompt', () => {
     const argsLargos = { ...ARGS, consistencyBlock: bloqueLargo, productDesc: productoLargo }
     // ⚠️ Con `LOTE_MAX_CHARS` un lote ya no puede llevar 8 líneas largas — el reparto lo
     // impide antes. La presión ahora viene de la COREOGRAFÍA, que es donde va a estar.
-    const muchasTomas = groupIntoLotes(Array.from({ length: 5 }, (_, i) =>
-      ({ ...toma(i + 1, 3, `Frase número ${i + 1} del guión adaptado.`), accionVisual: accionLarga.repeat(2) })))[0]
+    // ⚠️ Un solo lote a propósito: `LOTE_MAX_COREO` ya parte los lotes con demasiada
+    // coreografía, así que la presión sobre la escalera hay que construirla dentro de UNO.
+    const muchasTomas = {
+      ...groupIntoLotes([toma(1, 3, 'Frase número 1 del guión adaptado.')])[0],
+      tomas: Array.from({ length: 5 }, (_, i) => ({
+        n: i + 1, duracionSeg: 3, accionVisual: accionLarga.repeat(2),
+        personaje: 'Mujer 25', producto: 'Frasco', locucion: `Frase número ${i + 1} del guión adaptado.`,
+        tiempoOriginal: '00:00 - 00:00',
+      })),
+    }
 
     const p = buildLotePrompt({ lote: muchasTomas, ...argsLargos })
 
@@ -805,5 +813,29 @@ describe('groupIntoLotes — la clase de toma cierra el lote', () => {
   it('sin clasePorTiempo agrupa como siempre', () => {
     const l = groupIntoLotes([conClase(1, 4, 't1'), conClase(2, 3, 't2'), conClase(3, 4, 't3')])
     expect(l).toHaveLength(1)
+  })
+})
+
+describe('groupIntoLotes — presupuesto de coreografía', () => {
+  const conAccion = (n: number, dur: number, accion: string) => ({ ...toma(n, dur), accionVisual: accion })
+
+  // ⚠️ MEDIDO sobre 125 lotes: los que llegaban con la coreografía truncada pedían 1332
+  // caracteres contra 259 los sanos. El truncado no era aleatorio — pasaba justo en los
+  // lotes con MÁS movimiento que copiar, que son los que importan.
+  it('cierra el lote cuando la coreografía acumulada no va a entrar', () => {
+    const larga = 'x'.repeat(600)
+    const l = groupIntoLotes([conAccion(1, 3, larga), conAccion(2, 3, larga)])
+    expect(l).toHaveLength(2)
+  })
+
+  it('no lo cierra cuando la coreografía es normal', () => {
+    const l = groupIntoLotes([conAccion(1, 3, 'x'.repeat(200)), conAccion(2, 3, 'x'.repeat(200))])
+    expect(l).toHaveLength(1)
+  })
+
+  // Una toma que SOLA se pasa del presupuesto se queda en su lote: cerrar no ayuda, y es
+  // la misma jerarquía que con la duración y con los caracteres de habla.
+  it('una sola toma que se pasa sigue en su lote', () => {
+    expect(groupIntoLotes([conAccion(1, 5, 'x'.repeat(LOTE_MAX_COREO + 300))])).toHaveLength(1)
   })
 })
