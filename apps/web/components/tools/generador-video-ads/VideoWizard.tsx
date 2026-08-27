@@ -49,8 +49,16 @@ export default function VideoWizard() {
   useEffect(() => {
     if (arrancado.current) return
     arrancado.current = true
-    const saved = localStorage.getItem(SESSION_KEY)
+    // ⚠️ `?sesion=<id>` GANA sobre `localStorage`, y existe porque hasta ahora una sesión
+    // solo se podía reanudar en el NAVEGADOR QUE LA CREÓ: el id vive en `localStorage`, así
+    // que abrirla en otra máquina —o pasarle el link a alguien— era imposible sin entrar por
+    // la vista de sesión y pulsar "Reanudar". La ruta ya filtra por dueño (`getVideoSession`
+    // con `readUserId`), así que esto NO abre ninguna sesión ajena: un id de otro usuario
+    // responde 404 y se cae al camino de siempre.
+    const desdeUrl = new URLSearchParams(window.location.search).get('sesion')
+    const saved = desdeUrl || localStorage.getItem(SESSION_KEY)
     if (!saved) return
+    if (desdeUrl) localStorage.setItem(SESSION_KEY, desdeUrl)
     fetch(`/api/generador-video-ads/sessions/${saved}`)
       .then((r) => (r.ok ? (r.json() as Promise<VideoSessionResponse>) : Promise.reject()))
       .then((s) => hydrateFromSession(s))
