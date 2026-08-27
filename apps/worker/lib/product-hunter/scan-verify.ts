@@ -6,7 +6,7 @@ import type Anthropic from '@anthropic-ai/sdk'
 import type { Page } from 'playwright'
 import { readConnection, advertiserUrl, type SsrAd } from './ssr-fetch'
 import { isPersistentlyBlocked, PersistentBlockError, rateGateMs } from './scraper'
-import { shareOf, senalNicho, productKey, type SenalNicho } from './product-key'
+import { shareOf, senalNicho, productKey, type SenalNicho, type ClusterInfo } from './product-key'
 import { juzgarNicho } from './nicho-verdict'
 import { nonPhysicalSignal } from '@ph/shared'
 
@@ -44,6 +44,13 @@ export interface Lectura {
   distintos: number
   muestra: number
   base: SsrAd[]
+  /**
+   * ⚠️ TODOS los anuncios leídos, SIN filtrar por cluster. `base` de arriba son
+   * solo los del dominante, así que clusterizar sobre ella devolvería UN cluster
+   * y el pipeline seguiría andando, contando exactamente lo mismo que hoy —
+   * un fallo que no rompe nada y por eso no se ve. `clustersOf` va sobre esta.
+   */
+  todos: SsrAd[]
   /** Unix seconds del anuncio más viejo — la antigüedad que filtra el buscador. */
   masViejo: number | null
 }
@@ -93,6 +100,7 @@ export async function leerAnunciante(
     share: s.share, dominante: s.dominante,
     distintos: s.distintos, muestra: s.muestra,
     base: delDominante.length ? delDominante : global.ads,
+    todos: global.ads,
     // Sobre TODOS los anuncios del anunciante, no solo los del dominante: la
     // pregunta es hace cuánto que este anunciante viene pautando, y esta lectura
     // ya está hecha — sale gratis. Es el backfill de `ad_start_date` para las
@@ -173,6 +181,63 @@ export async function juzgarAnunciante(
   const fisico = v.kind === 'fisico'
   const status = !fisico || !v.perteneceAlNicho ? 'descartado'
     // Sin cita textual que lo respalde el veredicto no se publica: va a revisión.
+    : !v.citaVerificada ? 'sin_verificar'
+    : 'monoproducto'
+  const nota = !fisico ? `no es producto físico (${v.kind}): ${v.motivo}`
+    : !v.perteneceAlNicho ? `fuera del nicho: ${v.motivo}`
+    : !v.citaVerificada ? `sin cita textual que respalde el veredicto: ${v.motivo}`
+    : v.motivo
+  return { status, kind: v.kind, nota, productName: v.productName || null, medicion: m }
+}
+
+/**
+ * Veredicto de UN producto dentro de un anunciante.
+ *
+ * ⚠️ EL GATE DE SHARE DE LA PÁGINA YA NO DESCARTA. `juzgarAnunciante` arranca
+ * con `share < SHARE_MIN → descartado`, y eso tiró **4.860 filas sin que ningún
+ * modelo las mirara** (share medio 0,33): son exactamente las páginas
+ * multiproducto que esta función existe para atender. Lo que lo reemplaza es el
+ * piso de MUESTRA, que es la pregunta honesta — "¿tengo evidencia suficiente de
+ * ESTE producto?" — en vez de "¿la página vende una sola cosa?".
+ *
+ * `juzgarAnunciante` NO se borra: `verify-products.ts` la sigue usando.
+ */
+export async function juzgarCluster(
+  ai: Anthropic | null, niche: string, advertiser: string | null,
+  m: Medicion, c: ClusterInfo,
+): Promise<Veredicto> {
+  if (!c.publicable) {
+    return {
+      status: 'descartado', kind: 'indeterminado', productName: null, medicion: m,
+      nota: `evidencia insuficiente: ${c.n} anuncios de ${m.muestra} en la muestra`,
+    }
+  }
+  // La lista negra mira al ANUNCIANTE, así que sigue aplicando a todos sus
+  // clusters: un marketplace no deja de serlo porque uno de sus productos tenga
+  // volumen. Ver el comentario de juzgarAnunciante sobre Temu Argentina.
+  const negra = nonPhysicalSignal(
+    [c.titulo, c.cuerpo].filter(Boolean).join(' ').slice(0, 600), advertiser,
+  )
+  if (negra) {
+    return {
+      status: 'descartado',
+      kind: negra.cluster === 'marketplace' || negra.cluster === 'plataforma' ? 'servicio' : 'indeterminado',
+      productName: null, medicion: m,
+      nota: `no es producto físico (${negra.cluster}): "${negra.match}" en el anunciante`,
+    }
+  }
+  if (!ai) {
+    return {
+      status: 'sin_verificar', kind: 'indeterminado', productName: null, medicion: m,
+      nota: 'medido sin verificación de nicho',
+    }
+  }
+  const v = await juzgarNicho(ai, {
+    niche, advertiser, productPath: c.key,
+    textos: [c.titulo, c.cuerpo].filter((t): t is string => !!t),
+  })
+  const fisico = v.kind === 'fisico'
+  const status = !fisico || !v.perteneceAlNicho ? 'descartado'
     : !v.citaVerificada ? 'sin_verificar'
     : 'monoproducto'
   const nota = !fisico ? `no es producto físico (${v.kind}): ${v.motivo}`
