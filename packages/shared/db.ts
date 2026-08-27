@@ -830,9 +830,27 @@ function applyFilters<T>(q: T, f: RawFilters | undefined, now = Date.now()): T {
   return out as T
 }
 
+/**
+ * De qué tabla se sirve: el ANUNCIANTE (`ph_raw_products`) o el PRODUCTO
+ * (`ph_raw_clusters`).
+ *
+ * ⚠️ ESTE FLAG SE PRENDE CUANDO EL BACKFILL TERMINÓ, NO ANTES. Los clusters se
+ * llenan anunciante por anunciante (una lectura cada uno, ~13 h para las 66k
+ * filas pendientes): prenderlo con la tabla a medio llenar deja el buscador
+ * sirviendo un puñado de productos en vez de decenas de miles. Medido al
+ * escribir esto: 24 clusters contra 67.861 filas servibles.
+ *
+ * Comprobar antes de prenderlo:
+ *   select count(*) from ph_raw_clusters where status not in ('descartado','inactivo');
+ *
+ * ponytail: un flag con fecha de vencimiento — se borra junto con la rama
+ * `ph_raw_products` del serving en cuanto el backfill esté completo.
+ */
+const TABLA_SERVING = process.env.PH_SERVE_CLUSTERS === '1' ? 'ph_raw_clusters' : 'ph_raw_products'
+
 function bucketQuery(niche: string, bucket: RawBucket, f?: RawFilters) {
   const { min, max } = bucketRange(bucket)
-  let q = getDb().from('ph_raw_products').select('*')
+  let q = getDb().from(TABLA_SERVING).select('*')
     .eq('niche', niche)
     .not('status', 'in', NO_SERVIBLES)
     .gte('ad_count', min)
@@ -852,8 +870,14 @@ function bucketQuery(niche: string, bucket: RawBucket, f?: RawFilters) {
 // categoría más grande arma ~2.4KB, así que hay margen de sobra.
 function categoriaQuery(niches: string[], bucket: RawBucket, f?: RawFilters) {
   const { min, max } = bucketRange(bucket)
-  let q = getDb().from('ph_raw_products')
-    .select('niche,page_id,name,product_name,country,ad_count,ad_start_date,raw_data,status,share,senal_nicho')
+  // Las dos tablas no tienen las mismas columnas: el anunciante guarda el
+  // anuncio representativo en `raw_data` (jsonb) y el producto lo tiene abierto
+  // en `titulo`/`cuerpo`, más los dos crudos del estimado.
+  const cols = TABLA_SERVING === 'ph_raw_clusters'
+    ? 'niche,page_id,cluster_key,name,product_name,country,ad_count,muestra_n,muestra_tot,titulo,cuerpo,url,ad_start_date,status,senal_nicho'
+    : 'niche,page_id,name,product_name,country,ad_count,ad_start_date,raw_data,status,share,senal_nicho'
+  let q = getDb().from(TABLA_SERVING)
+    .select(cols)
     .in('niche', niches)
     .not('status', 'in', NO_SERVIBLES)
     .gte('ad_count', min)
@@ -924,13 +948,20 @@ export async function getApprovedByCategory(
     (nichosPorPagina.get(r.page_id)?.size ?? 0) >= NICHOS_CATALOGO
 
   const tope = maxPorNicho(limit)
-  const paginas = new Set<string>()
+  const vistos = new Set<string>()
   const porNicho = new Map<string, number>()
   const elegidos: RawProductRow[] = []
   const relegados: RawProductRow[] = []   // los que solo el tope por nicho dejó fuera
+  // ⚠️ El dedupe es por PRODUCTO, no por página: sirviendo clusters, una tienda
+  // con tres productos validados tiene que poder mostrar los tres — es
+  // literalmente el punto del cambio. Sobre `ph_raw_products` no hay
+  // `cluster_key` y la clave vuelve a ser la página, o sea el comportamiento
+  // de siempre. Lo que sigue mandando es el tope por nicho.
+  const clave = (r: RawProductRow) =>
+    'cluster_key' in r ? `${r.page_id}:${(r as { cluster_key: string }).cluster_key}` : r.page_id
   for (const r of [...confirmados, ...relleno.filter((r) => !esCatalogo(r))]) {
-    if (paginas.has(r.page_id)) continue
-    paginas.add(r.page_id)
+    if (vistos.has(clave(r))) continue
+    vistos.add(clave(r))
     const n = porNicho.get(r.niche) ?? 0
     if (n >= tope) { relegados.push(r); continue }
     porNicho.set(r.niche, n + 1)
