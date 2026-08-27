@@ -543,7 +543,21 @@ El modelo ya no devuelve el `VoiceProfile` entero: devuelve **`sexoVocal`** —q
 
 **Huella v9 → v10.** Cambian el cap, el reparto, la plantilla del prompt y la voz. La huella hashea INSUMOS y no el texto producido, así que el cambio de plantilla le es invisible: sin el bump, reanudar pegaría un clip de 30 s con la voz vieja a uno de 15 s con la nueva mientras `isPaidResume` jura que es el mismo contenido.
 
-⚠️ **LO QUE SIGUE SIN VERIFICAR:** ningún render real corrió con este código. En particular **que grok diga la locución en español palabra por palabra sigue sin medirse**, igual que antes de este cambio, y tampoco se midió si 15 s efectivamente arregla la deriva de consistencia que motivó bajarlo — esa es la premisa entera y hoy es una hipótesis del dueño del repo, no un dato.
+✅ **GROK DICE LA LOCUCIÓN EN ESPAÑOL PALABRA POR PALABRA — MEDIDO (2026-08-27, `scripts/probe-audio-espanol.ts`).** Era el riesgo más grande de la tool desde la vuelta a grok: la doc del modelo dice que el prompt es *English only* y la locución viaja entrecomillada en español. **No hizo falta gastar un render**: se transcribieron con Gemini clips YA pagados y se compararon contra la locución exacta que se les pidió, que es un oráculo mecánico.
+
+| clip | resultado |
+|---|---|
+| 10 s, 178 caracteres | **100 %** — las 31 palabras literales |
+| 7 s, 98 caracteres | una sola palabra cambiada (*"es este"* por *"es el"*), el resto exacto |
+| **15 s, 281 caracteres** | **100 %** — la locución ENTERA, las dos frases, en español |
+
+Y en el de 15 s leyó además el **10** de la etiqueta del frasco (*"Pure Niacinamide 10 Serum"*), que no estaba en el guion: no solo pronuncia el texto, mira el producto.
+
+⚠️ **DOS MÉTRICAS ANTERIORES DIERON EL VEREDICTO CONTRARIO SOBRE LOS MISMOS CLIPS, y por eso el probe IMPRIME además de puntuar.** La primera avanzaba un puntero sobre las palabras esperadas y **se atascaba en la primera que faltaba sin recuperarse nunca**: con una palabra cambiada de diecisiete reportó **11 %**, o sea "grok no dice el español" sobre una locución correcta. La segunda (LCS por palabra) dio 88 % por artefactos del guion — `anti-envejecimiento`/`antienvejecimiento` y `La Roche-Posay`/`La Roche Posay`, y **las dos normalizaciones posibles del guion pierden uno de los dos casos, que salieron en el MISMO clip**. La que vale es **LCS a nivel de CARÁCTER sin espacios**, donde ninguno de los dos existe. Hay un test (`probe-audio-espanol.test.ts`) con los pares REALES observados, más una traducción al inglés y una locución cortada, que son lo que la métrica tiene que seguir castigando.
+
+⚠️ **`GEMINI_VIA=direct` HOY NO FUNCIONARÍA:** medido al escribir este probe, la `GOOGLE_API_KEY` del entorno devuelve `429 "Your prepayment credits are depleted"`. El escape documentado para devolver el recurso al SDK de Google existe en el código y no tiene saldo detrás.
+
+⚠️ **LO QUE SIGUE SIN VERIFICAR:** que 15 s arregle la deriva de consistencia que motivó bajar el cap de 30 — esa es la premisa del cambio y sigue siendo una hipótesis del dueño del repo, no un dato. Lo que sí se ve en el control de 15 s es que **a 15 s la consistencia AGUANTA**: misma cara, misma camisa, misma habitación y mismo frasco en los 11 fotogramas, con los 3 beats ejecutados. Eso no dice nada sobre 30.
 
 ⚠️ **VUELTA A GROK: `grok-imagine/image-to-video` (2026-08-24, decisión del dueño del repo).** Deshace la migración a Veo 3.1 del 2026-08-19 y cambia cinco cosas a la vez, todas encadenadas: el modelo, el cap de clip (8 s → **30 s**), el sistema de imágenes (keyframes → **anclas**), el generador de imagen (Nano Banana Pro → **gpt-image-2**) y el idioma del prompt (español → **inglés**, con la locución en español). Todo lo que este documento diga de `veo3_fast`, `FIRST_AND_LAST_FRAMES_2_VIDEO` o del tope de 60.000 caracteres es HISTORIA a partir de acá.
 
