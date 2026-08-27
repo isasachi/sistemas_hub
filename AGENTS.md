@@ -557,7 +557,26 @@ Y en el de 15 s leyó además el **10** de la etiqueta del frasco (*"Pure Niacin
 
 ⚠️ **`GEMINI_VIA=direct` HOY NO FUNCIONARÍA:** medido al escribir este probe, la `GOOGLE_API_KEY` del entorno devuelve `429 "Your prepayment credits are depleted"`. El escape documentado para devolver el recurso al SDK de Google existe en el código y no tiene saldo detrás.
 
-⚠️ **LO QUE SIGUE SIN VERIFICAR:** que 15 s arregle la deriva de consistencia que motivó bajar el cap de 30 — esa es la premisa del cambio y sigue siendo una hipótesis del dueño del repo, no un dato. Lo que sí se ve en el control de 15 s es que **a 15 s la consistencia AGUANTA**: misma cara, misma camisa, misma habitación y mismo frasco en los 11 fotogramas, con los 3 beats ejecutados. Eso no dice nada sobre 30.
+❌ **LA PREMISA DEL CAP DE 15 s ES FALSA, Y LO QUE DE VERDAD SE ROMPE ES OTRA COSA (2026-08-27, `scripts/probe-cap-30.ts`, 4 renders).** El cap bajó de 30 a 15 porque *"grok pierde la consistencia del personaje y del entorno en clips largos"*, y eso DUPLICÓ las llamadas pagadas. Medido con **dos draws por duración**, como exige la regla de n=1 de este documento:
+
+**La consistencia visual aguanta 30 segundos, en 2 de 2 draws.** Misma cara, misma camisa blanca sobre top negro, misma cocina de fondo y mismo frasco en los 15 fotogramas de cada clip. Cero deriva de identidad, de vestuario o de escenario. La razón por la que se bajó el cap no ocurre.
+
+⚠️ **LO QUE SE ROMPE ES LA LOCUCIÓN, y eso nadie lo estaba mirando.** Transcritos con `probe-audio-espanol.ts`:
+
+| duración | caracteres | car/s | locución |
+|---|---|---|---|
+| 7 s | 98 | 14,0 | ✅ |
+| 10 s | 178 | 17,8 | ✅ **100 %** |
+| 15 s | 281 | 18,7 | ✅ **100 %** |
+| 18 s | 281 | 15,6 | ✅ **100 %** |
+| **30 s** | **577** | 19,2 | ❌ **56 %** |
+| **30 s** (2º draw) | **577** | 19,2 | ❌ **70 %** |
+
+A 30 s deja de recitar y empieza a improvisar: *"Les quiero enseñar mi producto favorito"*, *"Yo la uso en la mañana"* — frases que no están en el guión. Y el segundo draw es todavía más claro: **repite la primera oración TRES VECES** y después degenera en balbuceo (*"por su suero esta utilidad ni piel meo es este"*). Es el mismo modo de fallo que este documento ya registra para Veo con el techo blando (*"Y es nuestro mural y es nuestro top mural"*), pero por el extremo largo.
+
+⚠️ **CONSECUENCIA PRÁCTICA: el cap que ata de verdad es `LOTE_MAX_CHARS`, no `LOTE_MAX_SEC`.** Vale **300** (15 × `CPS_MAX`) y las mediciones lo respaldan sin haberlo buscado: 281 caracteres funcionan y 577 no. O sea el número correcto ya estaba puesto, pero por el motivo equivocado.
+
+⚠️ **Y ABRE UNA OPTIMIZACIÓN QUE NO SE PUEDE CABLEAR TODAVÍA:** si lo que limita es el TEXTO, un lote con poca locución —o mudo— podría durar más de 15 s sin riesgo, y menos clips es menos costuras (ver la concatenación: el fondo cambia ENTRE clips, no dentro). Lo verificado es 18 s con 281 caracteres; **25 s con 200 caracteres es extrapolación y necesita sus propios 2 draws**. No subas `LOTE_MAX_SEC` sin medirlo: es exactamente el error que este documento acaba de cometer tres veces seguidas.
 
 ⚠️ **VUELTA A GROK: `grok-imagine/image-to-video` (2026-08-24, decisión del dueño del repo).** Deshace la migración a Veo 3.1 del 2026-08-19 y cambia cinco cosas a la vez, todas encadenadas: el modelo, el cap de clip (8 s → **30 s**), el sistema de imágenes (keyframes → **anclas**), el generador de imagen (Nano Banana Pro → **gpt-image-2**) y el idioma del prompt (español → **inglés**, con la locución en español). Todo lo que este documento diga de `veo3_fast`, `FIRST_AND_LAST_FRAMES_2_VIDEO` o del tope de 60.000 caracteres es HISTORIA a partir de acá.
 
