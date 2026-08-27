@@ -689,6 +689,20 @@ Después, la prueba directa: el MISMO lote renderizado dos veces, con el prompt 
 
 ⚠️ **El precio, medido sobre las 155 combinaciones reales: 1,72× llamadas pagadas** (155 → 266 lotes), con la duración media por clip cayendo de 7,6 s a 4,4 s. Es una decisión del dueño del repo y no un efecto colateral que se pueda tomar acá — igual que el resto de los cambios de reparto.
 
+❌ **NO REPLICA EN UN SEGUNDO LOTE, ASÍ QUE NO SE CABLEA.** Repetido sobre el top asimétrico (`02fa1205`, nicho ropa, cuerpo entero), lote de 5,3 s con **4 beats y sin locución** — y esta vez con CONTROL, que la primera prueba no tenía:
+
+| | qué ejecutó |
+|---|---|
+| **control**, 4 beats en 6 s | gira → vuelve de frente → manos juntas al abdomen → mano al pecho: **los cuatro**, comprimidos, + relleno inventado (manos a la cintura) |
+| clip 1 de 6 s (beats 1-2) | gira a perfil y **se queda ahí ~4 s**, vuelve a cámara recién al final |
+| clip 2 de 6 s (beats 3-4) | **inventa un estirón del dobladillo** ~3 s (no está en el guion), después sí mano al pecho y al abdomen |
+
+**Partir no ganó: el control ejecutó más que los clips partidos.** Y lo que se ve en los dos clips partidos es el **piso de 6 s de grok** (`MIN_DURATION`) trabajando en contra: 5,3 s de contenido repartidos en dos clips son **12 s de video**, y grok rellena la holgura inventando. Es el mismo mecanismo que el techo blando de `clampDuration` ya documenta para la locución, sobre la coreografía.
+
+⚠️ **Entonces lo que predice el fallo NO es el número de beats.** Los dos lotes difieren en otra cosa: el del suero son **micro-manipulaciones de objeto** (destapar, sacar el gotero, aplicar) dentro de un primer plano; éste son **poses de cuerpo** sin objeto. Grok encadena poses bien y se queda corto en la manipulación fina. Si algún día se parte, la regla acotada sería *beats con manipulación de objeto Y lote ≥12 s* (para que cada mitad tenga 6 s de contenido REAL y no de relleno), no un beat por clip a secas.
+
+⚠️ **`n = 2`, y los dos lotes se contradicen.** Lo que está medido es que la palanca no es el prompt (eso sí replicó); qué la reemplaza sigue abierto.
+
 ⚠️ **Y los dos se quedan quietos al mismo tiempo, lo que reubica el problema:** el límite no es cuánto le podemos contar a grok, es **cuánta coreografía ejecuta por clip** — parece agotarse tras el primer beat, con prompt largo o corto. Si eso se confirma, la palanca es **clips más cortos** (un beat por clip, más llamadas pagadas), no prompts más ricos.
 
 ⚠️ **Dos observaciones más de la misma prueba:** (1) el clip B conservó la habitación y el suéter **sin el bloque `SETTING AND LIGHTING`**, o sea que ese bloque (358 caracteres de mediana) es probablemente redundante con la imagen del avatar — coherente con que la imagen le gane al texto; (2) `n = 1`: un lote, un seed. No prueba que el prompt largo nunca ayude, prueba que acá no ayudó.

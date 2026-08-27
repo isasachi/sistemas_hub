@@ -7,12 +7,17 @@
  * una frase cada uno, y compara si entre los dos se cubre la coreografía que uno solo no
  * cubría.
  *
- * Usa el prompt CORTO en los dos, para que la única variable sea el largo del clip.
+ * Usa el prompt CORTO en todos, para que la única variable sea el reparto.
+ *
+ * ⚠️ La primera versión mezclaba DOS variables: el número de beats y la duración del clip
+ * (10 s/2 beats contra 6 s/1 beat). Ahora renderiza el CONTROL (todos los beats en un
+ * clip, tal como está hoy) más K clips con el reparto, así se puede ver si lo que arregla
+ * la ejecución es un beat por clip o simplemente un clip más corto.
  *
  * ⚠️ No toca la cuota del hub, no escribe en la base y no genera imágenes. Gasta DOS
  * renders de KIE.
  *
- *   npx tsx --env-file=.env.local scripts/probe-beat-por-clip.ts <sessionId>
+ *   npx tsx --env-file=.env.local scripts/probe-beat-por-clip.ts <sessionId> [lote] [K]
  */
 import { createClient } from '@supabase/supabase-js'
 import { writeFile } from 'node:fs/promises'
@@ -59,22 +64,27 @@ async function main() {
   if (!id) throw new Error('Falta el sessionId')
   const { data } = await db.from('video_sessions').select('*').eq('id', id).single()
   const r = data as Record<string, unknown> & { forensic_analysis: ForensicReport }
-  const { data: st } = await db.from('user_settings').select('kie_api_key').eq('user_id', r.user_id as string).single()
-  const key = (st as { kie_api_key?: string } | null)?.kie_api_key
-  if (!key) throw new Error('El usuario no tiene key de KIE guardada')
+  // Las sesiones viejas están claveadas por la cookie anónima, así que su user_id no tiene
+  // fila en user_settings: se cae a cualquier key guardada (todas son la del dueño del repo).
+  const { data: st } = await db.from('user_settings').select('user_id,kie_api_key').not('kie_api_key', 'is', null)
+  const filas = (st ?? []) as { user_id?: string; kie_api_key: string }[]
+  const key = filas.find((f) => f.user_id === r.user_id)?.kie_api_key ?? filas[0]?.kie_api_key
+  if (!key) throw new Error('No hay ninguna key de KIE guardada')
 
   const adapted = AdaptedScriptSchema.parse(r.adapted)
   const f = r.forensic_analysis
   const plano = new Map(f.cortes.map((c) => [c.tiempo, String(c.camara).trim()]))
   const clase = new Map(f.cortes.map((c) => [c.tiempo, corteMuestraPersona(c)]))
-  const lote = groupIntoLotes(adapted.tomas, plano, 1, clase)[0]
+  const iLote = Number(process.argv[3] ?? 0)
+  const K = Number(process.argv[4] ?? 2)
+  const lote = groupIntoLotes(adapted.tomas, plano, 1, clase)[iLote]
   const t = lote.tomas[0]
 
-  // Un beat por clip: la acción se parte por su separador y la locución por frases.
-  const mitades = repartirAccion(t.accionVisual, [1, 1])
+  // El reparto: la acción se parte por su separador y la locución por frases.
+  const partes = repartirAccion(t.accionVisual, Array.from({ length: K }, () => 1))
   const frases = t.locucion.split(/(?<=[.!?])\s+/).filter(Boolean)
-  const corte = Math.ceil(frases.length / 2)
-  const locuciones = [frases.slice(0, corte).join(' '), frases.slice(corte).join(' ')]
+  const porClip = Math.ceil(frases.length / K) || 1
+  const locuciones = Array.from({ length: K }, (_, i) => frases.slice(i * porClip, (i + 1) * porClip).join(' '))
 
   const scan = (r.product_scan ?? {}) as { productDescription?: string }
   const camara = camaraDeLote(lote, f.cortes, 'primer plano')
@@ -83,16 +93,30 @@ async function main() {
     { url: r.product_url as string, role: 'the product' },
   ]
 
-  console.log(`sesión ${id.slice(0, 8)} · lote ${lote.n} de ${t.duracionSeg}s partido en 2\n`)
+  const beats = t.accionVisual.split(' Luego, ').length
+  console.log(`sesión ${id.slice(0, 8)} · lote ${lote.n} · ${t.duracionSeg}s · ${beats} beats → control + ${K} clips\n`)
   const tareas: (readonly [string, string])[] = []
-  for (let i = 0; i < 2; i++) {
-    const seg = Math.max(MIN_DURATION, clampDuration(t.duracionSeg / 2, locuciones[i].length, 1))
+
+  // CONTROL: todo junto, tal como se renderiza hoy.
+  {
+    const seg = clampDuration(t.duracionSeg, t.locucion.length, 1)
     const prompt = promptCorto({
       persona: (r.consistency_block as string) ?? '', producto: scan.productDescription ?? '',
-      camara, accion: mitades[i], locucion: locuciones[i], segundos: seg,
+      camara, accion: t.accionVisual, locucion: t.locucion, segundos: seg,
     })
-    console.log(`clip ${i + 1} — ${seg}s · ${prompt.length} caracteres`)
-    console.log(`  acción:   ${mitades[i]}`)
+    console.log(`CONTROL — ${seg}s · ${beats} beats · ${prompt.length} caracteres`)
+    tareas.push(['C', await createVideoTask({ images: imagenes, prompt, durationSec: seg, locucionChars: t.locucion.length, tomas: 1 }, key)] as const)
+  }
+
+  for (let i = 0; i < K; i++) {
+    if (!partes[i]?.trim()) continue
+    const seg = Math.max(MIN_DURATION, clampDuration(t.duracionSeg / K, locuciones[i].length, 1))
+    const prompt = promptCorto({
+      persona: (r.consistency_block as string) ?? '', producto: scan.productDescription ?? '',
+      camara, accion: partes[i], locucion: locuciones[i], segundos: seg,
+    })
+    console.log(`clip ${i + 1} — ${seg}s · ${partes[i].split(' Luego, ').length} beat(s) · ${prompt.length} caracteres`)
+    console.log(`  acción:   ${partes[i].slice(0, 130)}`)
     console.log(`  locución: ${locuciones[i]}\n`)
     const taskId = await createVideoTask({ images: imagenes, prompt, durationSec: seg, locucionChars: locuciones[i].length, tomas: 1 }, key)
     tareas.push([`${i + 1}`, taskId] as const)
