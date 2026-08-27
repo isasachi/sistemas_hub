@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import type { ProductRow, NicheRow, PePoolRow, WatchlistRow, StoredAnalysis, UrlResearchRow, UrlResearchResult, RawProductRow } from './types'
+import type { ProductRow, NicheRow, PePoolRow, WatchlistRow, StoredAnalysis, UrlResearchRow, UrlResearchResult, RawProductRow, RawClusterRow } from './types'
 import { bucketRange, type RawBucket } from './raw-buckets'
 import { type Pais } from './filtros'
 import { prescore } from './prescore'
@@ -622,6 +622,33 @@ export async function upsertRawProducts(
     const { error } = await getDb()
       .from('ph_raw_products')
       .upsert(clean.slice(i, i + 200), { onConflict: 'niche,page_id' })
+    if (error) throw new Error(error.message)
+  }
+}
+
+/**
+ * Los PRODUCTOS de un anunciante. `onConflict` compuesto con `cluster_key`: un
+ * re-scrape actualiza el producto en vez de duplicarlo con otra clave.
+ *
+ * Ojo: un anunciante que está en 40 nichos escribe sus clusters 40 veces, una
+ * por nicho. Es el mismo modelo que `ph_raw_products` (que también tiene una
+ * fila por nicho) y es correcto, porque el veredicto de pertenencia ES por
+ * nicho — pero la tabla crece por ese factor.
+ */
+export async function upsertRawClusters(rows: RawClusterRow[]): Promise<void> {
+  if (!rows.length) return
+  const now = new Date().toISOString()
+  const clean = rows.map((r) => ({
+    ...r,
+    titulo: r.titulo ? cleanJsonText(r.titulo) : null,
+    cuerpo: r.cuerpo ? cleanJsonText(r.cuerpo) : null,
+    name: r.name ? cleanJsonText(r.name) : null,
+    scraped_at: now,
+  }))
+  for (let i = 0; i < clean.length; i += 200) {
+    const { error } = await getDb()
+      .from('ph_raw_clusters')
+      .upsert(clean.slice(i, i + 200), { onConflict: 'niche,page_id,cluster_key' })
     if (error) throw new Error(error.message)
   }
 }

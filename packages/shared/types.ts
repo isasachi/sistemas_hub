@@ -280,6 +280,36 @@ export interface RawProductRow {
   ad_start_date?: number | null
 }
 
+/**
+ * Un PRODUCTO dentro de un anunciante — la unidad que el buscador debe contar.
+ * `ph_raw_products` sigue siendo la fila del ANUNCIANTE; esto cuelga de ella.
+ *
+ * ⚠️ `ad_count` acá es ESTIMADO: `(muestra_n / muestra_tot) * ad_count del
+ * anunciante`. Meta no expone cursor de paginación y solo se leen ~30 anuncios,
+ * así que los dos crudos viajan al lado para poder auditarlo sin re-scrapear.
+ */
+export interface RawClusterRow {
+  niche: string
+  page_id: string
+  cluster_key: string
+  ad_count: number
+  muestra_n: number
+  muestra_tot: number
+  titulo: string | null
+  cuerpo: string | null
+  url: string | null
+  name?: string | null       // del anunciante, para la card
+  country?: string | null
+  status?: 'pendiente' | 'monoproducto' | 'sin_verificar' | 'descartado' | 'inactivo'
+  kind?: string | null
+  product_name?: string | null
+  verdict_note?: string | null
+  senal_nicho?: 'path' | 'titulo' | 'cuerpo' | 'ninguna' | null
+  ad_start_date?: number | null
+  scraped_at?: string
+  verified_at?: string | null
+}
+
 // Lo que ve el front del buscador.
 export interface RawProductEntry {
   id: string            // `${niche}:${page_id}`
