@@ -37,7 +37,12 @@ const db = createClient(
 )
 
 interface Fila { niche: string; page_id: string; ad_count: number; status: string; name: string | null }
-interface Cluster { key: string; n: number; titulo: string | null; url: string | null }
+// `cuerpo` es el copy del anuncio, y se guarda porque SIN ÉL no se puede probar
+// la propuesta de embeddings: el título de la card suele ser el reclamo
+// promocional del anunciante, no el nombre del producto — medido, "paga al
+// recibir" es el título de 10 productos distintos del mismo anunciante y el 42%
+// de los clusters no traen ningún texto de producto en ese campo.
+interface Cluster { key: string; n: number; titulo: string | null; cuerpo: string | null; url: string | null }
 interface Salida extends Fila { muestra: number; distintos: number; clusters: Cluster[] }
 
 // Estratificado a propósito: `pendiente` es la población sin medir (el punto),
@@ -73,7 +78,7 @@ function clustersDe(ads: SsrAd[]): Cluster[] {
     else t.set(k, { n: 1, a: ad })
   }
   return [...t.entries()]
-    .map(([key, v]) => ({ key, n: v.n, titulo: v.a.title, url: v.a.link_url }))
+    .map(([key, v]) => ({ key, n: v.n, titulo: v.a.title, cuerpo: v.a.body?.slice(0, 400) ?? null, url: v.a.link_url }))
     .sort((a, b) => b.n - a.n)
 }
 

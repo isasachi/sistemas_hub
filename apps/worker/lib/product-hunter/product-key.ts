@@ -13,7 +13,7 @@
 // de 1.00 a 0.38 al corregirlo — los dos habrían entrado a la vitrina como
 // monoproducto perfecto. Cuando el destino es un chat o una red, la clave sale
 // del TÍTULO del anuncio.
-const CHAT = /(whatsapp|messenger|instagram|facebook|linktr|link\.me|m\.me|wa\.me|bit\.ly|linkr|t\.me|telegram)/
+export const CHAT = /(whatsapp|messenger|instagram|facebook|linktr|link\.me|m\.me|wa\.me|bit\.ly|linkr|t\.me|telegram)/
 
 export interface KeyableAd {
   title?: string | null
