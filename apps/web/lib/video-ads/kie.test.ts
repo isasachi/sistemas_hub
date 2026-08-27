@@ -3,6 +3,7 @@ import {
   buildTaskBody, clampDuration, resolutionFor, parseTaskDetail, createVideoTask,
   MIN_DURATION, MAX_DURATION, MAX_IMAGES, KIE_PROMPT_MAX, resolveKey,
 } from './kie'
+import { MIN_TOMA_SEG } from './forensic'
 import { CPS_MAX, CPS_MIN } from './forensic'
 
 // Sin API key no se puede probar el render en vivo, así que lo que se verifica acá es el
@@ -239,5 +240,17 @@ describe('clampDuration — el b-roll está exento del techo blando', () => {
   // Y la contraparte: con UNA escena y poco texto, el techo sí actúa. Es su razón de ser.
   it('con una sola escena y poco texto, el techo recorta', () => {
     expect(clampDuration(15, 40, 1)).toBeLessThan(15)
+  })
+})
+
+// ⚠️ `MIN_TOMA_SEG` (la fusión de micro-cortes) TIENE que ser el piso del modelo de
+// render. No se puede importar `MIN_DURATION` desde forensic.ts —kie.ts ya importa de
+// ahí, sería un ciclo— así que la constante está duplicada y esto es lo único que impide
+// que se desincronicen. Ya pasó una vez: quedó en 4 (el piso de Veo 3.1) al volver a
+// grok, cuyo piso es 6, y el resultado fue que 48 de 189 lotes le pedían al modelo más
+// segundos de los que su contenido tenía. Grok rellena esa holgura inventando.
+describe('MIN_TOMA_SEG sigue al piso del modelo', () => {
+  it('la fusión no fabrica tomas más cortas de lo que el render acepta', () => {
+    expect(MIN_TOMA_SEG).toBe(MIN_DURATION)
   })
 })

@@ -265,17 +265,29 @@ export const CPS_MIN = 9
 /**
  * Piso de duración de una TOMA, en segundos.
  *
- * Ya NO es un número discutible: 4 es `MIN_DURATION` de Veo 3.1, la duración más corta
- * que el modelo acepta. Una toma más corta que eso no se puede renderizar tal cual —
- * `snapDuration` la subiría a 4 s igual, o sea el clip duraría más que la toma y el
- * anuncio se alargaría solo. Fusionar antes es lo que evita esa inflación.
+ * Ya NO es un número discutible: es `MIN_DURATION` del modelo de render, la duración más
+ * corta que acepta. Una toma más corta que eso no se puede renderizar tal cual —
+ * `clampDuration` la sube al piso igual, o sea el clip dura MÁS que la toma y el modelo
+ * rellena la holgura: medido en dos renders, inventando acción que el original no tiene
+ * (un estirón del dobladillo de 3 s) o quedándose quieto. Fusionar antes es lo que evita
+ * esa inflación.
  *
- * Con grok esto era 3 y sí era discutible (su piso era 1 s, y un clip de 1 s renderiza
- * una pose congelada, no una acción). El argumento de costo sigue valiendo igual: cada
- * corte es una llamada PAGADA y la frontera de plano abre un lote por encuadre, así que
- * un montaje de micro-cortes multiplica el costo por la granularidad del original.
+ * ⚠️ **SE QUEDÓ EN 4 AL VOLVER DE VEO A GROK, y eso costaba la mitad del defecto.** 4 era
+ * el piso de `veo3_fast`; el de `grok-imagine` es **6**. Medido sobre los 33 análisis
+ * forenses guardados, simulando el reparto entero: con 4 quedan **48 de 189 lotes (25 %)**
+ * pidiendo más segundos de los que su contenido tiene, y con 6 quedan **21 de 169 (12 %)**,
+ * con la holgura total bajando del 8 % al 6 %. Y sale **más barato**, no más caro: 189 →
+ * 169 lotes, porque fusionar reduce llamadas pagadas. Si el modelo de render cambia otra
+ * vez, esto se mueve CON él — hay un test que lo ata a `MIN_DURATION`.
+ *
+ * (No se importa `MIN_DURATION` de `kie.ts` porque ese módulo ya importa de éste: sería un
+ * ciclo. El test es lo que impide que se desincronicen otra vez.)
+ *
+ * El argumento de costo sigue valiendo igual: cada corte es una llamada PAGADA y la
+ * frontera de plano abre un lote por encuadre, así que un montaje de micro-cortes
+ * multiplica el costo por la granularidad del original.
  */
-export const MIN_TOMA_SEG = 4
+export const MIN_TOMA_SEG = 6
 
 /**
  * ¿Este corte muestra a la PERSONA, o solo al producto?

@@ -703,6 +703,24 @@ Después, la prueba directa: el MISMO lote renderizado dos veces, con el prompt 
 
 ⚠️ **`n = 2`, y los dos lotes se contradicen.** Lo que está medido es que la palanca no es el prompt (eso sí replicó); qué la reemplaza sigue abierto.
 
+✅ **PERO LA PRUEBA DESTAPÓ UN DEFECTO QUE SÍ ES GENERAL, Y ERA UNA CONSTANTE HUÉRFANA: `MIN_TOMA_SEG` SE QUEDÓ EN EL PISO DE VEO.** Lo que se ve en los dos experimentos es el mismo mecanismo: cuando al clip le sobran segundos respecto de su contenido, grok rellena — inventando (el estirón del dobladillo, las manos a la cintura) o quedándose quieto (los 8 s sosteniendo el frasco). O sea la holgura es basura, y es medible sin gastar un render.
+
+Medido sobre los lotes reales: **74 de 155 (48 %) le piden a grok más segundos de los que su contenido tiene**, y 47 de esos 74 es el piso del modelo. La causa es que `mergeMicroCortes` fusionaba hasta `MIN_TOMA_SEG = 4` mientras `MIN_DURATION` de grok es **6**: todo lo que queda entre 4 y 6 s nace con holgura. **El 4 era el piso de `veo3_fast` y se quedó ahí en la vuelta a grok** — su propio comentario lo decía (*"4 es `MIN_DURATION` de Veo 3.1"*), o sea no era un dial de costo sino una constante desactualizada.
+
+Simulando el reparto entero sobre los 33 análisis forenses guardados:
+
+| | lotes | inflados por el piso | holgura total |
+|---|---|---|---|
+| `MIN_TOMA_SEG = 4` (Veo) | 189 | 48 (25 %) | 8 % |
+| `= 5` | 182 | 35 (19 %) | 7 % |
+| **`= 6`** (grok) | **169** | **21 (12 %)** | **6 %** |
+
+⚠️ **Y sale MÁS BARATO, no más caro** — 189 → 169 lotes, porque fusionar reduce llamadas pagadas. Es la excepción a que un cambio de reparto sea decisión de costo del dueño del repo: acá el costo baja y lo que se cierra es un defecto.
+
+⚠️ **No se importa `MIN_DURATION` desde `forensic.ts`: `kie.ts` ya importa de ahí y sería un ciclo.** La constante queda duplicada, así que hay un test en `kie.test.ts` que exige `MIN_TOMA_SEG === MIN_DURATION`. Sin él se vuelven a desincronizar en el próximo cambio de modelo, que es exactamente lo que pasó.
+
+⚠️ **Un test rompió al aplicarlo, y la aserción era la equivocada.** *"Con piso, el beat mudo conserva su duración real"* comparaba contra `MIN_TOMA_SEG` en vez de contra los 5 s de su ventana — coincidía por casualidad mientras la constante valía 4. El piso de `repairCutTiming` está acotado a la duración que el corte ya tiene (suelo contra el vaciado, no empujón), así que la comparación correcta es contra la duración real.
+
 ⚠️ **Y los dos se quedan quietos al mismo tiempo, lo que reubica el problema:** el límite no es cuánto le podemos contar a grok, es **cuánta coreografía ejecuta por clip** — parece agotarse tras el primer beat, con prompt largo o corto. Si eso se confirma, la palanca es **clips más cortos** (un beat por clip, más llamadas pagadas), no prompts más ricos.
 
 ⚠️ **Dos observaciones más de la misma prueba:** (1) el clip B conservó la habitación y el suéter **sin el bloque `SETTING AND LIGHTING`**, o sea que ese bloque (358 caracteres de mediana) es probablemente redundante con la imagen del avatar — coherente con que la imagen le gane al texto; (2) `n = 1`: un lote, un seed. No prueba que el prompt largo nunca ayude, prueba que acá no ayudó.

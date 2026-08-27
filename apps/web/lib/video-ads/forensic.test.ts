@@ -942,7 +942,11 @@ describe('reconciliar + reparar: el b-roll sobrevive a las dos pasadas', () => {
   it('con piso, el beat mudo conserva su duración real', () => {
     const { report } = reconciliarConVentana(base())
     const conPiso = repairCutTiming(report, MIN_TOMA_SEG).report
-    expect(conPiso.cortes[1].duracionSeg).toBeGreaterThanOrEqual(MIN_TOMA_SEG)
+    // Su duración REAL son los 5 s de su ventana, no `MIN_TOMA_SEG`: el piso está acotado
+    // a la duración que el corte ya tiene (es un suelo contra el vaciado, no un empujón
+    // hacia arriba). Comparar contra la constante coincidía por casualidad mientras valía
+    // 4, y rompía sola al atarla al piso de grok.
+    expect(conPiso.cortes[1].duracionSeg).toBe(5)
     // Y el diálogo de los cortes hablados sigue siendo decible: el piso no rompe eso.
     for (const c of conPiso.cortes) {
       if (!c.dialogo) continue
