@@ -21,16 +21,44 @@ export default function AdWizard() {
   const {
     step, imageUrl, sessionId, sessionError,
     startNewSession, hydrateFromSession, setStep, setRegens,
+    resetSession,
   } = useWizardStore()
 
   // Reanudar: si hay un id guardado y la sesión existe, rehidratar; si no, una nueva.
+  // ⚠️ UNA SOLA VEZ, PASE LO QUE PASE CON EL MONTAJE. Este efecto CREA una sesión en el
+  // servidor, y el StrictMode de React monta dos veces en desarrollo: sin este candado se
+  // crean DOS filas por visita. Medido en la base, las sesiones fantasma aparecían en
+  // pareja con la real y con el mismo minuto de creación.
+  const arrancado = useRef(false)
+
+  // ponytail: la fila se crea al MONTAR, no en la primera acción real. El listado del
+  // dashboard filtra las vacías (ver `list*Sessions`), así que no molestan — pero se
+  // siguen creando. El upgrade es crear la sesión con el primer insumo (el upload del
+  // paso 1) en vez de acá; hoy no se hace porque el wizard necesita un id para subir a
+  // `/upload-url` y cambiarlo toca los tres flujos a la vez.
+  // ⚠️ EL MONTAJE YA NO CREA LA FILA. Abrir la tool y no hacer nada dejaba una sesión
+  // fantasma; el listado del dashboard las filtra al LEER, lo que ocultaba el síntoma en
+  // vez de arreglarlo. Ahora la fila nace en el primer insumo real (`ensureSession`).
   useEffect(() => {
+    if (arrancado.current) return
+    arrancado.current = true
     const saved = localStorage.getItem(SESSION_KEY)
-    if (!saved) { startNewSession(); return }
+    // ⚠️ SIN ID GUARDADO HAY QUE VACIAR EL STORE, no basta con no hacer nada: zustand es un
+    // singleton de MÓDULO y sobrevive la navegación del cliente, así que "Empezar" (que
+    // borra el id de `localStorage` y navega acá) remontaba el wizard con la sesión
+    // anterior todavía en memoria — y el usuario aterrizaba en su último paso.
+    if (!saved) { resetSession(); return }
     fetch(`/api/generador-anuncios/sessions/${saved}`)
       .then((r) => (r.ok ? (r.json() as Promise<SessionResponse>) : Promise.reject()))
       .then((s) => hydrateFromSession(s))
-      .catch(() => startNewSession())
+      // ⚠️ Un id que ya no existe (sesión borrada del dashboard) o que es de otra cuenta
+      // NO crea una fila: vacía el wizard y la sesión nace con el primer insumo, igual que
+      // en el camino sin id. Con `startNewSession` acá, un link viejo o ajeno dejaba una
+      // sesión fantasma en silencio — el problema que este cambio vino a eliminar.
+      // ⚠️ Y SE BORRA EL ID GUARDADO: antes lo pisaba el `startNewSession` de este mismo
+      // catch. Sin eso, un id muerto se queda en `localStorage` y vuelve a fallar en cada
+      // visita — el wizard queda pidiéndole al servidor una sesión que no existe para siempre.
+      .catch(() => { localStorage.removeItem(SESSION_KEY); resetSession() })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {

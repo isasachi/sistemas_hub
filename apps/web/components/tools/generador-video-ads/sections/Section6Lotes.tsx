@@ -33,6 +33,7 @@ export default function Section6Lotes() {
   // si la caída fue transitoria, el próximo tick se recupera solo; si es persistente,
   // el aviso se queda visible hasta que se recupere o el usuario recargue.
   const [connectionLost, setConnectionLost] = useState(false)
+  const [bajando, setBajando] = useState(false)
   const timer = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Preview local: cuántos renders va a costar, ANTES de gastarlos.
@@ -139,7 +140,11 @@ export default function Section6Lotes() {
           </p>
         </div>
         {error && <div className={errorBox}>{error}</div>}
-        <button onClick={() => submit(false)} disabled={submitting} className={btnPrimary}>
+        {/* `running` además de `submitting`: el POST vuelve enseguida (crea las tareas
+            y responde), pero el render sigue corriendo minutos después. Sin esto, un
+            click de más encadena otra petición y agota los créditos de KIE del usuario.
+            El servidor ya responde 409 al duplicado — esto es para que no llegue. */}
+        <button onClick={() => submit(false)} disabled={submitting || running} className={btnPrimary}>
           {submitting ? <><span className={spinner} />Iniciando el render...</> : `Generar los ${preview.length} lotes →`}
         </button>
       </div>
@@ -153,6 +158,35 @@ export default function Section6Lotes() {
   // individual haya salido `fail` de KIE — eso se ve en su tarjeta).
   const stuck = !running && lotes.some(isStuck)
   const finished = !running && !stuck
+
+  // El entregable son N clips porque el render se reparte en lotes, pero lo que se sube a
+  // una red social es UN video. La ruta los pega con `-c copy` (sin re-encode) y devuelve
+  // el mp4 en el cuerpo; acá se convierte en descarga.
+  //
+  // ⚠️ Es un POST que responde bytes, así que NO puede ser un `<a download>`: hay que
+  // pedirlo con fetch y hacer la descarga desde un blob.
+  const listos = lotes.filter((l) => l.videoUrl).length
+  const descargarTodo = async () => {
+    setBajando(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/generador-video-ads/sessions/${sessionId}/concat`, { method: 'POST' })
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? 'No se pudo armar el video')
+      const faltan = Number(res.headers.get('X-Clips-Faltantes') ?? 0)
+      const url = URL.createObjectURL(await res.blob())
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'video-completo.mp4'
+      a.click()
+      URL.revokeObjectURL(url)
+      // Un clip caído no se puede pegar, y saltarlo cambia el guión: decirlo, no callarlo.
+      if (faltan > 0) setError(`El video se armó sin ${faltan} clip${faltan > 1 ? 's' : ''} que no llegó a renderizar.`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo armar el video completo')
+    } finally {
+      setBajando(false)
+    }
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -220,8 +254,15 @@ export default function Section6Lotes() {
           confundiría "seguimos reintentando solos" con "algo requiere tu acción". */}
       {error && !running && <div className={errorBox}>{error}</div>}
       {stuck && (
-        <button onClick={() => submit(true)} disabled={submitting} className={btnPrimary}>
+        <button onClick={() => submit(true)} disabled={submitting || running} className={btnPrimary}>
           {submitting ? <><span className={spinner} />Reintentando...</> : 'Reintentar el render →'}
+        </button>
+      )}
+      {listos > 1 && (
+        <button onClick={descargarTodo} disabled={bajando} className={btnPrimary}>
+          {bajando
+            ? <><span className={spinner} />Armando el video...</>
+            : <><Download className="h-4 w-4" strokeWidth={1.8} />Descargar los {listos} clips en un video</>}
         </button>
       )}
       {finished && (
@@ -235,7 +276,7 @@ export default function Section6Lotes() {
             adáptalo otra vez antes de generar de nuevo — si no cambia nada, este botón
             no crea una versión distinta.
           </p>
-          <button onClick={() => submit(true)} disabled={submitting} className={btnGhost}>
+          <button onClick={() => submit(true)} disabled={submitting || running} className={btnGhost}>
             {submitting ? <><span className={spinner} />Generando...</> : 'Generar otra versión →'}
           </button>
         </div>

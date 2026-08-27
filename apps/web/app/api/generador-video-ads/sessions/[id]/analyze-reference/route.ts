@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getVideoSession, updateVideoSession } from '@/lib/video-ads/db'
-import { fetchAsBase64, PayloadTooLargeError } from '@/lib/storage'
-import { geminiCallStructured } from '@/lib/gemini'
+import { fetchAsBase64, headStorageFile, PayloadTooLargeError } from '@/lib/storage'
+import { geminiCallStructured, geminiEsDirecto } from '@/lib/gemini'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 import { ForensicReportSchema } from '@/lib/video-ads/types'
-import { buildForensicInstruction, repairCutTiming, limpiarDialogos, verificarHablantes } from '@/lib/video-ads/forensic'
+import { buildForensicInstruction, repairCutTiming, reconciliarConVentana, coreografiaEscasa, MIN_TOMA_SEG, limpiarDialogos, verificarHablantes } from '@/lib/video-ads/forensic'
 import { MAX_VIDEO_MB } from '@/lib/video-ads/limits'
 import { STEP } from '@/lib/video-ads/steps'
 import type { Part } from '@google/genai'
@@ -40,15 +40,24 @@ export async function POST(
   if (!parsed.success) return NextResponse.json({ error: 'Falta el video de referencia' }, { status: 400 })
 
   try {
-    // El tope de MAX_VIDEO_MB hoy solo se valida en el browser (Section0Reference) —
-    // UX, no seguridad: un request armado a mano se lo salta. `fetchAsBase64` revisa
-    // `content-length` ANTES de bufferear el video entero (que además se infla 4/3 en
-    // base64), así que un video sobredimensionado falla acá con un 413 claro en vez
-    // de reventar el runtime de Node por memoria o timeout minutos después.
-    const { data, mimeType } = await fetchAsBase64(parsed.data.videoUrl, MAX_VIDEO_MB * 1024 * 1024)
+    // El tope de MAX_VIDEO_MB también se valida en el browser (Section0Reference), pero eso es
+    // UX: un request armado a mano se lo salta. Acá se comprueba con un HEAD —junto con el
+    // allowlist de host, que importa MÁS que antes porque la URL se la damos a KIE para que la
+    // busque él— sin bajar el archivo.
+    const { mimeType } = await headStorageFile(parsed.data.videoUrl, MAX_VIDEO_MB * 1024 * 1024)
 
+    // ⚠️ EL VIDEO VA POR URL, NO EN BASE64, Y NO ES UNA OPTIMIZACIÓN. Medido sobre el mismo video
+    // de 13,6 MB: 18,2 MB de base64 MÁS el schema del forense revientan a los ~69 s con un
+    // `400 "The server is currently being maintained"` de KIE que miente —3 de 3 intentos, 3,7 min
+    // y un 500 al usuario— y con la URL responde. El video ya vive en el bucket, así que además
+    // nos ahorramos bajarlo y volver a subirlo dentro del request.
+    //
+    // Bajo `GEMINI_VIA=direct` se manda inline: el SDK de Google solo acepta un `fileUri` de su
+    // propia Files API, no una URL de Supabase.
     const parts: Part[] = [
-      { inlineData: { mimeType, data } },
+      geminiEsDirecto()
+        ? { inlineData: await fetchAsBase64(parsed.data.videoUrl, MAX_VIDEO_MB * 1024 * 1024) }
+        : { fileData: { fileUri: parsed.data.videoUrl, mimeType } },
       { text: buildForensicInstruction() },
     ]
     const analysis = await geminiCallStructured('forensic_report', ForensicReportSchema, parts)
@@ -73,11 +82,38 @@ export async function POST(
     if (descartados.length) {
       console.warn(`[video-ads/analyze-reference] sesión ${id}: el reparto por hablante no reproducía el diálogo en los cortes ${descartados.join(', ')} — se descartó su atribución`)
     }
-    const { report: reparado, ajustes } = repairCutTiming(atribuido)
+    // ⚠️ RECONCILIAR ANTES DE REPARAR, y SOLO acá. El modelo declara la duración dos
+    // veces (la ventana `tiempo` y `duracionSeg`) y se contradice en el 15 % de los
+    // cortes, siempre contra el b-roll: 9 de los 12 cortes mudos de la base están por
+    // debajo de 3 s. Las ventanas sí forman una línea coherente, así que mandan. En
+    // `extract-template` NO se repite: allá las duraciones ya pasaron por la reparación.
+    const { report: conVentana, ajustes: reconciliados } = reconciliarConVentana(atribuido)
+    if (reconciliados.length)
+      console.warn(
+        `[video-ads/analyze-reference] sesión ${id}: ${reconciliados.length} cortes cuya duración no coincidía con su ventana, reconciliados:`,
+        reconciliados.map((a) => `corte ${a.n}: ${a.de.toFixed(1)}s → ${a.a.toFixed(1)}s`),
+      )
+    // ⚠️ Y CON PISO VISIBLE, o la reconciliación no sirve de nada. Un corte MUDO tiene
+    // mínimo de habla 0, así que para el reparto es holgura pura y lo puede vaciar entero
+    // para financiar a los hablados. Sin este piso, el b-roll que la línea de arriba acaba
+    // de levantar a su duración real se drena en la línea siguiente. El piso se acota a la
+    // duración que el corte YA tiene (ver `repairCutTiming`), así que no infla nada: solo
+    // impide el vaciado.
+    const { report: reparado, ajustes } = repairCutTiming(conVentana, MIN_TOMA_SEG)
     if (ajustes.length)
       console.warn(
         `[video-ads/analyze-reference] sesión ${id}: ${ajustes.length} cortes con diálogo indecible en su duración, recronometrados:`,
         ajustes.map((a) => `corte ${a.n}: ${a.de.toFixed(1)}s → ${a.a.toFixed(1)}s`),
+      )
+
+    // ⚠️ VISIBILIDAD, no corrección: el forense es el paso caro y no se re-llama por esto.
+    // El síntoma que llega al usuario es "el video no copia los movimientos", y su causa
+    // más común es que la coreografía de un corte largo se describió con dos frases.
+    const escasos = coreografiaEscasa(reparado)
+    if (escasos.length)
+      console.warn(
+        `[video-ads/analyze-reference] sesión ${id}: ${escasos.length} cortes con coreografía escasa para su duración —`,
+        escasos.map((e) => `corte ${e.n}: ${e.movimientos} movimientos en ${e.seg.toFixed(1)}s`),
       )
 
     await updateVideoSession(id, {

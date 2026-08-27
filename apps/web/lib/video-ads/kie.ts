@@ -1,37 +1,56 @@
 import { CPS_MAX, CPS_MIN } from './forensic'
 
 /**
- * Cliente de KIE AI (Veo 3.1) para el render de video.
+ * Cliente de KIE AI (Grok Imagine `image-to-video`) para el render de video.
  *
- * KIE es ASÍNCRONO: generate devuelve un taskId al instante (200 ≠ terminado) y el
- * resultado se consulta con record-info. Por eso el render NO usa el patrón SSE del
+ * KIE es ASÍNCRONO: createTask devuelve un taskId al instante (200 ≠ terminado) y el
+ * resultado se consulta con recordInfo. Por eso el render NO usa el patrón SSE del
  * generador de anuncios: la ruta crea la tarea y responde, y el cliente hace polling.
  *
- * ⚠️ VEO VIVE EN OTRO ENDPOINT QUE EL RESTO DEL MARKETPLACE DE KIE. Grok y Nano Banana
- * Pro van por `/api/v1/jobs/createTask` + `recordInfo`; Veo tiene los suyos y una forma
- * de respuesta distinta (`successFlag` numérico en vez de `state` string). No es un
- * cambio de string de modelo: es otro cliente.
+ * ⚠️ VUELTA A GROK DESDE VEO 3.1 (2026-08-24, decisión del dueño del repo). Veo vivía en
+ * `/api/v1/veo/*` con `successFlag` numérico; este modelo está en el MARKETPLACE
+ * (`/api/v1/jobs/createTask` + `recordInfo`), con `state` string y `resultJson` como
+ * STRING con JSON adentro. No es un cambio de string de modelo: es otro cliente, otro
+ * parser y otro contrato de duraciones.
  *
- * Restricciones reales, todas MEDIDAS contra la API el 2026-08-19 (docs.kie.ai/veo3-api):
- *   - `duration` acepta EXACTAMENTE 4, 6 u 8 segundos. Nada de decimales ni de 15.
- *     Ver `snapDuration`, que es donde se decide qué se pierde al ajustar.
- *   - `prompt` topa en 60.000 caracteres (`422 "The prompt word cannot exceed 60000
- *     characters"`). Son 14,6× el tope de grok, y por eso `buildLotePrompt` ya no
- *     necesita la escalera de degradación que existía para caber en 4096.
- *   - `generationType` decide qué significan las imágenes, y los modos son EXCLUYENTES:
- *     `REFERENCE_2_VIDEO` (1–3 refs, solo fast/lite, solo 8 s) o
- *     `FIRST_AND_LAST_FRAMES_2_VIDEO` (1–2 keyframes: primero y último).
- *   - El prompt puede ir en ESPAÑOL y la locución entrecomillada se dice literal, con
- *     acento latinoamericano. Medido con dos renders: la afirmación de que Veo 3.1 solo
- *     acepta inglés es falsa, y `enableTranslation` NO toca el texto entrecomillado.
+ * ⚠️ Y NO ES EL MISMO GROK QUE HUBO ANTES. `grok-imagine-video-1-5-preview` (el de la
+ * primera época de esta tool) tomaba `duration` INTEGER 1–15, prompt de 4096 y rechazaba
+ * `mode`. Éste toma `duration` STRING 6–30, prompt de 5000 y acepta `mode`. Copiar el
+ * cliente viejo tal cual lo rechaza la validación.
  *
- * El canario para probar el body sin gastar: mandar `duration: 5` (inválido) devuelve
- * 422 SIN taskId, o sea la validación corre antes de despachar y no cobra. Cualquier
- * otro campo se verifica gratis mandándolo junto a esa duración inválida.
+ * Contrato (docs.kie.ai/market/grok-imagine/image-to-video):
+ *   - `image_urls`: hasta **7** imágenes, **10 MB** cada una (no 20), JPEG/PNG/WEBP, y
+ *     URLs públicas. Con `resolution: 1080p` solo se admite UNA — otra razón para 720p.
+ *   - `prompt`: máx **5000** caracteres, y la doc dice *English only*. Ver `KIE_PROMPT_MAX`
+ *     y la nota de idioma en `buildLotePrompt`: el andamiaje va en inglés y la locución
+ *     entrecomillada en español, que es lo que el anuncio tiene que decir.
+ *   - `duration`: **STRING**, 6–30 segundos en pasos de 1. ⚠️ Medido con el canario: la
+ *     API acepta TAMBIÉN el number, así que el `String()` no es lo que evita un 422 —
+ *     se manda string porque es lo que dice la doc, no porque el number falle. Los dos
+ *     extremos del rango ("6" y "30") pasaron la validación.
+ *   - `resolution`: `480p` (default) | `720p` | `1080p`.
+ *   - `aspect_ratio`: `9:16` para UGC vertical. ⚠️ "This parameter is invalid if it is a
+ *     single image": con UNA sola imagen manda el ratio del origen — ver `vertical.ts`.
+ *   - `mode`: `fun` | `normal` (default) | `spicy`. Va `normal` explícito.
+ *   - `nsfw_checker`: ⚠️ el default de la API es **false**, y false DESACTIVA el filtro.
+ *     Acá va **true** a propósito: queremos el filtro puesto.
+ *   - Las imágenes se citan en el prompt como @image(1), @image(2)… en el orden del
+ *     array. Sin esa leyenda el modelo mezcla los sujetos.
+ *
+ * ⚠️ LOS ERRORES VIENEN EN HTTP 200 CON `code: 500` ADENTRO (no 422, y no en el status).
+ * Mirar solo `res.ok` deja pasar el fallo como éxito y el polling espera para siempre un
+ * taskId que no existe. Por eso `createVideoTask` exige `data.taskId`.
+ *
+ * EL CANARIO GRATIS (`scripts/canary-grok.ts`, medido el 2026-08-24): la validación corre
+ * ANTES de despachar, así que un campo inválido devuelve error SIN `taskId` y sin cobrar.
+ * Mandando una `duration` fuera de rango se verifica gratis todo lo demás; y al revés,
+ * mandando un prompt de 5001 caracteres se verifica gratis la duración. Así se
+ * confirmaron, sin gastar un render: prompt de 5000 OK y 5001 rechazado ("The text length
+ * cannot exceed the maximum limit"), 7 imágenes OK, y "6"/"12"/"30" válidas.
  */
 
-const VEO_BASE = 'https://api.kie.ai/api/v1/veo'
-const MODEL = 'veo3_fast'
+const KIE_BASE = 'https://api.kie.ai/api/v1/jobs'
+const MODEL = 'grok-imagine/image-to-video'
 
 export type KieState = 'waiting' | 'queuing' | 'generating' | 'success' | 'fail'
 
@@ -42,89 +61,119 @@ export interface VideoImage {
   role: string
 }
 
-/**
- * `frames`: las imágenes son el primer y el último fotograma del clip — el modelo tiene
- * que llegar de una a la otra, así que el movimiento sale interpolado de verdad en vez
- * de inventado. `reference`: son material de referencia y se citan como @image(n).
- */
-export type VideoMode = 'frames' | 'reference'
-
 export interface VideoTaskInput {
   images: VideoImage[]
   prompt: string
   durationSec: number
-  /** Caracteres de la locución del lote: decide si una duración legal alcanza. */
+  /** Caracteres de la locución del lote: decide si la duración deja decirla. */
   locucionChars?: number
-  mode?: VideoMode
+  /** Cuántas tomas trae el lote. >1 desactiva el techo blando — ver `clampDuration`. */
+  tomas?: number
 }
 
-/** Las únicas duraciones que Veo 3.1 acepta. */
-export const DURATIONS = [4, 6, 8] as const
-export const MIN_DURATION = DURATIONS[0]
-export const MAX_DURATION = DURATIONS[DURATIONS.length - 1]
-
-/** Tope de `prompt` en Veo 3.1. Pasarse = 422 con la cuota ya gastada. */
-export const KIE_PROMPT_MAX = 60000
+/** Rango legal de `duration` en este modelo. Entero, y viaja como STRING. */
+export const MIN_DURATION = 6
+export const MAX_DURATION = 30
 
 /**
- * Ajusta una duración continua al conjunto legal {4, 6, 8}.
- *
- * Las dos cosas que hay que respetar tiran en direcciones distintas: el clip debería
- * durar lo que duraba la toma en el original (ritmo), y la locución tiene que caber sin
- * atropellarse (inteligibilidad). Redondear siempre hacia arriba mete silencio; siempre
- * hacia abajo corta diálogo a mitad de frase, que es mucho peor.
- *
- * Dos condiciones, en orden de prioridad:
- *
- *  1. DURA (`>= chars / CPS_MAX`): el texto tiene que poder decirse. Violarla corta
- *     diálogo a mitad de frase.
- *  2. BLANDA (`<= chars / CPS_MIN`): el texto no puede quedar tan suelto que el modelo
- *     rellene. ⚠️ Medido: 23 caracteres en 6 s (3,8 car/s) hicieron que Veo dijera la
- *     frase DOS VECES para llenar el audio. Antes solo existía la condición dura, así
- *     que un clip largo con una línea corta pasaba sin que nada lo mirara.
- *
- * Entre las que cumplen las dos se elige la más cercana a la duración original, para
- * conservar el ritmo del anuncio. Si ninguna cumple la blanda se toma la MÁS CORTA de
- * las que cumplen la dura: es la que menos silencio deja para rellenar.
- *
- * Una toma MUDA no entra en esto: sin habla no hay nada que repetir, y su duración es un
- * beat visual que conviene respetar tal cual.
- *
- * Si el texto no entra ni en 8 s, devuelve 8: es el techo de la API y significa que la
- * toma tendría que haberse partido antes (`splitLongToma`), no que acá se pueda arreglar.
+ * Cuántas imágenes acepta el modelo por tarea. Es el techo del sistema de anclas:
+ * avatar + producto + los fotogramas ancla que haga falta generar.
  */
-export function snapDuration(sec: number, locucionChars = 0): number {
-  const objetivo = Number.isFinite(sec) && sec > 0 ? sec : MAX_DURATION
-  const cercana = (ds: readonly number[]) =>
-    ds.reduce((mejor, d) => (Math.abs(d - objetivo) < Math.abs(mejor - objetivo) ? d : mejor))
+export const MAX_IMAGES = 7
 
-  const caben = DURATIONS.filter((d) => d >= locucionChars / CPS_MAX)
-  if (caben.length === 0) return MAX_DURATION
-  // Sin locución no aplica el piso: el clip es un beat visual, no audio que rellenar.
-  if (locucionChars === 0) return cercana(caben)
+/** Tope de `input.prompt`, CONFIRMADO con el canario. Pasarse = tarea rechazada. */
+export const KIE_PROMPT_MAX = 5000
 
-  const sinHuecos = caben.filter((d) => d <= locucionChars / CPS_MIN)
-  return sinHuecos.length ? cercana(sinHuecos) : Math.min(...caben)
+/**
+ * Ajusta la duración de un lote al rango legal, sin perder ninguna de las dos lecciones
+ * que ya estaban medidas cuando el rango era el conjunto discreto {4, 6, 8} de Veo.
+ *
+ * Con un rango CONTINUO 6–30 esto se vuelve un clamp entre dos cotas en vez de una
+ * búsqueda sobre un conjunto, pero las cotas son las mismas:
+ *
+ *  1. PISO DURO (`>= chars / CPS_MAX`): el texto tiene que poder decirse. Violarlo corta
+ *     el diálogo a mitad de frase.
+ *  2. TECHO BLANDO (`<= chars / CPS_MIN`): el texto no puede quedar tan suelto que el
+ *     modelo rellene. ⚠️ Medido en su momento: 23 caracteres en 6 s (3,8 car/s) hicieron
+ *     que el generador dijera la frase DOS VECES para llenar el audio. El techo blando
+ *     nunca puede quedar por debajo del piso duro — si chocan, manda el piso.
+ *
+ * Dentro de esa banda se elige la duración ORIGINAL de la toma, que es lo que conserva
+ * el ritmo del anuncio de referencia.
+ *
+ * Una toma MUDA no tiene techo blando: sin habla no hay nada que repetir, y su duración
+ * es un beat visual que conviene respetar tal cual.
+ *
+ * ⚠️ EL TECHO BLANDO SOLO APLICA A UN CLIP DE UNA SOLA ESCENA, y ese acote es
+ * obligatorio con el cap de 30 s. La medición que lo justifica es de un clip de 6 s con
+ * UNA línea de 23 caracteres: ahí el modelo no tenía nada más que hacer y repitió la
+ * frase. Un clip de 30 s con varias tomas es otra cosa — cada toma trae su propia
+ * `accionVisual`, y el silencio entre escenas es la textura que se está copiando del
+ * original, no aire muerto.
+ *
+ * Sin este acote el techo blando recorta el clip a la duración que "merece" su texto y
+ * se lleva puestas las escenas de más: medido con estos mismos números, un lote de 30 s
+ * con 200 caracteres caía a 22 s y uno con 120 caracteres a **13 s** — o sea 17
+ * segundos de shot list descartados en silencio, justo los que tienen su imagen ancla
+ * ya generada y pagada.
+ *
+ * ⚠️ Un lote más corto que `MIN_DURATION` se sube a 6 s: es el mínimo de la API. Deja un
+ * poco de aire al final, que es preferible a no poder renderizarlo.
+ */
+export function clampDuration(sec: number, locucionChars = 0, tomas = 1): number {
+  const objetivo = Number.isFinite(sec) && sec > 0 ? Math.round(sec) : MIN_DURATION
+  const piso = Math.max(MIN_DURATION, Math.ceil(locucionChars / CPS_MAX))
+  // El techo blando solo existe si hay UNA escena y algo que decir, y jamás por debajo
+  // del piso duro: si chocan, manda el piso (el texto tiene que poder decirse).
+  const techo = locucionChars > 0 && tomas <= 1
+    ? Math.min(MAX_DURATION, Math.max(piso, Math.floor(locucionChars / CPS_MIN)))
+    : MAX_DURATION
+  return Math.min(techo, Math.max(piso, objetivo))
 }
 
-/** 720p fijo: el entregable es un feed vertical y 1080p multiplica el costo del render. */
+/** 720p fijo: el entregable es un feed vertical, y 1080p además exige UNA sola imagen. */
 export function resolutionFor(): '720p' {
   return '720p'
 }
 
 /** Cuerpo exacto del POST. Puro y exportado para poder verificarlo sin API key. */
 export function buildTaskBody(input: VideoTaskInput) {
-  const mode: VideoMode = input.mode ?? 'reference'
   return {
     model: MODEL,
-    prompt: input.prompt,
-    imageUrls: input.images.map((i) => i.url),
-    generationType:
-      mode === 'frames' ? 'FIRST_AND_LAST_FRAMES_2_VIDEO' : 'REFERENCE_2_VIDEO',
-    duration: snapDuration(input.durationSec, input.locucionChars),
-    resolution: resolutionFor(),
-    aspect_ratio: '9:16',
+    input: {
+      image_urls: input.images.map((i) => i.url),
+      prompt: input.prompt,
+      // ⚠️ STRING, no number. Es la diferencia de contrato con el grok viejo y con Veo.
+      duration: String(clampDuration(input.durationSec, input.locucionChars, input.tomas)),
+      resolution: resolutionFor(),
+      aspect_ratio: '9:16',
+      mode: 'normal',
+      // true = filtro de contenido ACTIVADO (el default de la API es false, que lo apaga).
+      nsfw_checker: true,
+    },
   }
+}
+
+export const SIN_KEY =
+  'Para generar video necesitas tu propia API key de KIE. Cárgala en Mi cuenta y vuelve a intentarlo.'
+
+/**
+ * La key con la que se llama a KIE. BYOK ESTRICTO: el render lo paga el usuario con
+ * SU cuenta, así que la key sale de `user_settings` y se pasa por parámetro.
+ *
+ * ⚠️ YA NO HAY KEY GLOBAL. Hasta 2026-08-24 esto caía a `process.env.KIE_API_KEY`
+ * cuando el usuario no había cargado la suya: el hub terminaba pagando renders
+ * ajenos sin que nada lo reportara. El fallback se quitó entero —también para dev—
+ * porque un respaldo silencioso es exactamente el modo de fallo que hay que evitar:
+ * si la key falta, se ve.
+ *
+ * ⚠️ Se resuelve por parámetro y no leyendo la sesión acá adentro para que este
+ * módulo siga siendo el cliente HTTP puro que ya era — testeable sin cookies.
+ */
+export function resolveKey(userKey?: string | null): string {
+  const key = (userKey ?? '').trim()
+  if (!key) throw new Error('Falta tu API key de KIE: cárgala en Mi cuenta.')
+  return key
 }
 
 /**
@@ -138,11 +187,11 @@ export const KIE_HTTP_TIMEOUT_MS = 30_000
  * defecto, y una conexión que el proveedor deja abierta sin responder cuelga el await
  * para siempre.
  *
- * ⚠️ Lo rompió de verdad. El bucle de polling de `nano-banana.ts` comprobaba su
- * presupuesto DESPUÉS del `await fetch`, así que un fetch colgado impedía que el tope de
- * 240 s se evaluara nunca: el dev server quedó bloqueado con 0 % de CPU y una conexión
- * ESTAB a api.kie.ai. En Vercel el síntoma sería distinto y peor de diagnosticar — la
- * función muere en `maxDuration` con las tareas ya creadas y pagadas.
+ * ⚠️ Lo rompió de verdad. El bucle de polling de la generación de imagen comprobaba su
+ * presupuesto DESPUÉS del `await fetch`, así que un fetch colgado impedía que el tope se
+ * evaluara nunca: el dev server quedó bloqueado con 0 % de CPU y una conexión ESTAB a
+ * api.kie.ai. En Vercel el síntoma sería distinto y peor de diagnosticar — la función
+ * muere en `maxDuration` con las tareas ya creadas y pagadas.
  */
 export async function fetchKie(url: string, init: RequestInit = {}, timeoutMs = KIE_HTTP_TIMEOUT_MS): Promise<Response> {
   try {
@@ -155,24 +204,9 @@ export async function fetchKie(url: string, init: RequestInit = {}, timeoutMs = 
   }
 }
 
-/**
- * La key con la que se llama a KIE. BYOK: el render lo paga el usuario con SU
- * cuenta, así que la key sale de `user_settings` y se pasa por parámetro; el env
- * `KIE_API_KEY` queda como respaldo del hub (dev, y las sesiones de quien todavía
- * no cargó la suya).
- *
- * ⚠️ Se resuelve por parámetro y no leyendo la sesión acá adentro para que este
- * módulo siga siendo el cliente HTTP puro que ya era — testeable sin cookies.
- */
-export function resolveKey(userKey?: string | null): string {
-  const key = (userKey ?? '').trim() || process.env.KIE_API_KEY
-  if (!key) throw new Error('Falta la API key de KIE: cárgala en Ajustes.')
-  return key
-}
-
 /** Crea la tarea de render. Devuelve el taskId; NO espera al video. */
 export async function createVideoTask(input: VideoTaskInput, userKey?: string | null): Promise<string> {
-  const res = await fetchKie(`${VEO_BASE}/generate`, {
+  const res = await fetchKie(`${KIE_BASE}/createTask`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${resolveKey(userKey)}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(buildTaskBody(input)),
@@ -180,11 +214,11 @@ export async function createVideoTask(input: VideoTaskInput, userKey?: string | 
   const json = (await res.json().catch(() => null)) as
     | { code?: number; msg?: string; data?: { taskId?: string } }
     | null
-  // ⚠️ Veo devuelve HTTP 200 con `code: 422` adentro en los errores de validación, así
-  // que mirar solo `res.ok` deja pasar un fallo como éxito y después el polling espera
+  // ⚠️ KIE devuelve HTTP 200 con `code` de error adentro en los fallos de validación, así
+  // que mirar solo `res.ok` deja pasar el fallo como éxito y después el polling espera
   // para siempre un taskId que no existe.
-  if (!res.ok || json?.code !== 200 || !json?.data?.taskId) {
-    throw new Error(`KIE veo/generate falló (${json?.code ?? res.status}): ${json?.msg ?? 'sin respuesta'}`)
+  if (!res.ok || !json?.data?.taskId) {
+    throw new Error(`KIE createTask falló (${json?.code ?? res.status}): ${json?.msg ?? 'sin respuesta'}`)
   }
   return json.data.taskId
 }
@@ -197,31 +231,43 @@ export interface TaskDetail {
 }
 
 /**
- * Normaliza la respuesta de record-info. Veo usa `successFlag` numérico (0 en curso,
- * 1 ok, 2|3 falló) y devuelve las URLs en `response.resultUrls` como ARRAY — no como el
- * string con JSON adentro que usaba el marketplace. Se conserva el enum `KieState`
- * porque es lo que persiste `Lote.status` y lo que lee la UI; `queuing` simplemente ya
- * no se emite (Veo no distingue cola de generación).
+ * Normaliza la respuesta de recordInfo del MARKETPLACE.
+ *
+ * ⚠️ Distinto de Veo en las dos cosas que importan: el estado es un `state` STRING (no un
+ * `successFlag` numérico) y `resultJson` viene como STRING con JSON adentro
+ * (`{"resultUrls":["…"]}`), no como objeto. Mezclar los dos parsers deja el polling
+ * esperando para siempre un video que ya está listo.
  */
 export function parseTaskDetail(data: unknown): TaskDetail {
   const d = (data ?? {}) as Record<string, unknown>
-  const flag = typeof d.successFlag === 'number' ? d.successFlag : 0
-  const resp = (d.response ?? d) as Record<string, unknown>
-  const urls = resp?.resultUrls
-  const videoUrl =
-    Array.isArray(urls) && typeof urls[0] === 'string' ? (urls[0] as string) : null
-  const failMsg =
-    typeof d.errorMessage === 'string' && d.errorMessage ? d.errorMessage : null
-  if (flag === 1) return { state: 'success', progress: 1, videoUrl, failMsg: null }
-  if (flag === 2 || flag === 3) return { state: 'fail', progress: 0, videoUrl: null, failMsg }
-  return { state: 'generating', progress: 0, videoUrl: null, failMsg: null }
+  const estados: KieState[] = ['waiting', 'queuing', 'generating', 'success', 'fail']
+  const bruto = typeof d.state === 'string' ? d.state : ''
+  const state: KieState = (estados as string[]).includes(bruto) ? (bruto as KieState) : 'waiting'
+
+  let videoUrl: string | null = null
+  if (typeof d.resultJson === 'string' && d.resultJson) {
+    try {
+      const urls = (JSON.parse(d.resultJson) as { resultUrls?: unknown }).resultUrls
+      if (Array.isArray(urls) && typeof urls[0] === 'string') videoUrl = urls[0]
+    } catch {
+      /* resultJson corrupto → todavía sin resultado, no un fallo duro */
+    }
+  }
+
+  return {
+    state,
+    progress: typeof d.progress === 'number' ? d.progress : state === 'success' ? 1 : 0,
+    videoUrl,
+    failMsg: typeof d.failMsg === 'string' && d.failMsg ? d.failMsg : null,
+  }
 }
 
+/** Consulta el estado de una tarea. */
 export async function getTaskDetail(taskId: string, userKey?: string | null): Promise<TaskDetail> {
-  const res = await fetchKie(`${VEO_BASE}/record-info?taskId=${encodeURIComponent(taskId)}`, {
+  const res = await fetchKie(`${KIE_BASE}/recordInfo?taskId=${encodeURIComponent(taskId)}`, {
     headers: { Authorization: `Bearer ${resolveKey(userKey)}` },
   })
-  const json = (await res.json().catch(() => null)) as { data?: unknown; msg?: string } | null
-  if (!res.ok) throw new Error(`KIE veo/record-info falló (${res.status}): ${json?.msg ?? ''}`)
+  const json = (await res.json().catch(() => null)) as { data?: unknown } | null
+  if (!res.ok) throw new Error(`KIE recordInfo falló (${res.status})`)
   return parseTaskDetail(json?.data)
 }

@@ -11,7 +11,7 @@ import { btnPrimary, errorBox, warnBox, spinner } from './shared'
 // Paso 0: el VIDEO ORIGINAL. El spec lo exige siempre — es la fuente de verdad de
 // estructura, ritmo, cámara y orden. Sin él no hay pipeline.
 export default function Section0Reference() {
-  const { sessionId, patch, setLoading, isLoading } = useVideoStore()
+  const { sessionId, ensureSession, patch, setLoading, isLoading } = useVideoStore()
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -37,7 +37,10 @@ export default function Section0Reference() {
   }
 
   async function analyze() {
-    if (!sessionId || !file) return
+    if (!file) return
+    // La fila de la sesión nace ACÁ, con el primer insumo real — no al montar el wizard.
+    const sessionId = await ensureSession()
+    if (!sessionId) return
     setLoading(true); setError(null)
     try {
       const videoUrl = await uploadDirect(sessionId, 'reference-video', file)

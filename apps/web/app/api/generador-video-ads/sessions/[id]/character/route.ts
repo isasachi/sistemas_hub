@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getVideoSession, updateVideoSession } from '@/lib/video-ads/db'
 import { callVideoAds } from '@/lib/video-ads/llm'
-import { generateImage } from '@/lib/video-ads/nano-banana'
+import { generateImage } from '@/lib/gemini'
 import { uploadToStorage, fetchAsBase64 } from '@/lib/storage'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
-import { IdentidadesSchema, buildIdentityInstruction, buildCharacterParts } from '@/lib/video-ads/character'
+import { currentKieKey } from '@/lib/user-settings'
+import { SIN_KEY } from '@/lib/video-ads/kie'
+import { IdentidadesSchema, buildIdentityInstruction, buildCharacterParts, vozDe } from '@/lib/video-ads/character'
 import { personajesDe, resolvePersonaje } from '@/lib/video-ads/personajes'
 import { nicheSpec } from '@/lib/video-ads/niches'
 
@@ -34,6 +36,15 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
+
+  // ⚠️ El avatar ya NO se genera en KIE (pasó a gpt-image-2, que paga el hub), así que
+  // esta comprobación dejó de ser "sin key esta llamada falla" y pasa a ser un gate de
+  // COSTO DEL HUB: sin key de KIE el usuario no va a poder renderizar el video, y
+  // generarle igual el avatar sería gastar dinero nuestro en algo que no va a usar.
+  // Sigue yendo ANTES de `checkGenQuota` para no cobrarle una generación de su cuota por
+  // un paso que vamos a rechazar de todos modos.
+  const kieKey = await currentKieKey()
+  if (!kieKey) return NextResponse.json({ error: SIN_KEY }, { status: 400 })
 
   const { blocked } = await checkGenQuota(id, 'video-character')
   if (blocked) return blocked
@@ -105,19 +116,33 @@ export async function POST(
     const avatares = await Promise.all(conIdentidad.map(async ({ personaje, identidad }) => {
       const referencias = [personaje.fotoUrl, spec.wornProduct ? session.product_url : null]
         .filter((u): u is string => !!u)
-      const bytes = await generateImage({
-        prompt: identidad.promptCreacion,
-        imageUrls: referencias,
-        aspectRatio: '9:16',
-      })
-      return uploadToStorage(id, bytes, 'image/png', `avatar-${personaje.id}`)
+      // ⚠️ GEMINI 3.1 FLASH IMAGE (en KIE, `nano-banana-2`), no gpt-image-2 — decisión del dueño
+      // del repo al migrar la imagen (2026-08-25). `preferGemini` lo pone de PRIMARIO y deja a
+      // gpt-image-2 de respaldo, que es el orden que conviene acá: está medido que gpt-image-2
+      // rechaza ~1 de cada 3 avatares por moderación con la MISMA foto y el MISMO prompt, así que
+      // de primario sería un peaje sistemático y de respaldo es una segunda oportunidad.
+      //
+      // ⚠️ Las referencias van como `fileData`, no bajadas a base64: ya viven en nuestro bucket y
+      // el transporte pasa esas URLs tal cual. Se ahorra bajarlas y volver a subirlas.
+      //
+      // ⚠️ CONSECUENCIA DE COSTO: esto lo paga el HUB, no el usuario. Lo del usuario es el render.
+      const b64 = await generateImage(
+        [
+          ...referencias.map((u) => ({ fileData: { fileUri: u, mimeType: 'image/jpeg' } })),
+          { text: identidad.promptCreacion },
+        ],
+        3,
+        { aspectRatio: '9:16', preferGemini: true },
+      )
+      return uploadToStorage(id, Buffer.from(b64, 'base64'), 'image/png', `avatar-${personaje.id}`)
     }))
 
     const personajes = conIdentidad.map(({ personaje, identidad }, i) => ({
       ...personaje,
       avatarUrl: avatares[i],
       consistencyBlock: identidad.bloqueConsistencia,
-      voiceProfile: identidad.voz,
+      // La voz sale del perfil fijo de su sexo (`VOZ_POR_DEFECTO`), no del modelo.
+      voiceProfile: vozDe(identidad),
       motionProfile: identidad.movimiento,
     }))
     const [principal] = personajes

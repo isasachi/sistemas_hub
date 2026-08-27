@@ -43,6 +43,25 @@ export async function POST(
       { inlineData: { mimeType, data: base64 } },
       { text: [
         'Analyze this reference ad. Return the complete structured analysis including all sceneElements.',
+        // Sin exigir el MECANISMO, este campo sale como una etiqueta de una palabra e inservible
+        // — es lo que ya pasó con `style` ("moderno") y `typography` ("estilo moderno y limpio").
+        // ⚠️ La tipografía es lo que el anuncio nuevo tiene que CONSERVAR (WHAT STAYS de STEP5):
+        // solo puede cambiarle el color. Pero el instructivo se arma con texto puro, así que lo
+        // único que sabe de ella es este campo — y sin exigir el detalle sale como una etiqueta
+        // inservible ("estilo moderno y limpio", medido). Mismo tratamiento que `creativeConcept`.
+        'typography: describe the type so it can be REPRODUCED, block by block: typeface character',
+        '(geometric sans, grotesque, high-contrast serif, condensed, script…), weight, case,',
+        'letter-spacing, alignment, the size hierarchy between blocks, and any effect on the letters',
+        '(outline, drop shadow, highlight box, angled or curved baseline, italics, underline).',
+        'A one-word label like "modern" or "clean" is useless here — name what is actually on screen.',
+        'creativeConcept: name the creative concept the ad IS and describe how it is built.',
+        'Common concepts: before/after, testimonial, product demonstration, side-by-side comparison',
+        'against an alternative, problem→solution, benefit list, offer/price, social-media screenshot,',
+        'unboxing, expert endorsement. If none fits, name the one you actually see.',
+        'If it is a BEFORE/AFTER, this is mandatory: state which half is which, where each sits, what',
+        'label each carries, and what each side claims — the "before" half states the problem and the',
+        '"after" half states the result, and they are NOT interchangeable.',
+        'One or two sentences. Never a bare one-word label.',
         // El campo existe para poder RE-APUNTAR esos marcadores a la zona del producto nuevo,
         // así que hay que nombrarlos uno por uno: "hay flechas" no dice cuál mover ni adónde.
         'bodyFocus + attentionMarkers: if the ad directs the viewer\'s attention to a specific body',

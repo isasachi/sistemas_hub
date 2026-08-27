@@ -7,6 +7,10 @@ import type { CopyElement } from '@/lib/types'
 
 const btnPrimary = 'h-11 w-full rounded-xl jr-cta text-[13px] font-bold disabled:opacity-40 transition-all duration-200 cursor-pointer border-0 font-sans flex items-center justify-center gap-2'
 
+export function mismosTextos(a: CopyElement[], b: CopyElement[]): boolean {
+  return a.length === b.length && a.every((el, i) => el.text === b[i].text)
+}
+
 function CopyCard({
   version,
   label,
@@ -60,14 +64,15 @@ export default function Section4Copy() {
 
   if (!copyVersions) return null
 
-  // La regla del prompt dice que si ningún comentario aporta palabras propias, B
-  // copia A — y entonces salían dos tarjetas idénticas, con B marcada
-  // "Recomendada" y el texto prometiendo "las palabras exactas de tu audiencia".
+  // A es copy nuevo y B es la plantilla del original rellenada, así que ya no
+  // deberían coincidir nunca: si coinciden, el modelo no templó y las dos
+  // tarjetas dicen lo mismo. Se sigue detectando para no prometer en pantalla una
+  // diferencia que no está.
+  // ⚠️ Se comparan los TEXTOS, no los elementos: A trae `template: null` y B lo llena, así que
+  // comparar los objetos enteros da siempre "distintas" y la guarda no detecta nada.
   // ponytail: comparación literal; si difieren en un espacio, se tratan como
-  // distintas, que es el lado seguro (se muestra la promesa solo cuando B es
-  // realmente otra versión).
-  const iguales =
-    JSON.stringify(copyVersions.versionA) === JSON.stringify(copyVersions.versionB)
+  // distintas, que es el lado seguro.
+  const iguales = mismosTextos(copyVersions.versionA, copyVersions.versionB)
 
   async function handleConfirm() {
     if (!sessionId || !selected || isLoading) return
@@ -94,8 +99,8 @@ export default function Section4Copy() {
     <div className="flex flex-col gap-4">
       <p className="text-[13px] text-[#c9b4ae]">
         {iguales
-          ? 'Las dos versiones salieron iguales: los comentarios que pegaste no aportaron frases propias que sirvieran para reescribir el copy. Elige cualquiera, o vuelve atrás y pega comentarios con más texto.'
-          : 'La versión B usa las palabras exactas de tu audiencia. Ambas mantienen la estructura del anuncio original.'}
+          ? 'Las dos versiones salieron iguales, que no debería pasar. Elige cualquiera, o vuelve atrás y genera el copy otra vez.'
+          : 'La A es copy nuevo inspirado en el anuncio original. La B calca su estructura frase por frase y solo cambia los datos de tu producto. Las dos hablan con las palabras de tu audiencia.'}
       </p>
       <CopyCard version="A" label="Versión A" elements={copyVersions.versionA} selected={selected === 'A'} onPick={() => setSelected('A')} />
       <CopyCard version="B" label="Versión B" recommended={!iguales} elements={copyVersions.versionB} selected={selected === 'B'} onPick={() => setSelected('B')} />

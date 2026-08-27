@@ -31,20 +31,18 @@ describe('buildIdentityInstruction', () => {
     expect(p).toMatch(/no.*reemplac/i)
   })
 
-  it('usa la etnia y el acento del usuario, literales', () => {
-    const p = buildIdentityInstruction(INPUTS, FORENSIC, [SIN_FOTO])
-    expect(p).toContain('Latina peruana')
-    expect(p).toContain('Español peruano de Lima')
+  it('usa la etnia del usuario, literal', () => {
+    expect(buildIdentityInstruction(INPUTS, FORENSIC, [SIN_FOTO])).toContain('Latina peruana')
   })
 
-  it('marca el acento pendiente en vez de poner uno genérico', () => {
+  // ⚠️ El acento salió del wizard (2026-08-25): la voz es un perfil FIJO en español
+  // (`VOZ_POR_DEFECTO`). El prompt ya no lo pide ni propaga un marcador — y no debe
+  // pedirlo, porque el usuario no tiene dónde escribirlo.
+  it('ya no pide el acento ni lo propaga: la voz es fija', () => {
     const p = buildIdentityInstruction(INPUTS, FORENSIC, [{ ...SIN_FOTO, acento: '' }])
-    expect(p).toContain(ACENTO_PENDIENTE)
-  })
-
-  it('no marca el acento como pendiente cuando el usuario sí lo confirmó', () => {
-    const p = buildIdentityInstruction(INPUTS, FORENSIC, [SIN_FOTO])
     expect(p).not.toContain(ACENTO_PENDIENTE)
+    expect(p).toContain('sexoVocal')
+    expect(p).toMatch(/siempre español latino neutro/i)
   })
 
   it('con imagen de referencia manda observar, no inventar', () => {
@@ -155,12 +153,9 @@ describe('CharacterIdentitySchema', () => {
     const ok = CharacterIdentitySchema.safeParse({
       promptCreacion: 'Retrato vertical de mujer de 25 años, cabello negro...',
       bloqueConsistencia: 'Mujer de 25 años, latina peruana, cabello negro liso recogido en moño bajo, piel clara, ojos marrón claro, complexión delgada, polo blanco de algodón sin estampado.',
-      voz: {
-        idioma: 'Español', varianteRegional: 'Perú - Lima', acento: 'Limeño neutro',
-        pronunciacion: 'Clara, seseo', ritmo: 'Conversacional', velocidad: 'Media',
-        entonacion: 'Ascendente en preguntas', energia: 'Media-alta', pausas: 'Naturales',
-        tono: 'Cálido', timbre: 'Claro', edadVocal: '25 años', estilo: 'Amiga que recomienda',
-      },
+      sexoVocal: 'mujer',
+      edadVocal: '25-30 años',
+      timbre: 'Claro y algo aniñado',
       movimiento: {
         calidadMovimiento: 'Movimientos continuos y pausados, sin cortes bruscos entre gestos; el peso se desplaza de una pierna a la otra al hablar y las manos siguen vivas cuando no señalan nada.',
         manerismos: 'Se acomoda el pelo detrás de la oreja al empezar cada frase y ladea la cabeza al escuchar.',
@@ -190,7 +185,7 @@ describe('buildIdentityInstruction — producto que se lleva puesto', () => {
     duracionTotalSeg: 28, caracteresGuion: 385, guionOriginal: 'x',
     sujeto: 'Mujer joven de cabello oscuro', vestuario: 'Camiseta rosa de manga larga',
     producto: 'Camisa', fondo: 'Pared blanca', elementosGraficos: 'Subtítulos',
-    cortes: [{ n: 1, tiempo: '00:00 - 00:01', duracionSeg: 1, accion: 'a', camara: 'Plano medio', dialogo: 'd', textoOverlay: 'No aparece', transicion: 'corte' }],
+    cortes: [{ n: 1, tiempo: '00:00 - 00:01', duracionSeg: 1, accion: 'a', camara: 'Plano medio', dialogo: 'd', textoOverlay: 'No aparece', transicion: 'corte', objetoEnMano: null, micro: null }],
     tomas: [{ n: 1, encuadre: 'Plano medio', posicion: 'De pie', accionFisica: 'a', objeto: 'camisa', dialogo: 'd', duracionSeg: 1 }],
     edicion: { sincronizacion: 'x', textoOverlay: 'x', escalaZoom: 'x', cortes: 'x', ritmo: 'x', corteFinal: 'x' },
     resumenParaUsuario: 'x',
@@ -296,9 +291,10 @@ describe('buildIdentityInstruction — varios personajes', () => {
     expect(p).toMatch(/No inventes personajes que no estén en la lista ni omitas ninguno/)
   })
 
-  it('NO uniforma los acentos: cada uno lleva el suyo', () => {
-    expect(p).toContain('Español mexicano rural')
-    expect(p).toMatch(/No los uniformes/)
+  // Con la voz fija por sexo, `edadVocal` y `timbre` son lo ÚNICO que separa a dos
+  // personajes del mismo sexo: sin eso el anuncio suena doblado por la misma persona.
+  it('exige diferenciar la voz por edad y timbre', () => {
+    expect(p).toMatch(/edadVocal. y .timbre. son lo ÚNICO que/)
   })
 
   it('con un solo personaje no aparece nada de todo eso', () => {
@@ -308,10 +304,9 @@ describe('buildIdentityInstruction — varios personajes', () => {
     expect(uno).toMatch(/UNA sola entrada/)
   })
 
-  it('propaga el marcador si a CUALQUIERA le falta el acento', () => {
-    // La FASE 0 exige etnia y acento por personaje; que uno los tenga no cubre al otro.
+  it('un acento vacío ya no cambia nada del prompt', () => {
     const conHueco = buildIdentityInstruction(INPUTS, FORENSIC, [hijo, { ...padre, acento: '' }])
-    expect(conHueco).toMatch(/propaga el marcador/)
+    expect(conHueco).toBe(buildIdentityInstruction(INPUTS, FORENSIC, [hijo, padre]))
   })
 })
 
@@ -330,5 +325,60 @@ describe('buildCharacterParts — varias fotos', () => {
   it('una sola foto sigue funcionando como antes', () => {
     const parts = buildCharacterParts('x', { data: 'AAA', mimeType: 'image/png' })
     expect(parts).toHaveLength(2)
+  })
+})
+
+describe('buildIdentityInstruction — el encuadre sale del original', () => {
+  // ⚠️ Esta línea decía "plano medio" a secas, sin mirar la referencia. Como el avatar es
+  // @image(1) en todos los lotes y la imagen le gana al texto, ese plano medio se volvía el
+  // encuadre del anuncio ENTERO: medido sobre un anuncio grabado en primer plano, los
+  // cuatro clips salieron con la persona mucho más lejos que el original.
+  const conCortes = (cortes: { camara: string; accion: string }[]) => ({
+    ...FORENSIC,
+    cortes: cortes.map((c, i) => ({
+      n: i + 1, tiempo: `00:0${i} - 00:0${i + 1}`, duracionSeg: 1,
+      dialogo: '', textoOverlay: '', transicion: '', objetoEnMano: null, micro: null, ...c,
+    })),
+  } as ForensicReport)
+
+  it('toma el encuadre del primer corte con persona', () => {
+    const p = buildIdentityInstruction(INPUTS, conCortes([
+      { camara: 'corta a la altura del pecho, frontal', accion: 'La mujer habla a cámara' },
+    ]), [SIN_FOTO])
+    expect(p).toContain('corta a la altura del pecho, frontal')
+  })
+
+  // Un anuncio que abre con un plano de producto no da un encuadre útil para un retrato.
+  it('salta los cortes que no muestran a nadie', () => {
+    const p = buildIdentityInstruction(INPUTS, conCortes([
+      { camara: 'primerísimo del frasco', accion: 'Detalle del frasco, sin persona en cuadro' },
+      { camara: 'corta a la altura de los hombros', accion: 'La mujer mira a cámara' },
+    ]), [SIN_FOTO])
+    expect(p).toContain('corta a la altura de los hombros')
+    expect(p).not.toContain('primerísimo del frasco')
+  })
+
+  it('sin ningún corte con persona cae al valor de siempre', () => {
+    const p = buildIdentityInstruction(INPUTS, conCortes([
+      { camara: 'detalle del producto', accion: 'Plano del frasco, sin persona en cuadro' },
+    ]), [SIN_FOTO])
+    expect(p).toContain('plano medio, ángulo levemente bajo')
+  })
+})
+
+describe('buildIdentityInstruction — el ritmo tiene que llegar al movimiento', () => {
+  // ⚠️ Medido sobre seis sesiones guardadas: `calidadMovimiento` empezaba con "movimientos
+  // fluidos" en las SEIS, tanto en anuncios de ritmo "rápido y dinámico" como en los
+  // "pausado y conversacional". El eje del ritmo no llegaba al render, y este campo es su
+  // único camino: el prompt del lote no lee `edicion.ritmo`.
+  const p = buildIdentityInstruction(INPUTS, FORENSIC, [SIN_FOTO])
+
+  it('exige reflejar el ritmo del original en la calidad del movimiento', () => {
+    expect(p).toMatch(/RITMO DEL ORIGINAL/)
+    expect(p).toMatch(/Ritmo de edición observado/)
+  })
+
+  it('prohíbe la etiqueta genérica que devuelve todo video', () => {
+    expect(p).toMatch(/PROHIBIDO responder solo "movimientos fluidos y continuos"/)
   })
 })

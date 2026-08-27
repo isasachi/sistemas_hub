@@ -80,9 +80,29 @@ export async function POST(
           `Product name: ${productName}`,
           `What it does: ${whatItDoes}`,
           `Target audience: ${targetAudience}`,
-          'Analyze the product image for a UGC video ad: describe the physical object',
-          'precisely (shape, size in hand, label, colors, visible text) so a video model can',
-          'keep it identical. Return ProductScan JSON.',
+          'Analyze the product image for a UGC video ad. Return ProductScan JSON with TWO',
+          'clearly different fields:',
+          '',
+          'productDescription = the physical object: shape, size in the hand, material,',
+          '  cap, proportions and colors, precisely enough for a video model to keep it',
+          '  identical across clips.',
+          '',
+          // ⚠️ ESTE CAMPO ES UNA TRANSCRIPCIÓN, NO UNA RESEÑA — y el prompt de video nunca
+          // lo decía. Medido contra el de anuncios, que sí lo pide: anuncios transcribe en
+          // 19 de 31 scans y video solo en 10 de 27, con 8 que devuelven una descripción
+          // del ESTILO gráfico ("minimalista, clínico y limpio, típico de productos
+          // dermatológicos"). Y eso es la causa raíz de los ingredientes inventados en el
+          // guión: FASE 3 tiene la orden de copiar el ingrediente de la etiqueta, y si la
+          // etiqueta nunca se transcribió, no hay de dónde copiar y el modelo completa de
+          // memoria. Caso real: la etiqueta capturada de un serum no nombraba un solo
+          // ingrediente y el guión salió con "hepéres", después "HEPES".
+          'brandingDescription = ONLY the words actually printed on the packaging, copied',
+          '  letter by letter: brand, product name, claims, ingredient list, dosage, volume.',
+          '  It is a TRANSCRIPTION, not a review — never describe the typography, the layout',
+          '  or how premium it looks. Keep the original capitalisation and units.',
+          '  Read every readable line, including the small print of the ingredient list: it',
+          '  is the ONLY source the script has for what this product actually contains.',
+          '  If the packaging carries no readable text at all, return null.',
         ].join('\n'),
       },
     ]

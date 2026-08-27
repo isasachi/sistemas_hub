@@ -18,7 +18,7 @@ const TRUST: TrustBlock = {
 function session(copy: SectionCopy[], over: Partial<LandingSessionResponse> = {}): LandingSessionResponse {
   return { offer: OFFER, offer_copy: null, trust_block: TRUST, copy, landing_dna: null, ...over } as LandingSessionResponse
 }
-const sec = (type: SectionCopy['type'], headline: string, extra: Partial<SectionCopy> = {}): SectionCopy => ({ type, headline, ...extra })
+const sec = (kind: SectionCopy['kind'], headline: string, extra: Partial<SectionCopy> = {}): SectionCopy => ({ kind, headline, ...extra })
 
 // Fixture de ADN: paleta derivada por fórmula (garantiza contraste ≥7:1 — QA#8) salvo que un
 // test la pise a mano para probar el caso "hand-edited" que R8 debe atrapar.

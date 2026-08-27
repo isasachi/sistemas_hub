@@ -57,7 +57,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   let copy: SectionCopy | null = SectionCopySchema.safeParse(body.copy).success ? SectionCopySchema.parse(body.copy) : null
   if (!copy) {
-    const approved = (session.copy ?? []).find((c) => c.type === parsedType.data)
+    const approved = (session.copy ?? []).find((c) => c.kind === parsedType.data)
     if (approved) copy = SectionCopySchema.parse(approved)
   }
   // ⚠️ LOS TIERS SE GENERAN SI FALTAN, PASE LO QUE PASE CON EL COPY — y no era así.
@@ -78,8 +78,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
   // La sección Oferta arma su SectionCopy desde offer_copy si el copy general no la trajo.
   if (!copy && parsedType.data === 'oferta' && offer && offerCopy)
-    copy = { type: 'oferta', headline: offerCopy.headline, subheadline: offerCopy.subheadline, cta: offer.tiers.find((t) => t.featured)?.cta }
-  if (!copy || copy.type !== parsedType.data)
+    copy = { kind: 'oferta', headline: offerCopy.headline, subheadline: offerCopy.subheadline, cta: offer.tiers.find((t) => t.featured)?.cta }
+  if (!copy || copy.kind !== parsedType.data)
     return NextResponse.json({ error: 'Falta el copy de la sección' }, { status: 400 })
 
   // Regen con prompt sobre una sección ya generada = edición exclusiva: solo ese cambio,
@@ -190,14 +190,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // 2:3 de OpenAI → la recortaba. Ese motivo ya no aplica: la imagen ES 9:16. No se reinstala
   // igual — era un adorno menor y la difusión ya renderiza la marca por el label del producto.
   // reserveLockup/BrandLockup siguen sin uso.)
-  const imageUrl = await uploadToStorage(id, Buffer.from(b64, 'base64'), 'image/png', `section-${copy.type}`)
+  const imageUrl = await uploadToStorage(id, Buffer.from(b64, 'base64'), 'image/png', `section-${copy.kind}`)
 
   // Upsert ATÓMICO de la sección: el `order` lo manda el cliente (índice en selected_sections);
   // al regenerar se preserva el existente. Se persiste vía RPC atómica (no read-modify-write del
   // array) para que las secciones concurrentes no se pisen.
   const existingSection = (session.sections ?? []).find((s) => s.type === parsedType.data)
   const order = existingSection ? existingSection.order : (typeof body.order === 'number' ? body.order : (session.sections?.length ?? 0))
-  const section: LandingSection = { type: copy.type, order, copy, imageUrl, status: 'done' }
+  const section: LandingSection = { type: copy.kind, order, copy, imageUrl, status: 'done' }
   await upsertLandingSection(id, section)
   await recordGenQuota(id, kind, userId)
   return NextResponse.json({ section, regensLeft })

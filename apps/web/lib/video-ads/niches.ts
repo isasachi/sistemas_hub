@@ -63,6 +63,8 @@ export interface NicheSpec {
   avatarNote: string
   /** Rótulo del bloque de producto dentro del prompt de cada lote. */
   productBlock: string
+  /** El mismo rótulo en INGLÉS: el prompt de render va en inglés (ver `buildLotePrompt`). */
+  productBlockEn: string
 }
 
 export const NICHE_SPEC: Record<Niche, NicheSpec> = {
@@ -73,6 +75,8 @@ export const NICHE_SPEC: Record<Niche, NicheSpec> = {
     avatarNote: '',
     productBlock:
       'PRODUCTO (debe verse idéntico a su imagen de referencia — misma forma, etiqueta,\ncolores y texto; nunca lo rediseñes):',
+    productBlockEn:
+      'PRODUCT (must look identical to its reference image — same shape, label, colors\nand text; never redesign it):',
   },
   ropa: {
     label: 'Ropa',
@@ -87,6 +91,8 @@ export const NICHE_SPEC: Record<Niche, NicheSpec> = {
       'original NO se copia: la prenda del usuario lo reemplaza.',
     productBlock:
       'PRODUCTO — ES LA PRENDA QUE EL PERSONAJE LLEVA PUESTA, no un objeto que sostiene.\nDebe verse idéntica a su imagen de referencia (mismo corte, color, tejido y detalles):',
+    productBlockEn:
+      'PRODUCT — IT IS THE GARMENT THE CHARACTER IS WEARING, not an object they hold.\nIt must look identical to its reference image (same cut, color, fabric and details):',
   },
   zapatos: {
     label: 'Calzado',
@@ -100,6 +106,8 @@ export const NICHE_SPEC: Record<Niche, NicheSpec> = {
       'original NO se copia: el del usuario lo reemplaza.',
     productBlock:
       'PRODUCTO — ES EL CALZADO QUE EL PERSONAJE LLEVA PUESTO, no un objeto que sostiene.\nDebe verse idéntico a su imagen de referencia (misma forma, color, material y suela):',
+    productBlockEn:
+      'PRODUCT — IT IS THE FOOTWEAR THE CHARACTER IS WEARING, not an object they hold.\nIt must look identical to its reference image (same shape, color, material and sole):',
   },
 }
 

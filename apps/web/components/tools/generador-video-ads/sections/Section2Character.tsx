@@ -16,7 +16,7 @@ const vacio = (i: number): PersonajeInput => ({
   id: nuevoId(i), rol: '', desc: '', etnia: '', acento: '', voz: '', fotoUrl: null,
 })
 
-// Paso 2: personaje y voz. Etnia y acento son campos LIBRES y obligatorios: el spec
+// Paso 2: personaje. La ETNIA es un campo LIBRE y obligatorio: el spec
 // prohíbe inferirlos de la apariencia, así que no hay chips ni defaults — si el
 // usuario no los escribe, la FASE 0 los marca PENDIENTE y el flujo se detiene.
 export default function Section2Character() {
@@ -130,9 +130,10 @@ export default function Section2Character() {
       </p>
       {notVertical && <div className={warnBox}>{notVertical}</div>}
 
-      {/* ⚠️ Etnia y acento son campos LIBRES y obligatorios POR PERSONAJE: el spec
-          prohíbe inferirlos, y que uno los tenga no cubre al otro — un anuncio con el
-          padre sin acento saldría con una voz genérica que nadie eligió. */}
+      {/* ⚠️ La etnia es un campo LIBRE y obligatorio POR PERSONAJE: el spec
+          prohíbe inferirla, y que un personaje la tenga no cubre al otro. El ACENTO y la
+          VOZ se eliminaron (2026-08-25): la voz sale de un perfil fijo en español según
+          el sexo del personaje (`VOZ_POR_DEFECTO`, character.ts). */}
       {gente.map((p, i) => (
         <div key={p.id} className="flex flex-col gap-3 rounded-xl border border-white/[0.08] p-3.5">
           <div className="flex items-center justify-between">
@@ -173,19 +174,6 @@ export default function Section2Character() {
               placeholder="Latina peruana" className="jr-field h-11 rounded-lg px-3 text-[13px]" />
           </div>
 
-          <div className="flex flex-col gap-1.5">
-            <label className="text-[13px] font-semibold text-[#ededed]">Acento / variante de habla</label>
-            <span className="text-[11.5px] text-[#8b8b8b]">Obligatorio. Sin esto la voz saldría con un acento genérico que no elegiste.</span>
-            <input value={p.acento} onChange={(e) => setCampo(i, 'acento', e.target.value)}
-              placeholder="Español peruano de Lima" className="jr-field h-11 rounded-lg px-3 text-[13px]" />
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <label className="text-[13px] font-semibold text-[#ededed]">Voz (opcional)</label>
-            <input value={p.voz} onChange={(e) => setCampo(i, 'voz', e.target.value)}
-              placeholder="Femenina joven, ritmo conversacional, energía media"
-              className="jr-field h-11 rounded-lg px-3 text-[13px]" />
-          </div>
         </div>
       ))}
 

@@ -5,7 +5,7 @@ import { callVideoAds } from '@/lib/video-ads/llm'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 import { SlotValuesSchema, CoherenceSchema, buildAdaptInstruction, buildCoherenceInstruction } from '@/lib/video-ads/adapt'
-import { extractSlots, fillTemplate, rejectBadValues, resolveSlotId, acceptScaffoldFix, acceptRewrite } from '@/lib/video-ads/fill'
+import { extractSlots, fillTemplate, rejectBadValues, resolveSlotId, acceptScaffoldFix, acceptRewrite, quitarRotuloDeToma } from '@/lib/video-ads/fill'
 import { extractPending } from '@/lib/video-ads/pending'
 import { canProceed } from '@/lib/video-ads/validation'
 import { STEP } from '@/lib/video-ads/steps'
@@ -105,7 +105,8 @@ export async function POST(
           return t
         }
         reescritas.push(t.n)
-        return { ...t, locucion: propuesta.trim() }
+        // Mismo saneo que midió `acceptRewrite`: el rótulo de toma se pronuncia.
+        return { ...t, locucion: quitarRotuloDeToma(propuesta.trim()) }
       }),
     }
     relleno = { ...relleno, guionFinal: relleno.tomas.map((t) => t.locucion).join(' ') }
@@ -218,9 +219,10 @@ export async function POST(
           console.warn(`[video-ads/adapt-script] sesión ${id}: ajuste ignorado, hueco "${a.idHueco}" no está en la toma ${a.n}`)
           continue
         }
+        const propuestaAjuste = quitarRotuloDeToma(a.locucion.trim())
         const veredicto = acceptScaffoldFix({
           original: toma.locucion,
-          propuesta: a.locucion,
+          propuesta: propuestaAjuste,
           // El valor del hueco NOMBRADO se excluye a propósito: el ajuste existe porque
           // ese valor no cabe en la frase, así que exigir que sobreviva bloquearía el
           // único caso para el que la excepción se abrió. Los demás valores de la toma
@@ -238,7 +240,7 @@ export async function POST(
         // Se guarda el texto de ANTES: la justificación de permitir esto es que el
         // usuario pueda ver qué se movió, no que se le avise de que algo se movió.
         andamiaje.push({ n: a.n, antes: toma.locucion, motivo: a.motivo })
-        toma.locucion = a.locucion.trim()
+        toma.locucion = propuestaAjuste
         console.info(`[video-ads/adapt-script] sesión ${id}: andamiaje de la toma ${a.n} ajustado (${a.motivo})`)
       }
       if (andamiaje.length) relleno = { ...relleno, guionFinal: relleno.tomas.map((t) => t.locucion).join(' ') }
@@ -264,7 +266,12 @@ export async function POST(
         accionVisual: porToma.get(t.n)?.trim() || t.accionVisual,
         personaje: session.character_desc ?? '',
         producto: session.product_scan?.productDescription ?? session.product_name ?? '',
-        locucion: t.locucion,
+        // ⚠️ EL SANEO VA ACÁ, EN EL PUNTO ÚNICO. Tres caminos distintos escriben
+        // `locucion` —la reescritura aceptada, la re-aplicación tras el corrector de
+        // coherencia y el ajuste de andamiaje— y parchear cada uno es exactamente cómo se
+        // escapó el rótulo: el tercero no estaba cubierto y "Toma 1:" llegó al guión
+        // guardado. Un rótulo en `locucion` se PRONUNCIA (ver `quitarRotuloDeToma`).
+        locucion: quitarRotuloDeToma(t.locucion),
       })),
       // Se derivan del texto, no se le preguntan al modelo: `fillTemplate` deja un
       // marcador por cada hueco que quedó sin valor.

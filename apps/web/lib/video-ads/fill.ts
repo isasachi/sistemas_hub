@@ -117,6 +117,53 @@ function ngramas(palabras: string[], n: number): Set<string> {
  * `[PENDIENTE: …]` y el usuario lo escribe él. Es el mismo desenlace que un valor que el
  * modelo no supo rellenar: preferible a texto ilegible dentro de un lote pagado.
  */
+/**
+ * ⚠️ UN VALOR QUE CHOCA CON LA PALABRA DE AL LADO PRODUCE UNA REDUNDANCIA QUE SE PRONUNCIA.
+ *
+ * Caso real: la plantilla decía *"y tambien nos da [beneficio 3] de inmediato"* y el modelo
+ * eligió *"calma inmediata"*, así que el guión salió con **"nos da calma inmediata de
+ * inmediato"**. El valor es correcto para su etiqueta y absurdo en su frase.
+ *
+ * Los guards que ya existían no lo ven: el de 3-gramas busca que el valor REPITA tres
+ * palabras seguidas del andamiaje, y acá la colisión es de UNA palabra con otra forma
+ * ("inmediata" contra "inmediato").
+ *
+ * Se compara solo contra las DOS palabras pegadas al hueco, no contra todo el andamiaje:
+ * el nombre del producto y su categoría aparecen por toda la locución de forma legítima, y
+ * comparar contra todo rechazaría valores buenos. Medido sobre las 151 tomas de la base,
+ * la versión amplia daba 2 falsos positivos de 6 — los dos, "niacinamida" junto a
+ * "Niacinamide" del nombre comercial, que es una frase perfectamente natural.
+ *
+ * La raíz son 6 caracteres: "inmediata"/"inmediato" comparten 8, mientras que
+ * "para"/"paraliza" solo comparten 4 y no colisionan.
+ */
+const RAIZ = 6
+
+function raicesVecinas(plantilla: string, id: string): Set<string> {
+  const out = new Set<string>()
+  // El hueco se identifica por su nombre entre corchetes; `id` puede traer el sufijo #n.
+  const nombre = id.replace(/#\d+$/, '')
+  const re = new RegExp(`\\[\\s*${nombre.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\]`, 'i')
+  const m = re.exec(plantilla)
+  if (!m) return out
+  const antes = norm(plantilla.slice(0, m.index)).slice(-2)
+  const despues = norm(plantilla.slice(m.index + m[0].length)).slice(0, 2)
+  for (const w of [...antes, ...despues]) if (w.length > RAIZ) out.add(w.slice(0, RAIZ))
+  return out
+}
+
+/** El texto de la plantilla del que salió este hueco: puede ser la locución o la acción. */
+function textoDelSlot(t: ScriptTemplate, s: Slot): string {
+  const toma = t.tomas.find((x) => x.n === s.toma)
+  return (s.campo === 'accion' ? toma?.accionVisual : toma?.locucion) ?? ''
+}
+
+function chocaConElAndamiaje(plantilla: string, id: string, valor: string): boolean {
+  const vecinas = raicesVecinas(plantilla, id)
+  if (!vecinas.size) return false
+  return norm(valor).some((w) => w.length > RAIZ && vecinas.has(w.slice(0, RAIZ)))
+}
+
 export function rejectBadValues(
   t: ScriptTemplate,
   valores: Record<string, string>,
@@ -157,7 +204,10 @@ export function rejectBadValues(
       !!sinRespaldo ||
       v.length > MAX_VALOR ||
       norm(v).join(' ').includes(norm(s.nombre).join(' ')) ||
-      [...ngramas(norm(v), 3)].some((g) => andamio.get(s.toma)?.has(g))
+      [...ngramas(norm(v), 3)].some((g) => andamio.get(s.toma)?.has(g)) ||
+      // El valor no puede repetir la raíz de la palabra pegada al hueco: ver
+      // `chocaConElAndamiaje` ("calma inmediata" dentro de "nos da ___ de inmediato").
+      chocaConElAndamiaje(textoDelSlot(t, s), s.id, v)
 
     if (malo) rechazados.push(s.id)
     // La puntuación final se recorta acá y no se le pide al modelo: la frase ya trae la
@@ -575,6 +625,25 @@ function ungrounded(texto: string, fuentes: string[]): string | null {
  * pasa el filtro cae al relleno determinista, que sigue siendo el piso. Nunca se queda
  * peor que hoy — como mucho, igual.
  */
+/**
+ * ⚠️ LA ETIQUETA DE LA TOMA SE COLABA DENTRO DE LA LOCUCIÓN, Y ESO SE PRONUNCIA.
+ *
+ * Medido en una sesión real: la toma 1 volvió como *"Toma 1: Este serum de niacinamida
+ * esta cambiando…"*. El modelo copió el rótulo con el que se le presenta cada toma en el
+ * prompt y lo metió dentro del texto hablado, así que el generador de video lo LEE EN VOZ
+ * ALTA — el mismo modo de fallo que ya documenta `limpiarDialogo` con "No aparece".
+ *
+ * Es raro (1 de 151 tomas de la base) y catastrófico cuando pasa, así que se limpia en
+ * código y no se le pide al prompt: un rótulo al principio de la línea NUNCA es diálogo.
+ * Se acota al ARRANQUE de la locución y a las cuatro palabras que el pipeline usa como
+ * rótulo, para no comerse una frase legítima que empiece hablando de una escena.
+ */
+const ROTULO_TOMA = /^\s*(toma|shot|corte|escena)\s*\d*\s*[:.\u2013-]\s*/i
+
+export function quitarRotuloDeToma(locucion: string): string {
+  return locucion.replace(ROTULO_TOMA, '').trimStart()
+}
+
 export function acceptRewrite(args: {
   /** Locución de la PLANTILLA, con sus corchetes: de ahí sale el andamiaje. */
   plantilla: string
@@ -583,16 +652,18 @@ export function acceptRewrite(args: {
   propuesta: string
   /**
    * Todo lo que el usuario entregó: inputs, texto de la etiqueta y los valores elegidos.
-   * La reescritura es TEXTO LIBRE y por tanto esquiva `rejectBadValues`, así que este es
-   * el único punto donde se puede comprobar que no aparezca contenido de la nada. Medido:
-   * sin esto, una reescritura afirmó que unas gomitas de melatonina llevan "vitamina B6"
-   * —que no está ni en los inputs ni en la etiqueta— y otra convirtió la "hoja verde" del
-   * logo en un ingrediente.
+   *
+   * ponytail: hoy NO se usa — alimentaba el guard de invención que se quitó arriba. Se
+   * conserva el parámetro (opcional) para no tocar los dos call sites ni los tests, y
+   * porque es el enganche natural si algún día hace falta un guard acotado (por ejemplo,
+   * solo contra premios y avales médicos, que el prompt sí sigue prohibiendo).
    */
-  fuentes: string[]
+  fuentes?: string[]
 }): { ok: true; fidelidad: number } | { ok: false; motivo: string; fidelidad: number } {
-  const { plantilla, piso, propuesta, fuentes } = args
-  const t = propuesta.trim()
+  const { plantilla, piso, propuesta } = args
+  // El rótulo se saca ANTES de medir: si no, baja la fidelidad y tira al piso una
+  // reescritura que por lo demás está bien. Ver `quitarRotuloDeToma`.
+  const t = quitarRotuloDeToma(propuesta.trim())
   const fidelidad = scaffoldFidelity(plantilla, t)
   if (!t) return { ok: false, motivo: 'vacía', fidelidad }
 
@@ -613,8 +684,18 @@ export function acceptRewrite(args: {
   const eco = repeticionInmediata(t)
   if (eco) return { ok: false, motivo: `repite "${eco}" dos veces seguidas`, fidelidad }
 
-  const inventada = ungrounded(t, [plantilla, piso, ...fuentes])
-  if (inventada) return { ok: false, motivo: `afirma "${inventada}", que no está en ningún dato`, fidelidad }
+  // ⚠️ ACÁ HABÍA UN GUARD DE INVENCIÓN (`ungrounded`) Y SE QUITÓ A PROPÓSITO
+  // (2026-08-24, decisión del dueño del repo). Rechazaba toda palabra de contenido que
+  // no estuviera ya en la plantilla, los inputs, los valores o la etiqueta — o sea,
+  // exactamente lo que ahora se le PIDE al modelo: autocompletar los huecos deduciendo
+  // del contexto y, si no alcanza, aproximando. Dejarlo puesto habría hecho que cada
+  // reescritura autocompletada cayera al relleno determinista y el guión volviera a
+  // salir con `[PENDIENTE: …]`: la función nueva no haría nada y el síntoma sería
+  // "no cambió nada", que es el peor modo de fallo posible.
+  //
+  // Lo que NO se quitó, porque es la otra mitad de la orden ("la plantilla no se
+  // inventa"): `FIDELIDAD_MIN` sobre el andamiaje, el eco y el conteo de pendientes.
+  // Es el andamiaje lo que tiene que sobrevivir intacto, no el vocabulario.
 
   return { ok: true, fidelidad }
 }

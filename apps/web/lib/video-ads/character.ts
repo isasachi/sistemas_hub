@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import type { Part } from '@google/genai'
 import type { UserInputs } from './types'
-import { enProsa, type ForensicReport } from './forensic'
+import { corteMuestraPersona, enProsa, type ForensicReport } from './forensic'
 import { nicheSpec } from './niches'
 import type { Personaje } from './personajes'
 
@@ -39,6 +39,50 @@ export const VoiceProfileSchema = z.object({
 export type VoiceProfile = z.infer<typeof VoiceProfileSchema>
 
 /**
+ * ⚠️ LA VOZ YA NO SE PREGUNTA NI SE INVENTA: sale de acá (2026-08-25).
+ *
+ * Revierte una regla que este repo tenía como dura —*"etnia y acento NUNCA se marcan
+ * confirmados desde la referencia"*— y es decisión del dueño del repo. El acento y la
+ * voz eran dos campos del wizard, uno obligatorio y bloqueante y el otro opcional; el
+ * anuncio es para el mercado peruano y la respuesta útil era siempre la misma, así que
+ * pedirla era fricción que además podía trabar la FASE 0.
+ *
+ * **La ETNIA no se tocó** y sigue siendo obligatoria por personaje: es lo que sostiene la
+ * REGLA DE NO-ASUNCIÓN y el gate de FASE 0 con varios personajes.
+ *
+ * Dos perfiles, uno por sexo, siempre en español latino neutro. Lo que sigue viniendo del
+ * modelo son `edadVocal` y `timbre` (ver `CharacterIdentitySchema`): sin eso, dos
+ * personajes del mismo sexo sonarían idénticos en el mismo anuncio.
+ */
+export const VOZ_POR_DEFECTO: Record<'hombre' | 'mujer', VoiceProfile> = {
+  hombre: {
+    idioma: 'Español', varianteRegional: 'Latinoamericano neutro', acento: 'Español latino neutro',
+    pronunciacion: 'Clara y articulada', ritmo: 'Conversacional', velocidad: 'Moderada',
+    entonacion: 'Natural y cercana, sin locución publicitaria', energia: 'Media-alta',
+    pausas: 'Cortas, donde caen en el habla real', tono: 'Cálido y directo',
+    timbre: 'Masculino adulto, medio', edadVocal: '30-40 años', estilo: 'Conversacional, de persona real hablándole a la cámara',
+  },
+  mujer: {
+    idioma: 'Español', varianteRegional: 'Latinoamericano neutro', acento: 'Español latino neutro',
+    pronunciacion: 'Clara y articulada', ritmo: 'Conversacional', velocidad: 'Moderada',
+    entonacion: 'Natural y cercana, sin locución publicitaria', energia: 'Media-alta',
+    pausas: 'Cortas, donde caen en el habla real', tono: 'Cálido y cercano',
+    timbre: 'Femenino adulto, claro', edadVocal: '25-35 años', estilo: 'Conversacional, de persona real hablándole a la cámara',
+  },
+}
+
+/** La voz de un personaje: el perfil fijo de su sexo, con lo que el modelo pudo aportar
+ *  para diferenciarlo de los demás. */
+export function vozDe(id: { sexoVocal: 'hombre' | 'mujer'; edadVocal?: string; timbre?: string }): VoiceProfile {
+  const base = VOZ_POR_DEFECTO[id.sexoVocal] ?? VOZ_POR_DEFECTO.mujer
+  return {
+    ...base,
+    edadVocal: id.edadVocal?.trim() || base.edadVocal,
+    timbre: id.timbre?.trim() || base.timbre,
+  }
+}
+
+/**
  * FASE 4.6 — CÓMO SE MUEVE. El tercer artefacto bloqueado, junto al bloque de
  * consistencia (cómo se ve) y el perfil de voz (cómo suena).
  *
@@ -64,7 +108,20 @@ export type MotionProfile = z.infer<typeof MotionProfileSchema>
 export const CharacterIdentitySchema = z.object({
   promptCreacion: z.string(),
   bloqueConsistencia: z.string(),
-  voz: VoiceProfileSchema,
+  /**
+   * ⚠️ EL MODELO OBSERVA EL SEXO, EL CÓDIGO CONSTRUYE LA VOZ (2026-08-25, decisión del
+   * dueño del repo). Antes el modelo devolvía el `VoiceProfile` entero y el usuario le
+   * daba el acento a mano; los dos campos del wizard se eliminaron y ahora la voz sale de
+   * `VOZ_POR_DEFECTO`, fija y siempre en español.
+   *
+   * Lo único que hace falta preguntarle es a cuál de los dos perfiles corresponde, y eso
+   * SÍ es una observación (está en la foto y en el video). Los campos expresivos que el
+   * modelo todavía puede aportar —edad vocal y timbre— siguen viniendo de él: con varios
+   * personajes son lo que impide que dos hombres suenen exactamente igual.
+   */
+  sexoVocal: z.enum(['hombre', 'mujer']),
+  edadVocal: z.string(),
+  timbre: z.string(),
   movimiento: MotionProfileSchema,
 })
 
@@ -84,6 +141,22 @@ export const IdentidadesSchema = z.object({
 export type Identidades = z.infer<typeof IdentidadesSchema>
 export type CharacterIdentity = z.infer<typeof CharacterIdentitySchema>
 
+/**
+ * El encuadre con el que ABRE el anuncio, para que el avatar nazca con él.
+ *
+ * ⚠️ Se busca el primer corte que MUESTRA A UNA PERSONA, no el primero a secas: un anuncio
+ * que abre con un plano de detalle del producto no da un encuadre útil para un retrato, y
+ * copiarlo produciría un avatar que no sirve como referencia de identidad.
+ *
+ * Sin ningún corte con persona (un anuncio íntegramente en voz en off sobre b-roll), se
+ * cae al valor que esta línea tenía fijo desde siempre.
+ */
+function encuadreDeApertura(forensic: ForensicReport): string {
+  const c = (forensic.cortes ?? []).find((x) => corteMuestraPersona(x))
+  const t = c?.camara?.trim()
+  return t || 'plano medio, ángulo levemente bajo'
+}
+
 export function buildIdentityInstruction(
   inputs: UserInputs,
   forensic: ForensicReport,
@@ -96,8 +169,6 @@ export function buildIdentityInstruction(
   const datos = (p: Personaje) => [
     `  Personaje: ${p.desc || '[VARIABLE PENDIENTE]'}`,
     `  Raza / etnia / origen cultural: ${p.etnia || '[VARIABLE PENDIENTE]'}`,
-    `  Acento: ${p.acento.trim() || ACENTO_PENDIENTE}`,
-    p.voz ? `  Voz: ${p.voz}` : '',
   ].filter(Boolean).join('\n')
   return [
     'Actúa como director creativo de anuncios UGC.',
@@ -117,15 +188,30 @@ export function buildIdentityInstruction(
       ? [
           '⚠️ SON PERSONAS DISTINTAS Y TIENEN QUE VERSE DISTINTAS. Diferéncialos en rasgos',
           'CONCRETOS —edad, complexión, forma del rostro, cabello, piel, vestuario— y no en',
-          'adjetivos vagos. Y también tienen que SONAR distinto: dos perfiles de voz',
-          'idénticos hacen que el anuncio parezca doblado por la misma persona.',
-          'Respeta el acento que el usuario dio a CADA UNO: no los uniformes.',
+          'adjetivos vagos. Y también tienen que SONAR distinto: la voz base es la misma',
+          'para todos los de un mismo sexo, así que `edadVocal` y `timbre` son lo ÚNICO que',
+          'los separa — dános valores realmente distintos o el anuncio parecerá doblado por',
+          'la misma persona.',
           '',
         ].join('\n')
       : '',
+    // ⚠️ ESTE BLOQUE SE COPIA, NO SE INTERPRETA — y decía lo contrario. Medido sobre un
+    // anuncio de serum: el forense leyó bien el original ("jersey tejido rosa pálido",
+    // "pared crema, marco de puerta de madera oscura") y el avatar salió con **blusa
+    // blanca sobre top negro en una cocina moderna**, porque la instrucción pedía
+    // "vestuario equivalente" y "el mismo TIPO de lugar". El modelo tomó esa latitud.
+    //
+    // Y el daño no queda en el avatar: esa imagen es `@image(1)` en TODOS los lotes, y la
+    // imagen le gana al texto. Los cuatro clips salieron con la ropa equivocada, uno
+    // transcurrió literalmente en la cocina del avatar, y los otros tres en habitaciones
+    // distintas entre sí porque el texto `SETTING` y la imagen se contradecían.
+    //
+    // Lo que NO se copia es la CARA: el avatar es una persona nueva por requisito legal.
+    // El vestuario y el lugar no son identidad — son la escenografía del anuncio que se
+    // está replicando, y replicarlos es justamente el trabajo.
     spec.wornProduct
-      ? 'CONTEXTO DEL VIDEO ORIGINAL (solo para encuadre; el vestuario NO se copia):'
-      : 'CONTEXTO DEL VIDEO ORIGINAL (solo para encuadre y vestuario equivalente):',
+      ? 'CONTEXTO DEL VIDEO ORIGINAL — se COPIA el escenario; el vestuario NO (es el producto):'
+      : 'CONTEXTO DEL VIDEO ORIGINAL — el vestuario y el escenario se COPIAN, no se reinterpretan:',
     `  Sujeto observado: ${enProsa(forensic.sujeto)}`,
     `  Vestuario observado: ${enProsa(forensic.vestuario)}`,
     // ⚠️ En ropa/zapatos el PRODUCTO Y EL VESTUARIO SON EL MISMO OBJETO. Sin esta
@@ -149,6 +235,17 @@ export function buildIdentityInstruction(
           'estructura del rostro, cabello (corte y color), complexión, rasgos distintivos',
           'visibles y edad aparente. No mezcles rasgos con otros personajes. Si un rasgo',
           'no puede observarse con certeza, no inventes ese rasgo.',
+          // ⚠️ EL AVATAR ES UNA PERSONA NUEVA, NO LA DE LA FOTO. La foto la puede haber
+          // sacado el usuario de cualquier lado, así que reproducir esa cara sería
+          // publicar la imagen de alguien que no dio permiso. Se toma el TIPO físico
+          // —edad, complexión, tono de piel, estilo de cabello— y se construye a otra
+          // persona con él, combinándolo con lo que el usuario describió en el brief.
+          'IMPORTANTE — NO CLONES LA CARA DE LA FOTO. El avatar es una persona NUEVA que',
+          'comparte el TIPO físico de la referencia (rango de edad, complexión, tono de',
+          'piel, estilo y color de cabello), no sus facciones exactas: distinta forma de',
+          'nariz, boca, ojos y mandíbula. La foto marca el tipo; el brief del usuario',
+          'manda sobre el resto. Es un requisito legal, no estético: la persona de esa',
+          'foto no dio permiso para aparecer en un anuncio.',
           'De la foto SOLO se leen rasgos observables (edad aparente, tono de piel,',
           'cabello, facciones, complexión). NUNCA infieras de la foto la etnia, el',
           'origen cultural ni el acento del personaje: esos dos datos vienen',
@@ -186,9 +283,16 @@ export function buildIdentityInstruction(
     // manera fiable de acotar a un clip un texto que describe el video entero), así que
     // si la escena no está EN LA IMAGEN no está en ningún lado.
     'ESCENARIO — la imagen es el primer fotograma del anuncio, no un retrato de estudio:',
-    'sitúa al personaje EN EL MISMO TIPO DE LUGAR que el video original, con su misma',
-    `iluminación. Lugar observado: ${enProsa(forensic.fondo) || 'interior con luz natural'}`,
-    'Reproduce el TIPO de espacio y su luz, no los objetos concretos de una toma suelta.',
+    'sitúa al personaje EN EL LUGAR OBSERVADO, con su misma iluminación.',
+    `  Lugar observado: ${enProsa(forensic.fondo) || 'interior con luz natural'}`,
+    // ⚠️ "reproduce el TIPO de espacio" era la puerta por la que se coló una cocina donde
+    // el original tiene una pared crema con una puerta de madera oscura. Se copian los
+    // ELEMENTOS que el forense nombró (superficies, colores, muebles, temperatura de luz);
+    // lo que no se exige es la disposición exacta de una toma suelta.
+    'Reproduce los ELEMENTOS que ese texto nombra —superficies, colores, muebles, tipo y',
+    'temperatura de luz—, no un lugar "del mismo estilo". Si dice pared crema y puerta de',
+    'madera oscura, eso es lo que va detrás: no lo cambies por otra habitación que te',
+    'parezca equivalente. Lo único que no se exige es la disposición exacta de los objetos.',
     // ⚠️ Sin esto el modelo abre el plano para "mostrar" el lugar: medido, el avatar
     // pasó de plano medio a cuerpo entero en cuanto se le nombró la tienda. El escenario
     // va DETRÁS y desenfocado; el encuadre lo manda el original, no el decorado.
@@ -197,9 +301,31 @@ export function buildIdentityInstruction(
     // 9:16 y no el 2:3 de antes: con el modo de frames de Veo esta imagen no es "una
     // referencia más", es el PRIMER FOTOGRAMA del clip. El encuadre que tenga es el
     // encuadre con el que abre el anuncio.
-    'La imagen es el primer fotograma de un video vertical de redes: encuádrala como una',
-    'foto de teléfono real (plano medio, ángulo levemente bajo), no como un retrato de',
-    'estudio. Sin teléfonos, cámaras ni trípodes a la vista.',
+    // ⚠️ EL ENCUADRE SALE DEL ORIGINAL, NO DE UN VALOR FIJO. Esta línea decía "plano
+    // medio" a secas, sin mirar el video de referencia — y como esta imagen es `@image(1)`
+    // en todos los lotes y la imagen le gana al texto, ese plano medio se convertía en el
+    // encuadre del anuncio ENTERO. Medido sobre un anuncio grabado en primer plano: los
+    // cuatro clips salieron con la persona mucho más lejos que el original.
+    //
+    // Se toma el encuadre del PRIMER CORTE QUE MUESTRA A UNA PERSONA: esta imagen es el
+    // primer fotograma del anuncio, así que su encuadre es el de apertura. Si el anuncio
+    // abre con un plano de producto, ese corte no sirve de referencia para un retrato y se
+    // sigue buscando; sin ninguno, se cae al valor de siempre.
+    `La imagen es el primer fotograma de un video vertical de redes: encuádrala como una foto de teléfono real, con el MISMO encuadre con el que abre el original — ${encuadreDeApertura(forensic)}.`,
+    'Ese encuadre manda: no lo abras ni lo cierres. Sin teléfonos, cámaras ni trípodes a la vista.',
+    // ⚠️ REALISMO ESTRICTO, exigido por el dueño del repo. Es el fallo más visible de un
+    // generador de imagen sobre personas: devuelve piel de plástico, luz uniforme y cara
+    // de render 3D, y eso delata el anuncio como generado antes de que nadie lo escuche.
+    // Y acá pesa el doble, porque este fotograma define cómo se ve el clip entero: una
+    // piel acartonada acá contamina todas las tomas que salgan de ella.
+    'REALISMO FOTOGRÁFICO ESTRICTO — y esto manda sobre cualquier otra consideración',
+    'estética. Piel real con su textura: poros, vello fino, lunares, pequeñas',
+    'irregularidades, brillo natural donde la piel es grasa y líneas de expresión propias',
+    'de la edad. Iluminación real y desigual, con sombras que caen donde tienen que caer.',
+    'PROHIBIDO: piel suavizada o retocada, tonos pastel, acabado acartonado o de plástico,',
+    'aspecto de ilustración, de render 3D, de muñeco o de personaje de videojuego,',
+    'estilización, glamour de estudio, aerógrafo, filtro de belleza y luz perfecta.',
+    'Tiene que poder pasar por un fotograma de un video grabado con un teléfono.',
     spec.wornProduct
       ? 'Sin texto, sin logos y sin watermarks. El producto SÍ va en el encuadre: el personaje lo lleva puesto, tal como se ve en su imagen.'
       : 'Sin texto, sin logos, sin watermarks y sin el producto en el encuadre.',
@@ -212,21 +338,23 @@ export function buildIdentityInstruction(
     'anterior produce otra persona.',
     'Debe ser autosuficiente y describir edad, etnia (la del usuario), rostro, cabello,',
     'piel, ojos, complexión, vestuario y accesorios.',
+    // ⚠️ El vestuario del avatar termina dentro del bloque de consistencia y viaja a cada
+    // lote: si acá se inventa, el anuncio entero sale vestido de otra cosa.
+    spec.wornProduct
+      ? ''
+      : 'VESTUARIO: copia el observado en el original —prenda, color, tejido, cuello, largo— y también sus accesorios (aretes, collares). No lo sustituyas por otra prenda "parecida" ni por una más favorecedora: es la escenografía del anuncio que se replica, no una elección de estilo.',
     spec.wornProduct
       ? 'El vestuario que describas ES EL PRODUCTO: detalla la prenda del usuario (corte, color, tejido, cuello, mangas, puños, largo) como parte de la identidad bloqueada. Es lo único que mantiene la misma prenda en el lote 1 y en el 5.'
       : '',
     '',
-    '`voz`: perfil vocal completo — idioma, variante regional, acento, pronunciación,',
-    'ritmo, velocidad, entonación, energía, pausas, tono, timbre, edad vocal aproximada',
-    'y estilo conversacional.',
-    // El acento es POR PERSONAJE: uniformarlos borraría justamente el dato que la FASE 0
-    // exige confirmar uno por uno.
-    varios
-      ? 'El acento de cada uno es el que su bloque de DATOS DEL USUARIO indica, tal cual. No los uniformes.'
-      : `El acento debe ser explícito y estable: usa "${personajes[0].acento.trim() || ACENTO_PENDIENTE}" tal cual.`,
-    personajes.some((p) => !p.acento.trim())
-      ? 'NO sustituyas un acento pendiente por uno genérico ni "neutro": propaga el marcador.'
-      : '',
+    // ⚠️ EL PERFIL DE VOZ YA NO SE PIDE: sale de `VOZ_POR_DEFECTO`, fijo y en español.
+    // Lo único que se observa es a cuál de los dos corresponde, más los dos campos que
+    // diferencian a personajes del mismo sexo.
+    '`sexoVocal`: "hombre" o "mujer", según se ve y se oye en la referencia. Es lo único',
+    'que decide qué voz se usa; el idioma es SIEMPRE español latino neutro y no se elige.',
+    '`edadVocal`: rango aproximado ("28-35 años"). `timbre`: cómo suena esa voz en concreto',
+    '(grave y con aire, clara y brillante, algo nasal…). Los dos salen de lo que se OYE en',
+    'el video original.',
     '',
     '`movimiento`: CÓMO SE MUEVE el personaje, leído del video original. Son DOS campos',
     'separados y no se pueden mezclar:',
@@ -235,6 +363,23 @@ export function buildIdentityInstruction(
     '  o entrecortado, su velocidad, cómo desplaza el peso de una pierna a otra, qué',
     '  hacen las manos y los brazos MIENTRAS NO HACEN NADA, y dónde descansa la mirada',
     '  entre una frase y la siguiente.',
+    '',
+    // ⚠️ EL RITMO DEL ORIGINAL SE COLAPSABA EN UNA ETIQUETA. Medido sobre seis sesiones
+    // guardadas: `calidadMovimiento` empezaba con "movimientos fluidos" en las SEIS, tanto
+    // en anuncios cuyo ritmo el forense describió como "rápido y dinámico" como en los que
+    // describió "pausado y conversacional". O sea el eje del ritmo no llegaba al render —
+    // este campo es el único camino por el que puede llegar, porque el prompt del lote no
+    // lee `edicion.ritmo`. Es el mismo modo de fallo que ya se corrigió pidiendo detalle
+    // reproducible en `style`, `typography` y `creativeConcept`: prohibir la etiqueta.
+    '  ⚠️ TIENE QUE REFLEJAR EL RITMO DEL ORIGINAL, que está arriba en "Ritmo de edición',
+    '  observado". Un anuncio rápido y uno pausado NO se mueven igual: cambia la velocidad',
+    '  del gesto, cuántas veces se mueve por frase y si se queda quieta entre una y otra.',
+    '  Dilo con esa concreción — "gesticula en casi cada frase, con las manos moviéndose',
+    '  rápido a la altura del pecho" contra "un gesto cada dos o tres frases, las manos',
+    '  vuelven al regazo y se quedan ahí".',
+    '  PROHIBIDO responder solo "movimientos fluidos y continuos" o cualquier variante: es',
+    '  la etiqueta que devuelve TODO video y no distingue nada. Si el movimiento es fluido,',
+    '  dilo Y agrega a qué velocidad y con qué frecuencia.',
     '',
     '  `manerismos` — los gestos involuntarios y repetidos de esa persona, los que no',
     '  cumplen ninguna función en el guión: acomodarse el pelo, tocarse la cara,',

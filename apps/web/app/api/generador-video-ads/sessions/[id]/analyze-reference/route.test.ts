@@ -7,11 +7,12 @@ vi.mock('@/lib/video-ads/db', () => ({
 
 vi.mock('@/lib/storage', () => {
   class PayloadTooLargeError extends Error {}
-  return { fetchAsBase64: vi.fn(), PayloadTooLargeError }
+  return { fetchAsBase64: vi.fn(), headStorageFile: vi.fn(), PayloadTooLargeError }
 })
 
 vi.mock('@/lib/gemini', () => ({
   geminiCallStructured: vi.fn(),
+  geminiEsDirecto: vi.fn(() => false), // por KIE: el video viaja por URL, no en base64
 }))
 
 vi.mock('@/lib/gen-quota', () => ({
@@ -26,7 +27,7 @@ vi.mock('@/lib/product-hunter/session', () => ({
 import { NextRequest } from 'next/server'
 import { POST } from './route'
 import { getVideoSession, updateVideoSession } from '@/lib/video-ads/db'
-import { fetchAsBase64, PayloadTooLargeError } from '@/lib/storage'
+import { headStorageFile, PayloadTooLargeError } from '@/lib/storage'
 import { geminiCallStructured } from '@/lib/gemini'
 import type { VideoSessionResponse } from '@/lib/video-ads/types'
 
@@ -51,7 +52,7 @@ describe('POST /api/generador-video-ads/sessions/[id]/analyze-reference — guar
 
   it('413 con mensaje en español cuando el video excede el tope, sin llamar a Gemini', async () => {
     vi.mocked(getVideoSession).mockResolvedValue({ id: 's1' } as unknown as VideoSessionResponse)
-    vi.mocked(fetchAsBase64).mockRejectedValue(new PayloadTooLargeError('El archivo pesa más de 14 MB.'))
+    vi.mocked(headStorageFile).mockRejectedValue(new PayloadTooLargeError('El archivo pesa más de 14 MB.'))
 
     const res = await POST(req({ videoUrl: 'https://x.supabase.co/reference-video.mp4' }), ctx())
     const data = await res.json()
@@ -64,7 +65,7 @@ describe('POST /api/generador-video-ads/sessions/[id]/analyze-reference — guar
 
   it('procede normalmente cuando el video está dentro del tope', async () => {
     vi.mocked(getVideoSession).mockResolvedValue({ id: 's1' } as unknown as VideoSessionResponse)
-    vi.mocked(fetchAsBase64).mockResolvedValue({ data: 'YWJj', mimeType: 'video/mp4' })
+    vi.mocked(headStorageFile).mockResolvedValue({ mimeType: 'video/mp4' })
     // El modelo devuelve un conteo estimado y lo estima MAL: en una corrida real reportó
     // 562 caracteres sobre un guión de 776. Ese número es la referencia contra la que se
     // mide si el guión adaptado se fue de largo, así que el servidor lo recalcula.
@@ -80,9 +81,9 @@ describe('POST /api/generador-video-ads/sessions/[id]/analyze-reference — guar
       .toMatchObject({ caracteresGuion: 4 })
   })
 
-  it('otros errores de fetchAsBase64 siguen devolviendo el 500 genérico', async () => {
+  it('otros errores al leer el video siguen devolviendo el 500 genérico', async () => {
     vi.mocked(getVideoSession).mockResolvedValue({ id: 's1' } as unknown as VideoSessionResponse)
-    vi.mocked(fetchAsBase64).mockRejectedValue(new Error('network blew up'))
+    vi.mocked(headStorageFile).mockRejectedValue(new Error('network blew up'))
 
     const res = await POST(req({ videoUrl: 'https://x.supabase.co/reference-video.mp4' }), ctx())
     expect(res.status).toBe(500)

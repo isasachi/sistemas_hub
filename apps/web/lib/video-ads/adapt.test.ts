@@ -20,7 +20,7 @@ const TEMPLATE: ScriptTemplate = {
 const FORENSIC = {
   caracteresGuion: 58,
   guionOriginal: 'Si estás cansado de las marcas, necesitas probar este suero.',
-  cortes: [{ n: 1, tiempo: '00:00 - 00:06', duracionSeg: 6, accion: '', camara: '', dialogo: '', textoOverlay: '', transicion: '' }],
+  cortes: [{ n: 1, tiempo: '00:00 - 00:06', duracionSeg: 6, accion: '', camara: '', dialogo: '', textoOverlay: '', transicion: '', objetoEnMano: null, micro: null }],
 } as ForensicReport
 
 const INPUTS: UserInputs = {
@@ -46,7 +46,7 @@ describe('buildAdaptInstruction', () => {
     const ORIGINAL = 'Tres razones para tomar Gomi Energy para ella.'
     const forense = (dialogo: string) => ({
       caracteresGuion: ORIGINAL.length, guionOriginal: ORIGINAL,
-      cortes: [{ n: 1, tiempo: '00:00 - 00:05', duracionSeg: 5, accion: '', camara: '', dialogo, textoOverlay: '', transicion: '' }],
+      cortes: [{ n: 1, tiempo: '00:00 - 00:05', duracionSeg: 5, accion: '', camara: '', dialogo, textoOverlay: '', transicion: '', objetoEnMano: null, micro: null }],
     }) as ForensicReport
     const plantilla = (locucion: string): ScriptTemplate =>
       ({ ...TEMPLATE, tomas: [{ n: 1, accionVisual: 'Sostiene el frasco', locucion, duracionSeg: 5 }] })
@@ -84,12 +84,19 @@ describe('buildAdaptInstruction', () => {
     })
   })
 
-  // La regla sigue: no se inventa lo que no está en los inputs. Lo que se corrigió es su
-  // justificación — el ejemplo que citaba (PHE-resorcinol) resultó ser un dato CORRECTO
-  // que el modelo leyó de la etiqueta del propio producto del usuario, no una invención.
-  it('prohíbe inventar lo que no está en los inputs', () => {
-    expect(p).toMatch(/no inventes/i)
-    expect(p).toMatch(/conocimiento del mundo NO es una fuente/i)
+  // ⚠️ LA REGLA CAMBIÓ DE OBJETO (2026-08-24, decisión del dueño del repo). Antes era
+  // "no inventes NADA": lo que no estuviera literal en los inputs dejaba el hueco
+  // pendiente. Ahora lo intocable es la PLANTILLA —el texto que rodea a los corchetes,
+  // que es del anuncio original— y los huecos SÍ se autocompletan deduciendo del
+  // contexto y, si no alcanza, aproximando. Lo que sigue prohibido es lo que el usuario
+  // tendría que salir a demostrar.
+  it('declara intocable la plantilla y autocompletable el hueco', () => {
+    expect(p).toMatch(/LA PLANTILLA NO SE INVENTA/i)
+    expect(p).toMatch(/LO QUE VA DENTRO DE LOS CORCHETES SÍ SE COMPLETA/i)
+  })
+
+  it('sigue prohibiendo lo que el usuario tendría que demostrar', () => {
+    expect(p).toMatch(/premios, avales médicos, estudios clínicos/i)
   })
 
   // El hallazgo que corrigió el dueño del repo: la etiqueta es la fuente más autorizada
@@ -159,9 +166,18 @@ describe('buildAdaptInstruction', () => {
     expect(p).toContain('tipo de producto')
   })
 
-  it('pide dejar el valor VACÍO en vez de adivinar', () => {
-    expect(p).toMatch(/devuelve `valor` VAC[IÍ]O/i)
-    expect(p).toMatch(/hueco\s+vac[ií]o\s+es\s+un\s+resultado\s+correcto/i)
+  // Al revés que antes: vaciar dejó de ser la salida por defecto. Un guión con agujeros
+  // no se puede renderizar y obliga al usuario a escribir a mano lo que el modelo ya
+  // puede deducir del resto de la sesión.
+  it('pide rellenar SIEMPRE, con la escalera de dónde sacar el valor', () => {
+    expect(p).toMatch(/RELLENA SIEMPRE/)
+    expect(p).toMatch(/Está literal en los INPUTS o en la etiqueta/i)
+    expect(p).toMatch(/se DEDUCE de lo que sí hay/i)
+    expect(p).toMatch(/lo más VEROSÍMIL para un producto de esta/i)
+  })
+
+  it('acota el hueco vacío al dato que compromete al usuario', () => {
+    expect(p).toMatch(/Deja `valor` VACÍO solo si/i)
   })
 
   it('fija TEXTO EN PANTALLA: NINGUNO', () => {

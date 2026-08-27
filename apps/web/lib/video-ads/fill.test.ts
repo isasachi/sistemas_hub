@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractSlots, fillTemplate, validateTemplate, assembleTemplate, rejectBadValues, alignSlots, normalizeSlots, resolveSlotId, acceptScaffoldFix, acceptRewrite, slotOriginals } from './fill'
+import { extractSlots, fillTemplate, validateTemplate, assembleTemplate, rejectBadValues, alignSlots, normalizeSlots, resolveSlotId, acceptScaffoldFix, acceptRewrite, slotOriginals, quitarRotuloDeToma } from './fill'
 import type { ScriptTemplate } from './template'
 
 // Plantilla recortada del caso real (serum Apivita → suero de niacinamida). Trae los
@@ -512,17 +512,23 @@ describe('acceptRewrite', () => {
     expect(r.fidelidad).toBeLessThan(0.85)
   })
 
-  // La reescritura es texto libre: no pasa por `rejectBadValues`. Caso real — afirmó que
-  // unas gomitas de melatonina llevan "vitamina B6", que no está en ningún dato.
-  it('rechaza la reescritura que afirma algo que no está en ninguna fuente', () => {
+  // ⚠️ ESTE TEST AFIRMABA LO CONTRARIO Y SE INVIRTIÓ A PROPÓSITO (2026-08-24). El guard
+  // `ungrounded` rechazaba toda palabra de contenido que no estuviera ya en la plantilla,
+  // los inputs, los valores o la etiqueta — o sea exactamente lo que ahora se le PIDE al
+  // modelo: autocompletar el hueco deduciendo del contexto. Con el guard puesto, cada
+  // reescritura autocompletada caía al relleno determinista y el guión volvía a salir con
+  // `[PENDIENTE: …]`: la función nueva no haría nada.
+  //
+  // Lo que sostiene "la plantilla no se inventa" es `FIDELIDAD_MIN` sobre el ANDAMIAJE,
+  // que el test de arriba fija — no el vocabulario de los huecos.
+  it('acepta un valor deducido que no aparece literal en las fuentes', () => {
     const r = acceptRewrite({
       plantilla: 'Número dos, tiene [ingrediente 2] que también ayuda a [beneficio 2]',
       piso: 'Número dos, tiene melatonina que también ayuda a dormir',
       propuesta: 'Número dos, tiene vitamina B6 que también ayuda a dormir',
       fuentes: ['gomitas de melatonina', 'Melatonin 10mg Per Serving'],
     })
-    expect(r.ok).toBe(false)
-    expect(r.ok === false && r.motivo).toContain('vitamina')
+    expect(r.ok).toBe(true)
   })
 
   // La flexión no es invención: la libertad gramatical es justo lo que esto viene a ganar.
@@ -715,5 +721,72 @@ describe('acceptScaffoldFix — quitar el artículo que no concuerda', () => {
     const mala = 'Y si te encuentras en Lima, tienes que venir a nuestra tienda para solicitar tu Top Murai.'
     const r = acceptScaffoldFix({ original, propuesta: mala, valores: ['Bloom', 'Top Murai'] })
     expect(r.ok).toBe(false)
+  })
+})
+
+describe('quitarRotuloDeToma', () => {
+  // ⚠️ MEDIDO EN UNA SESIÓN REAL: la toma 1 volvió como "Toma 1: Este serum de niacinamida
+  // esta cambiando…". El modelo copió el rótulo con el que se le presenta cada toma en el
+  // prompt y lo metió DENTRO del texto hablado — y todo lo que está en `locucion` se
+  // pronuncia. Mismo modo de fallo que "No aparece" en `limpiarDialogo`.
+  it('saca el rótulo que el modelo copió del prompt', () => {
+    expect(quitarRotuloDeToma('Toma 1: Este serum está cambiando mi piel.'))
+      .toBe('Este serum está cambiando mi piel.')
+    expect(quitarRotuloDeToma('Shot 3 - Mira esto.')).toBe('Mira esto.')
+    expect(quitarRotuloDeToma('Escena 2. Hola.')).toBe('Hola.')
+  })
+
+  // Acotado al ARRANQUE y a las cuatro palabras que el pipeline usa como rótulo: no puede
+  // comerse una frase legítima que hable de una escena o de una toma.
+  it('no toca una frase que solo menciona la palabra', () => {
+    for (const x of [
+      'Toma este serum todos los días.',
+      'La toma 1 del video me encantó.',
+      'Corte y confección, eso hago.',
+      'Esta escena me da paz.',
+    ]) expect(quitarRotuloDeToma(x)).toBe(x)
+  })
+
+  it('deja intacta una locución normal', () => {
+    const x = 'Este es el serum de la marca La Roche-Posay.'
+    expect(quitarRotuloDeToma(x)).toBe(x)
+  })
+})
+
+describe('rejectBadValues — choque con la palabra de al lado', () => {
+  const plantilla = (loc: string) => ({ tomas: [{ n: 1, locucion: loc, accionVisual: 'la mujer habla' }] }) as never
+
+  // ⚠️ CASO REAL: la plantilla decía "y tambien nos da [beneficio 3] de inmediato" y el
+  // modelo eligió "calma inmediata" → "nos da calma inmediata de inmediato". El valor es
+  // correcto para su etiqueta y absurdo en su frase. Los guards viejos no lo veían: el de
+  // 3-gramas busca tres palabras seguidas repetidas, y acá la colisión es de UNA con otra
+  // forma.
+  it('rechaza el valor que repite la raíz de la palabra pegada al hueco', () => {
+    const out = rejectBadValues(plantilla('nos da [beneficio 3] de inmediato'), { 'beneficio 3#1': 'calma inmediata' })
+    expect(out.rechazados).toContain('beneficio 3#1')
+    expect(out.valores['beneficio 3#1']).toBeUndefined()
+  })
+
+  it('acepta el mismo hueco con un valor que no choca', () => {
+    const out = rejectBadValues(plantilla('nos da [beneficio 3] de inmediato'), { 'beneficio 3#1': 'un efecto lifting' })
+    expect(out.rechazados).toEqual([])
+    expect(out.valores['beneficio 3#1']).toBe('un efecto lifting')
+  })
+
+  // ⚠️ Solo se miran las DOS palabras pegadas al hueco. Medido sobre las 151 tomas de la
+  // base, comparar contra TODO el andamiaje daba 2 falsos positivos de 6 — los dos,
+  // "niacinamida" junto al "Niacinamide" del nombre comercial, que es natural.
+  it('no rechaza una raíz repetida que está lejos del hueco', () => {
+    const out = rejectBadValues(
+      plantilla('Este suero de [ingrediente] de la marca X se llama Pure Niacinamide Serum'),
+      { 'ingrediente#1': 'niacinamida' },
+    )
+    expect(out.rechazados).toEqual([])
+  })
+
+  // "para"/"paraliza" comparten 4 caracteres: con la raíz en 6 no colisionan.
+  it('una coincidencia corta no cuenta como choque', () => {
+    const out = rejectBadValues(plantilla('es [beneficio] para todos'), { 'beneficio#1': 'paraliza la caída' })
+    expect(out.rechazados).toEqual([])
   })
 })

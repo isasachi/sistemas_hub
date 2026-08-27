@@ -22,7 +22,7 @@ describe('OfferSchema — decoy estructural (nivel de sesión, Fase 5)', () => {
   })
 
   it('OfferCopySchema ya NO lleva tiers (solo el texto de la sección)', () => {
-    const parsed = OfferCopySchema.parse({ type: 'oferta', headline: 'Oferta', tiers: [tier()] } as unknown as object)
+    const parsed = OfferCopySchema.parse({ kind: 'oferta', headline: 'Oferta', tiers: [tier()] } as unknown as object)
     expect('tiers' in parsed).toBe(false)
   })
 
@@ -41,6 +41,8 @@ describe('resolveOffer — compat de sesiones pre-F5', () => {
   })
 
   it('cae a los tiers legados guardados en offer_copy (offer null)', () => {
+    // ⚠️ `type` a propósito: así se guardó el offer_copy legado, antes del renombre a `kind`.
+    // `resolveOffer` lo normaliza al leer, que es lo que este test fija.
     const legacy = { type: 'oferta', headline: 'x', urgency: 'Ya', tiers }
     const got = resolveOffer({ offer: null, offer_copy: legacy as never })
     expect(got?.tiers).toHaveLength(2)

@@ -38,10 +38,20 @@ export interface BrandingListRow {
 }
 
 export async function listBrandingSessions(userId: string): Promise<BrandingListRow[]> {
+  // ⚠️ NO SE LISTAN LAS SESIONES VACÍAS. El wizard crea la fila al MONTAR la página, así
+  // que abrir la tool y no hacer nada deja una sesión en el historial — y en dev, con el
+  // StrictMode de React montando dos veces, deja DOS. Medido sobre la base: 40 de 107 filas de `branding_sessions` no tienen marca.
+  // Una sesión sin marca es una que el usuario nunca empezó: no hay nada
+  // que abrir ni que borrar, solo ruido que empuja hacia abajo el trabajo real.
+  //
+  // Se filtra al LEER y no se borran filas: son inofensivas, y borrarlas es una migración
+  // destructiva para arreglar un problema de presentación. El `step` no sirve de
+  // discriminante (nace en 0 y una sesión real también pasa por 0).
   const { data, error } = await getDb()
     .from('branding_sessions')
     .select('id, created_at, step, brand_name, logo_url, mockup_url')
     .eq('user_id', userId)
+    .not('brand_name', 'is', null)
     .order('created_at', { ascending: false })
     .limit(24)
   if (error) return []

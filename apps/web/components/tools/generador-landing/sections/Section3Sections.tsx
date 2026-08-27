@@ -18,7 +18,7 @@ const OPTIONS = TYPES.map((t) => SECTION_LABELS[t])
 function CopyCard({ c }: { c: SectionCopy }) {
   return (
     <div className="rounded-xl border border-white/[0.08] bg-[#2a0f1a] px-4 py-3 flex flex-col gap-1">
-      <p className="text-[11px] uppercase tracking-wide text-[#a98c88]">{SECTION_LABELS[c.type]}</p>
+      <p className="text-[11px] uppercase tracking-wide text-[#a98c88]">{SECTION_LABELS[c.kind]}</p>
       <p className="text-[14px] font-bold text-[#efe7e0]">{c.headline}</p>
       {c.subheadline && <p className="text-[12px] text-[#c9b4ae]">{c.subheadline}</p>}
       {c.bullets?.length ? (
@@ -82,7 +82,7 @@ export default function Section3Sections() {
         </button>
       ) : (
         <>
-          <div className="flex flex-col gap-2">{copy.map((c) => <CopyCard key={c.type} c={c} />)}</div>
+          <div className="flex flex-col gap-2">{copy.map((c) => <CopyCard key={c.kind} c={c} />)}</div>
 
           {issues.length > 0 && (
             <div className="flex flex-col gap-1.5 rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-4 py-3">

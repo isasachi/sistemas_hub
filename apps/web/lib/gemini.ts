@@ -3,6 +3,13 @@ import { z } from 'zod'
 import fs from 'fs'
 import path from 'path'
 import { openaiCallStructured, openaiCallReasoning, openaiGenerateImage } from './llm-openai'
+import { kieGeminiStructured, kieGeminiReasoning } from './kie-gemini'
+import { kieGenerateImage, type ModeloImagen } from './kie-image'
+import { clampTooBigStrings, correccionDeLargo, sliceToWord } from './llm-clamp'
+
+// Re-exportados desde el módulo hoja `llm-clamp.ts`: los necesita también `kie-gemini.ts`, y este
+// archivo lo importa a él — dejarlos acá era un ciclo. Los importadores no cambiaron.
+export { clampTooBigStrings, sliceToWord }
 
 function getAI() {
   return new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY! })
@@ -15,6 +22,31 @@ function getAI() {
 // gemini` fuerza Gemini-only (sin tocar OpenAI) — útil para costo o si OpenAI está caído.
 function geminiForced(): boolean {
   return process.env.LLM_PROVIDER === 'gemini'
+}
+
+// ─── Recurso migrado a KIE: el texto/visión de Gemini (2026-08-25) ───────────
+// `gemini-2.5-flash` sale por `api.kie.ai` en vez del SDK de Google. Es UN recurso: gpt-4o-mini
+// sigue primario donde lo era, la IMAGEN de Gemini (`gemini-3.1-flash-image`) sigue en el SDK, y
+// el render de video y el worker no se tocan.
+//
+// ⚠️ `GEMINI_VIA=direct` lo devuelve al SDK sin revertir código. Es lo que hace reversible el
+// slice: si KIE se cae PARA ESTE RECURSO, se cambia una variable y no hay que desplegar nada.
+export function geminiEsDirecto(): boolean {
+  return process.env.GEMINI_VIA === 'direct'
+}
+function viaDirecta(): boolean {
+  return geminiEsDirecto()
+}
+
+// ─── Recurso migrado a KIE: la IMAGEN (2026-08-25) ──────────────────────────
+// `gpt-image-2` y `gemini-3.1-flash-image` (en KIE, `nano-banana-2`) salen por el marketplace.
+// El par no cambia: gpt-image-2 primario, nano-banana-2 de respaldo, y `preferGemini` lo invierte.
+//
+// ⚠️ `IMAGE_VIA=direct` devuelve el recurso a los SDK sin desplegar. Va aparte de `GEMINI_VIA`
+// porque son dos recursos distintos: se puede tener el texto en KIE y la imagen en los SDK, o al
+// revés, que es justo el punto de migrar de a uno.
+function imagenDirecta(): boolean {
+  return process.env.IMAGE_VIA === 'direct'
 }
 
 // ⚠️ Latencia de imagen (constraint de despliegue, NO se resuelve solo con este cableado):
@@ -52,40 +84,6 @@ export const BRANDING_SYSTEM_PROMPT = fs.readFileSync(
   'utf-8'
 )
 
-// Gemini IGNORA los maxLength del responseSchema y a veces devuelve strings más largos que el
-// `.max()` del esquema → el safeParse estricto tiraba ZodError (y 500-eaba /copy tras 3 reintentos).
-// Los `.max()` de copy son una defensa contra texto largo, no una validación dura: recortamos los
-// strings 'too_big' a su máximo y reintentamos el parse en vez de rechazar. Solo toca strings
-// (un array/número 'too_big' no se recorta → se deja fallar como antes). Puro y testeable.
-function valueAtPath(obj: unknown, path: readonly (string | number | symbol)[]): unknown {
-  return path.reduce<unknown>((o, k) => (o == null ? o : (o as Record<string | number, unknown>)[k as string | number]), obj)
-}
-// Recorta a `max` pero en LÍMITE DE PALABRA (nunca a mitad de palabra, que dejaba basura visible
-// como "Sient." o "absor…"): corta, retrocede al último espacio si no perdés demasiado, y quita
-// separadores finales (coma, punto, guiones). Exportada: la reusa el post-trim de copy.ts.
-export function sliceToWord(s: string, max: number): string {
-  if (s.length <= max) return s
-  let cut = s.slice(0, max)
-  const lastSpace = cut.lastIndexOf(' ')
-  if (lastSpace > max * 0.5) cut = cut.slice(0, lastSpace)
-  return cut.replace(/[\s,;:.–—-]+$/, '')
-}
-
-export function clampTooBigStrings(obj: unknown, error: z.ZodError): boolean {
-  let changed = false
-  for (const issue of error.issues) {
-    if (issue.code !== 'too_big' || typeof issue.maximum !== 'number' || issue.path.length === 0) continue
-    const parent = valueAtPath(obj, issue.path.slice(0, -1))
-    const key = issue.path[issue.path.length - 1] as string | number
-    const cur = parent == null ? undefined : (parent as Record<string | number, unknown>)[key]
-    if (typeof cur === 'string' && cur.length > issue.maximum) {
-      ;(parent as Record<string | number, unknown>)[key] = sliceToWord(cur, issue.maximum)
-      changed = true
-    }
-  }
-  return changed
-}
-
 // Gemini structured (fallback). Contiene la lógica de recuperación de strings 'too_big'.
 // Exportada también como entrada directa para el análisis forense de video:
 // `callStructured` es OpenAI-primario y gpt-4o-mini no acepta partes de video, así que
@@ -97,12 +95,27 @@ export async function geminiCallStructured<T>(
   maxRetries = 3,
   systemInstruction: string = SYSTEM_PROMPT,
 ): Promise<T> {
+  return viaDirecta()
+    ? geminiDirectoStructured(schemaName, schema, parts, maxRetries, systemInstruction)
+    : kieGeminiStructured(schemaName, schema, parts, maxRetries, systemInstruction)
+}
+
+/** El camino de siempre por `@google/genai`. Solo se usa con `GEMINI_VIA=direct`. */
+async function geminiDirectoStructured<T>(
+  schemaName: string,
+  schema: z.ZodSchema<T>,
+  parts: Part[],
+  maxRetries: number,
+  systemInstruction: string,
+): Promise<T> {
   let lastError: unknown = new Error(`geminiCallStructured(${schemaName}): no attempts`)
+  // El reintento NO puede mandar el mismo prompt: ver `correccionDeLargo`.
+  let correccion: string | null = null
   for (let i = 0; i < maxRetries; i++) {
     try {
       const res = await getAI().models.generateContent({
         model: 'gemini-2.5-flash',
-        contents: [{ role: 'user', parts }],
+        contents: [{ role: 'user', parts: correccion ? [...parts, { text: correccion }] : parts }],
         config: {
           systemInstruction,
           responseMimeType: 'application/json',
@@ -112,9 +125,20 @@ export async function geminiCallStructured<T>(
       const obj = JSON.parse(res.text ?? '')
       let parsed = schema.safeParse(obj)
       // Recupera el caso común: strings sobre el límite → recorta y reintenta el parse (no la API).
-      if (!parsed.success && clampTooBigStrings(obj, parsed.error)) parsed = schema.safeParse(obj)
+      // ⚠️ EL RECORTE ES EL ÚLTIMO RECURSO, NO EL PRIMERO. Recortar en el primer intento REPARA en
+      // silencio lo que el modelo escribió de más, y así nunca se le vuelve a pedir: el copy sale
+      // amputado aunque un segundo intento lo habría escrito completo. Medido en una landing real
+      // —"…con ingredientes de alta " y un titular cortado en "¡Espera a ver"— con el system
+      // prompt diciéndole explícitamente que no llegue al tope.
+      //
+      // Ahora un `too_big` deja fallar el parse y se reintenta; solo en el ÚLTIMO intento se
+      // recorta, para devolver algo en vez de tirar (que es el 500 tras tres intentos que este
+      // recorte vino a evitar en su día).
+      const ultimo = i === maxRetries - 1
+      if (!parsed.success && ultimo && clampTooBigStrings(obj, parsed.error)) parsed = schema.safeParse(obj)
       if (parsed.success) return parsed.data
       lastError = parsed.error
+      correccion = correccionDeLargo(parsed.error)
     } catch (e) {
       lastError = e
     }
@@ -153,6 +177,11 @@ export async function callStructured<T>(
 
 // Texto libre (razonamiento): OpenAI primario, Gemini fallback.
 async function geminiCallReasoning(systemPrompt: string, userMessage: string): Promise<string> {
+  return viaDirecta() ? geminiDirectoReasoning(systemPrompt, userMessage) : kieGeminiReasoning(systemPrompt, userMessage)
+}
+
+/** El camino de siempre por `@google/genai`. Solo se usa con `GEMINI_VIA=direct`. */
+async function geminiDirectoReasoning(systemPrompt: string, userMessage: string): Promise<string> {
   const res = await getAI().models.generateContent({
     model: 'gemini-2.5-flash',
     contents: [{ role: 'user', parts: [{ text: userMessage }] }],
@@ -239,6 +268,29 @@ export async function generateImage(
   opts?: { aspectRatio?: string; imageSize?: string; preferGemini?: boolean }
 ): Promise<string> {
   const allParts: Part[] = [...parts, { text: SPANISH_RULE }]
+
+  // Por KIE los dos modelos hablan el mismo protocolo, así que el par se arma acá y el orden es el
+  // de siempre: `preferGemini` pone a nano-banana-2 (gemini-3.1-flash-image) de primario. Lo usan
+  // la placa de zona de landing —donde gpt-image-2 modera el encuadre de cuerpo sin rostro en 4 de
+  // 4 corridas— y el avatar y las anclas del video.
+  if (!imagenDirecta() && !geminiForced()) {
+    const [primero, segundo]: ModeloImagen[] = opts?.preferGemini
+      ? ['nano-banana-2', 'gpt-image-2']
+      : ['gpt-image-2', 'nano-banana-2']
+    try {
+      const out = await kieGenerateImage(primero, allParts, maxRetries, opts)
+      if (out) return out
+      console.warn(`[llm] imagen ${primero} vacía → respaldo ${segundo}`)
+    } catch (e) {
+      // Una imagen rechazada por MODERACIÓN cae acá igual que un fallo de red, y el respaldo es la
+      // respuesta correcta: está medido que gpt-image-2 rechaza ~1 de cada 3 sobre una foto de
+      // persona, con la misma foto y el mismo prompt. Reintentar con el que ya dijo que no es
+      // repetirle la pregunta.
+      console.warn(`[llm] imagen ${primero} falló → respaldo ${segundo}`, e)
+    }
+    return kieGenerateImage(segundo, allParts, maxRetries, opts)
+  }
+
   if (geminiForced()) return geminiGenerateImage(allParts, maxRetries, opts)
   // `preferGemini` invierte el orden de proveedores para UNA llamada, igual que en callStructured.
   // Existe porque hay imágenes que gpt-image-2 rechaza SIEMPRE por política de contenido — la placa
@@ -346,6 +398,20 @@ export function refinePrompt(resultImageNumber: number, feedback: string): strin
     `before/after halves — already point at the body zone this product acts on, and its color ` +
     `palette is already this brand's. Keep both exactly as they are in image ${resultImageNumber}. ` +
     `NEVER re-aim them at the zone shown in image 1, and never restore image 1's colors.`
+  // ⚠️ TERCER CANDADO, MISMO HUECO. STEP5 congela el tratamiento tipográfico de la referencia y
+  // deja que solo cambie el COLOR del texto; refine no lee ese instructivo, así que sin nombrarlo
+  // acá la regeneración re-tipografía el anuncio — cambia la familia, el peso o la caja "para que
+  // combine con la marca" y el anuncio deja de espejar a la referencia, que es lo único que esta
+  // tool promete replicar.
+  //
+  // ⚠️ Ojo con la rama SIN feedback: ahí se pide una variación de tratamiento visual, y sin este
+  // candado la tipografía es justo lo primero que un modelo entiende por "otra versión".
+  const typographyLock =
+    `The typographic treatment in image ${resultImageNumber} — typeface, weight, case, ` +
+    `letter-spacing, alignment, the size hierarchy between blocks, and any effect on the letters ` +
+    `(outline, shadow, highlight box, angled baseline) — was copied from the reference on purpose. ` +
+    `Reproduce it exactly. Only the text COLOR may differ, and it already does. Never restyle, ` +
+    `re-set or "modernize" the type, and never resize one text block relative to another.`
   // Con feedback el cambio es SAGRADO y EXCLUSIVO: solo eso, el resto pixel-idéntico
   // (no redibujar ni "mejorar" lo no pedido). Sin feedback, una variación fresca
   // (el botón "Regenerar" sin texto debe dar algo distinto, no un eco de la misma).
@@ -358,6 +424,7 @@ export function refinePrompt(resultImageNumber: number, feedback: string): strin
         `anything not asked.`,
         identityLock,
         adaptationLock,
+        typographyLock,
         `Change request: ${feedback.trim()}`,
       ].join(' ')
     : [
@@ -369,6 +436,7 @@ export function refinePrompt(resultImageNumber: number, feedback: string): strin
         `image 1 (the reference ad) — from image 1 copy ONLY the layout, never who appears in it.`,
         identityLock,
         adaptationLock,
+        typographyLock,
         `Vary only the visual treatment — lighting, framing detail, background texture, and how`,
         `strongly the accents read WITHIN that same palette — so it reads as a different take of`,
         `the same ad, never a redesign.`,

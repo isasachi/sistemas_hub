@@ -16,6 +16,7 @@ interface WizardState {
   logoUrl: string | null
   productScan: ProductScan | null
   productName: string | null
+  whatItIs: string | null
   whatItDoes: string | null
   targetAudience: string | null
   copyVersions: CopyVersions | null
@@ -34,6 +35,7 @@ interface WizardActions {
     logoUrl: string | null
     productScan: ProductScan
     productName: string
+    whatItIs: string
     whatItDoes: string
     targetAudience: string
   }) => void
@@ -43,6 +45,8 @@ interface WizardActions {
   resetFromStep: (step: number) => void
   hydrateFromSession: (session: SessionResponse) => void
   startNewSession: () => Promise<void>
+  ensureSession: () => Promise<string | null>
+  resetSession: () => void
   setRegens: (m: Record<string, number>) => void
   setRegen: (kind: string, n: number) => void
 }
@@ -58,6 +62,7 @@ const initialState: WizardState = {
   logoUrl: null,
   productScan: null,
   productName: null,
+  whatItIs: null,
   whatItDoes: null,
   targetAudience: null,
   copyVersions: null,
@@ -66,7 +71,7 @@ const initialState: WizardState = {
   regens: {},
 }
 
-export const useWizardStore = create<WizardState & WizardActions>((set) => ({
+export const useWizardStore = create<WizardState & WizardActions>((set, get) => ({
   ...initialState,
 
   setSessionId: (id) => set({ sessionId: id }),
@@ -76,8 +81,8 @@ export const useWizardStore = create<WizardState & WizardActions>((set) => ({
   setReferenceData: ({ referenceUrl, referenceAnalysis }) =>
     set({ referenceUrl, referenceAnalysis, step: 1 }),
 
-  setProductData: ({ productUrl, logoUrl, productScan, productName, whatItDoes, targetAudience }) =>
-    set({ productUrl, logoUrl, productScan, productName, whatItDoes, targetAudience, step: 2 }),
+  setProductData: ({ productUrl, logoUrl, productScan, productName, whatItIs, whatItDoes, targetAudience }) =>
+    set({ productUrl, logoUrl, productScan, productName, whatItIs, whatItDoes, targetAudience, step: 2 }),
 
   setCopyVersions: (copyVersions) => set({ copyVersions, step: 3 }),
 
@@ -91,13 +96,13 @@ export const useWizardStore = create<WizardState & WizardActions>((set) => ({
       Object.assign(resets, {
         referenceUrl: null, referenceAnalysis: null,
         productUrl: null, logoUrl: null, productScan: null,
-        productName: null, whatItDoes: null, targetAudience: null,
+        productName: null, whatItIs: null, whatItDoes: null, targetAudience: null,
         copyVersions: null, confirmedCopy: null, imageUrl: null,
       })
     } else if (step <= 2) {
       Object.assign(resets, {
         productUrl: null, logoUrl: null, productScan: null,
-        productName: null, whatItDoes: null, targetAudience: null,
+        productName: null, whatItIs: null, whatItDoes: null, targetAudience: null,
         copyVersions: null, confirmedCopy: null, imageUrl: null,
       })
     } else if (step <= 3) {
@@ -119,6 +124,7 @@ export const useWizardStore = create<WizardState & WizardActions>((set) => ({
       logoUrl: session.logo_url,
       productScan: session.product_scan,
       productName: session.product_name,
+      whatItIs: session.what_it_is,
       whatItDoes: session.what_it_does,
       targetAudience: session.target_audience,
       copyVersions: session.copy_versions,
@@ -143,4 +149,31 @@ export const useWizardStore = create<WizardState & WizardActions>((set) => ({
       set({ sessionError: true })
     }
   },
+
+  /**
+   * El id de la sesión, creándola si todavía no existe.
+   *
+   * ⚠️ ES LO QUE SACA LA CREACIÓN DE FILAS DEL MONTAJE DEL WIZARD: abrir la tool y no
+   * hacer nada creaba una fila. El listado del dashboard las filtra al LEER, pero eso
+   * ocultaba el síntoma — se seguían creando. Ver `ensureSession` en `store/video.ts`.
+   */
+  ensureSession: async () => {
+    const actual = get().sessionId
+    if (actual) return actual
+    await get().startNewSession()
+    return get().sessionId
+  },
+
+  /**
+   * Vacía el wizard SIN crear ninguna fila.
+   *
+   * ⚠️ EXISTE POR UNA REGRESIÓN MEDIDA. Cuando el montaje del wizard creaba la sesión, el
+   * botón "Empezar" de la intro (`ToolIntro.empezar`) solo tenía que borrar el id de
+   * `localStorage` y navegar: el wizard llegaba vacío y creaba una fila nueva. Al mover la
+   * creación al primer insumo, ese borrado dejó de alcanzar — **el store de zustand es un
+   * singleton de MÓDULO y sobrevive la navegación del cliente**, así que el wizard se
+   * remontaba con la sesión anterior todavía en memoria y el usuario aterrizaba en el
+   * último paso de su sesión anterior en vez de en uno nuevo.
+   */
+  resetSession: () => set({ ...initialState }),
 }))

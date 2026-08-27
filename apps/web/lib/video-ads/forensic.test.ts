@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { buildForensicInstruction, ForensicReportSchema, repairCutTiming, mergeMicroCortes, muestraPersona, CPS_MAX, type ForensicReport, enProsa, limpiarDialogo, verificarHablantes } from './forensic'
+import { z } from 'zod'
+import { buildForensicInstruction, ForensicReportSchema, repairCutTiming, mergeMicroCortes, muestraPersona, corteMuestraPersona, CPS_MAX, type ForensicReport, type Corte, enProsa, limpiarDialogo, verificarHablantes, unirTomasContinuas, reconciliarConVentana, coreografiaEscasa, MIN_TOMA_SEG, ObjetoEnManoSchema, MicroSchema, CorteSchema } from './forensic'
 
 // El prompt es el contrato con Gemini. Estos asserts fijan las reglas del spec que,
 // si se caen, producen el bug que ya vimos en producción: cortes inventados por
@@ -61,7 +62,7 @@ describe('repairCutTiming', () => {
   const corte = (n: number, duracionSeg: number, dialogo: string) => ({
     n, duracionSeg, dialogo,
     tiempo: `00:${String(n).padStart(2, '0')} - 00:${String(n + 1).padStart(2, '0')}`,
-    accion: 'a', camara: 'c', textoOverlay: 'No aparece', transicion: 'corte directo',
+    accion: 'a', camara: 'c', textoOverlay: 'No aparece', transicion: 'corte directo', objetoEnMano: null, micro: null,
   })
   const informe = (cortes: ReturnType<typeof corte>[]): ForensicReport => ({
     duracionTotalSeg: cortes.reduce((n, c) => n + c.duracionSeg, 0),
@@ -70,7 +71,7 @@ describe('repairCutTiming', () => {
     sujeto: '', vestuario: '', producto: '', fondo: '', elementosGraficos: '',
     cortes,
     tomas: cortes.map((c) => ({
-      n: c.n, encuadre: '', posicion: '', accionFisica: '', objeto: '',
+      n: c.n, encuadre: '', posicion: 'x', accionFisica: '', objeto: '',
       dialogo: c.dialogo, duracionSeg: c.duracionSeg,
     })),
     edicion: { sincronizacion: '', textoOverlay: '', escalaZoom: '', cortes: '', ritmo: '', corteFinal: '' },
@@ -194,7 +195,7 @@ describe('ForensicReportSchema', () => {
         accion: 'Sostiene el frasco frente a la cámara',
         camara: 'Primer plano, altura de ojos, cámara en mano',
         dialogo: 'este suero de niacinamida', textoOverlay: 'este suero de niacinamida',
-        transicion: 'corte directo',
+        transicion: 'corte directo', objetoEnMano: null, micro: null,
       }],
       tomas: [{
         n: 1, encuadre: 'Primer plano', posicion: 'Frente a cámara',
@@ -229,7 +230,7 @@ describe('ForensicReportSchema', () => {
 describe('mergeMicroCortes', () => {
   const corte = (n: number, dur: number, camara: string, dialogo = `frase ${n}`) => ({
     n, tiempo: `00:${String(n).padStart(2, '0')} - 00:${String(n + 1).padStart(2, '0')}`,
-    duracionSeg: dur, accion: `accion ${n}`, camara, dialogo, textoOverlay: 'No aparece', transicion: 'corte directo',
+    duracionSeg: dur, accion: `accion ${n}`, camara, dialogo, textoOverlay: 'No aparece', transicion: 'corte directo', objetoEnMano: null, micro: null,
   })
   const rep = (cortes: ReturnType<typeof corte>[]): ForensicReport => ({
     duracionTotalSeg: cortes.reduce((a, c) => a + c.duracionSeg, 0),
@@ -324,7 +325,7 @@ describe('mergeMicroCortes', () => {
 describe('repairCutTiming — piso de duración visible', () => {
   const c = (n: number, dur: number, dialogo: string) => ({
     n, tiempo: `t${n}`, duracionSeg: dur, accion: 'a', camara: 'A', dialogo,
-    textoOverlay: 'No aparece', transicion: 'corte',
+    textoOverlay: 'No aparece', transicion: 'corte', objetoEnMano: null, micro: null,
   })
   const rep = (cortes: ReturnType<typeof c>[]): ForensicReport => ({
     duracionTotalSeg: cortes.reduce((a, x) => a + x.duracionSeg, 0), caracteresGuion: 0,
@@ -389,7 +390,7 @@ describe('muestraPersona', () => {
 describe('mergeMicroCortes — no cruza la frontera persona/producto', () => {
   const c = (n: number, dur: number, accion: string) => ({
     n, tiempo: `t${n}`, duracionSeg: dur, accion, camara: `C${n}`, dialogo: '',
-    textoOverlay: 'No aparece', transicion: 'corte',
+    textoOverlay: 'No aparece', transicion: 'corte', objetoEnMano: null, micro: null,
   })
   const rep = (cortes: ReturnType<typeof c>[]): ForensicReport => ({
     duracionTotalSeg: cortes.reduce((a, x) => a + x.duracionSeg, 0), caracteresGuion: 0,
@@ -434,7 +435,7 @@ describe('mergeMicroCortes — no cruza la frontera persona/producto', () => {
 describe('repairCutTiming — el piso no infla', () => {
   const c = (n: number, dur: number, dialogo: string) => ({
     n, tiempo: `t${n}`, duracionSeg: dur, accion: 'a', camara: 'A', dialogo,
-    textoOverlay: 'No aparece', transicion: 'corte',
+    textoOverlay: 'No aparece', transicion: 'corte', objetoEnMano: null, micro: null,
   })
   const rep = (cortes: ReturnType<typeof c>[]): ForensicReport => ({
     duracionTotalSeg: cortes.reduce((a, x) => a + x.duracionSeg, 0), caracteresGuion: 0,
@@ -554,7 +555,7 @@ describe('verificarHablantes', () => {
   const corte = (over: Record<string, unknown> = {}) => ({
     n: 1, tiempo: '00:00 - 00:05', duracionSeg: 5, accion: 'a', camara: 'plano medio',
     dialogo: 'Tome, doctorcito. No se preocupe por eso.',
-    textoOverlay: 'No aparece', transicion: 'corte', ...over,
+    textoOverlay: 'No aparece', transicion: 'corte', objetoEnMano: null, micro: null, ...over,
   })
   const rep = (cortes: unknown[]) => ({ cortes, tomas: [] } as never)
 
@@ -641,5 +642,385 @@ describe('muestraPersona — la negación manda', () => {
 
   it('un plano sin personas mencionadas sigue siendo de producto', () => {
     expect(muestraPersona('Placa final con el logotipo de la marca sobre fondo blanco')).toBe(false)
+  })
+})
+
+describe('unirTomasContinuas', () => {
+  const micro = { cuerpo: 'quieto', manos: 'sube', rostro: 'sonríe', cabello: 'fijo', entorno: 'nada' }
+  const corte = (n: number, p: Partial<Corte> = {}): Corte => ({
+    n, tiempo: `00:0${n - 1} - 00:0${n}`, duracionSeg: 3,
+    accion: 'La mujer sostiene el frasco', camara: 'Primer plano', dialogo: `linea ${n}`,
+    textoOverlay: 'No aparece', transicion: 'corte directo',
+    objetoEnMano: { inicio: 'frasco', fin: 'frasco', accesorios: '' }, micro,
+    ...p,
+  })
+  const base = (cortes: Corte[]): ForensicReport => ({
+    duracionTotalSeg: cortes.reduce((n, c) => n + c.duracionSeg, 0),
+    caracteresGuion: 0, guionOriginal: '', sujeto: '', vestuario: '', producto: '', fondo: '',
+    elementosGraficos: '', cortes,
+    tomas: cortes.map((c) => ({ n: c.n, encuadre: '', posicion: 'x', accionFisica: '', objeto: '', dialogo: c.dialogo, duracionSeg: c.duracionSeg })),
+    edicion: { sincronizacion: '', textoOverlay: '', escalaZoom: '', cortes: '', ritmo: '', corteFinal: '' },
+    resumenParaUsuario: '',
+  })
+
+  it('une cortes consecutivos que son la misma toma', () => {
+    const { report, fusiones } = unirTomasContinuas(base([corte(1), corte(2)]), 15, 300)
+    expect(report.cortes).toHaveLength(1)
+    expect(report.cortes[0].duracionSeg).toBe(6)
+    expect(report.cortes[0].tiempo).toBe('00:00 - 00:02')
+    expect(report.cortes[0].dialogo).toBe('linea 1 linea 2')
+    expect(fusiones).toHaveLength(1)
+  })
+
+  // ⚠️ LA CONDICIÓN QUE JUSTIFICA TODA LA FUNCIÓN. En el original ese salto es un corte
+  // de montaje; dentro de un clip continuo es un gotero teletransportándose.
+  it('NO une si lo que hay en la mano cambia entre un corte y el otro', () => {
+    const a = corte(1, { objetoEnMano: { inicio: 'nada', fin: 'gotero', accesorios: '' } })
+    const b = corte(2, { objetoEnMano: { inicio: 'nada', fin: 'nada', accesorios: '' } })
+    expect(unirTomasContinuas(base([a, b]), 15, 300).report.cortes).toHaveLength(2)
+  })
+
+  it('tolera el artículo y las mayúsculas al comparar el objeto', () => {
+    const a = corte(1, { objetoEnMano: { inicio: 'nada', fin: 'El frasco', accesorios: '' } })
+    const b = corte(2, { objetoEnMano: { inicio: 'frasco', fin: 'frasco', accesorios: '' } })
+    expect(unirTomasContinuas(base([a, b]), 15, 300).report.cortes).toHaveLength(1)
+  })
+
+  it('NO une planos distintos: la toma continua necesitaría un corte adentro', () => {
+    expect(unirTomasContinuas(base([corte(1), corte(2, { camara: 'Plano medio' })]), 15, 300)
+      .report.cortes).toHaveLength(2)
+  })
+
+  // ⚠️ La clase la DECLARA `micro` ("no aparece"), no la prosa de `accion`: el forense
+  // escribe en telegrama y sin sujeto. Ver `corteMuestraPersona`.
+  it('NO une un plano de persona con uno sin persona', () => {
+    const b = corte(2, {
+      accion: 'Detalle del frasco',
+      micro: { cuerpo: 'no aparece', manos: 'sostienen el frasco', rostro: 'no aparece', cabello: 'no aparece', entorno: 'fondo quieto' },
+    })
+    expect(unirTomasContinuas(base([corte(1), b]), 15, 300).report.cortes).toHaveLength(2)
+  })
+
+  it('NO une voz en off con habla a cámara', () => {
+    expect(unirTomasContinuas(base([corte(1), corte(2, { vozEnOff: true })]), 15, 300)
+      .report.cortes).toHaveLength(2)
+  })
+
+  // Fail-closed: toda sesión analizada antes de que el campo existiera cae acá.
+  it('sin objetoEnMano no une nada, y devuelve el MISMO objeto', () => {
+    const r = base([corte(1, { objetoEnMano: undefined }), corte(2, { objetoEnMano: undefined })])
+    const out = unirTomasContinuas(r, 15, 300)
+    expect(out.report).toBe(r)
+    expect(out.fusiones).toEqual([])
+  })
+
+  it('respeta el cap de segundos y el de caracteres', () => {
+    const largos = [corte(1, { duracionSeg: 9 }), corte(2, { duracionSeg: 9 })]
+    expect(unirTomasContinuas(base(largos), 15, 300).report.cortes).toHaveLength(2)
+    const habladores = [corte(1, { dialogo: 'x'.repeat(200) }), corte(2, { dialogo: 'x'.repeat(200) })]
+    expect(unirTomasContinuas(base(habladores), 15, 300).report.cortes).toHaveLength(2)
+  })
+
+  // ⚠️ Unir A+B habilita AB+C, así que una pasada no es un punto fijo — y dos listas de
+  // cortes para el mismo contenido son dos scriptFingerprint distintas.
+  it('converge y es idempotente', () => {
+    const { report } = unirTomasContinuas(base([corte(1), corte(2), corte(3), corte(4)]), 15, 300)
+    expect(report.cortes).toHaveLength(1)
+    expect(report.cortes[0].duracionSeg).toBe(12)
+    expect(unirTomasContinuas(report, 15, 300).report).toBe(report)
+  })
+
+  it('concatena el detalle atómico en vez de quedarse con la mitad', () => {
+    const b = corte(2, { micro: { ...micro, manos: 'baja' } })
+    const { report } = unirTomasContinuas(base([corte(1), b]), 15, 300)
+    expect(report.cortes[0].micro?.manos).toBe('sube; después baja')
+    expect(report.cortes[0].micro?.cuerpo).toBe('quieto')
+  })
+
+  it('la toma resultante abarca de la primera mano a la última', () => {
+    const a = corte(1, { objetoEnMano: { inicio: 'nada', fin: 'frasco', accesorios: '' } })
+    const b = corte(2, { objetoEnMano: { inicio: 'frasco', fin: 'frasco abierto', accesorios: '' } })
+    const { report } = unirTomasContinuas(base([a, b]), 15, 300)
+    expect(report.cortes[0].objetoEnMano).toEqual({ inicio: 'nada', fin: 'frasco abierto', accesorios: '' })
+  })
+})
+
+describe('corteMuestraPersona', () => {
+  const sin = { cuerpo: 'no aparece', manos: 'sostienen el frasco', rostro: 'no aparece', cabello: 'no aparece', entorno: 'fondo quieto' }
+  const con = { cuerpo: 'torso erguido', manos: 'sube la mano', rostro: 'sonríe', cabello: 'fijo', entorno: 'quieto' }
+
+  // ⚠️ EL CASO QUE LO MOTIVÓ, medido sobre una sesión real: el forense escribe la acción
+  // en telegrama y SIN SUJETO, así que buscar "mujer" en la prosa da false para un plano
+  // de persona evidente. Los tres cortes de esa sesión daban false.
+  it('la acción en telegrama sin sujeto ya no engaña al clasificador', () => {
+    const accion = 'Sujeta pipeta con mano derecha, aplica producto en mejilla, mira a cámara.'
+    expect(muestraPersona(accion)).toBe(false)
+    expect(corteMuestraPersona({ accion, micro: con })).toBe(true)
+  })
+
+  it('un plano de producto se declara sin persona', () => {
+    expect(corteMuestraPersona({ accion: 'Detalle del frasco', micro: sin })).toBe(false)
+  })
+
+  // Un plano de manos sigue siendo plano de persona a efectos de continuidad y fotograma.
+  it('basta con que UNA parte del cuerpo esté descrita', () => {
+    expect(corteMuestraPersona({ accion: 'x', micro: { ...sin, cabello: 'cae sobre la cara' } })).toBe(true)
+  })
+
+  // Sin `micro` (toda sesión anterior) el comportamiento es exactamente el de antes.
+  it('sin micro cae al heurístico de siempre', () => {
+    expect(corteMuestraPersona({ accion: 'La mujer sostiene el frasco' })).toBe(true)
+    expect(corteMuestraPersona({ accion: 'Detalle del zapato, sin persona en cuadro' })).toBe(false)
+  })
+})
+
+describe('MicroSchema — por qué el .catch va en la CASILLA y no en el objeto', () => {
+  // ⚠️ MEDIDO EN VIVO Y CARÍSIMO. Con `micro: MicroSchema.nullable().catch(null)`, una
+  // casilla que el modelo omitiera hacía fallar el parse del objeto y `.catch` devolvía
+  // null: se perdían las SEIS. En la sesión que lo destapó, `objetoEnMano` volvió 5/5 y
+  // `micro` volvió null en los 5 cortes — el detalle atómico que el modelo SÍ produjo se
+  // tiró en silencio.
+  it('una casilla que falte no arrastra a las otras cinco', () => {
+    const out = MicroSchema.parse({ cuerpo: 'torso quieto', manos: 'sube', rostro: 'sonríe', cabello: 'fijo' })
+    expect(out.entorno).toBe('')
+    expect(Object.values(out).filter(Boolean)).toHaveLength(4)
+  })
+
+  // ⚠️ LA INFALIBILIDAD ES LO QUE PERMITE QUE EL OBJETO SEA REQUERIDO SIN RIESGO. Si
+  // alguien devuelve una casilla a `z.string()` a secas, el parse del objeto vuelve a poder
+  // fallar y el `.catch` de afuera lo convierte en null — se pierden las seis otra vez.
+  it('el objeto NO puede fallar: es lo que hace seguro el .catch de afuera', () => {
+    expect(MicroSchema.safeParse({}).success).toBe(true)
+    expect(ObjetoEnManoSchema.safeParse({}).success).toBe(true)
+  })
+
+  // Y la otra mitad: lo que no se le EXIGE al modelo, no lo manda. Medido — con los dos
+  // objetos en `.optional()`, una corrida entera volvió con las claves ausentes: 0/5.
+  it('los dos objetos van en el `required` del corte', () => {
+    const req = (z.toJSONSchema(CorteSchema) as { required?: string[] }).required ?? []
+    expect(req).toContain('micro')
+    expect(req).toContain('objetoEnMano')
+  })
+
+  it('una sesión guardada sin ninguno de los dos sigue parseando', () => {
+    const c = CorteSchema.parse({ n: 1, tiempo: 'a', duracionSeg: 1, accion: 'x', camara: 'y', dialogo: '', textoOverlay: '', transicion: '', objetoEnMano: null, micro: null })
+    expect(c.micro).toBeNull()
+    expect(c.objetoEnMano).toBeNull()
+  })
+
+  // ⚠️ LA SALIDA QUE EL SCHEMA LE OFRECÍA AL MODELO. `.nullable().catch(null)` emite
+  // {"default": null, "anyOf": [{"type":"string"},{"type":"null"}]} — o sea le dice que
+  // null es legal Y que es el default. Medido: con esa forma los objetos volvieron 6/6
+  // pero las cuatro casillas nuevas salieron null en los 6 cortes. `.catch('')` deja el
+  // campo en `required`, infalible, y SIN null donde escaparse.
+  it('ninguna casilla le ofrece `null` como respuesta legal', () => {
+    for (const esquema of [MicroSchema, ObjetoEnManoSchema]) {
+      const props = (z.toJSONSchema(esquema) as { properties: Record<string, unknown> }).properties
+      for (const [k, v] of Object.entries(props)) {
+        expect(JSON.stringify(v), `${k} le ofrece null al modelo`).not.toContain('null')
+      }
+    }
+  })
+
+  it('las seis casillas se le siguen exigiendo al modelo', () => {
+    const req = (z.toJSONSchema(MicroSchema) as { required?: string[] }).required ?? []
+    for (const k of ['cuerpo', 'manos', 'rostro', 'cabello', 'entorno']) expect(req).toContain(k)
+  })
+})
+
+describe('ObjetoEnManoSchema — por qué NO son .optional()', () => {
+  // ⚠️ Un campo `.optional()` sale del `required` del JSON Schema, y lo que no se le exige
+  // al modelo lo omite en silencio. Medido en la primera sesión analizada con el schema:
+  // `izquierda` y `derecha` volvieron en 0 de 4 cortes, teniendo el dato en `accion`
+  // ("Sujeta frasco con izquierda, saca gotero con derecha"). El eje entero quedaba en
+  // no-op con el síntoma idéntico al bug que vino a arreglar.
+  it('los tres campos van en el `required` que se le manda al modelo', () => {
+    const req = (z.toJSONSchema(ObjetoEnManoSchema) as { required?: string[] }).required ?? []
+    for (const k of ['inicio', 'fin', 'accesorios']) expect(req).toContain(k)
+  })
+
+  // Y la otra mitad: un `.nullable()` a secas reventaría el parse de toda sesión guardada.
+  it('una sesión vieja sin los campos sigue parseando', () => {
+    const out = ObjetoEnManoSchema.parse({ inicio: 'frasco', fin: 'frasco' })
+    expect(out).toEqual({ inicio: 'frasco', fin: 'frasco', accesorios: '' })
+  })
+})
+
+describe('reconciliarConVentana', () => {
+  const corte = (n: number, tiempo: string, duracionSeg: number, dialogo = ''): Corte => ({
+    n, tiempo, duracionSeg, accion: 'x', camara: 'y', dialogo,
+    textoOverlay: 'No aparece', transicion: 'corte', objetoEnMano: null, micro: null,
+  })
+  const rep = (cortes: Corte[], total?: number): ForensicReport => ({
+    duracionTotalSeg: total ?? cortes.reduce((n, c) => n + c.duracionSeg, 0),
+    caracteresGuion: 0, guionOriginal: '', sujeto: '', vestuario: '', producto: '', fondo: '',
+    elementosGraficos: '', cortes,
+    tomas: cortes.map((c) => ({ n: c.n, encuadre: '', posicion: '', accionFisica: '', objeto: '', dialogo: c.dialogo, duracionSeg: c.duracionSeg })),
+    edicion: { sincronizacion: '', textoOverlay: '', escalaZoom: '', cortes: '', ritmo: '', corteFinal: '' },
+    resumenParaUsuario: '',
+  })
+
+  // ⚠️ EL CASO REAL: el anuncio de serum dedica ~8 s al frasco a pantalla completa; el
+  // forense declaró la ventana 00:10-00:15 y una duración de 3,4 s. La ventana manda.
+  it('levanta el corte mudo que el modelo subestimó', () => {
+    const { report, ajustes } = reconciliarConVentana(rep([
+      corte(1, '00:00 - 00:10', 10, 'hablando'),
+      corte(2, '00:10 - 00:15', 3.4),
+      corte(3, '00:15 - 00:20', 5, 'más'),
+    ], 20))
+    expect(report.cortes[1].duracionSeg).toBe(5)
+    expect(ajustes).toEqual([{ n: 2, de: 3.4, a: 5 }])
+    // `tomas` empareja 1-a-1 con `cortes` y tiene que seguirlas.
+    expect(report.tomas[1].duracionSeg).toBe(5)
+  })
+
+  // Fail-closed: sin una línea de tiempo coherente no hay motivo para creerle a la ventana.
+  it('no toca nada si las ventanas dejan un hueco', () => {
+    const r = rep([corte(1, '00:00 - 00:05', 3), corte(2, '00:09 - 00:14', 3)])
+    expect(reconciliarConVentana(r).report).toBe(r)
+  })
+
+  it('no toca nada si las ventanas se solapan', () => {
+    const r = rep([corte(1, '00:00 - 00:10', 3), corte(2, '00:05 - 00:15', 3)])
+    expect(reconciliarConVentana(r).report).toBe(r)
+  })
+
+  it('no toca nada si la suma no se parece a la duración total declarada', () => {
+    const r = rep([corte(1, '00:00 - 00:05', 5), corte(2, '00:05 - 00:10', 5)], 40)
+    expect(reconciliarConVentana(r).report).toBe(r)
+  })
+
+  it('no toca nada si alguna ventana es ilegible', () => {
+    const r = rep([corte(1, 'inicio - fin', 5), corte(2, '00:05 - 00:10', 5)])
+    expect(reconciliarConVentana(r).report).toBe(r)
+  })
+
+  // Un desacuerdo menor a 1 s es ruido de redondeo del formato MM:SS, no un error.
+  it('tolera el desacuerdo de menos de un segundo', () => {
+    const r = rep([corte(1, '00:00 - 00:05', 4.6), corte(2, '00:05 - 00:10', 5)], 9.6)
+    expect(reconciliarConVentana(r).ajustes).toEqual([])
+  })
+
+  it('es idempotente', () => {
+    const { report } = reconciliarConVentana(rep([
+      corte(1, '00:00 - 00:10', 10, 'x'), corte(2, '00:10 - 00:15', 3.4),
+    ], 15))
+    expect(reconciliarConVentana(report).report).toBe(report)
+  })
+})
+
+describe('reconciliar + reparar: el b-roll sobrevive a las dos pasadas', () => {
+  const corte = (n: number, tiempo: string, duracionSeg: number, dialogo = ''): Corte => ({
+    n, tiempo, duracionSeg, accion: 'x', camara: 'y', dialogo,
+    textoOverlay: 'No aparece', transicion: 'corte', objetoEnMano: null, micro: null,
+  })
+  // El caso real del anuncio de serum: un beat de producto MUDO entre dos tomas habladas
+  // cuyo diálogo no entra en su duración, o sea el reparto va a buscar de dónde sacar.
+  const base = () => ({
+    duracionTotalSeg: 20, caracteresGuion: 0, guionOriginal: '', sujeto: '', vestuario: '',
+    producto: '', fondo: '', elementosGraficos: '',
+    cortes: [
+      corte(1, '00:00 - 00:10', 10, 'x'.repeat(240)),
+      corte(2, '00:10 - 00:15', 3.4),
+      corte(3, '00:15 - 00:20', 5, 'x'.repeat(120)),
+    ],
+    tomas: [1, 2, 3].map((n) => ({ n, encuadre: '', posicion: '', accionFisica: '', objeto: '', dialogo: '', duracionSeg: 1 })),
+    edicion: { sincronizacion: '', textoOverlay: '', escalaZoom: '', cortes: '', ritmo: '', corteFinal: '' },
+    resumenParaUsuario: '',
+  }) as ForensicReport
+
+  // ⚠️ SIN PISO VISIBLE, LA RECONCILIACIÓN NO SIRVE DE NADA: un corte mudo tiene mínimo de
+  // habla 0, así que el reparto lo vacía para financiar a los hablados en la línea
+  // siguiente a la que acaba de levantarlo.
+  it('sin piso, el reparto vacía el beat mudo que se acaba de levantar', () => {
+    const { report } = reconciliarConVentana(base())
+    expect(report.cortes[1].duracionSeg).toBe(5)
+    const sinPiso = repairCutTiming(report).report
+    expect(sinPiso.cortes[1].duracionSeg).toBeLessThan(5)
+  })
+
+  it('con piso, el beat mudo conserva su duración real', () => {
+    const { report } = reconciliarConVentana(base())
+    const conPiso = repairCutTiming(report, MIN_TOMA_SEG).report
+    // Su duración REAL son los 5 s de su ventana, no `MIN_TOMA_SEG`: el piso está acotado
+    // a la duración que el corte ya tiene (es un suelo contra el vaciado, no un empujón
+    // hacia arriba). Comparar contra la constante coincidía por casualidad mientras valía
+    // 4, y rompía sola al atarla al piso de grok.
+    expect(conPiso.cortes[1].duracionSeg).toBe(5)
+    // Y el diálogo de los cortes hablados sigue siendo decible: el piso no rompe eso.
+    for (const c of conPiso.cortes) {
+      if (!c.dialogo) continue
+      expect(c.dialogo.length / c.duracionSeg).toBeLessThanOrEqual(CPS_MAX + 0.01)
+    }
+  })
+})
+
+describe('buildForensicInstruction — la escala de encuadre vive donde se declara el campo', () => {
+  const p = buildForensicInstruction()
+
+  // ⚠️ Estaba como bloque FLOTANTE antes de la sección de cortes, y la definición del campo
+  // decía "ver la escala de abajo" apuntando hacia arriba. Medido en la sesión siguiente:
+  // el modelo siguió devolviendo la etiqueta ("Plano medio, frontal, fija") en vez del
+  // punto de corte. La lección de esta tanda es que la instrucción tiene que vivir donde se
+  // declara el campo — es lo que funcionó con `micro.manos`.
+  it('la escala aparece DESPUÉS de nombrar el campo, no antes', () => {
+    const campo = p.indexOf('`camara`, que se declara así')
+    const escala = p.indexOf('EL ENCUADRE SE DECLARA POR DÓNDE CORTA')
+    expect(campo).toBeGreaterThan(0)
+    expect(escala).toBeGreaterThan(campo)
+  })
+
+  it('no quedan referencias colgantes a una escala que no está', () => {
+    expect(p).not.toContain('ver la escala de abajo')
+  })
+
+  it('da la escala completa por punto de corte', () => {
+    for (const t of ['hombros', 'pecho', 'esternón', 'cintura', 'muslos', 'cuerpo entero'])
+      expect(p).toContain(t)
+  })
+})
+
+describe('coreografiaEscasa', () => {
+  const corte = (n: number, duracionSeg: number, accion: string): Corte => ({
+    n, tiempo: '00:00 - 00:10', duracionSeg, accion, camara: '', dialogo: '',
+    textoOverlay: '', transicion: '', objetoEnMano: null, micro: null,
+  })
+  const rep = (cortes: Corte[]) => ({ cortes } as ForensicReport)
+
+  // ⚠️ EL CASO MEDIDO: un corte de 10 s descrito con dos frases. El original tiene seis o
+  // siete movimientos ahí, y el video generado se queda quieto el resto del tiempo.
+  it('marca el corte largo descrito con dos frases', () => {
+    const out = coreografiaEscasa(rep([corte(1, 10,
+      'Sostiene gotero con mano derecha, lo lleva a la mejilla. Luego, muestra el frasco frente al pecho')]))
+    expect(out).toHaveLength(1)
+    expect(out[0]).toMatchObject({ n: 1, seg: 10 })
+  })
+
+  it('no marca el corte con un movimiento cada dos segundos', () => {
+    expect(coreografiaEscasa(rep([corte(1, 6,
+      'levanta la mano derecha, destapa el frasco, aplica en la mejilla, baja la mano')]))).toEqual([])
+  })
+
+  // Un corte corto no tiene margen para muchos movimientos: no se le exige.
+  it('ignora los cortes de menos de 4 segundos', () => {
+    expect(coreografiaEscasa(rep([corte(1, 2, 'mira a cámara')]))).toEqual([])
+  })
+})
+
+describe('buildForensicInstruction — los cortes largos van por tramos', () => {
+  // ⚠️ MEDIDO: con la cuenta de "un movimiento cada 2 segundos" sola, los cortes cortos y
+  // medios llegan al piso (3 s → 3 movimientos, 7 s → 4) pero los LARGOS se quedan en ~4
+  // frases pase lo que pase — 20 s con 4, 11 s con 4. El modelo se topa en un número de
+  // cláusulas por respuesta, no en la instrucción. La estructura por tramos convierte
+  // "describí más" en "describí cada tramo", que es otra tarea.
+  const p = buildForensicInstruction()
+
+  it('pide tramos con marca de tiempo por encima de 10 segundos', () => {
+    expect(p).toMatch(/SI EL CORTE PASA DE 10 SEGUNDOS, DESCRÍBELO POR TRAMOS/)
+    expect(p).toContain('0-4 s:')
+  })
+
+  it('mantiene la cuenta de movimientos por segundo', () => {
+    expect(p).toMatch(/un movimiento por cada 2 segundos/i)
   })
 })

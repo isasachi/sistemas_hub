@@ -30,6 +30,20 @@ import { styleOf, DEFAULT_STYLE } from './style-dna'
 // distintas) en sus cards; `faq`/`garantia`/`cta-final` no llevan persona alguna.
 export const NO_TALENT_SECTIONS: Set<SectionType> = new Set(['faq', 'testimonios', 'garantia', 'cta-final'])
 
+/**
+ * ⚠️ EL SEPARADOR NO SE MANDA — se parte acá. El copy trae el bullet como "acción — complemento", y
+ * la primera versión de esto le pasaba el string CRUDO explicándole en palabras qué significaba el
+ * " — ". Verificado en un render real: el modelo hizo las dos líneas bien Y ADEMÁS imprimió el guion
+ * al final de la primera ("Energiza con sabor —"). Un separador que el modelo no ve es un separador
+ * que no puede dibujar, así que las dos partes van rotuladas y el " — " no viaja.
+ */
+export function enDosLineas(b: string): string {
+  const [uno, ...resto] = b.split(' — ')
+  return resto.length
+    ? `  • LINE 1 (bold): "${uno}" | LINE 2 (light): "${resto.join(' — ')}"`
+    : `  • LINE 1 (bold): "${uno}"`
+}
+
 function copyBlock(raw: SectionCopy): string {
   // Segunda puerta de `cleanAccentWord` (la primera está en `copy.ts`, al generar). Esta repara las
   // sesiones YA guardadas —5 de 26 traen un accentWord que no está en su headline— sin migración: el
@@ -40,15 +54,34 @@ function copyBlock(raw: SectionCopy): string {
   // modelo elija otra o la envuelva en [ ] para "enfatizar".
   if (copy.accentWord) lines.push(`Emphasis: within the headline, render the words "${copy.accentWord}" in the brand ACCENT COLOR only — same font and size, NO brackets, quotes, underline or box around them.`)
   if (copy.subheadline) lines.push(`Subheadline: "${copy.subheadline}".`)
-  if (copy.type === 'antes-despues') lines.push(`Label the left/before state "ANTES" and the right/after state "DESPUÉS" (those exact Spanish words, not "before/after").`)
-  if (copy.bullets?.length) lines.push(`${copy.type === 'antes-despues' ? 'ANTES column — problems, each with a red ✗' : 'Bullets'}:\n${copy.bullets.map((b) => `  • ${b}`).join('\n')}`)
-  if (copy.bulletsAfter?.length) lines.push(`AFTER column — results, each with a green ✓ (paired beside the BEFORE column):\n${copy.bulletsAfter.map((b) => `  • ${b}`).join('\n')}`)
+  if (copy.kind === 'antes-despues') lines.push(`Label the left/before state "ANTES" and the right/after state "DESPUÉS" (those exact Spanish words, not "before/after").`)
+  // ⚠️ EL RENDER NO PUEDE COMPLETAR UN BULLET. Su composición dibuja DOS líneas por bullet (acción
+  // en bold + complemento en light). Cuando el copy llegó con una sola parte, el modelo de imagen
+  // inventó la segunda — y distinta en cada sección: la misma landing salió con "Ideal para perros
+  // pequeños / y razas mini" en el hero y "…/ y de todas las razas" en beneficios, que además se
+  // contradice sola. Lo que se dibuja es lo que hay; sin complemento, la segunda línea va vacía.
+  if (copy.bullets?.length) lines.push(
+    `${copy.kind === 'antes-despues' ? 'ANTES column — problems, each with a red ✗' : 'Bullets'}:\n` +
+    `${copy.bullets.map(enDosLineas).join('\n')}\n` +
+    `  Render each line EXACTLY as written and NEVER write words of your own into a bullet.` +
+    ` A bullet with no LINE 2 has NO second line: leave it empty.`,
+  )
+  if (copy.bulletsAfter?.length) lines.push(`AFTER column — results, each with a green ✓ (paired beside the BEFORE column):\n${copy.bulletsAfter.map(enDosLineas).join('\n')}`)
   if (copy.cards?.length)
     lines.push(`Cards:\n${copy.cards.map((c) => `  - "${c.title}": "${c.body}"`).join('\n')}`)
   if (copy.cta) lines.push(`Call-to-action button label: "${copy.cta}".`)
   if (copy.kicker) lines.push(`Kicker (subtítulo dorado con guiones laterales "— TEXTO —"): "${copy.kicker}".`)
   if (copy.closingBold) lines.push(`Closing card — frase bold: "${copy.closingBold}"${copy.closingSub ? `; subcopy: "${copy.closingSub}"` : ''}.`)
-  if (copy.closingStrip) lines.push(`Franja de cierre inferior (mayúsculas, reemplaza la barra de confianza): "${copy.closingStrip}".`)
+  // ⚠️ UNA SOLA BANDA, Y ESO HAY QUE DECIRLO. Verificado en un render real de `antes-despues`: el
+  // modelo dibujó DOS franjas apiladas y le escribió a la de arriba un texto propio ("EL CAMBIO QUE
+  // TU PERRO NECESITA."), con el closingStrip real debajo. Es el mismo modo de fallo que el bullet a
+  // medias —un carril que la plantilla dibuja y el prompt no llena del todo se llena solo—, y acá lo
+  // dispara el "reemplaza a la barra de confianza": el modelo pone las dos.
+  if (copy.closingStrip) lines.push(
+    `Franja de cierre inferior: EXACTAMENTE UNA banda sólida al pie, en mayúsculas, con este texto y` +
+    ` nada más: "${copy.closingStrip}". Reemplaza a la barra de confianza — no dibujes las dos, ni` +
+    ` apiles una segunda banda, ni agregues una línea de texto propia encima o debajo de ella.`,
+  )
   if (copy.socialProof) lines.push(`Banda de prueba social (con escudo): "${copy.socialProof}".`)
   if (copy.ctaHeadline) lines.push(`Bloque CTA — titular en mayúsculas: "${copy.ctaHeadline}"${copy.ctaSub ? `; subcopy: "${copy.ctaSub}"` : ''}.`)
   return lines.join('\n')
