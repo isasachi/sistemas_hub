@@ -128,7 +128,10 @@ export async function POST(
   // eso el prompt del lote lo rotula "ESCENARIO E ILUMINACIÓN".
   const escenario = enProsa(session.forensic_analysis?.fondo) || 'interior con luz natural'
   const cortes = session.forensic_analysis?.cortes ?? []
-  const camaraFallback = cortes[0]?.camara?.trim() || 'primer plano, cámara en mano'
+  // ⚠️ NO se pasa `cortes[0].camara` como fallback: mandar el encuadre del corte 1 a todos
+  // los lotes es el defecto que `camaraDeLote` existe para arreglar, y la línea `CAMERA:`
+  // del prompt lo afirma como un hecho. Sin emparejamiento no sabemos el encuadre, así que
+  // el default de `camaraDeLote` no declara ninguna escala. Ver `CAMARA_SIN_DATO`.
 
   // ⚠️ EL MAPA DE PLANOS YA NO CIERRA LOTES por defecto (2026-08-24): `groupIntoLotes`
   // pasó a `maxPlanos = Infinity`, así que un clip de hasta 30 s concatena varias escenas
@@ -160,7 +163,7 @@ export async function POST(
   // lenguaje visual del original y antes acá se mandaba el encuadre del corte 1 a
   // todos los lotes. Índice a índice con `agrupados` — y por tanto con `base` y con
   // `seed`, que son `agrupados` mapeado.
-  const camaras = agrupados.map((l) => camaraDeLote(l, cortes, camaraFallback))
+  const camaras = agrupados.map((l) => camaraDeLote(l, cortes))
 
   // Huella del contenido de ESTE intento (guión + personaje + voz + producto +
   // escenario + cámara + imágenes). Se estampa en todos los lotes que se persistan

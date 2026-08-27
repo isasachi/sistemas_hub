@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { groupIntoLotes, LOTE_MAX_SEC, LOTE_MAX_CHARS, LOTE_MAX_COREO, LoteSchema, buildLotePrompt, camaraDeLote, repartirAccion } from './lotes'
+import { groupIntoLotes, LOTE_MAX_SEC, LOTE_MAX_CHARS, LOTE_MAX_COREO, LoteSchema, buildLotePrompt, camaraDeLote, repartirAccion, CAMARA_SIN_DATO } from './lotes'
 import { clampDuration } from './kie'
 import type { TomaFinal } from './adapt'
 import { KIE_PROMPT_MAX } from './kie'
@@ -837,5 +837,35 @@ describe('groupIntoLotes — presupuesto de coreografía', () => {
   // la misma jerarquía que con la duración y con los caracteres de habla.
   it('una sola toma que se pasa sigue en su lote', () => {
     expect(groupIntoLotes([conAccion(1, 5, 'x'.repeat(LOTE_MAX_COREO + 300))])).toHaveLength(1)
+  })
+})
+
+// ⚠️ `generate-lotes` pasaba `cortes[0].camara` como fallback, o sea el encuadre del corte 1
+// mandado a TODOS los lotes — el defecto exacto que `camaraDeLote` existe para arreglar,
+// entrando por la puerta del fallback. Y la línea `CAMERA:` del prompt lo afirma como un
+// hecho, así que un lote de producto salía pidiendo el plano de la primera toma hablada.
+describe('camaraDeLote — sin emparejamiento no inventa un encuadre', () => {
+  const lote = {
+    n: 1, duracionSeg: 5,
+    tomas: [{ n: 1, duracionSeg: 5, accionVisual: 'x', personaje: '', producto: '', locucion: '', tiempoOriginal: '00:99 - 01:00' }],
+  } as unknown as Lote
+  const cortes = [
+    { tiempo: '00:00 - 00:05', camara: 'Plano medio, corta a la cintura' },
+    { tiempo: '00:05 - 00:10', camara: 'Primer plano del producto' },
+  ]
+
+  it('no devuelve el plano de ningún corte cuando ninguno empareja', () => {
+    const c = camaraDeLote(lote, cortes)
+    expect(c).toBe(CAMARA_SIN_DATO)
+    for (const x of cortes) expect(c).not.toContain(x.camara)
+  })
+
+  it('el default no declara ninguna escala de encuadre', () => {
+    expect(CAMARA_SIN_DATO).not.toMatch(/plano|primer|medio|general|cuerpo entero|corta a/i)
+  })
+
+  it('cuando SÍ empareja usa los planos de sus cortes, no el default', () => {
+    const ok = { ...lote, tomas: [{ ...lote.tomas[0], tiempoOriginal: '00:05 - 00:10' }] } as unknown as Lote
+    expect(camaraDeLote(ok, cortes)).toBe('Primer plano del producto')
   })
 })

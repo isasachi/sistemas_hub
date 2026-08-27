@@ -430,10 +430,28 @@ export interface LoteImage {
  * Se deduplica por texto: varios cortes seguidos con el mismo encuadre son lo normal y
  * repetirlo tres veces solo gasta presupuesto de prompt.
  */
+/**
+ * Lo que se emite cuando NO se sabe el encuadre de ninguna toma del lote.
+ *
+ * ⚠️ **NO PUEDE SER EL PLANO DE UN CORTE CONCRETO, Y ESE ERA EL BUG.** `generate-lotes`
+ * pasaba `cortes[0].camara` como fallback — o sea el encuadre del corte 1 mandado a TODOS
+ * los lotes, que es exactamente el defecto que `camaraDeLote` se escribió para arreglar,
+ * entrando por la puerta de atrás. Y no es un fallback inofensivo: la línea `CAMERA:` del
+ * prompt afirma ese plano como un hecho, así que un lote de primer plano de producto salía
+ * pidiendo el plano medio de la primera toma hablada.
+ *
+ * Si el emparejamiento por `tiempoOriginal` falla no sabemos NADA del encuadre, así que la
+ * respuesta honesta es no afirmar ninguna escala: solo el carácter de cámara en mano, que
+ * es la única propiedad cierta para todo el formato. Sin escala, el encuadre lo decide la
+ * imagen de referencia — que es el fail-safe correcto (`preservar`), el mismo criterio que
+ * la zona del cuerpo y la paleta en el generador de anuncios.
+ */
+export const CAMARA_SIN_DATO = 'cámara en mano, con micro-temblor natural'
+
 export function camaraDeLote(
   lote: Lote,
   cortes: { tiempo: string; camara: string }[],
-  fallback: string,
+  fallback: string = CAMARA_SIN_DATO,
 ): string {
   const porTiempo = new Map(cortes.map((c) => [c.tiempo, c.camara]))
   const vistas: string[] = []
