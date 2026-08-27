@@ -677,6 +677,18 @@ Después, la prueba directa: el MISMO lote renderizado dos veces, con el prompt 
 
 **Los dos clips son prácticamente el mismo**: los dos ejecutan la aplicación con el gotero durante los primeros ~2 segundos y después sostienen el frasco hablando los 8 restantes. Los 3042 caracteres extra no compraron nada observable.
 
+✅ **Y LA HIPÓTESIS QUE ESO ABRIÓ SE CONFIRMÓ (`scripts/probe-beat-por-clip.ts`, dos renders más).** El MISMO lote de 10 s partido en dos clips de un beat cada uno, con el prompt corto en los dos:
+
+| | qué ejecutó |
+|---|---|
+| 1 clip de 10 s | aplica con el gotero ~2 s, después 8 s sosteniendo el frasco |
+| **clip 1 de 6 s** (beat 1) | sostiene → lleva la mano a la tapa → **saca el gotero** → **aplica en la mejilla**, sostenido ~2,5 s |
+| **clip 2 de 7 s** (beat 2) | **levanta el frasco con ambas manos** → **lo acerca a cámara** → **lo sostiene con una sola mano**: las tres sub-acciones |
+
+**Un beat por clip se ejecuta entero.** Dos beats en un clip se ejecutan a medias, tenga el prompt 1854 caracteres o 4896. El límite es cuánta coreografía ejecuta grok por llamada, no cuánta le cabe al prompt.
+
+⚠️ **El precio, medido sobre las 155 combinaciones reales: 1,72× llamadas pagadas** (155 → 266 lotes), con la duración media por clip cayendo de 7,6 s a 4,4 s. Es una decisión del dueño del repo y no un efecto colateral que se pueda tomar acá — igual que el resto de los cambios de reparto.
+
 ⚠️ **Y los dos se quedan quietos al mismo tiempo, lo que reubica el problema:** el límite no es cuánto le podemos contar a grok, es **cuánta coreografía ejecuta por clip** — parece agotarse tras el primer beat, con prompt largo o corto. Si eso se confirma, la palanca es **clips más cortos** (un beat por clip, más llamadas pagadas), no prompts más ricos.
 
 ⚠️ **Dos observaciones más de la misma prueba:** (1) el clip B conservó la habitación y el suéter **sin el bloque `SETTING AND LIGHTING`**, o sea que ese bloque (358 caracteres de mediana) es probablemente redundante con la imagen del avatar — coherente con que la imagen le gane al texto; (2) `n = 1`: un lote, un seed. No prueba que el prompt largo nunca ayude, prueba que acá no ayudó.
