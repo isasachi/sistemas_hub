@@ -39,11 +39,12 @@ import {
 } from '../lib/product-hunter/scraper'
 import { openSsrSession } from '../lib/product-hunter/ssr-fetch'
 import {
-  leerAnunciante, medicionDe, juzgarAnunciante, esFalloDeApi, type Lectura,
+  leerAnunciante, medicionDe, juzgarAnunciante, clustersDeAnunciante, esFalloDeApi,
+  type Lectura,
 } from '../lib/product-hunter/scan-verify'
 import {
   getRawProductsByVolume, saveRawVerdict, countRawPending, seedKeywords,
-  getAllNicheKeywords, type RawProductRow,
+  getAllNicheKeywords, upsertRawClusters, type RawProductRow,
 } from '@ph/shared'
 
 const JITTER_MS = Math.max(0, Number(process.env.PH_JITTER_MS ?? 500))
@@ -173,12 +174,24 @@ async function main() {
           cacheNoFisico.set(row.page_id, { kind: v.kind, nota: v.nota })
         }
 
+        // Un veredicto por PRODUCTO, aparte del del anunciante. La fila de
+        // ph_raw_products se sigue escribiendo: es el denominador del estimado.
+        // ⚠️ Los clusters dependen SOLO del anunciante (por eso `cacheLectura`
+        // los cubre gratis entre nichos), pero la pertenencia al nicho NO — y
+        // eso es lo que esta llamada resuelve, así que va por fila.
+        const clusters = yaSabido
+          ? []   // anunciante ya descartado por la lista negra: no gasta modelo
+          : await clustersDeAnunciante(
+            ai, { niche: row.niche, pageId: row.page_id, advertiser: row.name, country: row.country }, l, m,
+          )
+
         await saveRawVerdict({
           niche: row.niche, page_id: row.page_id, ad_count: m.adCount, status: v.status,
           kind: v.kind, share: m.share, product_name: v.productName,
           verdict_note: v.nota, senal_nicho: m.senal, product_path: m.dominante,
           ad_start_date: m.masViejo,
         })
+        if (clusters.length) await upsertRawClusters(clusters)
         return { row, estado: v.status, m }
       })
 

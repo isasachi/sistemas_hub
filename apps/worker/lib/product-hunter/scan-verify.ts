@@ -6,9 +6,9 @@ import type Anthropic from '@anthropic-ai/sdk'
 import type { Page } from 'playwright'
 import { readConnection, advertiserUrl, type SsrAd } from './ssr-fetch'
 import { isPersistentlyBlocked, PersistentBlockError, rateGateMs } from './scraper'
-import { shareOf, senalNicho, productKey, type SenalNicho, type ClusterInfo } from './product-key'
+import { shareOf, senalNicho, productKey, clustersOf, type SenalNicho, type ClusterInfo } from './product-key'
 import { juzgarNicho } from './nicho-verdict'
-import { nonPhysicalSignal } from '@ph/shared'
+import { nonPhysicalSignal, type RawClusterRow } from '@ph/shared'
 
 export const SHARE_MIN = Number(process.env.PH_SCAN_SHARE_MIN ?? 0.5)
 
@@ -245,6 +245,44 @@ export async function juzgarCluster(
     : !v.citaVerificada ? `sin cita textual que respalde el veredicto: ${v.motivo}`
     : v.motivo
   return { status, kind: v.kind, nota, productName: v.productName || null, medicion: m }
+}
+
+/**
+ * Los PRODUCTOS de un anunciante, ya juzgados y listos para persistir.
+ *
+ * Vive acá y no en cada script por el motivo de la cabecera de este archivo:
+ * `scan-nicho` y `scan-base` tienen que aplicar la MISMA regla, y dos copias es
+ * como una se desincroniza. Cada script solo aporta de dónde saca el anunciante.
+ *
+ * ⚠️ Clusteriza sobre `l.todos`, NUNCA sobre `l.base` — esa ya viene filtrada al
+ * dominante y daría un solo cluster sin que nada falle.
+ *
+ * ⚠️ COSTO: se gasta una llamada al modelo por cluster PUBLICABLE, no por
+ * anunciante. Medido sobre 801 filas es ×2 global (×5,8 en las `descartado`,
+ * que son catálogos); el piso de `MUESTRA_MIN` es lo que lo acota — sin él, en
+ * esas filas serían 5,67 llamadas en vez de 1,86.
+ */
+export async function clustersDeAnunciante(
+  ai: Anthropic | null,
+  ctx: { niche: string; pageId: string; advertiser: string | null; country: string | null },
+  l: Lectura,
+  m: Medicion,
+): Promise<RawClusterRow[]> {
+  const filas: RawClusterRow[] = []
+  for (const c of clustersOf(l.todos, l.adCount)) {
+    // Solo se le pregunta al modelo por lo que podría publicarse.
+    const v = await juzgarCluster(c.publicable ? ai : null, ctx.niche, ctx.advertiser, m, c)
+    filas.push({
+      niche: ctx.niche, page_id: ctx.pageId, cluster_key: c.key,
+      ad_count: c.estimado, muestra_n: c.n, muestra_tot: l.muestra,
+      titulo: c.titulo, cuerpo: c.cuerpo, url: c.url,
+      name: ctx.advertiser, country: ctx.country,
+      status: v.status, kind: v.kind, product_name: v.productName,
+      verdict_note: v.nota, senal_nicho: m.senal,
+      ad_start_date: m.masViejo, verified_at: new Date().toISOString(),
+    })
+  }
+  return filas
 }
 
 // Un fallo de la API NO es un veredicto sobre el producto: marcar la fila por
