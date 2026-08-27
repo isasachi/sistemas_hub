@@ -41,16 +41,16 @@ export default function VideoWizard() {
   // pareja con la real y con el mismo minuto de creación.
   const arrancado = useRef(false)
 
-  // ponytail: la fila se crea al MONTAR, no en la primera acción real. El listado del
-  // dashboard filtra las vacías (ver `list*Sessions`), así que no molestan — pero se
-  // siguen creando. El upgrade es crear la sesión con el primer insumo (el upload del
-  // paso 1) en vez de acá; hoy no se hace porque el wizard necesita un id para subir a
-  // `/upload-url` y cambiarlo toca los tres flujos a la vez.
+  // ⚠️ EL MONTAJE YA NO CREA LA FILA. Abrir la tool y no hacer nada dejaba una sesión
+  // fantasma en el dashboard —22 de 57 filas de `video_sessions` sin su primer insumo,
+  // medido—; el listado las filtra al LEER, pero eso ocultaba el síntoma en vez de
+  // arreglarlo. Ahora la fila nace en el primer insumo real (`ensureSession`, store), que
+  // es lo único que necesitaba el id para firmar la subida.
   useEffect(() => {
     if (arrancado.current) return
     arrancado.current = true
     const saved = localStorage.getItem(SESSION_KEY)
-    if (!saved) { startNewSession(); return }
+    if (!saved) return
     fetch(`/api/generador-video-ads/sessions/${saved}`)
       .then((r) => (r.ok ? (r.json() as Promise<VideoSessionResponse>) : Promise.reject()))
       .then((s) => hydrateFromSession(s))

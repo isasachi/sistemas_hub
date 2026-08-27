@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { groupIntoLotes, LOTE_MAX_SEC, LOTE_MAX_CHARS, LOTE_MAX_COREO, LoteSchema, buildLotePrompt, camaraDeLote, repartirAccion, CAMARA_SIN_DATO } from './lotes'
+import { groupIntoLotes, LOTE_MAX_SEC, LOTE_MAX_CHARS, LOTE_MAX_COREO, LoteSchema, buildLotePrompt, camaraDeLote, repartirAccion, CAMARA_SIN_DATO, type Lote } from './lotes'
 import { clampDuration } from './kie'
 import type { TomaFinal } from './adapt'
 import { KIE_PROMPT_MAX } from './kie'

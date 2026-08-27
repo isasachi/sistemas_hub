@@ -56,10 +56,11 @@ interface VideoActions {
   patch: (p: Partial<VideoState>) => void
   hydrateFromSession: (s: VideoSessionResponse) => void
   startNewSession: () => Promise<void>
+  ensureSession: () => Promise<string | null>
   setRegens: (m: Record<string, number>) => void
 }
 
-export const useVideoStore = create<VideoState & VideoActions>((set) => ({
+export const useVideoStore = create<VideoState & VideoActions>((set, get) => ({
   ...initialState,
 
   setStep: (step) => set({ step }),
@@ -138,5 +139,24 @@ export const useVideoStore = create<VideoState & VideoActions>((set) => ({
     } catch {
       set({ sessionError: true })
     }
+  },
+
+  /**
+   * El id de la sesión, creándola si todavía no existe.
+   *
+   * ⚠️ ES LO QUE SACA LA CREACIÓN DE FILAS DEL MONTAJE DEL WIZARD. Abrir la tool y no
+   * hacer nada creaba una fila: medido sobre la base, 22 de 57 filas de `video_sessions`
+   * (y 103 de 144 de `sessions`) no tenían ni siquiera su primer insumo. El listado del
+   * dashboard las filtra al LEER, pero eso ocultaba el síntoma — se seguían creando.
+   *
+   * ⚠️ El bloqueo que este cambio esperó tanto era de una línea: `startNewSession` no
+   * devuelve el id, y el primer paso lo necesita para firmar la subida a `/upload-url`.
+   * Con esto la fila nace en el primer insumo real, que es donde tiene que nacer.
+   */
+  ensureSession: async () => {
+    const actual = get().sessionId
+    if (actual) return actual
+    await get().startNewSession()
+    return get().sessionId
   },
 }))

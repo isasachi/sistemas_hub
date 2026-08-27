@@ -8,7 +8,7 @@ import type { ReferenceAnalysis } from '@/lib/types'
 const btnPrimary = 'h-11 w-full rounded-xl jr-cta text-[13px] font-bold disabled:opacity-40 transition-all duration-200 cursor-pointer border-0 font-sans flex items-center justify-center gap-2'
 
 export default function Section1Reference() {
-  const { sessionId, referenceUrl, setReferenceData, setLoading, isLoading } = useWizardStore()
+  const { sessionId, ensureSession, referenceUrl, setReferenceData, setLoading, isLoading } = useWizardStore()
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<string | null>(referenceUrl)
   const [error, setError] = useState<string | null>(null)
@@ -20,7 +20,10 @@ export default function Section1Reference() {
   }
 
   async function handleSubmit() {
-    if (!sessionId || !file || isLoading) return
+    if (!file || isLoading) return
+    // La fila de la sesión nace ACÁ, con el primer insumo real — no al montar el wizard.
+    const sessionId = await ensureSession()
+    if (!sessionId) return
     setLoading(true)
     setError(null)
     try {

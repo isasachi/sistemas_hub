@@ -45,6 +45,7 @@ interface WizardActions {
   resetFromStep: (step: number) => void
   hydrateFromSession: (session: SessionResponse) => void
   startNewSession: () => Promise<void>
+  ensureSession: () => Promise<string | null>
   setRegens: (m: Record<string, number>) => void
   setRegen: (kind: string, n: number) => void
 }
@@ -69,7 +70,7 @@ const initialState: WizardState = {
   regens: {},
 }
 
-export const useWizardStore = create<WizardState & WizardActions>((set) => ({
+export const useWizardStore = create<WizardState & WizardActions>((set, get) => ({
   ...initialState,
 
   setSessionId: (id) => set({ sessionId: id }),
@@ -146,5 +147,19 @@ export const useWizardStore = create<WizardState & WizardActions>((set) => ({
     } catch {
       set({ sessionError: true })
     }
+  },
+
+  /**
+   * El id de la sesión, creándola si todavía no existe.
+   *
+   * ⚠️ ES LO QUE SACA LA CREACIÓN DE FILAS DEL MONTAJE DEL WIZARD: abrir la tool y no
+   * hacer nada creaba una fila. El listado del dashboard las filtra al LEER, pero eso
+   * ocultaba el síntoma — se seguían creando. Ver `ensureSession` en `store/video.ts`.
+   */
+  ensureSession: async () => {
+    const actual = get().sessionId
+    if (actual) return actual
+    await get().startNewSession()
+    return get().sessionId
   },
 }))

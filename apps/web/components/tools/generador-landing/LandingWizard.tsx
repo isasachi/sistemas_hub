@@ -41,11 +41,14 @@ export default function LandingWizard() {
   // siguen creando. El upgrade es crear la sesión con el primer insumo (el upload del
   // paso 1) en vez de acá; hoy no se hace porque el wizard necesita un id para subir a
   // `/upload-url` y cambiarlo toca los tres flujos a la vez.
+  // ⚠️ EL MONTAJE YA NO CREA LA FILA. Abrir la tool y no hacer nada dejaba una sesión
+  // fantasma; el listado del dashboard las filtra al LEER, lo que ocultaba el síntoma en
+  // vez de arreglarlo. Ahora la fila nace en el primer insumo real (`ensureSession`).
   useEffect(() => {
     if (arrancado.current) return
     arrancado.current = true
     const saved = localStorage.getItem(SESSION_KEY)
-    if (!saved) { startNewSession(); return }
+    if (!saved) return
     fetch(`/api/generador-landing/sessions/${saved}`)
       .then((r) => (r.ok ? (r.json() as Promise<LandingSessionResponse>) : Promise.reject()))
       .then((s) => hydrateFromSession(s))

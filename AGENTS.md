@@ -1056,7 +1056,11 @@ Efecto sobre la sesión de ropa: **29 cortes → 7 lotes**, dos de ellos los fla
 
 ⚠️ **Y EN DESARROLLO SE CREAN DE A DOS:** el StrictMode de React monta dos veces, y este efecto tiene un efecto de servidor. Se ve en los datos — las fantasma aparecen **en pareja con la sesión real y con el mismo minuto de creación**. Un `useRef` corta la segunda.
 
-⚠️ **PENDIENTE, Y ES LA RAÍZ: la fila debería nacer con el PRIMER INSUMO, no con el montaje.** Lo de arriba OCULTA las fantasma y corta la duplicación; no evita que se creen. El arreglo de verdad es mover `startNewSession()` del `useEffect` de montaje al primer upload real del paso 1. Hoy no está hecho porque el wizard necesita un `sessionId` para subir a `/upload-url`, así que el cambio toca los tres flujos a la vez (`VideoWizard`, `AdWizard`, `LandingWizard`) y su store. Marcado con `ponytail:` en los tres sitios.
+✅ **ARREGLADO EN LA RAÍZ (2026-08-27): LA FILA NACE CON EL PRIMER INSUMO.** El `useRef` de arriba y el filtro del listado ocultaban el síntoma; esto lo elimina. El bloqueo que lo demoró —*"el wizard necesita un `sessionId` para subir a `/upload-url`"*— resultó ser de una línea: `startNewSession` no DEVOLVÍA el id. Los tres stores ganan **`ensureSession()`**, que devuelve el id existente o crea la fila y lo devuelve, y el `useEffect` de montaje pasa a solo HIDRATAR: sin id guardado no hace nada. La llaman los tres primeros pasos (`Section0Reference` de video, `Section1Reference` de anuncios, `Section1Product` de landing), que son los que tienen el primer insumo real.
+
+⚠️ **`Section1Product` tenía un `if (!sessionId) return null` que sin fila al montar daba PANTALLA EN BLANCO** — el mismo modo de fallo que este documento ya registra para `Section2Character` con `validation`. Se quitó: el formulario se pinta siempre y la fila nace al enviarlo.
+
+✅ **Verificado en un navegador real**: con `localStorage` limpio, abrir el wizard de landing pinta el paso 1 completo (con "Continuar" deshabilitado hasta que haya nombre) y **`video_sessions` / `sessions` / `landing_sessions` se quedan en 60 / 144 / 89** — antes y después de cargar la página. Ninguna fila fantasma.
 
 **El listado filtra al LEER y no se borra ninguna fila.** Cada `list*Sessions` exige que exista el primer insumo de su tool (`reference_video_url`, `reference_url`, `product_name`, `brand_name`). Borrarlas sería una migración destructiva para arreglar un problema de presentación, y son inofensivas donde están. ⚠️ El `step` NO sirve de discriminante: nace en 0 y una sesión real también pasa por 0.
 

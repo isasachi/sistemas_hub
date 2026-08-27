@@ -11,7 +11,7 @@ const btnPrimary =
 const TONE_OPTIONS = ['Profesional', 'Cercano', 'Divertido', 'Lujoso', 'Urgente', 'Confiable']
 
 export default function Section1Product() {
-  const { sessionId, productName, price, benefits, audience, tone, productForm, setDetails } = useLandingStore()
+  const { ensureSession, productName, price, benefits, audience, tone, productForm, setDetails } = useLandingStore()
   const [name, setName] = useState(productName ?? '')
   const [priceV, setPriceV] = useState(price ?? '')
   const [benefitsV, setBenefitsV] = useState(benefits ?? '')
@@ -22,7 +22,10 @@ export default function Section1Product() {
   const [error, setError] = useState<string | null>(null)
 
   async function submit() {
-    if (!sessionId || saving || !name.trim()) return
+    if (saving || !name.trim()) return
+    // La fila de la sesión nace ACÁ, con el primer insumo real — no al montar el wizard.
+    const sessionId = await ensureSession()
+    if (!sessionId) return
     setSaving(true)
     setError(null)
     try {
@@ -41,7 +44,6 @@ export default function Section1Product() {
     }
   }
 
-  if (!sessionId) return null
 
   return (
     <div className="flex flex-col gap-4">
