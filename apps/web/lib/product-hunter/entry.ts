@@ -64,8 +64,10 @@ export function toEntry(r: RawProductRow | RawClusterRow): RawProductEntry {
       adCount: r.ad_count,
       adsUrl: adsUrl(r.page_id),
       verificado: r.status === 'monoproducto',
-      // Qué parte de la pauta del anunciante es este producto.
+      // Qué parte de la pauta del anunciante es este producto — NO "qué tan
+      // monoproducto es la página". Ver el comentario de `share` en types.ts.
       share: r.muestra_tot ? Number((r.muestra_n / r.muestra_tot).toFixed(2)) : null,
+      porProducto: true,
       senal: r.senal_nicho ?? null,
       diasCorriendo: diasCorriendo(r.ad_start_date),
     }

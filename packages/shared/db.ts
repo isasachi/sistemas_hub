@@ -998,9 +998,20 @@ export const getNichesWithInventory = () => getTopNiches(2000)
 // se piden SOBRE_PEDIDO× filas y se recortan después.
 // Filtra por tres motivos distintos: no es físico (regla 1 sin LLM), es una
 // marca grande (física, pero no una oportunidad) o es la red de spam.
+// ⚠️ EL TEXTO VIVE EN CAMPOS DISTINTOS SEGÚN LA TABLA y leer solo uno deja el
+// filtro medio inerte: en `ph_raw_products` el anuncio representativo está en
+// el jsonb `raw_data`, y en `ph_raw_clusters` está abierto en `titulo`/`cuerpo`
+// (ahí `raw_data` ni existe). Sin esto, al prender TABLA_SERVING la mitad de la
+// lista negra —la que mira el TEXTO, no el nombre del anunciante— dejaría de
+// filtrar, y Shoptemu y Uber volverían a encabezar las categorías.
+const textoDeFila = (r: RawProductRow | RawClusterRow) =>
+  ('cluster_key' in r
+    ? [r.titulo, r.cuerpo]
+    : [r.raw_data?.title, r.raw_data?.body]
+  ).filter(Boolean).join(' — ')
+
 const fisicos = (rows: RawProductRow[] | null) =>
-  (rows ?? []).filter((r) =>
-    isServible([r.raw_data?.title, r.raw_data?.body].filter(Boolean).join(' — '), r.name))
+  (rows ?? []).filter((r) => isServible(textoDeFila(r), r.name))
 
 /**
  * Chips de sugerencia de la portada: los nichos con más inventario servible.

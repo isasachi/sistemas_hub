@@ -324,7 +324,16 @@ export interface RawProductEntry {
   // solo está scrapeado. null = la fila viene del pipeline viejo, que no los
   // escribe; la card no muestra nada en ese caso.
   verificado: boolean
+  /**
+   * ⚠️ `share` SIGNIFICA DOS COSAS SEGÚN `porProducto`, y la card tiene que
+   * decirlo distinto. Sirviendo ANUNCIANTES es "esta página es X% un solo
+   * producto" → el sello "Monoproducto X%". Sirviendo PRODUCTOS es "este
+   * producto es X% de la pauta del anunciante", y ahí un 15% legítimo de una
+   * tienda con seis productos no es un monoproducto malo: es un producto de una
+   * tienda con seis productos. Con la misma etiqueta se leería al revés.
+   */
   share: number | null
+  porProducto?: boolean
   senal: 'path' | 'titulo' | 'cuerpo' | 'ninguna' | null
   // Días que lleva corriendo el anuncio más viejo del anunciante. null = todavía
   // sin medir (la columna se llena a medida que el worker re-scrapea).

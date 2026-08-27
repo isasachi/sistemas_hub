@@ -150,13 +150,17 @@ function ProductCard({ p }: { p: RawProductEntry }) {
         {p.verificado && (
           <span
             title={
-              `Verificado: ${Math.round((p.share ?? 0) * 100)}% de los anuncios de este anunciante son del mismo producto` +
+              (p.porProducto
+                ? `Verificado: este producto es el ${Math.round((p.share ?? 0) * 100)}% de los anuncios del anunciante`
+                : `Verificado: ${Math.round((p.share ?? 0) * 100)}% de los anuncios de este anunciante son del mismo producto`) +
               (p.senal ? ` · el término del nicho aparece en ${SENAL_TEXTO[p.senal]}` : "")
             }
             className="inline-flex items-center gap-1 mt-2 text-[10px] font-bold uppercase tracking-[0.5px] rounded-full px-2 py-0.5 border border-emerald-400/30 text-emerald-300 bg-emerald-400/10"
           >
             <BadgeCheck className="w-3 h-3" />
-            Monoproducto {Math.round((p.share ?? 0) * 100)}%
+            {/* Sirviendo productos, "Monoproducto 15%" se leería como un
+                defecto cuando es un producto de una tienda con seis. */}
+            {p.porProducto ? "Producto verificado" : `Monoproducto ${Math.round((p.share ?? 0) * 100)}%`}
           </span>
         )}
       </div>
