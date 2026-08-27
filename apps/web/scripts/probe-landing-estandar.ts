@@ -78,7 +78,12 @@ async function main() {
     const prompt = buildDiffusionInstruction({
       section: tipo, copy, dna: s.landing_dna,
       productLabels: s.product_labels ?? null, productForm: s.product_form ?? null,
-      offer, trust: s.trust ?? null, packUnits,
+      // ⚠️ LA COLUMNA SE LLAMA `trust_block`, NO `trust`. Con `s.trust` esto pasaba `null` y el
+      // prompt salía SIN la instrucción de la barra de confianza: los dos primeros renders de
+      // verificación se hicieron así, con la banda saliendo entera de la plantilla. El bug era del
+      // probe, no del producto — la ruta lee bien porque `LandingSessionResponse` la expone con su
+      // nombre real. Un probe que arma el prompt a mano tiene que copiar el mapeo, no inventarlo.
+      offer, trust: s.trust_block ?? null, packUnits,
       hasTalent, nicheId: s.niche_id ?? null,
       talentSubstitute: !hasTalent ? (s.niche_id ? NO_TALENT_SUBSTITUTE[s.niche_id as keyof typeof NO_TALENT_SUBSTITUTE] : 'Producto en contexto') : undefined,
       demographicLabel: s.demographic_id ? DEMOGRAPHIC_LABELS[s.demographic_id as keyof typeof DEMOGRAPHIC_LABELS] : undefined,
