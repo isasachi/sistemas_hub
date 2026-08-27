@@ -1256,6 +1256,37 @@ El arreglo va en la capa de RENDER, no en el prompt del clasificador: el modelo 
 
 ⚠️ **"ROSTROS DISTINTOS ENTRE SÍ" NO ALCANZA: salían tres clones en testimonios.** Es una restricción de comparación, y el modelo la satisface con tres variaciones mínimas de la misma cara (mismo tono de piel, mismo pelo, misma edad, misma ropa). Lo que separa las caras es nombrar **ejes concretos y ortogonales tarjeta por tarjeta** — tono de piel, pelo, forma de cara, color de prenda — en `masterLayoutBlock` (instructions.ts). Los rasgos son relativos entre tarjetas y sin género, para que valgan en cualquier demografía; **la edad varía DENTRO del rango** de `DEMOGRAPHIC_LABELS`, porque salirse reintroduce justo el fallo que la restricción demográfica existe para evitar. ⚠️ `lib/landing/avatars.ts` (`generateAvatars`, 3 retratos sueltos por `VARIANT_TRAITS`) era **código muerto** — nada lo importaba — y era un sitio-señuelo: su encabezado dice "avatares de testimonios", así que el arreglo natural era editar el archivo que no hace nada. Borrado. La columna `testimonial_avatars` sigue en la base sin migración.
 
+⚠️ **NADA ERA ESTÁNDAR ENTRE SECCIONES PORQUE HABÍA DOS AUTORIDADES SOBRE EL MISMO PÍXEL (2026-08-27).** Reportado sobre una sesión real: bordes de card distintos en cada sección, barra de confianza distinta en cada sección, avatares de testimonios que se seguían pareciendo, y texto de instrucciones IMPRESO dentro de las tarjetas.
+
+✅ **Lo primero fue descartar la causa obvia: las plantillas están bien.** Descargadas las 7 curadas de `landing-templates/` y comparadas franja por franja: las **seis secciones con barra traen la MISMA banda azul esmerilada** (4 ítems, mismos iconos, misma pastilla debajo) y su tratamiento de card es idéntico. La variación no venía de ahí.
+
+Venía de que el TEXTO repintaba lo que la plantilla ya fija, en dos sitios:
+
+1. **`trustText` decía las dos cosas.** *"Reproduce EXACTAMENTE la banda de confianza de la plantilla"* y en el renglón siguiente *"la franja es SIEMPRE un degradado metálico dorado … con acabado de lámina pulida"*. El modelo conciliaba dos órdenes incompatibles y devolvía una tercera cosa cada vez: banda negra de filo dorado en hero, degradado dorado en beneficios, grilla 2x2 en testimonios, otro degradado en cta-final. ⚠️ **Y estaba declarado en DOS lugares**: el `DESIGN_SYSTEM` listaba *"la BANDA DE CONFIANZA del pie"* entre los usos del metal. Arreglar uno solo la habría dejado igual, entrando por la otra puerta — el propio comentario del código avisaba de eso.
+
+2. **La card, igual.** *"El MATERIAL lo manda la marca"* + `st.surface` (p.ej. `glass_premium`: *"vidrio esmerilado al 75-85 %, borde blanco de 1px, glow"*) sobre una plantilla que ya la muestra resuelta. Ninguno de los renders seguía NI la plantilla NI el estilo: hero con borde casi invisible, beneficios con contorno oscuro **y rellenos tintados**, faq/garantía con borde gris azulado, cta-final sin borde. Ahora la card entera la manda la plantilla y de la marca sale el COLOR. ⚠️ **Recorta el eje `style` (PR #63) a 4 de sus 6 ejes** (`icon`, `background`, `light`, `type`): es un intercambio deliberado, la marca deja de decidir el acabado a cambio de que las 8 secciones se lean como una pieza. Si se quiere el acabado por marca de vuelta, la vía es **una plantilla por estilo**, no volver a describirlo en texto sobre la plantilla.
+
+⚠️ **LA DISCIPLINA DE TEXTO ERA UNA LISTA NEGRA DE JERGA Y POR ESO NO ATAJABA NADA.** Decía *"nunca renderices vocabulario de esta instrucción (nombres de capas, «ADN», «invariante», nombres de fuente)"* — y lo que se filtraba no parecía jerga, parecía copy. Medido: las tarjetas de testimonios salieron con la instrucción de casting impresa como cuerpo (*"piel trigueña, cabello oscuro liso, cara ovalada, prenda de tono claro."*, *"piel clara (más que Card 1)…"*, *"No se repiten rasgos, peinados ni colores de ropa."*) y beneficios con un bullet que decía *"No hay bloques de venta ni precios"*, que es `NO_SALES_BLOCK` vuelto copy.
+
+⚠️ **CONSECUENCIA: EL EJE DE DIFERENCIACIÓN DE AVATARES ESTABA EN NO-OP.** No es que las caras se parecieran "todavía un poco" — es que la instrucción **nunca actuó sobre ellas**, porque el modelo la convertía en texto. Es cableado, no calibración. Ahora la regla es una lista **BLANCA** y no necesita enumerar: *solo se dibuja lo que viene entrecomillado en el bloque COPY*. Mismo criterio que el separador `" — "` que no se manda.
+
+✅ **Verificado con dos renders reales** (`scripts/probe-landing-estandar.ts`, que NO escribe en la base — regenerar por la ruta sobrescribiría las secciones del usuario y no quedaría con qué comparar), sobre la misma sesión que lo destapó:
+
+| | antes | después |
+|---|---|---|
+| barra de confianza | beneficios en degradado dorado macizo; testimonios en grilla 2x2 sobre negro→dorado | **la misma franja en las dos**: 4 ítems en una fila con separadores finos, mismos iconos, misma pastilla |
+| cards de beneficios | contornos oscuros y dos rellenos tintados (morado, azul) | seis cards blancas idénticas |
+| tarjetas de testimonios | la instrucción de casting impresa como cuerpo de texto | solo el testimonio, el nombre y la bandera |
+| caras | tres variaciones de la misma | **tres personas distintas** — piel, largo de pelo, forma de cara y edad |
+| bullet de beneficios | *"No hay bloques de venta ni precios."* | *"Transforma tu rutina de cuidado."* |
+
+⚠️ **Caveats de esa verificación:** son 2 secciones, no 8; y **gpt-image-2 rechazó las dos por contenido**, así que las hizo el respaldo nano-banana-2 — no es el mismo motor que produjo los originales. Que la barra coincida entre las dos secciones nuevas sí es comparable (mismo motor en ambas).
+
+⚠️ **LO QUE ESTE CAMBIO NO ARREGLA, y no hay que atribuírselo:**
+- **La oferta.** Salió con un solo frasco en vez de las variantes por tier, y el tier de 1 unidad sin botón. Verificado que el dato es correcto (los tres tiers traen `cta: "Compra ya"`), que `offerText` sí pide `botón "…"` por tier, y que **la plantilla muestra los tres botones**. O sea es incumplimiento del modelo contra una plantilla correcta, con `n = 1` y sin mecanismo identificado — a diferencia de los tres de arriba, acá no hay nada que señalar todavía.
+- **El texto destrozado** (*"ADDO"*, *"renbolso"*, *"O TE DEMIVSEMOS TO DINERO"*, *"SATSFACCIÓN"*, *"3 unidad"*). Es ruido de renderizado de tipografía por difusión, aparece en todas las secciones y **ningún cambio de prompt lo toca**. Es el límite conocido de imprimir copy dentro de la imagen.
+- **Los defectos de COPY** (un sexto bullet inventado, *"Ayuda a abrazar tu belleza"*): quedan fuera de este pase, que era de estandarización visual.
+
 ## Suscripción — Whop (`lib/whop.ts`) y planes (`@ph/shared` `plans.ts`)
 
 Paywall del hub: **tres planes**, sin prueba gratis, que desbloquean el ACCESO al área privada (`/dashboard` y `/tools/*`) y, según el tier, cuánto sirve el buscador y cuántas imágenes entran en el período. Whop entra **solo como capa de pago/entitlement** — la identidad sigue siendo Supabase Auth. Se descartaron "Sign in with Whop" (OAuth 2.1 + PKCE) y la app embebida en el iframe de Whop: obligarían a migrar sesiones y no compran nada sobre el login que ya existe.
