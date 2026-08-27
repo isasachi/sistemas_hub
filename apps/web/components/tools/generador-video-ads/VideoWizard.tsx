@@ -33,6 +33,7 @@ export default function VideoWizard() {
   const {
     step, sessionId, sessionError, validation,
     startNewSession, hydrateFromSession, setStep, setRegens,
+    resetSession,
   } = useVideoStore()
 
   // ⚠️ UNA SOLA VEZ, PASE LO QUE PASE CON EL MONTAJE. Este efecto CREA una sesión en el
@@ -57,12 +58,29 @@ export default function VideoWizard() {
     // responde 404 y se cae al camino de siempre.
     const desdeUrl = new URLSearchParams(window.location.search).get('sesion')
     const saved = desdeUrl || localStorage.getItem(SESSION_KEY)
-    if (!saved) return
-    if (desdeUrl) localStorage.setItem(SESSION_KEY, desdeUrl)
+    // ⚠️ SIN ID GUARDADO HAY QUE VACIAR EL STORE, no basta con no hacer nada: zustand es un
+    // singleton de MÓDULO y sobrevive la navegación del cliente, así que "Empezar" (que
+    // borra el id de `localStorage` y navega acá) remontaba el wizard con la sesión
+    // anterior todavía en memoria — y el usuario aterrizaba en su último paso.
+    if (!saved) { resetSession(); return }
+    if (desdeUrl) {
+      localStorage.setItem(SESSION_KEY, desdeUrl)
+      // ⚠️ Y SE QUITA DE LA BARRA: si el parámetro se queda, "Reiniciar" seguido de recargar
+      // resucita la sesión vieja — el id ya vive en `localStorage`, así que la URL solo
+      // puede contradecirlo.
+      window.history.replaceState(null, '', window.location.pathname)
+    }
     fetch(`/api/generador-video-ads/sessions/${saved}`)
       .then((r) => (r.ok ? (r.json() as Promise<VideoSessionResponse>) : Promise.reject()))
       .then((s) => hydrateFromSession(s))
-      .catch(() => startNewSession())
+      // ⚠️ Un id que ya no existe (sesión borrada del dashboard) o que es de otra cuenta
+      // NO crea una fila: vacía el wizard y la sesión nace con el primer insumo, igual que
+      // en el camino sin id. Con `startNewSession` acá, un link viejo o ajeno dejaba una
+      // sesión fantasma en silencio — el problema que este cambio vino a eliminar.
+      // ⚠️ Y SE BORRA EL ID GUARDADO: antes lo pisaba el `startNewSession` de este mismo
+      // catch. Sin eso, un id muerto se queda en `localStorage` y vuelve a fallar en cada
+      // visita — el wizard queda pidiéndole al servidor una sesión que no existe para siempre.
+      .catch(() => { localStorage.removeItem(SESSION_KEY); resetSession() })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {

@@ -56,6 +56,7 @@ interface LandingActions {
   hydrateFromSession: (s: LandingSessionResponse) => void
   startNewSession: () => Promise<void>
   ensureSession: () => Promise<string | null>
+  resetSession: () => void
   setRegens: (m: Record<string, number>) => void
   setRegen: (kind: string, n: number) => void
 }
@@ -184,4 +185,17 @@ export const useLandingStore = create<LandingState & LandingActions>((set, get) 
     await get().startNewSession()
     return get().sessionId
   },
+
+  /**
+   * Vacía el wizard SIN crear ninguna fila.
+   *
+   * ⚠️ EXISTE POR UNA REGRESIÓN MEDIDA. Cuando el montaje del wizard creaba la sesión, el
+   * botón "Empezar" de la intro (`ToolIntro.empezar`) solo tenía que borrar el id de
+   * `localStorage` y navegar: el wizard llegaba vacío y creaba una fila nueva. Al mover la
+   * creación al primer insumo, ese borrado dejó de alcanzar — **el store de zustand es un
+   * singleton de MÓDULO y sobrevive la navegación del cliente**, así que el wizard se
+   * remontaba con la sesión anterior todavía en memoria y el usuario aterrizaba en el
+   * último paso de su sesión anterior en vez de en uno nuevo.
+   */
+  resetSession: () => set({ ...initialState }),
 }))

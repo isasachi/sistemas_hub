@@ -1062,6 +1062,12 @@ Efecto sobre la sesión de ropa: **29 cortes → 7 lotes**, dos de ellos los fla
 
 ✅ **Verificado en un navegador real**: con `localStorage` limpio, abrir el wizard de landing pinta el paso 1 completo (con "Continuar" deshabilitado hasta que haya nombre) y **`video_sessions` / `sessions` / `landing_sessions` se quedan en 60 / 144 / 89** — antes y después de cargar la página. Ninguna fila fantasma.
 
+⚠️ **EL CAMBIO ROMPIÓ "EMPEZAR" EN LAS TRES TOOLS, Y LA CAUSA ES QUE ZUSTAND ES UN SINGLETON DE MÓDULO.** Reportado por el dueño del repo: *"el botón de crear nueva sesión me lleva al step final de la última que hice"*. `ToolIntro.empezar()` borra el id de `localStorage` y navega al wizard — eso ALCANZABA mientras el montaje creaba la sesión, porque el wizard llegaba vacío y creaba una fila nueva. Al mover la creación al primer insumo, el montaje pasó a hacer `return`… y **el store sobrevive la navegación del cliente**: el wizard se remontaba con la sesión anterior todavía en memoria y el usuario aterrizaba en su último paso.
+
+Los tres stores ganan **`resetSession()`** (`set({ ...initialState })`, sin crear nada) y el montaje la llama cuando no hay id. La lección general: **al quitar un efecto secundario del montaje hay que preguntarse qué estado dependía de él para limpiarse**, no solo qué dependía de él para existir.
+
+⚠️ **Y EL CAMINO DE ERROR HACÍA LO MISMO.** `.catch(() => startNewSession())` —un id borrado del dashboard, o de otra cuenta— creaba una fila en silencio, o sea el problema que este cambio vino a eliminar entrando por la puerta del fallo. Ahora **vacía el wizard Y BORRA el id de `localStorage`**: sin eso el id muerto se queda guardado y vuelve a fallar en cada visita (antes lo pisaba el `startNewSession` de ese mismo catch). Verificado con un id inexistente: paso 1, `localStorage` en null, cero filas nuevas.
+
 **El listado filtra al LEER y no se borra ninguna fila.** Cada `list*Sessions` exige que exista el primer insumo de su tool (`reference_video_url`, `reference_url`, `product_name`, `brand_name`). Borrarlas sería una migración destructiva para arreglar un problema de presentación, y son inofensivas donde están. ⚠️ El `step` NO sirve de discriminante: nace en 0 y una sesión real también pasa por 0.
 
 ## Tool: Calculadora de Costos (`calculadora-costos`)

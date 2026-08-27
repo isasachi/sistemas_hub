@@ -21,6 +21,7 @@ export default function AdWizard() {
   const {
     step, imageUrl, sessionId, sessionError,
     startNewSession, hydrateFromSession, setStep, setRegens,
+    resetSession,
   } = useWizardStore()
 
   // Reanudar: si hay un id guardado y la sesión existe, rehidratar; si no, una nueva.
@@ -42,11 +43,22 @@ export default function AdWizard() {
     if (arrancado.current) return
     arrancado.current = true
     const saved = localStorage.getItem(SESSION_KEY)
-    if (!saved) return
+    // ⚠️ SIN ID GUARDADO HAY QUE VACIAR EL STORE, no basta con no hacer nada: zustand es un
+    // singleton de MÓDULO y sobrevive la navegación del cliente, así que "Empezar" (que
+    // borra el id de `localStorage` y navega acá) remontaba el wizard con la sesión
+    // anterior todavía en memoria — y el usuario aterrizaba en su último paso.
+    if (!saved) { resetSession(); return }
     fetch(`/api/generador-anuncios/sessions/${saved}`)
       .then((r) => (r.ok ? (r.json() as Promise<SessionResponse>) : Promise.reject()))
       .then((s) => hydrateFromSession(s))
-      .catch(() => startNewSession())
+      // ⚠️ Un id que ya no existe (sesión borrada del dashboard) o que es de otra cuenta
+      // NO crea una fila: vacía el wizard y la sesión nace con el primer insumo, igual que
+      // en el camino sin id. Con `startNewSession` acá, un link viejo o ajeno dejaba una
+      // sesión fantasma en silencio — el problema que este cambio vino a eliminar.
+      // ⚠️ Y SE BORRA EL ID GUARDADO: antes lo pisaba el `startNewSession` de este mismo
+      // catch. Sin eso, un id muerto se queda en `localStorage` y vuelve a fallar en cada
+      // visita — el wizard queda pidiéndole al servidor una sesión que no existe para siempre.
+      .catch(() => { localStorage.removeItem(SESSION_KEY); resetSession() })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
