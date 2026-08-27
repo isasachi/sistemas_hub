@@ -701,7 +701,17 @@ Después, la prueba directa: el MISMO lote renderizado dos veces, con el prompt 
 
 ⚠️ **Entonces lo que predice el fallo NO es el número de beats.** Los dos lotes difieren en otra cosa: el del suero son **micro-manipulaciones de objeto** (destapar, sacar el gotero, aplicar) dentro de un primer plano; éste son **poses de cuerpo** sin objeto. Grok encadena poses bien y se queda corto en la manipulación fina. Si algún día se parte, la regla acotada sería *beats con manipulación de objeto Y lote ≥12 s* (para que cada mitad tenga 6 s de contenido REAL y no de relleno), no un beat por clip a secas.
 
-⚠️ **`n = 2`, y los dos lotes se contradicen.** Lo que está medido es que la palanca no es el prompt (eso sí replicó); qué la reemplaza sigue abierto.
+❌ **TERCER LOTE, EL DEL REGIMEN QUE SE PREDIJO A FAVOR, Y TAMPOCO.** Después de la nota de arriba se buscó en TODA la base el caso donde partir debía ganar —manipulación de objeto Y ≥12 s, para que cada mitad tenga contenido real y no relleno— y existe uno solo: `2849e595` lote 0, **14,3 s con 3 beats, los tres de manipulación** (saca el cuentagotas → aplica y masajea → muestra el frasco a cámara). Es OTRA sesión que la del A/B, verificado: no contiene aquel lote de 10 s.
+
+| | qué ejecutó |
+|---|---|
+| **control**, 3 beats en 15 s | **los tres**: extrae el cuentagotas → aplica en la mejilla → masajea → muestra el frasco a cámara con la etiqueta de frente → vuelve el cuentagotas a la cara |
+| clip 1 de 10 s (beats 1-2) | los dos, pero aplica en la **frente** y no en la mejilla |
+| clip 2 de 7 s (beat 3) | lo ejecuta, con el frasco a cámara **menos limpio** que en el control |
+
+**El control volvió a ser el mejor de los tres**, y encima es el que dio la única toma de producto con la etiqueta bien presentada — que es lo que el anuncio vende.
+
+⚠️ **`n = 3`: el efecto apareció UNA vez y falló DOS, incluida la prueba diseñada a su favor.** La explicación más simple ya no es un límite estructural de grok sino **la varianza del seed**: cada uno de estos clips es un render único de un modelo estocástico. La frase de arriba (*"parece agotarse tras el primer beat"*) describe ese primer draw, no un comportamiento del modelo. **No partas los lotes por número de beats.** Lo que sí quedó medido y replicado es lo del prompt: el largo no es la palanca.
 
 ✅ **PERO LA PRUEBA DESTAPÓ UN DEFECTO QUE SÍ ES GENERAL, Y ERA UNA CONSTANTE HUÉRFANA: `MIN_TOMA_SEG` SE QUEDÓ EN EL PISO DE VEO.** Lo que se ve en los dos experimentos es el mismo mecanismo: cuando al clip le sobran segundos respecto de su contenido, grok rellena — inventando (el estirón del dobladillo, las manos a la cintura) o quedándose quieto (los 8 s sosteniendo el frasco). O sea la holgura es basura, y es medible sin gastar un render.
 
