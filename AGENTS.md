@@ -1280,6 +1280,26 @@ El arreglo va en la capa de RENDER, no en el prompt del clasificador: el modelo 
 
 ⚠️ **Caveats:** son 2 secciones de 8, y **gpt-image-2 rechazó varias veces por contenido**, así que parte de los renders los hizo el respaldo nano-banana-2.
 
+🔴 **LA CAUSA RAÍZ DE "NADA ES ESTÁNDAR" NO ERA EL PROMPT: LOS RENDERS CAMBIARON DE MODELO EN SILENCIO (2026-08-27).** Tres rondas de trabajo sobre el prompt persiguieron un síntoma. El dueño del repo lo destapó al mostrar una sesión vieja (`fbe218f3`, 2026-08-22) cuyas barras salían **iguales entre sí y sin cortar nada** — y cuyo `trustText` es **byte-idéntico** al que se acusó de "repintar la plantilla".
+
+**Lo que cambió es el tamaño del lienzo, y el tamaño delata el modelo:**
+
+| tanda | tamaño | modelo |
+|---|---|---|
+| la buena (2026-08-22) | **864x1536** | **gpt-image-2** |
+| primeras quejas | 1536x2752 | otro |
+| siguientes | 1152x2048 | **nano-banana-2** |
+
+El propio documento fija la equivalencia: `9:16 → 864x1536` es el `sizeFor` de gpt-image-2, y `1152x2048` es lo que devuelve el ratio nativo de la imagen de Gemini. **Ninguna sesión desde las quejas salió de gpt-image-2.**
+
+⚠️ **Y LA FECHA CUADRA CON UN COMMIT: `0f51808` (2026-08-25), la migración de la IMAGEN a KIE.** Antes de ese commit `generateImage` llamaba a `openaiGenerateImage` — el SDK de OpenAI directo. Después, gpt-image-2 va por el marketplace de KIE, y **ahí rechaza los prompts de landing 3 de 3** con `"The current content could not be processed. Please revise your input and try again."`. `generateImage` cae al respaldo **en silencio** (solo un `console.warn`), así que el usuario ve que "el diseño cambió" sin que nadie tocara el diseño.
+
+✅ **Verificado con un render: con `IMAGE_VIA=direct` el MISMO prompt y la MISMA sesión salen por gpt-image-2 (864x1536), sin rechazo y sin respaldo** — cards uniformes, producto entero, composición limpia. El escape ya estaba documentado y era exactamente para esto.
+
+⚠️ **ESTE ES EL TERCER CASO DEL MISMO PATRÓN Y HAY QUE LEERLO COMO CLASE.** Este documento ya avisaba: *"Si el resultado de imagen cambia de estética sin que nadie toque código, mirá el saldo antes de mirar el prompt"*. La lección se amplía: **antes de diagnosticar un prompt, comprobá QUÉ MODELO produjo la imagen** — y el tamaño del lienzo es la huella más barata para saberlo. Un respaldo silencioso convierte un problema de infraestructura en una cacería de prompts.
+
+⚠️ **CONSECUENCIA PENDIENTE:** en producción `IMAGE_VIA` **no está seteada**, así que producción sigue cayendo al respaldo. Y queda sin decidir si, con gpt-image-2 de vuelta, la barra compuesta sigue haciendo falta — el prompt solo bastaba en la sesión del 22-ago.
+
 ✅ **LA BARRA DE CONFIANZA SE COMPONE EN CÓDIGO (2026-08-27, `lib/landing/trust-bar.ts`).** Tras TRES rondas de prompt la barra seguía saliendo distinta: sobre una corrida real de las 8 secciones salieron tres barras doradas, una **NEGRA** (faq), una negra con filos dorados (testimonios) y una en **dos filas** (garantía), con la pastilla distinta en las seis — y con el bloque de texto que la describe siendo **literalmente el mismo string en las 6**, cosa que un test ya fijaba.
 
 **La causa es la ley que este documento ya midió con la luz, el encuadre y el escenario: contra una imagen adjunta que muestra otra cosa, el texto pierde.** La plantilla curada trae la banda AZUL; pedirle al modelo que la repinte de dorado es una negociación, y la resolvía distinto cada vez. Una cuarta ronda de prompt habría sido insistir con un método ya medido.
