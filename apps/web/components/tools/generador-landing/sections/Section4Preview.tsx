@@ -186,9 +186,18 @@ export default function Section4Preview() {
       .map((c, i) => ({ c, order: i }))
       .filter(({ c }) => !opts?.resume || !doneTypes.has(c.kind))
 
-    // Estado inicial: las ya hechas 'done', las que vamos a generar 'pending'.
+    // ⚠️ EL ESTADO INICIAL SALE DE `targets`, NO DE `doneTypes` — y ésa era la causa de que
+    // "Regenerar todo" dejara la barra clavada en 100 %. Sin `resume`, TODAS las secciones tienen
+    // `imageUrl` (por eso hay algo que regenerar), así que `doneTypes` las contenía a todas y el
+    // estado inicial las marcaba `done` de entrada: la barra arrancaba llena y las previews se
+    // quedaban con la imagen vieja como si ya hubieran terminado.
+    //
+    // La regla correcta es la que ya expresa `targets`: lo que se va a generar arranca PENDIENTE,
+    // lo que no se toca queda `done`. Así sirve igual para "Regenerar todo" (todo pendiente) y
+    // para "Reanudar" (solo las que faltan).
+    const aGenerar = new Set(targets.map(({ c }) => c.kind))
     const initial: Record<string, GenStatus> = {}
-    for (const c of copy) initial[c.kind] = doneTypes.has(c.kind) ? 'done' : 'pending'
+    for (const c of copy) initial[c.kind] = aGenerar.has(c.kind) ? 'pending' : 'done'
     setStatus(initial)
 
     let failed = 0
@@ -242,8 +251,14 @@ export default function Section4Preview() {
   if (!sessionId) return null
 
   const frameWidth = device === 'mobile' ? 'max-w-[380px]' : 'max-w-[720px]'
-  const doneCount = sections.filter((s) => s.imageUrl).length
-  const missing = copy.length - doneCount // secciones sin generar (para Reanudar)
+  // ⚠️ MIENTRAS SE GENERA, EL PROGRESO SE CUENTA DEL ESTADO, NO DEL STORE. El store conserva las
+  // imágenes viejas durante una regeneración —es lo que permite seguir viendo la landing anterior
+  // hasta que llega la nueva—, así que contar `sections` daba 8/8 desde el primer segundo.
+  const doneCount = generating
+    ? copy.filter((c) => status[c.kind] === 'done').length
+    : sections.filter((s) => s.imageUrl).length
+  // `missing` es para el botón "Reanudar" y SÍ mira el store: son las que no tienen imagen.
+  const missing = copy.length - sections.filter((s) => s.imageUrl).length
 
   return (
     <div className="flex flex-col gap-4">
@@ -277,10 +292,19 @@ export default function Section4Preview() {
               muestran un placeholder con su estado (Fase 6 · progreso real). */}
           <div className={`mx-auto w-full ${frameWidth} rounded-2xl overflow-hidden border border-white/[0.08] bg-white transition-all duration-300`}>
             {copy.map((c) => {
+              // ⚠️ La imagen VIEJA no puede quedarse en pantalla mientras esa sección se
+              // regenera: se veía terminada cuando en realidad estaba en cola. Si su estado dice
+              // que está pendiente o generándose, manda el esqueleto aunque el store todavía
+              // tenga la anterior.
+              const est = status[c.kind] ?? 'pending'
+              // ⚠️ Atado a `generating`: al montar la pantalla `status` está VACÍO, así que sin
+              // esta condición el default `pending` pintaría una landing YA TERMINADA entera en
+              // esqueleto. Solo hay esqueleto mientras hay una generación en curso.
+              const regenerando = generating && (est === 'pending' || est === 'generating')
               const s = sections.find((x) => x.type === c.kind && x.imageUrl)
-              return s
+              return s && !regenerando
                 ? <SectionCard key={c.kind} section={s} />
-                : <SectionSkeleton key={c.kind} type={c.kind} status={status[c.kind] ?? 'pending'} />
+                : <SectionSkeleton key={c.kind} type={c.kind} status={est} />
             })}
           </div>
 
