@@ -140,9 +140,24 @@ export function fusionarPorEmbedding(
  * Fusionar es un refinamiento — perderlo cuesta 2,5% de tramos, y abortar la
  * corrida cuesta la corrida.
  */
+let avisado = false
+/** Avisa UNA vez por proceso: fallar en silencio en cada anunciante deja la
+ *  fusión como no-op invisible, que es el modo de fallo que este repo ya pagó
+ *  varias veces. ⚠️ La OPENAI_API_KEY del worker es un PLACEHOLDER (`sk-....`);
+ *  la real vive en la env de apps/web. Sin ponerla en el worker, la fusión no
+ *  corre nunca y los clusters se guardan sin unir. */
+function avisarUnaVez(motivo: string): null {
+  if (!avisado) {
+    avisado = true
+    console.warn(`⚠ fusión de clusters DESACTIVADA (${motivo}) — los productos repartidos en varias landings se guardan separados`)
+  }
+  return null
+}
+
 export async function embeddings(textos: string[]): Promise<number[][] | null> {
   const key = process.env.OPENAI_API_KEY
-  if (!key || !textos.length) return null
+  if (!textos.length) return null
+  if (!key || key.startsWith('sk-...')) return avisarUnaVez('sin OPENAI_API_KEY real en el worker')
   try {
     const r = await fetch('https://api.openai.com/v1/embeddings', {
       method: 'POST',
@@ -153,9 +168,9 @@ export async function embeddings(textos: string[]): Promise<number[][] | null> {
       signal: AbortSignal.timeout(30_000),
     })
     const j = (await r.json()) as { data?: { embedding: number[] }[]; error?: { message: string } }
-    if (j.error || !j.data) return null
+    if (j.error || !j.data) return avisarUnaVez(j.error?.message?.slice(0, 80) ?? 'respuesta sin datos')
     return j.data.map((d) => d.embedding)
-  } catch {
-    return null
+  } catch (e) {
+    return avisarUnaVez((e as Error).message.slice(0, 80))
   }
 }

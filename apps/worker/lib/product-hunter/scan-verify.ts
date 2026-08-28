@@ -8,6 +8,7 @@ import { readConnection, advertiserUrl, type SsrAd } from './ssr-fetch'
 import { isPersistentlyBlocked, PersistentBlockError, rateGateMs } from './scraper'
 import { shareOf, senalNicho, productKey, clustersOf, type SenalNicho, type ClusterInfo } from './product-key'
 import { juzgarNicho } from './nicho-verdict'
+import { textoDeCluster, fusionarPorEmbedding, embeddings } from './cluster-merge'
 import { nonPhysicalSignal, type RawClusterRow } from '@ph/shared'
 
 export const SHARE_MIN = Number(process.env.PH_SCAN_SHARE_MIN ?? 0.5)
@@ -275,6 +276,25 @@ export async function juzgarCluster(
  * que son catálogos); el piso de `MUESTRA_MIN` es lo que lo acota — sin él, en
  * esas filas serían 5,67 llamadas en vez de 1,86.
  */
+/**
+ * Une los clusters que son el MISMO producto repartido en varias landings.
+ *
+ * ⚠️ VA ANTES DE JUZGAR, no después, y eso importa por dos motivos: el veredicto
+ * y la llamada al modelo se gastan una sola vez por producto real en vez de una
+ * por landing, y el piso de muestra se aplica sobre la muestra SUMADA — un
+ * producto con 3+3+3 anuncios en tres landings pasa el piso, y por separado los
+ * tres caían.
+ *
+ * ⚠️ FALLA ABIERTO A PROPÓSITO: sin `OPENAI_API_KEY`, con error de API o con
+ * timeout, `embeddings` devuelve null y se sigue SIN fusionar. Fusionar mueve
+ * el 2,5% de los tramos; abortar el barrido cuesta el barrido.
+ */
+async function fusionarClusters(cs: ClusterInfo[]): Promise<ClusterInfo[]> {
+  if (cs.length < 2) return cs
+  const vecs = await embeddings(cs.map(textoDeCluster))
+  return vecs ? fusionarPorEmbedding(cs, vecs) : cs
+}
+
 export async function clustersDeAnunciante(
   ai: Anthropic | null,
   ctx: { niche: string; pageId: string; advertiser: string | null; country: string | null },
@@ -282,7 +302,7 @@ export async function clustersDeAnunciante(
   m: Medicion,
 ): Promise<RawClusterRow[]> {
   const filas: RawClusterRow[] = []
-  for (const c of clustersOf(l.todos, l.adCount)) {
+  for (const c of await fusionarClusters(clustersOf(l.todos, l.adCount))) {
     // Solo se le pregunta al modelo por lo que podría publicarse.
     const v = await juzgarCluster(c.publicable ? ai : null, ctx.niche, ctx.advertiser, m, c)
     filas.push({

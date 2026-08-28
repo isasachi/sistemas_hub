@@ -65,4 +65,15 @@ describe('fusionarPorEmbedding', () => {
     const out = fusionarPorEmbedding(cs, [[1, 0], [1, 0]], 0.95)
     expect(out[0].estimado).toBe(160)
   })
+
+  // Por esto la fusión corre ANTES de juzgar: un producto repartido en tres
+  // landings con 3 anuncios cada una no pasa el piso de muestra por separado,
+  // y sumado sí. Fusionar después dejaría fuera al producto que la fusión
+  // existe para rescatar.
+  it('la muestra sumada es lo que decide si un producto es publicable', () => {
+    const cs = [c({ key: 'a', n: 3 }), c({ key: 'b', n: 3 }), c({ key: 'c', n: 3 })]
+    expect(cs.every((x) => x.n < 4)).toBe(true)          // ninguno solo llega al piso
+    const iguales = [[1, 0], [1, 0], [1, 0]]
+    expect(fusionarPorEmbedding(cs, iguales, 0.92)[0].n).toBe(9)
+  })
 })
