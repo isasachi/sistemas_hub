@@ -236,8 +236,30 @@ describe('buildDiffusionInstruction — DNA-driven (spec 2026-07-23)', () => {
   it('nota de plantilla: presente, marcada fuente de verdad de estructura, subordinada al resto de la instrucción', () => {
     const out = build('hero')
     expect(out).toContain('PLANTILLA DE COMPOSICIÓN')
-    expect(out).toContain('fuente de verdad de ESTRUCTURA')
-    expect(out).toContain('La ESTRUCTURA manda la plantilla')
+    expect(out).toContain('Es un PLANO, no una referencia visual')
+    expect(out).toContain('Tomá de ella SOLO la estructura')
+  })
+
+  // ⚠️ ESTA LÍNEA SE EMITE SIEMPRE, no solo para estilos no-default. El carve-out de acabado
+  // colgaba de `style !== DEFAULT_STYLE`, así que la marca más común nunca recibía NINGUNA línea
+  // que dijera que los colores de la plantilla no se copian — y el modelo los tomaba distinto en
+  // cada sección. Es el arreglo de estandarización: el reparto plantilla/marca hay que declararlo
+  // en todas las piezas, no solo en las raras.
+  it('el carve-out de COLOR Y MATERIAL se emite en TODOS los estilos, default incluido', () => {
+    for (const style of [...BrandStyle.options, undefined]) {
+      const out = build('beneficios', { dna: { ...DNA, style } })
+      expect(out).toContain('COLOR Y MATERIAL NO SE COPIAN DE LA PLANTILLA')
+      expect(out).toMatch(/RELLENO de ejemplo/)
+    }
+  })
+
+  // Fuga reportada: "a veces se cuela el avatar del template o el producto del template". La línea
+  // vieja lo prohibía con un calificador que la anulaba ("props/persona DE OTRO NICHO").
+  it('declara el contenido de la plantilla como marcador de posición, sin calificadores', () => {
+    const out = build('hero')
+    expect(out).toContain('MARCADOR DE POSICIÓN')
+    expect(out).toMatch(/NO se copian jamás/)
+    expect(out).not.toContain('props/persona de otro nicho')
   })
 
   it('hasTalent:false — la nota nombra el sustituto y NO reintroduce persona', () => {
@@ -289,21 +311,20 @@ describe('buildDiffusionInstruction — DNA-driven (spec 2026-07-23)', () => {
     expect(hero).toContain('SIN BLOQUE DE VENTA')
   })
 
+  // ⚠️ ESTE TEST VOLVIÓ A SU FORMA ORIGINAL: el prompt DIBUJA la barra otra vez. La versión
+  // intermedia exigía una franja reservada porque la banda se componía en código — se desactivó al
+  // descubrir que lo que variaba era el modelo, no el prompt.
   it('la barra de confianza (TRUST BAR) va en las 6 secciones que la tienen, no en oferta/antes-despues', () => {
     for (const type of ['hero', 'beneficios', 'testimonios', 'faq', 'garantia', 'cta-final'] as SectionType[]) {
       const out = build(type, { trust: TRUST })
       expect(out).toContain('TRUST BAR')
       expect(out).toContain('Pago contraentrega')
-      // composición neutral: ya no dicta "frosted pill" (eso rompía la consistencia)
       expect(out).not.toContain('frosted pill')
     }
-    // oferta (payment_row) y antes-despues (closing_strip) NO llevan la barra
     expect(build('oferta', { trust: TRUST })).not.toContain('TRUST BAR')
     expect(build('antes-despues', { trust: TRUST })).not.toContain('TRUST BAR')
   })
 
-  // Pedido del usuario 2026-08-07: la banda de confianza deja de re-tintarse por sección y pasa a
-  // ser SIEMPRE el mismo metal. Antes su color de fondo era explícitamente "lo único que varía".
   describe('color de la banda de confianza', () => {
     it('es el mismo metal dorado en las 6 secciones, y ya no se re-tinta', () => {
       const salidas = (['hero', 'beneficios', 'testimonios', 'faq', 'garantia', 'cta-final'] as SectionType[])
@@ -503,10 +524,29 @@ describe('estilo de marca (style-dna)', () => {
     }
   })
 
-  it('un estilo no-default lleva el carve-out ⚠️ ACABADO ≠ ESTRUCTURA; glass_premium no', () => {
-    expect(conEstilo('natural_organic')).toContain('ACABADO ≠ ESTRUCTURA')
-    expect(conEstilo('natural_organic')).toContain(STYLE_DNA.natural_organic.name)
-    expect(conEstilo('glass_premium')).not.toContain('ACABADO ≠ ESTRUCTURA')
+  // ⚠️ ERA CONDICIONAL Y ESE ERA EL AGUJERO. Solo se emitía con `style !== DEFAULT_STYLE`, así
+  // que la marca con el estilo por defecto —la más común— nunca recibía una línea que dijera de
+  // dónde sale el acabado de la card. Mismo agujero que tenía el carve-out de COLOR.
+  it('el carve-out ⚠️ ACABADO ≠ ESTRUCTURA se emite en TODOS los estilos, default incluido', () => {
+    for (const style of [...BrandStyle.options, undefined]) {
+      const out = build('beneficios', { dna: { ...DNA, style } })
+      expect(out).toContain('ACABADO ≠ ESTRUCTURA')
+      expect(out).toContain(STYLE_DNA[style ?? 'glass_premium'].name)
+    }
+  })
+
+  // La regresión que el dueño del repo recordaba: hasta `e71564a` (PR #63) la línea afirmaba un
+  // absoluto ("estructura invariante, solo cambia color … glassmorphism SIEMPRE") y las cards
+  // salían iguales entre secciones. Después pasó a NARRAR un reparto de autoridad ("la geometría
+  // la manda la plantilla; el material lo manda la marca") — y eso le pide al modelo que arbitre.
+  it('la línea de Componentes AFIRMA, no reparte autoridad', () => {
+    for (const style of BrandStyle.options) {
+      const comp = conEstilo(style).match(/^Componentes[^\n]*/m)![0]
+      expect(comp).toContain('estructura invariante')
+      expect(comp).toContain('EXACTAMENTE las mismas en las 8 secciones')
+      // El meta-comentario es justamente lo que la rompió: no puede volver acá.
+      expect(comp).not.toMatch(/lo manda la marca|manda la plantilla|GEOMETRÍA es invariante/)
+    }
   })
 
   // ⚠️ Esto verifica que el carve-out de luz se EMITE, no que funcione — medido en píxeles NO
@@ -529,7 +569,7 @@ describe('estilo de marca (style-dna)', () => {
   it('la plantilla ya NO manda el "tratamiento" (si lo mandara, el estilo sería letra muerta)', () => {
     for (const style of BrandStyle.options) {
       const out = conEstilo(style)
-      expect(out).toContain('fuente de verdad de ESTRUCTURA')
+      expect(out).toContain('Tomá de ella SOLO la estructura')
       expect(out).not.toContain('encuadre y tratamiento')
     }
   })
@@ -706,5 +746,34 @@ describe('enDosLineas', () => {
   // La lista de ✗/✓ de antes-despues es de UNA línea: sin segunda parte no hay LINE 2 que dibujar.
   it('un bullet sin separador no declara segunda línea', () => {
     expect(enDosLineas('Snacks duros y secos')).toBe('  • LINE 1 (bold): "Snacks duros y secos"')
+  })
+})
+
+// ─── Regla de canal: qué es copy y qué es dirección (2026-08-27) ─────────────
+// Medido en una sesión real: las tarjetas de testimonios salieron con la instrucción de casting
+// IMPRESA como cuerpo de texto ("piel trigueña, cabello oscuro liso, cara ovalada…", "piel clara
+// (más que Card 1)", "No se repiten rasgos, peinados ni colores de ropa") y beneficios con un
+// bullet que decía "No hay bloques de venta ni precios" — o sea `NO_SALES_BLOCK` vuelto copy.
+//
+// La regla vieja era una lista NEGRA de jerga ("nombres de capas", "ADN", "invariante") y por eso
+// no atajaba nada: lo que se filtró no parece jerga, parece copy. La nueva es una lista BLANCA.
+describe('disciplina de texto — solo se dibuja lo entrecomillado en COPY', () => {
+  const out = build('testimonios', { trust: TRUST })
+
+  it('la regla es una lista BLANCA, no una enumeración de jerga', () => {
+    expect(out).toMatch(/ÚNICO texto que se dibuja/i)
+    expect(out).toContain('ENTRECOMILLADO en el bloque COPY')
+    expect(out).not.toMatch(/nombres de capas/)
+  })
+
+  it('nombra al casting como dirección, que es lo que se estaba imprimiendo', () => {
+    expect(out).toMatch(/casting/i)
+    expect(out).toMatch(/jamás letra sobre la pieza/i)
+  })
+
+  // El fallo no fue desobediencia: fue que dos cosas escritas en el mismo español natural
+  // llegaban por el mismo canal. La regla tiene que decir eso.
+  it('avisa de que una dirección puede sonar a copy', () => {
+    expect(out).toMatch(/suene a copy/i)
   })
 })

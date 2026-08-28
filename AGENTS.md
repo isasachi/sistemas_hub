@@ -1256,6 +1256,93 @@ El arreglo va en la capa de RENDER, no en el prompt del clasificador: el modelo 
 
 ⚠️ **"ROSTROS DISTINTOS ENTRE SÍ" NO ALCANZA: salían tres clones en testimonios.** Es una restricción de comparación, y el modelo la satisface con tres variaciones mínimas de la misma cara (mismo tono de piel, mismo pelo, misma edad, misma ropa). Lo que separa las caras es nombrar **ejes concretos y ortogonales tarjeta por tarjeta** — tono de piel, pelo, forma de cara, color de prenda — en `masterLayoutBlock` (instructions.ts). Los rasgos son relativos entre tarjetas y sin género, para que valgan en cualquier demografía; **la edad varía DENTRO del rango** de `DEMOGRAPHIC_LABELS`, porque salirse reintroduce justo el fallo que la restricción demográfica existe para evitar. ⚠️ `lib/landing/avatars.ts` (`generateAvatars`, 3 retratos sueltos por `VARIANT_TRAITS`) era **código muerto** — nada lo importaba — y era un sitio-señuelo: su encabezado dice "avatares de testimonios", así que el arreglo natural era editar el archivo que no hace nada. Borrado. La columna `testimonial_avatars` sigue en la base sin migración.
 
+⚠️ **NADA ERA ESTÁNDAR ENTRE SECCIONES, Y EL REPARTO CORRECTO ES: LA PLANTILLA ES UN PLANO (2026-08-27).** Reportado sobre una sesión real: bordes de card distintos en cada sección, barra de confianza distinta en cada sección, avatares de testimonios que se seguían pareciendo, y texto de instrucciones IMPRESO dentro de las tarjetas.
+
+**El modelo mental de la tool, fijado por el dueño del repo:** la plantilla determina **solo el esqueleto** —dónde va cada elemento y con qué proporción—; el **color y el material** (cards, iconos, props) salen del **producto y del branding**; la **barra de confianza es dorada metálica y estandarizada** en todas las secciones donde la plantilla la muestra, con el escalón a cobre/plateado cuando la marca ya trae dorado (eso ya vive en `moneyRamp`) y adaptación en modo oscuro.
+
+⚠️ **UNA PRIMERA VERSIÓN DE ESTE ARREGLO SE PASÓ DE LARGO Y SE REVIRTIÓ.** Al ver que las 7 plantillas curadas son consistentes entre sí, la conclusión fue "que la plantilla mande el color y el acabado" — o sea lo contrario del reparto de arriba: le sacó el metal a la banda y el `st.surface` a la card. **No lo repitas.** Que la plantilla sea consistente no la convierte en la fuente del color; solo significa que su relleno de ejemplo es parejo.
+
+**Las tres causas reales:**
+
+1. **El carve-out que dice que los colores de la plantilla NO se copian colgaba de `style !== DEFAULT_STYLE`.** Con el estilo por defecto —el caso más común, y el de la sesión reportada— el prompt **no emitía ninguna línea** que dijera de dónde sale el color, así que el modelo lo tomaba de la plantilla y distinto en cada sección. Ahora `COLOR Y MATERIAL NO SE COPIAN DE LA PLANTILLA` es incondicional, con test que lo exige en los 5 estilos **y** en el ADN legado.
+
+2. **`trustText` pedía las dos cosas a la vez:** *"reproduce EXACTAMENTE la banda de confianza de la plantilla"* —que es AZUL— y *"la franja es SIEMPRE un degradado metálico dorado"*. El modelo conciliaba dos órdenes incompatibles y devolvía una tercera cosa cada vez. Ahora se nombra qué aporta cada fuente (estructura ← plantilla, color ← marca) y se avisa explícitamente de que el color de la plantilla es relleno.
+
+3. **El anti-fuga tenía un calificador que lo anulaba.** Prohibía copiar *"props/persona DE OTRO NICHO"*, así que el avatar y el envase de una plantilla del mismo nicho quedaban habilitados — la fuga que el dueño del repo reporta como *"a veces se cuela el avatar del template o el producto del template"*. Ahora el contenido de la plantilla es **marcador de posición**, sin calificadores: donde muestra un envase va el de la Imagen 1, donde muestra una persona va la placa adjunta (y sin placa, NO va nadie).
+
+⚠️ **LA DISCIPLINA DE TEXTO ERA UNA LISTA NEGRA DE JERGA Y POR ESO NO ATAJABA NADA.** Decía *"nunca renderices vocabulario de esta instrucción (nombres de capas, «ADN», «invariante»)"* — y lo que se filtró no parecía jerga, parecía copy. Medido: las tarjetas de testimonios salieron con la instrucción de casting impresa como cuerpo (*"piel trigueña, cabello oscuro liso, cara ovalada, prenda de tono claro."*, *"piel clara (más que Card 1)…"*, *"No se repiten rasgos, peinados ni colores de ropa."*) y beneficios con un bullet que decía *"No hay bloques de venta ni precios"*, que es `NO_SALES_BLOCK` vuelto copy.
+
+⚠️ **CONSECUENCIA: EL EJE DE DIFERENCIACIÓN DE AVATARES ESTABA EN NO-OP.** No es que las caras se parecieran "todavía un poco" — la instrucción **nunca actuó sobre ellas**, porque el modelo la convertía en texto. Es cableado, no calibración. La regla es ahora una lista **BLANCA**: solo se dibuja lo que viene entrecomillado en el bloque COPY. Mismo criterio que el separador `" — "` que no se manda.
+
+⚠️ **UN PROBE QUE ARMA EL PROMPT A MANO TIENE QUE COPIAR EL MAPEO DE COLUMNAS, NO INVENTARLO — Y ESO INVALIDÓ DOS VERIFICACIONES.** `scripts/probe-landing-estandar.ts` leía `s.trust` cuando la columna se llama **`trust_block`** (la ruta lee bien porque `LandingSessionResponse` la expone con su nombre real). Con `null`, `buildDiffusionInstruction` **omite `trustText` entero**: los dos primeros pares de renders salieron SIN instrucción de barra, con la banda saliendo completa de la plantilla — y sobre eso se afirmó que "la barra ya es la misma en las dos secciones". Era casualidad. El síntoma de este bug es silencioso: el prompt se arma igual, solo que sin un bloque.
+
+✅ **Verificado con renders reales, ya con el mapeo correcto:** beneficios y testimonios salen las dos con **la misma banda dorada metálica**, mismos 4 ítems, mismos divisores, misma pastilla — y con los HECHOS del `trust_block` de la sesión (*"envío gratis"*, *"Devolución garantizada"*), no con los textos de ejemplo de la plantilla. Las tres caras de testimonios son tres personas distintas, no hay ninguna directiva impresa, y el envase es el de la sesión.
+
+⚠️ **Caveats:** son 2 secciones de 8, y **gpt-image-2 rechazó varias veces por contenido**, así que parte de los renders los hizo el respaldo nano-banana-2.
+
+🔴 **LA CAUSA RAÍZ DE "NADA ES ESTÁNDAR" NO ERA EL PROMPT: LOS RENDERS CAMBIARON DE MODELO EN SILENCIO (2026-08-27).** Tres rondas de trabajo sobre el prompt persiguieron un síntoma. El dueño del repo lo destapó al mostrar una sesión vieja (`fbe218f3`, 2026-08-22) cuyas barras salían **iguales entre sí y sin cortar nada** — y cuyo `trustText` es **byte-idéntico** al que se acusó de "repintar la plantilla".
+
+**Lo que cambió es el tamaño del lienzo, y el tamaño delata el modelo:**
+
+| tanda | tamaño | modelo |
+|---|---|---|
+| la buena (2026-08-22) | **864x1536** | **gpt-image-2** |
+| primeras quejas | 1536x2752 | otro |
+| siguientes | 1152x2048 | **nano-banana-2** |
+
+El propio documento fija la equivalencia: `9:16 → 864x1536` es el `sizeFor` de gpt-image-2, y `1152x2048` es lo que devuelve el ratio nativo de la imagen de Gemini. **Ninguna sesión desde las quejas salió de gpt-image-2.**
+
+⚠️ **Y LA FECHA CUADRA CON UN COMMIT: `0f51808` (2026-08-25), la migración de la IMAGEN a KIE.** Antes de ese commit `generateImage` llamaba a `openaiGenerateImage` — el SDK de OpenAI directo. Después, gpt-image-2 va por el marketplace de KIE, y **ahí rechaza los prompts de landing 3 de 3** con `"The current content could not be processed. Please revise your input and try again."`. `generateImage` cae al respaldo **en silencio** (solo un `console.warn`), así que el usuario ve que "el diseño cambió" sin que nadie tocara el diseño.
+
+✅ **Verificado con un render: con `IMAGE_VIA=direct` el MISMO prompt y la MISMA sesión salen por gpt-image-2 (864x1536), sin rechazo y sin respaldo** — cards uniformes, producto entero, composición limpia. El escape ya estaba documentado y era exactamente para esto.
+
+⚠️ **ESTE ES EL TERCER CASO DEL MISMO PATRÓN Y HAY QUE LEERLO COMO CLASE.** Este documento ya avisaba: *"Si el resultado de imagen cambia de estética sin que nadie toque código, mirá el saldo antes de mirar el prompt"*. La lección se amplía: **antes de diagnosticar un prompt, comprobá QUÉ MODELO produjo la imagen** — y el tamaño del lienzo es la huella más barata para saberlo. Un respaldo silencioso convierte un problema de infraestructura en una cacería de prompts.
+
+⚠️ **CONSECUENCIA PENDIENTE:** en producción `IMAGE_VIA` **no está seteada**, así que producción sigue cayendo al respaldo. Y queda sin decidir si, con gpt-image-2 de vuelta, la barra compuesta sigue haciendo falta — el prompt solo bastaba en la sesión del 22-ago.
+
+✅ **CABLEADO DE IMAGEN DE LANDING (2026-08-27, decisión del dueño del repo).** `generateImage` gana `opts.viaDirecta`, que le da a landing su propia rama:
+
+| llamada | primario | respaldo |
+|---|---|---|
+| secciones y retrato del talento (`viaDirecta`) | **gpt-image-2 por el SDK de OpenAI** | **nano-banana-2 por KIE** |
+| **placa de zona** (`preferGemini`, sin `viaDirecta`) | **nano-banana-2 por KIE** | gpt-image-2 |
+| anuncios, branding, video (sin flags) | gpt-image-2 por KIE | nano-banana-2 por KIE |
+
+⚠️ **POR LLAMADA Y NO POR `IMAGE_VIA` DE ENTORNO.** La variable cambiaría el camino de TODO el hub, y anuncios y branding hoy funcionan bien por KIE. Es un problema de UNA tool, no del motor.
+
+⚠️ **Y EL RESPALDO DE LANDING NO PUEDE SER `geminiGenerateImage`**, que es lo que hace la rama de `IMAGE_VIA=direct`: ese camino usa el SDK de Google, y su clave devuelve `429 prepayment credits are depleted` (medido 2026-08-27). Sería caer de un modelo que anda a uno muerto. Por eso landing tiene rama propia en vez de reusar la del escape.
+
+⚠️ **LA PLACA DE ZONA SE QUEDA EN KIE A PROPÓSITO, no por olvido:** gpt-image-2 modera el encuadre de cuerpo sin rostro en 4 de 4 corridas, así que ahí el primario tiene que ser nano-banana-2 y gpt-image-2 es la segunda oportunidad. `preferGemini` invierte el par en las DOS ramas, así que el contrato se mantiene con o sin `viaDirecta`.
+
+✅ **Fijado por `lib/gemini.imagen.test.ts`**, que mockea los dos transportes y comprueba quién atiende primero y quién de respaldo en los tres casos, incluida la caída por respuesta VACÍA (no solo por excepción). Existe porque **este cableado ya cambió en silencio una vez**: un `console.warn` no es una señal.
+
+🔴 **Y LA BARRA COMPUESTA SE DESACTIVÓ.** `lib/landing/trust-bar.ts` se construyó sobre un diagnóstico FALSO (que el prompt no podía dar una barra igual entre secciones). Con gpt-image-2 de vuelta, el prompt sí puede — es lo que hacía antes de la migración. `trustText` está **restaurado byte a byte** desde `8e3d51e`, junto con la banda en la lista de usos del metal del `DESIGN_SYSTEM`: las dos mitades vuelven juntas o el prompt se contradice.
+
+⚠️ **`trust-bar.ts` NO se borró.** Sigue probado (franja byte-idéntica, tinta real, rampa oro/cobre, emplazamiento por espacio libre) y es la única vía que GARANTIZA una barra idéntica si el render vuelve a cambiar de modelo. Mismo criterio que `vertical.ts` en video-ads: un salvavidas documentado para un modo que hoy no se usa, no código muerto. Reconectarlo son dos líneas en la ruta.
+
+⚠️ **LAS CARDS: LA REGRESIÓN ESTÁ FECHADA Y ES DE REDACCIÓN, NO DEL EJE DE ESTILO (2026-08-27).** El dueño del repo recordaba que "antes salían bien", y la historia lo confirma: hasta **`e71564a` (PR #63, 2026-08-15)** la línea decía
+
+> *"Componentes (**estructura invariante, solo cambia color**): card con radio 28-32px, relleno translúcido, borde blanco 1px, sombra difusa teñida del acento, leve glow — **glassmorphism siempre, card sólida nunca**."*
+
+y después pasó a
+
+> *"Componentes — la **GEOMETRÍA** es invariante (radio, proporciones y anatomía los manda la plantilla); el **MATERIAL** lo manda la marca. Card: radio 28-32px, con este acabado — `${st.surface}`"*.
+
+⚠️ **LO QUE ROMPIÓ NO FUE QUE EL MATERIAL DEPENDA DE LA MARCA.** `st.surface` es constante dentro de una sesión, así que no puede causar variación ENTRE secciones. Lo que rompió es que la frase pasó de **afirmar un absoluto** a **narrar un reparto de autoridad**: eso le pide al modelo que arbitre, y arbitró distinto en cada sección (contenedor único con divisores en beneficios, tarjetas con borde gris en testimonios, borde oscuro en faq, sin borde en garantía y cta-final). Es la misma causa que la banda de confianza, el escenario y la luz.
+
+**El arreglo conserva la PR #63** —la marca sigue decidiendo el material— y recupera la forma que funcionaba: la línea vuelve a ser una sola afirmación (`estructura invariante, solo cambia el color` + el acabado + el icono + *"EXACTAMENTE las mismas en las 8 secciones"*), sin meta-comentario. Hay un test que exige que el reparto NO vuelva a esa línea: si hace falta decir qué manda cada fuente, va en `templateNote`, que es donde vive el contrato con la plantilla.
+
+⚠️ **Y el carve-out `ACABADO ≠ ESTRUCTURA` pasó a ser INCONDICIONAL — mismo agujero que tenía el del color.** Colgaba de `style !== DEFAULT_STYLE`, así que la marca con el estilo por defecto nunca recibía una línea que dijera de dónde sale el acabado. Con el default la plantilla y la marca coinciden y la línea es redundante, que es justo lo que se quiere: una sola voz. ⚠️ El carve-out de **LUZ sigue condicional a propósito**: está documentado como escrito, probado en píxeles y **sin efecto**, así que emitirlo siempre sería sumar ruido a un prompt que ya recorta.
+
+⚠️ **La vía de "alinear las plantillas" NO aplica acá, y conviene saberlo antes de intentarla:** está medido que **su tratamiento de card ya es consistente entre secciones**. No hay contradicción que quitar — por eso el arreglo es de redacción y no de assets.
+
+⚠️ **SIN VERIFICAR:** es una hipótesis de redacción, y este documento tiene medido tres veces que la redacción es una palanca débil. Lo que la respalda es que el estado "antes" está verificado en git y la diferencia es nombrable. Se comprueba con renders, no con tests.
+
+⚠️ **LO QUE ESTE CAMBIO NO ARREGLA:**
+- **La oferta.** Un solo frasco en vez de variantes por tier, y el tier de 1 unidad sin botón. El dato es correcto (los tres tiers traen `cta`), `offerText` sí pide `botón "…"` por tier y **la plantilla muestra los tres botones**: es incumplimiento del modelo contra una plantilla correcta, `n = 1`, sin mecanismo identificado.
+- **El texto destrozado por la difusión** (*"ADDO"*, *"renbolso"*, *"O TE DEMIVSEMOS TO DINERO"*). Ningún cambio de prompt lo toca.
+- **La excepción de "marca con colores muy contrastantes o pasteles"** que pidió el dueño del repo: NO está implementada. Darle latitud al modelo en el prompt reintroduce justo la variación que esto viene a cerrar; la vía correcta es un heurístico en código, como el `isGolden` que ya decide oro→cobre.
+
 ## Suscripción — Whop (`lib/whop.ts`) y planes (`@ph/shared` `plans.ts`)
 
 Paywall del hub: **tres planes**, sin prueba gratis, que desbloquean el ACCESO al área privada (`/dashboard` y `/tools/*`) y, según el tier, cuánto sirve el buscador y cuántas imágenes entran en el período. Whop entra **solo como capa de pago/entitlement** — la identidad sigue siendo Supabase Auth. Se descartaron "Sign in with Whop" (OAuth 2.1 + PKCE) y la app embebida en el iframe de Whop: obligarían a migrar sesiones y no compran nada sobre el login que ya existe.

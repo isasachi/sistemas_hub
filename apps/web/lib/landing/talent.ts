@@ -38,7 +38,10 @@ export async function generateTalent(
   _palette: PaletteTokens,
 ): Promise<string | null> {
   if (!persona.trim()) return null
-  const b64 = await generateImage([{ text: buildTalentPrompt(persona) }], 3, { aspectRatio: '3:4' })
+  // ⚠️ `viaDirecta`: el retrato es parte de landing y sale por el MISMO camino que las secciones
+  // (gpt-image-2 por el SDK de OpenAI, respaldo nano-banana-2 por KIE). Por KIE, gpt-image-2
+  // rechaza los prompts de esta tool — ver el cableado en `generateImage`.
+  const b64 = await generateImage([{ text: buildTalentPrompt(persona) }], 3, { aspectRatio: '3:4', viaDirecta: true })
   return b64 || null
 }
 
@@ -97,6 +100,10 @@ export async function generateZonePlate(
   // cuerpo sin rostro cae del lado prohibido de su filtro, y no hay forma de pedirlo que no lo haga.
   // Con OpenAI de primario eran 19s de peaje garantizado antes de un fallback que igual ocurría.
   // La placa canónica (retrato, con cara) NO tiene este problema y sigue por el camino normal.
+  // ⚠️ SIN `viaDirecta` A PROPÓSITO, y esto es cableado, no olvido: la placa de zona va por
+  // **nano-banana-2 por KIE** de primario. `preferGemini` invierte el par en las dos ramas, así
+  // que dejarla en la rama de KIE la deja exactamente donde tiene que estar. gpt-image-2 queda de
+  // segunda oportunidad — que es lo correcto para una imagen que rechaza 4 de 4.
   const b64 = await generateImage(parts, 3, { aspectRatio: '3:4', preferGemini: true })
   return b64 || null
 }

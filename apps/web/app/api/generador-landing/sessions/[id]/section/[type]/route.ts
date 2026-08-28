@@ -174,7 +174,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         demographicLabel: session.demographic_id && session.demographic_id !== 'no_talent' ? DEMOGRAPHIC_LABELS[session.demographic_id] : undefined,
       }),
     })
-    b64 = await generateImage(parts, 3, { aspectRatio: '9:16' })
+    // ⚠️ `viaDirecta` ES SOLO PARA LANDING, y por un fallo medido: gpt-image-2 POR KIE rechaza
+    // estos prompts 3 de 3 ("The current content could not be processed") y `generateImage` cae al
+    // respaldo en silencio. Nano-banana-2 renderiza la barra y las cards distinto en cada sección,
+    // y eso es lo que se reportó como "nada es estándar" — el prompt nunca fue el problema. Por el
+    // SDK directo el MISMO prompt se acepta y vuelve la calidad de antes de la migración.
+    //
+    // Va por LLAMADA y no por `IMAGE_VIA` de entorno a propósito: la variable lo cambiaría para
+    // todo el hub, y anuncios y branding hoy funcionan bien por KIE. La huella para saber qué
+    // modelo respondió es el tamaño: 864x1536 = gpt-image-2, 1152x2048 = nano-banana-2.
+    b64 = await generateImage(parts, 3, { aspectRatio: '9:16', viaDirecta: true })
   }
   if (!b64) return NextResponse.json({ error: 'No se pudo generar la sección', retryable: true }, { status: 502 })
 
@@ -190,6 +199,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // 2:3 de OpenAI → la recortaba. Ese motivo ya no aplica: la imagen ES 9:16. No se reinstala
   // igual — era un adorno menor y la difusión ya renderiza la marca por el label del producto.
   // reserveLockup/BrandLockup siguen sin uso.)
+  // ⚠️ EL COMPOSITE DE LA BARRA ESTÁ DESACTIVADO (2026-08-27, decisión del dueño del repo).
+  // Se construyó porque el prompt no lograba una barra igual entre secciones — y ese diagnóstico
+  // resultó FALSO: lo que variaba era el modelo, no el prompt (ver `viaDirecta` arriba). Con
+  // gpt-image-2 de vuelta, la barra la dibuja el prompt como lo hacía antes de la migración.
+  //
+  // `lib/landing/trust-bar.ts` NO se borró: sigue probado y es la única vía que GARANTIZA una
+  // barra idéntica si el render vuelve a cambiar de modelo. Mismo criterio que `vertical.ts` en
+  // video-ads — un salvavidas documentado para un modo que hoy no se usa, no código muerto.
   const imageUrl = await uploadToStorage(id, Buffer.from(b64, 'base64'), 'image/png', `section-${copy.kind}`)
 
   // Upsert ATÓMICO de la sección: el `order` lo manda el cliente (índice en selected_sections);

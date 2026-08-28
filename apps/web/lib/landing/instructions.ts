@@ -151,8 +151,13 @@ function designSystemBlock(dna: LandingDna, money: MoneyRamp, section: SectionTy
     `Halo: ${dna.halo}, detrás del talento (o de su sustituto).${dna.halo === 'none' ? ' La separación figura-fondo se resuelve solo con el degradado y la profundidad.' : ''} Constante en todo el funnel.`,
     'Base (invariante): superficie reflectante en el borde inferior donde el envase proyecta reflejo vertical difuso.',
     'Profundidad (invariante): tres planos — fondo atmosférico, talento, producto + props en primer plano. Ligera profundidad de campo en el fondo.',
-    `Paleta aplicada por ROL: titular base en ${p.color_headline}; palabra destacada del titular en ${p.color_accent}; cuerpo de texto en ${p.color_body}; superficie de card en ${p.color_surface} (la OPACIDAD y el acabado de esa superficie los define el estilo de marca, más abajo en «Componentes» — no la fijes acá); iconos en ${p.color_icon.join(', ')} (uno por atributo).${dark ? ' Pieza de MODO OSCURO: el fondo, las superficies de card y las bandas son oscuros, y el texto encima va claro. El acabado de las superficies es el mismo que define el estilo de marca abajo — solo cambia que se aplica sobre superficie oscura.' : ''}`,
+    `Paleta aplicada por ROL: titular base en ${p.color_headline}; palabra destacada del titular en ${p.color_accent}; cuerpo de texto en ${p.color_body}; superficie de card en ${p.color_surface}; iconos en ${p.color_icon.join(', ')} (uno por atributo).${dark ? ' Pieza de MODO OSCURO: el fondo, las superficies de card y las bandas son oscuros, y el texto encima va claro. El acabado de las superficies es el mismo que define el estilo de marca abajo — solo cambia que se aplica sobre superficie oscura.' : ''}`,
     `CONSISTENCIA DE COLOR (crítico): estos hex son los MISMOS exactos en las 8 secciones del funnel — el acento ${p.color_accent}, el titular ${p.color_headline} y los íconos NO deben variar de tono, saturación ni brillo de una sección a otra. Son el color EXACTO de la marca, no una sugerencia aproximada.`,
+    // ⚠️ LA BANDA DE CONFIANZA SALIÓ DE ESTA LISTA (2026-08-27): ya no la dibuja el modelo, la
+    // compone el código (`trust-bar.ts`). Dejarla nombrada acá sería volver a tener dos
+    // autoridades sobre el mismo píxel — solo que ahora una de las dos es invisible, porque el
+    // composite tapa lo que el modelo hubiera pintado. El metal sigue rigiendo oferta y sellos.
+    //
     // El oro es invariante salvo que la marca sea dorada (decisión #6): ahí marca y oro se
     // confundirían y muere la regla de significado. El TRATAMIENTO metálico se mantiene siempre —
     // es sobre él, no sobre el tono, que cabalga la distinción.
@@ -160,7 +165,27 @@ function designSystemBlock(dna: LandingDna, money: MoneyRamp, section: SectionTy
     `Tipografía: una sola familia, ${dna.font_family}. Toda la expresividad viene de peso + color + tamaño, jamás de una segunda fuente.${dna.font_accent ? ` ${dna.font_accent} se usa SOLO en el titular de hero/oferta, nunca en cuerpo ni cards.` : ''} Expresión tipográfica de la marca: ${st.type}`,
     'Titular (invariante): 3-4 líneas, alineado a la izquierda, ragged right; conviven líneas neutras en el color de titular semibold y 1-2 palabras clave en el color de acento extrabold, a mayor tamaño. Subtítulo: 1 línea, ~40% del tamaño del titular, con una palabra en el color de acento.',
     'Card title (invariante): bold en el color de titular. Card body: regular en el color de cuerpo, máximo 2 líneas. Microcopy: uppercase bold + descriptor regular debajo, a menor tamaño.',
-    `Componentes — la GEOMETRÍA es invariante (radio, proporciones y anatomía los manda la plantilla); el MATERIAL lo manda la marca. Card: radio 28-32px, con este acabado — ${st.surface} Icono: ${st.icon} Diámetro constante dentro de una misma sección.`,
+    // ⚠️ ESTA LÍNEA VOLVIÓ A SU FORMA ABSOLUTA (2026-08-27), Y LA REGRESIÓN ESTÁ FECHADA.
+    // Hasta `e71564a` (PR #63, 2026-08-15) decía: *"Componentes (estructura invariante, solo
+    // cambia color): card con radio 28-32px, relleno translúcido, borde blanco 1px, sombra difusa
+    // teñida del acento, leve glow — glassmorphism SIEMPRE, card sólida NUNCA."* Con esa forma las
+    // cards salían iguales entre secciones; el dueño del repo lo recordaba y la historia lo
+    // confirma.
+    //
+    // Lo que la rompió NO fue que el material pase a depender de la marca —`st.surface` es
+    // constante dentro de una sesión, así que no puede causar variación ENTRE secciones—. Fue que
+    // la frase pasó de AFIRMAR UN ABSOLUTO a NARRAR UN REPARTO DE AUTORIDAD ("la geometría la
+    // manda la plantilla; el material lo manda la marca"). Eso le pide al modelo que arbitre, y
+    // arbitra distinto en cada sección: contenedor único con divisores en beneficios, tarjetas con
+    // borde gris en testimonios, borde oscuro en faq, sin borde en garantía y cta-final.
+    //
+    // Es la misma causa que la banda de confianza, el escenario y la luz. El reparto sigue siendo
+    // cierto y sigue documentado —en `templateNote`, que es donde va el contrato con la plantilla—;
+    // lo que no puede es vivir DENTRO de la descripción de la card, compitiendo con ella.
+    //
+    // ⚠️ NO reintroduzcas el meta-comentario acá. Si hace falta decir qué manda cada fuente, va en
+    // la nota de plantilla, no en la línea que describe el componente.
+    `Componentes (estructura invariante, solo cambia el color): card de radio 28-32px, ${st.surface} Icono: ${st.icon} Diámetro constante dentro de una misma sección. Estas propiedades son EXACTAMENTE las mismas en las 8 secciones del funnel — el borde, la opacidad, la sombra y el tratamiento del icono NO cambian de una sección a otra.`,
     ...offerComponents(section),
   ].join('\n')
 }
@@ -265,7 +290,21 @@ const TEXT_RULES = [
   'Oferta: ancla tachada + % de ahorro + precio por unidad + escasez temporal. Los tres precios y anclas son el MISMO set en todas las secciones del funnel.',
   'Moneda: "S/" siempre antepuesta, con el mismo formato en toda la pieza.',
   'Máximo 1 signo de exclamación por bloque. Sin mayúsculas sostenidas fuera del microcopy y las pills.',
-  'Disciplina de texto: todo texto visible sale ÚNICAMENTE del copy de abajo + lo impreso en el producto — nunca renderices vocabulario de esta instrucción (nombres de capas, "ADN", "invariante", nombres de fuente) como si fuera copy de la pieza.',
+  // ⚠️ ERA UNA LISTA NEGRA DE JERGA Y POR ESO NO ATAJABA NADA. Decía "nunca renderices vocabulario
+  // de esta instrucción (nombres de capas, «ADN», «invariante», nombres de fuente)" — y lo que se
+  // filtró no parecía jerga, parecía copy. Medido en una sesión real: las tarjetas de testimonios
+  // salieron con la instrucción de casting IMPRESA como cuerpo de texto ("piel trigueña, cabello
+  // oscuro liso, cara ovalada, prenda de tono claro." / "piel clara (más que Card 1)…" / "No se
+  // repiten rasgos, peinados ni colores de ropa."), y beneficios con un bullet que decía "No hay
+  // bloques de venta ni precios" — que es `NO_SALES_BLOCK` vuelto copy.
+  //
+  // ⚠️ CONSECUENCIA GRAVE: el eje de diferenciación de avatares quedó en NO-OP. No es que las caras
+  // se parecieran "todavía un poco" — es que la instrucción nunca actuó sobre ellas, porque el
+  // modelo la convertía en texto. Es cableado, no calibración.
+  //
+  // La regla es ahora una lista BLANCA, que no necesita enumerar: solo se dibuja lo que viene
+  // entrecomillado en el bloque COPY. Mismo criterio que el separador " — " que no se manda.
+  'Disciplina de texto (regla de canal): el ÚNICO texto que se dibuja en la imagen es el que aparece ENTRECOMILLADO en el bloque COPY, más lo que está impreso en el envase del producto. TODO lo demás de esta instrucción —casting, material, encuadre, paleta, prohibiciones, notas de composición— es DIRECCIÓN para ti, jamás letra sobre la pieza, por más que esté escrito en español natural y suene a copy. Ante la duda: si no está entre comillas en COPY, no se escribe.',
   'CÓDIGOS DE COLOR = NUNCA son texto visible. Los valores de color de esta instrucción (#RRGGBB, rgb(...), rgba(...) — p.ej. "rgba(28,74,74,0.7)") indican SOLO qué color aplicar; JAMÁS deben aparecer escritos como texto en la imagen (ni en microcopy, ni en cards, ni en ningún lado). Si un texto necesita color de cuerpo, aplícalo como color — no escribas el código.',
 ].join('\n')
 
@@ -293,10 +332,27 @@ function templateNote(talentImageAttached: boolean, dark: boolean, dna: LandingD
     'REFERENCIAS ADJUNTAS (orden) —',
     'Imagen 1 = envase canónico (fidelidad EXACTA de forma y labels). Siguientes = fotos reales del producto.',
     persona,
-    'ÚLTIMA = PLANTILLA DE COMPOSICIÓN (fuente de verdad de ESTRUCTURA): reproduce EXACTAMENTE su composición, distribución de zonas, geometría y anatomía de tarjetas (radio de esquina, proporciones, disposición), encuadre y jerarquía. La ESTRUCTURA manda la plantilla. Cambia SOLO lo que esta instrucción indica: producto, cara del talento, copy, color, acabado/material de las superficies, luz y props/partículas del nicho. NO copies de la plantilla su producto, marca, textos, ni props/persona de otro nicho.',
+    // ⚠️ LA PLANTILLA ES UN PLANO, NO UNA REFERENCIA VISUAL — Y ESO HAY QUE DECIRLO SIEMPRE, NO
+    // SOLO PARA LOS ESTILOS NO-DEFAULT. El carve-out «ACABADO ≠ ESTRUCTURA» de más abajo solo se
+    // emitía cuando `style !== DEFAULT_STYLE`, así que una marca con el estilo por defecto —el caso
+    // más común— nunca recibía ninguna línea que le dijera que los COLORES de la plantilla no se
+    // copian. Resultado medido sobre una sesión real: el modelo tomaba color y material de la
+    // plantilla de forma distinta en cada sección (bordes de card oscuros en una, tintados en otra,
+    // sin borde en otra) porque nadie le había dicho de dónde salían.
+    'ÚLTIMA = PLANTILLA DE COMPOSICIÓN. Es un PLANO, no una referencia visual: define DÓNDE va cada elemento y con qué proporción. Tomá de ella SOLO la estructura — distribución de zonas, geometría y anatomía de las tarjetas (radio de esquina, proporciones, disposición), encuadre y jerarquía.',
+    '⚠️ COLOR Y MATERIAL NO SE COPIAN DE LA PLANTILLA, NUNCA. Sus colores, su tonalidad, el acabado de sus superficies, sus iconos y su iluminación son un RELLENO de ejemplo. El color y el material de ESTA pieza salen del producto y de la marca, según el DESIGN_SYSTEM de arriba. Igualar la paleta o el acabado de la plantilla es criterio de fallo.',
+    // ⚠️ FUGA REPORTADA POR EL DUEÑO DEL REPO: "a veces se cuela el avatar del template o el
+    // producto del template". La línea vieja lo prohibía pero con un calificador que la anulaba
+    // —"ni props/persona DE OTRO NICHO"—, así que un template del mismo nicho quedaba habilitado.
+    'CONTENIDO DE LA PLANTILLA = MARCADOR DE POSICIÓN. El envase, la persona, el logo, los textos y los props que se ven en ella son de otra marca y NO se copian jamás, aunque se parezcan a los de esta pieza. Donde la plantilla muestra un envase va el de la Imagen 1; donde muestra una persona va la placa de talento adjunta (y si no hay placa adjunta, ahí NO va ninguna persona); donde muestra texto va el copy de abajo.',
+    // ⚠️ ESTE CARVE-OUT ERA CONDICIONAL Y ESE ERA EL MISMO AGUJERO QUE EL DEL COLOR: solo se
+    // emitía con `style !== DEFAULT_STYLE`, así que la marca con el estilo por defecto —el caso
+    // más común— nunca recibía una línea que dijera de dónde sale el acabado de la card. Ahora se
+    // emite siempre; con el estilo por defecto la plantilla y la marca coinciden y la línea es
+    // redundante, que es exactamente lo que se quiere: una sola voz, sin arbitraje.
+    `⚠️ ACABADO ≠ ESTRUCTURA: la plantilla adjunta está armada con acabado de VIDRIO ESMERILADO (cards translúcidas con glow y borde blanco, iconos esféricos 3D glossy). El acabado de ESTA pieza es «${st.name}» y lo manda el DESIGN_SYSTEM de arriba, tal como está descrito ahí y IDÉNTICO en las 8 secciones. De la plantilla tomá solo la estructura y la geometría (zonas, encuadre, radio de esquina, proporciones, anatomía de las tarjetas). Si el acabado del DESIGN_SYSTEM difiere del de la plantilla, manda el DESIGN_SYSTEM: no devuelvas las cards al vidrio esmerilado ni los iconos a esferas glossy para parecerte a ella.`,
     ...(styled
       ? [
-          `⚠️ ACABADO ≠ ESTRUCTURA: la plantilla adjunta está armada con acabado de VIDRIO ESMERILADO (cards translúcidas con glow y borde blanco, iconos esféricos 3D glossy), pero esta pieza es de acabado «${st.name}». De la plantilla tomá SOLO la estructura y la geometría (zonas, encuadre, radio de esquina, proporciones, anatomía de las tarjetas); el MATERIAL y el acabado los manda el DESIGN_SYSTEM de arriba. NO devuelvas las cards al vidrio esmerilado ni los iconos a esferas glossy para parecerte a la plantilla — es criterio de fallo.`,
           // ⚠️ CARVE-OUT DE LUZ — ESCRITO, PROBADO EN PÍXELES, Y **NO FUNCIONA**. No lo cites como
           // mecanismo que anda. La medición (sesión bbbdb4c2, sección beneficios, `bold_impact`):
           // 4 renders — 2 con este carve-out y 2 más cambiándole el halo a `backlight` y a `none` —
@@ -453,10 +509,29 @@ function offerText(offer: Offer): string {
   return `PRICE TIERS — coloca EXACTAMENTE estos ${offer.tiers.length} tiers en las columnas de precio de la plantilla, uno por columna y NINGUNO más. La PLANTILLA ya define la disposición de las 3 columnas, cuál va elevada al centro, la corona/cinta dorada "Recomendado"/"Mejor valor" y el estilo de cada botón — reprodúcela tal cual; esta instrucción solo aporta los DATOS (etiquetas, precios, ancla tachada, ahorro %, precio por unidad, texto del botón). El tier marcado DESTACADO va en el slot central elevado:\n${lines}${offer.urgency ? `\n  Badge de urgencia arriba con EXACTAMENTE este texto y nada más: "${offer.urgency}".` : ''}`
 }
 
-// Barra de confianza: los HECHOS (data). La COMPOSICIÓN la manda la plantilla — este texto ya no
-// describe "frosted pill" ni forma alguna (eso hacía que hero saliera con pills y beneficios con
-// banda sólida). La barra es IDÉNTICA en todas las secciones que la tienen; lo único que cambia
-// entre secciones es el color de fondo de la banda (re-tinte).
+// Barra de confianza: la ESTRUCTURA la manda la plantilla, el COLOR la marca, los HECHOS este
+// bloque. Ese reparto es el modelo mental del dueño del repo para toda la tool (2026-08-27): la
+// plantilla es un plano, el color y el material salen del producto y del branding.
+//
+// ⚠️ EL FALLO ERA QUE ESTE TEXTO PEDÍA LAS DOS COSAS A LA VEZ. Decía "reproduce EXACTAMENTE la
+// banda de confianza de la plantilla" y en el renglón siguiente la repintaba de metal — y la
+// plantilla la muestra AZUL. Medido sobre una sesión real: el modelo conciliaba las dos órdenes
+// distinto cada vez (banda negra de filo dorado en hero, degradado dorado en beneficios, grilla 2x2
+// en testimonios, otro degradado en cta-final). Ahora se nombra explícitamente qué aporta cada
+// fuente y se avisa de que el color de la plantilla es relleno — el metal no se negocia.
+//
+// ⚠️ NO borres el metal para "resolver" la contradicción: se probó y es al revés de lo que la tool
+// quiere. La banda dorada es la regla de significado del sistema (el metal comunica dinero; el
+// color de marca, confianza) y el escalón oro→cobre para marcas doradas ya vive en `moneyRamp`.
+// ⚠️ ESTE TEXTO ES EL DE `8e3d51e` (2026-08-22), RESTAURADO BYTE A BYTE — no lo "mejores".
+// Se lo acusó de contradecirse ("reproduce EXACTAMENTE la banda de la plantilla" + "SIEMPRE
+// metálica dorada") y se lo reemplazó dos veces: primero quitándole el color, después por una
+// reserva de franja con la banda compuesta en código. **Las dos veces el diagnóstico era falso.**
+// La sesión `fbe218f3` del 2026-08-22 salió con ESTE MISMO STRING y sus barras son iguales entre
+// sí y no cortan nada. Lo que había cambiado no era el prompt sino el MODELO: desde `0f51808`
+// (migración de la imagen a KIE) gpt-image-2 rechaza estos prompts y el respaldo nano-banana-2
+// renderiza la banda distinto en cada sección. Se arregla con `viaDirecta` en la ruta, no acá.
+//
 function trustText(trust: TrustBlock, money: MoneyRamp): string {
   const rows: string[] = []
   if (trust.coverage?.length) rows.push(`Envío a domicilio en ${trust.coverage.join(' y ')}${trust.freeShipping ? ' (envío gratis)' : ''}`)
@@ -473,6 +548,7 @@ function trustText(trust: TrustBlock, money: MoneyRamp): string {
 COLOR DE LA BANDA (invariante, NO se re-tinta): la franja es SIEMPRE un degradado metálico ${money.name} de ${money.dark} a ${money.light}, con acabado de lámina pulida y un brillo suave que la recorre. EXACTAMENTE el mismo color y acabado en TODAS las secciones — no lo adaptes a la marca, al fondo ni a la sección. El texto y los iconos sobre la banda van en ${money.on} para que se lean sobre el metal.
 Usa EXACTAMENTE estos hechos, no inventes ninguno:\n${rows.map((r) => `  - ${r}`).join('\n')}`
 }
+
 
 // Reserva la banda inferior de métodos de pago. Garantía deja la banda limpia y puede rotular
 // "Paga como prefieras". (El overlay de logos reales se retiró post-smoke.)
