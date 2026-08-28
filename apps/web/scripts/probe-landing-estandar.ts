@@ -28,6 +28,9 @@ import { buildDiffusionInstruction, MULTI_UNIT_SECTIONS, NO_TALENT_SECTIONS } fr
 import { buildProductPack } from '../lib/landing/product-box'
 import { NO_TALENT_SUBSTITUTE, DEMOGRAPHIC_LABELS, zoneNeedsOwnPlate } from '../lib/landing/demographics'
 import { SectionCopySchema, SECTION_REF, resolveOffer, SectionType } from '../lib/landing/types'
+import { componerBarraConfianza } from '../lib/landing/trust-bar'
+import { moneyRamp } from '../lib/landing/palette-derive'
+import { TRUST_BAND_SECTIONS } from '../lib/landing/instructions'
 
 const SALIDA = process.env.PROBE_OUT ?? '/home/isasachi/.claude/jobs/e42ca7ab/tmp/std'
 const db = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
@@ -94,8 +97,15 @@ async function main() {
 
     console.log(`· ${tipo}: prompt ${prompt.length} caracteres, ${parts.length - 1} imágenes`)
     const b64 = await generateImage(parts, 3, { aspectRatio: '9:16' })
+    // Mismo post-proceso que la ruta: la barra se COMPONE, no la dibuja el modelo.
+    let bytes = Buffer.from(b64, 'base64')
+    if (s.trust_block && TRUST_BAND_SECTIONS.has(tipo)) {
+      bytes = Buffer.from(await componerBarraConfianza(
+        bytes, s.trust_block, moneyRamp(s.landing_dna.palette), s.landing_dna.palette.polarity === 'dark',
+      ))
+    }
     const ruta = `${SALIDA}-${tipo}.png`
-    await writeFile(ruta, Buffer.from(b64, 'base64'))
+    await writeFile(ruta, bytes)
     console.log(`  → ${ruta}`)
   }
 }
