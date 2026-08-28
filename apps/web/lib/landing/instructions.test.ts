@@ -532,10 +532,29 @@ describe('estilo de marca (style-dna)', () => {
     }
   })
 
-  it('un estilo no-default lleva el carve-out ⚠️ ACABADO ≠ ESTRUCTURA; glass_premium no', () => {
-    expect(conEstilo('natural_organic')).toContain('ACABADO ≠ ESTRUCTURA')
-    expect(conEstilo('natural_organic')).toContain(STYLE_DNA.natural_organic.name)
-    expect(conEstilo('glass_premium')).not.toContain('ACABADO ≠ ESTRUCTURA')
+  // ⚠️ ERA CONDICIONAL Y ESE ERA EL AGUJERO. Solo se emitía con `style !== DEFAULT_STYLE`, así
+  // que la marca con el estilo por defecto —la más común— nunca recibía una línea que dijera de
+  // dónde sale el acabado de la card. Mismo agujero que tenía el carve-out de COLOR.
+  it('el carve-out ⚠️ ACABADO ≠ ESTRUCTURA se emite en TODOS los estilos, default incluido', () => {
+    for (const style of [...BrandStyle.options, undefined]) {
+      const out = build('beneficios', { dna: { ...DNA, style } })
+      expect(out).toContain('ACABADO ≠ ESTRUCTURA')
+      expect(out).toContain(STYLE_DNA[style ?? 'glass_premium'].name)
+    }
+  })
+
+  // La regresión que el dueño del repo recordaba: hasta `e71564a` (PR #63) la línea afirmaba un
+  // absoluto ("estructura invariante, solo cambia color … glassmorphism SIEMPRE") y las cards
+  // salían iguales entre secciones. Después pasó a NARRAR un reparto de autoridad ("la geometría
+  // la manda la plantilla; el material lo manda la marca") — y eso le pide al modelo que arbitre.
+  it('la línea de Componentes AFIRMA, no reparte autoridad', () => {
+    for (const style of BrandStyle.options) {
+      const comp = conEstilo(style).match(/^Componentes[^\n]*/m)![0]
+      expect(comp).toContain('estructura invariante')
+      expect(comp).toContain('EXACTAMENTE las mismas en las 8 secciones')
+      // El meta-comentario es justamente lo que la rompió: no puede volver acá.
+      expect(comp).not.toMatch(/lo manda la marca|manda la plantilla|GEOMETRÍA es invariante/)
+    }
   })
 
   // ⚠️ Esto verifica que el carve-out de luz se EMITE, no que funcione — medido en píxeles NO

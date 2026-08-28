@@ -1292,7 +1292,23 @@ Componerla **saca al modelo de la decisión**: se pega encima, así que no depen
 
 ✅ **Verificado por los dos caminos.** En test: la franja compuesta es **byte-idéntica** sobre dos secciones de distinto fondo, tiene tinta de verdad (ese test caza el texto en blanco si la fuente no llega al bundle), cambia con la rampa oro/cobre y no toca la imagen sin hechos de confianza. Y con renders reales de **faq y garantía** —las dos peores de la corrida anterior— las dos salen ahora con la misma banda dorada, mismos ítems, mismos divisores y misma pastilla, con la franja limpia encima. ⚠️ Entre esas dos la igualdad NO es byte a byte porque salieron con lienzos distintos (1152x2048 y 1520x2688, una de gpt-image-2 y otra del respaldo): la barra escala con la imagen. La igualdad exacta a igual tamaño es la que fija el test.
 
-⚠️ **LAS CARDS NO SE PUEDEN ARREGLAR POR LA VÍA DE LA PLANTILLA, y conviene saberlo antes de intentarlo.** La hipótesis era "alinear las plantillas", pero está medido que **su tratamiento de card ya es consistente entre secciones** — el que varía es el render (contenedor único con divisores en beneficios, tarjetas con borde gris en testimonios, borde oscuro en faq, sin borde en garantía y cta-final). No hay contradicción que quitar: es incumplimiento del modelo contra una plantilla que ya dice lo correcto. Las salidas reales son componerlas (no viable: son estructurales, no una franja al pie) o resignar el eje `style` para cards, que el dueño del repo ya rechazó una vez.
+⚠️ **LAS CARDS: LA REGRESIÓN ESTÁ FECHADA Y ES DE REDACCIÓN, NO DEL EJE DE ESTILO (2026-08-27).** El dueño del repo recordaba que "antes salían bien", y la historia lo confirma: hasta **`e71564a` (PR #63, 2026-08-15)** la línea decía
+
+> *"Componentes (**estructura invariante, solo cambia color**): card con radio 28-32px, relleno translúcido, borde blanco 1px, sombra difusa teñida del acento, leve glow — **glassmorphism siempre, card sólida nunca**."*
+
+y después pasó a
+
+> *"Componentes — la **GEOMETRÍA** es invariante (radio, proporciones y anatomía los manda la plantilla); el **MATERIAL** lo manda la marca. Card: radio 28-32px, con este acabado — `${st.surface}`"*.
+
+⚠️ **LO QUE ROMPIÓ NO FUE QUE EL MATERIAL DEPENDA DE LA MARCA.** `st.surface` es constante dentro de una sesión, así que no puede causar variación ENTRE secciones. Lo que rompió es que la frase pasó de **afirmar un absoluto** a **narrar un reparto de autoridad**: eso le pide al modelo que arbitre, y arbitró distinto en cada sección (contenedor único con divisores en beneficios, tarjetas con borde gris en testimonios, borde oscuro en faq, sin borde en garantía y cta-final). Es la misma causa que la banda de confianza, el escenario y la luz.
+
+**El arreglo conserva la PR #63** —la marca sigue decidiendo el material— y recupera la forma que funcionaba: la línea vuelve a ser una sola afirmación (`estructura invariante, solo cambia el color` + el acabado + el icono + *"EXACTAMENTE las mismas en las 8 secciones"*), sin meta-comentario. Hay un test que exige que el reparto NO vuelva a esa línea: si hace falta decir qué manda cada fuente, va en `templateNote`, que es donde vive el contrato con la plantilla.
+
+⚠️ **Y el carve-out `ACABADO ≠ ESTRUCTURA` pasó a ser INCONDICIONAL — mismo agujero que tenía el del color.** Colgaba de `style !== DEFAULT_STYLE`, así que la marca con el estilo por defecto nunca recibía una línea que dijera de dónde sale el acabado. Con el default la plantilla y la marca coinciden y la línea es redundante, que es justo lo que se quiere: una sola voz. ⚠️ El carve-out de **LUZ sigue condicional a propósito**: está documentado como escrito, probado en píxeles y **sin efecto**, así que emitirlo siempre sería sumar ruido a un prompt que ya recorta.
+
+⚠️ **La vía de "alinear las plantillas" NO aplica acá, y conviene saberlo antes de intentarla:** está medido que **su tratamiento de card ya es consistente entre secciones**. No hay contradicción que quitar — por eso el arreglo es de redacción y no de assets.
+
+⚠️ **SIN VERIFICAR:** es una hipótesis de redacción, y este documento tiene medido tres veces que la redacción es una palanca débil. Lo que la respalda es que el estado "antes" está verificado en git y la diferencia es nombrable. Se comprueba con renders, no con tests.
 
 ⚠️ **LO QUE ESTE CAMBIO NO ARREGLA:**
 - **La oferta.** Un solo frasco en vez de variantes por tier, y el tier de 1 unidad sin botón. El dato es correcto (los tres tiers traen `cta`), `offerText` sí pide `botón "…"` por tier y **la plantilla muestra los tres botones**: es incumplimiento del modelo contra una plantilla correcta, `n = 1`, sin mecanismo identificado.
