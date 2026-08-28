@@ -1300,9 +1300,21 @@ El propio documento fija la equivalencia: `9:16 → 864x1536` es el `sizeFor` de
 
 ⚠️ **CONSECUENCIA PENDIENTE:** en producción `IMAGE_VIA` **no está seteada**, así que producción sigue cayendo al respaldo. Y queda sin decidir si, con gpt-image-2 de vuelta, la barra compuesta sigue haciendo falta — el prompt solo bastaba en la sesión del 22-ago.
 
-✅ **LANDING VUELVE AL SDK DIRECTO PARA LA IMAGEN, Y SOLO LANDING (2026-08-27).** `generateImage` acepta ahora `opts.viaDirecta`, y la ruta de sección lo pasa en `true`. Va **por llamada y no por `IMAGE_VIA` de entorno** a propósito: la variable cambiaría el camino de TODO el hub, y anuncios y branding hoy funcionan bien por KIE. Lo que se arregla con esto es la clase entera de defectos que se reportó como *"nada es estándar"*.
+✅ **CABLEADO DE IMAGEN DE LANDING (2026-08-27, decisión del dueño del repo).** `generateImage` gana `opts.viaDirecta`, que le da a landing su propia rama:
 
-⚠️ **LA HUELLA PARA SABER QUÉ MODELO RESPONDIÓ ES EL TAMAÑO DEL LIENZO: `864x1536` = gpt-image-2, `1152x2048` = nano-banana-2.** Es la comprobación más barata que existe y hay que hacerla ANTES de diagnosticar un prompt.
+| llamada | primario | respaldo |
+|---|---|---|
+| secciones y retrato del talento (`viaDirecta`) | **gpt-image-2 por el SDK de OpenAI** | **nano-banana-2 por KIE** |
+| **placa de zona** (`preferGemini`, sin `viaDirecta`) | **nano-banana-2 por KIE** | gpt-image-2 |
+| anuncios, branding, video (sin flags) | gpt-image-2 por KIE | nano-banana-2 por KIE |
+
+⚠️ **POR LLAMADA Y NO POR `IMAGE_VIA` DE ENTORNO.** La variable cambiaría el camino de TODO el hub, y anuncios y branding hoy funcionan bien por KIE. Es un problema de UNA tool, no del motor.
+
+⚠️ **Y EL RESPALDO DE LANDING NO PUEDE SER `geminiGenerateImage`**, que es lo que hace la rama de `IMAGE_VIA=direct`: ese camino usa el SDK de Google, y su clave devuelve `429 prepayment credits are depleted` (medido 2026-08-27). Sería caer de un modelo que anda a uno muerto. Por eso landing tiene rama propia en vez de reusar la del escape.
+
+⚠️ **LA PLACA DE ZONA SE QUEDA EN KIE A PROPÓSITO, no por olvido:** gpt-image-2 modera el encuadre de cuerpo sin rostro en 4 de 4 corridas, así que ahí el primario tiene que ser nano-banana-2 y gpt-image-2 es la segunda oportunidad. `preferGemini` invierte el par en las DOS ramas, así que el contrato se mantiene con o sin `viaDirecta`.
+
+✅ **Fijado por `lib/gemini.imagen.test.ts`**, que mockea los dos transportes y comprueba quién atiende primero y quién de respaldo en los tres casos, incluida la caída por respuesta VACÍA (no solo por excepción). Existe porque **este cableado ya cambió en silencio una vez**: un `console.warn` no es una señal.
 
 🔴 **Y LA BARRA COMPUESTA SE DESACTIVÓ.** `lib/landing/trust-bar.ts` se construyó sobre un diagnóstico FALSO (que el prompt no podía dar una barra igual entre secciones). Con gpt-image-2 de vuelta, el prompt sí puede — es lo que hacía antes de la migración. `trustText` está **restaurado byte a byte** desde `8e3d51e`, junto con la banda en la lista de usos del metal del `DESIGN_SYSTEM`: las dos mitades vuelven juntas o el prompt se contradice.
 

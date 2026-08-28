@@ -51,8 +51,8 @@ function viaDirecta(): boolean {
 // content could not be processed" y `generateImage` cae al respaldo en silencio — el mismo
 // prompt, por el SDK directo, se acepta. La variable de entorno lo arreglaba para TODO el hub,
 // incluidos anuncios y branding, que hoy funcionan bien por KIE.
-function imagenDirecta(opts?: { viaDirecta?: boolean }): boolean {
-  return opts?.viaDirecta === true || process.env.IMAGE_VIA === 'direct'
+function imagenDirecta(): boolean {
+  return process.env.IMAGE_VIA === 'direct'
 }
 
 // ⚠️ Latencia de imagen (constraint de despliegue, NO se resuelve solo con este cableado):
@@ -279,7 +279,43 @@ export async function generateImage(
   // de siempre: `preferGemini` pone a nano-banana-2 (gemini-3.1-flash-image) de primario. Lo usan
   // la placa de zona de landing —donde gpt-image-2 modera el encuadre de cuerpo sin rostro en 4 de
   // 4 corridas— y el avatar y las anclas del video.
-  if (!imagenDirecta(opts) && !geminiForced()) {
+  // ⚠️ CABLEADO DE LANDING (`viaDirecta`, 2026-08-27): gpt-image-2 por el **SDK de OpenAI**, con
+  // respaldo **nano-banana-2 por KIE**. Es su propia rama y no reusa `IMAGE_VIA` a propósito:
+  //
+  //  - Por KIE, gpt-image-2 RECHAZA los prompts de landing 3 de 3 ("The current content could not
+  //    be processed") y el respaldo entra en silencio. Nano-banana-2 renderiza la barra y las
+  //    cards distinto en cada sección, y eso es lo que se reportó como "nada es estándar". Por el
+  //    SDK directo el MISMO prompt se acepta. La huella para saberlo es el tamaño: 864x1536 =
+  //    gpt-image-2, 1152x2048 = nano-banana-2.
+  //  - Y el respaldo NO puede ser `geminiGenerateImage`, que es lo que hacía la rama de
+  //    `IMAGE_VIA=direct`: ese camino usa el SDK de Google, y su clave devuelve `429 prepayment
+  //    credits are depleted` (medido 2026-08-27). Sería caer de un modelo que anda a uno muerto.
+  //
+  // ⚠️ `preferGemini` invierte el par también acá — lo usa la PLACA DE ZONA, donde gpt-image-2
+  // modera el encuadre de cuerpo sin rostro en 4 de 4 corridas. Ahí el primario es nano-banana-2
+  // POR KIE y gpt-image-2 queda de segunda oportunidad, no al revés.
+  if (opts?.viaDirecta && !geminiForced()) {
+    if (opts.preferGemini) {
+      try {
+        const out = await kieGenerateImage('nano-banana-2', allParts, maxRetries, opts)
+        if (out) return out
+        console.warn('[llm] nano-banana-2 (KIE) vacía → respaldo gpt-image-2 (SDK)')
+      } catch (e) {
+        console.warn('[llm] nano-banana-2 (KIE) falló → respaldo gpt-image-2 (SDK)', e)
+      }
+      return withTimeout(openaiGenerateImage(allParts, maxRetries, opts), imageTimeoutMs())
+    }
+    try {
+      const out = await withTimeout(openaiGenerateImage(allParts, maxRetries, opts), imageTimeoutMs())
+      if (out) return out
+      console.warn('[llm] gpt-image-2 (SDK) vacía → respaldo nano-banana-2 (KIE)')
+    } catch (e) {
+      console.warn('[llm] gpt-image-2 (SDK) falló → respaldo nano-banana-2 (KIE)', e)
+    }
+    return kieGenerateImage('nano-banana-2', allParts, maxRetries, opts)
+  }
+
+  if (!imagenDirecta() && !geminiForced()) {
     const [primero, segundo]: ModeloImagen[] = opts?.preferGemini
       ? ['nano-banana-2', 'gpt-image-2']
       : ['gpt-image-2', 'nano-banana-2']
