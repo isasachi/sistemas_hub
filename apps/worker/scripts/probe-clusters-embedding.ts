@@ -18,6 +18,7 @@ import './bootstrap'
 import { config } from 'dotenv'
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { CHAT } from '../lib/product-hunter/product-key'
+import { cleanJsonText } from '@ph/shared'
 
 // ⚠️ La OPENAI_API_KEY del worker es un PLACEHOLDER (`sk-....`) y la real vive
 // en la env de apps/web. `override: true` no es opcional: `bootstrap` ya cargó
@@ -187,7 +188,12 @@ async function main() {
         '(mismo artículo o servicio concreto) o productos DISTINTOS. Dos anuncios con el mismo reclamo promocional ' +
         'pero distinto artículo son DISTINTOS. Un mismo artículo con copy en otro idioma o en otra landing es el MISMO.\n' +
         'Devuelve JSON {"r":[{"i":0,"same":true}, ...]} con un item por par.\n\n' +
-        lote.map((p, k) => `[${k}] anunciante: ${p.page}\n  A: ${p.a.slice(0, 260)}\n  B: ${p.b.slice(0, 260)}`).join('\n\n')
+        // ⚠️ `cleanJsonText`, no `slice` a secas: el copy publicitario trae
+        // emojis, y cortarlo a 260 puede partir un par de surrogates al medio.
+        // La API rechaza el request entero con "Invalid body" y el lote se
+        // pierde — medido, murió en el lote 12 de 14.
+        lote.map((p, k) => `[${k}] anunciante: ${cleanJsonText(p.page)}\n` +
+          `  A: ${cleanJsonText(p.a.slice(0, 260))}\n  B: ${cleanJsonText(p.b.slice(0, 260))}`).join('\n\n')
       const res = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
