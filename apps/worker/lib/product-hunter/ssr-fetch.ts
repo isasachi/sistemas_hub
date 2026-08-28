@@ -109,14 +109,43 @@ export async function openSsrSession(page: Page, country = 'MX'): Promise<void> 
  * dejar la fila pendiente, jamás asumir cero.
  */
 export async function readConnection(page: Page, url: string): Promise<SsrResult | null> {
+  // ── Camino rápido: fetch same-origin (2,3 s contra ~15 s de navegar) ──
+  //
+  // ⚠️ EL BODY SE PARSEA AUNQUE EL STATUS NO SEA OK. Medido el 2026-08-28 desde
+  // una IP que Meta estaba limitando: la respuesta viene con **HTTP 403 y el
+  // contenido completo adentro** (`count: 50`, 30 anuncios). El `if (!r.ok)
+  // return null` que había acá tiraba esa lectura buena y la reportaba como
+  // inconclusa — o sea el pipeline se auto-bloqueaba con datos en la mano.
   const js = `(async () => {
-    var r = await fetch(${JSON.stringify(url)}, { credentials: 'include' })
-    if (!r.ok) return null
-    var html = await r.text()
-    return (${EXTRACTOR_JS})(html)
+    try {
+      var r = await fetch(${JSON.stringify(url)}, { credentials: 'include' })
+      var html = await r.text()
+      return (${EXTRACTOR_JS})(html)
+    } catch (e) { return null }
   })()`
-  const out = await page.evaluate(js).catch(() => null)
-  return (out as SsrResult | null) ?? null
+  const rapido = (await page.evaluate(js).catch(() => null)) as SsrResult | null
+  if (rapido) return rapido
+
+  // ── Fallback: leer NAVEGANDO ──
+  //
+  // ⚠️ NO ES REDUNDANTE CON EL DE ARRIBA: son dos barreras distintas. Medido en
+  // la misma sesión y repetido dos veces, el fetch same-origin moría con
+  // `TypeError: Failed to fetch` (falla de RED, no de status) mientras la
+  // navegación al MISMO url devolvía los 30 anuncios. Sin esto, el barrido se
+  // detiene entero por bloqueo persistente teniendo el contenido disponible.
+  //
+  // Cuesta ~5 s en vez de 2,3 s, así que solo corre cuando el rápido falló.
+  try {
+    await page.goto(url, { timeout: 30_000, waitUntil: 'domcontentloaded' })
+    // Meta reescribe la URL del lado del cliente y esa navegación destruye el
+    // contexto de ejecución: sin la espera el evaluate falla. Mismo motivo que
+    // documenta `openSsrSession`.
+    await page.waitForTimeout(2_500)
+    const out = await page.evaluate(`(${EXTRACTOR_JS})(document.documentElement.outerHTML)`)
+    return (out as SsrResult | null) ?? null
+  } catch {
+    return null
+  }
 }
 
 /**

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { EXTRACTOR_JS, advertiserUrl } from './ssr-fetch'
+import { EXTRACTOR_JS, advertiserUrl, readConnection } from './ssr-fetch'
 
 // Se evalúa la MISMA fuente que corre en el browser, no una copia.
 const extract = new Function(`return (${EXTRACTOR_JS})`)() as (html: string) => {
@@ -60,5 +60,51 @@ describe('advertiserUrl', () => {
   })
   it('mide al anunciante en todos los países', () => {
     expect(advertiserUrl('123')).toContain('country=ALL')
+  })
+})
+
+describe('readConnection — fallback por navegación', () => {
+  const RESULTADO = { count: 50, ads: [{ page_id: '1' }] }
+
+  /** Page falsa: decide qué hace el fetch y qué hace la navegación. */
+  const fakePage = (opts: { fetchDevuelve: unknown; navDevuelve?: unknown; navFalla?: boolean }) => {
+    const llamadas: string[] = []
+    return {
+      llamadas,
+      evaluate: async (js: string) => {
+        // El camino rápido arma un fetch; el fallback lee el DOM ya navegado.
+        if (js.includes('fetch(')) { llamadas.push('fetch'); return opts.fetchDevuelve }
+        llamadas.push('dom')
+        return opts.navDevuelve ?? null
+      },
+      goto: async () => {
+        llamadas.push('goto')
+        if (opts.navFalla) throw new Error('net::ERR_ABORTED')
+        return null
+      },
+      waitForTimeout: async () => {},
+    }
+  }
+
+  it('cuando el fetch resuelve, NO navega (la navegación cuesta el doble)', async () => {
+    const p = fakePage({ fetchDevuelve: RESULTADO })
+    const r = await readConnection(p as never, 'https://x/y')
+    expect(r).toEqual(RESULTADO)
+    expect(p.llamadas).toEqual(['fetch'])
+  })
+
+  // Medido: el fetch same-origin moría con "Failed to fetch" mientras la
+  // navegación al MISMO url devolvía los 30 anuncios. Sin este fallback el
+  // barrido se corta por bloqueo persistente teniendo el contenido a mano.
+  it('cuando el fetch se cae, lee navegando', async () => {
+    const p = fakePage({ fetchDevuelve: null, navDevuelve: RESULTADO })
+    const r = await readConnection(p as never, 'https://x/y')
+    expect(r).toEqual(RESULTADO)
+    expect(p.llamadas).toEqual(['fetch', 'goto', 'dom'])
+  })
+
+  it('si también falla la navegación, sigue siendo INCONCLUSO (null)', async () => {
+    const p = fakePage({ fetchDevuelve: null, navFalla: true })
+    expect(await readConnection(p as never, 'https://x/y')).toBeNull()
   })
 })
