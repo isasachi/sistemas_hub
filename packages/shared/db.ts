@@ -662,8 +662,11 @@ export interface RawVerdictInput {
   // (las filas importadas del pipeline anterior lo traen desactualizado) y con
   // eso el rango, que sale de ese número.
   ad_count?: number | null
-  status: 'monoproducto' | 'sin_verificar' | 'descartado'
-  kind: string
+  // 'pendiente' e 'inactivo' entran porque el backfill de clusters escribe el
+  // conteo y el marcador de cola SIN re-juzgar al anunciante: ahí el status que
+  // se guarda es el que la fila ya tenía. Ver `--solo-clusters` en scan-base.
+  status: 'monoproducto' | 'sin_verificar' | 'descartado' | 'pendiente' | 'inactivo'
+  kind: string | null
   share: number | null
   product_name: string | null
   verdict_note: string | null

@@ -35,7 +35,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import type { Page } from 'playwright'
 import {
   launchScraperContext, runPool, isPersistentlyBlocked, PersistentBlockError,
-  rateGateMs, CONCURRENCY,
+  rateGateMs, noteNavResult, CONCURRENCY,
 } from '../lib/product-hunter/scraper'
 import { openSsrSession } from '../lib/product-hunter/ssr-fetch'
 import {
@@ -134,6 +134,20 @@ async function main() {
   // pediría las mismas y el dedupe de abajo cortaría el barrido creyendo que la
   // cola se vació. Con el lote entero en un solo fetch no hay segunda vuelta.
   const rehacer = args.includes('--rehacer')
+  // --solo-clusters: construye ph_raw_clusters SIN re-juzgar al anunciante con
+  // la regla vieja.
+  //
+  // ⚠️ SIN ESTO EL BACKFILL DEGRADA EL BUSCADOR MIENTRAS EL FLAG ESTÁ APAGADO, y
+  // está medido: en 3,5 h `juzgarAnunciante` marcó `descartado` a 6.213 filas
+  // por share bajo (media 0,32), de las cuales 5.978 tienen ≥40 anuncios. Son
+  // EXACTAMENTE las páginas multiproducto que este cambio existe para rescatar
+  // — y como el serving todavía lee ph_raw_products, desaparecen de la vitrina
+  // sin que sus clusters estén sirviéndose todavía.
+  //
+  // Con el flag se conserva el `status` que la fila ya tenía y solo se refresca
+  // lo que el backfill sí debe actualizar: el conteo, la antigüedad y el
+  // marcador de cola. El veredicto por producto vive en ph_raw_clusters.
+  const soloClusters = args.includes('--solo-clusters')
 
   await cargarKeywords()
   const pendientes = await countRawPending()
@@ -179,6 +193,13 @@ async function main() {
           cacheLectura.set(clave, pendiente)
         }
         const l = await pendiente
+        // ⚠️ SIN ESTO EL COOL-DOWN NUNCA SE ENTERA. El controlador de bloqueo es
+        // compartido pero se alimenta desde los callers (`noteNavResult`), y
+        // este script no lo hacía — `scan-nicho` sí. Resultado medido el
+        // 2026-08-28: 3,5 h golpeando una IP ya bloqueada sin que se activara
+        // ni una pausa, quemando 19.027 filas con lecturas vacías. Se pasa la
+        // muestra, que es lo que distingue "leí bien" de "me devolvieron humo".
+        noteNavResult(l ? l.muestra : 0)
         // Inconcluso: la fila queda 'pendiente' y vuelve a salir en otra corrida.
         // Se saca del cache para que un fallo transitorio no se propague al
         // resto de los nichos del mismo anunciante.
@@ -207,9 +228,15 @@ async function main() {
           )
 
         await saveRawVerdict({
-          niche: row.niche, page_id: row.page_id, ad_count: m.adCount, status: v.status,
-          kind: v.kind, share: m.share, product_name: v.productName,
-          verdict_note: v.nota, senal_nicho: m.senal, product_path: m.dominante,
+          niche: row.niche, page_id: row.page_id, ad_count: m.adCount,
+          // En modo --solo-clusters el status NO se toca: la regla que lo
+          // decidía es la que este cambio retira, y pisarlo sacaría de la
+          // vitrina justo las páginas multiproducto. Ver el comentario del flag.
+          status: soloClusters ? (row.status ?? 'pendiente') : v.status,
+          kind: soloClusters ? (row.kind ?? null) : v.kind,
+          share: m.share, product_name: soloClusters ? (row.product_name ?? null) : v.productName,
+          verdict_note: soloClusters ? (row.verdict_note ?? null) : v.nota,
+          senal_nicho: m.senal, product_path: m.dominante,
           ad_start_date: m.masViejo,
         })
         if (clusters.length) await upsertRawClusters(clusters)

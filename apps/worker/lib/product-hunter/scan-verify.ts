@@ -83,6 +83,19 @@ export async function leerAnunciante(
   const global = await readConnection(page, advertiserUrl(pageId))
   if (!global || typeof global.count !== 'number') return null
 
+  // ⚠️ CONTEO SIN ANUNCIOS ES UN BLOQUEO, NO UN ANUNCIANTE VACÍO — y tratarlo
+  // como lectura buena es el fallo más caro que tuvo este pipeline. Medido el
+  // 2026-08-28: un barrido de 3,5 h marcó 19.027 filas (6.548 anunciantes) con
+  // share 0, el 86% con ≥40 anuncios activos y media de 73 — o sea anunciantes
+  // vivos leídos en cero. Como el veredicto escribe `senal_nicho`, esas filas
+  // salieron de las DOS colas para siempre sin dejar un solo cluster.
+  // Comprobado con un control: un anunciante que había devuelto 30 anuncios
+  // minutos antes devolvía count=0 en ALL, CO y MX al mismo tiempo.
+  //
+  // `count === 0` SÍ es un anunciante sin pauta activa y se deja pasar: ahí el
+  // cero es el dato. Lo que no puede pasar es count > 0 con la lista vacía.
+  if (global.count > 0 && !global.ads.length) return null
+
   let adCount = global.count
   if (country && country !== 'ALL') {
     await esperarTurno()
