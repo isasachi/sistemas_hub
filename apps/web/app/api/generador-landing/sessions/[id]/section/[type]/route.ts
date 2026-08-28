@@ -2,9 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getLandingSession, updateLandingSession, upsertLandingSection } from '@/lib/landing/db'
 import { fetchAsBase64, uploadToStorage, storagePublicUrl } from '@/lib/storage'
 import { generateImage, editWithPrompt } from '@/lib/gemini'
-import { buildDiffusionInstruction, MULTI_UNIT_SECTIONS, NO_TALENT_SECTIONS, OFFER_SECTIONS, TRUST_BAND_SECTIONS } from '@/lib/landing/instructions'
-import { componerBarraConfianza } from '@/lib/landing/trust-bar'
-import { moneyRamp } from '@/lib/landing/palette-derive'
+import { buildDiffusionInstruction, MULTI_UNIT_SECTIONS, NO_TALENT_SECTIONS, OFFER_SECTIONS } from '@/lib/landing/instructions'
 import { buildProductPack } from '@/lib/landing/product-box'
 import { NO_TALENT_SUBSTITUTE, DEMOGRAPHIC_LABELS, zoneNeedsOwnPlate } from '@/lib/landing/demographics'
 import { generateOfferCopy } from '@/lib/landing/copy'
@@ -176,7 +174,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         demographicLabel: session.demographic_id && session.demographic_id !== 'no_talent' ? DEMOGRAPHIC_LABELS[session.demographic_id] : undefined,
       }),
     })
-    b64 = await generateImage(parts, 3, { aspectRatio: '9:16' })
+    // ⚠️ `viaDirecta` ES SOLO PARA LANDING, y por un fallo medido: gpt-image-2 POR KIE rechaza
+    // estos prompts 3 de 3 ("The current content could not be processed") y `generateImage` cae al
+    // respaldo en silencio. Nano-banana-2 renderiza la barra y las cards distinto en cada sección,
+    // y eso es lo que se reportó como "nada es estándar" — el prompt nunca fue el problema. Por el
+    // SDK directo el MISMO prompt se acepta y vuelve la calidad de antes de la migración.
+    //
+    // Va por LLAMADA y no por `IMAGE_VIA` de entorno a propósito: la variable lo cambiaría para
+    // todo el hub, y anuncios y branding hoy funcionan bien por KIE. La huella para saber qué
+    // modelo respondió es el tamaño: 864x1536 = gpt-image-2, 1152x2048 = nano-banana-2.
+    b64 = await generateImage(parts, 3, { aspectRatio: '9:16', viaDirecta: true })
   }
   if (!b64) return NextResponse.json({ error: 'No se pudo generar la sección', retryable: true }, { status: 502 })
 
@@ -192,28 +199,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // 2:3 de OpenAI → la recortaba. Ese motivo ya no aplica: la imagen ES 9:16. No se reinstala
   // igual — era un adorno menor y la difusión ya renderiza la marca por el label del producto.
   // reserveLockup/BrandLockup siguen sin uso.)
-  // ⚠️ LA BARRA DE CONFIANZA SE SUPERPONE ACÁ, NO LA DIBUJA EL MODELO. Tiene que ser el MISMO
-  // elemento en las 6 secciones que la llevan, y tres rondas de prompt no lo lograron: sobre una
-  // corrida real de las 8 salieron tres barras doradas, una NEGRA, una negra con filos dorados y
-  // una en dos filas — con el bloque de texto que la describe siendo literalmente idéntico en las
-  // 6 (hay un test que lo fija). Componerla saca al modelo de la decisión. Ver `trust-bar.ts`.
+  // ⚠️ EL COMPOSITE DE LA BARRA ESTÁ DESACTIVADO (2026-08-27, decisión del dueño del repo).
+  // Se construyó porque el prompt no lograba una barra igual entre secciones — y ese diagnóstico
+  // resultó FALSO: lo que variaba era el modelo, no el prompt (ver `viaDirecta` arriba). Con
+  // gpt-image-2 de vuelta, la barra la dibuja el prompt como lo hacía antes de la migración.
   //
-  // Es best-effort: un fallo del composite NO puede tumbar una generación ya pagada — se sube la
-  // imagen tal cual y se loguea, que es el mismo criterio que el mirror de `lote-status`.
-  let bytes = Buffer.from(b64, 'base64')
-  if (session.trust_block && TRUST_BAND_SECTIONS.has(parsedType.data)) {
-    try {
-      bytes = Buffer.from(await componerBarraConfianza(
-        bytes,
-        session.trust_block,
-        moneyRamp(session.landing_dna.palette),
-        session.landing_dna.palette.polarity === 'dark',
-      ))
-    } catch (err) {
-      console.error('[landing-section] no se pudo componer la barra de confianza', err)
-    }
-  }
-  const imageUrl = await uploadToStorage(id, bytes, 'image/png', `section-${copy.kind}`)
+  // `lib/landing/trust-bar.ts` NO se borró: sigue probado y es la única vía que GARANTIZA una
+  // barra idéntica si el render vuelve a cambiar de modelo. Mismo criterio que `vertical.ts` en
+  // video-ads — un salvavidas documentado para un modo que hoy no se usa, no código muerto.
+  const imageUrl = await uploadToStorage(id, Buffer.from(b64, 'base64'), 'image/png', `section-${copy.kind}`)
 
   // Upsert ATÓMICO de la sección: el `order` lo manda el cliente (índice en selected_sections);
   // al regenerar se preserva el existente. Se persiste vía RPC atómica (no read-modify-write del

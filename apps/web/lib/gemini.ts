@@ -45,8 +45,14 @@ function viaDirecta(): boolean {
 // ⚠️ `IMAGE_VIA=direct` devuelve el recurso a los SDK sin desplegar. Va aparte de `GEMINI_VIA`
 // porque son dos recursos distintos: se puede tener el texto en KIE y la imagen en los SDK, o al
 // revés, que es justo el punto de migrar de a uno.
-function imagenDirecta(): boolean {
-  return process.env.IMAGE_VIA === 'direct'
+// ⚠️ Y se puede forzar POR LLAMADA (`opts.viaDirecta`), no solo por entorno. Existe porque el
+// caso real no es "migrar el hub entero", es "esta tool necesita el otro camino": medido el
+// 2026-08-27, **gpt-image-2 por KIE rechaza los prompts de landing 3 de 3** con "The current
+// content could not be processed" y `generateImage` cae al respaldo en silencio — el mismo
+// prompt, por el SDK directo, se acepta. La variable de entorno lo arreglaba para TODO el hub,
+// incluidos anuncios y branding, que hoy funcionan bien por KIE.
+function imagenDirecta(opts?: { viaDirecta?: boolean }): boolean {
+  return opts?.viaDirecta === true || process.env.IMAGE_VIA === 'direct'
 }
 
 // ⚠️ Latencia de imagen (constraint de despliegue, NO se resuelve solo con este cableado):
@@ -265,7 +271,7 @@ async function geminiGenerateImage(
 export async function generateImage(
   parts: Part[],
   maxRetries = 3,
-  opts?: { aspectRatio?: string; imageSize?: string; preferGemini?: boolean }
+  opts?: { aspectRatio?: string; imageSize?: string; preferGemini?: boolean; viaDirecta?: boolean }
 ): Promise<string> {
   const allParts: Part[] = [...parts, { text: SPANISH_RULE }]
 
@@ -273,7 +279,7 @@ export async function generateImage(
   // de siempre: `preferGemini` pone a nano-banana-2 (gemini-3.1-flash-image) de primario. Lo usan
   // la placa de zona de landing —donde gpt-image-2 modera el encuadre de cuerpo sin rostro en 4 de
   // 4 corridas— y el avatar y las anclas del video.
-  if (!imagenDirecta() && !geminiForced()) {
+  if (!imagenDirecta(opts) && !geminiForced()) {
     const [primero, segundo]: ModeloImagen[] = opts?.preferGemini
       ? ['nano-banana-2', 'gpt-image-2']
       : ['gpt-image-2', 'nano-banana-2']
