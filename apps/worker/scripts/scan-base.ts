@@ -123,6 +123,17 @@ async function main() {
   // el motor viejo y lo marcado 'inactivo' (que revive si volvió a pautar: el
   // conteo se relee en vivo).
   const todo = args.includes('--todo')
+  // --rehacer: las filas que YA pasó scan-* y siguen sirviéndose. No están en
+  // 'pendiente' ni en la cola de --todo (que pide senal_nicho null), así que las
+  // dos las saltean — y sin clusters propios desaparecen del buscador el día que
+  // se prenda PH_SERVE_CLUSTERS. Es el complemento del barrido grande.
+  //
+  // ⚠️ USALO CON UN `--lote` QUE CUBRA TODO EL SET DE UNA (medido: son 337
+  // filas, así que `--rehacer --lote 500` alcanza). Esta cola no se autovacía:
+  // procesar una fila no le quita el `senal_nicho`, así que la segunda vuelta
+  // pediría las mismas y el dedupe de abajo cortaría el barrido creyendo que la
+  // cola se vació. Con el lote entero en un solo fetch no hay segunda vuelta.
+  const rehacer = args.includes('--rehacer')
 
   await cargarKeywords()
   const pendientes = await countRawPending()
@@ -142,9 +153,19 @@ async function main() {
   try {
     await Promise.all(pages.map((p) => openSsrSession(p)))
 
+    // ⚠️ `--rehacer` NO SE AUTOVACÍA: procesar una fila no le quita el
+    // `senal_nicho`, así que la query la devuelve otra vez y el loop giraría
+    // sobre las mismas 60 para siempre. Las colas normales sí se vacían (la
+    // fila deja de ser 'pendiente' / gana senal_nicho) y no pagan nada por esto.
+    const yaVistas = new Set<string>()
+
     while (procesados < total && !motivoCorte) {
       const cuantos = Math.min(lote, total - procesados)
-      const filas = await getRawProductsByVolume(cuantos, minAds, maxAds, niche, todo)
+      const crudas = await getRawProductsByVolume(cuantos, minAds, maxAds, niche, todo, rehacer)
+      const filas = rehacer
+        ? crudas.filter((r) => !yaVistas.has(`${r.niche}:${r.page_id}`))
+        : crudas
+      for (const r of filas) yaVistas.add(`${r.niche}:${r.page_id}`)
       if (!filas.length) { motivoCorte = 'cola vacía'; break }
 
       const settled = await runPool(filas, pages, async (row: RawProductRow, page: Page) => {

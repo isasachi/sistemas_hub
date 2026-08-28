@@ -698,9 +698,25 @@ export async function getRawProductsToVerify(limit = 50, niche?: string): Promis
  * producto dan 1.00). Empezar por arriba pone primero lo que se puede medir.
  */
 export async function getRawProductsByVolume(
-  limit = 60, minAds = 0, maxAds?: number, niche?: string, todo = false,
+  limit = 60, minAds = 0, maxAds?: number, niche?: string,
+  todo = false, rehacer = false,
 ): Promise<RawProductRow[]> {
   let q = getDb().from('ph_raw_products').select('*')
+  // ⚠️ `rehacer` existe por un hueco del backfill de clusters: las filas que YA
+  // pasó scan-* tienen `senal_nicho`, así que no están en la cola de `todo`, y
+  // tampoco están en 'pendiente'. O sea las dos colas las saltean — y son el
+  // mejor inventario que hay (medido: 337 servibles, 320 con sello de
+  // monoproducto). Sin clusters propios desaparecerían del buscador el día que
+  // se prenda PH_SERVE_CLUSTERS. Es una pasada corta: a ~83 filas/min son
+  // minutos, no las 13 h del barrido grande.
+  if (rehacer) {
+    return (await q.not('senal_nicho', 'is', null)
+      .not('status', 'in', '(descartado,inactivo)')
+      .gte('ad_count', minAds)
+      .order('ad_count', { ascending: false })
+      .order('page_id')
+      .limit(limit)).data as RawProductRow[] ?? []
+  }
   // `todo` = toda la base, no solo la cola de pendientes: incluye lo que
   // verificó el motor viejo (que no escribe `senal_nicho`) y lo marcado
   // 'inactivo'. `senal_nicho` es el marcador de "ya pasó por scan-*": lo escribe
