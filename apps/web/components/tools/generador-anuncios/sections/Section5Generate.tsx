@@ -121,15 +121,33 @@ export default function Section5Generate() {
 
       {imageUrl && (
         <div className="flex flex-col gap-4">
-          <img src={imageUrl} alt="Anuncio generado" className="w-full rounded-2xl border border-white/[0.06] shadow-[0_8px_32px_rgba(0,0,0,.6)]" />
+          {/* ⚠️ AL REGENERAR, LA IMAGEN VIEJA SE APAGA. `refineImage` es un POST normal —no SSE—,
+              así que `imageUrl` no cambia hasta que vuelve la respuesta (38-55 s de gpt-image-2):
+              sin esto el anuncio anterior se quedaba nítido y el único indicio de que algo estaba
+              pasando era el spinner del botón, abajo del todo. Mismo tratamiento que usa branding
+              en cada pieza de su kit. */}
+          <div className="relative">
+            <img
+              src={imageUrl}
+              alt="Anuncio generado"
+              className={`w-full rounded-2xl border border-white/[0.06] shadow-[0_8px_32px_rgba(0,0,0,.6)] transition-opacity duration-300 ${refining ? 'opacity-40' : ''}`}
+            />
+            {refining && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-2xl bg-black/60">
+                <span className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-[#e8467a]" />
+                <p className="text-[12px] text-[#efe7e0]">Regenerando el anuncio…</p>
+                <p className="text-[11px] text-[#a98c88]">Suele tomar alrededor de un minuto.</p>
+              </div>
+            )}
+          </div>
           <div className="flex gap-3">
-            <button onClick={handleDownload} className={btnPrimary + ' flex-1 h-11'}>
+            <button onClick={handleDownload} disabled={refining} className={btnPrimary + ' flex-1 h-11 disabled:opacity-40'}>
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
               </svg>
               Descargar
             </button>
-            <button onClick={startNewSession} className="h-11 px-4 rounded-xl border border-white/[0.14] text-[#efe7e0] text-[13px] font-medium hover:bg-white/[0.05] transition-colors cursor-pointer bg-transparent">
+            <button onClick={startNewSession} disabled={refining} className="h-11 px-4 rounded-xl border border-white/[0.14] text-[#efe7e0] text-[13px] font-medium hover:bg-white/[0.05] transition-colors cursor-pointer bg-transparent disabled:opacity-40">
               Nuevo anuncio
             </button>
           </div>
