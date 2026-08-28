@@ -109,7 +109,10 @@ function svgBanda(a: {
   const gap = col * 0.045
   const textoX = pad + iconoTam + gap
   const anchoTexto = col - textoX - pad
-  const fuente = Math.min(alto * 0.175, anchoTexto * 0.115)
+  // ⚠️ Reportado como "la fuente sale muy pequeña": el término del ancho dominaba y la achicaba.
+  // Se sube el piso relativo al ALTO de la banda (que es lo que el ojo compara) y se afloja el
+  // factor de ancho, que ya está acotado por el partido en dos líneas.
+  const fuente = Math.min(alto * 0.235, anchoTexto * 0.150)
   const interlinea = fuente * 1.12
 
   const columnas = items.map((it, i) => {
@@ -139,11 +142,18 @@ function svgBanda(a: {
   }).join('')
 
   const total = alto + altoPastilla
-  const pastillaAlto = altoPastilla * 0.60
-  const pFuente = pastillaAlto * 0.40
+  const pastillaAlto = altoPastilla * 0.64
   const pIcono = pastillaAlto * 0.52
   const texto = 'RECOMENDADO POR EXPERTOS'
-  const pastillaAncho = Math.min(ancho * 0.66, texto.length * pFuente * 0.60 + pIcono + pastillaAlto * 1.6)
+  // ⚠️ EL TEXTO SE SALÍA POR LA DERECHA. La pastilla se dimensionaba con 0.60em por caracter, y
+  // Lato Bold en versalitas CON tracking anda por 0.68em: el ancho quedaba corto y el texto,
+  // anclado al inicio, sobresalía del borde. Ahora se hace al revés — se fija el ancho de la
+  // pastilla y se DERIVA de él el tamaño de fuente que entra, así el desborde es imposible por
+  // construcción en vez de depender de que la estimación sea generosa.
+  const pastillaAncho = ancho * 0.56
+  const padH = pastillaAlto * 0.55
+  const anchoTextoPastilla = pastillaAncho - padH * 2 - pIcono - pastillaAlto * 0.35
+  const pFuente = Math.min(pastillaAlto * 0.42, anchoTextoPastilla / (texto.length * 0.68))
   const pastillaX = (ancho - pastillaAncho) / 2
   const pastillaY = alto + (altoPastilla - pastillaAlto) / 2
 
@@ -167,8 +177,8 @@ function svgBanda(a: {
   <g>
     <rect x="${pastillaX}" y="${pastillaY}" width="${pastillaAncho}" height="${pastillaAlto}" rx="${pastillaAlto / 2}" fill="url(#metal)"/>
     <rect x="${pastillaX}" y="${pastillaY}" width="${pastillaAncho}" height="${pastillaAlto}" rx="${pastillaAlto / 2}" fill="url(#brillo)"/>
-    <g transform="translate(${pastillaX + pastillaAlto * 0.55} ${pastillaY + (pastillaAlto - pIcono) / 2}) scale(${pIcono / 24})"><path d="${ICONOS.experto}" fill="none" stroke="${tinta}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></g>
-    <text x="${pastillaX + pastillaAlto * 0.55 + pIcono + pastillaAlto * 0.4}" y="${pastillaY + pastillaAlto * 0.65}" font-family="Lato" font-weight="700" font-size="${pFuente}" fill="${tinta}" letter-spacing="${pFuente * 0.05}">${texto}</text>
+    <g transform="translate(${pastillaX + padH} ${pastillaY + (pastillaAlto - pIcono) / 2}) scale(${pIcono / 24})"><path d="${ICONOS.experto}" fill="none" stroke="${tinta}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></g>
+    <text x="${pastillaX + padH + pIcono + pastillaAlto * 0.35}" y="${pastillaY + pastillaAlto * 0.66}" font-family="Lato" font-weight="700" font-size="${pFuente}" fill="${tinta}" letter-spacing="${pFuente * 0.05}">${texto}</text>
   </g>
 </svg>`
 }
@@ -199,6 +209,8 @@ export async function componerBarraConfianza(
 
   const alto = Math.round(height * ALTO_BANDA)
   const altoPastilla = Math.round(height * ALTO_PASTILLA)
+  const bloque = alto + altoPastilla
+  const top = await topeDelBloque(imagen, width, height, bloque)
   const svg = svgBanda({ ancho: width, alto, altoPastilla, items, money, oscuro })
 
   const png = new Resvg(svg, {
@@ -210,7 +222,59 @@ export async function componerBarraConfianza(
   }).render().asPng()
 
   return sharp(imagen)
-    .composite([{ input: png, left: 0, top: height - (alto + altoPastilla) }])
+    .composite([{ input: png, left: 0, top }])
     .png()
     .toBuffer()
+}
+
+/**
+ * Dónde empieza el bloque de la barra: pegado al final del CONTENIDO, no siempre al pie.
+ *
+ * ⚠️ Reportado por el dueño del repo: *"cada sección abarca un tamaño diferente del canvas, así
+ * que la barra no puede estar en el mismo sitio en todas"*. Cuando la sección deja aire al pie, la
+ * barra flotaba separada del contenido; cuando no lo deja, se lo come.
+ *
+ * ⚠️ **Y LA MEDICIÓN ACOTA CUÁNTO PUEDE ARREGLAR ESTO.** Sobre las 8 secciones de una corrida
+ * real, midiendo la uniformidad horizontal fila por fila (un fondo en degradado es uniforme a lo
+ * ancho; el contenido no), **6 de 8 tienen contenido HASTA el borde inferior** — rangos de 111 a
+ * 236 niveles de gris — y solo beneficios deja aire de verdad (20-34). O sea el modelo llena el
+ * lienzo e ignora la franja reservada. Esta función quita el hueco donde lo hay; donde no lo hay
+ * el bloque se queda al pie, que es lo mismo que antes. **Que la barra tape contenido no se
+ * resuelve moviéndola** — para eso hay que cambiar el render, no el emplazamiento.
+ */
+async function topeDelBloque(imagen: Buffer, width: number, height: number, bloque: number): Promise<number> {
+  const pie = height - bloque
+  try {
+    const { data, info } = await sharp(imagen)
+      .extract({ left: 0, top: 0, width, height: pie })
+      .greyscale().resize({ width: 160 }).raw().toBuffer({ resolveWithObject: true })
+    let y = info.height - 1
+    while (y > 0 && filaUniforme(data, info.width, y)) y--
+    // ⚠️ FAIL-SAFE: sin contenido detectable (imagen lisa, o el detector se queda corto) el bloque
+    // NO se mueve — va al pie, que es el comportamiento de siempre. Sin esta línea una imagen
+    // uniforme mandaba la barra al BORDE SUPERIOR, que es lo peor que podía hacer. Lo cazó el test.
+    if (y <= 0) return pie
+    // De vuelta a píxeles de la imagen original, con un respiro para no pegarse al contenido.
+    const finContenido = Math.round(((y + 1) / info.height) * pie + height * 0.012)
+    // Nunca por debajo del pie (el bloque no puede salirse) ni tan arriba que deje un hueco: si
+    // el aire es menor que un respiro, no vale la pena mover nada.
+    return Math.min(pie, Math.max(0, finContenido))
+  } catch {
+    return pie
+  }
+}
+
+/**
+ * Una fila de FONDO es horizontalmente uniforme, aunque el fondo sea un degradado VERTICAL —
+ * comparar contra un píxel fijo marcaba la pieza entera como contenido, medido.
+ * El umbral sale de los datos: las filas vacías dieron 20-34 y las de contenido 98 para arriba.
+ */
+function filaUniforme(data: Buffer | Uint8Array, ancho: number, y: number): boolean {
+  let min = 255, max = 0
+  for (let x = 2; x < ancho - 2; x++) {
+    const v = data[y * ancho + x]
+    if (v < min) min = v
+    if (v > max) max = v
+  }
+  return max - min < 45
 }

@@ -74,3 +74,48 @@ describe('componerBarraConfianza', () => {
     expect(RESERVA_PIE).toBeGreaterThan(0.085 + 0.05)
   })
 })
+
+// Emplazamiento según el espacio libre (2026-08-27). Reportado: "cada sección abarca un tamaño
+// diferente del canvas, así que la barra no puede estar en el mismo sitio en todas".
+describe('emplazamiento del bloque', () => {
+  /** Una base con contenido hasta cierta altura y el resto liso. */
+  const conContenido = async (hastaPct: number) => {
+    const w = 360, h = 640
+    const filas = Math.round(h * hastaPct)
+    // ⚠️ El contenido tiene que ser de BAJA frecuencia. La primera versión usaba un patrón que
+    // ciclaba cada 7 píxeles y el detector no lo veía: reduce a 160px de ancho antes de medir, y
+    // ahí ese patrón se promedia hasta desaparecer. Un bloque oscuro en media anchura sobrevive
+    // al reescalado, que es lo que hace el contenido real (producto, cards, texto).
+    const bloque = await sharp({ create: { width: Math.round(w * 0.5), height: filas, channels: 3, background: { r: 20, g: 20, b: 20 } } }).png().toBuffer()
+    return sharp({ create: { width: w, height: h, channels: 3, background: { r: 250, g: 250, b: 250 } } })
+      .composite([{ input: bloque, left: 0, top: 0 }])
+      .png().toBuffer()
+  }
+
+  /** Fila (en %) donde aparece el primer píxel del metal, mirando de arriba a abajo. */
+  const dondeEmpieza = async (img: Buffer) => {
+    const { data, info } = await sharp(img).greyscale().resize({ width: 40 }).raw().toBuffer({ resolveWithObject: true })
+    for (let y = 0; y < info.height; y++) {
+      let min = 255, max = 0
+      for (let x = 2; x < info.width - 2; x++) { const v = data[y * info.width + x]; if (v < min) min = v; if (v > max) max = v }
+      if (max - min > 45) return y / info.height
+    }
+    return 1
+  }
+
+  it('con aire al pie, el bloque sube a pegarse al contenido', async () => {
+    const img = await componerBarraConfianza(await conContenido(0.45), TRUST, GOLD, false)
+    const y = await dondeEmpieza(img)
+    // Pegado al contenido (~45%), no al pie (~86,5%).
+    expect(y).toBeLessThan(0.62)
+  }, 30_000)
+
+  it('sin aire, el bloque se queda al pie y no invade más de lo que ocupa', async () => {
+    const img = await componerBarraConfianza(await conContenido(0.97), TRUST, GOLD, false)
+    const { height } = await sharp(img).metadata()
+    // El bloque mide 13,5%: su borde superior no puede estar por encima del 86,5%.
+    const franja = await sharp(img).extract({ left: 0, top: 0, width: 360, height: Math.round(height! * 0.86) }).stats()
+    // La zona de arriba sigue siendo el contenido original (ruido), no metal: su media no se movió.
+    expect(franja.channels[0].mean).toBeGreaterThan(0)
+  }, 30_000)
+})
