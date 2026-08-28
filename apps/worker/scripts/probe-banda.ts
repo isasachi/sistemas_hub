@@ -5,7 +5,7 @@
 // cosa. Sin este dato no se puede elegir proveedor.
 import './bootstrap'
 import { launchScraperContext } from '../lib/product-hunter/scraper'
-import { openSsrSession, advertiserUrl, searchUrl } from '../lib/product-hunter/ssr-fetch'
+import { openSsrSession, advertiserUrl } from '../lib/product-hunter/ssr-fetch'
 
 const KB = (n: number) => `${(n / 1024).toFixed(0)} KB`
 
