@@ -147,7 +147,7 @@ describe('buildDiffusionInstruction — DNA-driven (spec 2026-07-23)', () => {
       'ANTES/DESPUÉS ADAPTATIVO': ['antes-despues'],
       'PAYMENT LOGOS (DRAW them)': ['oferta'],
       'PAYMENT LOGOS (do NOT draw)': ['garantia'],
-      'TRUST BAR': ['hero', 'beneficios', 'testimonios', 'faq', 'garantia', 'cta-final'],
+      'FRANJA INFERIOR RESERVADA': ['hero', 'beneficios', 'testimonios', 'faq', 'garantia', 'cta-final'],
       'MULTI-UNIT PACK': ['oferta', 'cta-final'],
       'SIN BLOQUE DE VENTA': ['hero', 'beneficios', 'antes-despues', 'testimonios', 'faq', 'garantia'],
     }
@@ -311,35 +311,39 @@ describe('buildDiffusionInstruction — DNA-driven (spec 2026-07-23)', () => {
     expect(hero).toContain('SIN BLOQUE DE VENTA')
   })
 
-  it('la barra de confianza (TRUST BAR) va en las 6 secciones que la tienen, no en oferta/antes-despues', () => {
+  // ⚠️ EL PROMPT YA NO DIBUJA LA BARRA: RESERVA SU FRANJA. La compone el código
+  // (`componerBarraConfianza`) porque tres rondas de prompt no lograron que fuera la misma en
+  // las 6 secciones — con el bloque de texto siendo idéntico en todas, medido.
+  it('reserva la franja en las 6 secciones que llevan barra, y no en oferta/antes-despues', () => {
     for (const type of ['hero', 'beneficios', 'testimonios', 'faq', 'garantia', 'cta-final'] as SectionType[]) {
       const out = build(type, { trust: TRUST })
-      expect(out).toContain('TRUST BAR')
-      expect(out).toContain('Pago contraentrega')
-      // composición neutral: ya no dicta "frosted pill" (eso rompía la consistencia)
-      expect(out).not.toContain('frosted pill')
+      expect(out).toContain('FRANJA INFERIOR RESERVADA')
+      expect(out).toMatch(/tiene que quedar VACÍO/)
     }
-    // oferta (payment_row) y antes-despues (closing_strip) NO llevan la barra
-    expect(build('oferta', { trust: TRUST })).not.toContain('TRUST BAR')
-    expect(build('antes-despues', { trust: TRUST })).not.toContain('TRUST BAR')
+    expect(build('oferta', { trust: TRUST })).not.toContain('FRANJA INFERIOR RESERVADA')
+    expect(build('antes-despues', { trust: TRUST })).not.toContain('FRANJA INFERIOR RESERVADA')
   })
 
-  // Pedido del usuario 2026-08-07: la banda de confianza deja de re-tintarse por sección y pasa a
-  // ser SIEMPRE el mismo metal. Antes su color de fondo era explícitamente "lo único que varía".
-  describe('color de la banda de confianza', () => {
-    it('es el mismo metal dorado en las 6 secciones, y ya no se re-tinta', () => {
+  // ⚠️ Y NO PUEDE SEGUIR DICTÁNDOLE EL ASPECTO: si el prompt describe una banda Y el código pega
+  // otra encima, vuelve la doble autoridad — solo que ahora una de las dos es invisible.
+  it('no describe ninguna banda de confianza: ni color, ni ítems, ni composición', () => {
+    for (const type of ['hero', 'beneficios', 'testimonios', 'faq', 'garantia', 'cta-final'] as SectionType[]) {
+      const out = build(type, { trust: TRUST })
+      const franja = out.match(/FRANJA INFERIOR RESERVADA[^\n]*/)![0]
+      expect(franja).not.toMatch(/degradado|metálic|lámina|#[0-9A-Fa-f]{6}/)
+      expect(franja).not.toContain('Pago contraentrega')
+    }
+  })
+
+  // ⚠️ ESTE BLOQUE FIJABA QUE EL PROMPT PINTARA LA BANDA DE DORADO. Ya no la pinta nadie más que
+  // el código; lo que hay que fijar ahora es que la RESERVA sea idéntica entre secciones — si
+  // variara, variaría el sitio donde se pega el composite.
+  describe('la reserva del pie es idéntica entre secciones', () => {
+    it('misma instrucción literal en las 6', () => {
       const salidas = (['hero', 'beneficios', 'testimonios', 'faq', 'garantia', 'cta-final'] as SectionType[])
         .map((t) => build(t, { trust: TRUST }))
-      for (const out of salidas) {
-        expect(out).toContain('#B8860B')
-        expect(out).toContain('#F5D372')
-        expect(out).toContain('El metal es el mismo en las 6 secciones')
-        // ⚠️ Y avisa de que el color de la plantilla es relleno: sin eso el texto pedía a la vez
-        // "reproduce EXACTAMENTE la banda de la plantilla" (azul) y "es SIEMPRE metálica".
-        expect(out).toContain('La plantilla adjunta muestra esta banda en OTRO color')
-      }
-      // La franja de color de la banda tiene que ser literalmente idéntica entre secciones.
-      const franja = salidas.map((o) => o.match(/COLOR \(de la marca[^\n]*/)![0])
+      // La franja reservada tiene que ser literalmente idéntica entre secciones.
+      const franja = salidas.map((o) => o.match(/FRANJA INFERIOR RESERVADA[^\n]*/)![0])
       expect(new Set(franja).size).toBe(1)
       // Y la vieja regla de "lo único que varía es el color de fondo" no puede seguir viva.
       for (const out of salidas) expect(out).not.toContain('re-tintado a la marca')
@@ -583,8 +587,11 @@ describe('estilo de marca (style-dna)', () => {
   it('el estilo NO toca la banda metálica de confianza (invariante declarada en dos lugares)', () => {
     for (const style of BrandStyle.options) {
       const out = build('beneficios', { dna: { ...DNA, style }, trust: TRUST })
-      expect(out).toContain('degradado metálico dorado')                    // designSystemBlock
-      expect(out).toContain('El metal es el mismo en las 6 secciones')       // trustText
+      // El metal sigue vivo para oferta, sellos y cintas — pero ya NO nombra la banda del pie,
+      // que la compone el código.
+      const metal = out.match(/^Oferta\/premium\/sellos:[^\n]*/m)![0]
+      expect(metal).toContain('degradado metálico dorado')
+      expect(metal).not.toMatch(/BANDA DE CONFIANZA|banda de confianza/)
     }
   })
 })

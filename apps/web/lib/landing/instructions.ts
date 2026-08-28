@@ -3,6 +3,7 @@ import { NICHE_LABELS } from './niches'
 import { BODY_FOCUS_FRAMING, zoneNeedsOwnPlate } from './demographics'
 import { SECTION_DNA } from './section-dna'
 import { moneyRamp, type MoneyRamp } from './palette-derive'
+import { itemsDeConfianza, RESERVA_PIE } from './trust-bar'
 import { styleOf, DEFAULT_STYLE } from './style-dna'
 
 // Builders puros ($0) para el prompt de imagen de cada sección de la landing (motor de DIFUSIÓN).
@@ -153,10 +154,15 @@ function designSystemBlock(dna: LandingDna, money: MoneyRamp, section: SectionTy
     'Profundidad (invariante): tres planos — fondo atmosférico, talento, producto + props en primer plano. Ligera profundidad de campo en el fondo.',
     `Paleta aplicada por ROL: titular base en ${p.color_headline}; palabra destacada del titular en ${p.color_accent}; cuerpo de texto en ${p.color_body}; superficie de card en ${p.color_surface} (la OPACIDAD y el acabado de esa superficie los define el estilo de marca, más abajo en «Componentes» — no la fijes acá); iconos en ${p.color_icon.join(', ')} (uno por atributo).${dark ? ' Pieza de MODO OSCURO: el fondo, las superficies de card y las bandas son oscuros, y el texto encima va claro. El acabado de las superficies es el mismo que define el estilo de marca abajo — solo cambia que se aplica sobre superficie oscura.' : ''}`,
     `CONSISTENCIA DE COLOR (crítico): estos hex son los MISMOS exactos en las 8 secciones del funnel — el acento ${p.color_accent}, el titular ${p.color_headline} y los íconos NO deben variar de tono, saturación ni brillo de una sección a otra. Son el color EXACTO de la marca, no una sugerencia aproximada.`,
+    // ⚠️ LA BANDA DE CONFIANZA SALIÓ DE ESTA LISTA (2026-08-27): ya no la dibuja el modelo, la
+    // compone el código (`trust-bar.ts`). Dejarla nombrada acá sería volver a tener dos
+    // autoridades sobre el mismo píxel — solo que ahora una de las dos es invisible, porque el
+    // composite tapa lo que el modelo hubiera pintado. El metal sigue rigiendo oferta y sellos.
+    //
     // El oro es invariante salvo que la marca sea dorada (decisión #6): ahí marca y oro se
     // confundirían y muere la regla de significado. El TRATAMIENTO metálico se mantiene siempre —
     // es sobre él, no sobre el tono, que cabalga la distinción.
-    `Oferta/premium/sellos: degradado metálico ${money.name} ${money.dark}→${money.light}, y ÚNICAMENTE ahí — oferta, sellos de garantía, cinta "RECOMENDADO", la etiqueta "DESPUÉS" y la BANDA DE CONFIANZA del pie. En ningún otro lugar. Precio ancla tachado en #D93025. Regla de significado (invariante): el color de marca comunica confianza; el metal ${money.name} comunica dinero y urgencia — por eso NUNCA deben ser el mismo color.`,
+    `Oferta/premium/sellos: degradado metálico ${money.name} ${money.dark}→${money.light}, y ÚNICAMENTE ahí — oferta, sellos de garantía, cinta "RECOMENDADO" y la etiqueta "DESPUÉS". En ningún otro lugar. Precio ancla tachado en #D93025. Regla de significado (invariante): el color de marca comunica confianza; el metal ${money.name} comunica dinero y urgencia — por eso NUNCA deben ser el mismo color.`,
     `Tipografía: una sola familia, ${dna.font_family}. Toda la expresividad viene de peso + color + tamaño, jamás de una segunda fuente.${dna.font_accent ? ` ${dna.font_accent} se usa SOLO en el titular de hero/oferta, nunca en cuerpo ni cards.` : ''} Expresión tipográfica de la marca: ${st.type}`,
     'Titular (invariante): 3-4 líneas, alineado a la izquierda, ragged right; conviven líneas neutras en el color de titular semibold y 1-2 palabras clave en el color de acento extrabold, a mayor tamaño. Subtítulo: 1 línea, ~40% del tamaño del titular, con una palabra en el color de acento.',
     'Card title (invariante): bold en el color de titular. Card body: regular en el color de cuerpo, máximo 2 líneas. Microcopy: uppercase bold + descriptor regular debajo, a menor tamaño.',
@@ -494,21 +500,18 @@ function offerText(offer: Offer): string {
 // quiere. La banda dorada es la regla de significado del sistema (el metal comunica dinero; el
 // color de marca, confianza) y el escalón oro→cobre para marcas doradas ya vive en `moneyRamp`.
 function trustText(trust: TrustBlock, money: MoneyRamp): string {
-  const rows: string[] = []
-  if (trust.coverage?.length) rows.push(`Envío a domicilio en ${trust.coverage.join(' y ')}${trust.freeShipping ? ' (envío gratis)' : ''}`)
-  if (trust.deliveryTime) rows.push(`Entrega en ${trust.deliveryTime}`)
-  if (trust.codDelivery) rows.push('Pago contraentrega — pagas en efectivo cuando llega')
-  if (trust.guaranteeDays) rows.push(`Compra 100% segura${trust.guaranteeText ? ` — ${trust.guaranteeText}` : ` — garantía de ${trust.guaranteeDays} días`}`)
-  if (!rows.length) return ''
-  // La banda ya NO se re-tinta por sección (pedido del usuario, 2026-08-07): es metálica y
-  // ABSOLUTAMENTE la misma en las 6 secciones que la llevan. Antes el color de fondo era "lo único
-  // que variaba" entre secciones, y esa variación era justo lo que rompía la sensación de que la
-  // barra es un elemento fijo del funnel. Ojo: esto AGREGA la banda a la lista de usos del metal
-  // del DESIGN_SYSTEM — las dos líneas tienen que decir lo mismo o el prompt se contradice.
-  return `TRUST BAR — ESTRUCTURA (de la plantilla): una sola franja horizontal al pie, con estos ítems en UNA fila pareja, separados por divisores finos: ícono + título bold + línea más ligera debajo. Misma disposición, mismo orden, misma cantidad de ítems y misma altura en TODAS las secciones que la llevan. Es el mismo elemento del funnel repetido, no una banda que se rediseña por sección.
-COLOR (de la marca, NO de la plantilla): la franja es SIEMPRE un degradado metálico ${money.name} de ${money.dark} a ${money.light}, con acabado de lámina pulida y un brillo suave que la recorre. ⚠️ La plantilla adjunta muestra esta banda en OTRO color: ése es relleno de ejemplo y no se copia. El metal es el mismo en las 6 secciones — no lo adaptes al fondo ni a la sección. El texto y los iconos sobre la banda van en ${money.on} para que se lean sobre el metal.
-Usa EXACTAMENTE estos hechos, no inventes ninguno:\n${rows.map((r) => `  - ${r}`).join('\n')}`
+  if (!itemsDeConfianza(trust).length) return ''
+  // ⚠️ YA NO SE LE PIDE QUE LA DIBUJE: SE LE PIDE QUE DEJE EL SITIO. La barra la compone el
+  // código después de generar (`componerBarraConfianza`), así que acá solo hay que reservar la
+  // franja — mismo patrón que `LOCKUP_BAND` y que los logos de pago, que también se componen
+  // aparte porque la difusión los garabatea.
+  //
+  // La reserva es defensa en profundidad, no un requisito: el composite es OPACO y tapa lo que
+  // haya. Sirve para que el modelo no meta contenido que valga la pena (producto, texto) en una
+  // franja que se va a cubrir.
+  return `FRANJA INFERIOR RESERVADA — el ${Math.round(RESERVA_PIE * 100)}% inferior de la imagen tiene que quedar VACÍO: una superficie lisa y calma, sin banda de confianza, sin iconos, sin sellos, sin texto y sin producto. NO dibujes ahí ninguna barra de garantías ni pastilla de "recomendado": esa banda se compone aparte y se superpone después. Cualquier cosa que pongas en esa franja se pierde.`
 }
+
 
 // Reserva la banda inferior de métodos de pago. Garantía deja la banda limpia y puede rotular
 // "Paga como prefieras". (El overlay de logos reales se retiró post-smoke.)

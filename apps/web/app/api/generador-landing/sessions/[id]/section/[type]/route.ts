@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getLandingSession, updateLandingSession, upsertLandingSection } from '@/lib/landing/db'
 import { fetchAsBase64, uploadToStorage, storagePublicUrl } from '@/lib/storage'
 import { generateImage, editWithPrompt } from '@/lib/gemini'
-import { buildDiffusionInstruction, MULTI_UNIT_SECTIONS, NO_TALENT_SECTIONS, OFFER_SECTIONS } from '@/lib/landing/instructions'
+import { buildDiffusionInstruction, MULTI_UNIT_SECTIONS, NO_TALENT_SECTIONS, OFFER_SECTIONS, TRUST_BAND_SECTIONS } from '@/lib/landing/instructions'
+import { componerBarraConfianza } from '@/lib/landing/trust-bar'
+import { moneyRamp } from '@/lib/landing/palette-derive'
 import { buildProductPack } from '@/lib/landing/product-box'
 import { NO_TALENT_SUBSTITUTE, DEMOGRAPHIC_LABELS, zoneNeedsOwnPlate } from '@/lib/landing/demographics'
 import { generateOfferCopy } from '@/lib/landing/copy'
@@ -190,7 +192,28 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // 2:3 de OpenAI → la recortaba. Ese motivo ya no aplica: la imagen ES 9:16. No se reinstala
   // igual — era un adorno menor y la difusión ya renderiza la marca por el label del producto.
   // reserveLockup/BrandLockup siguen sin uso.)
-  const imageUrl = await uploadToStorage(id, Buffer.from(b64, 'base64'), 'image/png', `section-${copy.kind}`)
+  // ⚠️ LA BARRA DE CONFIANZA SE SUPERPONE ACÁ, NO LA DIBUJA EL MODELO. Tiene que ser el MISMO
+  // elemento en las 6 secciones que la llevan, y tres rondas de prompt no lo lograron: sobre una
+  // corrida real de las 8 salieron tres barras doradas, una NEGRA, una negra con filos dorados y
+  // una en dos filas — con el bloque de texto que la describe siendo literalmente idéntico en las
+  // 6 (hay un test que lo fija). Componerla saca al modelo de la decisión. Ver `trust-bar.ts`.
+  //
+  // Es best-effort: un fallo del composite NO puede tumbar una generación ya pagada — se sube la
+  // imagen tal cual y se loguea, que es el mismo criterio que el mirror de `lote-status`.
+  let bytes = Buffer.from(b64, 'base64')
+  if (session.trust_block && TRUST_BAND_SECTIONS.has(parsedType.data)) {
+    try {
+      bytes = Buffer.from(await componerBarraConfianza(
+        bytes,
+        session.trust_block,
+        moneyRamp(session.landing_dna.palette),
+        session.landing_dna.palette.polarity === 'dark',
+      ))
+    } catch (err) {
+      console.error('[landing-section] no se pudo componer la barra de confianza', err)
+    }
+  }
+  const imageUrl = await uploadToStorage(id, bytes, 'image/png', `section-${copy.kind}`)
 
   // Upsert ATÓMICO de la sección: el `order` lo manda el cliente (índice en selected_sections);
   // al regenerar se preserva el existente. Se persiste vía RPC atómica (no read-modify-write del
