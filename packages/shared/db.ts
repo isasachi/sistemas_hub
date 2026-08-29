@@ -819,6 +819,33 @@ export async function saveRawVerdict(v: RawVerdictInput): Promise<void> {
 // datos — solo dejó de leerse y de escribirse.
 const SOBRE_PEDIDO = 4   // se piden 4× filas porque la lista negra recorta después
 
+/**
+ * Baraja en el sitio (Fisher-Yates). Es lo que hace que dos consultas seguidas
+ * NO devuelvan la misma vitrina.
+ *
+ * ⚠️ SE BARAJA DENTRO DE CADA NIVEL, NUNCA SOBRE EL RESULTADO FINAL. El serving
+ * por categoría ordena por calidad a propósito —los `monoproducto` primero, el
+ * relleno después, con tope por nicho— y barajar el resultado tiraría justo eso.
+ * Barajando cada nivel por separado se conserva la jerarquía y lo único que
+ * cambia es CUÁL de los muchos candidatos igual de válidos sale hoy.
+ *
+ * ⚠️ NO ES PERSONALIZACIÓN, y la diferencia importa: no hay estado por usuario,
+ * ni cookie, ni tabla de vistos. Esa economía del visto existió y se eliminó
+ * entera en 2026-08-13. Acá dos usuarios distintos siguen pudiendo ver lo mismo;
+ * lo que cambia es que la MISMA persona no ve la misma lista dos veces seguidas.
+ *
+ * El precio: dentro de un tramo se pierde el orden por `ad_count`. Es barato
+ * porque el tramo ya acota ese número (en "50-100" todos tienen entre 50 y 100),
+ * así que ordenar por él adentro informa poco.
+ */
+export function barajar<T>(xs: T[]): T[] {
+  for (let i = xs.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[xs[i], xs[j]] = [xs[j], xs[i]]
+  }
+  return xs
+}
+
 // Lo que NO llega a la vitrina, por estado:
 //   'inactivo'   — refresh-active marca así lo que dejó de pautar.
 //   'descartado' — el verificador ya probó que no es un producto físico del
@@ -926,7 +953,9 @@ export async function getApprovedByBucket(
 ): Promise<RawProductRow[]> {
   const { data, error } = await bucketQuery(niche, bucket, filters).limit(limit * SOBRE_PEDIDO)
   if (error) throw new Error(error.message)
-  return fisicos(data as RawProductRow[]).slice(0, limit)
+  // Se piden 4× y se barajan: los 4× ya pasaron el mismo filtro de calidad, así
+  // que mostrar 10 al azar de esos 40 varía la vitrina sin bajar el listón.
+  return barajar(fisicos(data as RawProductRow[])).slice(0, limit)
 }
 
 /**
@@ -944,8 +973,12 @@ export async function getApprovedByBucket(
  *   2. una página (`page_id`) aparece UNA vez aunque esté en cinco nichos;
  *   3. tope por nicho, para que un nicho enorme no se coma la categoría.
  *
- * El resultado NO depende del usuario: la misma categoría en el mismo rango
- * devuelve siempre lo mismo (ver el comentario de `SOBRE_PEDIDO`).
+ * ⚠️ EL RESULTADO YA NO ES EL MISMO EN CADA CONSULTA (2026-08-29). Antes esta
+ * función devolvía siempre lo mismo para la misma categoría y rango; ahora cada
+ * nivel se baraja (ver `barajar`), así que dos consultas seguidas muestran
+ * productos distintos. Lo que NO cambió es que no depende del USUARIO: no hay
+ * estado por persona, ni cookie, ni tabla de vistos — la economía del visto se
+ * eliminó entera en 2026-08-13 y esto no la reintroduce.
  */
 export async function getApprovedByCategory(
   niches: string[],
@@ -962,8 +995,10 @@ export async function getApprovedByCategory(
   if (verificados.error) throw new Error(verificados.error.message)
   if (resto.error) throw new Error(resto.error.message)
 
-  const confirmados = fisicos(verificados.data as unknown as RawProductRow[])
-  const relleno = fisicos(resto.data as unknown as RawProductRow[])
+  // Barajados por SEPARADO: los confirmados siguen entrando antes que el
+  // relleno (ver `barajar`), y lo que varía es cuáles de cada grupo.
+  const confirmados = barajar(fisicos(verificados.data as unknown as RawProductRow[]))
+  const relleno = barajar(fisicos(resto.data as unknown as RawProductRow[]))
 
   // Firma de marketplace: la MISMA página pautando en muchos nichos distintos de
   // la categoría (Shoptemu, Uber, Airbnb, Mercado Pago). No es un producto, es
