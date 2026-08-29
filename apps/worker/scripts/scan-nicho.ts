@@ -127,7 +127,10 @@ async function medir(
   // El rango se mide en el país donde se encontró el producto, no en el mundo:
   // la tool busca lo que pauta en LATAM, no volumen global.
   const l = await leerAnunciante(page, cand.pageId, cand.country)
-  noteNavResult(l ? l.muestra : 0)
+  // Se reporta si la IP respondió, no cuántos anuncios tiene el anunciante: un
+  // anunciante sin anuncios legibles no es una señal de bloqueo. Ver el mismo
+  // comentario en scan-base.ts.
+  noteNavResult(l ? 1 : 0)
   return l ? { l, m: medicionDe(l, terminos) } : null
 }
 

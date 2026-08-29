@@ -199,7 +199,13 @@ async function main() {
         // 2026-08-28: 3,5 h golpeando una IP ya bloqueada sin que se activara
         // ni una pausa, quemando 19.027 filas con lecturas vacías. Se pasa la
         // muestra, que es lo que distingue "leí bien" de "me devolvieron humo".
-        noteNavResult(l ? l.muestra : 0)
+        // ⚠️ LO QUE SE REPORTA ES SI LA IP RESPONDIÓ, NO CUÁNTOS ANUNCIOS TIENE
+        // EL ANUNCIANTE. `noteNavResult(0)` significa "señal de bloqueo", y un
+        // anunciante que legítimamente no tiene anuncios legibles devuelve
+        // muestra 0 sin que la IP tenga nada de malo. Pasarle esa muestra hacía
+        // que anunciantes vacíos dispararan cool-downs y el hard-abort: medido,
+        // el barrido cortaba con 14 de 25 filas resueltas correctamente.
+        noteNavResult(l ? 1 : 0)
         // Inconcluso: la fila queda 'pendiente' y vuelve a salir en otra corrida.
         // Se saca del cache para que un fallo transitorio no se propague al
         // resto de los nichos del mismo anunciante.

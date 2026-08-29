@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { juzgarCluster, leerAnunciante } from './scan-verify'
 import type { ClusterInfo } from './product-key'
 import * as ssr from './ssr-fetch'
+import * as scraper from './scraper'
 
 const medicion = (share: number) => ({
   adCount: 300, adCountGlobal: 300, share, dominante: 'k', distintos: 8,
@@ -44,12 +45,26 @@ describe('juzgarCluster — una página multiproducto ya no se descarta entera',
 describe('leerAnunciante — un conteo sin anuncios es un BLOQUEO, no un vacío', () => {
   const page = {} as never
 
-  it('devuelve null cuando hay conteo pero la lista viene vacía', async () => {
+  it('devuelve null cuando hay conteo sin anuncios Y las lecturas vecinas también fallan', async () => {
     // Es la firma del soft-block de Meta. Tratarla como lectura buena marcó
     // 19.027 filas como procesadas sin un solo cluster, y las sacó de las dos
     // colas para siempre — el fallo más caro que tuvo este pipeline.
     vi.spyOn(ssr, 'readConnection').mockResolvedValue({ count: 9779, ads: [] })
+    vi.spyOn(scraper, 'rachaVacia').mockReturnValue(3)   // veníamos leyendo en cero
     expect(await leerAnunciante(page, '123')).toBeNull()
+    vi.restoreAllMocks()
+  })
+
+  it('SÍ resuelve cuando los vecinos leen bien: el vacío es de ese anunciante', async () => {
+    // Medido: `count=19 ads=0` en 1Click Store con las lecturas de al lado
+    // funcionando — sus anuncios no los parsea el extractor. Devolverlo como
+    // inconcluso lo deja en la cola para siempre, y como la cola va por volumen
+    // se acumulan en la cabeza: 24 de 25 filas inconclusas por esto.
+    vi.spyOn(ssr, 'readConnection').mockResolvedValue({ count: 19, ads: [] })
+    vi.spyOn(scraper, 'rachaVacia').mockReturnValue(0)   // la anterior trajo nodos
+    const l = await leerAnunciante(page, '123')
+    expect(l).not.toBeNull()
+    expect(l!.muestra).toBe(0)
     vi.restoreAllMocks()
   })
 

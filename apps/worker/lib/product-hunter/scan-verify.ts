@@ -5,7 +5,7 @@
 import type Anthropic from '@anthropic-ai/sdk'
 import type { Page } from 'playwright'
 import { readConnection, advertiserUrl, type SsrAd } from './ssr-fetch'
-import { isPersistentlyBlocked, PersistentBlockError, rateGateMs } from './scraper'
+import { isPersistentlyBlocked, PersistentBlockError, rateGateMs, rachaVacia } from './scraper'
 import { shareOf, senalNicho, productKey, clustersOf, type SenalNicho, type ClusterInfo } from './product-key'
 import { juzgarNicho } from './nicho-verdict'
 import { textoDeCluster, fusionarPorEmbedding, embeddings } from './cluster-merge'
@@ -95,7 +95,18 @@ export async function leerAnunciante(
   //
   // `count === 0` SÍ es un anunciante sin pauta activa y se deja pasar: ahí el
   // cero es el dato. Lo que no puede pasar es count > 0 con la lista vacía.
-  if (global.count > 0 && !global.ads.length) return null
+  //
+  // ⚠️ PERO SOLO SI ES UN BLOQUEO, Y ESO SE DECIDE MIRANDO A LOS VECINOS. Hay
+  // anunciantes cuyos anuncios el extractor no parsea: devuelven un `count`
+  // REAL con la lista vacía (medido: `count=19 ads=0` en 1Click Store y
+  // `count=1 ads=0` en Winsome, con las lecturas de al lado funcionando). Si se
+  // los trata como inconclusos nunca salen de la cola, y como la cola va
+  // ordenada por volumen se acumulan en la cabeza y cada corrida los reintenta:
+  // medido, 24 de 25 filas inconclusas y corte por "bloqueo" que no existía.
+  //
+  // La racha del control de bloqueo separa los dos casos: si la lectura
+  // anterior trajo nodos, la IP responde y el vacío es de ESTE anunciante.
+  if (global.count > 0 && !global.ads.length && rachaVacia() > 0) return null
 
   let adCount = global.count
   if (country && country !== 'ALL') {

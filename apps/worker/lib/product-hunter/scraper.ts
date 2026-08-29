@@ -193,6 +193,17 @@ export function noteNavResult(nodeCount: number) {
   rateControl.note(nodeCount)
 }
 
+/**
+ * Cuántas navegaciones seguidas volvieron sin nodos. 0 = la última trajo datos.
+ *
+ * Sirve para distinguir "me están bloqueando" de "este anunciante no se puede
+ * leer": las dos cosas se ven igual mirando UNA respuesta, y se separan mirando
+ * si las de al lado funcionan.
+ */
+export function rachaVacia(): number {
+  return rateControl.consecutiveZero
+}
+
 // ─── Presupuesto de tiempo por nicho ──────────────────────────────────────────
 // Las búsquedas traen cientos/miles de candidatos pero el análisis solo procesa
 // PH_ANALYZE_LIMIT (50) por corrida — enriquecer la cola larga de candidatos
