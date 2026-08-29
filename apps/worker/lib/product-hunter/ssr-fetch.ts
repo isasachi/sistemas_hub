@@ -101,6 +101,34 @@ export async function openSsrSession(page: Page, country = 'MX'): Promise<void> 
 }
 
 /**
+ * Abre la sesión de TODAS las pages y devuelve las que quedaron vivas.
+ *
+ * ⚠️ ABRIR N SESIONES ES LA RÁFAGA MÁS AGRESIVA DE TODA LA CORRIDA, y con
+ * `Promise.all` una sola que se pase de los 60 s mata el run entero. Medido el
+ * 2026-08-28 a conc 6 con proxy: `page.goto: Timeout 60000ms exceeded` en
+ * `openSsrSession` y **0 filas procesadas en 3,8 min**, con la cola intacta.
+ * A más concurrencia, más probable — que es justo lo contrario de lo que se
+ * busca al subirla.
+ *
+ * Con una sola sesión viva el barrido avanza igual, más lento. Sin ninguna, ahí
+ * sí no hay nada que hacer y se lanza.
+ */
+export async function abrirSesiones(pages: Page[], country = 'MX'): Promise<Page[]> {
+  const vivas: Page[] = []
+  for (const p of pages) {
+    try {
+      await openSsrSession(p, country)
+      vivas.push(p)
+    } catch (e) {
+      console.log(`  ⚠ sesión descartada: ${(e as Error).message.split('\n')[0].slice(0, 80)}`)
+    }
+  }
+  if (!vivas.length) throw new Error('ninguna sesión pudo abrirse — la IP o el proxy están bloqueados')
+  if (vivas.length < pages.length) console.log(`  sesiones vivas: ${vivas.length}/${pages.length}`)
+  return vivas
+}
+
+/**
  * Lee una URL de la Ad Library. Devuelve null cuando NO se pudo leer.
  *
  * ⚠️ null es INCONCLUSO, nunca "este anunciante no tiene anuncios". Un fetch

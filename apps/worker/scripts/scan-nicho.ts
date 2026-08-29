@@ -34,7 +34,7 @@ import {
   launchScraperContext, runPool, searchUrl, noteNavResult, rateGateMs,
   isPersistentlyBlocked, PersistentBlockError, CONCURRENCY,
 } from '../lib/product-hunter/scraper'
-import { openSsrSession, readConnection } from '../lib/product-hunter/ssr-fetch'
+import { abrirSesiones, readConnection } from '../lib/product-hunter/ssr-fetch'
 import {
   leerAnunciante, medicionDe, juzgarAnunciante, clustersDeAnunciante, esFalloDeApi,
   type Medicion, type Lectura,
@@ -159,9 +159,9 @@ async function main() {
 
   try {
     // Una sola navegación por página; el resto son fetches same-origin.
-    await Promise.all(pages.map((p) => openSsrSession(p, paises[0])))
+    const vivas = await abrirSesiones(pages, paises[0])
 
-    const { candidatos, busquedas, fallos, servicios } = await descubrir(pages, niche, keywords, paises)
+    const { candidatos, busquedas, fallos, servicios } = await descubrir(vivas, niche, keywords, paises)
     console.log(
       `\nDescubrimiento: ${busquedas} búsquedas · ${fallos} inconclusas · ` +
       `${servicios} servicios descartados · ${candidatos.size} anunciantes únicos`,
@@ -182,7 +182,7 @@ async function main() {
       })))
     }
 
-    const settled = await runPool(orden, pages, async (cand, page: Page) => {
+    const settled = await runPool(orden, vivas, async (cand, page: Page) => {
       const leido = await medir(page, cand, terminos)
       if (!leido) return { cand, estado: 'inconcluso' as const }
       const { l, m } = leido

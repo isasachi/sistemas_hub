@@ -37,7 +37,7 @@ import {
   launchScraperContext, runPool, isPersistentlyBlocked, PersistentBlockError,
   rateGateMs, noteNavResult, CONCURRENCY,
 } from '../lib/product-hunter/scraper'
-import { openSsrSession } from '../lib/product-hunter/ssr-fetch'
+import { abrirSesiones } from '../lib/product-hunter/ssr-fetch'
 import {
   leerAnunciante, medicionDe, juzgarAnunciante, clustersDeAnunciante, esFalloDeApi,
   type Lectura,
@@ -165,7 +165,7 @@ async function main() {
   const t0 = Date.now()
 
   try {
-    await Promise.all(pages.map((p) => openSsrSession(p)))
+    const vivas = await abrirSesiones(pages)
 
     // ⚠️ `--rehacer` NO SE AUTOVACÍA: procesar una fila no le quita el
     // `senal_nicho`, así que la query la devuelve otra vez y el loop giraría
@@ -182,7 +182,7 @@ async function main() {
       for (const r of filas) yaVistas.add(`${r.niche}:${r.page_id}`)
       if (!filas.length) { motivoCorte = 'cola vacía'; break }
 
-      const settled = await runPool(filas, pages, async (row: RawProductRow, page: Page) => {
+      const settled = await runPool(filas, vivas, async (row: RawProductRow, page: Page) => {
         const clave = `${row.page_id}|${row.country ?? 'ALL'}`
         let pendiente = cacheLectura.get(clave)
         if (!pendiente) {
