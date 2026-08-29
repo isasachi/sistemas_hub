@@ -702,9 +702,22 @@ export async function getRawProductsToVerify(limit = 50, niche?: string): Promis
  */
 export async function getRawProductsByVolume(
   limit = 60, minAds = 0, maxAds?: number, niche?: string,
-  todo = false, rehacer = false,
+  todo = false, rehacer = false, ids?: string[],
 ): Promise<RawProductRow[]> {
   let q = getDb().from('ph_raw_products').select('*')
+  // ⚠️ `ids` IGNORA `senal_nicho` a propósito: es para re-procesar filas que YA
+  // pasaron por el pipeline, que es justo lo que las colas normales excluyen.
+  // Existe porque "las filas servibles SIN clusters" no se puede preguntar con
+  // PostgREST (es un NOT EXISTS entre dos tablas): los page_id se sacan con SQL
+  // y se pasan por acá. Sin esto, `--rehacer` devolvía las 61.807 filas que ya
+  // tienen clusters para recuperar 413 que no.
+  if (ids?.length) {
+    return (await q.in('page_id', ids)
+      .not('status', 'in', '(descartado,inactivo)')
+      .order('ad_count', { ascending: false })
+      .order('page_id')
+      .limit(limit)).data as RawProductRow[] ?? []
+  }
   // ⚠️ `rehacer` existe por un hueco del backfill de clusters: las filas que YA
   // pasó scan-* tienen `senal_nicho`, así que no están en la cola de `todo`, y
   // tampoco están en 'pendiente'. O sea las dos colas las saltean — y son el

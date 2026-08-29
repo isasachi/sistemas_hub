@@ -37,6 +37,7 @@ import {
   launchScraperContext, runPool, isPersistentlyBlocked, PersistentBlockError,
   rateGateMs, noteNavResult, CONCURRENCY,
 } from '../lib/product-hunter/scraper'
+import { readFileSync } from 'node:fs'
 import { abrirSesiones } from '../lib/product-hunter/ssr-fetch'
 import {
   leerAnunciante, medicionDe, juzgarAnunciante, clustersDeAnunciante, esFalloDeApi,
@@ -148,6 +149,14 @@ async function main() {
   // lo que el backfill sí debe actualizar: el conteo, la antigüedad y el
   // marcador de cola. El veredicto por producto vive en ph_raw_clusters.
   const soloClusters = args.includes('--solo-clusters')
+  // --ids <archivo>: page_ids separados por coma o salto de línea. Re-procesa
+  // esas filas IGNORANDO el marcador de cola, para reparaciones puntuales.
+  // Igual que `--rehacer`, la cola no se autovacía: usá un `--lote` que cubra
+  // el set entero de una.
+  const idsArg = args.indexOf('--ids')
+  const ids = idsArg !== -1 && args[idsArg + 1]
+    ? readFileSync(args[idsArg + 1], 'utf8').split(/[,\s]+/).map((s) => s.trim()).filter(Boolean)
+    : undefined
 
   await cargarKeywords()
   const pendientes = await countRawPending()
@@ -175,8 +184,8 @@ async function main() {
 
     while (procesados < total && !motivoCorte) {
       const cuantos = Math.min(lote, total - procesados)
-      const crudas = await getRawProductsByVolume(cuantos, minAds, maxAds, niche, todo, rehacer)
-      const filas = rehacer
+      const crudas = await getRawProductsByVolume(cuantos, minAds, maxAds, niche, todo, rehacer, ids)
+      const filas = (rehacer || ids)
         ? crudas.filter((r) => !yaVistas.has(`${r.niche}:${r.page_id}`))
         : crudas
       for (const r of filas) yaVistas.add(`${r.niche}:${r.page_id}`)
