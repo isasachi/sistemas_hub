@@ -2,8 +2,10 @@ import { describe, it, expect } from 'vitest'
 import { textoDeCluster, fusionarPorEmbedding, UMBRAL_FUSION } from './cluster-merge'
 import type { ClusterInfo } from './product-key'
 
+// El default lleva texto real: un cluster SIN texto no se fusiona nunca (ver
+// `sinTextoDeProducto`), así que un fixture vacío probaría otra cosa.
 const c = (o: Partial<ClusterInfo> = {}): ClusterInfo => ({
-  key: 'k', n: 1, titulo: null, cuerpo: null, url: null,
+  key: 'k', n: 1, titulo: 'Rodillera', cuerpo: 'alivia el dolor de rodilla', url: null,
   estimado: 0, publicable: true, ...o,
 })
 
@@ -70,6 +72,27 @@ describe('fusionarPorEmbedding', () => {
   // landings con 3 anuncios cada una no pasa el piso de muestra por separado,
   // y sumado sí. Fusionar después dejaría fuera al producto que la fusión
   // existe para rescatar.
+  // Los anuncios dinámicos de catálogo llegan con los placeholders sin
+  // resolver, así que dos clusters distintos tienen textos casi idénticos y el
+  // coseno los da por el mismo producto. Medido: dos autos de BYD a 0.864, y
+  // son el 13,1% de los clusters del corpus.
+  it('NO fusiona clusters cuyo texto es una plantilla sin renderizar', () => {
+    const cs = [
+      c({ key: 'a', n: 10, titulo: '{{product.name}}', cuerpo: '{{product.brand}}' }),
+      c({ key: 'b', n: 8, titulo: '{{product.name}}', cuerpo: '{{product.brand}}' }),
+    ]
+    const out = fusionarPorEmbedding(cs, [[1, 0], [1, 0]], 0.92)   // idénticos
+    expect(out).toHaveLength(2)
+  })
+
+  it('tampoco fusiona uno con texto contra uno vacío', () => {
+    const cs = [
+      c({ key: 'a', n: 10, cuerpo: 'rodillera de compresión para el dolor' }),
+      c({ key: 'b', n: 8, titulo: '{{product.name}}', cuerpo: null }),
+    ]
+    expect(fusionarPorEmbedding(cs, [[1, 0], [1, 0]], 0.92)).toHaveLength(2)
+  })
+
   it('la muestra sumada es lo que decide si un producto es publicable', () => {
     const cs = [c({ key: 'a', n: 3 }), c({ key: 'b', n: 3 }), c({ key: 'c', n: 3 })]
     expect(cs.every((x) => x.n < 4)).toBe(true)          // ninguno solo llega al piso

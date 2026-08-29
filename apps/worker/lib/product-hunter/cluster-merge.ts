@@ -85,6 +85,30 @@ export function textoDeCluster(c: ClusterInfo): string {
 // 140 pares etiquetados da precisión 1.00 a 0.92 SIN limpiar, así que tampoco
 // hace falta para el caso que la motivó.
 
+/**
+ * Un cluster cuyo texto NO identifica ningún producto: los anuncios dinámicos
+ * de catálogo llegan con los placeholders sin resolver (`{{product.name}}`,
+ * `{{product.brand}}`) y lo único que queda es andamiaje.
+ *
+ * ⚠️ ESTOS NUNCA SE FUSIONAN, y no es una precaución teórica. Dos clusters así
+ * tienen textos casi idénticos —la MISMA plantilla— y el coseno los da por el
+ * mismo producto: medido, `{{product.brand}} — {{product.name}} — A6zfR6Vm…` y
+ * `… — P26z8sDR…` de BYD Auto salían a 0.864, o sea dos autos DISTINTOS
+ * fusionados por parecerse en lo que no dice nada. Son el **13,1% de los
+ * clusters** del corpus, así que sin este guard la fusión de más es sistemática.
+ *
+ * El slug queda fuera de la cuenta a propósito: en estos casos es un id opaco
+ * (`A6zfR6VmfcRd91eT8`) que no aporta identidad de producto.
+ */
+export function sinTextoDeProducto(c: ClusterInfo): boolean {
+  const t = [c.cuerpo ?? '', c.titulo ?? '']
+    .join(' ')
+    .replace(/\{\{[^}]*\}\}/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return t.length < 4
+}
+
 export function coseno(a: number[], b: number[]): number {
   let d = 0, na = 0, nb = 0
   for (let i = 0; i < a.length; i++) { d += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i] }
@@ -107,12 +131,19 @@ export function coseno(a: number[], b: number[]): number {
  */
 export function fusionarPorEmbedding(
   cs: ClusterInfo[], vecs: number[][], umbral = UMBRAL_FUSION,
+  /** Pares que el árbitro resolvió como el mismo producto, además del coseno. */
+  extra: Array<[number, number]> = [],
 ): ClusterInfo[] {
   if (cs.length < 2) return cs
+  const mudo = cs.map(sinTextoDeProducto)
   const padre = cs.map((_, i) => i)
   const raiz = (i: number): number => (padre[i] === i ? i : (padre[i] = raiz(padre[i])))
+  for (const [i, j] of extra) if (!mudo[i] && !mudo[j]) padre[raiz(i)] = raiz(j)
   for (let i = 0; i < cs.length; i++) {
     for (let j = i + 1; j < cs.length; j++) {
+      // Sin texto que los identifique no hay fusión: el parecido sería el de la
+      // plantilla, no el del producto. Ver `sinTextoDeProducto`.
+      if (mudo[i] || mudo[j]) continue
       if (coseno(vecs[i], vecs[j]) >= umbral) padre[raiz(i)] = raiz(j)
     }
   }
