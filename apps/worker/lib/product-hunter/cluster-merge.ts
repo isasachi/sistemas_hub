@@ -171,7 +171,26 @@ export function fusionarPorEmbedding(
  * Fusionar es un refinamiento — perderlo cuesta 2,5% de tramos, y abortar la
  * corrida cuesta la corrida.
  */
+let fallos = 0
+let apagado = false
 let avisado = false
+
+/**
+ * ⚠️ TRES FALLOS SEGUIDOS Y SE APAGA PARA EL RESTO DEL PROCESO. Sin esto, un
+ * fallo transitorio de red se vuelve permanente: `embeddings` se llama UNA VEZ
+ * POR ANUNCIANTE y cada intento fallido se come el timeout entero, así que el
+ * barrido pasa a pagar segundos por anunciante para nada.
+ *
+ * Medido el 2026-08-29 en el log del barrido: los primeros 60 anunciantes
+ * tardaron 3,4 min, apareció el aviso de "fetch failed", y los 60 siguientes
+ * tardaron **26,6 min** — con OpenAI respondiendo en 0,5 s cuando se lo probó
+ * aparte, o sea el fallo ya había pasado y lo que quedaba era el reintento.
+ *
+ * El precio del apagado es perder la fusión en lo que queda de la corrida, que
+ * mueve el 2,5% de los tramos y se puede recuperar re-corriendo. El precio de
+ * NO apagarlo es el barrido entero.
+ */
+const LIMITE_FALLOS = 3
 /** Avisa UNA vez por proceso: fallar en silencio en cada anunciante deja la
  *  fusión como no-op invisible, que es el modo de fallo que este repo ya pagó
  *  varias veces. ⚠️ La OPENAI_API_KEY del worker es un PLACEHOLDER (`sk-....`);
@@ -187,8 +206,8 @@ function avisarUnaVez(motivo: string): null {
 
 export async function embeddings(textos: string[]): Promise<number[][] | null> {
   const key = process.env.OPENAI_API_KEY
-  if (!textos.length) return null
-  if (!key || key.startsWith('sk-...')) return avisarUnaVez('sin OPENAI_API_KEY real en el worker')
+  if (!textos.length || apagado) return null
+  if (!key || key.startsWith('sk-...')) { apagado = true; return avisarUnaVez('sin OPENAI_API_KEY real en el worker') }
   try {
     const r = await fetch('https://api.openai.com/v1/embeddings', {
       method: 'POST',
@@ -196,12 +215,23 @@ export async function embeddings(textos: string[]): Promise<number[][] | null> {
       body: JSON.stringify({ model: MODELO_EMBEDDING, input: textos }),
       // En Node el fetch no tiene timeout por defecto y esto corre dentro del
       // barrido: la lección que ya dejó `fetchKie` en el generador de video.
-      signal: AbortSignal.timeout(30_000),
+      // ⚠️ 10s y no 30: medido, una llamada sana tarda 0,5 s, así que 30 s no
+      // esperaban una respuesta lenta — multiplicaban el costo del fallo.
+      signal: AbortSignal.timeout(10_000),
     })
     const j = (await r.json()) as { data?: { embedding: number[] }[]; error?: { message: string } }
-    if (j.error || !j.data) return avisarUnaVez(j.error?.message?.slice(0, 80) ?? 'respuesta sin datos')
+    if (j.error || !j.data) return anotarFallo(j.error?.message?.slice(0, 80) ?? 'respuesta sin datos')
+    fallos = 0            // una buena limpia la racha: no apaga por fallos sueltos
     return j.data.map((d) => d.embedding)
   } catch (e) {
-    return avisarUnaVez((e as Error).message.slice(0, 80))
+    return anotarFallo((e as Error).message.slice(0, 80))
   }
+}
+
+function anotarFallo(motivo: string): null {
+  if (++fallos >= LIMITE_FALLOS) {
+    apagado = true
+    return avisarUnaVez(`${motivo} · ${LIMITE_FALLOS} fallos seguidos, apagada para el resto del proceso`)
+  }
+  return null
 }
