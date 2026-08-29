@@ -40,6 +40,41 @@ describe('categoryOf — la primera regla que matchea gana', () => {
     expect(categoryOf('hobbies nicho')).toBeNull()
   })
 
+  // ── Cobertura agregada el 2026-08-29 ──────────────────────────────────────
+  // Medido contra el inventario real: 42 nichos con 6.694 productos (8,6%) no
+  // matcheaban ninguna regla, y no eran basura — creatina, magnesio, keratina,
+  // pilates, papada, túnel carpiano. Tras estas reglas queda 0,9%, que son los
+  // cuatro nichos que de verdad no son de compra.
+  const nuevos: Array<[string, string]> = [
+    ['creatina', 'suplementos'], ['magnesio', 'suplementos'], ['melatonina', 'suplementos'],
+    ['multivitaminico', 'suplementos'], ['probioticos', 'suplementos'], ['ashwagandha', 'suplementos'],
+    ['keratina', 'belleza'], ['puntas abiertas', 'belleza'], ['niacinamida', 'belleza'],
+    ['puntos negros', 'belleza'], ['retinol', 'belleza'], ['papada', 'belleza'],
+    ['boxeo', 'fitness'], ['pilates', 'fitness'], ['estiramiento', 'fitness'],
+    ['rueda abdominal', 'fitness'], ['recuperacion muscular', 'fitness'],
+    ['tunel carpiano', 'ortopedia'], ['manguito rotador', 'ortopedia'],
+    ['menisco', 'ortopedia'], ['torticolis', 'ortopedia'], ['venda elastica', 'ortopedia'],
+    ['humidificador', 'hogar'], ['cojines', 'hogar'], ['tira led', 'tecnologia'],
+    ['fundas de asiento', 'auto'], ['inflador de llantas', 'auto'],
+    ['collar', 'moda'],
+    ['estreñimiento', 'salud'], ['sofocos', 'salud'], ['fibromialgia', 'salud'],
+    ['vista cansada', 'salud'], ['sinusitis', 'salud'], ['hipotiroidismo', 'salud'],
+  ]
+  for (const [niche, esperado] of nuevos) {
+    it(`${niche} → ${esperado}`, () => expect(categoryOf(niche)).toBe(esperado))
+  }
+
+  // ⚠️ Ensanchar una regla puede robarle nichos a otra categoría, y el orden es
+  // lo único que lo evita. Estos son los cruces que las reglas nuevas tocan.
+  it('las reglas nuevas no le roban a la categoría que iba primero', () => {
+    expect(categoryOf('collarin cervical')).toBe('ortopedia')   // antes que moda
+    expect(categoryOf('collar para perros')).toBe('mascotas')   // antes que moda
+    expect(categoryOf('dolor abdominal')).toBe('salud')         // "abdominal" no lo lleva a fitness
+    expect(categoryOf('cojin para coxis')).toBe('ortopedia')    // antes que hogar
+    expect(categoryOf('tiroides')).toBe('salud')                // el recorte a "tiroid" no lo pierde
+    expect(categoryOf('vitamina c')).toBe('suplementos')        // el recorte a "vitamin" tampoco
+  })
+
   it('todas las categorías tienen id único', () => {
     expect(new Set(CATEGORIES.map((c) => c.id)).size).toBe(CATEGORIES.length)
   })

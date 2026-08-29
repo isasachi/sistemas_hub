@@ -193,6 +193,17 @@ export function noteNavResult(nodeCount: number) {
   rateControl.note(nodeCount)
 }
 
+/**
+ * Cuántas navegaciones seguidas volvieron sin nodos. 0 = la última trajo datos.
+ *
+ * Sirve para distinguir "me están bloqueando" de "este anunciante no se puede
+ * leer": las dos cosas se ven igual mirando UNA respuesta, y se separan mirando
+ * si las de al lado funcionan.
+ */
+export function rachaVacia(): number {
+  return rateControl.consecutiveZero
+}
+
 // ─── Presupuesto de tiempo por nicho ──────────────────────────────────────────
 // Las búsquedas traen cientos/miles de candidatos pero el análisis solo procesa
 // PH_ANALYZE_LIMIT (50) por corrida — enriquecer la cola larga de candidatos
@@ -776,6 +787,28 @@ async function applyMediaBlock(page: Page): Promise<void> {
   await client.send('Network.setBlockedURLs', { urls: BLOCKED_MEDIA_URLS })
 }
 
+/**
+ * Le pega un id de sesión distinto a la credencial del proxy, para que cada
+ * page salga por una IP RESIDENCIAL distinta.
+ *
+ * ⚠️ SIN ESTO, CONCURRENCIA > 1 CONCENTRA TODO EN UNA SOLA IP y Meta la bloquea
+ * igual que a la IP directa. Medido el 2026-08-28 con IPRoyal: 5 requests
+ * seguidos de la misma page salen por la MISMA IP (el keep-alive del browser
+ * reusa la conexión), así que conc 3 le daba tres flujos concurrentes a un solo
+ * domicilio. A conc 3 el barrido abortaba a las 24 filas; a conc 1 completaba.
+ *
+ * El formato `_session-<id>` es el de IPRoyal, por eso el guard por host: en
+ * otro proveedor la credencial se manda intacta en vez de romper la auth.
+ * `PH_PROXY_NO_SESSION=1` lo desactiva.
+ */
+function conSesion(proxy: ProxyConfig, i: number): ProxyConfig {
+  if (process.env.PH_PROXY_NO_SESSION === '1') return proxy
+  if (!/iproyal/i.test(proxy.server) || !proxy.password) return proxy
+  if (/_session-/i.test(proxy.password)) return proxy   // ya la trae puesta
+  const id = `${Date.now().toString(36)}${i}`
+  return { ...proxy, password: `${proxy.password}_session-${id}` }
+}
+
 export async function launchScraperContext(pageCount = 1) {
   const proxy = parseProxyEnv()
   console.log(
@@ -791,17 +824,22 @@ export async function launchScraperContext(pageCount = 1) {
   // browser ya lanzado quedaría huérfano → Chromium zombie acumulándose en el daemon
   // 24/7 (OOM). Cerrar antes de propagar.
   try {
-    const context = await browser.newContext({
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
-      locale: 'es-419',
-      timezoneId: 'America/Lima',
-      viewport: { width: 1366, height: 768 },
-    })
-    await context.addInitScript(() => {
-      Object.defineProperty(navigator, 'webdriver', { get: () => undefined })
-    })
+    // UN CONTEXT POR PAGE, no un context con N pages: el proxy se configura por
+    // context, así que compartirlo mandaría todas las pages por la misma IP.
+    // Cada context tiene además su propio tarro de cookies, que es lo coherente
+    // — la sesión de cada page la estableció SU IP.
     const pages: Page[] = []
     for (let i = 0; i < Math.max(1, pageCount); i++) {
+      const context = await browser.newContext({
+        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+        locale: 'es-419',
+        timezoneId: 'America/Lima',
+        viewport: { width: 1366, height: 768 },
+        ...(proxy ? { proxy: conSesion(proxy, i) } : {}),
+      })
+      await context.addInitScript(() => {
+        Object.defineProperty(navigator, 'webdriver', { get: () => undefined })
+      })
       const page = await context.newPage()
       if (BLOCK_MEDIA) await applyMediaBlock(page)
       pages.push(page)

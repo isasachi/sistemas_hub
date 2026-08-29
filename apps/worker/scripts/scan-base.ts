@@ -35,15 +35,17 @@ import Anthropic from '@anthropic-ai/sdk'
 import type { Page } from 'playwright'
 import {
   launchScraperContext, runPool, isPersistentlyBlocked, PersistentBlockError,
-  rateGateMs, CONCURRENCY,
+  rateGateMs, noteNavResult, CONCURRENCY,
 } from '../lib/product-hunter/scraper'
-import { openSsrSession } from '../lib/product-hunter/ssr-fetch'
+import { readFileSync } from 'node:fs'
+import { abrirSesiones } from '../lib/product-hunter/ssr-fetch'
 import {
-  leerAnunciante, medicionDe, juzgarAnunciante, esFalloDeApi, type Lectura,
+  leerAnunciante, medicionDe, juzgarAnunciante, clustersDeAnunciante, esFalloDeApi,
+  type Lectura,
 } from '../lib/product-hunter/scan-verify'
 import {
   getRawProductsByVolume, saveRawVerdict, countRawPending, seedKeywords,
-  getAllNicheKeywords, type RawProductRow,
+  getAllNicheKeywords, upsertRawClusters, type RawProductRow,
 } from '@ph/shared'
 
 const JITTER_MS = Math.max(0, Number(process.env.PH_JITTER_MS ?? 500))
@@ -122,6 +124,39 @@ async function main() {
   // el motor viejo y lo marcado 'inactivo' (que revive si volvió a pautar: el
   // conteo se relee en vivo).
   const todo = args.includes('--todo')
+  // --rehacer: las filas que YA pasó scan-* y siguen sirviéndose. No están en
+  // 'pendiente' ni en la cola de --todo (que pide senal_nicho null), así que las
+  // dos las saltean — y sin clusters propios desaparecen del buscador el día que
+  // se prenda PH_SERVE_CLUSTERS. Es el complemento del barrido grande.
+  //
+  // ⚠️ USALO CON UN `--lote` QUE CUBRA TODO EL SET DE UNA (medido: son 337
+  // filas, así que `--rehacer --lote 500` alcanza). Esta cola no se autovacía:
+  // procesar una fila no le quita el `senal_nicho`, así que la segunda vuelta
+  // pediría las mismas y el dedupe de abajo cortaría el barrido creyendo que la
+  // cola se vació. Con el lote entero en un solo fetch no hay segunda vuelta.
+  const rehacer = args.includes('--rehacer')
+  // --solo-clusters: construye ph_raw_clusters SIN re-juzgar al anunciante con
+  // la regla vieja.
+  //
+  // ⚠️ SIN ESTO EL BACKFILL DEGRADA EL BUSCADOR MIENTRAS EL FLAG ESTÁ APAGADO, y
+  // está medido: en 3,5 h `juzgarAnunciante` marcó `descartado` a 6.213 filas
+  // por share bajo (media 0,32), de las cuales 5.978 tienen ≥40 anuncios. Son
+  // EXACTAMENTE las páginas multiproducto que este cambio existe para rescatar
+  // — y como el serving todavía lee ph_raw_products, desaparecen de la vitrina
+  // sin que sus clusters estén sirviéndose todavía.
+  //
+  // Con el flag se conserva el `status` que la fila ya tenía y solo se refresca
+  // lo que el backfill sí debe actualizar: el conteo, la antigüedad y el
+  // marcador de cola. El veredicto por producto vive en ph_raw_clusters.
+  const soloClusters = args.includes('--solo-clusters')
+  // --ids <archivo>: page_ids separados por coma o salto de línea. Re-procesa
+  // esas filas IGNORANDO el marcador de cola, para reparaciones puntuales.
+  // Igual que `--rehacer`, la cola no se autovacía: usá un `--lote` que cubra
+  // el set entero de una.
+  const idsArg = args.indexOf('--ids')
+  const ids = idsArg !== -1 && args[idsArg + 1]
+    ? readFileSync(args[idsArg + 1], 'utf8').split(/[,\s]+/).map((s) => s.trim()).filter(Boolean)
+    : undefined
 
   await cargarKeywords()
   const pendientes = await countRawPending()
@@ -139,14 +174,24 @@ async function main() {
   const t0 = Date.now()
 
   try {
-    await Promise.all(pages.map((p) => openSsrSession(p)))
+    const vivas = await abrirSesiones(pages)
+
+    // ⚠️ `--rehacer` NO SE AUTOVACÍA: procesar una fila no le quita el
+    // `senal_nicho`, así que la query la devuelve otra vez y el loop giraría
+    // sobre las mismas 60 para siempre. Las colas normales sí se vacían (la
+    // fila deja de ser 'pendiente' / gana senal_nicho) y no pagan nada por esto.
+    const yaVistas = new Set<string>()
 
     while (procesados < total && !motivoCorte) {
       const cuantos = Math.min(lote, total - procesados)
-      const filas = await getRawProductsByVolume(cuantos, minAds, maxAds, niche, todo)
+      const crudas = await getRawProductsByVolume(cuantos, minAds, maxAds, niche, todo, rehacer, ids)
+      const filas = (rehacer || ids)
+        ? crudas.filter((r) => !yaVistas.has(`${r.niche}:${r.page_id}`))
+        : crudas
+      for (const r of filas) yaVistas.add(`${r.niche}:${r.page_id}`)
       if (!filas.length) { motivoCorte = 'cola vacía'; break }
 
-      const settled = await runPool(filas, pages, async (row: RawProductRow, page: Page) => {
+      const settled = await runPool(filas, vivas, async (row: RawProductRow, page: Page) => {
         const clave = `${row.page_id}|${row.country ?? 'ALL'}`
         let pendiente = cacheLectura.get(clave)
         if (!pendiente) {
@@ -157,6 +202,19 @@ async function main() {
           cacheLectura.set(clave, pendiente)
         }
         const l = await pendiente
+        // ⚠️ SIN ESTO EL COOL-DOWN NUNCA SE ENTERA. El controlador de bloqueo es
+        // compartido pero se alimenta desde los callers (`noteNavResult`), y
+        // este script no lo hacía — `scan-nicho` sí. Resultado medido el
+        // 2026-08-28: 3,5 h golpeando una IP ya bloqueada sin que se activara
+        // ni una pausa, quemando 19.027 filas con lecturas vacías. Se pasa la
+        // muestra, que es lo que distingue "leí bien" de "me devolvieron humo".
+        // ⚠️ LO QUE SE REPORTA ES SI LA IP RESPONDIÓ, NO CUÁNTOS ANUNCIOS TIENE
+        // EL ANUNCIANTE. `noteNavResult(0)` significa "señal de bloqueo", y un
+        // anunciante que legítimamente no tiene anuncios legibles devuelve
+        // muestra 0 sin que la IP tenga nada de malo. Pasarle esa muestra hacía
+        // que anunciantes vacíos dispararan cool-downs y el hard-abort: medido,
+        // el barrido cortaba con 14 de 25 filas resueltas correctamente.
+        noteNavResult(l ? 1 : 0)
         // Inconcluso: la fila queda 'pendiente' y vuelve a salir en otra corrida.
         // Se saca del cache para que un fallo transitorio no se propague al
         // resto de los nichos del mismo anunciante.
@@ -173,12 +231,30 @@ async function main() {
           cacheNoFisico.set(row.page_id, { kind: v.kind, nota: v.nota })
         }
 
+        // Un veredicto por PRODUCTO, aparte del del anunciante. La fila de
+        // ph_raw_products se sigue escribiendo: es el denominador del estimado.
+        // ⚠️ Los clusters dependen SOLO del anunciante (por eso `cacheLectura`
+        // los cubre gratis entre nichos), pero la pertenencia al nicho NO — y
+        // eso es lo que esta llamada resuelve, así que va por fila.
+        const clusters = yaSabido
+          ? []   // anunciante ya descartado por la lista negra: no gasta modelo
+          : await clustersDeAnunciante(
+            ai, { niche: row.niche, pageId: row.page_id, advertiser: row.name, country: row.country }, l, m,
+          )
+
         await saveRawVerdict({
-          niche: row.niche, page_id: row.page_id, ad_count: m.adCount, status: v.status,
-          kind: v.kind, share: m.share, product_name: v.productName,
-          verdict_note: v.nota, senal_nicho: m.senal, product_path: m.dominante,
+          niche: row.niche, page_id: row.page_id, ad_count: m.adCount,
+          // En modo --solo-clusters el status NO se toca: la regla que lo
+          // decidía es la que este cambio retira, y pisarlo sacaría de la
+          // vitrina justo las páginas multiproducto. Ver el comentario del flag.
+          status: soloClusters ? (row.status ?? 'pendiente') : v.status,
+          kind: soloClusters ? (row.kind ?? null) : v.kind,
+          share: m.share, product_name: soloClusters ? (row.product_name ?? null) : v.productName,
+          verdict_note: soloClusters ? (row.verdict_note ?? null) : v.nota,
+          senal_nicho: m.senal, product_path: m.dominante,
           ad_start_date: m.masViejo,
         })
+        if (clusters.length) await upsertRawClusters(clusters)
         return { row, estado: v.status, m }
       })
 

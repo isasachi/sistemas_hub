@@ -34,14 +34,15 @@ import {
   launchScraperContext, runPool, searchUrl, noteNavResult, rateGateMs,
   isPersistentlyBlocked, PersistentBlockError, CONCURRENCY,
 } from '../lib/product-hunter/scraper'
-import { openSsrSession, readConnection } from '../lib/product-hunter/ssr-fetch'
+import { abrirSesiones, readConnection } from '../lib/product-hunter/ssr-fetch'
 import {
-  medirAnunciante, juzgarAnunciante, esFalloDeApi, type Medicion,
+  leerAnunciante, medicionDe, juzgarAnunciante, clustersDeAnunciante, esFalloDeApi,
+  type Medicion, type Lectura,
 } from '../lib/product-hunter/scan-verify'
 import { isLikelyService } from '../lib/product-hunter/competitors'
 import {
   seedKeywords, getNicheStatus, upsertRawProducts, saveRawVerdict, upsertRawNiche,
-  updateRawNicheAfterScrape,
+  updateRawNicheAfterScrape, upsertRawClusters,
 } from '@ph/shared'
 
 // Los 5 mercados del experimento. PE queda fuera a propósito: acá se busca lo
@@ -117,13 +118,20 @@ async function descubrir(
 // ── Fase 3: medición (determinista) ──────────────────────────────────────────
 // La medición y el veredicto viven en scan-verify.ts: los comparte con
 // scan-base.ts, que verifica lo ya scrapeado en vez de descubrir.
-async function medir(page: Page, cand: Candidato, terminos: string[]): Promise<Medicion | null> {
+// Devuelve la LECTURA junto a la medición: los clusters se calculan sobre
+// `l.todos` (los anuncios sin filtrar) y la medición sola no los lleva.
+async function medir(
+  page: Page, cand: Candidato, terminos: string[],
+): Promise<{ l: Lectura; m: Medicion } | null> {
   await esperarTurno()
   // El rango se mide en el país donde se encontró el producto, no en el mundo:
   // la tool busca lo que pauta en LATAM, no volumen global.
-  const m = await medirAnunciante(page, cand.pageId, terminos, cand.country)
-  noteNavResult(m ? m.muestra : 0)
-  return m
+  const l = await leerAnunciante(page, cand.pageId, cand.country)
+  // Se reporta si la IP respondió, no cuántos anuncios tiene el anunciante: un
+  // anunciante sin anuncios legibles no es una señal de bloqueo. Ver el mismo
+  // comentario en scan-base.ts.
+  noteNavResult(l ? 1 : 0)
+  return l ? { l, m: medicionDe(l, terminos) } : null
 }
 
 async function main() {
@@ -151,9 +159,9 @@ async function main() {
 
   try {
     // Una sola navegación por página; el resto son fetches same-origin.
-    await Promise.all(pages.map((p) => openSsrSession(p, paises[0])))
+    const vivas = await abrirSesiones(pages, paises[0])
 
-    const { candidatos, busquedas, fallos, servicios } = await descubrir(pages, niche, keywords, paises)
+    const { candidatos, busquedas, fallos, servicios } = await descubrir(vivas, niche, keywords, paises)
     console.log(
       `\nDescubrimiento: ${busquedas} búsquedas · ${fallos} inconclusas · ` +
       `${servicios} servicios descartados · ${candidatos.size} anunciantes únicos`,
@@ -174,21 +182,30 @@ async function main() {
       })))
     }
 
-    const settled = await runPool(orden, pages, async (cand, page: Page) => {
-      const m = await medir(page, cand, terminos)
-      if (!m) return { cand, estado: 'inconcluso' as const }
+    const settled = await runPool(orden, vivas, async (cand, page: Page) => {
+      const leido = await medir(page, cand, terminos)
+      if (!leido) return { cand, estado: 'inconcluso' as const }
+      const { l, m } = leido
 
       // El rango sale del conteo real y el monoproducto del share determinista;
       // solo lo que pasa ese filtro gasta una llamada a Haiku. La regla vive en
       // scan-verify.ts, compartida con scan-base.ts.
       const v = await juzgarAnunciante(ai, niche, cand.pageName, m)
-      if (!dryRun) await saveRawVerdict({
-        niche, page_id: cand.pageId, ad_count: m.adCount, status: v.status,
-        kind: v.kind, share: m.share, product_name: v.productName,
-        verdict_note: v.nota, senal_nicho: m.senal, product_path: m.dominante,
+      // Y aparte, un veredicto por PRODUCTO. La fila del anunciante se sigue
+      // escribiendo igual: es el denominador con el que se estima cada cluster.
+      const clusters = await clustersDeAnunciante(
+        ai, { niche, pageId: cand.pageId, advertiser: cand.pageName, country: cand.country }, l, m,
+      )
+      if (!dryRun) {
+        await saveRawVerdict({
+          niche, page_id: cand.pageId, ad_count: m.adCount, status: v.status,
+          kind: v.kind, share: m.share, product_name: v.productName,
+          verdict_note: v.nota, senal_nicho: m.senal, product_path: m.dominante,
           ad_start_date: m.masViejo,
-      })
-      return { cand, m, estado: v.status, motivo: v.nota }
+        })
+        await upsertRawClusters(clusters)
+      }
+      return { cand, m, estado: v.status, motivo: v.nota, clusters: clusters.length }
     })
 
     for (const s of settled) {

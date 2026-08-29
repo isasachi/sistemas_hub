@@ -54,3 +54,6 @@ graphify-out/
 # Salidas temporales del navegador (Playwright MCP): logs y snapshots de
 # depuración, nunca contenido del proyecto.
 .playwright-mcp/
+
+# caché de embeddings del probe de clusters: 244 MB de vectores regenerables por ~$0.002
+apps/worker/embeddings-clusters.json

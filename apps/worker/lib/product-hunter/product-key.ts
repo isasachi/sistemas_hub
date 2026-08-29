@@ -13,7 +13,7 @@
 // de 1.00 a 0.38 al corregirlo — los dos habrían entrado a la vitrina como
 // monoproducto perfecto. Cuando el destino es un chat o una red, la clave sale
 // del TÍTULO del anuncio.
-const CHAT = /(whatsapp|messenger|instagram|facebook|linktr|link\.me|m\.me|wa\.me|bit\.ly|linkr|t\.me|telegram)/
+export const CHAT = /(whatsapp|messenger|instagram|facebook|linktr|link\.me|m\.me|wa\.me|bit\.ly|linkr|t\.me|telegram)/
 
 export interface KeyableAd {
   title?: string | null
@@ -109,6 +109,63 @@ export function shareOf(ads: KeyableAd[]): ShareResult {
  * pádel (matchearon "espinillas" en sentido anatómico).
  */
 export type SenalNicho = 'path' | 'titulo' | 'cuerpo' | 'ninguna'
+
+/**
+ * ⚠️ EL PISO NO ES COSMÉTICO. Sin cursor de paginación solo se leen ~30 anuncios
+ * del anunciante, así que el conteo de un cluster es una regla de tres. Con 3
+ * anuncios de 30 sobre una página de 5.000 el estimado dice 500 y el intervalo
+ * es enorme: medido, el 71% de los "productos" que aparecían dentro de los
+ * catálogos descartados vivían por debajo de este piso, contra 11 de 184 del
+ * cluster dominante. Publicarlos sería inventar inventario.
+ *
+ * Es además el control de COSTO: en las filas `descartado` el piso baja las
+ * llamadas al modelo de 5,67 a 1,86 por fila (medido sobre 801 filas).
+ *
+ * ponytail: piso fijo sobre la muestra; el upgrade real es paginar el listado
+ * del anunciante, que hoy Meta no expone.
+ */
+export const MUESTRA_MIN = 4
+
+export interface ClusterInfo {
+  key: string
+  n: number
+  titulo: string | null
+  cuerpo: string | null
+  url: string | null
+  /** Anuncios del cluster ESTIMADOS sobre el total real del anunciante. */
+  estimado: number
+  publicable: boolean
+}
+
+/**
+ * Todos los productos de un anunciante con cuántos anuncios tiene cada uno.
+ *
+ * Es el mismo tally que `shareOf` ya construye y descarta: ahí sobrevive solo
+ * el dominante, acá sobreviven todos. Se mantienen las dos porque `shareOf`
+ * sigue respondiendo "¿esta página vende una sola cosa?", que es otra pregunta.
+ */
+export function clustersOf(ads: KeyableAd[], adCount: number): ClusterInfo[] {
+  const t = new Map<string, { n: number; a: KeyableAd }>()
+  for (const ad of ads) {
+    const k = productKey(ad)
+    if (!k) continue
+    const prev = t.get(k)
+    if (prev) prev.n++
+    else t.set(k, { n: 1, a: ad })
+  }
+  const muestra = ads.length
+  return [...t.entries()]
+    .map(([key, v]) => ({
+      key,
+      n: v.n,
+      titulo: v.a.title ?? null,
+      cuerpo: v.a.body?.slice(0, 400) ?? null,
+      url: v.a.link_url ?? null,
+      estimado: muestra ? Math.round((v.n / muestra) * adCount) : 0,
+      publicable: v.n >= MUESTRA_MIN,
+    }))
+    .sort((a, b) => b.n - a.n)
+}
 
 export function senalNicho(terminos: string[], key: string | null, ads: KeyableAd[]): SenalNicho {
   const hay = terminos.map((t) => normalize(t)).filter(Boolean)

@@ -44,22 +44,22 @@ export const CATEGORIES: Category[] = [
   {
     id: 'ortopedia',
     label: 'Ortopedia y soporte',
-    test: /corrector de postura|ortopedic|\bfajas?\b|cabestrillo|inmovilizador|plantillas|calcetines de compresion|medias de compresion|cojin para coxis|rodillera|munequera|tobillera|codera|collarin/,
+    test: /corrector de postura|ortopedic|\bfajas?\b|cabestrillo|inmovilizador|plantillas|calcetines de compresion|medias de compresion|cojin para coxis|rodillera|munequera|tobillera|codera|collarin|tunel carpiano|manguito rotador|\bmenisco\b|torticolis|soporte para arco plantar|venda elastica/,
   },
   {
     id: 'fitness',
     label: 'Fitness y deporte',
-    test: /mancuerna|bandas? de resistencia|\byoga\b|eliptica|caminadora|bicicleta|kettlebell|dominadas|foam roller|deportiv|correr|gimnasio|cuerda para saltar|abdominales|pesas|entrenamiento/,
+    test: /mancuerna|bandas? de resistencia|\byoga\b|eliptica|caminadora|bicicleta|kettlebell|dominadas|foam roller|deportiv|correr|gimnasio|cuerda para saltar|abdominales|rueda abdominal|pesas|entrenamiento|\bboxeo\b|pilates|estiramiento|recuperacion muscular/,
   },
   {
     id: 'belleza',
     label: 'Belleza y cuidado personal',
-    test: /\bpiel\b|acne|cabello|calvicie|alopecia|caspa|frizz|canas|barba|afeitad|depilacion|\bvello\b|cuero cabelludo|\bunas?\b|pestanas|cejas|labios|arrugas|manchas|celulitis|estrias|flacidez|maquillaje|serum|crema|shampoo|protector solar|bronceado|autobronceante|melasma|\bporos\b|cicatrices|aceite corporal|acido hialuronico|agua micelar|mascarillas faciales|microblading|tinte|alisad|plancha de cabello|secador|cepillo alisador|capilar|facial|\brostro\b|levantamiento|doble menton|parpados caidos|bolsas en los ojos|ojeras|\bbelleza\b|lunares|verrugas|escote|\bbusto\b|gluteos/,
+    test: /\bpiel\b|acne|cabello|calvicie|alopecia|caspa|frizz|canas|barba|afeitad|depilacion|\bvello\b|cuero cabelludo|\bunas?\b|pestanas|cejas|labios|arrugas|manchas|celulitis|estrias|flacidez|maquillaje|serum|crema|shampoo|protector solar|bronceado|autobronceante|melasma|\bporos\b|cicatrices|aceite corporal|acido hialuronico|agua micelar|mascarillas faciales|microblading|tinte|alisad|plancha de cabello|secador|cepillo alisador|capilar|facial|\brostro\b|levantamiento|doble menton|parpados caidos|bolsas en los ojos|ojeras|\bbelleza\b|lunares|verrugas|escote|\bbusto\b|\bsenos\b|gluteos|keratina|queratina|puntas abiertas|niacinamida|puntos negros|retinol|papada/,
   },
   {
     id: 'suplementos',
     label: 'Suplementos y nutrición',
-    test: /\bte verde\b|ginseng|matcha|stevia|espirulina|\bmaca\b|\bmiel\b|jengibre|curcuma|linaza|semillas de chia|frutos secos|granola|\bzinc\b|\bhierro\b|\bcalcio\b|acido folico|biotina|coenzima|electrolitos|colageno|moringa|\bfibra\b|enzimas digestivas|\bdetox\b|proteina|omega|vitamina|control de apetito|bajar de peso|\bazucar\b/,
+    test: /\bte verde\b|ginseng|matcha|stevia|espirulina|\bmaca\b|\bmiel\b|jengibre|curcuma|linaza|semillas de chia|frutos secos|granola|\bzinc\b|\bhierro\b|\bcalcio\b|acido folico|biotina|coenzima|electrolitos|colageno|moringa|\bfibra\b|enzimas digestivas|\bdetox\b|proteina|omega|vitamin|control de apetito|bajar de peso|\bazucar\b|creatina|magnesio|melatonina|probiotico|ashwagandha/,
   },
   {
     id: 'descanso',
@@ -69,12 +69,12 @@ export const CATEGORIES: Category[] = [
   {
     id: 'tecnologia',
     label: 'Tecnología',
-    test: /audifonos|smartwatch|banda inteligente|camara|parlante|bluetooth|cargador|power bank|tablet|laptop|celular|teclado|\bmouse\b|webcam|microfono|proyector|smart home|inteligente|gaming|gamer|luces led|aro de luz|linterna|tripode|impresora|home office|tecnologia|filtro azul/,
+    test: /audifonos|smartwatch|banda inteligente|camara|parlante|bluetooth|cargador|power bank|tablet|laptop|celular|teclado|\bmouse\b|webcam|microfono|proyector|smart home|inteligente|gaming|gamer|luces led|tira led|aro de luz|linterna|tripode|impresora|home office|tecnologia|filtro azul/,
   },
   {
     id: 'auto',
     label: 'Auto, moto y herramientas',
-    test: /\bautos?\b|\bmotos?\b|\bcascos?\b|taladro|destornillador|herramienta|nivel laser|retroceso|\bdiy\b/,
+    test: /\bautos?\b|\bmotos?\b|\bcascos?\b|taladro|destornillador|herramienta|nivel laser|retroceso|\bdiy\b|fundas de asiento|llantas/,
   },
   {
     id: 'cocina',
@@ -84,12 +84,12 @@ export const CATEGORIES: Category[] = [
   {
     id: 'hogar',
     label: 'Hogar y organización',
-    test: /\bhogar\b|sabanas|colchon|cobija|edredon|almohada|cortinas?|alfombras|perchas|organizador|organizadores|cajas organizadoras|ganchos adhesivos|macetas|plantas artificiales|muebles|espejos|cuadros decorativos|lampara|aspirador|trapeador|\bmopa\b|limpiavidrios|quitamanchas|limpiador a vapor|desinfectante|lavanderia|purificador|ventilador|ducha|\bbano\b|jabon|zapatero|silla ergonomica|ergonomia|riego|jardin|sostenibilidad/,
+    test: /\bhogar\b|sabanas|colchon|cobija|edredon|almohada|cortinas?|alfombras|perchas|organizador|organizadores|cajas organizadoras|ganchos adhesivos|macetas|plantas artificiales|muebles|espejos|cuadros decorativos|lampara|aspirador|trapeador|\bmopa\b|limpiavidrios|quitamanchas|limpiador a vapor|desinfectante|lavanderia|purificador|humidificador|\bcojines?\b|ventilador|ducha|\bbano\b|jabon|zapatero|silla ergonomica|ergonomia|riego|jardin|sostenibilidad/,
   },
   {
     id: 'moda',
     label: 'Moda y accesorios',
-    test: /leggings|carteras|joyeria|aretes|collares|relojes|lentes|zapatillas|zapatos|pantuflas|maleta|mochila|billetera|brasier|\bropa\b|pantalon|pijamas|body shaper|bolsos|gorra|sombrero|\bmoda\b|accesorios cabello/,
+    test: /leggings|carteras|joyeria|aretes|\bcollar(es)?\b|relojes|lentes|zapatillas|zapatos|pantuflas|maleta|mochila|billetera|brasier|\bropa\b|pantalon|pijamas|body shaper|bolsos|gorra|sombrero|\bmoda\b|accesorios cabello/,
   },
   {
     // Va al final a propósito: es la categoría más grande (dolencias + anatomía)
@@ -97,7 +97,7 @@ export const CATEGORIES: Category[] = [
     // salud, "uñas en gel" es belleza — gana el que va primero acá abajo).
     id: 'salud',
     label: 'Salud y dolor',
-    test: /\bdolor|calambres|\bgases\b|endometrio|trompas de falopio|disfuncion erectil|hernia|artritis|artrosis|tendinitis|bursitis|bursas|inflamacion|ciatica|lumbago|contractura|esguince|juanetes|callos|espolon|fascitis|hongos|varices|hemorroides|diabet|tiroides|colesterol|presion arterial|hipertension|anemia|asma|reflujo|gastritis|colon|higado|rinon|riniones|prostata|menopausia|fertilidad|libido|incontinencia|infeccion|candidiasis|dermatitis|eczema|psoriasis|rosacea|sudoracion|hiperhidrosis|tinnitus|vertigo|migrana|cancer|osteoporosis|gota\b|acido urico|glucosa|metabolismo|circulacion|digestion|inmunidad|memoria|fatiga|salud|sensibilidad dental|blanqueamiento dental|ortodoncia|bruxismo|mal aliento|encias|dientes|caries|congestion|rinitis|amigdalas|garganta|ronquera|apendice|vesicula|pancreas|intestino|estomago|vejiga|utero|ovarios|menstrual|colicos|embarazo|postura|joroba|escoliosis|cervical|lumbar|columna|articulacion|musculo|musculos|tendon|ligamento|cartilago|hueso|huesos|nervio|nervios|hinchazon|retencion de liquidos|edema|herida|ulcera|quemadura|alergia|autoinmune|hormona|glandula|glandulas|linfatico|arterias|capilares|venas|corazon|pulmones|bronquios|traquea|alveolos|diafragma|pleura|peritoneo|bazo|timo|hipofisis|paratiroides|suprarrenales|globulos|plaquetas|orina|ureteres|uretra|cuello|hombro|rodilla|espalda|\bmanos?\b|talon|abdomen|cintura|\bpies?\b|pierna|muneca|tobillo|\bcodo\b|cadera|muslo|pantorrilla|antebrazo|\bbrazos?\b|dedos?|\bojos?\b|\bnariz\b|\borejas?\b|\boido|\bboca\b|lengua|paladar|mandibula|craneo|cabeza|\bcara\b|mejillas|sienes|costillas|esternon|ingle|pelvis|\bano\b|recto|vagina|vulva|clitoris|pene|escroto|glande|prepucio|testiculo|pezones|axilas|\bcerebro\b|cristalino|cornea|retina|conductos|esofago|senos paranasales|fosas nasales|cera en los oidos|cuerdas vocales|laringe|equilibrio|sistema nervioso|fascia|tejido adiposo|grasa|suelo pelvico|palmas|planta del pie|cuerpo/,
+    test: /\bdolor|calambres|\bgases\b|endometrio|trompas de falopio|disfuncion erectil|hernia|artritis|artrosis|tendinitis|bursitis|bursas|inflamacion|ciatica|lumbago|contractura|esguince|juanetes|callos|espolon|fascitis|hongos|varices|hemorroides|diabet|tiroid|colesterol|presion arterial|hipertension|anemia|asma|reflujo|gastritis|colon|higado|rinon|riniones|prostata|menopausia|fertilidad|libido|incontinencia|infeccion|candidiasis|dermatitis|eczema|psoriasis|rosacea|sudoracion|hiperhidrosis|tinnitus|vertigo|migrana|cancer|osteoporosis|gota\b|acido urico|glucosa|metabolismo|circulacion|digestion|inmunidad|memoria|fatiga|salud|sensibilidad dental|blanqueamiento dental|ortodoncia|bruxismo|mal aliento|encias|dientes|caries|congestion|rinitis|amigdalas|garganta|ronquera|apendice|vesicula|pancreas|intestino|estomago|vejiga|utero|ovarios|menstrual|colicos|embarazo|postura|joroba|escoliosis|cervical|lumbar|columna|articulacion|musculo|musculos|tendon|ligamento|cartilago|hueso|huesos|nervio|nervios|hinchazon|retencion de liquidos|edema|herida|ulcera|quemadura|alergia|autoinmune|hormona|glandula|glandulas|linfatico|arterias|capilares|venas|corazon|pulmones|bronquios|traquea|alveolos|diafragma|pleura|peritoneo|bazo|timo|hipofisis|paratiroides|suprarrenales|globulos|plaquetas|orina|ureteres|uretra|cuello|hombro|rodilla|espalda|\bmanos?\b|talon|abdomen|cintura|\bpies?\b|pierna|muneca|tobillo|\bcodo\b|cadera|muslo|pantorrilla|antebrazo|\bbrazos?\b|dedos?|\bojos?\b|\bnariz\b|\borejas?\b|\boido|\bboca\b|lengua|paladar|mandibula|craneo|cabeza|\bcara\b|mejillas|sienes|costillas|esternon|ingle|pelvis|\bano\b|recto|vagina|vulva|clitoris|pene|escroto|glande|prepucio|testiculo|pezones|axilas|\bcerebro\b|cristalino|cornea|retina|conductos|esofago|senos paranasales|fosas nasales|cera en los oidos|cuerdas vocales|laringe|equilibrio|sistema nervioso|fascia|tejido adiposo|grasa|suelo pelvico|palmas|planta del pie|cuerpo|estrenimiento|sofocos|fibromialgia|vista cansada|presbicia|sinusitis/,
   },
 ]
 

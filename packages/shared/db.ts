@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import type { ProductRow, NicheRow, PePoolRow, WatchlistRow, StoredAnalysis, UrlResearchRow, UrlResearchResult, RawProductRow } from './types'
+import type { ProductRow, NicheRow, PePoolRow, WatchlistRow, StoredAnalysis, UrlResearchRow, UrlResearchResult, RawProductRow, RawClusterRow } from './types'
 import { bucketRange, type RawBucket } from './raw-buckets'
 import { type Pais } from './filtros'
 import { prescore } from './prescore'
@@ -626,6 +626,33 @@ export async function upsertRawProducts(
   }
 }
 
+/**
+ * Los PRODUCTOS de un anunciante. `onConflict` compuesto con `cluster_key`: un
+ * re-scrape actualiza el producto en vez de duplicarlo con otra clave.
+ *
+ * Ojo: un anunciante que está en 40 nichos escribe sus clusters 40 veces, una
+ * por nicho. Es el mismo modelo que `ph_raw_products` (que también tiene una
+ * fila por nicho) y es correcto, porque el veredicto de pertenencia ES por
+ * nicho — pero la tabla crece por ese factor.
+ */
+export async function upsertRawClusters(rows: RawClusterRow[]): Promise<void> {
+  if (!rows.length) return
+  const now = new Date().toISOString()
+  const clean = rows.map((r) => ({
+    ...r,
+    titulo: r.titulo ? cleanJsonText(r.titulo) : null,
+    cuerpo: r.cuerpo ? cleanJsonText(r.cuerpo) : null,
+    name: r.name ? cleanJsonText(r.name) : null,
+    scraped_at: now,
+  }))
+  for (let i = 0; i < clean.length; i += 200) {
+    const { error } = await getDb()
+      .from('ph_raw_clusters')
+      .upsert(clean.slice(i, i + 200), { onConflict: 'niche,page_id,cluster_key' })
+    if (error) throw new Error(error.message)
+  }
+}
+
 // ─── Verificación (pipeline nuevo: físico → rango → mayoría) ─────────────────
 
 export interface RawVerdictInput {
@@ -635,8 +662,11 @@ export interface RawVerdictInput {
   // (las filas importadas del pipeline anterior lo traen desactualizado) y con
   // eso el rango, que sale de ese número.
   ad_count?: number | null
-  status: 'monoproducto' | 'sin_verificar' | 'descartado'
-  kind: string
+  // 'pendiente' e 'inactivo' entran porque el backfill de clusters escribe el
+  // conteo y el marcador de cola SIN re-juzgar al anunciante: ahí el status que
+  // se guarda es el que la fila ya tenía. Ver `--solo-clusters` en scan-base.
+  status: 'monoproducto' | 'sin_verificar' | 'descartado' | 'pendiente' | 'inactivo'
+  kind: string | null
   share: number | null
   product_name: string | null
   verdict_note: string | null
@@ -671,9 +701,38 @@ export async function getRawProductsToVerify(limit = 50, niche?: string): Promis
  * producto dan 1.00). Empezar por arriba pone primero lo que se puede medir.
  */
 export async function getRawProductsByVolume(
-  limit = 60, minAds = 0, maxAds?: number, niche?: string, todo = false,
+  limit = 60, minAds = 0, maxAds?: number, niche?: string,
+  todo = false, rehacer = false, ids?: string[],
 ): Promise<RawProductRow[]> {
   let q = getDb().from('ph_raw_products').select('*')
+  // ⚠️ `ids` IGNORA `senal_nicho` a propósito: es para re-procesar filas que YA
+  // pasaron por el pipeline, que es justo lo que las colas normales excluyen.
+  // Existe porque "las filas servibles SIN clusters" no se puede preguntar con
+  // PostgREST (es un NOT EXISTS entre dos tablas): los page_id se sacan con SQL
+  // y se pasan por acá. Sin esto, `--rehacer` devolvía las 61.807 filas que ya
+  // tienen clusters para recuperar 413 que no.
+  if (ids?.length) {
+    return (await q.in('page_id', ids)
+      .not('status', 'in', '(descartado,inactivo)')
+      .order('ad_count', { ascending: false })
+      .order('page_id')
+      .limit(limit)).data as RawProductRow[] ?? []
+  }
+  // ⚠️ `rehacer` existe por un hueco del backfill de clusters: las filas que YA
+  // pasó scan-* tienen `senal_nicho`, así que no están en la cola de `todo`, y
+  // tampoco están en 'pendiente'. O sea las dos colas las saltean — y son el
+  // mejor inventario que hay (medido: 337 servibles, 320 con sello de
+  // monoproducto). Sin clusters propios desaparecerían del buscador el día que
+  // se prenda PH_SERVE_CLUSTERS. Es una pasada corta: a ~83 filas/min son
+  // minutos, no las 13 h del barrido grande.
+  if (rehacer) {
+    return (await q.not('senal_nicho', 'is', null)
+      .not('status', 'in', '(descartado,inactivo)')
+      .gte('ad_count', minAds)
+      .order('ad_count', { ascending: false })
+      .order('page_id')
+      .limit(limit)).data as RawProductRow[] ?? []
+  }
   // `todo` = toda la base, no solo la cola de pendientes: incluye lo que
   // verificó el motor viejo (que no escribe `senal_nicho`) y lo marcado
   // 'inactivo'. `senal_nicho` es el marcador de "ya pasó por scan-*": lo escribe
@@ -760,6 +819,33 @@ export async function saveRawVerdict(v: RawVerdictInput): Promise<void> {
 // datos — solo dejó de leerse y de escribirse.
 const SOBRE_PEDIDO = 4   // se piden 4× filas porque la lista negra recorta después
 
+/**
+ * Baraja en el sitio (Fisher-Yates). Es lo que hace que dos consultas seguidas
+ * NO devuelvan la misma vitrina.
+ *
+ * ⚠️ SE BARAJA DENTRO DE CADA NIVEL, NUNCA SOBRE EL RESULTADO FINAL. El serving
+ * por categoría ordena por calidad a propósito —los `monoproducto` primero, el
+ * relleno después, con tope por nicho— y barajar el resultado tiraría justo eso.
+ * Barajando cada nivel por separado se conserva la jerarquía y lo único que
+ * cambia es CUÁL de los muchos candidatos igual de válidos sale hoy.
+ *
+ * ⚠️ NO ES PERSONALIZACIÓN, y la diferencia importa: no hay estado por usuario,
+ * ni cookie, ni tabla de vistos. Esa economía del visto existió y se eliminó
+ * entera en 2026-08-13. Acá dos usuarios distintos siguen pudiendo ver lo mismo;
+ * lo que cambia es que la MISMA persona no ve la misma lista dos veces seguidas.
+ *
+ * El precio: dentro de un tramo se pierde el orden por `ad_count`. Es barato
+ * porque el tramo ya acota ese número (en "50-100" todos tienen entre 50 y 100),
+ * así que ordenar por él adentro informa poco.
+ */
+export function barajar<T>(xs: T[]): T[] {
+  for (let i = xs.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[xs[i], xs[j]] = [xs[j], xs[i]]
+  }
+  return xs
+}
+
 // Lo que NO llega a la vitrina, por estado:
 //   'inactivo'   — refresh-active marca así lo que dejó de pautar.
 //   'descartado' — el verificador ya probó que no es un producto físico del
@@ -803,9 +889,27 @@ function applyFilters<T>(q: T, f: RawFilters | undefined, now = Date.now()): T {
   return out as T
 }
 
+/**
+ * De qué tabla se sirve: el ANUNCIANTE (`ph_raw_products`) o el PRODUCTO
+ * (`ph_raw_clusters`).
+ *
+ * ⚠️ ESTE FLAG SE PRENDE CUANDO EL BACKFILL TERMINÓ, NO ANTES. Los clusters se
+ * llenan anunciante por anunciante (una lectura cada uno, ~13 h para las 66k
+ * filas pendientes): prenderlo con la tabla a medio llenar deja el buscador
+ * sirviendo un puñado de productos en vez de decenas de miles. Medido al
+ * escribir esto: 24 clusters contra 67.861 filas servibles.
+ *
+ * Comprobar antes de prenderlo:
+ *   select count(*) from ph_raw_clusters where status not in ('descartado','inactivo');
+ *
+ * ponytail: un flag con fecha de vencimiento — se borra junto con la rama
+ * `ph_raw_products` del serving en cuanto el backfill esté completo.
+ */
+const TABLA_SERVING = process.env.PH_SERVE_CLUSTERS === '1' ? 'ph_raw_clusters' : 'ph_raw_products'
+
 function bucketQuery(niche: string, bucket: RawBucket, f?: RawFilters) {
   const { min, max } = bucketRange(bucket)
-  let q = getDb().from('ph_raw_products').select('*')
+  let q = getDb().from(TABLA_SERVING).select('*')
     .eq('niche', niche)
     .not('status', 'in', NO_SERVIBLES)
     .gte('ad_count', min)
@@ -825,8 +929,14 @@ function bucketQuery(niche: string, bucket: RawBucket, f?: RawFilters) {
 // categoría más grande arma ~2.4KB, así que hay margen de sobra.
 function categoriaQuery(niches: string[], bucket: RawBucket, f?: RawFilters) {
   const { min, max } = bucketRange(bucket)
-  let q = getDb().from('ph_raw_products')
-    .select('niche,page_id,name,product_name,country,ad_count,ad_start_date,raw_data,status,share,senal_nicho')
+  // Las dos tablas no tienen las mismas columnas: el anunciante guarda el
+  // anuncio representativo en `raw_data` (jsonb) y el producto lo tiene abierto
+  // en `titulo`/`cuerpo`, más los dos crudos del estimado.
+  const cols = TABLA_SERVING === 'ph_raw_clusters'
+    ? 'niche,page_id,cluster_key,name,product_name,country,ad_count,muestra_n,muestra_tot,titulo,cuerpo,url,ad_start_date,status,senal_nicho'
+    : 'niche,page_id,name,product_name,country,ad_count,ad_start_date,raw_data,status,share,senal_nicho'
+  let q = getDb().from(TABLA_SERVING)
+    .select(cols)
     .in('niche', niches)
     .not('status', 'in', NO_SERVIBLES)
     .gte('ad_count', min)
@@ -843,7 +953,9 @@ export async function getApprovedByBucket(
 ): Promise<RawProductRow[]> {
   const { data, error } = await bucketQuery(niche, bucket, filters).limit(limit * SOBRE_PEDIDO)
   if (error) throw new Error(error.message)
-  return fisicos(data as RawProductRow[]).slice(0, limit)
+  // Se piden 4× y se barajan: los 4× ya pasaron el mismo filtro de calidad, así
+  // que mostrar 10 al azar de esos 40 varía la vitrina sin bajar el listón.
+  return barajar(fisicos(data as RawProductRow[])).slice(0, limit)
 }
 
 /**
@@ -861,8 +973,12 @@ export async function getApprovedByBucket(
  *   2. una página (`page_id`) aparece UNA vez aunque esté en cinco nichos;
  *   3. tope por nicho, para que un nicho enorme no se coma la categoría.
  *
- * El resultado NO depende del usuario: la misma categoría en el mismo rango
- * devuelve siempre lo mismo (ver el comentario de `SOBRE_PEDIDO`).
+ * ⚠️ EL RESULTADO YA NO ES EL MISMO EN CADA CONSULTA (2026-08-29). Antes esta
+ * función devolvía siempre lo mismo para la misma categoría y rango; ahora cada
+ * nivel se baraja (ver `barajar`), así que dos consultas seguidas muestran
+ * productos distintos. Lo que NO cambió es que no depende del USUARIO: no hay
+ * estado por persona, ni cookie, ni tabla de vistos — la economía del visto se
+ * eliminó entera en 2026-08-13 y esto no la reintroduce.
  */
 export async function getApprovedByCategory(
   niches: string[],
@@ -879,8 +995,10 @@ export async function getApprovedByCategory(
   if (verificados.error) throw new Error(verificados.error.message)
   if (resto.error) throw new Error(resto.error.message)
 
-  const confirmados = fisicos(verificados.data as unknown as RawProductRow[])
-  const relleno = fisicos(resto.data as unknown as RawProductRow[])
+  // Barajados por SEPARADO: los confirmados siguen entrando antes que el
+  // relleno (ver `barajar`), y lo que varía es cuáles de cada grupo.
+  const confirmados = barajar(fisicos(verificados.data as unknown as RawProductRow[]))
+  const relleno = barajar(fisicos(resto.data as unknown as RawProductRow[]))
 
   // Firma de marketplace: la MISMA página pautando en muchos nichos distintos de
   // la categoría (Shoptemu, Uber, Airbnb, Mercado Pago). No es un producto, es
@@ -897,13 +1015,20 @@ export async function getApprovedByCategory(
     (nichosPorPagina.get(r.page_id)?.size ?? 0) >= NICHOS_CATALOGO
 
   const tope = maxPorNicho(limit)
-  const paginas = new Set<string>()
+  const vistos = new Set<string>()
   const porNicho = new Map<string, number>()
   const elegidos: RawProductRow[] = []
   const relegados: RawProductRow[] = []   // los que solo el tope por nicho dejó fuera
+  // ⚠️ El dedupe es por PRODUCTO, no por página: sirviendo clusters, una tienda
+  // con tres productos validados tiene que poder mostrar los tres — es
+  // literalmente el punto del cambio. Sobre `ph_raw_products` no hay
+  // `cluster_key` y la clave vuelve a ser la página, o sea el comportamiento
+  // de siempre. Lo que sigue mandando es el tope por nicho.
+  const clave = (r: RawProductRow) =>
+    'cluster_key' in r ? `${r.page_id}:${(r as { cluster_key: string }).cluster_key}` : r.page_id
   for (const r of [...confirmados, ...relleno.filter((r) => !esCatalogo(r))]) {
-    if (paginas.has(r.page_id)) continue
-    paginas.add(r.page_id)
+    if (vistos.has(clave(r))) continue
+    vistos.add(clave(r))
     const n = porNicho.get(r.niche) ?? 0
     if (n >= tope) { relegados.push(r); continue }
     porNicho.set(r.niche, n + 1)
@@ -940,9 +1065,20 @@ export const getNichesWithInventory = () => getTopNiches(2000)
 // se piden SOBRE_PEDIDO× filas y se recortan después.
 // Filtra por tres motivos distintos: no es físico (regla 1 sin LLM), es una
 // marca grande (física, pero no una oportunidad) o es la red de spam.
+// ⚠️ EL TEXTO VIVE EN CAMPOS DISTINTOS SEGÚN LA TABLA y leer solo uno deja el
+// filtro medio inerte: en `ph_raw_products` el anuncio representativo está en
+// el jsonb `raw_data`, y en `ph_raw_clusters` está abierto en `titulo`/`cuerpo`
+// (ahí `raw_data` ni existe). Sin esto, al prender TABLA_SERVING la mitad de la
+// lista negra —la que mira el TEXTO, no el nombre del anunciante— dejaría de
+// filtrar, y Shoptemu y Uber volverían a encabezar las categorías.
+const textoDeFila = (r: RawProductRow | RawClusterRow) =>
+  ('cluster_key' in r
+    ? [r.titulo, r.cuerpo]
+    : [r.raw_data?.title, r.raw_data?.body]
+  ).filter(Boolean).join(' — ')
+
 const fisicos = (rows: RawProductRow[] | null) =>
-  (rows ?? []).filter((r) =>
-    isServible([r.raw_data?.title, r.raw_data?.body].filter(Boolean).join(' — '), r.name))
+  (rows ?? []).filter((r) => isServible(textoDeFila(r), r.name))
 
 /**
  * Chips de sugerencia de la portada: los nichos con más inventario servible.
