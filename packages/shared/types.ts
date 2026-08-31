@@ -363,4 +363,9 @@ export interface RawSearchResponse {
   // Cuántos productos sirve su plan por rango, para que la UI pueda decir
   // "10 de 50 con el Plan 3" sin duplicar la tabla de planes.
   porRango?: number
+  // Qué INTERFAZ sirvió esta respuesta. Ausente = la lista de siempre. Con
+  // 'flujo' los chips no son el filtro de la lista sino las SEMILLAS del flujo
+  // de un producto por vez. El inventario es el mismo en los dos casos.
+  motor?: 'flujo'
+  seeds?: string[]
 }
