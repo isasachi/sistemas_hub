@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { toEntry } from './entry'
+import { toEntry, nombreDeCard } from './entry'
 import type { RawProductRow, RawClusterRow } from '@ph/shared'
 
 const fila = (extra: Partial<RawProductRow> = {}): RawProductRow => ({
@@ -65,5 +65,60 @@ describe('toEntry — fila de CLUSTER: la card identifica el producto, no la pá
 
   it('sin título ni url usable no inventa un nombre', () => {
     expect(toEntry(cluster({ titulo: null, url: null, product_name: null })).productName).toBeNull()
+  })
+})
+
+// Todos los casos de acá salieron de una muestra de 189 productos servibles con
+// 40+ anuncios (la vitrina real), no de ejemplos inventados.
+describe('nombreDeCard — el título del anuncio no siempre nombra el producto', () => {
+  const c = (titulo: string | null, url: string | null) => nombreDeCard({ titulo, url })
+
+  it('un reclamo promocional pierde contra el slug de la landing', () => {
+    expect(c('OFERTA 2x1', 'https://bienbuenochile.com/products/drenaje-linfatico-nature'))
+      .toBe('drenaje linfatico nature')
+    expect(c('PIDE Y PAGA AL RECIBIR ✨', 'https://t.com/products/lashmagnet')).toBe('lashmagnet')
+    expect(c('+12.590 Clientes Satisfechas', 'https://t.com/products/cepillo-drenaje'))
+      .toBe('cepillo drenaje')
+    expect(c('HOY 50% Y ENVÍO GRATIS!', 'https://t.com/products/skinup-pro')).toBe('skinup pro')
+  })
+
+  it('una frase entera de copy también pierde: es un anuncio, no un nombre', () => {
+    expect(c('Me casé con el genio mágico, pero lo perdí.', 'https://t.com/products/faja-lumbar'))
+      .toBe('faja lumbar')
+  })
+
+  // Sin esto el arreglo rompería más de lo que arregla: son nombres de verdad.
+  it('un título que SÍ nombra el producto se conserva', () => {
+    expect(c('Complejo de Magnesio', 'https://t.com/products/xyz')).toBe('Complejo de Magnesio')
+    expect(c('Calzones menstruales', 'https://t.com/products/xyz')).toBe('Calzones menstruales')
+    expect(c('Depilación Láser en casa 🏡', 'https://t.com/p/lummia')).toBe('Depilación Láser en casa 🏡')
+    // 8 palabras pero sin puntuación final: descriptivo, no una oración cerrada.
+    expect(c('Una rutina dental más fácil para tu mascota', 'https://t.com/p/vetriuntrix'))
+      .toBe('Una rutina dental más fácil para tu mascota')
+  })
+
+  it('el sufijo aleatorio del generador de landings se cae; un modelo numérico no', () => {
+    expect(c(null, 'https://t.com/products/slim-rack-organizador-plegable-1jazf'))
+      .toBe('slim rack organizador plegable')
+    expect(c(null, 'https://t.com/products/mcch-taichi-2602')).toBe('mcch taichi 2602')
+  })
+
+  it('un slug que no nombra nada devuelve el título, aunque sea un reclamo', () => {
+    // Id opaco de CMS y de la App Store.
+    expect(c('OFERTA 2x1', 'https://drama.reelshort.com/es/drama/69d8604d4eb6d161cf064114'))
+      .toBe('OFERTA 2x1')
+    expect(c('Design the Next Century', 'http://itunes.apple.com/app/id1354260888'))
+      .toBe('Design the Next Century')
+    // camelCase = ruta del CMS, no un nombre escrito para leer.
+    expect(c('Me casé con el genio mágico, pero lo perdí.', 'https://w2a.reelshort.com/w2a/booksAdvPageV2/'))
+      .toBe('Me casé con el genio mágico, pero lo perdí.')
+    // Genérico de tienda.
+    expect(c('Never Have a Bad Outfit Day', 'https://t.com/pages/quiz'))
+      .toBe('Never Have a Bad Outfit Day')
+  })
+
+  it('el nombre verificado del pipeline le gana a todo', () => {
+    expect(nombreDeCard({ product_name: 'Faja Lumbar', titulo: 'OFERTA 2x1', url: 'https://t.com/p/x-y' }))
+      .toBe('Faja Lumbar')
   })
 })

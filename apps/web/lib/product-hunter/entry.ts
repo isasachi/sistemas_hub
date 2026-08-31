@@ -17,6 +17,36 @@ const esCluster = (r: RawProductRow | RawClusterRow): r is RawClusterRow =>
   'cluster_key' in r
 
 /**
+ * Un título que NO nombra el producto: es el reclamo del anunciante o copy del
+ * anuncio. Medido sobre 189 productos servibles con 40+ anuncios: "OFERTA 2x1",
+ * "PIDE Y PAGA AL RECIBIR", "+12.590 Clientes Satisfechas", "HOY 50% Y ENVÍO
+ * GRATIS!", "Ultimas unidades" — y del otro lado, frases enteras de copy
+ * ("Me casé con el genio mágico, pero lo perdí."), que son un anuncio, no un
+ * nombre.
+ *
+ * ⚠️ El sesgo es SEGURO en una dirección: un falso positivo solo hace que la
+ * card muestre el slug de la landing, que casi siempre nombra mejor el producto.
+ */
+export function esReclamo(t: string): boolean {
+  const n = t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  if (/\b(oferta|descuento|envio gratis|free shipping|paga al recibir|pide y paga|ultimas unidades|ultimos dias|compra ahora|aprovecha|limited time|free gifts?|\d+\s*x\s*\d+|\d+\s*%|\d+% off)\b/.test(n)) return true
+  // "+12.590 Clientes Satisfechas", "+60.000 hogares felices", "5.500 VENDIDOS":
+  // una cifra de prueba social, no un producto.
+  if (/[+\d][\d.,]*\s*(clientes?|hogares|vendidos|personas|unidades)/.test(n)) return true
+  // Una ORACIÓN es copy del anuncio. El corte va en 6 palabras porque los
+  // nombres reales medidos ("Depilación Láser en casa", "Complejo de Magnesio",
+  // "Cuadernos Paperblanks") no llegan ahí y encima no cierran con puntuación.
+  return /[.!?…]\s*$/.test(t.trim()) && t.trim().split(/\s+/).length >= 6
+}
+
+// Segmentos de path que son andamiaje de la tienda, no el nombre del artículo.
+const SLUG_GENERICO = new Set([
+  'quiz', 'send', 'home', 'index', 'cart', 'checkout', 'shop', 'store',
+  'products', 'product', 'collections', 'collection', 'pages', 'page', 'all',
+  'es', 'en', 'mx', 'co', 'ar', 'cl', 'pe',
+])
+
+/**
  * Nombre del producto cuando el título no sirve.
  *
  * ⚠️ El 42% de los clusters NO trae texto de producto en el título — plantillas
@@ -24,15 +54,62 @@ const esCluster = (r: RawProductRow | RawClusterRow): r is RawClusterRow =>
  * suele ser el reclamo del anunciante: medido, "paga al recibir" es el título
  * de 10 productos distintos de la misma página. El slug de la landing SÍ
  * identifica el artículo: es la misma señal con la que `productKey` agrupa.
+ *
+ * Devuelve null cuando el slug tampoco nombra nada — un id opaco
+ * ("69d8604d4eb6d161cf064114", "id1354260888"), un segmento camelCase del CMS
+ * ("booksAdvPageV2", "CuentaDigital") o un genérico de tienda. Ahí la card
+ * prefiere el título aunque sea un reclamo: es lo único legible que queda.
  */
-function nombreDeCluster(r: RawClusterRow): string | null {
+export function nombreDeCluster(r: { url?: string | null }): string | null {
+  let s: string
   try {
     const p = decodeURIComponent(new URL(r.url ?? '').pathname)
-    const s = p.split('/').filter(Boolean).pop()?.replace(/[-_]+/g, ' ').trim()
-    return s && s.length >= 3 ? s : null
+    const crudo = p.split('/').filter(Boolean).pop()
+    if (!crudo) return null
+    if (SLUG_GENERICO.has(crudo.toLowerCase())) return null
+    // Id opaco de CMS: hex largo, o el "id1354260888" de la App Store.
+    if (/^[0-9a-f]{12,}$/i.test(crudo) || /^id\d{5,}$/i.test(crudo)) return null
+    // camelCase sin separadores = ruta del CMS, no un nombre escrito para leer.
+    if (!/[-_\s]/.test(crudo) && /[a-z][A-Z]/.test(crudo)) return null
+    s = crudo.replace(/\.\w{2,4}$/, '').replace(/[-_]+/g, ' ').trim()
   } catch {
     return null
   }
+  // Sufijo aleatorio del generador de landings: "slim rack organizador plegable
+  // 1jazf". Solo cae si MEZCLA letras y dígitos — un "2602" o un "2 0" suelto es
+  // número de modelo y se conserva.
+  const t = s.split(' ')
+  if (t.length > 1 && /^(?=.*[a-z])(?=.*\d)[a-z0-9]{4,10}$/i.test(t[t.length - 1])) t.pop()
+  s = t.join(' ').trim()
+  return s.length >= 3 ? s : null
+}
+
+/**
+ * Qué nombre lleva la card. El orden es el arreglo: hasta acá el título del
+ * anuncio le ganaba SIEMPRE al slug, así que un "OFERTA 2x1" tapaba al
+ * "drenaje linfatico nature sunshine" que la landing sí nombra.
+ *
+ * ✅ Medido sobre los 189 productos servibles con 40+ anuncios: 60 títulos son
+ * reclamos y **52 cards (28%) cambian de nombre**. Los 3 que quedan sin nombre
+ * (antes 5, ahora 8) son slugs opacos rechazados a propósito — `id1567954123`,
+ * `CuentaDigital`, `send` — y ahí `ProductCard` ya cae al anunciante, que
+ * nombra más que eso.
+ *
+ * ⚠️ RESIDUO CONOCIDO, 1 de 189: "Cuando los pruebes, entenderás por qué." cae
+ * al slug `5 razones`, que es peor. Es un título compartido por dos productos
+ * del mismo anunciante (el caso que este arreglo persigue), pero su landing
+ * tampoco nombra nada. NO agregues una lista de "palabras de landing" para
+ * cazarlo: no hay evidencia detrás y el que lo resuelve de verdad es el pase de
+ * nombrado por LLM, que escribe `product_name` y le gana a todo esto.
+ */
+export function nombreDeCard(r: {
+  product_name?: string | null; titulo?: string | null; url?: string | null
+}): string | null {
+  const nombre = stripAdVars(r.product_name)
+  if (nombre) return nombre
+  const titulo = stripAdVars(r.titulo)
+  if (titulo && !esReclamo(titulo)) return titulo
+  return nombreDeCluster(r) ?? titulo
 }
 
 function adsUrl(pageId: string): string {
@@ -56,7 +133,7 @@ export function toEntry(r: RawProductRow | RawClusterRow): RawProductEntry {
       // colisionarían y el front mostraría uno solo.
       id: `${r.niche}:${r.page_id}:${r.cluster_key}`,
       advertiser: r.name ?? 'Anunciante',
-      productName: stripAdVars(r.product_name) ?? stripAdVars(r.titulo) ?? nombreDeCluster(r),
+      productName: nombreDeCard(r),
       title: stripAdVars(r.titulo),
       body: stripAdVars(r.cuerpo),
       country: r.country ?? null,
