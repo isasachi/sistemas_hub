@@ -43,13 +43,22 @@ Fuera de esos dos casos, ante la duda razonable responde que SÍ pertenece: perd
 
 3. CITA: copia TEXTUAL un fragmento corto del texto que te dieron y que justifique tu decisión sobre el nicho. Cópialo carácter por carácter, sin reescribirlo. Si no hay ninguno, deja la cita vacía.
 
-Devuelve además el nombre corto del producto (dos o tres palabras).`
+4. NOMBRE: el nombre corto del producto, dos o tres palabras, como lo llamaría quien lo vende.
+
+5. DESCRIPCIÓN: UNA línea de 8 a 16 palabras que diga QUÉ ES y PARA QUÉ SIRVE, en español neutro.
+- Sale SOLO del texto que te dieron. Si el anuncio no dice de qué está hecho o cuánto trae, no lo inventes.
+- Nada de promoción: ni precios, ni "envío gratis", ni "oferta", ni signos de exclamación.
+- No empieces con el nombre del producto (ya se muestra arriba); empieza por lo que es.
+- Si el texto no alcanza para decir qué es, déjala vacía en vez de rellenarla.`
 
 const VerdictSchema = z.object({
   kind: z.enum(['fisico', 'digital', 'servicio', 'contenido', 'indeterminado']),
   // Opcional con default true: si el modelo lo omite NO se descarta el producto.
   perteneceAlNicho: z.boolean().optional().default(true),
   productName: z.string().optional().default(''),
+  // Una línea para la card. Se pide en la MISMA llamada que el veredicto: es un
+  // campo más de salida, no una llamada más.
+  descripcion: z.string().optional().default(''),
   cita: z.string().optional().default(''),
   motivo: z.string().optional().default(''),
 })
@@ -82,16 +91,34 @@ export function citaRespaldada(cita: string, textos: string[]): boolean {
   return fuente.includes(c)
 }
 
-export async function juzgarNicho(ai: Anthropic, input: VerdictInput): Promise<NichoVerdict> {
-  const textos = input.textos.map((t) => t.replace(/\{\{[^}]*\}\}/g, ' ').replace(/\s+/g, ' ').trim())
-    .filter((t) => t.length >= 12).slice(0, 12)
+// Las tres piezas de abajo las comparten los DOS transportes. Están extraídas y
+// no duplicadas por el mismo motivo que el SYSTEM: dos preparaciones distintas
+// del mismo texto darían dos veredictos distintos sobre la misma fila.
 
-  if (!textos.length) {
-    return {
-      kind: 'indeterminado', perteneceAlNicho: true, productName: '',
-      cita: '', motivo: 'el anuncio no trae texto real', citaVerificada: false,
-    }
+/** Quita las plantillas sin renderizar y se queda con lo que dice algo. */
+export function limpiarTextos(textos: string[]): string[] {
+  return textos.map((t) => t.replace(/\{\{[^}]*\}\}/g, ' ').replace(/\s+/g, ' ').trim())
+    .filter((t) => t.length >= 12).slice(0, 12)
+}
+
+/** Sin texto no hay veredicto — y NO se gasta una llamada en averiguarlo. */
+export function sinTexto(): NichoVerdict {
+  return {
+    kind: 'indeterminado', perteneceAlNicho: true, productName: '', descripcion: '',
+    cita: '', motivo: 'el anuncio no trae texto real', citaVerificada: false,
   }
+}
+
+function mensajeDe(input: VerdictInput, textos: string[]): string {
+  return `Nicho buscado: "${input.niche}"\n` +
+    `Anunciante: "${input.advertiser ?? '(sin nombre)'}"\n` +
+    `URL del producto: ${input.productPath ?? '(no hay)'}\n\n` +
+    `Textos de sus anuncios de ese producto:\n${textos.map((t) => `· ${t}`).join('\n')}`
+}
+
+export async function juzgarNicho(ai: Anthropic, input: VerdictInput): Promise<NichoVerdict> {
+  const textos = limpiarTextos(input.textos)
+  if (!textos.length) return sinTexto()
 
   const res = await ai.messages.create({
     model: MODEL,
@@ -102,18 +129,94 @@ export async function juzgarNicho(ai: Anthropic, input: VerdictInput): Promise<N
     system: [{ type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } }],
     tools: [TOOL],
     tool_choice: { type: 'tool', name: TOOL.name },
-    messages: [{
-      role: 'user',
-      content:
-        `Nicho buscado: "${input.niche}"\n` +
-        `Anunciante: "${input.advertiser ?? '(sin nombre)'}"\n` +
-        `URL del producto: ${input.productPath ?? '(no hay)'}\n\n` +
-        `Textos de sus anuncios de ese producto:\n${textos.map((t) => `· ${t}`).join('\n')}`,
-    }],
+    messages: [{ role: 'user', content: mensajeDe(input, textos) }],
   })
 
   const use = res.content.find((b) => b.type === 'tool_use')
   if (!use || use.type !== 'tool_use') throw new Error('sin tool_use en el veredicto de nicho')
   const parsed = VerdictSchema.parse(use.input)
+  return { ...parsed, citaVerificada: citaRespaldada(parsed.cita, textos) }
+}
+
+// ─── El mismo veredicto por OpenAI ────────────────────────────────────────────
+//
+// Existe porque el pase de nombres corre sobre el texto YA guardado y ahí el
+// modelo barato manda: gpt-5.6-luna cuesta $0,20/$1,20 por millón contra
+// $1,00/$5,00 de Haiku. Comparte SYSTEM, schema y `citaRespaldada` con el camino
+// de Anthropic a propósito — dos copias del prompt es como una se desincroniza.
+//
+// ⚠️ EL JSON SCHEMA VA ESCRITO A MANO, no con `z.toJSONSchema`. Los structured
+// outputs de OpenAI exigen `additionalProperties: false` y TODAS las claves en
+// `required`, mientras el schema de zod marca cinco como opcionales; convertirlo
+// automáticamente es justo la transformación que AGENTS.md documenta como fuente
+// de campos inventados. Con seis campos, escribirlo es más corto que adaptarlo.
+//
+// ⚠️ Y por eso los opcionales se piden igual y se rellenan con cadena vacía: en
+// structured outputs `required` no significa "el dato existe", significa "la
+// clave viene". Un string vacío es la forma de decir "no hay".
+export const MODELO_OPENAI = process.env.PH_NICHO_MODEL_OPENAI ?? 'gpt-5.6-luna'
+
+const JSON_SCHEMA = {
+  name: 'veredicto',
+  strict: true,
+  schema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['kind', 'perteneceAlNicho', 'productName', 'descripcion', 'cita', 'motivo'],
+    properties: {
+      kind: { type: 'string', enum: ['fisico', 'digital', 'servicio', 'contenido', 'indeterminado'] },
+      perteneceAlNicho: { type: 'boolean' },
+      productName: { type: 'string' },
+      descripcion: { type: 'string' },
+      cita: { type: 'string' },
+      motivo: { type: 'string' },
+    },
+  },
+} as const
+
+/**
+ * Consumo acumulado del proceso. Existe para que el precio del barrido sea
+ * MEDIDO y no estimado por caracteres: el costo lo domina la salida, y esa es
+ * justo la parte que no se puede contar sin llamar.
+ */
+export const usoOpenAI = { llamadas: 0, input: 0, inputCacheado: 0, output: 0 }
+
+export async function juzgarNichoOpenAI(input: VerdictInput): Promise<NichoVerdict> {
+  const key = process.env.OPENAI_API_KEY
+  if (!key || key.startsWith('sk-...')) throw new Error('falta OPENAI_API_KEY real')
+  const textos = limpiarTextos(input.textos)
+  if (!textos.length) return sinTexto()
+
+  // En Node el fetch no tiene timeout propio: sin esto una petición colgada
+  // detiene el barrido entero (la lección de `fetchKie`).
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: MODELO_OPENAI,
+      messages: [
+        { role: 'system', content: SYSTEM },
+        { role: 'user', content: mensajeDe(input, textos) },
+      ],
+      response_format: { type: 'json_schema', json_schema: JSON_SCHEMA },
+    }),
+    signal: AbortSignal.timeout(120_000),
+  })
+  const j = (await res.json()) as {
+    choices?: { message: { content: string | null } }[]
+    usage?: { prompt_tokens?: number; completion_tokens?: number
+              prompt_tokens_details?: { cached_tokens?: number } }
+    error?: { message?: string }
+  }
+  if (j.usage) {
+    usoOpenAI.llamadas++
+    usoOpenAI.input += j.usage.prompt_tokens ?? 0
+    usoOpenAI.inputCacheado += j.usage.prompt_tokens_details?.cached_tokens ?? 0
+    usoOpenAI.output += j.usage.completion_tokens ?? 0
+  }
+  if (j.error) throw new Error(`openai: ${j.error.message ?? 'error'}`)
+  const txt = j.choices?.[0]?.message?.content
+  if (!txt) throw new Error('openai: respuesta sin contenido')
+  const parsed = VerdictSchema.parse(JSON.parse(txt))
   return { ...parsed, citaVerificada: citaRespaldada(parsed.cita, textos) }
 }
