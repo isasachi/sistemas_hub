@@ -122,3 +122,30 @@ describe('nombreDeCard — el título del anuncio no siempre nombra el producto'
       .toBe('Faja Lumbar')
   })
 })
+
+describe('toEntry — la descripción redactada le gana al copy del anuncio', () => {
+  const c = (extra: Partial<RawClusterRow>): RawClusterRow => ({
+    niche: 'rodilla', page_id: '123', cluster_key: 't.com/p/x',
+    ad_count: 63, muestra_n: 15, muestra_tot: 30,
+    titulo: 'OFERTA 2x1', cuerpo: 'PIDE Y PAGA AL RECIBIR 💛 envío gratis',
+    url: 'https://t.com/p/x', name: 'Tienda', country: 'MX',
+    status: 'monoproducto', ...extra,
+  })
+
+  it('usa `descripcion` cuando el veredicto ya pasó por la fila', () => {
+    expect(toEntry(c({ descripcion: 'Rodillera de compresión para aliviar el dolor al caminar.' })).body)
+      .toBe('Rodillera de compresión para aliviar el dolor al caminar.')
+  })
+
+  // Fuera del tramo que la barrida cubrió, `descripcion` es null: la card tiene
+  // que seguir mostrando lo de siempre en vez de quedarse sin texto.
+  it('sin descripción cae al cuerpo del anuncio, como antes', () => {
+    expect(toEntry(c({ descripcion: null })).body).toBe('PIDE Y PAGA AL RECIBIR 💛 envío gratis')
+    expect(toEntry(c({})).body).toBe('PIDE Y PAGA AL RECIBIR 💛 envío gratis')
+  })
+
+  it('una descripción que solo trae plantillas no tapa al cuerpo', () => {
+    expect(toEntry(c({ descripcion: '{{product.description}}' })).body)
+      .toBe('PIDE Y PAGA AL RECIBIR 💛 envío gratis')
+  })
+})

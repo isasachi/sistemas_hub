@@ -135,7 +135,11 @@ export function toEntry(r: RawProductRow | RawClusterRow): RawProductEntry {
       advertiser: r.name ?? 'Anunciante',
       productName: nombreDeCard(r),
       title: stripAdVars(r.titulo),
-      body: stripAdVars(r.cuerpo),
+      // La descripción REDACTADA le gana al copy crudo del anuncio: `cuerpo` es
+      // la promoción tal cual ("PIDE Y PAGA AL RECIBIR 💛") y está vacío en el
+      // 10% de las filas. Se cae a `cuerpo` mientras el veredicto no haya
+      // pasado por esa fila, que hoy es el caso fuera del tramo de 50+.
+      body: stripAdVars(r.descripcion) ?? stripAdVars(r.cuerpo),
       country: r.country ?? null,
       // ⚠️ Los anuncios del PRODUCTO, no los de la página. Es el cambio entero.
       adCount: r.ad_count,
