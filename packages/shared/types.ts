@@ -303,6 +303,10 @@ export interface RawClusterRow {
   status?: 'pendiente' | 'monoproducto' | 'sin_verificar' | 'descartado' | 'inactivo'
   kind?: string | null
   product_name?: string | null
+  // Una línea REDACTADA que dice qué es el producto, del mismo veredicto que
+  // escribe `product_name`. Distinta de `cuerpo`, que es el copy crudo del
+  // anuncio. Nace null: la card cae a `cuerpo` mientras no exista.
+  descripcion?: string | null
   verdict_note?: string | null
   senal_nicho?: 'path' | 'titulo' | 'cuerpo' | 'ninguna' | null
   ad_start_date?: number | null

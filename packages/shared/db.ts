@@ -933,7 +933,7 @@ function categoriaQuery(niches: string[], bucket: RawBucket, f?: RawFilters) {
   // anuncio representativo en `raw_data` (jsonb) y el producto lo tiene abierto
   // en `titulo`/`cuerpo`, más los dos crudos del estimado.
   const cols = TABLA_SERVING === 'ph_raw_clusters'
-    ? 'niche,page_id,cluster_key,name,product_name,country,ad_count,muestra_n,muestra_tot,titulo,cuerpo,url,ad_start_date,status,senal_nicho'
+    ? 'niche,page_id,cluster_key,name,product_name,descripcion,country,ad_count,muestra_n,muestra_tot,titulo,cuerpo,url,ad_start_date,status,senal_nicho'
     : 'niche,page_id,name,product_name,country,ad_count,ad_start_date,raw_data,status,share,senal_nicho'
   let q = getDb().from(TABLA_SERVING)
     .select(cols)
