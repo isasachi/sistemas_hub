@@ -434,20 +434,24 @@ más las tres prohibiciones (`Do not compress…`, `Do not start the next beat e
 
 ⚠️ **REEMPLAZA A LA PROSA, no se suma.** `accionVisual` se COMPILA desde estos mismos beats (`compileAccion`), así que emitir las dos es decir lo mismo dos veces. Sin timeline —toda sesión guardada— el candado vuelve vacío y manda la prosa, como siempre.
 
-❌ **MEDIDO CON 4 RENDERS REALES (`scripts/probe-motion-lock.ts`, sesión `7e4ccbcf`): NO MUEVE LA AGUJA.** Mismo lote, mismo contenido, dos draws por brazo; el brazo A es el control científico (los MISMOS beats proyectados a prosa con `compileAccion`), no literalmente lo que producción emitía.
+⚠️ **LA PRIMERA CORRIDA DE 4 RENDERS MIDIÓ UN BED DONDE EL CANDADO ES UN NO-OP POR CONSTRUCCIÓN, y hay que leerla así.** El lote elegido eran DOS shots con **un beat cada uno**: ahí las tres prohibiciones no tienen referente —no hay nada que comprimir, nada que adelantar, ningún orden que imponer— y los estados tampoco se emiten (un fragmento no los trae). El brazo B se reducía a formato. Resultado, como corresponde: **2 de 4 beats ejecutados en cada brazo** (A1 1/2, A2 1/2, B1 0/2, B2 2/2), con el peor y el mejor clip los dos del brazo con candado. **No dice nada sobre el candado**, y el guard que lo habría frenado (el shot medido tiene que llevar ≥2 tramos) es ahora el cuarto del probe.
 
-| | beats ejecutados |
+❌ **CON EL BED CORREGIDO —UN SOLO SHOT DE 10,4 s CON TRES TRAMOS SECUENCIALES Y LOS DOS ESTADOS EMITIDOS— EL CANDADO SIGUE SIN MOVER LA AGUJA.** Cuatro renders más, dos draws por brazo, mismo lote y mismo contenido; el brazo A es el control científico (los MISMOS beats proyectados a prosa con `compileAccion`), no literalmente lo que producción emitía.
+
+| | tramos ejecutados |
 |---|---|
-| A1 (prosa) | 1 de 2, 1 parcial |
-| A2 (prosa) | 1 de 2, 1 parcial |
-| **B1 (candado)** | **0 de 2**, 1 parcial |
-| **B2 (candado)** | **2 de 2** |
+| A1 (prosa) | **0 de 3**, 1 parcial — *"0.0-8.0s postura estable hablando a cámara sin realizar las acciones solicitadas"* |
+| A2 (prosa) | **2 de 3** |
+| B1 (candado) | **1 de 3**, 1 parcial |
+| B2 (candado) | **0 de 3**, 1 parcial — *"0.0-9.5s sosteniendo el frasco frente a la cámara durante todo el clip"* |
 
-**2 de 4 en cada brazo.** La varianza del seed domina: el peor clip y el mejor son los dos del brazo con candado. Con n=2 por brazo no hay efecto que reportar.
+**A 2 de 6, B 1 de 6.** La varianza del seed vuelve a dominar —cada brazo tiene un clip que ejecuta y uno que se queda quieto los diez segundos— y en los dos brazos el clip promedio ejecuta **un tercio** de lo que se le pidió. Con n=2 por brazo no hay efecto que reportar, y la dirección del ruido tampoco favorece al candado. Clips y prompts en `~/Downloads/probe-motion-lock/`.
 
-⚠️ **Y LA CAUSA ESTÁ AGUAS ARRIBA: EL TIMELINE NO TIENE DENSIDAD SUFICIENTE PARA QUE HAYA ALGO QUE FIJAR.** Medido sobre el refinamiento fresco de **tres sesiones** (`2849e595`, `7e4ccbcf`, `1f231b1d`): el pase dedicado devuelve **2 o 3 beats por corte sin importar cuánto dure el corte** — un corte de 20 s vuelve con 3, uno de 3,4 s con 3. Es exactamente el mismo techo que este documento ya midió para la prosa (*"los cortes LARGOS se quedan en ~4 frases pase lo que pase"*), y el pase dedicado NO lo rompió: **el techo es semántico, no de presupuesto ni de formato**. Con 2 beats en un clip de 8,5 s no hay colapso que prevenir, y el propio juez lo dice — el hueco de 3,5 a 6,2 s, donde el timeline no pide nada, se llena de quietud.
+⚠️ **LO QUE SÍ ESTÁ SOSTENIDO POR LA MEDICIÓN, y es el hallazgo:** el refinamiento devuelve **2 o 3 beats por corte sin importar cuánto dure el corte** — medido sobre el pase fresco de **tres sesiones** (`2849e595`, `7e4ccbcf`, `1f231b1d`): un corte de 20 s vuelve con 3, uno de 3,4 s también con 3. Es exactamente el mismo techo que este documento ya midió para la prosa (*"los cortes LARGOS se quedan en ~4 frases pase lo que pase"*), y el pase dedicado NO lo rompió: **el techo es semántico, no de presupuesto ni de formato**. Y se ve en el render: los dos clips quietos lo están justo donde el timeline no pide nada.
 
-**Entonces la palanca siguiente NO es el prompt del lote: es la DENSIDAD del timeline.** Ninguna forma de emitir 2 beats hace que grok ejecute 8.
+**Entonces la palanca siguiente no es el prompt del lote: es la DENSIDAD del timeline.** Ninguna forma de emitir 3 tramos hace que grok ejecute diez movimientos.
+
+⚠️ **Lo que NO se midió, y no hay que leerlo como medido:** que el candado no sirva NUNCA. Se midió que no cambia nada **con 2-3 tramos por clip**, que es todo lo que el forense da hoy. Si algún día la densidad sube, esto se vuelve a medir — el probe está escrito y sus cuatro guards también.
 
 ✅ **Lo que la corrida SÍ dejó, y no es poco: cinco defectos que solo aparecen armando el prompt de verdad.** Los cinco están arreglados y con test.
 1. **Los beats se DUPLICABAN al partir la toma.** `splitLongToma` copia la toma entera, así que los dos fragmentos recibían el timeline completo — el bug de la coreografía duplicada en su forma más literal, ahora con línea de tiempo. `repartirBeats` los reparte por punto medio y rebasa los tiempos.
@@ -460,7 +464,7 @@ más las tres prohibiciones (`Do not compress…`, `Do not start the next beat e
 
 ⚠️ **`scriptFingerprint` HASHEA LOS BEATS, y no alcanzaba con `accionVisual`.** `compileAccion` descarta los `micro` y —lo que importa— **los TIEMPOS**: dos timelines que difieren solo en la ventana de cada tramo compilan a la misma prosa. Misma huella, prompts distintos, `isPaidResume` jurando que es el mismo contenido — y la ventana de tiempo es justamente lo único que el candado agrega. **Huella v11 → v12** por el cambio de plantilla.
 
-⚠️ **EL PROBE SE ESCRIBIÓ CON TRES GUARDS ANTES DE GASTAR UN RENDER, y los tres se dispararon.** (a) *el brazo B no lleva candado* — el primer emparejamiento ataba los cortes frescos a `adapted.tomas[].tiempoOriginal`, y el forense fresco corta el video DISTINTO (5 cortes donde el guardado tenía 4): la toma de 14,3 s recibía por cercanía el timeline de un corte de 3,4 s. Se habrían gastado cuatro renders midiendo eso. Ahora el lote se construye desde el forense fresco y el timeline manda. (b) *el brazo B sale truncado* — en una sesión el prompt pasaba de 5.000 y se habría medido presupuesto y no representación. (c) *un beat termina después de que el clip se acabó* — el defecto 2 de arriba. **Un probe de render tiene que negarse a rendir.**
+⚠️ **EL PROBE SE ESCRIBIÓ CON GUARDS ANTES DE GASTAR UN RENDER, y todos se dispararon.** (a) *el brazo B no lleva candado* — el primer emparejamiento ataba los cortes frescos a `adapted.tomas[].tiempoOriginal`, y el forense fresco corta el video DISTINTO (5 cortes donde el guardado tenía 4): la toma de 14,3 s recibía por cercanía el timeline de un corte de 3,4 s. Se habrían gastado cuatro renders midiendo eso. Ahora el lote se construye desde el forense fresco y el timeline manda. (b) *el brazo B sale truncado* — en una sesión el prompt pasaba de 5.000 y se habría medido presupuesto y no representación. (c) *un beat termina después de que el clip se acabó* — el defecto 2 de arriba. (d) *ningún shot del lote lleva 2 o más tramos* — el guard que faltaba, y el que habría frenado la primera corrida. **Un probe de render tiene que negarse a rendir.**
 
 ⚠️ **LA COREOGRAFÍA SE DUPLICABA EN CADA FRAGMENTO, Y ÉSA ERA LA CAUSA DE "FALTAN MOVIMIENTOS".** `splitLongToma` partía `locucion` por frases y copiaba `accionVisual` **tal cual** a cada fragmento. Una toma fusionada de 17,4 s partida en dos le pedía al modelo la coreografía COMPLETA de los 17 s en 3 s, y otra vez en 8,7 s — una instrucción imposible, de la que el modelo ejecuta una fracción arbitraria. Reportado por el dueño del repo como *"no se ve como el video original, faltan movimientos y gestos"*.
 

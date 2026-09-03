@@ -6,7 +6,7 @@ import { CPS_MAX } from './forensic'
 import { KIE_PROMPT_MAX } from './kie'
 import { nicheSpec } from './niches'
 import { etiqueta, type Personaje } from './personajes'
-import { repartirBeats, MotionBeatSchema, MotionTimelineSchema, type MotionBeat, type MotionState, type MotionTimeline } from './motion'
+import { repartirBeats, MotionBeatSchema, MotionStateSchema, type MotionBeat, type MotionState, type MotionTimeline } from './motion'
 
 /**
  * FASE 5 del prompt maestro — agrupación de tomas en lotes de generación.
@@ -75,6 +75,11 @@ export const LOTE_MAX_CHARS = LOTE_MAX_SEC * CPS_MAX
  * atómico completo. Cuesta llamadas pagadas —igual que los otros dos cierres— y es el
  * mismo tipo de aritmética determinista.
  */
+// ⚠️ ponytail: mide `accionVisual`, que con el CANDADO DE MOVIMIENTO ya no se emite cuando
+// la toma trae beats — ahí pasa a ser un PROXY del tamaño del candado, no una medida suya.
+// No se cambió porque el piso (la búsqueda binaria encoge las líneas del candado, con test)
+// ya impide que un lote quede sin prompt válido; si el reparto se vuelve a quedar corto, el
+// arreglo es medir los beats acá y no aflojar el tope.
 export const LOTE_MAX_COREO = 900
 
 export const LoteSchema = z.object({
@@ -95,10 +100,14 @@ export const LoteSchema = z.object({
      * solo con los suyos.
      */
     beats: z.array(MotionBeatSchema).optional(),
-    /** El timeline COMPLETO del corte, solo cuando la toma no se partió: es de donde
-     *  salen `START STATE` y `END STATE`. Un fragmento no lo lleva — el estado inicial
-     *  del corte no es el suyo. */
-    motion: MotionTimelineSchema.optional(),
+    /** Los estados inicial y final del corte, solo cuando la toma NO se partió. Un
+     *  fragmento no los lleva: el estado inicial del corte no es el suyo.
+     *  ⚠️ Son los DOS ESTADOS y no el `MotionTimeline` entero: el timeline trae también
+     *  sus `beats`, que ya viven en `beats` — guardarlo completo mete el mismo array dos
+     *  veces por toma en el jsonb de `lotes`, la columna que este repo ya cacheó
+     *  `render_done` para no arrastrar a una lista de 24 filas. */
+    startState: MotionStateSchema.optional(),
+    endState: MotionStateSchema.optional(),
   })),
   duracionSeg: z.number(),
   prompt: z.string(),
@@ -292,7 +301,7 @@ function splitLongToma(t: TomaFinal): TomaFinal[] {
   // recursivamente antes de aceptarlo.
   const trozos = repartirBeats(t.beats ?? [], duraciones)
   return partes.flatMap((p, i) =>
-    splitLongToma({ ...t, duracionSeg: duraciones[i], accionVisual: acciones[i], beats: trozos[i], motion: undefined, locucion: p }),
+    splitLongToma({ ...t, duracionSeg: duraciones[i], accionVisual: acciones[i], beats: trozos[i], startState: undefined, endState: undefined, locucion: p }),
   )
 }
 
@@ -393,7 +402,7 @@ export function groupIntoLotes(
   const conBeats = motionPorTiempo
     ? tomas.map((t) => {
         const tl = motionPorTiempo.get(t.tiempoOriginal)
-        return { ...t, beats: tl?.beats ?? [], motion: tl }
+        return { ...t, beats: tl?.beats ?? [], startState: tl?.startState, endState: tl?.endState }
       })
     : tomas
   const expandidas = conBeats.flatMap(splitLongToma).map((t, i) => ({ ...t, n: i + 1 }))
@@ -414,7 +423,7 @@ export function groupIntoLotes(
         // Los beats de ESTE fragmento. La proyección es explícita a propósito (lo que se
         // guarda en el jsonb es lo que el prompt lee), así que un campo que no se nombra
         // acá no llega al render — que es justo lo que pasaba con el candado.
-        beats: t.beats, motion: t.motion,
+        beats: t.beats, startState: t.startState, endState: t.endState,
       })),
       // Redondeamos recién acá, para mostrar: el check que decide si el lote cierra ya
       // pasó por `excedeTope` sobre el acumulado SIN redondear, así que este r1 no
@@ -784,10 +793,9 @@ function estadoEnProsa(e: MotionState | undefined): string {
 
 function candadoDeMovimiento(
   beats: MotionBeat[] | undefined,
-  /** El timeline del corte, cuando la toma NO se partió. Es de donde salen los estados
-   *  inicial y final — las nueve casillas, no las seis del beat. Un FRAGMENTO no lo trae:
-   *  el estado inicial global no es el suyo, así que ahí se derivan de sus propios beats. */
-  tl: MotionTimeline | undefined,
+  /** Los estados del corte, cuando la toma NO se partió: las nueve casillas, no las seis
+   *  del beat. Un FRAGMENTO no los trae — el estado inicial global no es el suyo. */
+  estados: { startState?: MotionState; endState?: MotionState },
   soloMayores: boolean,
   cap: number | null,
   /** Segundo del CLIP en el que arranca esta toma. Las ventanas del beat son relativas a
@@ -816,8 +824,8 @@ function candadoDeMovimiento(
   // beat 2). Un FRAGMENTO no trae timeline —el estado inicial del corte no es el suyo— y
   // además arranca de su imagen ancla, que ya dice cómo se ve. Sin estados, sigue teniendo
   // lo único que el candado aporta: las ventanas de tiempo.
-  const inicio = corta(estadoEnProsa(tl?.startState))
-  const fin = corta(estadoEnProsa(tl?.endState))
+  const inicio = corta(estadoEnProsa(estados.startState))
+  const fin = corta(estadoEnProsa(estados.endState))
   return [
     inicio && `START STATE: ${inicio}.`,
     'TIMED MOTION — perform these in order, each inside its own window:',
@@ -988,7 +996,7 @@ export function buildLotePrompt(args: {
         const ancla = anclas.get(t.tiempoOriginal)
         const candado = candadoDeMovimiento(
           t.beats,
-          t.motion ?? undefined,
+          t,
           nivel >= NIVEL_MICRO_CORTO,
           capAccion,
           lote.tomas.slice(0, i).reduce((n, x) => n + x.duracionSeg, 0),

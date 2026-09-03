@@ -171,12 +171,16 @@ async function main() {
   // inicial y final) y el MÁS LARGO de los que tienen al menos dos tramos — el defecto que
   // se mide es el colapso y la quietud posterior, y eso solo se ve cuando sobra tiempo.
   // `nLote` elige otro de la lista ordenada.
-  // El bed: el corte con MÁS tramos, desempatando por duración. Medido en tres sesiones,
-  // el refinamiento devuelve 2-3 beats por corte sin importar cuánto dure (un corte de 20 s
-  // vuelve con 3), así que "el que más tiene" es también el único con material de sobra
-  // para que el colapso se note. `nLote` elige otro de la lista ordenada.
+  // ⚠️ EL BED TIENE QUE SER UN SOLO SHOT CON VARIOS TRAMOS, y eso descarta los cortes que
+  // se parten. La primera corrida se gastó cuatro renders sobre un lote de dos shots con UN
+  // beat cada uno: ahí las tres prohibiciones no tienen referente —no hay nada que
+  // comprimir, nada que adelantar, ningún orden que imponer— y los estados tampoco se
+  // emiten (un fragmento no los trae). El brazo B se reducía a formato.
+  // Por eso: `duracionSeg <= LOTE_MAX_SEC` (así `splitLongToma` no dispara) y >= 2 beats,
+  // desempatando por duración — el colapso solo se ve cuando sobra tiempo después.
+  // `nLote` elige otro de la lista ordenada.
   const corte = fresco.cortes
-    .filter((c) => tieneMotion(c) && c.motion!.beats.length >= 2)
+    .filter((c) => tieneMotion(c) && c.motion!.beats.length >= 2 && c.duracionSeg <= 15)
     .sort((a, b) => (b.motion!.beats.length - a.motion!.beats.length) || (b.duracionSeg - a.duracionSeg))[nLote ? nLote - 1 : 0]
   if (!corte) throw new Error('El forense no devolvió ningún corte con timeline')
   const cerca = adapted.tomas
@@ -213,8 +217,8 @@ async function main() {
   const control = {
     ...lote,
     tomas: lote.tomas.map((t) => ({
-      ...t, beats: undefined, motion: undefined,
-      accionVisual: t.beats?.length ? compileAccion({ ...(t.motion ?? {}), beats: t.beats } as MotionTimeline) : t.accionVisual,
+      ...t, beats: undefined, startState: undefined, endState: undefined,
+      accionVisual: t.beats?.length ? compileAccion({ beats: t.beats } as MotionTimeline) : t.accionVisual,
     })),
   }
 
@@ -251,6 +255,14 @@ async function main() {
   for (const [et, p] of [['A', promptA], ['B', promptB]] as const) {
     if (p.includes('…')) throw new Error(`El brazo ${et} sale TRUNCADO: se estaría midiendo presupuesto y no representación`)
   }
+  // (d) EL SHOT MEDIDO TIENE QUE LLEVAR VARIOS TRAMOS. Es el guard que habría frenado la
+  // primera corrida: con un beat por shot, las tres prohibiciones no tienen referente y el
+  // brazo B se reduce a formato.
+  for (const t of lote.tomas) {
+    if ((t.beats?.length ?? 0) >= 2) break
+    if (t === lote.tomas.at(-1)) throw new Error('Ningún shot del lote lleva 2 o más tramos: no habría nada que colapsar')
+  }
+
   // Ninguna ventana puede salirse del clip: un tramo que empieza después de que el video
   // terminó es una instrucción imposible, y el modelo resuelve eso ignorando el bloque.
   for (const b of beats) {

@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { MotionBeatSchema, MotionTimelineSchema } from './motion'
+import { MotionBeatSchema, MotionStateSchema } from './motion'
 import type { ScriptTemplate } from './template'
 import { slotOriginals, type Slot } from './fill'
 import type { ForensicReport } from './forensic'
@@ -113,7 +113,8 @@ export const TomaFinalSchema = z.object({
   /** Los beats del movimiento de esta toma, y el timeline completo del corte cuando la
    *  toma no se partió. Los adjunta el código en FASE 5, no el modelo. */
   beats: z.array(MotionBeatSchema).optional(),
-  motion: MotionTimelineSchema.optional(),
+  startState: MotionStateSchema.optional(),
+  endState: MotionStateSchema.optional(),
 })
 export type TomaFinal = z.infer<typeof TomaFinalSchema>
 

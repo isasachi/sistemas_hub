@@ -278,6 +278,16 @@ export function scriptFingerprint(input: {
           b.body, b.headAndGaze, b.leftHand, b.rightHand, b.productStateBefore, b.productStateAfter,
         )
       }
+      // Y los ESTADOS, por lo mismo: se imprimen como `START STATE:` / `END STATE:` en el
+      // prompt, así que dos tomas con los mismos beats y estados distintos son dos prompts
+      // distintos. Las nueve casillas en orden fijo, `''` cuando no hay estado (una toma
+      // partida no lo lleva) — que es lo que hashearía una sesión sin timeline.
+      for (const e of [t.startState, t.endState]) {
+        campos.push(
+          e?.bodyPose ?? '', e?.headPose ?? '', e?.gaze ?? '', e?.leftHand ?? '', e?.rightHand ?? '',
+          e?.facialExpression ?? '', e?.productState ?? '', e?.propsState ?? '', e?.cameraState ?? '',
+        )
+      }
       campos.push((input.enOff?.has(t.tiempoOriginal) ? '1' : '0'))
       const hablan = input.quien?.get(t.tiempoOriginal) ?? []
       campos.push(String(hablan.length), ...hablan.map((p) => p.id))
