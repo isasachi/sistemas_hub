@@ -419,6 +419,49 @@ Cuatro condiciones, todas COMPARACIONES y no criterios — es la "matemática" q
 
 ⚠️ **Medido: en el video real de producción, 0 uniones de 5 cortes — y es CORRECTO.** Sus cinco cortes tienen trabajos de cámara genuinamente distintos (*"posición fija frontal"* contra *"zoom digital lento"* contra *"plano completo, handheld"*), así que unirlos habría metido el corte adentro del clip. El ahorro por esta vía solo aparece cuando el original repite el mismo setup; **el grueso del presupuesto lo liberó la compresión del andamiaje**, no la fusión.
 
+### EL CANDADO DE MOVIMIENTO (V2) — cableado, verificado y **sin efecto medible todavía** (2026-09-03)
+
+La coreografía deja de viajar como prosa y viaja como una **máquina de estados**: `MotionTimeline` (`lib/video-ads/motion.ts`) con `startState` / `beats` / `endState`, y el prompt del lote emite
+
+```
+START STATE: …                                   ← solo si la toma NO se partió
+TIMED MOTION — perform these in order, each inside its own window:
+[0.0–3.5s] sway; left hand: holds bottle; right hand: rubs product into skin
+[6.2–8.5s] upright; left hand: holding bottle; right hand: touches chin
+END STATE: …
+```
+más las tres prohibiciones (`Do not compress…`, `Do not start the next beat early.`, `Do not invent additional hand gestures between beats.`), **una vez por prompt y no por toma** — son globales, y repetirlas son ~150 caracteres × (N−1) de duplicación pura dentro del presupuesto que el candado existe para proteger.
+
+⚠️ **REEMPLAZA A LA PROSA, no se suma.** `accionVisual` se COMPILA desde estos mismos beats (`compileAccion`), así que emitir las dos es decir lo mismo dos veces. Sin timeline —toda sesión guardada— el candado vuelve vacío y manda la prosa, como siempre.
+
+❌ **MEDIDO CON 4 RENDERS REALES (`scripts/probe-motion-lock.ts`, sesión `7e4ccbcf`): NO MUEVE LA AGUJA.** Mismo lote, mismo contenido, dos draws por brazo; el brazo A es el control científico (los MISMOS beats proyectados a prosa con `compileAccion`), no literalmente lo que producción emitía.
+
+| | beats ejecutados |
+|---|---|
+| A1 (prosa) | 1 de 2, 1 parcial |
+| A2 (prosa) | 1 de 2, 1 parcial |
+| **B1 (candado)** | **0 de 2**, 1 parcial |
+| **B2 (candado)** | **2 de 2** |
+
+**2 de 4 en cada brazo.** La varianza del seed domina: el peor clip y el mejor son los dos del brazo con candado. Con n=2 por brazo no hay efecto que reportar.
+
+⚠️ **Y LA CAUSA ESTÁ AGUAS ARRIBA: EL TIMELINE NO TIENE DENSIDAD SUFICIENTE PARA QUE HAYA ALGO QUE FIJAR.** Medido sobre el refinamiento fresco de **tres sesiones** (`2849e595`, `7e4ccbcf`, `1f231b1d`): el pase dedicado devuelve **2 o 3 beats por corte sin importar cuánto dure el corte** — un corte de 20 s vuelve con 3, uno de 3,4 s con 3. Es exactamente el mismo techo que este documento ya midió para la prosa (*"los cortes LARGOS se quedan en ~4 frases pase lo que pase"*), y el pase dedicado NO lo rompió: **el techo es semántico, no de presupuesto ni de formato**. Con 2 beats en un clip de 8,5 s no hay colapso que prevenir, y el propio juez lo dice — el hueco de 3,5 a 6,2 s, donde el timeline no pide nada, se llena de quietud.
+
+**Entonces la palanca siguiente NO es el prompt del lote: es la DENSIDAD del timeline.** Ninguna forma de emitir 2 beats hace que grok ejecute 8.
+
+✅ **Lo que la corrida SÍ dejó, y no es poco: cinco defectos que solo aparecen armando el prompt de verdad.** Los cinco están arreglados y con test.
+1. **Los beats se DUPLICABAN al partir la toma.** `splitLongToma` copia la toma entera, así que los dos fragmentos recibían el timeline completo — el bug de la coreografía duplicada en su forma más literal, ahora con línea de tiempo. `repartirBeats` los reparte por punto medio y rebasa los tiempos.
+2. **Y un beat desbordaba la ventana de su fragmento.** Cae en el fragmento que contiene su PUNTO MEDIO, así que puede empezar antes o terminar después de sus bordes: un beat `[6.5–13.2]` se emitía dentro de un clip de 11,6 s. Se clampea.
+3. **Las ventanas eran relativas a la TOMA y el clip es UNO.** La segunda toma de un lote volvía a empezar en `[0.0s]`: dos relojes en el mismo prompt. Ahora llevan el corrimiento acumulado del lote.
+4. **`repartirBeats` dejaba fragmentos sin un solo beat** (con duraciones 9:1, el caso que `repartirAccion` ya tenía medido), y ahí el fragmento cae a la prosa — que se compila de TODOS los beats de la toma, o sea repite lo que el candado del hermano ya pidió. Piso de un beat por fragmento.
+5. **Los estados salían del primer y del último beat cuando el timeline no los traía**, y eso es duplicación pura: en un fragmento de dos beats el prompt decía lo mismo tres veces. Ahora **los estados salen del timeline o no salen**; un fragmento arranca de su imagen ancla, que ya dice cómo se ve.
+
+⚠️ **Y el presupuesto: con la prosa fuera, lo único que la búsqueda binaria del piso puede encoger son las líneas del candado.** Con cap 0 el tramo deja **la ventana de tiempo sola** —lo único que aporta sobre la prosa— y los estados desaparecen enteros. Sin eso, un lote con el timeline cargado hacía lanzar a `buildLotePrompt` con la cuota ya gastada (medido: 8.394 caracteres en el piso). Con test.
+
+⚠️ **`scriptFingerprint` HASHEA LOS BEATS, y no alcanzaba con `accionVisual`.** `compileAccion` descarta los `micro` y —lo que importa— **los TIEMPOS**: dos timelines que difieren solo en la ventana de cada tramo compilan a la misma prosa. Misma huella, prompts distintos, `isPaidResume` jurando que es el mismo contenido — y la ventana de tiempo es justamente lo único que el candado agrega. **Huella v11 → v12** por el cambio de plantilla.
+
+⚠️ **EL PROBE SE ESCRIBIÓ CON TRES GUARDS ANTES DE GASTAR UN RENDER, y los tres se dispararon.** (a) *el brazo B no lleva candado* — el primer emparejamiento ataba los cortes frescos a `adapted.tomas[].tiempoOriginal`, y el forense fresco corta el video DISTINTO (5 cortes donde el guardado tenía 4): la toma de 14,3 s recibía por cercanía el timeline de un corte de 3,4 s. Se habrían gastado cuatro renders midiendo eso. Ahora el lote se construye desde el forense fresco y el timeline manda. (b) *el brazo B sale truncado* — en una sesión el prompt pasaba de 5.000 y se habría medido presupuesto y no representación. (c) *un beat termina después de que el clip se acabó* — el defecto 2 de arriba. **Un probe de render tiene que negarse a rendir.**
+
 ⚠️ **LA COREOGRAFÍA SE DUPLICABA EN CADA FRAGMENTO, Y ÉSA ERA LA CAUSA DE "FALTAN MOVIMIENTOS".** `splitLongToma` partía `locucion` por frases y copiaba `accionVisual` **tal cual** a cada fragmento. Una toma fusionada de 17,4 s partida en dos le pedía al modelo la coreografía COMPLETA de los 17 s en 3 s, y otra vez en 8,7 s — una instrucción imposible, de la que el modelo ejecuta una fracción arbitraria. Reportado por el dueño del repo como *"no se ve como el video original, faltan movimientos y gestos"*.
 
 ⚠️ **Y EL CONTEO POR LOTE LO SUBESTIMA 3×.** Contando duplicados dentro de un mismo lote da **5 de 85**; contando fragmentos por sesión da **21 de 119 tomas**. La diferencia es que `splitLongToma` corre ANTES de `groupIntoLotes`, así que los fragmentos de una misma toma caen en lotes distintos y ahí el conteo por lote no los ve. Con el cap en 15 s este es el camino normal, no la cola.
@@ -718,6 +761,103 @@ A 30 s deja de recitar y empieza a improvisar: *"Les quiero enseñar mi producto
 **Transiciones: cortes secos, no efectos.** Con varias escenas por clip el prompt emite un bloque `CUTS` que pide cortes duros como los de un montaje real y prohíbe explícitamente crossfades, disolvencias, whip pans, transiciones de zoom, morphing y speed ramps — y exige que persona, vestuario, producto, habitación y luz NO cambien al otro lado del corte. Con una sola escena vuelve el bloque `CONTINUOUS TAKE` de siempre.
 
 ⚠️ **VOLVIÓ LA ESCALERA DE DEGRADACIÓN DEL PROMPT, y no es opcional.** Se había BORRADO con Veo (60.000 caracteres, nada que recortar). Con **5.000** y clips de hasta 30 s, el mismo prompt tiene que sostener ~4× las tomas en 1/12 del espacio: sin escalera, `buildLotePrompt` lanzaría en cuanto un lote tenga contenido real. Los niveles y su orden se recuperaron del commit `a660c68^` en vez de re-derivarse — vienen de incidentes medidos. Lo que se cede primero es lo que DUPLICA información; la línea hablada de cada toma **nunca** se suelta (es la única señal de qué frase va con qué acción, y perderla en un lote y no en otro produjo *"una habla muy rápido y la otra muy lento"*).
+
+## V2 — el movimiento pasa a ser un artefacto estructurado (`motion.ts`)
+
+⚠️ **EL DEFECTO QUE LO MOTIVA:** el movimiento viajaba como PROSA de punta a punta (`accion`, `micro` → `accionVisual` → prompt), y una prosa preserva la IDEA del gesto pero no su estructura temporal. Grok recibía *"aplica una gota y masajea"* para 11 segundos y se inventaba el reparto. `MotionTimeline` no es una descripción más rica: es una **máquina de estados** —cada beat declara qué había antes y qué queda después— y por eso el encadenado se puede **verificar en código**.
+
+⚠️ **EL SCHEMA NO PUEDE OFRECERLE UNA SALIDA AL MODELO, Y ACÁ COSTÓ UNA MEDICIÓN ENTERA.** La primera versión declaró `motion: MotionTimelineSchema.nullable().catch(null)`, copiando la forma de `micro`. Resultado sobre un video real: **0 de 5 cortes con timeline.** Ni uno. La causa es la que este documento ya registra para las casillas de `micro`: `.nullable().catch(null)` emite `{"default": null, …}`, o sea el schema le dice que `null` es válido **y que es el default** — y con un objeto tan grande esa salida es irresistible. Con **`.catch(TIMELINE_VACIO)`** —en el `required`, infalible y sin ningún `null` donde escaparse— la misma llamada devolvió **5 de 5**. Es la quinta vez que este repo paga esta lección; ahora hay un test que falla si el JSON Schema del campo vuelve a contener `"null"`.
+
+⚠️ **Y LOS SUB-OBJETOS TAMBIÉN INFALIBLES:** con `startState: MotionStateSchema` a secas, un estado malformado hace fallar el objeto entero y el `.catch` de afuera devuelve el timeline VACÍO, destruyendo los beats que el modelo SÍ produjo. Es exactamente la trampa documentada con `micro`.
+
+⚠️ **`objetoEnMano` DEJA DE PEDIRSE: SE DERIVA.** Preguntaba lo mismo que `productStateBefore` del primer beat y `productStateAfter` del último, **en la misma granularidad** — el duplicado que este repo midió que vuelve vacío (0 de 4, 0 de 6). `objetoEnManoFromMotion` lo reconstruye del timeline, así que sus dos consumidores (`puedenUnirse`, `unirManos`) **no cambian una línea**. Es el §35.5 pregunta 5 resuelto sin borrar nada que alguien lea.
+
+⚠️ **`micro` SÍ SOBREVIVE, y la distinción importa:** es el agregado POR CORTE (alimenta `corteMuestraPersona` y la línea compacta del prompt); un beat es un tramo DENTRO del corte. Dos campos con la misma pregunta en granularidades distintas no son duplicados.
+
+⚠️ **LOS TRAMOS EN PROSA SE ELIMINARON** (el `"0-2 s: …; 2-4 s: …"` de la víspera). Eran una lista de beats pobre en texto, inventada para esquivar el techo de cláusulas del modelo. Con estructura real sobran, y mantener las dos habría sido pedir el mismo contenido dos veces. Es el "preferir borrar una regla a agregar otra que la compense".
+
+⚠️ **EL PASE DE REFINAMIENTO VA CABLEADO, Y ES UNA LLAMADA POR VIDEO — NO POR CORTE.** Medido sobre el mismo video, tres variantes:
+
+| | beats por corte | total | eslabones rotos | llamadas extra |
+|---|---|---|---|---|
+| pase general (FASE 1) | 1, 1, 1, 1, 1 | 5 | — | 0 |
+| **dedicado, 1 llamada/VIDEO** ← cableado | 2, 3, 2, 3, 2 | **12** | ~0–1 | **1** |
+| dedicado, 1 llamada/CORTE | 2, 3, 3, 4, 3 | 15 | **3** | **5** |
+
+⚠️ **Por corte NO vale la pena, y el motivo es contraintuitivo: más llamadas dieron PEOR calidad.** Compra un 25 % más de beats a 5× el costo, pero con menos contexto el modelo **deja de mantener la cadena de estados del producto** (3 eslabones rotos contra ~0) y se saltó un `referenceFrameMs`. Trocear más fino la misma pregunta tiene rendimientos decrecientes y un costo de coherencia; no lo repitas sin volver a medirlo.
+
+**Cómo está cableado, y las tres decisiones que lo hacen seguro:**
+1. **Va en `try/catch` y ANTES de persistir nada.** Si el refinamiento falla, la sesión se guarda con el movimiento del pase general — peor pero utilizable. Misma forma que el corrector de coherencia cayendo al relleno de la primera pasada: un paso de mejora nunca puede costar el paso que ya se pagó.
+2. **Solo pisa si trae MÁS resolución** (`m.beats.length > actual`): nunca se cambia un timeline por uno más pobre, y un corte que el pase no supo refinar se queda con el suyo.
+3. **Kind propio `video-motion`, SIN tope per-step.** Se registra para que aparezca en el panel de consumo y cuente al backstop diario, pero un segundo gate sobre la misma ruta solo podría dejar la sesión con el análisis hecho y el movimiento a medias — la ruta ya está topada por `video-forensic`. Mismo criterio que `video-render`.
+
+⚠️ **EL BEAT SE ADELGAZÓ DE 18 A 10 CAMPOS, Y EL RESULTADO REFUTA LA HIPÓTESIS QUE LO MOTIVÓ — pero se conserva igual.**
+
+La hipótesis era que el techo de densidad era **presupuestario**: si un beat cuesta 18 campos, el modelo emite menos beats de los que emitía frases, así que abaratarlo debería multiplicarlos. Medido sobre el mismo video:
+
+| | pase general | pase dedicado |
+|---|---|---|
+| beat de 18 campos | 5, 5 (dos corridas) | 9, 12 |
+| **beat de 10 campos** | **8** | **11** |
+
+**En el pase DEDICADO no se movió** (11 cae dentro del 9–12 que ya daba el gordo). Si el techo fuera el costo por beat, partirlo casi a la mitad tenía que dar un salto, y no lo dio.
+
+✅ **Pero en el pase GENERAL subió de 5 a 8**, y esa diferencia tiene una lectura: ahí el beat **compite** con la transcripción, los cortes, los personajes, la cámara y el resumen, así que abaratarlo libera presupuesto real. En el pase dedicado los beats son el único trabajo — no hay nada con qué competir, y por eso el adelgazamiento no compra nada.
+
+⚠️ **CONCLUSIÓN, Y ES LA QUE IMPORTA PARA NO SEGUIR PERSIGUIENDO ESTO: el techo del pase dedicado NO es de presupuesto, es SEMÁNTICO.** El modelo simplemente juzga que un corte de 20 s contiene ~3 eventos. Ni más llamadas (una por corte: peor), ni beats más baratos (esto: sin efecto) lo mueven. Las palancas que quedan sin probar son de otra clase: pedirle el corte en tramos de video ya segmentados, o una cuota explícita de beats — y la cuota **el spec la prohíbe** porque fabrica movimiento que el original no tiene, que es exactamente lo que el render después ejecuta.
+
+**El adelgazamiento se conserva igual**, y no por consuelo: mismo número de beats con **44 % menos superficie**, el pase general mejora, y los tres indicadores de calidad se mantienen en el máximo (**0 eslabones rotos, 0 beats sin `referenceFrameMs`, 5 de 5 cortes con timeline**). Es el mandato de des-ingeniería en su forma más literal: si dos implementaciones dan la misma conducta medida, gana la de menos piezas.
+
+Lo que se fue del beat, y por qué — cada uno por el mismo criterio de "ya está contestado en la granularidad correcta":
+
+| campo | dónde vive ahora |
+|---|---|
+| `id` | se deriva (`b1`, `b2`, …) |
+| `referenceStartMs` / `referenceEndMs` | se derivan de la ventana del corte + `startSec/endSec` |
+| `productInteraction` | es el par `productStateBefore/After` dicho otra vez en prosa |
+| `cameraMotion` | `camara`, por corte — y con `maxPlanos = 1` hay un encuadre por clip |
+| `environmentMotion` | `micro.entorno`, por corte |
+| `face` | `micro.rostro`, por corte. La MIRADA se queda: sí cambia dentro del corte |
+| `dialogueMode` | se deriva de `vozEnOff` y `dialogo`, que son del corte |
+| `continuityCritical` | solapaba con `importance: 'major'`; la escalera solo lee una |
+
+❌ **LA DENSIDAD SIGUE SIENDO EL PROBLEMA ABIERTO DE V2.** ~11 beats en 46 s son 0,24 beats/s contra los 0,67–1,33 que implica la guía del spec. Antes de construir encima (anclas de pose, MOTION LOCK, carga de movimiento) conviene saber que se construye sobre **2-3 beats por corte**, y que las tres palancas obvias ya están medidas y agotadas.
+
+Lo que SÍ compró la estructura, y no es poco: **0 eslabones rotos** en la cadena de estados del producto, `referenceFrameMs` en el 100 % de los beats (que es lo que habilita las anclas de pose), y las dos manos separadas de forma fiable.
+
+⚠️ **EL VALIDADOR TOLERA LA REDACCIÓN, y también por medición:** marcó roto un eslabón donde un beat dejaba *"Dropper held in front of face"* y el siguiente esperaba *"Dropper in front of face"*. Un validador que marca eso entrena a ignorarlo. `mismoEstado` compara palabras de contenido por subconjunto; una contradicción real (*"on the table"* contra *"at her face"*) sigue saltando.
+
+✅ **LA DEUDA DEL PROMPT MIXTO SE CERRÓ EN LA FUENTE — CONTRATO DE IDIOMA (2026-09-03).** Este documento la describía como acotada y cara de arreglar (*"traducirlo exigiría una llamada de LLM por lote"*). El camino barato que se anotaba entonces —*"pedirle a FASE 1/FASE 4 esos campos también en inglés"*— es el que se tomó, y **no cuesta ni una llamada ni un carácter de más**.
+
+La regla parte la salida por lo que hace cada campo, no por gusto:
+
+| en ESPAÑOL — se pronuncia o lo lee una persona | en INGLÉS — va literal al prompt del render |
+|---|---|
+| `guionOriginal`, `dialogo`, `hablantes[].texto`, `textoOverlay`, `resumenParaUsuario`, la plantilla, los `valores` y las `locuciones` de FASE 3 | `accion`, `camara`, `transicion`, `micro.*`, `objetoEnMano.*`, `sujeto`, `vestuario`, `producto`, `fondo`, `edicion.*`, `accionVisual` de FASE 3, `promptCreacion`, `bloqueConsistencia`, `calidadMovimiento`, `manerismos`, `productDescription` |
+
+⚠️ **`brandingDescription` NO ENTRA EN NINGUNA DE LAS DOS COLUMNAS: va en el idioma DEL ENVASE.** Es una transcripción letra por letra y es la única fuente que el guion tiene de lo que el producto contiene; traducirla la deja de ser una transcripción y reintroduce la clase entera del ingrediente inventado, que este documento ya pagó dos veces (*"hepéres"*, después *"HEPES"*).
+
+⚠️ **FASE 2 NO NECESITÓ NADA, y conviene saberlo antes de tocarla:** `assembleTemplate` copia `accionVisual: c.accion` del corte del forense — el modelo de esa fase no lo produce, lo hereda. Agregarle una regla de idioma habría sido una línea de prompt para un campo que ese modelo no escribe.
+
+🔴 **LO PRIMERO ERA QUE EL CAMBIO NO ROMPIERA LOS GUARDS, Y ESO NO ESTABA EN EL SPEC.** Tres funciones deterministas parseaban esos campos EN ESPAÑOL, y cada una falla en una dirección distinta:
+
+| guard | qué le pasa con `accion`/`micro` en inglés |
+|---|---|
+| `corteMuestraPersona` | **falla ABIERTO.** Compara contra `/^no aparece$/`; con `"not visible"` ninguna casilla parece ausente, **TODO corte se clasifica como plano de persona** y un flat-lay vuelve a fusionarse entre dos planos de la modelo — el fallo exacto que la función existe para evitar |
+| `muestraPersona` | **falla CERRADO.** Devuelve `false` para toda acción en inglés: no fabrica fusiones, pero apaga en silencio la frontera de clase de `groupIntoLotes` |
+| `coreografiaEscasa` | **miente.** Parte por `luego|después|y`; en inglés cuenta menos movimientos justo en el log que se usa para medir si la densidad mejoró — o sea rompe el instrumento |
+
+Es la misma lección que dejó `repartirAccion` el día anterior: **al cambiar el FORMATO que produce el forense hay que mirar quién lo parsea aguas abajo.** Los tres son bilingües ahora. `AUSENTE` es un centinela de vocabulario controlado (comparación anclada contra una lista corta), no una heurística sobre prosa, así que extenderlo es seguro.
+
+⚠️ **Y EL PROMPT SOLO OBEDECIÓ CUANDO SE TRADUJERON LOS EJEMPLOS, NO LA REGLA — medido.** Con la regla de idioma escrita y los ejemplos todavía en español, la primera corrida real devolvió **4 de 6 campos técnicos en inglés**: `micro.*` y `transicion` se quedaron en español, y `transicion` volvió literalmente *"corte directo"*, que era **el valor del propio ejemplo del prompt** (*"jump cut / corte directo / continuidad / zoom digital"*). Es el patrón que este documento ya registra cuatro veces —**un ejemplo con forma de valor es una plantilla que rellenar**— y acá manda sobre una regla global escrita diez líneas más arriba.
+
+El arreglo fue traducir los EJEMPLOS (el formato de `micro.manos`, el estado de los accesorios, el telegrama, el glosario de encuadre, el anti-ejemplo de `accion`), no insistir con la regla. Segunda corrida sobre la misma sesión: **5 de 5 campos medibles en inglés**, `transicion` → *"Hard cut"*, `micro.manos` → *"left: holds bottle · right: uncaps → applies to cheek → caps"* con el formato exacto pedido, y el centinela `not visible` presente en 1 de 5 cortes.
+
+⚠️ **NO LLEVA BUMP DE HUELLA, y es contraintuitivo.** `scriptFingerprint` protege la **plantilla de `buildLotePrompt`**, que no se tocó; lo que cambia de idioma son VALORES (`consistencyBlock`, `productDesc`, `accionVisual`) que la huella ya hashea como insumos. Una sesión re-analizada obtiene huella nueva sola, y los parciales guardados conservan la suya. Bumpear acá invalidaría 20 sesiones con lotes pagados sin ninguna razón.
+
+⚠️ **LAS SESIONES GUARDADAS NO SE TRADUCEN AL LEER.** Sería no-determinismo dentro de `getVideoSession` y movería las huellas de los parciales pagados. Se quedan mixtas; solo los análisis NUEVOS nacen con el contrato. `muestraPersona` sigue siendo el camino legado y por eso tenía que quedar bilingüe, no cambiar de idioma.
+
+⚠️ **DEFECTO MENOR OBSERVADO, sin arreglar:** `sujeto` volvió con *"Not está flotando."* pegado al final — el mismo tic del modelo que ya se limpió en el scan del producto (`limpiarEscenaDeFoto`), apareciendo ahora en otro campo. Es cosmético y **anterior a este cambio**; si molesta, el arreglo es la misma limpieza aplicada a `sujeto`.
 
 ⚠️ **EL PROMPT VA EN INGLÉS Y LA LOCUCIÓN EN ESPAÑOL.** La doc dice *English only* y el dueño del repo lo confirmó por resultado. Pero el anuncio es para el mercado peruano: cada línea hablada va entrecomillada y rotulada como *Latin American Spanish, verbatim*, con una línea al principio del prompt que separa las dos cosas explícitamente. **Deuda conocida y acotada:** el CONTENIDO inyectado (bloque de consistencia, `accionVisual`, escenario, cámara, perfil de voz) lo produce el análisis forense en ESPAÑOL, así que el prompt queda mixto — andamiaje inglés, descripciones españolas. Traducirlo exigiría una llamada de LLM por lote (costo, latencia y no-determinismo justo donde `scriptFingerprint` necesita pureza) o re-correr el análisis de cada sesión guardada. El camino barato, si hace falta: pedirle a FASE 1/FASE 4 esos campos también en inglés.
 

@@ -5,6 +5,7 @@ import { currentKieKey } from '@/lib/user-settings'
 import { anchorSpecs, generateAnchorImages } from '@/lib/video-ads/anchors'
 import { personajesDe, hablantesPorTiempo, vozEnOffPorTiempo } from '@/lib/video-ads/personajes'
 import { enProsa, corteMuestraPersona } from '@/lib/video-ads/forensic'
+import { tieneMotion } from '@/lib/video-ads/motion'
 import { uploadToStorage, fetchAsBase64 } from '@/lib/storage'
 import { generateImage } from '@/lib/gemini'
 import { planoPorTiempoDe, groupIntoLotes, buildLotePrompt, camaraDeLote, type Lote } from '@/lib/video-ads/lotes'
@@ -162,7 +163,12 @@ export async function POST(
   // Medido sobre 135 lotes: los que mezclan dos encuadres pasan de 18 a 0 por 1,15× de
   // llamadas. Y cada clip se renderiza de una sola pasada, así que pedirle dos encuadres
   // es pedirle un corte de montaje dentro de un plano-secuencia: devuelve uno de los dos.
-  const agrupados = groupIntoLotes(adapted.tomas, planoPorTiempo, 1, clasePorTiempo)
+  // ⚠️ Los beats van por `tiempo` como todo lo demás (nunca por `n`, ver `camaraDeLote`).
+  // Se pasan al reparto y no al prompt para que `splitLongToma` pueda partirlos: pedirle
+  // a los dos fragmentos de una toma la coreografía entera es el bug de la coreografía
+  // duplicada, y con la línea de tiempo explícita sería todavía más literal.
+  const motionPorTiempo = new Map(cortes.filter(tieneMotion).map((c) => [c.tiempo, c.motion] as const))
+  const agrupados = groupIntoLotes(adapted.tomas, planoPorTiempo, 1, clasePorTiempo, motionPorTiempo)
   if (!agrupados.length) return NextResponse.json({ error: 'El guión no tiene tomas' }, { status: 409 })
 
   // Una cámara por lote, con los planos de SUS cortes: el spec pide replicar el

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { MotionBeatSchema, MotionTimelineSchema } from './motion'
 import type { ScriptTemplate } from './template'
 import { slotOriginals, type Slot } from './fill'
 import type { ForensicReport } from './forensic'
@@ -109,6 +110,10 @@ export const TomaFinalSchema = z.object({
   personaje: z.string(),
   producto: z.string(),
   locucion: z.string(),
+  /** Los beats del movimiento de esta toma, y el timeline completo del corte cuando la
+   *  toma no se partió. Los adjunta el código en FASE 5, no el modelo. */
+  beats: z.array(MotionBeatSchema).optional(),
+  motion: MotionTimelineSchema.optional(),
 })
 export type TomaFinal = z.infer<typeof TomaFinalSchema>
 
@@ -392,6 +397,13 @@ export function buildAdaptInstruction(
     'parecerse al original, que es lo único que se le pide.',
     'Conserva SIEMPRE: qué mano, cómo agarra, dónde toca, hacia dónde mira, y en qué',
     'momento el producto entra y sale del cuadro.',
+    '',
+    '⚠️ LA ACCIÓN SE ESCRIBE EN INGLÉS. No es una preferencia de estilo: `accionVisual` va',
+    'literal al prompt del generador de video, que trabaja en inglés, y hoy ese prompt queda',
+    'mitad y mitad. El corte original que copias puede venir en inglés (sesiones nuevas) o en',
+    'español (guardadas): en los dos casos tu respuesta va en INGLÉS.',
+    'Lo que NO cambia de idioma es todo lo demás de esta respuesta: `valores` y `locuciones`',
+    'son lo que se DICE en el anuncio y van en español, siempre.',
     '',
     'CORTES REALES DE LA REFERENCIA (empareja por índice con las tomas):',
     JSON.stringify(forensic.cortes.map((c) => ({ n: c.n, tiempo: c.tiempo, accion: c.accion, camara: c.camara }))),

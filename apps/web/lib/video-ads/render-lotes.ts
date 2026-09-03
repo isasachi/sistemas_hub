@@ -211,7 +211,13 @@ export function scriptFingerprint(input: {
     // UN personaje la voz sale íntegra de `VOZ_POR_DEFECTO`, o sea los 13 campos que la
     // huella hashea uno por uno se mueven. Los parciales anteriores cuentan como generación
     // nueva, fail-closed.
-    'v11',
+    // v11 → v12: EL CANDADO DE MOVIMIENTO. La plantilla del prompt cambia de forma (la
+    // coreografía deja de ser prosa y pasa a ser `START STATE` / `TIMED MOTION` con la
+    // ventana de tiempo de cada tramo / `END STATE`), y la huella hashea los INSUMOS y no
+    // el texto producido: sin el bump, reanudar a través del cambio pegaría un clip con la
+    // coreografía en prosa a uno con la línea de tiempo explícita mientras `isPaidResume`
+    // jura que es el mismo contenido.
+    'v12',
     // Pasa por `toNiche`: un nicho BLOQUEADO se renderiza como suplementos, así que su
     // huella tiene que ser la de suplementos. Sin esto, una sesión guardada como 'ropa'
     // con lotes ya pagados reanudaría pegando un clip del camino de prenda a uno del
@@ -257,6 +263,21 @@ export function scriptFingerprint(input: {
       // toma a otra. Las sesiones sin ninguno de los dos campos pushean '' y '0', que es
       // lo mismo que hashearían antes de que existieran… salvo por el bump de versión,
       // que es lo que las invalida a propósito.
+      // ⚠️ LOS BEATS SE HASHEAN, y no alcanza con `accionVisual`. Desde el CANDADO DE
+      // MOVIMIENTO la prosa ya no se emite cuando hay timeline: la compila `compileAccion`
+      // desde estos mismos beats, y esa proyección DESCARTA los `micro` y —lo que importa
+      // acá— los TIEMPOS. Dos timelines que difieren solo en la ventana de cada tramo
+      // compilan a la misma prosa: misma huella, prompts distintos, y `isPaidResume`
+      // jurando que es el mismo contenido. Y la ventana de tiempo es justamente lo único
+      // que el candado agrega sobre la prosa.
+      const beats = t.beats ?? []
+      campos.push(String(beats.length))
+      for (const b of beats) {
+        campos.push(
+          num(b.startSec), num(b.endSec), num(b.referenceFrameMs), b.importance,
+          b.body, b.headAndGaze, b.leftHand, b.rightHand, b.productStateBefore, b.productStateAfter,
+        )
+      }
       campos.push((input.enOff?.has(t.tiempoOriginal) ? '1' : '0'))
       const hablan = input.quien?.get(t.tiempoOriginal) ?? []
       campos.push(String(hablan.length), ...hablan.map((p) => p.id))

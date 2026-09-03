@@ -116,6 +116,21 @@ export async function POST(
           '  Read every readable line, including the small print of the ingredient list: it',
           '  is the ONLY source the script has for what this product actually contains.',
           '  If the packaging carries no readable text at all, return null.',
+          '',
+          // ⚠️ LOS DOS CAMPOS TIENEN IDIOMAS DISTINTOS Y POR MOTIVOS DISTINTOS.
+          // `productDescription` es una instrucción de render: se emite íntegra en el
+          // prompt de CADA lote, que va en inglés. `brandingDescription` es la
+          // TRANSCRIPCIÓN de la etiqueta — la única fuente que el guion tiene de lo que el
+          // producto contiene — y traducirla reintroduce la clase entera del ingrediente
+          // inventado: FASE 3 tiene la orden de copiar el ingrediente de la etiqueta, y si
+          // lo que hay ahí es una traducción, ya no está copiando nada.
+          'LANGUAGE — the two fields are NOT in the same language:',
+          '  productDescription → ENGLISH. It is a render instruction and goes verbatim',
+          '    into the video prompt.',
+          '  brandingDescription → the packaging\'s OWN language, letter by letter. Never',
+          '    translate it, never normalise it, never tidy it up. It is the only record of',
+          '    what this product actually contains; a translation is no longer a transcription.',
+          '  Proper nouns are never translated in either field.',
         ].join('\n'),
       },
     ]

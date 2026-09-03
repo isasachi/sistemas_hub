@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { TIMELINE_VACIO } from './motion'
 import { z } from 'zod'
 import { buildForensicInstruction, ForensicReportSchema, repairCutTiming, mergeMicroCortes, muestraPersona, corteMuestraPersona, CPS_MAX, type ForensicReport, type Corte, enProsa, limpiarDialogo, verificarHablantes, unirTomasContinuas, reconciliarConVentana, coreografiaEscasa, MIN_TOMA_SEG, ObjetoEnManoSchema, MicroSchema, CorteSchema } from './forensic'
 
@@ -37,11 +38,31 @@ describe('buildForensicInstruction', () => {
     expect(p).toMatch(/qué mano usa y cómo agarra/i)
     expect(p).toMatch(/ENTRA al cuadro/i)
     expect(p).toMatch(/mano libre/i)
-    expect(p).toContain('"muestra el producto" es inservible')
+    expect(p).toContain('"shows the product" es inservible')
   })
 
-  it('pide español para lo que ve el usuario', () => {
-    expect(p).toMatch(/español/i)
+  // ⚠️ EL CONTRATO DE IDIOMA ES DE DOS MITADES Y LAS DOS TIENEN QUE ESTAR NOMBRADAS.
+  // Lo que se DICE va en español porque es una transcripción y porque se pronuncia; lo
+  // técnico va en inglés porque se emite íntegro en el prompt del render, que va en
+  // inglés. Con una sola mitad escrita el prompt se contradice —el modo de fallo que este
+  // repo registra seis veces— o el render vuelve a quedar mitad y mitad.
+  it('declara las DOS mitades del contrato de idioma', () => {
+    const bloque = p.slice(p.indexOf('IDIOMA DE LA SALIDA'))
+    expect(bloque).toBeTruthy()
+    for (const esp of ['guionOriginal', 'dialogo', 'textoOverlay', 'resumenParaUsuario']) {
+      expect(bloque.slice(0, bloque.indexOf('EN INGLÉS'))).toContain(esp)
+    }
+    for (const ing of ['accion', 'camara', 'micro', 'objetoEnMano', 'vestuario', 'fondo']) {
+      expect(bloque.slice(bloque.indexOf('EN INGLÉS'))).toContain(ing)
+    }
+    expect(p).toMatch(/no lo traduzcas/i)
+  })
+
+  // El centinela que `corteMuestraPersona` compara de forma EXACTA. Si el prompt pide
+  // otra cosa que lo que el código busca, un flat-lay se fusiona con un plano de persona.
+  it('pide el marcador de ausencia exacto que el código compara', () => {
+    expect(p).toContain('not visible')
+    expect(p).toMatch(/EXACTAMENTE `not visible`/)
   })
 
   // El análisis devolvía los límites cuadrados en una rejilla de 5 s y con diálogos que
@@ -62,7 +83,7 @@ describe('repairCutTiming', () => {
   const corte = (n: number, duracionSeg: number, dialogo: string) => ({
     n, duracionSeg, dialogo,
     tiempo: `00:${String(n).padStart(2, '0')} - 00:${String(n + 1).padStart(2, '0')}`,
-    accion: 'a', camara: 'c', textoOverlay: 'No aparece', transicion: 'corte directo', objetoEnMano: null, micro: null,
+    accion: 'a', camara: 'c', textoOverlay: 'No aparece', transicion: 'corte directo', objetoEnMano: null, micro: null, motion: TIMELINE_VACIO,
   })
   const informe = (cortes: ReturnType<typeof corte>[]): ForensicReport => ({
     duracionTotalSeg: cortes.reduce((n, c) => n + c.duracionSeg, 0),
@@ -195,7 +216,7 @@ describe('ForensicReportSchema', () => {
         accion: 'Sostiene el frasco frente a la cámara',
         camara: 'Primer plano, altura de ojos, cámara en mano',
         dialogo: 'este suero de niacinamida', textoOverlay: 'este suero de niacinamida',
-        transicion: 'corte directo', objetoEnMano: null, micro: null,
+        transicion: 'corte directo', objetoEnMano: null, micro: null, motion: TIMELINE_VACIO,
       }],
       tomas: [{
         n: 1, encuadre: 'Primer plano', posicion: 'Frente a cámara',
@@ -230,7 +251,7 @@ describe('ForensicReportSchema', () => {
 describe('mergeMicroCortes', () => {
   const corte = (n: number, dur: number, camara: string, dialogo = `frase ${n}`) => ({
     n, tiempo: `00:${String(n).padStart(2, '0')} - 00:${String(n + 1).padStart(2, '0')}`,
-    duracionSeg: dur, accion: `accion ${n}`, camara, dialogo, textoOverlay: 'No aparece', transicion: 'corte directo', objetoEnMano: null, micro: null,
+    duracionSeg: dur, accion: `accion ${n}`, camara, dialogo, textoOverlay: 'No aparece', transicion: 'corte directo', objetoEnMano: null, micro: null, motion: TIMELINE_VACIO,
   })
   const rep = (cortes: ReturnType<typeof corte>[]): ForensicReport => ({
     duracionTotalSeg: cortes.reduce((a, c) => a + c.duracionSeg, 0),
@@ -325,7 +346,7 @@ describe('mergeMicroCortes', () => {
 describe('repairCutTiming — piso de duración visible', () => {
   const c = (n: number, dur: number, dialogo: string) => ({
     n, tiempo: `t${n}`, duracionSeg: dur, accion: 'a', camara: 'A', dialogo,
-    textoOverlay: 'No aparece', transicion: 'corte', objetoEnMano: null, micro: null,
+    textoOverlay: 'No aparece', transicion: 'corte', objetoEnMano: null, micro: null, motion: TIMELINE_VACIO,
   })
   const rep = (cortes: ReturnType<typeof c>[]): ForensicReport => ({
     duracionTotalSeg: cortes.reduce((a, x) => a + x.duracionSeg, 0), caracteresGuion: 0,
@@ -390,7 +411,7 @@ describe('muestraPersona', () => {
 describe('mergeMicroCortes — no cruza la frontera persona/producto', () => {
   const c = (n: number, dur: number, accion: string) => ({
     n, tiempo: `t${n}`, duracionSeg: dur, accion, camara: `C${n}`, dialogo: '',
-    textoOverlay: 'No aparece', transicion: 'corte', objetoEnMano: null, micro: null,
+    textoOverlay: 'No aparece', transicion: 'corte', objetoEnMano: null, micro: null, motion: TIMELINE_VACIO,
   })
   const rep = (cortes: ReturnType<typeof c>[]): ForensicReport => ({
     duracionTotalSeg: cortes.reduce((a, x) => a + x.duracionSeg, 0), caracteresGuion: 0,
@@ -435,7 +456,7 @@ describe('mergeMicroCortes — no cruza la frontera persona/producto', () => {
 describe('repairCutTiming — el piso no infla', () => {
   const c = (n: number, dur: number, dialogo: string) => ({
     n, tiempo: `t${n}`, duracionSeg: dur, accion: 'a', camara: 'A', dialogo,
-    textoOverlay: 'No aparece', transicion: 'corte', objetoEnMano: null, micro: null,
+    textoOverlay: 'No aparece', transicion: 'corte', objetoEnMano: null, micro: null, motion: TIMELINE_VACIO,
   })
   const rep = (cortes: ReturnType<typeof c>[]): ForensicReport => ({
     duracionTotalSeg: cortes.reduce((a, x) => a + x.duracionSeg, 0), caracteresGuion: 0,
@@ -555,7 +576,7 @@ describe('verificarHablantes', () => {
   const corte = (over: Record<string, unknown> = {}) => ({
     n: 1, tiempo: '00:00 - 00:05', duracionSeg: 5, accion: 'a', camara: 'plano medio',
     dialogo: 'Tome, doctorcito. No se preocupe por eso.',
-    textoOverlay: 'No aparece', transicion: 'corte', objetoEnMano: null, micro: null, ...over,
+    textoOverlay: 'No aparece', transicion: 'corte', objetoEnMano: null, micro: null, motion: TIMELINE_VACIO, ...over,
   })
   const rep = (cortes: unknown[]) => ({ cortes, tomas: [] } as never)
 
@@ -651,7 +672,7 @@ describe('unirTomasContinuas', () => {
     n, tiempo: `00:0${n - 1} - 00:0${n}`, duracionSeg: 3,
     accion: 'La mujer sostiene el frasco', camara: 'Primer plano', dialogo: `linea ${n}`,
     textoOverlay: 'No aparece', transicion: 'corte directo',
-    objetoEnMano: { inicio: 'frasco', fin: 'frasco', accesorios: '' }, micro,
+    objetoEnMano: { inicio: 'frasco', fin: 'frasco', accesorios: '' }, micro, motion: TIMELINE_VACIO,
     ...p,
   })
   const base = (cortes: Corte[]): ForensicReport => ({
@@ -803,7 +824,7 @@ describe('MicroSchema — por qué el .catch va en la CASILLA y no en el objeto'
   })
 
   it('una sesión guardada sin ninguno de los dos sigue parseando', () => {
-    const c = CorteSchema.parse({ n: 1, tiempo: 'a', duracionSeg: 1, accion: 'x', camara: 'y', dialogo: '', textoOverlay: '', transicion: '', objetoEnMano: null, micro: null })
+    const c = CorteSchema.parse({ n: 1, tiempo: 'a', duracionSeg: 1, accion: 'x', camara: 'y', dialogo: '', textoOverlay: '', transicion: '', objetoEnMano: null, micro: null, motion: TIMELINE_VACIO })
     expect(c.micro).toBeNull()
     expect(c.objetoEnMano).toBeNull()
   })
@@ -849,7 +870,7 @@ describe('ObjetoEnManoSchema — por qué NO son .optional()', () => {
 describe('reconciliarConVentana', () => {
   const corte = (n: number, tiempo: string, duracionSeg: number, dialogo = ''): Corte => ({
     n, tiempo, duracionSeg, accion: 'x', camara: 'y', dialogo,
-    textoOverlay: 'No aparece', transicion: 'corte', objetoEnMano: null, micro: null,
+    textoOverlay: 'No aparece', transicion: 'corte', objetoEnMano: null, micro: null, motion: TIMELINE_VACIO,
   })
   const rep = (cortes: Corte[], total?: number): ForensicReport => ({
     duracionTotalSeg: total ?? cortes.reduce((n, c) => n + c.duracionSeg, 0),
@@ -912,7 +933,7 @@ describe('reconciliarConVentana', () => {
 describe('reconciliar + reparar: el b-roll sobrevive a las dos pasadas', () => {
   const corte = (n: number, tiempo: string, duracionSeg: number, dialogo = ''): Corte => ({
     n, tiempo, duracionSeg, accion: 'x', camara: 'y', dialogo,
-    textoOverlay: 'No aparece', transicion: 'corte', objetoEnMano: null, micro: null,
+    textoOverlay: 'No aparece', transicion: 'corte', objetoEnMano: null, micro: null, motion: TIMELINE_VACIO,
   })
   // El caso real del anuncio de serum: un beat de producto MUDO entre dos tomas habladas
   // cuyo diálogo no entra en su duración, o sea el reparto va a buscar de dónde sacar.
@@ -974,16 +995,97 @@ describe('buildForensicInstruction — la escala de encuadre vive donde se decla
     expect(p).not.toContain('ver la escala de abajo')
   })
 
-  it('da la escala completa por punto de corte', () => {
-    for (const t of ['hombros', 'pecho', 'esternón', 'cintura', 'muslos', 'cuerpo entero'])
+  // ⚠️ LA ESCALA VA EN INGLÉS PORQUE `camara` VA EN INGLÉS. Medido: los ejemplos de un
+  // campo le ganan a la regla global de idioma —es el patrón "un ejemplo con forma de
+  // valor es una plantilla que rellenar"— así que un glosario en español devolvía
+  // encuadres en español dentro de un prompt de render inglés.
+  it('da la escala completa por punto de corte, en el idioma del campo', () => {
+    for (const t of ['shoulders', 'chest', 'sternum', 'waist', 'thighs', 'whole body'])
       expect(p).toContain(t)
+    expect(p).not.toContain('esternón')
+  })
+})
+
+// ⚠️ EL CONTRATO DE IDIOMA (§35) MUEVE `accion` Y `micro` AL INGLÉS EN LAS SESIONES
+// NUEVAS, y estos tres guards los parseaban en español. Cada uno falla en una dirección
+// distinta, y por eso hacen falta los tres casos:
+//
+//   corteMuestraPersona  → falla ABIERTO: sin el centinela en inglés ninguna casilla
+//                          parece ausente, TODO corte se lee como plano de persona y un
+//                          flat-lay vuelve a fusionarse entre dos planos de la modelo.
+//   muestraPersona       → falla CERRADO: sin los términos en inglés devuelve `false`
+//                          para toda acción y apaga la frontera de clase de los lotes.
+//   coreografiaEscasa    → miente: cuenta menos movimientos de los que hay, justo en el
+//                          log que se usa para medir si la densidad mejoró.
+describe('los guards deterministas sobreviven el cambio de idioma', () => {
+  const corte = (over: Record<string, unknown>) => ({
+    n: 1, tiempo: '00:00 - 00:05', duracionSeg: 5, accion: '', camara: '', dialogo: '',
+    textoOverlay: 'No aparece', transicion: 'corte directo', objetoEnMano: null, micro: null, motion: TIMELINE_VACIO,
+    ...over,
+  })
+  const micro = (over: Record<string, string>) =>
+    ({ cuerpo: '', manos: '', rostro: '', cabello: '', entorno: '', ...over })
+
+  it('reconoce el marcador de ausencia en inglés (si no, un flat-lay pasa por persona)', () => {
+    const flatLay = corte({
+      accion: 'Close-up of the bottle on the counter, no person in frame.',
+      micro: micro({ cuerpo: 'not visible', rostro: 'not visible', cabello: 'not visible', entorno: 'static background' }),
+    })
+    expect(corteMuestraPersona(flatLay as never)).toBe(false)
+  })
+
+  it('sigue reconociendo el marcador en español, para las sesiones guardadas', () => {
+    const flatLay = corte({
+      accion: 'Detalle del frasco, sin persona en cuadro.',
+      micro: micro({ cuerpo: 'no aparece', rostro: 'no aparece', cabello: 'no aparece', entorno: 'fondo quieto' }),
+    })
+    expect(corteMuestraPersona(flatLay as never)).toBe(false)
+  })
+
+  // ⚠️ LA INVARIANTE DE ESTE CAMBIO ES LA PARIDAD, no el criterio. Qué casillas mira el
+  // guard (`cuerpo`/`rostro`/`cabello`, nunca `manos`) es una decisión medida y aparte:
+  // acá solo se exige que el MISMO contenido, escrito en los dos idiomas, dé el MISMO
+  // veredicto. Si algún día se cambia el criterio, este test sigue valiendo.
+  it('el mismo corte en los dos idiomas da el mismo veredicto', () => {
+    const pares: [Record<string, string>, Record<string, string>][] = [
+      // habla a cámara
+      [micro({ cuerpo: 'slight sway, still torso', rostro: 'blinks, lips articulate', cabello: 'still on shoulders' }),
+       micro({ cuerpo: 'ligero balanceo, torso quieto', rostro: 'parpadea, labios articulan', cabello: 'fijo sobre hombros' })],
+      // flat-lay del producto
+      [micro({ cuerpo: 'not visible', rostro: 'not visible', cabello: 'not visible', entorno: 'static background' }),
+       micro({ cuerpo: 'no aparece', rostro: 'no aparece', cabello: 'no aparece', entorno: 'fondo quieto' })],
+      // solo el rostro descrito: basta UNA de las tres
+      [micro({ cuerpo: 'not visible', rostro: 'soft smile', cabello: 'not visible' }),
+       micro({ cuerpo: 'no aparece', rostro: 'sonrisa suave', cabello: 'no aparece' })],
+    ]
+    for (const [en, es] of pares) {
+      const a = corteMuestraPersona(corte({ accion: 'x', micro: en }) as never)
+      const b = corteMuestraPersona(corte({ accion: 'x', micro: es }) as never)
+      expect(a).toBe(b)
+    }
+  })
+
+  it('muestraPersona (el camino legado) entiende las dos lenguas', () => {
+    expect(muestraPersona('Woman holds the bottle and looks at the camera')).toBe(true)
+    expect(muestraPersona('Product detail, no person in frame')).toBe(false)
+    expect(muestraPersona('Mujer sostiene el frasco y mira a cámara')).toBe(true)
+    expect(muestraPersona('Detalle del producto, sin persona en cuadro')).toBe(false)
+  })
+
+  it('coreografiaEscasa cuenta los movimientos con conectores en inglés', () => {
+    const accion = 'takes the bottle with her right hand, then removes the dropper, '
+      + 'after that applies a drop on her cheek and massages it in, next she looks at the camera'
+    const informe = { cortes: [{ n: 1, duracionSeg: 10, accion }] } as never
+    // 5 movimientos en 10 s = 0,5/s: justo el piso, así que NO debe reportarse como escasa.
+    // Contando solo conectores españoles se parte mucho menos y aparecería un falso aviso.
+    expect(coreografiaEscasa(informe)).toEqual([])
   })
 })
 
 describe('coreografiaEscasa', () => {
   const corte = (n: number, duracionSeg: number, accion: string): Corte => ({
     n, tiempo: '00:00 - 00:10', duracionSeg, accion, camara: '', dialogo: '',
-    textoOverlay: '', transicion: '', objetoEnMano: null, micro: null,
+    textoOverlay: '', transicion: '', objetoEnMano: null, micro: null, motion: TIMELINE_VACIO,
   })
   const rep = (cortes: Corte[]) => ({ cortes } as ForensicReport)
 
@@ -1007,30 +1109,68 @@ describe('coreografiaEscasa', () => {
   })
 })
 
-describe('buildForensicInstruction — los cortes largos van por tramos', () => {
-  // ⚠️ MEDIDO: con la cuenta de "un movimiento cada 2 segundos" sola, los cortes cortos y
-  // medios llegan al piso (3 s → 3 movimientos, 7 s → 4) pero los LARGOS se quedan en ~4
-  // frases pase lo que pase — 20 s con 4, 11 s con 4. El modelo se topa en un número de
-  // cláusulas por respuesta, no en la instrucción. La estructura por tramos convierte
-  // "describí más" en "describí cada tramo", que es otra tarea.
+// ⚠️ LOS TRAMOS EN PROSA ERAN UNA LISTA DE BEATS POBRE, Y POR ESO SE FUERON.
+// Su historia: la cuenta de "un movimiento cada 2 segundos" no movía a los cortes largos
+// (el modelo se topa en ~4 cláusulas por respuesta), así que se les dio una ESTRUCTURA en
+// texto — "0-2 s: …; 2-4 s: …" — para convertir "describí más" en "describí cada tramo".
+// Funcionaba a medias y seguía siendo prosa que alguien tenía que parsear aguas abajo.
+// `motion` es esa misma estructura pero de verdad: campos, tiempos y estados que el código
+// puede validar. Mantener las dos habría sido pedir el mismo contenido dos veces — el
+// duplicado que este repo ya midió que vuelve vacío.
+describe('buildForensicInstruction — la línea de tiempo del movimiento', () => {
   const p = buildForensicInstruction()
 
-  it('pide tramos con marca de tiempo por encima de 10 segundos', () => {
-    expect(p).toMatch(/SI EL CORTE PASA DE 10 SEGUNDOS, DESCRÍBELO POR TRAMOS/)
-    expect(p).toContain('0-2 s:')
+  it('pide una línea de tiempo de estados, no un resumen', () => {
+    expect(p).toMatch(/Do not summarize choreography/)
+    expect(p).toMatch(/ORDERED TIMELINE OF/)
+    expect(p).toMatch(/motion.*LÍNEA DE TIEMPO DEL MOVIMIENTO/)
   })
 
-  it('mantiene la cuenta de movimientos por segundo', () => {
-    expect(p).toMatch(/un movimiento por cada 2 segundos/i)
+  // El límite de un beat es un cambio de ESTADO VISIBLE. Que no sea el final de una frase
+  // es la misma regla de corte real que rige todo el forense, un nivel más abajo.
+  it('el beat abre por cambio de estado, nunca por fin de frase', () => {
+    expect(p).toMatch(/NEW BEAT when one of these MATERIALLY changes/)
+    expect(p).toMatch(/never because a sentence ends/)
   })
 
-  // ⚠️ EL INTERVALO DE LOS TRAMOS Y LA CUENTA DE MOVIMIENTOS TIENEN QUE PEDIR LO MISMO.
-  // Decían "un movimiento cada 2 segundos" y "un tramo cada 4 o 5": dos instrucciones que
-  // se contradicen, y gana la ESTRUCTURA porque es la que da la forma de la respuesta.
-  // Medido en `7e4ccbcf`: 18,7 s volvieron con 4 tramos y 7 movimientos = 0,37 mov/s contra
-  // los 0,50 pedidos — exactamente el techo que ponía el intervalo.
-  it('el intervalo de los tramos no contradice a la cuenta de movimientos', () => {
-    expect(p).toMatch(/un tramo por cada 2 segundos/i)
-    expect(p).not.toMatch(/tramo por cada 4 o 5/i)
+  // ⚠️ LA DENSIDAD LA PONE LA FUENTE. La cuota fija ("un movimiento cada 2 s") se eliminó:
+  // servía contra los resúmenes vagos, pero como representación obliga a inventar
+  // movimiento donde el original está quieto — y el render ejecuta lo que se le invente.
+  it('la densidad sigue a la fuente y la quietud es una respuesta válida', () => {
+    expect(p).toMatch(/DENSITY FOLLOWS THE SOURCE, not a quota/)
+    expect(p).toMatch(/NEVER invent motion to reach a number/)
+    expect(p).toMatch(/static speaking\s+interval is a valid, correct answer/)
+    expect(p).not.toMatch(/un movimiento por cada 2 segundos/i)
+  })
+
+  it('separa las dos manos y dice por qué', () => {
+    expect(p).toMatch(/THE TWO HANDS ARE TRACKED SEPARATELY/)
+    expect(p).toMatch(/swaps the tasks between them/)
+  })
+
+  // El encadenado de estados es lo que `validateMotionTimeline` comprueba en código: si el
+  // prompt no lo pide como máquina de estados, no hay nada que validar.
+  it('pide el estado del producto como máquina de estados', () => {
+    expect(p).toMatch(/STATE MACHINE, not a description/)
+    expect(p).toMatch(/What a beat LEAVES is/)
+    expect(p).toContain('not in frame')
+  })
+
+  it('pide el instante de referencia para poder anclar la pose', () => {
+    expect(p).toMatch(/referenceFrameMs/)
+    expect(p).toMatch(/frame that will/)
+  })
+
+  // `importance` es lo que la escalera de degradación necesita para no recortar a ciegas.
+  it('etiqueta la importancia y dice para qué sirve', () => {
+    expect(p).toMatch(/`importance`/)
+    expect(p).toMatch(/sheds `micro` first and NEVER a `major`/)
+  })
+
+  // Se deja de pedir porque se DERIVA: preguntaba lo mismo que el estado del primer y del
+  // último beat, en la misma granularidad.
+  it('ya no pide objetoEnMano: se deriva del timeline', () => {
+    expect(p).toMatch(/`objetoEnMano` YA NO SE PIDE/)
   })
 })
+

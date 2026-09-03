@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { MotionTimelineSchema, TIMELINE_VACIO } from './motion'
 
 /**
  * FASE 1 del prompt maestro — análisis forense del VIDEO ORIGINAL.
@@ -178,6 +179,12 @@ export const CorteSchema = z.object({
    * — si alguien devuelve una casilla a `z.string()` a secas, vuelve el bug de (1).
    */
   micro: MicroSchema.nullable().catch(null),
+  /**
+   * V2 — la representación CANÓNICA del movimiento de este corte. `.nullable()` porque
+   * ninguna sesión guardada lo trae: sin él se lee `accion`/`micro` como siempre, así que
+   * el cambio es aditivo y no invalida nada. Con él presente, manda sobre la prosa.
+   */
+  motion: MotionTimelineSchema.catch(() => TIMELINE_VACIO),
 })
 
 /** Una persona con voz propia en el video de referencia. */
@@ -331,9 +338,25 @@ export const MIN_TOMA_SEG = 6
  * Sin `micro` (toda sesión analizada antes de que el campo existiera) se cae al
  * heurístico de siempre, así que ninguna sesión guardada cambia de comportamiento.
  */
+/**
+ * El marcador de ausencia de `micro`, en LOS DOS IDIOMAS.
+ *
+ * ⚠️ Con el contrato de idioma nuevo (§35: descripciones técnicas en inglés) este campo
+ * pasa a volver `"not visible"` en las sesiones nuevas y `"no aparece"` en las guardadas.
+ * Reconocer solo el español haría que `corteMuestraPersona` fallara **ABIERTO**: ninguna
+ * casilla parecería ausente, TODO corte se clasificaría como plano de persona y un
+ * flat-lay volvería a fusionarse entre dos planos de la modelo — el fallo exacto que esta
+ * función existe para evitar, reintroducido por un cambio de idioma.
+ *
+ * Es un centinela de vocabulario controlado (comparación anclada contra una lista corta),
+ * NO una heurística sobre prosa: por eso extenderlo es seguro y por eso está acá arriba,
+ * donde se ve, en vez de embebido en el cuerpo de la función.
+ */
+const AUSENTE = /^\s*(no aparece|no visible|not visible|not in frame|none)\s*\.?\s*$/i
+
 export function corteMuestraPersona(c: { accion: string; micro?: Micro | null }): boolean {
   if (!c.micro) return muestraPersona(c.accion)
-  const ausente = (x: string) => !x || /^\s*no aparece\s*\.?\s*$/i.test(x)
+  const ausente = (x: string) => !x || AUSENTE.test(x)
   // Basta con que UNA de las tres partes del cuerpo esté descrita: un plano de manos
   // sigue siendo un plano de persona a efectos de continuidad y de fotograma.
   return !(ausente(c.micro.cuerpo) && ausente(c.micro.rostro) && ausente(c.micro.cabello))
@@ -355,7 +378,14 @@ export function muestraPersona(accion: string): boolean {
   // el fallo que `muestraPersona` existe para evitar.
   // El hueco tolera artículos y preposiciones: "no se ve A LA modelo", "sin NINGUNA persona".
   if (/\b(sin|no hay|no aparece|no se ve|no se observa)\s+(a\s+)?(la|el|una|un|ninguna|ningun)?\s*(persona|personas|gente|modelo|nadie)\b/.test(t)) return false
+  // ⚠️ Y LO MISMO EN INGLÉS, porque `accion` cambia de idioma con el contrato nuevo.
+  // Acá el fallo es al revés que en `corteMuestraPersona`: sin estas dos líneas la
+  // función devuelve `false` para TODA acción en inglés — falla CERRADO. No fabrica
+  // fusiones, pero apaga en silencio la frontera de clase de `groupIntoLotes`, que es lo
+  // que impide que una toma de producto comparta clip con una de persona.
+  if (/\b(no|without)\s+(one|body|person|people|model)\b|\bnobody\b|\bno\s+person\b|\bnot\s+visible\b/.test(t)) return false
   return /\b(mujer|hombre|chica|chico|muchacha|muchacho|modelo|persona|sujeto|joven|senor|senora|ella|el sujeto|protagonista)\b/.test(t)
+    || /\b(woman|man|girl|boy|model|person|subject|presenter|she|he|her|his)\b/.test(t)
 }
 
 /**
@@ -809,7 +839,12 @@ export function coreografiaEscasa(report: ForensicReport): { n: number; seg: num
   const out: { n: number; seg: number; movimientos: number }[] = []
   for (const c of report.cortes ?? []) {
     if (!(c.duracionSeg >= 4)) continue
-    const m = String(c.accion).split(/[,.;]|\bluego\b|\bdespu[eé]s\b|\by\b/i)
+    // ⚠️ LOS CONECTORES VAN EN LOS DOS IDIOMAS, y esto no es cosmético: esta línea es el
+    // INSTRUMENTO con el que se mide si el forense describe suficiente movimiento — la
+    // señal que hay que mirar en la próxima corrida para saber si el intervalo de tramos
+    // de 2 s funcionó. Contando solo conectores españoles, una `accion` en inglés se parte
+    // solo por puntuación, el conteo baja y el log miente justo cuando se lo consulta.
+    const m = String(c.accion).split(/[,.;]|\bluego\b|\bdespu[eé]s\b|\by\b|\bthen\b|\bafter\b|\bnext\b|\band\b|\bwhile\b/i)
       .map((x) => x.trim()).filter((x) => x.length > 6).length
     if (m / c.duracionSeg < MOV_POR_SEG_MIN) out.push({ n: c.n, seg: c.duracionSeg, movimientos: m })
   }
@@ -939,6 +974,84 @@ export function repairCutTiming(
   }
 }
 
+/**
+ * FASE 1b — EL PASE DE REFINAMIENTO DE MOVIMIENTO.
+ *
+ * ⚠️ EXISTE POR UNA MEDICIÓN, no por elegancia. Con el timeline pedido dentro del análisis
+ * general, el modelo devolvió **5 de 5 cortes con timeline y UN SOLO BEAT CADA UNO** — un
+ * corte de 19 s resuelto con un beat. El encadenado de estados salía perfecto y las dos
+ * manos separadas, pero sin resolución temporal no preserva nada: es el mismo defecto de
+ * "la coreografía no crece con la duración" con ropa nueva.
+ *
+ * La causa es la de siempre en este repo: **el modelo se topa en una cantidad de contenido
+ * por respuesta**. Antes daba ~4 frases de prosa; ahora da 1 beat, porque un beat cuesta 18
+ * campos y en la misma respuesta está resolviendo transcripción, cortes, personajes,
+ * cámara, gráficos y resumen. Pedirle "más beats" en el mismo prompt es la petición que ya
+ * se midió tres veces que no mueve la aguja.
+ *
+ * Una llamada DEDICADA es otra tarea: llega con los cortes ya resueltos y lo único que
+ * tiene que hacer es mirar el video otra vez y partir el movimiento.
+ *
+ * ⚠️ NO PUEDE TOCAR LA ESTRUCTURA. Recibe las ventanas de corte como AUTORIDAD y solo
+ * devuelve `motion` por corte: si pudiera re-cortar, tendríamos dos fuentes de verdad para
+ * el cronometraje y todo lo que empareja por `tiempo` empezaría a fallar en silencio.
+ */
+export const MotionRefinementSchema = z.object({
+  cortes: z.array(z.object({
+    n: z.number(),
+    motion: MotionTimelineSchema.catch(() => TIMELINE_VACIO),
+  })),
+})
+export type MotionRefinement = z.infer<typeof MotionRefinementSchema>
+
+export function buildMotionRefinementInstruction(cortes: { n: number; tiempo: string; duracionSeg: number; accion: string }[]): string {
+  return [
+    'You already analysed this video. The cuts below are FINAL and AUTHORITATIVE.',
+    '',
+    'Your ONLY job now is to look at the video again and break the motion inside each cut',
+    'into an ordered timeline of state changes. Nothing else.',
+    '',
+    '⛔ You may NOT change: the number of cuts, their order, their time windows, or any',
+    'dialogue. Do not return them. Return only `motion` for each `n` listed below.',
+    '',
+    '⚠️ THE PREVIOUS PASS RETURNED ONE BEAT PER CUT. That is what this pass exists to fix.',
+    'A 19-second cut described with a single beat throws away 19 seconds of choreography:',
+    'the render model receives one instruction and stands still for the rest of the clip.',
+    'Watch the cut second by second and open a new beat every time something visibly',
+    'changes — a hand starts or stops a task, the product changes position or state, the',
+    'gaze moves, the body shifts, the camera moves.',
+    '',
+    'Density follows the source, never a quota: product manipulation usually lands around',
+    '0.75–1.5 s per beat, an ordinary talking head around 1–2 s, and a genuinely still',
+    'stretch stays ONE long beat that says it is still. Do not invent motion to make the',
+    'list longer — a fabricated beat gets performed by the render.',
+    '',
+    '⚠️ A BEAT HAS TEN FIELDS AND NOT ONE MORE. Camera, environment, face and dialogue',
+    'mode are already recorded once per cut — repeating them here buys nothing and costs',
+    'you beats. The number of beats is what preserves the source; the prose inside them is',
+    'not. Write each field in three to eight words and return MORE beats.',
+    '',
+    'For every beat: `startSec`/`endSec` relative to its own cut and inside its duration;',
+    '`referenceFrameMs` absolute in the source video (the frame that best shows the beat);',
+    '`body`, `headAndGaze`, `leftHand`, `rightHand`; `productStateBefore` and',
+    '`productStateAfter`; `importance`.',
+    '',
+    '⚠️ THE PRODUCT STATE IS A CHAIN: what one beat leaves is what the next one finds,',
+    'word for word. The code verifies it. If the product is not on screen, both states say',
+    '`not in frame`.',
+    '⚠️ THE TWO HANDS ARE SEPARATE. One holds while the other works; collapsing them makes',
+    'the render swap their tasks.',
+    '',
+    'Also return `startState` and `endState` per cut: body pose, head, gaze, each hand,',
+    'expression, product state, props and camera at the first and last frame of the cut.',
+    '',
+    'All motion text in ENGLISH. Do not translate or return any dialogue.',
+    '',
+    'CUTS (authoritative — one `motion` per `n`):',
+    JSON.stringify(cortes.map((c) => ({ n: c.n, window: c.tiempo, durationSec: c.duracionSeg, coarseAction: c.accion }))),
+  ].join('\n')
+}
+
 export function buildForensicInstruction(): string {
   return [
     'Actúa como analista forense experto en videos de respuesta directa.',
@@ -1024,49 +1137,68 @@ export function buildForensicInstruction(): string {
     '  - qué expresión tiene y en qué posición empieza y termina el corte — el spec pide',
     '    la secuencia completa (posición inicial → movimiento → interacción → posición',
     '    final), no solo el resultado.',
-    '⚠️ LA COREOGRAFÍA CRECE CON LA DURACIÓN DEL CORTE. Una toma de 3 segundos y una de 20',
-    'no se describen con el mismo número de frases: la de 20 tiene MÁS cosas pasando, y si',
-    'la describes con dos frases estás tirando 18 segundos de movimiento.',
-    'La cuenta: **un movimiento por cada 2 segundos de toma**, encadenados en el orden en',
-    'que ocurren. Un corte de 6 s necesita al menos 3; uno de 20 s, al menos 10.',
-    'Medido sobre videos reales: los cortes cortos se describen a ~1 movimiento por segundo',
-    'y los largos caen a 0,15 — o sea el modelo escribe una frase por corte sin mirar cuánto',
-    'dura, y el video generado se queda quieto el resto del tiempo.',
-    'Si de verdad no pasa nada durante varios segundos, DILO ("se queda quieta mirando a',
-    'cámara unos segundos"): la quietud declarada es un dato, un hueco no.',
+    '⚠️ `accion` ES SOLO UN RESUMEN LEGIBLE. Una línea, para que una persona entienda el',
+    'corte de un vistazo. El movimiento de verdad va en `motion`, abajo — y cuando `motion`',
+    'existe, el código RECOMPILA `accion` desde los beats, así que las dos no pueden',
+    'contradecirse. No gastes detalle acá: gástalo en los beats.',
     '',
-    // ⚠️ MEDIDO: con la cuenta sola, los cortes cortos y medios llegan al piso (3 s → 3
-    // movimientos, 7 s → 4) pero los LARGOS se quedan en ~4 frases pase lo que pase — 20 s
-    // con 4 movimientos, 11 s con 4. El modelo se topa en un número de cláusulas por
-    // respuesta, no en la instrucción. Pedirle "más" otra vez no mueve la aguja; darle una
-    // ESTRUCTURA donde colgarlas, sí: dividir el corte en tramos con su marca de tiempo
-    // convierte "describí más" en "describí cada tramo", que es una tarea distinta.
-    //
-    // ⚠️ Y EL INTERVALO ERA EL QUE PONÍA EL TECHO: la estructura decía "un tramo cada 4 o 5
-    // segundos" mientras la cuenta de arriba pide "un movimiento cada 2". Las dos
-    // instrucciones se contradicen y gana la estructura, porque es la que da la forma de la
-    // respuesta. Medido en la sesión `7e4ccbcf`: un corte de 18,7 s volvió con 4 tramos y 7
-    // movimientos — **0,37 mov/s contra los 0,50 pedidos**, o sea exactamente lo que el
-    // intervalo permitía. Con el intervalo alineado a la cuenta, las dos piden lo mismo.
-    //
-    // ⚠️ QUÉ MIRAR EN LA PRÓXIMA CORRIDA: el techo de cláusulas por respuesta puede
-    // reaparecer por el otro lado — más tramos, menos contenido en cada uno, mismo total.
-    // Un corte de ~19 s tiene que volver con ~9 tramos y ~14 movimientos. Si vuelve con 9
-    // tramos de dos palabras, se cambió detalle por estructura y hay que revertir. Se lee
-    // en la línea de `coreografiaEscasa` del log, no hace falta un probe.
-    '⚠️ SI EL CORTE PASA DE 10 SEGUNDOS, DESCRÍBELO POR TRAMOS, con su marca de tiempo',
-    'dentro del corte y en orden. No es un pedido de estilo: sin la estructura, una toma de',
-    '20 segundos se describe con las mismas cuatro frases que una de 5, y se pierden 15',
-    'segundos de movimiento.',
-    '  Formato: "0-2 s: …; 2-4 s: …; 4-6 s: …; 6-8 s: …"',
-    '  Un tramo por cada 2 segundos — la MISMA cuenta que se pide arriba, no otra: un corte',
-    '  de 20 s son 10 tramos. Dentro de cada uno, el detalle de siempre: qué mano, cómo',
-    '  agarra, hacia dónde mira, dónde cae en el cuadro.',
+    '── `motion`: LA LÍNEA DE TIEMPO DEL MOVIMIENTO (lo más importante de este análisis) ──',
+    'Do not summarize choreography.',
+    'For every real source cut, reconstruct the visible motion as an ORDERED TIMELINE OF',
+    'STATE CHANGES. Preserve the real cut boundaries. Do not split a continuous take',
+    'because the dialogue changes.',
     '',
-    'Un ejemplo del nivel esperado: "sostiene el frasco con la mano derecha por el cuerpo,',
-    'lo levanta hasta la altura del mentón y lo gira un cuarto de vuelta para que la',
-    'etiqueta quede al frente; la mano izquierda queda fuera de cuadro; mira al producto',
-    'y después a la cámara". Frente a eso, "muestra el producto" es inservible.',
+    'Open a NEW BEAT when one of these MATERIALLY changes — never because a sentence ends:',
+    '  body pose · head direction · gaze · what the LEFT hand is doing · what the RIGHT',
+    '  hand is doing · who holds the product · product orientation · product open/closed ·',
+    '  product being applied or used · camera movement or framing · a purposeful facial',
+    '  reaction · an interaction with the scene.',
+    '',
+    'DENSITY FOLLOWS THE SOURCE, not a quota. As a guide: product manipulation usually',
+    'lands around 0.75–1.5 s per beat; an ordinary gesture-driven talking head around',
+    '1–2 s; and a visibly still stretch is ONE long beat that says so. A static speaking',
+    'interval is a valid, correct answer — "body nearly still, hands down, gaze on camera,',
+    'natural blinking only". NEVER invent motion to reach a number: a fabricated beat is',
+    'worse than a long one, because the render will perform it.',
+    '',
+    '⚠️ A BEAT IS DELIBERATELY SMALL — ten fields, no more. Everything a beat does not ask',
+    'for is already answered once per cut (camera, environment, face, dialogue mode), so',
+    'do not repeat it here. Spend the budget on HOW MANY beats you return, not on how much',
+    'you write inside each one: a timeline of twelve short beats preserves the source; one',
+    'of three rich beats does not.',
+    '',
+    'For each beat return ONLY:',
+    '  `startSec` / `endSec` — relative to THIS cut, in order, inside its duration.',
+    '  `referenceFrameMs` — one absolute instant in the source video: the frame that best',
+    '    shows this beat\'s key state. It is the frame that will be pulled to anchor the',
+    '    pose, so choose it deliberately.',
+    '  `body` · `headAndGaze` · `leftHand` · `rightHand` — telegraphic. No articles, no',
+    '    "we can observe that". Three to eight words each.',
+    '  ⚠️ THE TWO HANDS ARE TRACKED SEPARATELY and this is not optional: in a real ad one',
+    '    hand holds while the other manipulates, and when they are collapsed into "gestures',
+    '    naturally" the render model swaps the tasks between them.',
+    '  `productStateBefore` · `productStateAfter`.',
+    '  ⚠️ THE PRODUCT STATE IS A STATE MACHINE, not a description. What a beat LEAVES is',
+    '    what the next one FINDS, word for word: "bottle on the table, closed" → "bottle in',
+    '    right hand at chest level" → "label facing the camera". The code CHECKS this chain,',
+    '    so a link that does not match is a defect, not a style choice. If the product does',
+    '    not appear in a beat, both states say `not in frame`.',
+    '  `importance` — `major` for the purposeful actions that define the choreography,',
+    '    `supporting` for what accompanies them, `micro` for texture (a blink, a sway).',
+    '    The render budget sheds `micro` first and NEVER a `major`, so this label decides',
+    '    what survives when the prompt has to be cut.',
+    '',
+    'Return an explicit `startState` and `endState` for the whole cut: body pose, head,',
+    'gaze, each hand, expression, product state, props and camera. They are what lets the',
+    'system join two cuts, split one for rendering, and anchor the pose at a boundary.',
+    '',
+    '⚠️ `objetoEnMano` YA NO SE PIDE: sale de `productStateBefore` del primer beat y',
+    'de `productStateAfter` del último. Déjalo en null.',
+    '',
+    'Un ejemplo del nivel esperado: "holds the bottle by its body with her right hand,',
+    'raises it to chin height and turns it a quarter turn so the label faces front; her',
+    'left hand stays out of frame; looks at the product, then at the camera". Frente a',
+    'eso, "shows the product" es inservible.',
     'Si en un corte el producto NO aparece, dilo explícitamente.',
     '',
     '⚠️ EL DETALLE ATÓMICO: `micro`, en CADA corte. Es el pedido central de este análisis.',
@@ -1112,24 +1244,24 @@ export function buildForensicInstruction(): string {
     '  Sirve para decidir en CÓDIGO si dos cortes se pueden unir en una toma continua, así',
     '  que lo único que importa es que el nombre sea consistente, no que sea elegante.',
     '  Ejemplo: un corte que empieza con las manos vacías y termina con el frasco tomado de',
-    '  la repisa es `{inicio: "nada", fin: "frasco"}`.',
+    '  la repisa es `{inicio: "none", fin: "bottle"}`.',
     '  ⚠️ El equipo de grabación NO va acá tampoco (micrófono, teléfono, trípode): si la',
     '  mano sostiene equipo, para este campo esa mano está vacía.',
     '',
     '⚠️ QUÉ HAY EN LAS MANOS: `objetoEnMano`.',
     '  `inicio` / `fin`: qué sostiene al EMPEZAR el corte y qué al TERMINARLO. Manos',
-    '  vacías se escribe "nada". Si no se ven las manos, "fuera de cuadro".',
+    '  vacías se escribe "none". Si no se ven las manos, "out of frame".',
     '  ⚠️ El recorrido de CADA MANO no va acá: va en `micro.manos`. Acá solo QUÉ se sostiene.',
     '  `accesorios`: el ESTADO de las piezas que se separan del producto — tapa, gotero,',
-    '    cuchara, aplicador — también con flechas. Ej: "tapa puesta → tapa fuera, en la',
-    '    mano derecha → tapa puesta".',
+    '    cuchara, aplicador — también con flechas. Ej: "cap on → cap off, in right hand →',
+    '    cap back on".',
     '    ⚠️ Es el campo que evita el fallo más visible de todos: si no dices que la tapa',
     '    salió y volvió, el video generado la hace REAPARECER en el frasco de la nada.',
     '    ⚠️ Una pieza nombrada en `inicio` TAMBIÉN necesita su estado acá: `inicio` dice qué',
     '    se SOSTIENE, `accesorios` dice si está puesta o fuera, y eso cambia dentro del corte.',
-    '    Si el producto no tiene piezas separables, escribe "sin accesorios".',
-    '  Nómbralo igual siempre dentro del mismo video: el frasco es "frasco" en los seis',
-    '  cortes, no "el producto" en uno y "el envase" en otro — se compara en código.',
+    '    Si el producto no tiene piezas separables, escribe "no detachable parts".',
+    '  Nómbralo igual siempre dentro del mismo video: el frasco es "bottle" en los seis',
+    '  cortes, no "bottle" en uno y "the product" en otro — se compara en código.',
     '  ⚠️ Para qué sirve: con esto el sistema decide si dos cortes se pueden unir en una',
     '  sola toma continua. Si el corte 3 termina con el gotero en la mano y el 4 empieza',
     '  con las manos vacías, unirlos haría que el gotero desaparezca en el aire.',
@@ -1140,8 +1272,8 @@ export function buildForensicInstruction(): string {
     '  el corte muestra a una persona:',
     '    `cuerpo`: balanceo, desplazamiento del peso, torsión del torso, respiración.',
     '    `manos`: QUÉ HACE CADA MANO Y EN QUÉ ORDEN, con flechas. Casi nunca hacen lo mismo:',
-    '      una sostiene mientras la otra manipula. Formato: "izquierda: sostiene frasco todo',
-    '      el corte · derecha: destapa → aplica en mejilla → vuelve a tapar". Incluye el',
+    '      una sostiene mientras la otra manipula. Formato: "left: holds bottle throughout ·',
+    '      right: uncaps → applies to cheek → caps again". Incluye el',
     '      vaivén, qué hacen cuando no hacen nada, y el estado de cualquier pieza que se',
     '      separe (tapa, gotero): si sale y vuelve, dilo acá — es lo que evita que un objeto',
     '      reaparezca de la nada en el video generado.',
@@ -1152,24 +1284,27 @@ export function buildForensicInstruction(): string {
 
     '',
     '  ⚠️ LA QUIETUD ES UNA OBSERVACIÓN, NO UNA CASILLA VACÍA. Un cuerpo que casi no se',
-    '  mueve es un dato tan renderizable como uno que se mueve mucho: "torso casi inmóvil,',
-    '  solo respiración" y "fondo completamente quieto" son respuestas CORRECTAS. Dejarlo',
+    '  mueve es un dato tan renderizable como uno que se mueve mucho: "torso almost still,',
+    '  breathing only" y "background completely static" son respuestas CORRECTAS. Dejarlo',
     '  vacío hace que el generador invente movimiento que el original no tiene.',
     '',
     '  ⚠️ ESCRÍBELO EN TELEGRAMA. Sin artículos, sin "se puede observar que", sin verbos de',
     '  relleno, separando observaciones con comas. Máximo unas 120 caracteres por casilla.',
     '  No es estilo: esto viaja a un generador con un tope duro de espacio, y la prosa',
     '  gasta el doble para decir lo mismo.',
-    '    ASÍ: "peso en pierna izquierda, hombro derecho baja al inhalar, torso quieto"',
-    '    NO ASÍ: "La modelo apoya su peso sobre la pierna izquierda mientras su hombro',
-    '    derecho desciende levemente cada vez que inhala."',
+    '    ASÍ: "weight on left leg, right shoulder drops on inhale, torso still"',
+    '    NO ASÍ: "The model shifts her weight onto her left leg while her right shoulder',
+    '    descends slightly each time she inhales."',
     '',
     '  ⚠️ SOLO LO QUE ESTÁ EN EL VIDEO. Es la regla de siempre y acá pesa más, porque el',
     '  nivel de detalle invita a rellenar: si el pelo está recogido y no se mueve, eso es',
     '  lo que va; no inventes un mechón cayendo porque quedaría bien.',
     '  Si un corte no muestra a la persona (plano de producto, flat-lay), `cuerpo`,',
-    '  `manos`, `rostro` y `cabello` dicen "no aparece" y `entorno` describe lo que sí',
-    '  se mueve en cuadro.',
+    '  `manos`, `rostro` y `cabello` dicen EXACTAMENTE `not visible` — esas dos palabras,',
+    '  sin nada más — y `entorno` describe lo que sí se mueve en cuadro.',
+    '  ⚠️ Es un marcador que el código compara de forma exacta para saber si el corte',
+    '  muestra a alguien: una variante ("nobody in frame", "n/a") lo rompe en silencio y',
+    '  un flat-lay se acaba fusionando con un plano de la persona.',
     '',
     'CRONOMETRAJE — se mide, no se estima:',
     '  `duracionSeg` lleva DECIMALES (4.3, no 5). No redondees a números redondos ni',
@@ -1201,7 +1336,7 @@ export function buildForensicInstruction(): string {
     'CORTES (`cortes`): uno por corte real, en orden. Para cada uno:',
     '  `tiempo` "MM:SS - MM:SS", `duracionSeg`, `accion` (descripción literal de lo',
     '  que sucede), `dialogo` (texto hablado durante ese corte), `textoOverlay` (o "No',
-    '  aparece"), `transicion` (jump cut / corte directo / continuidad / zoom digital) y',
+    '  aparece"), `transicion` (jump cut / hard cut / continuous / digital zoom) y',
     '  `camara`, que se declara así:',
     '',
     '  ⚠️ EL ENCUADRE SE DECLARA POR DÓNDE CORTA EL CUADRO, NO POR UNA ETIQUETA.',
@@ -1209,20 +1344,20 @@ export function buildForensicInstruction(): string {
     '    cortes, el render obedeció y el video salió con la persona mucho más lejos que el',
     '    original. La etiqueta sola no es medible; el punto de corte sí. Empieza SIEMPRE por',
     '    el punto de corte y después, si quieres, el nombre:',
-    '      "corta a la altura de los hombros" → primerísimo primer plano',
-    '      "corta a la altura del pecho o las axilas" → primer plano',
-    '      "corta a la altura del esternón" → plano medio corto',
-    '      "corta a la altura de la cintura" → plano medio',
-    '      "corta a la altura de los muslos" → plano americano',
-    '      "se ve el cuerpo entero" → plano general',
+    '      "cuts at the shoulders" → extreme close-up',
+    '      "cuts at the chest or armpits" → close-up',
+    '      "cuts at the sternum" → medium close-up',
+    '      "cuts at the waist" → medium shot',
+    '      "cuts at the thighs" → cowboy shot',
+    '      "the whole body is visible" → wide shot',
     '    Si en cuadro NO hay persona (detalle de producto, flat-lay), di qué llena el cuadro',
-    '    y cuánto: "el frasco ocupa dos tercios del alto del cuadro".',
+    '    y cuánto: "the bottle fills two thirds of the frame height".',
     '    Agrega después la posición de cámara (frontal, ligeramente baja o alta, cenital), si',
     '    está fija o en mano, y el movimiento (zoom, acercamiento, paneo).',
     '',
-    '⚠️ Y DÓNDE CAE CADA COSA EN EL CUADRO, en la misma línea: "persona centrada",',
-    '    "desplazada al tercio izquierdo", "el frasco entra por el borde inferior derecho",',
-    '    "a la altura del mentón". Referencias del encuadre, nunca medidas ni píxeles.',
+    '⚠️ Y DÓNDE CAE CADA COSA EN EL CUADRO, en la misma línea: "person centred",',
+    '    "shifted to the left third", "the bottle enters from the bottom-right edge",',
+    '    "at chin height". Referencias del encuadre, nunca medidas ni píxeles.',
     '',
 
     '',
@@ -1244,7 +1379,25 @@ export function buildForensicInstruction(): string {
     '    campo correspondiente en vez de inventarlo.',
     '',
     '`resumenParaUsuario` va en español neutro: se muestra en la interfaz.',
-    'Todo el output va en español.',
+    '',
+    '── IDIOMA DE LA SALIDA ──',
+    'Este análisis alimenta dos cosas distintas y por eso tiene DOS idiomas.',
+    '',
+    'EN ESPAÑOL, literal y sin traducir — es lo que se va a DECIR o a leer una persona:',
+    '  `guionOriginal`, `dialogo`, `hablantes[].texto`, `textoOverlay`, `resumenParaUsuario`.',
+    '  El diálogo es una transcripción: no lo traduzcas ni lo corrijas ni en una palabra.',
+    '',
+    'EN INGLÉS — son instrucciones técnicas para el generador de video, que trabaja en',
+    'inglés:',
+    '  `accion`, `camara`, `transicion`, `micro.*`, `objetoEnMano.*`,',
+    '  `sujeto`, `vestuario`, `producto`, `fondo`, `elementosGraficos`,',
+    '  `edicion.*`, `personajes[].descripcion`, `tomas[].encuadre/posicion/accionFisica/objeto`.',
+    '  Escríbelas como se las darías a un director de fotografía en un set: concretas,',
+    '  sin adornos y sin opiniones.',
+    '',
+    '⚠️ NO MEZCLES DENTRO DE UN MISMO CAMPO. Un campo es entero de un idioma o del otro.',
+    '  Los nombres propios NO se traducen en ninguno de los dos: una marca impresa en el',
+    '  envase se copia tal cual esté escrita.',
   ].join('\n')
 }
 

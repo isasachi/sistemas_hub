@@ -1,0 +1,295 @@
+/**
+ * ¿EL CANDADO DE MOVIMIENTO HACE QUE GROK EJECUTE MÁS COREOGRAFÍA QUE LA PROSA?
+ *
+ * Es LA pregunta del upgrade V2. El defecto reportado —y el motivo de todo el rediseño—
+ * es que con la coreografía en prosa grok **colapsa varios estados en un gesto genérico**
+ * y se queda quieto el resto del clip. La hipótesis del candado es que una lista de
+ * tramos CON SU VENTANA DE TIEMPO no le deja ese margen.
+ *
+ * Manipulación mínima, y esto es lo que la hace válida: los dos brazos llevan EL MISMO
+ * CONTENIDO y solo cambia la REPRESENTACIÓN.
+ *   A (control) — la coreografía en prosa, `compileAccion(timeline)`: los mismos beats
+ *                 proyectados a texto corrido con ' Luego, '.
+ *   B           — `START STATE` / `TIMED MOTION` con la ventana de cada tramo / `END STATE`.
+ *
+ * ⚠️ A ES EL CONTROL CIENTÍFICO, NO LITERALMENTE LO QUE PRODUCCIÓN EMITE HOY: hoy
+ * `accionVisual` viene del guión adaptado, que es prosa del forense y no de un timeline.
+ * Se usa la proyección para que la única diferencia entre los brazos sea la forma.
+ *
+ * **DOS DRAWS POR BRAZO** (4 renders), la regla que este repo se impuso tras el probe del
+ * cap de 30: grok es estocástico y un solo draw mide el seed, no el prompt.
+ *
+ * MÉTRICA PRINCIPAL: cuántos beats DISTINTOS se ejecutan visiblemente, sobre N. El defecto
+ * es un fallo de CUENTA (colapso), no de sincronía; el alineamiento temporal se imprime
+ * como secundario, porque la historia de `probe-audio-espanol` ya mostró dos métricas
+ * plausibles dando veredictos opuestos sobre los mismos clips. Y un binario: si hay algún
+ * tramo de más de 2 s de quietud mientras el timeline dice que un beat está corriendo.
+ *
+ * Cuesta: 2 llamadas de video a Gemini (forense + refinamiento, las paga el hub), 4 renders
+ * de KIE (key del usuario) y 4 llamadas de visión para juzgarlos. No escribe en la base.
+ *
+ *   PROBE_DRY=1 npx tsx --env-file=.env.local scripts/probe-motion-lock.ts <sessionId> [nLote]
+ */
+import { createClient } from '@supabase/supabase-js'
+import { mkdir, writeFile, readFile } from 'node:fs/promises'
+import { z } from 'zod'
+import { callVideoAds } from '../lib/video-ads/llm'
+import { groupIntoLotes, buildLotePrompt, camaraDeLote } from '../lib/video-ads/lotes'
+import { createVideoTask, getTaskDetail, clampDuration } from '../lib/video-ads/kie'
+import { AdaptedScriptSchema } from '../lib/video-ads/adapt'
+import {
+  ForensicReportSchema, buildForensicInstruction,
+  buildMotionRefinementInstruction, MotionRefinementSchema,
+  corteMuestraPersona, type ForensicReport,
+} from '../lib/video-ads/forensic'
+import { normalizeMotionTimeline, compileAccion, tieneMotion, type MotionTimeline } from '../lib/video-ads/motion'
+import { personajesDe } from '../lib/video-ads/personajes'
+
+const SALIDA = process.env.PROBE_OUT ?? '/home/isasachi/.claude/jobs/29c3edaa/tmp/motion-lock'
+const db = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+
+const segundosDe = (tiempo: string) => {
+  const m = String(tiempo).match(/(\d+):(\d+)/)
+  return m ? Number(m[1]) * 60 + Number(m[2]) : 0
+}
+
+const VeredictoSchema = z.object({
+  beats: z.array(z.object({
+    n: z.number().catch(0),
+    ejecutado: z.enum(['si', 'parcial', 'no']).catch('no'),
+    segundoObservado: z.number().catch(-1),
+    queSeVe: z.string().catch(''),
+  })),
+  quietudLarga: z.string().catch(''),
+})
+
+async function juzgar(url: string, beats: { body: string; leftHand: string; rightHand: string; startSec: number; endSec: number }[]) {
+  const lista = beats.map((b, i) =>
+    `${i + 1}. [${b.startSec.toFixed(1)}–${b.endSec.toFixed(1)}s] ${b.body}; mano izquierda: ${b.leftHand}; mano derecha: ${b.rightHand}`).join('\n')
+  return callVideoAds('veredicto_motion', VeredictoSchema, [
+    { fileData: { fileUri: url, mimeType: 'video/mp4' } },
+    { text: [
+      'Mira el clip y decide, para CADA acción de la lista, si el cuerpo la ejecuta de verdad.',
+      '',
+      'ACCIONES ESPERADAS (con la ventana en la que deberían ocurrir):',
+      lista,
+      '',
+      'Reglas:',
+      '- "si" solo si el movimiento ocurre y se distingue de los otros de la lista.',
+      '- "parcial" si se insinúa pero no se completa, o si dos acciones se resuelven en un',
+      '  mismo gesto genérico (ese colapso es exactamente lo que se está midiendo).',
+      '- "no" si no ocurre.',
+      '- `segundoObservado`: en qué segundo del clip empieza (-1 si no ocurre).',
+      '- `queSeVe`: qué hace el cuerpo en ese momento, en pocas palabras. Describe lo que',
+      '  ves, no lo que la lista pide.',
+      '- `quietudLarga`: si hay algún tramo de MÁS DE 2 SEGUNDOS sin movimiento del cuerpo,',
+      '  dilo con sus segundos ("4.0-7.5s quieta sosteniendo el frasco"). Si no hay, vacío.',
+    ].join('\n') },
+  ])
+}
+
+async function esperar(taskId: string, key: string, etiqueta: string): Promise<string | null> {
+  const limite = Date.now() + 10 * 60_000
+  while (Date.now() < limite) {
+    const d = await getTaskDetail(taskId, key)
+    if (d.state === 'success' && d.videoUrl) return d.videoUrl
+    if (d.state === 'fail') { console.error(`  ${etiqueta}: FALLÓ — ${d.failMsg ?? '(sin motivo)'}`); return null }
+    await new Promise((r) => setTimeout(r, 6000))
+  }
+  console.error(`  ${etiqueta}: se agotó el plazo`)
+  return null
+}
+
+async function main() {
+  const id = process.argv[2]
+  if (!id) throw new Error('Falta el sessionId')
+  const nLote = process.argv[3] ? Number(process.argv[3]) : null
+
+  // Acepta el prefijo de 8 caracteres, que es como se citan las sesiones en AGENTS.md.
+  const { data: ids } = await db.from('video_sessions').select('id')
+  const completo = (ids as { id: string }[] | null)?.find((f) => f.id.startsWith(id))?.id
+  const { data } = completo
+    ? await db.from('video_sessions').select('*').eq('id', completo).single()
+    : { data: null }
+  if (!data) throw new Error(`No existe la sesión ${id}`)
+  const r = data as Record<string, unknown> & { forensic_analysis: ForensicReport }
+  const { data: st } = await db.from('user_settings').select('kie_api_key').eq('user_id', r.user_id as string).single()
+  const key = (st as { kie_api_key?: string } | null)?.kie_api_key
+  if (!key) throw new Error('El usuario no tiene key de KIE guardada')
+
+  const adapted = AdaptedScriptSchema.parse(r.adapted)
+  const video = r.reference_video_url as string
+
+  // ── El timeline no existe en ninguna sesión guardada: se produce acá, con las MISMAS
+  // dos llamadas que la ruta (forense general + refinamiento dedicado).
+  // El forense se CACHEA en disco: son dos llamadas de video y este probe se re-corre
+  // varias veces afinando el brazo. `PROBE_FRESH=1` lo vuelve a pedir.
+  await mkdir(SALIDA, { recursive: true })
+  const cache = `${SALIDA}/forense-${id.slice(0, 8)}.json`
+  const guardado = process.env.PROBE_FRESH ? null : await readFile(cache, 'utf8').catch(() => null)
+  const fresco: ForensicReport = guardado ? JSON.parse(guardado) : await (async () => {
+  console.log('forense…')
+  const base = await callVideoAds('forensic_report', ForensicReportSchema, [
+    { fileData: { fileUri: video, mimeType: 'video/mp4' } },
+    { text: buildForensicInstruction() },
+  ])
+  console.log('refinamiento…')
+  const ref = await callVideoAds('motion_refinement', MotionRefinementSchema, [
+    { fileData: { fileUri: video, mimeType: 'video/mp4' } },
+    { text: buildMotionRefinementInstruction(base.cortes) },
+  ])
+  for (const m of ref.cortes ?? []) {
+    const c = base.cortes[(m.n ?? 0) - 1]
+    if (c && (m.motion?.beats?.length ?? 0) > (c.motion?.beats?.length ?? 0)) c.motion = m.motion
+  }
+  for (const c of base.cortes) {
+    if (tieneMotion(c)) c.motion = normalizeMotionTimeline(c.motion!, c.duracionSeg)
+  }
+  await writeFile(cache, JSON.stringify(base))
+  return base
+  })()
+
+  console.log('\n── LO QUE EL REFINAMIENTO DEVOLVIÓ, corte por corte')
+  for (const c of fresco.cortes) {
+    console.log(`  ${c.tiempo} · ${c.duracionSeg}s · ${c.motion?.beats?.length ?? 0} beats`)
+    for (const b of c.motion?.beats ?? []) {
+      console.log(`      [${b.startSec.toFixed(1)}–${b.endSec.toFixed(1)}] ${b.importance.padEnd(10)} ${b.body} | L:${b.leftHand} | R:${b.rightHand}`)
+    }
+  }
+
+  // ⚠️ EL LOTE SE CONSTRUYE DESDE EL FORENSE FRESCO, NO DESDE `adapted`.
+  // Primero se intentó emparejar los cortes nuevos con `adapted.tomas[].tiempoOriginal` y
+  // el resultado fue el no-op silencioso de siempre en su forma suave: el forense fresco
+  // corta el video distinto (5 cortes donde el guardado tenía 4), así que la toma de 14,3 s
+  // recibía por cercanía el timeline de un corte de 3,4 s — dos beats triviales para un
+  // clip cuatro veces más largo. Se habrían gastado cuatro renders midiendo eso.
+  //
+  // El timeline manda: se elige el corte con MÁS beats y el clip se arma a su medida. La
+  // locución sale de la toma adaptada que arranca más cerca, para que el prompt siga
+  // teniendo habla — un clip mudo le deja a grok margen que el caso real no tiene.
+  // El bed: un corte que NO se parte (así el clip conserva su timeline y con él los estados
+  // inicial y final) y el MÁS LARGO de los que tienen al menos dos tramos — el defecto que
+  // se mide es el colapso y la quietud posterior, y eso solo se ve cuando sobra tiempo.
+  // `nLote` elige otro de la lista ordenada.
+  // El bed: el corte con MÁS tramos, desempatando por duración. Medido en tres sesiones,
+  // el refinamiento devuelve 2-3 beats por corte sin importar cuánto dure (un corte de 20 s
+  // vuelve con 3), así que "el que más tiene" es también el único con material de sobra
+  // para que el colapso se note. `nLote` elige otro de la lista ordenada.
+  const corte = fresco.cortes
+    .filter((c) => tieneMotion(c) && c.motion!.beats.length >= 2)
+    .sort((a, b) => (b.motion!.beats.length - a.motion!.beats.length) || (b.duracionSeg - a.duracionSeg))[nLote ? nLote - 1 : 0]
+  if (!corte) throw new Error('El forense no devolvió ningún corte con timeline')
+  const cerca = adapted.tomas
+    .slice()
+    .sort((a, b) => Math.abs(segundosDe(a.tiempoOriginal) - segundosDe(corte.tiempo))
+                  - Math.abs(segundosDe(b.tiempoOriginal) - segundosDe(corte.tiempo)))[0]
+  const toma = {
+    n: 1,
+    // ⚠️ LA DURACIÓN REAL DEL CORTE, sin recortar. Recortarla a mano a `LOTE_MAX_SEC`
+    // dejaba beats con ventana [13.2–19.5s] dentro de un clip de 15 s: dos relojes en el
+    // mismo prompt, que es justo el defecto que el candado existe para no cometer. Con la
+    // duración real, `splitLongToma` parte la toma y `repartirBeats` rebasa los tiempos —
+    // el camino de producción.
+    duracionSeg: corte.duracionSeg,
+    locucion: cerca?.locucion ?? '',
+    tiempoOriginal: corte.tiempo,
+    accionVisual: compileAccion(corte.motion!),
+    personaje: cerca?.personaje ?? '',
+    producto: cerca?.producto ?? '',
+  }
+  const plano = new Map([[corte.tiempo, String(corte.camara).trim()]])
+  const clase = new Map([[corte.tiempo, corteMuestraPersona(corte)]])
+  const conCandado = groupIntoLotes([toma], plano, 1, clase, new Map([[corte.tiempo, corte.motion!]]))
+  // Si la toma se partió, se mide el fragmento con MÁS tramos: uno con un solo beat no
+  // tiene nada que colapsar, que es justo lo que este probe viene a ver.
+  const lote = conCandado.slice().sort((a, b) =>
+    b.tomas.reduce((n, t) => n + (t.beats?.length ?? 0), 0) - a.tomas.reduce((n, t) => n + (t.beats?.length ?? 0), 0))[0]
+  if (!lote) throw new Error('No hay lote')
+  if (conCandado.length > 1) console.log(`  (la toma se partió en ${conCandado.length} clips; se mide el ${lote.n}º)`)
+  console.log(`  corte elegido ${corte.tiempo} · ${corte.duracionSeg}s · ${corte.motion!.beats.length} beats` +
+    ` · locución de la toma ${cerca?.tiempoOriginal ?? '(ninguna)'}`)
+
+  // El control: los MISMOS beats, proyectados a prosa. Sin `motion` no hay candado.
+  const control = {
+    ...lote,
+    tomas: lote.tomas.map((t) => ({
+      ...t, beats: undefined, motion: undefined,
+      accionVisual: t.beats?.length ? compileAccion({ ...(t.motion ?? {}), beats: t.beats } as MotionTimeline) : t.accionVisual,
+    })),
+  }
+
+  const chars = lote.tomas.reduce((n, t) => n + t.locucion.length, 0)
+  const scan = (r.product_scan ?? {}) as { productDescription?: string }
+  const comun = {
+    consistencyBlock: (r.consistency_block as string) ?? '',
+    productDesc: scan.productDescription ?? '',
+    camara: camaraDeLote(lote, fresco.cortes, 'primer plano'),
+    voz: r.voice_profile as never, movimiento: r.motion_profile as never,
+    images: [
+      { url: r.avatar_url as string, role: 'the person' },
+      { url: r.product_url as string, role: 'the product' },
+    ],
+    cortes: fresco.cortes, niche: r.niche, personajes: personajesDe(r as never),
+  }
+  const promptA = buildLotePrompt({ lote: control, ...comun })
+  const promptB = buildLotePrompt({ lote, ...comun })
+
+  // Con el MISMO corrimiento que usa el prompt: el juez tiene que leer el mismo reloj que
+  // el modelo, o estaría midiendo la sincronía contra ventanas que nadie pidió.
+  const beats = lote.tomas.flatMap((t, i) => {
+    const desde = lote.tomas.slice(0, i).reduce((n, x) => n + x.duracionSeg, 0)
+    return (t.beats ?? []).map((b) => ({ ...b, startSec: b.startSec + desde, endSec: b.endSec + desde }))
+  })
+  console.log(`\nsesión ${id.slice(0, 8)} · lote ${lote.n} de ${conCandado.length} · ` +
+    `${lote.duracionSeg}s · ${lote.tomas.length} toma(s) · ${beats.length} beats`)
+  console.log(`  A (prosa):   ${promptA.length} caracteres`)
+  console.log(`  B (candado): ${promptB.length} caracteres`)
+
+  // Los tres guards que impiden gastar 4 renders midiendo nada.
+  if (!promptB.includes('TIMED MOTION')) throw new Error('El brazo B no lleva candado: los beats no llegaron al prompt')
+  if (promptA === promptB) throw new Error('Los dos brazos son idénticos')
+  for (const [et, p] of [['A', promptA], ['B', promptB]] as const) {
+    if (p.includes('…')) throw new Error(`El brazo ${et} sale TRUNCADO: se estaría midiendo presupuesto y no representación`)
+  }
+  // Ninguna ventana puede salirse del clip: un tramo que empieza después de que el video
+  // terminó es una instrucción imposible, y el modelo resuelve eso ignorando el bloque.
+  for (const b of beats) {
+    if (b.endSec > lote.duracionSeg + 0.05) {
+      throw new Error(`Un beat termina en ${b.endSec}s dentro de un clip de ${lote.duracionSeg}s`)
+    }
+  }
+
+  await mkdir(SALIDA, { recursive: true })
+  await writeFile(`${SALIDA}/prompt-A.txt`, promptA)
+  await writeFile(`${SALIDA}/prompt-B.txt`, promptB)
+  console.log('\n── COREOGRAFÍA PEDIDA')
+  beats.forEach((b, i) => console.log(`  ${i + 1}. [${b.startSec.toFixed(1)}–${b.endSec.toFixed(1)}s] ${b.body} | L:${b.leftHand} | R:${b.rightHand}`))
+
+  if (process.env.PROBE_DRY) { console.log(`\nPROBE_DRY: prompts en ${SALIDA}, no se creó ninguna tarea.`); return }
+
+  const dur = clampDuration(lote.duracionSeg, chars, lote.tomas.length)
+  const brazos = [['A1', promptA], ['A2', promptA], ['B1', promptB], ['B2', promptB]] as const
+  const tareas = await Promise.all(brazos.map(async ([et, prompt]) => {
+    const taskId = await createVideoTask(
+      { images: comun.images, prompt, durationSec: dur, locucionChars: chars, tomas: lote.tomas.length }, key)
+    console.log(`  ${et}: tarea ${taskId}`)
+    return [et, taskId] as const
+  }))
+
+  console.log('\n── VEREDICTOS')
+  for (const [et, taskId] of tareas) {
+    const url = await esperar(taskId, key, et)
+    if (!url) continue
+    await writeFile(`${SALIDA}/${et}.mp4`, Buffer.from(await (await fetch(url)).arrayBuffer()))
+    const v = await juzgar(url, beats)
+    const si = v.beats.filter((b) => b.ejecutado === 'si').length
+    const parcial = v.beats.filter((b) => b.ejecutado === 'parcial').length
+    console.log(`\n${et} — ${si}/${beats.length} ejecutados, ${parcial} parciales`)
+    for (const b of v.beats) {
+      console.log(`  ${String(b.n).padStart(2)}. ${b.ejecutado.padEnd(7)} ${b.segundoObservado >= 0 ? `${b.segundoObservado}s` : '—'}  ${b.queSeVe}`)
+    }
+    console.log(`  quietud: ${v.quietudLarga || '(ninguna de más de 2 s)'}`)
+  }
+}
+
+main().catch((e) => { console.error(e); process.exit(1) })

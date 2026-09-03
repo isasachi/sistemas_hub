@@ -6,6 +6,7 @@ import { CPS_MAX } from './forensic'
 import { KIE_PROMPT_MAX } from './kie'
 import { nicheSpec } from './niches'
 import { etiqueta, type Personaje } from './personajes'
+import { repartirBeats, MotionBeatSchema, MotionTimelineSchema, type MotionBeat, type MotionState, type MotionTimeline } from './motion'
 
 /**
  * FASE 5 del prompt maestro — agrupación de tomas en lotes de generación.
@@ -86,6 +87,18 @@ export const LoteSchema = z.object({
     producto: z.string(),
     locucion: z.string(),
     tiempoOriginal: z.string(),
+    /**
+     * Los beats de ESTE fragmento. Lo llena el código (`groupIntoLotes`), no el modelo, y
+     * por eso `.optional()` es correcto acá y no la trampa de siempre: una sesión guardada
+     * no lo trae y se lee como antes. Vive en la toma y no se busca por `tiempoOriginal`
+     * porque dos fragmentos de una misma toma COMPARTEN esa marca — y cada uno se queda
+     * solo con los suyos.
+     */
+    beats: z.array(MotionBeatSchema).optional(),
+    /** El timeline COMPLETO del corte, solo cuando la toma no se partió: es de donde
+     *  salen `START STATE` y `END STATE`. Un fragmento no lo lleva — el estado inicial
+     *  del corte no es el suyo. */
+    motion: MotionTimelineSchema.optional(),
   })),
   duracionSeg: z.number(),
   prompt: z.string(),
@@ -257,10 +270,14 @@ function splitLongToma(t: TomaFinal): TomaFinal[] {
     const minPartes = Math.ceil(dur / LOTE_MAX_SEC)
     const duraciones = Array.from({ length: minPartes }, () => r1(dur / minPartes))
     const acciones = repartirAccion(t.accionVisual, duraciones)
+    const trozos = repartirBeats(t.beats ?? [], duraciones)
     return duraciones.map((d, i) => ({
       ...t,
       duracionSeg: d,
       accionVisual: acciones[i],
+      // Los beats se reparten igual que la prosa y por el mismo motivo: pedirle a los dos
+      // fragmentos la coreografía entera es pedir lo imposible dos veces.
+      beats: trozos[i],
       locucion: i === 0 ? t.locucion : '',
     }))
   }
@@ -273,8 +290,9 @@ function splitLongToma(t: TomaFinal): TomaFinal[] {
   // Reparto proporcional a caracteres — NO es garantía suficiente por sí solo (ver
   // comentario de la función), así que cada fragmento se vuelve a verificar
   // recursivamente antes de aceptarlo.
+  const trozos = repartirBeats(t.beats ?? [], duraciones)
   return partes.flatMap((p, i) =>
-    splitLongToma({ ...t, duracionSeg: duraciones[i], accionVisual: acciones[i], locucion: p }),
+    splitLongToma({ ...t, duracionSeg: duraciones[i], accionVisual: acciones[i], beats: trozos[i], motion: undefined, locucion: p }),
   )
 }
 
@@ -361,13 +379,24 @@ export function groupIntoLotes(
    * de 8 a 0, y cuesta 1,06× llamadas — contra 1,27× de `maxPlanos = 1`, que arregla menos.
    */
   clasePorTiempo?: Map<string, boolean>,
+  /** `tiempoOriginal` → los beats de ese corte. Se adjuntan ANTES de partir, para que
+   *  `splitLongToma` pueda repartirlos entre los fragmentos. */
+  motionPorTiempo?: Map<string, MotionTimeline>,
 ): Lote[] {
   // Renumeramos TODA la secuencia expandida en orden: si una toma se divide, sus
   // fragmentos no pueden compartir el `n` original (colisionarían al rotular "Toma N"
   // en el prompt de Task 5 — dos "Toma 1" en el mismo guión). Numerar secuencial y
   // global es la forma más simple de garantizar unicidad y orden sin inventar un
   // esquema paralelo (sufijos, decimales) que Task 5 tendría que aprender a leer.
-  const expandidas = tomas.flatMap(splitLongToma).map((t, i) => ({ ...t, n: i + 1 }))
+  // Los beats se adjuntan ANTES de partir: `splitLongToma` los reparte entre los
+  // fragmentos igual que la prosa, y cada uno se queda solo con los suyos.
+  const conBeats = motionPorTiempo
+    ? tomas.map((t) => {
+        const tl = motionPorTiempo.get(t.tiempoOriginal)
+        return { ...t, beats: tl?.beats ?? [], motion: tl }
+      })
+    : tomas
+  const expandidas = conBeats.flatMap(splitLongToma).map((t, i) => ({ ...t, n: i + 1 }))
   const lotes: Lote[] = []
   let actual: TomaFinal[] = []
   let acumulado = 0
@@ -382,6 +411,10 @@ export function groupIntoLotes(
         n: t.n, duracionSeg: t.duracionSeg, accionVisual: t.accionVisual,
         personaje: t.personaje, producto: t.producto, locucion: t.locucion,
         tiempoOriginal: t.tiempoOriginal,
+        // Los beats de ESTE fragmento. La proyección es explícita a propósito (lo que se
+        // guarda en el jsonb es lo que el prompt lee), así que un campo que no se nombra
+        // acá no llega al render — que es justo lo que pasaba con el candado.
+        beats: t.beats, motion: t.motion,
       })),
       // Redondeamos recién acá, para mostrar: el check que decide si el lote cierra ya
       // pasó por `excedeTope` sobre el acumulado SIN redondear, así que este r1 no
@@ -725,6 +758,89 @@ function microDe(m: Micro | undefined, cap: number | null): string {
  * nacido en el escenario del original los dos coinciden y el bloque pasa a ser redundante
  * en vez de contradictorio; en ninguno de los dos casos aporta.
  */
+/**
+ * EL CANDADO DE MOVIMIENTO — `START STATE` / `TIMED MOTION` / `END STATE`.
+ *
+ * ⚠️ ES LA RESPUESTA DIRECTA AL DEFECTO QUE MOTIVA TODO V2: con la coreografía en prosa,
+ * grok colapsa varios estados en un gesto genérico más corto y se queda quieto el resto del
+ * clip. Una lista de tramos con SU VENTANA DE TIEMPO no le deja ese margen — cada acción
+ * tiene un cuándo, no solo un qué.
+ *
+ * Las tres líneas de cierre no son relleno: nombran las tres formas exactas en que el
+ * defecto aparece (comprimir, adelantarse, rellenar con gestos inventados).
+ *
+ * ⚠️ SIN TIMELINE NO EMITE NADA y el prompt cae a `accionVisual`, que es el comportamiento
+ * de siempre. Toda sesión guardada pasa por ahí.
+ */
+const sinPunto = (x: unknown) => String(x ?? '').trim().replace(/\.+$/, '')
+
+function estadoEnProsa(e: MotionState | undefined): string {
+  if (!e) return ''
+  return [e.bodyPose, e.headPose, e.gaze && `gaze ${e.gaze}`, e.leftHand && `left hand ${e.leftHand}`,
+    e.rightHand && `right hand ${e.rightHand}`, e.facialExpression,
+    e.productState && `product: ${e.productState}`, e.propsState && `props: ${e.propsState}`, e.cameraState]
+    .map(sinPunto).filter(Boolean).join('. ')
+}
+
+function candadoDeMovimiento(
+  beats: MotionBeat[] | undefined,
+  /** El timeline del corte, cuando la toma NO se partió. Es de donde salen los estados
+   *  inicial y final — las nueve casillas, no las seis del beat. Un FRAGMENTO no lo trae:
+   *  el estado inicial global no es el suyo, así que ahí se derivan de sus propios beats. */
+  tl: MotionTimeline | undefined,
+  soloMayores: boolean,
+  cap: number | null,
+  /** Segundo del CLIP en el que arranca esta toma. Las ventanas del beat son relativas a
+   *  su toma, pero el clip es uno solo: sin el corrimiento, la segunda toma de un lote
+   *  vuelve a empezar en "[0.0s]" y el prompt lleva dos relojes. */
+  desde: number,
+): string[] {
+  const usables = (beats ?? []).filter((b) => (soloMayores ? b.importance !== 'micro' : true))
+  if (!usables.length) return []
+  // El cap del piso ENCOGE cada tramo, nunca borra uno: perder un tramo es perder su
+  // ventana de tiempo, que es lo único que este bloque aporta sobre la prosa. Mismo
+  // criterio que `micro`, que se encoge en vez de soltarse.
+  // Con cap 0 devuelve vacío en vez de un puntito suspensivo: en el tramo deja la VENTANA
+  // DE TIEMPO sola, que es lo único que el candado aporta sobre la prosa, y en los estados
+  // hace desaparecer la línea entera. Sin esto el piso no baja —`START STATE` no lo tocaba
+  // nadie— y `buildLotePrompt` lanza con la cuota ya gastada.
+  const corta = (x: string) =>
+    cap == null || x.length <= cap ? x : cap === 0 ? '' : `${x.slice(0, cap).trimEnd()}…`
+  const linea = (b: MotionBeat) =>
+    `[${(desde + b.startSec).toFixed(1)}–${(desde + b.endSec).toFixed(1)}s] ` +
+    corta([b.body, b.leftHand && `left hand: ${b.leftHand}`, b.rightHand && `right hand: ${b.rightHand}`, b.headAndGaze]
+      .map(sinPunto).filter(Boolean).join('; '))
+  // ⚠️ LOS ESTADOS SALEN DEL TIMELINE O NO SALEN. Derivarlos del primer y del último beat
+  // parecía un fallback razonable y es duplicación: en un fragmento de dos beats el
+  // prompt terminaba diciendo lo mismo tres veces (estado inicial = beat 1, estado final =
+  // beat 2). Un FRAGMENTO no trae timeline —el estado inicial del corte no es el suyo— y
+  // además arranca de su imagen ancla, que ya dice cómo se ve. Sin estados, sigue teniendo
+  // lo único que el candado aporta: las ventanas de tiempo.
+  const inicio = corta(estadoEnProsa(tl?.startState))
+  const fin = corta(estadoEnProsa(tl?.endState))
+  return [
+    inicio && `START STATE: ${inicio}.`,
+    'TIMED MOTION — perform these in order, each inside its own window:',
+    ...usables.map(linea),
+    fin && `END STATE: ${fin}.`,
+  ].filter(Boolean)
+}
+
+/**
+ * Las tres prohibiciones. Van UNA VEZ POR PROMPT y no por toma: son globales, y repetirlas
+ * en cada toma son ~150 caracteres × (N−1) de duplicación pura dentro del presupuesto que
+ * el candado existe para proteger — el mismo argumento que bajó `Spoken line (Latin
+ * American Spanish, verbatim)` a `Says`.
+ *
+ * Nombran las tres formas exactas en que el defecto aparece: comprimir, adelantarse, y
+ * rellenar el hueco con gestos inventados.
+ */
+const BLOQUE_CANDADO = [
+  'Do not compress the timed motion into one simultaneous gesture.',
+  'Do not start the next beat early.',
+  'Do not invent additional hand gestures between beats.',
+].join('\n')
+
 export function buildLotePrompt(args: {
   lote: Lote
   consistencyBlock: string
@@ -858,8 +974,10 @@ export function buildLotePrompt(args: {
   // renderiza sin memoria del anterior (REGLA DE CONTEXTO ABSOLUTO).
   const microYaEmitido = new Set<string>()
 
+  let hayCandado = false
   const renderAcciones = (nivel: number, capAccion: number | null) => {
     microYaEmitido.clear()
+    hayCandado = false
     return lote.tomas
       .map((t, i) => {
         const accionVisual =
@@ -868,6 +986,14 @@ export function buildLotePrompt(args: {
             : t.accionVisual
         const plano = planoPorToma(i)
         const ancla = anclas.get(t.tiempoOriginal)
+        const candado = candadoDeMovimiento(
+          t.beats,
+          t.motion ?? undefined,
+          nivel >= NIVEL_MICRO_CORTO,
+          capAccion,
+          lote.tomas.slice(0, i).reduce((n, x) => n + x.duracionSeg, 0),
+        )
+        if (candado.length) hayCandado = true
         return [
           // r1: `duracionSeg` sale de un reparto proporcional y llegaba cruda al prompt
           // ("Toma 1 — 0.8854477611940298 s", medido). Es ruido en un presupuesto que ya
@@ -879,7 +1005,15 @@ export function buildLotePrompt(args: {
           ancla ? `Starts from @image(${ancla}): match that framing and setting exactly.` : '',
           // Ver `planoPorToma`: nunca se degrada, por el mismo motivo que la línea hablada.
           plano ? `Camera: ${plano}` : '',
-          accionVisual,
+          // ⚠️ EL CANDADO VA PEGADO A SU TOMA, no al lote: los tiempos son relativos a ESTE
+          // clip y mezclarlos con los de otra toma le daría al modelo dos relojes.
+          // ⚠️ Y REEMPLAZA A LA PROSA, no se suma: `accionVisual` se COMPILA desde estos
+          // mismos beats (`compileAccion`), así que emitir las dos es decir lo mismo dos
+          // veces en un prompt que ya recorta coreografía. Sin timeline —toda sesión
+          // guardada— el candado viene vacío y manda la prosa, como siempre.
+          // En el recorte se sueltan los beats `micro` y NUNCA los `major`: la textura es
+          // prescindible, la coreografía es lo que este bloque existe para fijar.
+          ...(candado.length ? candado : [accionVisual]),
           // Debajo de la coreografía a propósito: primero QUÉ hace el cuerpo, después CÓMO.
           // ⚠️ El detalle atómico se ENCOGE con la búsqueda binaria del piso, no se
           // suelta: medido sobre las 87 combinaciones reales, soltarlo dejaba 7 lotes sin
@@ -919,8 +1053,11 @@ export function buildLotePrompt(args: {
       .join('\n\n')
   }
 
-  const render = (nivel: number, capAccion: number | null) =>
-    [
+  const render = (nivel: number, capAccion: number | null) => {
+    // Antes del array: `hayCandado` solo se sabe DESPUÉS de armar el shot list, y las tres
+    // prohibiciones cuelgan de él.
+    const acciones = renderAcciones(nivel, capAccion)
+    return [
       `Vertical 9:16 UGC video, ${lote.duracionSeg} seconds total, shot on a phone.`,
       // La única línea del prompt que habla de idiomas. Sin ella, un prompt en inglés con
       // frases en español entrecomilladas es ambiguo: el modelo puede traducirlas.
@@ -1004,7 +1141,8 @@ export function buildLotePrompt(args: {
           ]
         : []),
       'SHOT LIST:',
-      renderAcciones(nivel, capAccion),
+      acciones,
+      hayCandado ? BLOQUE_CANDADO : '',
       '',
       // El guion completo de una vez. Es lo PRIMERO que se suelta bajo presión de
       // presupuesto: sale del mismo texto que las líneas de cada toma, así que soltarlo no
@@ -1034,6 +1172,7 @@ export function buildLotePrompt(args: {
       ...(nivel < NIVEL_MICRO_CORTO ? BLOQUE_SONIDO_EN : []),
       ...bloqueOverlay(nivel),
     ].join('\n')
+  }
 
   for (const nivel of [
     NIVEL_COMPLETO,

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { groupIntoLotes, LOTE_MAX_SEC, LOTE_MAX_CHARS, LOTE_MAX_COREO, LoteSchema, buildLotePrompt, camaraDeLote, repartirAccion, CAMARA_SIN_DATO, type Lote } from './lotes'
 import { clampDuration } from './kie'
 import type { TomaFinal } from './adapt'
+import { TIMELINE_VACIO } from './motion'
 import { KIE_PROMPT_MAX } from './kie'
 
 const toma = (n: number, duracionSeg: number, locucion = `linea ${n}`): TomaFinal => ({
@@ -932,4 +933,160 @@ describe('camaraDeLote — sin emparejamiento no inventa un encuadre', () => {
     const ok = { ...lote, tomas: [{ ...lote.tomas[0], tiempoOriginal: '00:05 - 00:10' }] } as unknown as Lote
     expect(camaraDeLote(ok, cortes)).toBe('Primer plano del producto')
   })
+})
+
+// ── EL CANDADO DE MOVIMIENTO (§18.8.1)
+// Es la respuesta al defecto que motiva V2: con la coreografía en prosa, grok colapsa
+// varios estados en un gesto genérico y se queda quieto el resto del clip. Lo que este
+// bloque agrega sobre la prosa es la VENTANA DE TIEMPO de cada tramo.
+describe('MOTION LOCK', () => {
+  const beat = (n: number, importance: 'major' | 'micro') => ({
+    startSec: n, endSec: n + 1, referenceFrameMs: n * 1000,
+    body: `torso ${n}`, headAndGaze: `mira ${n}`, leftHand: `izq ${n}`, rightHand: `der ${n}`,
+    productStateBefore: `antes ${n}`, productStateAfter: `despues ${n}`, importance,
+  })
+  const conBeats = (bs: ReturnType<typeof beat>[]): TomaFinal => ({ ...toma(1, 4, 'Hola.'), beats: bs })
+
+  const beats = [beat(0, 'major'), beat(1, 'micro'), beat(2, 'major')]
+  const tl = {
+    ...TIMELINE_VACIO, beats,
+    startState: { ...TIMELINE_VACIO.startState, bodyPose: 'de pie', productState: 'frasco cerrado' },
+    endState: { ...TIMELINE_VACIO.endState, bodyPose: 'sentada', productState: 'frasco abierto' },
+  }
+  const lote = groupIntoLotes([conBeats(beats)], undefined, undefined, undefined,
+    new Map([[toma(1, 4).tiempoOriginal, tl]]))[0]
+  const p = buildLotePrompt({ lote, ...ARGS })
+
+  // Las tres prohibiciones van UNA VEZ y no por toma: son globales, y repetirlas es
+  // duplicación pura dentro del presupuesto que el candado existe para proteger.
+  it('las prohibiciones se emiten una sola vez', () => {
+    expect(p.split('Do not start the next beat early.').length - 1).toBe(1)
+  })
+
+  it('emite los tres estados y las tres prohibiciones', () => {
+    expect(p).toContain('START STATE: de pie. product: frasco cerrado.')
+    expect(p).toContain('TIMED MOTION')
+    expect(p).toContain('END STATE: sentada. product: frasco abierto.')
+    expect(p).toContain('Do not compress the timed motion into one simultaneous gesture.')
+    expect(p).toContain('Do not start the next beat early.')
+    expect(p).toContain('Do not invent additional hand gestures between beats.')
+  })
+
+  it('cada tramo lleva su ventana de tiempo, que es lo único que la prosa no puede dar', () => {
+    expect(p).toContain('[0.0–1.0s]')
+    expect(p).toContain('[1.0–2.0s]')
+    expect(p).toContain('[2.0–3.0s]')
+  })
+
+  // `accionVisual` se COMPILA desde estos mismos beats, así que emitir las dos es decir
+  // lo mismo dos veces en un prompt que ya recorta coreografía.
+  it('REEMPLAZA a la prosa en vez de sumarse', () => {
+    expect(p).not.toContain('accion 1')
+  })
+
+  // Sin timeline —toda sesión guardada— el prompt es exactamente el de antes.
+  it('sin beats el prompt no cambia', () => {
+    const sin = buildLotePrompt({ lote: groupIntoLotes([toma(1, 4, 'Hola.')])[0], ...ARGS })
+    expect(sin).toContain('accion 1')
+    expect(sin).not.toContain('TIMED MOTION')
+  })
+})
+
+// La toma que SE PARTE con beats. Es el camino donde `repartirAccion` (proporcional) y
+// `repartirBeats` (por punto medio) pueden discrepar, y donde el bug de la coreografía
+// duplicada volvería en su forma más literal: pedirle a los dos fragmentos la línea de
+// tiempo entera.
+describe('MOTION LOCK — toma partida', () => {
+  const beat = (i: number) => ({
+    startSec: i * 4, endSec: i * 4 + 2, referenceFrameMs: i * 4000,
+    body: `gesto${i}`, headAndGaze: '', leftHand: '', rightHand: '',
+    productStateBefore: '', productStateAfter: '', importance: 'major' as const,
+  })
+  const beats = [0, 1, 2, 3, 4, 5].map(beat)
+  const larga: TomaFinal = {
+    ...toma(1, 24, 'Una. Dos. Tres. Cuatro. Cinco. Seis.'),
+    accionVisual: beats.map((b) => b.body).join(' Luego, '),
+    beats,
+  }
+  const lotes = groupIntoLotes([larga], undefined, undefined, undefined,
+    new Map([[larga.tiempoOriginal, { ...TIMELINE_VACIO, beats }]]))
+  const prompts = lotes.map((l) => buildLotePrompt({ lote: l, ...ARGS }))
+
+  // Un gesto vive en UN clip. (Dentro de su propio prompt sí se repite: el mismo beat es
+  // el estado inicial, el tramo y el estado final de un fragmento de un solo beat.)
+  it('cada gesto se pide en un solo clip', () => {
+    for (const b of beats) {
+      expect(prompts.filter((p) => p.includes(b.body))).toHaveLength(1)
+    }
+  })
+
+  // Los tiempos son relativos a SU clip: un fragmento que empieza en 0 no puede recibir
+  // "[16.0–18.0s]", que es la ventana dentro de la toma entera.
+  it('los tiempos se rebasan al arranque de cada fragmento', () => {
+    for (const [i, p] of prompts.entries()) {
+      expect(p).toContain('TIMED MOTION')
+      const dur = lotes[i].duracionSeg
+      for (const m of p.matchAll(/\[(\d+\.\d)–(\d+\.\d)s\]/g)) {
+        expect(Number(m[2])).toBeLessThanOrEqual(dur + 0.05)
+      }
+    }
+  })
+})
+
+// Con la prosa fuera, lo único que la búsqueda binaria del piso puede encoger son las
+// líneas del candado. Si no puede, `buildLotePrompt` lanza con la cuota ya gastada.
+it('un lote con la línea de tiempo cargada sigue entrando en el tope de KIE', () => {
+  const gordo = (i: number) => ({
+    startSec: i, endSec: i + 1, referenceFrameMs: 0,
+    body: `movimiento del cuerpo muy detallado numero ${i} `.repeat(6),
+    headAndGaze: 'mirada sostenida a camara con la cabeza levemente inclinada '.repeat(4),
+    leftHand: 'sostiene el frasco con firmeza a la altura del pecho '.repeat(4),
+    rightHand: 'destapa, extrae el gotero y vuelve a taparlo '.repeat(4),
+    productStateBefore: 'frasco cerrado', productStateAfter: 'frasco abierto',
+    importance: 'major' as const,
+  })
+  const beats = Array.from({ length: 8 }, (_, i) => gordo(i))
+  const tomas: TomaFinal[] = [1, 2, 3].map((n) => ({
+    ...toma(n, 4, `linea ${n}`), tiempoOriginal: `00:0${n} - 00:0${n + 4}`, beats,
+  }))
+  const lote = groupIntoLotes(tomas, undefined, undefined, undefined,
+    new Map(tomas.map((t) => [t.tiempoOriginal, { ...TIMELINE_VACIO, beats }])))[0]
+  expect(buildLotePrompt({ lote, ...ARGS }).length).toBeLessThanOrEqual(KIE_PROMPT_MAX)
+})
+
+// Un fragmento no trae timeline (el estado inicial del corte no es el suyo) y arranca de
+// su imagen ancla. Derivar los estados de su primer y último beat era decir lo mismo tres
+// veces en un prompt que ya recorta coreografía.
+it('un fragmento sin timeline emite los tramos pero no los estados', () => {
+  const b = (i: number) => ({
+    startSec: i * 6, endSec: i * 6 + 5, referenceFrameMs: 0, body: `paso${i}`,
+    headAndGaze: '', leftHand: '', rightHand: '', productStateBefore: '', productStateAfter: '',
+    importance: 'major' as const,
+  })
+  const beats = [0, 1, 2, 3].map(b)
+  const larga: TomaFinal = { ...toma(1, 24, 'Una. Dos. Tres. Cuatro.'), accionVisual: 'x', beats }
+  const [, segundo] = groupIntoLotes([larga], undefined, undefined, undefined,
+    new Map([[larga.tiempoOriginal, { ...TIMELINE_VACIO, beats }]]))
+  const p = buildLotePrompt({ lote: segundo, ...ARGS })
+  expect(p).toContain('TIMED MOTION')
+  expect(p).not.toContain('START STATE')
+  expect(p).not.toContain('END STATE')
+})
+
+// El clip es UNO. Las ventanas del beat son relativas a su toma, así que sin corrimiento
+// la segunda toma del lote vuelve a empezar en "[0.0s]" y el prompt lleva dos relojes.
+it('las ventanas del candado son relativas al CLIP, no a la toma', () => {
+  const b = (i: number) => ({
+    startSec: 0, endSec: 2, referenceFrameMs: 0, body: `paso${i}`, headAndGaze: '',
+    leftHand: '', rightHand: '', productStateBefore: '', productStateAfter: '',
+    importance: 'major' as const,
+  })
+  const tomas: TomaFinal[] = [1, 2].map((n) => ({
+    ...toma(n, 3, `linea ${n}`), tiempoOriginal: `00:0${n} - 00:0${n + 3}`, beats: [b(n)],
+  }))
+  const lote = groupIntoLotes(tomas, undefined, undefined, undefined,
+    new Map(tomas.map((t) => [t.tiempoOriginal, { ...TIMELINE_VACIO, beats: t.beats! }])))[0]
+  const p = buildLotePrompt({ lote, ...ARGS })
+  expect(p).toContain('[0.0–2.0s] paso1')
+  expect(p).toContain('[3.0–5.0s] paso2')
 })

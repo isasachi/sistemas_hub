@@ -67,6 +67,11 @@ export const GEN_PER_STEP_LIMIT = Number(process.env.GEN_PER_STEP_LIMIT ?? 4) //
 // tenga ese guión. `video-render` se sigue registrando —una fila por lote, para
 // conservar la visibilidad del costo real y seguir contando al backstop global—
 // pero deja de tener tope per-step: por eso sale de este array.
+// ⚠️ `video-motion` (el pase de refinamiento de FASE 1b) NO está acá a propósito. Es una
+// llamada de Gemini pagada por el hub y se REGISTRA para que se vea en el panel de consumo
+// y cuente al backstop diario, pero un tope per-step propio solo podría dejar la sesión con
+// el análisis hecho y el movimiento a medias: la ruta ya está topada por `video-forensic`,
+// que es la puerta de entrada de esa misma llamada. Mismo criterio que `video-render`.
 export const IMAGE_KINDS = ['branding-identidad', 'branding-logo', 'branding-etiqueta', 'branding-mockup', 'anuncios-image', 'landing-section', 'video-character', 'video-generation', 'video-forensic']
 export function isImageKind(kind: string): boolean {
   return IMAGE_KINDS.some((k) => kind === k || kind.startsWith(k + ':'))
