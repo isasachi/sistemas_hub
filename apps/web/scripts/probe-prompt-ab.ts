@@ -89,7 +89,7 @@ async function main() {
 
   const largo = buildLotePrompt({
     lote, consistencyBlock: (r.consistency_block as string) ?? '',
-    productDesc: scan.productDescription ?? '', escenario: f.fondo ?? '',
+    productDesc: scan.productDescription ?? '',
     camara, voz: r.voice_profile as never, movimiento: r.motion_profile as never,
     images: [{ url: r.avatar_url as string, role: 'the person' }, { url: r.product_url as string, role: 'the product' }],
     cortes: f.cortes, niche: r.niche, personajes: personajesDe(r as never),

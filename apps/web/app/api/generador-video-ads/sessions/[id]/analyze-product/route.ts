@@ -6,6 +6,7 @@ import { callVideoAds } from '@/lib/video-ads/llm'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 import { ProductScanSchema } from '@/lib/video-ads/types'
+import { limpiarProductScan } from '@/lib/video-ads/product-scan'
 import { STEP } from '@/lib/video-ads/steps'
 import type { Part } from '@google/genai'
 
@@ -86,6 +87,18 @@ export async function POST(
           'productDescription = the physical object: shape, size in the hand, material,',
           '  cap, proportions and colors, precisely enough for a video model to keep it',
           '  identical across clips.',
+          // ⚠️ EL OBJETO, NO LA FOTOGRAFÍA. Medido sobre 35 scans guardados, 9 describían
+          // de paso la puesta en escena del catálogo ("El producto descansa sobre una
+          // superficie blanca plana y produce una sombra suave a la derecha", "No está
+          // flotando"). Ese texto se emite ÍNTEGRO en el prompt de CADA lote, así que es
+          // una instrucción de escena dentro de un clip donde la persona tiene el envase en
+          // la mano en una sala — la misma clase de contaminación que `SETTING AND
+          // LIGHTING`. En FASE 3 el modelo llegó a copiarla dentro de `accionVisual`, que es
+          // el campo de COREOGRAFÍA.
+          '  Describe ONLY the object itself, never the photograph: no surface it rests on,',
+          '  no shadow it casts, no lighting direction, no camera angle, no background, and',
+          '  never say whether it is floating. In the video it will be held in someone’s',
+          '  hand in a room, so the catalogue shot it came from is not part of it.',
           '',
           // ⚠️ ESTE CAMPO ES UNA TRANSCRIPCIÓN, NO UNA RESEÑA — y el prompt de video nunca
           // lo decía. Medido contra el de anuncios, que sí lo pide: anuncios transcribe en
@@ -122,7 +135,9 @@ export async function POST(
     await updateVideoSession(id, {
       step: STEP.CHARACTER,
       product_url: productUrl,
-      product_scan: scan,
+      // La lectura ya lo limpia (`getVideoSession`), pero persistirlo limpio evita que la
+      // frase quede guardada esperando a que alguien lea la columna por otro camino.
+      product_scan: limpiarProductScan(scan),
       product_name: productName,
       what_it_does: whatItDoes,
       angle,

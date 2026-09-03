@@ -1017,10 +1017,20 @@ describe('buildForensicInstruction — los cortes largos van por tramos', () => 
 
   it('pide tramos con marca de tiempo por encima de 10 segundos', () => {
     expect(p).toMatch(/SI EL CORTE PASA DE 10 SEGUNDOS, DESCRÍBELO POR TRAMOS/)
-    expect(p).toContain('0-4 s:')
+    expect(p).toContain('0-2 s:')
   })
 
   it('mantiene la cuenta de movimientos por segundo', () => {
     expect(p).toMatch(/un movimiento por cada 2 segundos/i)
+  })
+
+  // ⚠️ EL INTERVALO DE LOS TRAMOS Y LA CUENTA DE MOVIMIENTOS TIENEN QUE PEDIR LO MISMO.
+  // Decían "un movimiento cada 2 segundos" y "un tramo cada 4 o 5": dos instrucciones que
+  // se contradicen, y gana la ESTRUCTURA porque es la que da la forma de la respuesta.
+  // Medido en `7e4ccbcf`: 18,7 s volvieron con 4 tramos y 7 movimientos = 0,37 mov/s contra
+  // los 0,50 pedidos — exactamente el techo que ponía el intervalo.
+  it('el intervalo de los tramos no contradice a la cuenta de movimientos', () => {
+    expect(p).toMatch(/un tramo por cada 2 segundos/i)
+    expect(p).not.toMatch(/tramo por cada 4 o 5/i)
   })
 })

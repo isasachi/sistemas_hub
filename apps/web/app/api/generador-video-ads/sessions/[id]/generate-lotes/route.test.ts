@@ -227,9 +227,13 @@ describe('POST generate-lotes — fix round 2: cuota por video, no por lote', ()
     vi.mocked(getVideoSession).mockResolvedValue(
       session({
         lotes: conPendiente(guardados) as unknown as VideoSessionResponse['lotes'],
-        // El caso normal de estas sesiones de prueba: un lote de una escena no necesita
-        // ancla, así que la lista guardada está vacía y tiene que reusarse igual.
-        frames: [],
+        // ⚠️ UNA ANCLA POR LOTE SALVO EL PRIMERO. Este fixture decía `frames: []` con el
+        // comentario "un lote de una escena no necesita ancla": era cierto cuando las
+        // anclas solo cubrían un cambio de escena DENTRO de un lote, y dejó de serlo cuando
+        // pasaron a anclar el fondo entre clips. Lo que el test protege no cambió —
+        // regenerarlas al reanudar cambiaría el aspecto del lote pendiente respecto de los
+        // ya pagados—, cambió cuántas hay que guardar para que el reuso aplique.
+        frames: guardados.slice(1).map((l) => `https://x.supabase.co/ancla-${l.n}-1.png`),
       } as never),
     )
     vi.mocked(generateImage).mockClear()
@@ -237,11 +241,15 @@ describe('POST generate-lotes — fix round 2: cuota por video, no por lote', ()
     const res = await POST(req({ resume: true }), ctx())
     expect(res.status).toBe(200)
     expect(generateImage).not.toHaveBeenCalled()
-    // El lote pendiente sigue recibiendo avatar y producto, en ese orden: es el contrato
-    // del que dependen la leyenda `@image(n)` y el índice de cada ancla.
+    // El lote pendiente recibe avatar, producto y DESPUÉS su ancla, en ese orden: es el
+    // contrato del que dependen la leyenda `@image(n)` y el índice de cada ancla. Y el
+    // ancla es la GUARDADA, no una nueva — que es el punto del test.
     const [creado] = vi.mocked(createVideoTask).mock.calls.slice(-1)
-    expect(creado[0].images.map((i) => i.url))
-      .toEqual(['https://x.supabase.co/character.png', 'https://x.supabase.co/product.png'])
+    expect(creado[0].images.map((i) => i.url)).toEqual([
+      'https://x.supabase.co/character.png',
+      'https://x.supabase.co/product.png',
+      `https://x.supabase.co/ancla-${guardados[1].n}-1.png`,
+    ])
   })
 
   it('resume:true SIN ningún taskId pagado se trata como intento nuevo: SÍ cobra', async () => {

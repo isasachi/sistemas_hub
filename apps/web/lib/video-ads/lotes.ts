@@ -168,11 +168,45 @@ const sanearDuracion = (d: number) => (Number.isFinite(d) && d > 0 ? d : DUR_FAL
  * los demás quedan sin línea de acción. Es peor que repartir y mucho mejor que duplicar:
  * una acción vacía omite una línea del prompt, una duplicada le pide al modelo hacer dos
  * veces lo mismo en la mitad del tiempo.
+ *
+ * ⚠️ HAY UN SEGUNDO SEPARADOR, Y NO TENERLO ERA UNA REGRESIÓN DE LA MEJORA DE FASE 1.
+ * Desde que el forense describe los cortes de más de 10 s **por tramos con marca de
+ * tiempo** (`0-5 s: …; 5-10 s: …`), el separador de un corte largo SIN fusionar ya no es
+ * ` Luego, ` sino el `;` delante del siguiente tramo. Esta función solo conocía el
+ * primero, así que veía UN tramo y se iba por la rama de "sin separador".
+ *
+ * Medido en la sesión `ca62aaed`: una toma de 20 s con sus cuatro tramos se partió en
+ * 11,6 + 6 + 2,3 s, el primer fragmento se llevó los 20 s de coreografía y **los otros dos
+ * — 8,3 s de video, el 18 % del anuncio — se renderizaron con la acción VACÍA**. Ahí el
+ * modelo improvisa, que es exactamente el *"se pierden movimientos"* reportado.
+ *
+ * ⚠️ Y ES UNA REGRESIÓN, no un hueco viejo: antes de que FASE 1 pidiera los tramos, un
+ * corte de 20 s llegaba como UNA frase de prosa y no había nada mejor que repartir. Ahora
+ * la información de tiempo existe y se estaba tirando.
  */
+/** El arranque de un tramo con marca de tiempo (`0-5 s:`, `10-15 s :`), tras `;` o punto. */
+const TRAMO_SEP = /\s*[;.]\s*(?=\d+\s*-\s*\d+\s*s\s*:)/gi
+/** La marca de tiempo misma, al principio de un tramo. */
+const TRAMO_MARCA = /^\d+\s*-\s*\d+\s*s\s*:\s*/i
+
 export function repartirAccion(accion: string, duraciones: number[]): string[] {
   const F = duraciones.length
   if (F <= 1) return [accion]
-  const segs = accion.split(' Luego, ').map((x) => x.trim()).filter(Boolean)
+  // Los dos separadores se normalizan a uno solo antes de partir, así conviven sin
+  // pelearse: un corte fusionado CUYOS tramos además vienen numerados existe en la base.
+  const segs = accion
+    .replace(TRAMO_SEP, ' Luego, ')
+    .split(' Luego, ')
+    // ⚠️ LA MARCA DE TIEMPO SE CAE AL PARTIR. Es relativa a la toma ENTERA, mientras que la
+    // duración de cada fragmento sale del reparto proporcional del texto hablado: un
+    // fragmento de 6 s que recibe "10-15 s: …" le pide al modelo que no haga nada durante
+    // los primeros diez segundos de un clip que dura seis. Ninguna re-numeración las vuelve
+    // ciertas — el fragmento no hereda la ventana de tiempo de sus tramos — y dos
+    // instrucciones que se contradicen en el mismo prompt es el modo de fallo que este repo
+    // ya registró cuatro veces. Mientras la toma NO se parte (`F <= 1`, arriba) las marcas
+    // se conservan intactas: ahí sí son ciertas, y son la mejora de FASE 1 funcionando.
+    .map((x) => x.trim().replace(TRAMO_MARCA, '').trim())
+    .filter(Boolean)
   if (segs.length <= 1) return duraciones.map((_, i) => (i === 0 ? accion : ''))
 
   // Cuántos tramos le tocan a cada fragmento, proporcional a su duración y por resto
@@ -501,6 +535,30 @@ const BLOQUE_OVERLAY_EN = [
 ]
 
 /**
+ * SONIDO — la única capa del clip que el prompt nunca nombró.
+ *
+ * `VOICE PROFILE` dice cómo suena la VOZ y la línea por toma dice qué se dice; del resto
+ * del audio no había ni una palabra, y grok genera la banda entera. Lo que llena ese
+ * silencio lo elige el modelo, y con la concatenación (`concat.ts`) eso pasó de ser un
+ * detalle a ser una costura: cuatro clips con cuatro camas de música distintas se oyen
+ * como cuatro anuncios pegados, que es justo lo que el video final viene a evitar.
+ *
+ * ⚠️ NO SE DERIVA DE UN CAMPO NUEVO DEL FORENSE, a propósito. Ese es el paso caro (manda
+ * el video a Gemini) y solo alcanzaría a los análisis NUEVOS: las sesiones guardadas
+ * seguirían sin audio descrito. Esta línea es fija y no re-describe la habitación — el
+ * escenario ya viaja arriba y las referencias lo muestran.
+ *
+ * ⚠️ SIN VERIFICAR. `probe-audio-espanol.ts` mide que grok DICE la locución en español
+ * palabra por palabra; que además honre una descripción de ambiente no lo mide nadie
+ * todavía. Es una hipótesis, no un arreglo medido.
+ */
+const BLOQUE_SONIDO_EN = [
+  'SOUND: real audio captured by the phone in this room — quiet natural room tone, plus',
+  'the foley the action makes (clothing rustle, the product picked up, opened, set down).',
+  'No background music, no sound-effects bed, no added reverb.',
+]
+
+/**
  * Niveles de detalle del prompt, de más a menos detallado.
  *
  * ⚠️ ESTA ESCALERA VOLVIÓ (2026-08-24) y no es opcional. Se había BORRADO con la
@@ -633,11 +691,44 @@ function microDe(m: Micro | undefined, cap: number | null): string {
   return partes.length ? `Micro-detail (reproduce exactly): ${partes.join(' · ')}` : ''
 }
 
+/**
+ * ⚠️ EL ESCENARIO YA NO VIAJA COMO TEXTO — MEDIDO CON 4 RENDERS (2026-09-02,
+ * `scripts/probe-setting.ts`).
+ *
+ * `SETTING AND LIGHTING: ${escenario}` salía de `forensic.fondo`, que describe el VIDEO
+ * ENTERO dentro del prompt de UN clip (de ahí el sillón de la sesión de ropa). Contra la
+ * imagen del avatar —que ES la escena, en píxeles— eso es una contradicción, y el modelo
+ * la resuelve distinto en cada draw. Ese es el mecanismo de la costura que se ve al
+ * concatenar: *"el FONDO cambia entre clips"*.
+ *
+ * A/B sobre el MISMO lote, quitando ESA LÍNEA y nada más, **dos draws por brazo** (la
+ * regla que impuso el probe del cap de 30: con uno solo se mide el seed, no el prompt):
+ *
+ *   avatar de referencia │ cocina blanca: alacenas, backsplash de mármol, refri de acero,
+ *                        │ olla terracota, banqueta de madera
+ *   A1 (con escenario)   │ pasillo con marco de puerta oscuro y espejo — NO es la cocina
+ *   A2 (con escenario)   │ otra habitación distinta — ni la cocina ni A1
+ *   B1 (sin escenario)   │ LA COCINA, exacta
+ *   B2 (sin escenario)   │ LA COCINA, exacta — idéntica a B1
+ *
+ * 2 de 2 en cada brazo. Con el bloque, el fondo no es ni el de la imagen ni el mismo
+ * entre draws; sin él, la imagen manda y el resultado es estable. Y de paso libera ~208
+ * caracteres (medidos) que van al presupuesto que se le come la coreografía.
+ *
+ * ⚠️ Lo que NO se tocó: `forensic.fondo` sigue alimentando el prompt del AVATAR
+ * (`character.ts`), que es donde el escenario del original SÍ tiene que entrar — es la
+ * mitad del arreglo de 2026-08-26 (*"el avatar contradecía al original"*). El escenario no
+ * desaparece del pipeline: deja de decirse dos veces y en dos idiomas distintos.
+ *
+ * ⚠️ CAVEAT DE LA MEDICIÓN: un lote, una sesión, y su avatar se generó 31 minutos ANTES de
+ * ese arreglo — o sea es el caso donde imagen y texto se contradicen. Con el avatar ya
+ * nacido en el escenario del original los dos coinciden y el bloque pasa a ser redundante
+ * en vez de contradictorio; en ninguno de los dos casos aporta.
+ */
 export function buildLotePrompt(args: {
   lote: Lote
   consistencyBlock: string
   productDesc: string
-  escenario: string
   camara: string
   voz: VoiceProfile
   /** Cómo se mueve. Null en sesiones anteriores a FASE 4.6: el bloque no se emite. */
@@ -662,7 +753,7 @@ export function buildLotePrompt(args: {
    */
   anclas?: Map<string, number>
 }): string {
-  const { lote, consistencyBlock, productDesc, escenario, camara, voz, movimiento, images, cortes } = args
+  const { lote, consistencyBlock, productDesc, camara, voz, movimiento, images, cortes } = args
 
   /**
    * VARIOS PERSONAJES. Quiénes salen en ESTE lote: la unión de los hablantes de sus
@@ -859,7 +950,6 @@ export function buildLotePrompt(args: {
       spec.productBlockEn,
       nivel >= NIVEL_PRODUCTO_FISICO ? productoFisico(productDesc) : productDesc,
       '',
-      `SETTING AND LIGHTING: ${escenario}`,
       // ⚠️ NO digas "estable". Durante mucho tiempo esta línea inyectaba esa palabra en
       // todos los prompts mientras el formato UGC se define por lo contrario: teléfono en
       // mano o apoyado, ángulo bajo, micro-temblor. Era pedirle trípode a un lenguaje
@@ -880,7 +970,12 @@ export function buildLotePrompt(args: {
         : [
             'CONTINUOUS TAKE: one single shot, no internal cuts, no jump cuts, no scene changes.',
           ]),
-      'CONTINUITY: character, product, wardrobe, setting and lighting identical throughout, exactly as above. Only the action advances.',
+      // ⚠️ APUNTA A LA IMAGEN, NO A UN BLOQUE DE TEXTO. Decía "exactly as above" cuando
+      // arriba había un `SETTING AND LIGHTING`; al quitarlo, esa referencia quedaría
+      // colgando — el modo de fallo que este repo ya registró tres veces (el `06c8259` de
+      // anuncios, `estable` contra el micro-temblor, "no reescribas" contra la sección que
+      // pide reescribir). Ahora nombra la fuente que de verdad manda.
+      'CONTINUITY: the room and lighting are the ones in the reference image; keep them, plus character, product and wardrobe, identical throughout. Only the action advances.',
       '',
       varios ? '' : 'VOICE PROFILE:',
       varios ? '' : `  Idioma: ${voz.idioma} · Variante: ${voz.varianteRegional} · Acento: ${voz.acento}`,
@@ -923,6 +1018,20 @@ export function buildLotePrompt(args: {
             '',
           ]
         : []),
+      // ⚠️ DEGRADA ANTES QUE LA COREOGRAFÍA PERO DESPUÉS DE LO QUE DUPLICA — y el escalón
+      // salió de una corrida real, no de una intuición. Puesto junto al guion global
+      // (`NIVEL_SIN_GUION_GLOBAL`), en una sesión de 4 lotes **sobrevivía en 2**: los otros
+      // dos degradaban por presupuesto y quedaban sin ninguna instrucción de audio. Un
+      // anuncio donde la mitad de los clips lleva ambiente pedido y la otra mitad lo que
+      // grok invente es exactamente la costura que este bloque vino a cerrar.
+      //
+      // Acá el orden de la escalera es su propia regla: lo que se suelta primero es lo que
+      // DUPLICA información. El guion global sale del mismo texto que las líneas por toma y
+      // el párrafo de overlay dice quince veces la misma orden; el sonido no lo nombra
+      // NADIE más. Así que sobrevive a los dos y cae recién cuando se empieza a recortar
+      // detalle real (`NIVEL_MICRO_CORTO`). Hasta ahí `accionVisual` sigue intacta en todos
+      // los niveles, así que este corrimiento no le quita ni un carácter a la coreografía.
+      ...(nivel < NIVEL_MICRO_CORTO ? BLOQUE_SONIDO_EN : []),
       ...bloqueOverlay(nivel),
     ].join('\n')
 

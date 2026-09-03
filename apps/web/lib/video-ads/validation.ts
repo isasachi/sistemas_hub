@@ -9,10 +9,17 @@ import type { UserInputs } from './types'
  * sería caro y, peor, abriría la puerta a que "rellene" lo que falta — exactamente
  * lo que la REGLA DE NO-ASUNCIÓN prohíbe.
  *
- * ⚠️ LA FILA DE ACENTO SE ELIMINÓ (2026-08-25, decisión del dueño del repo). El acento y
- * la voz eran dos campos del wizard —uno obligatorio y BLOQUEANTE— y ahora la voz sale de
- * un perfil fijo en español (`VOZ_POR_DEFECTO`, character.ts). Revierte a propósito una
- * regla que este repo tenía como dura.
+ * ⚠️ LAS FILAS DE ACENTO Y DE VOZ SE ELIMINARON (acento 2026-08-25, voz 2026-09-02, las
+ * dos por decisión del dueño del repo). El acento y la voz eran dos campos del wizard
+ * —uno obligatorio y BLOQUEANTE— y ahora la voz sale de un perfil fijo en español
+ * (`VOZ_POR_DEFECTO`, character.ts). Revierte a propósito una regla que este repo tenía
+ * como dura.
+ *
+ * La fila de voz sobrevivió a aquel cambio como vestigio: su campo salió del wizard, así
+ * que `inputs.voice` no lo llenaba NADIE y la fila imprimía "No especificada" en todas las
+ * sesiones. Una fila que siempre dice lo mismo no es una confirmación, es ruido en la
+ * pantalla donde el usuario revisa lo que sí decidió. Era `critica: false`, así que
+ * quitarla no puede cambiar si el gate deja pasar.
  *
  * La ETNIA no se tocó y sigue siendo la fila que NUNCA puede marcarse CONFIRMADA desde la
  * referencia: es lo que sostiene la REGLA DE NO-ASUNCIÓN, y con varios personajes es lo
@@ -91,8 +98,6 @@ export function buildValidationMatrix(
     row('Público objetivo', inputs.targetAudience, 'USUARIO'),
     row('Problema / deseo', inputs.problem, 'USUARIO'),
     ...filasDePersonajes,
-    // La voz es el único campo que el spec marca "SOLO SI ES RELEVANTE".
-    { variable: 'Voz', valor: filled(inputs.voice) ? inputs.voice : 'No especificada', fuente: 'USUARIO', estado: 'CONFIRMADA', critica: false },
   ]
 
   return {
