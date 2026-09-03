@@ -197,12 +197,29 @@ export function scriptFingerprint(input: {
     // invisible para ella: sin este bump, reanudar a través del cambio pegaría un clip de
     // 30 s con la voz vieja a uno de 15 s con la nueva mientras `isPaidResume` jura que es
     // el mismo contenido. Los parciales anteriores cuentan como generación nueva.
-    'v10',
+    // v10 → v11: CUATRO cambios que la huella no vería sola. (a) el prompt del lote gana un bloque SOUND
+    // (ambiente + foley + nada de música), porque el clip trae su propia banda de audio y
+    // hasta ahora nadie la describía; (b) SALE el bloque `SETTING AND LIGHTING` — medido
+    // con 4 renders, con la descripción puesta el fondo no era ni el de la imagen ni el
+    // mismo entre draws (ver `buildLotePrompt`). La huella hashea INSUMOS y no el texto
+    // producido, así que los dos le son invisibles: sin el bump, reanudar a través de este
+    // cambio pegaría un clip en otra habitación y con la banda que grok se inventó a uno
+    // con la habitación de la referencia y el ambiente pedido, mientras `isPaidResume`
+    // jura que es el mismo contenido — y con la concatenación eso se ve Y se oye.
+    // (c) `repartirAccion` aprende el separador de tramos, así que el reparto de una toma
+    // larga entre fragmentos CAMBIA (y con él la coreografía que recibe cada lote); (d) con
+    // UN personaje la voz sale íntegra de `VOZ_POR_DEFECTO`, o sea los 13 campos que la
+    // huella hashea uno por uno se mueven. Los parciales anteriores cuentan como generación
+    // nueva, fail-closed.
+    'v11',
     // Pasa por `toNiche`: un nicho BLOQUEADO se renderiza como suplementos, así que su
     // huella tiene que ser la de suplementos. Sin esto, una sesión guardada como 'ropa'
     // con lotes ya pagados reanudaría pegando un clip del camino de prenda a uno del
     // camino de objeto, con la huella jurando que es el mismo contenido.
     toNiche(input.niche),
+    // ⚠️ `escenario` SIGUE EN LA HUELLA aunque ya NO entre al prompt del lote: alimenta el
+    // prompt del AVATAR, y el avatar es la imagen de la que ahora sale la escena. Sacarlo
+    // haría la reanudación menos conservadora, nunca más — y ese no es el lado correcto.
     consistencyBlock, productDesc, escenario,
     voz.idioma, voz.varianteRegional, voz.acento, voz.pronunciacion, voz.ritmo,
     voz.velocidad, voz.entonacion, voz.energia, voz.pausas, voz.tono, voz.timbre,

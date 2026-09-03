@@ -141,8 +141,10 @@ export async function POST(
       ...personaje,
       avatarUrl: avatares[i],
       consistencyBlock: identidad.bloqueConsistencia,
-      // La voz sale del perfil fijo de su sexo (`VOZ_POR_DEFECTO`), no del modelo.
-      voiceProfile: vozDe(identidad),
+      // La voz sale del perfil fijo de su sexo (`VOZ_POR_DEFECTO`), no del modelo. Los dos
+      // campos que el modelo sí aporta solo entran cuando hay de quién diferenciarse: con
+      // un personaje son variación pura en un anuncio que se renderiza clip por clip.
+      voiceProfile: vozDe(identidad, conIdentidad.length > 1),
       motionProfile: identidad.movimiento,
     }))
     const [principal] = personajes

@@ -116,8 +116,30 @@ export function anchorSpecs(args: {
     claseAnterior = c
     planoAnterior = plano
 
-    // La primera escena del lote arranca del avatar; solo las siguientes necesitan ancla.
-    if (primera || !cambia) continue
+    /**
+     * ⚠️ CADA LOTE ABRE CON SU PROPIA ANCLA, SALVO EL PRIMERO — y esto es lo que ancla el
+     * FONDO entre clips.
+     *
+     * Antes solo se generaba ancla para un cambio de escena DENTRO de un lote, así que con
+     * `maxPlanos = 1` casi nunca se generaba ninguna (medido: **0 anclas** en las dos
+     * sesiones nuevas) y los N clips arrancaban del avatar solo por texto. Resultado
+     * medido en la sesión `7e4ccbcf`: la persona, el suéter y el producto se sostienen en
+     * los 5 clips, pero **el fondo deriva** — marco de puerta, dos cuadros, una puerta
+     * blanca, una planta. Grok re-imagina el entorno en cada render.
+     *
+     * ✅ La premisa se midió antes de cablear esto (`scripts/probe-anclas.ts`, 2 imágenes):
+     * dos anclas generadas desde el MISMO avatar conservan su habitación — mismo marco de
+     * puerta, misma pared, misma luz. **gpt-image-2 conserva el escenario al editar; grok
+     * lo re-inventa al generar video.** Esa diferencia es la que hace que esto funcione, y
+     * NO se podía heredar: la medición que había en AGENTS.md era de Nano Banana Pro.
+     *
+     * El PRIMER lote no lleva ancla a propósito: arranca del avatar, que ya ES una imagen
+     * válida de esa escena. Generarle una sería pagar por una copia.
+     *
+     * Cuesta N−1 imágenes por sesión, las paga el hub. Es el precio del eje.
+     */
+    const abreLote = primera && lote.n > 1
+    if (!abreLote && (primera || !cambia)) continue
     if (specs.length >= MAX_IMAGES - 2) {
       // ⚠️ SE LOGUEA, no se traga. Un recorte silencioso "se lee como que cubrimos todo"
       // cuando no: las escenas que se quedan sin ancla vuelven a depender solo del texto,

@@ -126,6 +126,12 @@ export async function POST(
   const productDesc = session.product_scan?.productDescription ?? adapted.tomas[0]?.producto ?? 'el producto'
   // El `fondo` del forense incluye la iluminación (su prompt la pide ahí dentro), por
   // eso el prompt del lote lo rotula "ESCENARIO E ILUMINACIÓN".
+  // ⚠️ YA NO ENTRA AL PROMPT DEL LOTE — desde que el escenario lo define la imagen (ver
+  // `buildLotePrompt`), su ÚNICO consumidor es `scriptFingerprint`. Se conserva prosificado
+  // y con su default a propósito: es un valor estable por sesión, y dejarlo en la huella
+  // solo hace la reanudación MÁS conservadora (re-analizar la referencia invalida un
+  // parcial), que es el lado correcto. Su lugar vivo en el pipeline es el prompt del
+  // AVATAR, en `character.ts`.
   const escenario = enProsa(session.forensic_analysis?.fondo) || 'interior con luz natural'
   const cortes = session.forensic_analysis?.cortes ?? []
   // ⚠️ NO se pasa `cortes[0].camara` como fallback: mandar el encuadre del corte 1 a todos
@@ -464,7 +470,6 @@ export async function POST(
           lote: loteParaPrompt,
           consistencyBlock: session.consistency_block,
           productDesc,
-          escenario,
           camara: camaras[i],
           voz: session.voice_profile,
           movimiento: session.motion_profile,

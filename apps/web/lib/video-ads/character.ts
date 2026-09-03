@@ -71,14 +71,51 @@ export const VOZ_POR_DEFECTO: Record<'hombre' | 'mujer', VoiceProfile> = {
   },
 }
 
-/** La voz de un personaje: el perfil fijo de su sexo, con lo que el modelo pudo aportar
- *  para diferenciarlo de los demás. */
-export function vozDe(id: { sexoVocal: 'hombre' | 'mujer'; edadVocal?: string; timbre?: string }): VoiceProfile {
+/**
+ * La voz de un personaje.
+ *
+ * ⚠️ CON UN SOLO PERSONAJE SALE ÍNTEGRA DE `VOZ_POR_DEFECTO`, sin una palabra del modelo.
+ * `edadVocal` y `timbre` existen por UNA razón —que dos personajes del mismo sexo no
+ * suenen idénticos en el mismo anuncio— y con uno solo no hay de quién diferenciarse: son
+ * variación pura, y variación es exactamente lo que no se quiere en un anuncio que se
+ * renderiza clip por clip y después se concatena. Medido: de **18 sesiones con lista de
+ * personajes, NINGUNA tiene más de uno**, así que en la práctica esto vuelve la voz
+ * idéntica en todas las sesiones y en todos sus lotes.
+ *
+ * ⚠️ Y EL CAMPO LIBRE SE CONTRADECÍA CON EL PERFIL FIJO, que es el defecto de verdad.
+ * Medido en la sesión `ca62aaed`, el mismo bloque llevaba `entonacion: "Natural y cercana,
+ * SIN locución publicitaria"` (fijo) junto a `timbre: "…con una entonación natural y
+ * expresiva propia de una LOCUCIÓN de redes sociales"` (del modelo): dos instrucciones
+ * opuestas dentro del mismo prompt, el modo de fallo que este repo ya registró cuatro
+ * veces. El modelo infla ese campo la mitad de las veces — **10 de 35 perfiles guardados
+ * traen un `timbre` de más de 40 caracteres, contra los 24 del fijo**.
+ *
+ * Cuando SÍ hay varios personajes los diferenciadores se conservan (es su motivo de ser)
+ * pero recortados: un timbre es una etiqueta corta, no una frase de estilo con opiniones
+ * sobre la locución. El corte es duro y por palabra para que no quede una frase a medias.
+ */
+const TIMBRE_MAX = 40
+
+function etiquetaCorta(v: string | undefined, porDefecto: string): string {
+  const t = v?.trim()
+  if (!t) return porDefecto
+  if (t.length <= TIMBRE_MAX) return t
+  const corte = t.slice(0, TIMBRE_MAX)
+  const espacio = corte.lastIndexOf(' ')
+  return (espacio > 0 ? corte.slice(0, espacio) : corte).replace(/[,;:.]$/, '')
+}
+
+export function vozDe(
+  id: { sexoVocal: 'hombre' | 'mujer'; edadVocal?: string; timbre?: string },
+  /** ¿Hay más de un personaje del que diferenciarse? Con uno solo, la voz es la fija. */
+  diferenciar = false,
+): VoiceProfile {
   const base = VOZ_POR_DEFECTO[id.sexoVocal] ?? VOZ_POR_DEFECTO.mujer
+  if (!diferenciar) return base
   return {
     ...base,
-    edadVocal: id.edadVocal?.trim() || base.edadVocal,
-    timbre: id.timbre?.trim() || base.timbre,
+    edadVocal: etiquetaCorta(id.edadVocal, base.edadVocal),
+    timbre: etiquetaCorta(id.timbre, base.timbre),
   }
 }
 

@@ -28,10 +28,26 @@ describe('primeraAccion', () => {
 describe('anchorSpecs', () => {
   const planos = new Map([['t1', 'Plano medio'], ['t2', 'Plano medio'], ['t3', 'Primer plano']])
 
-  // La primera escena arranca del avatar, que ya viaja como @image(1) en todos los lotes.
-  it('un lote de una sola escena no necesita ninguna ancla', () => {
+  // El PRIMER lote arranca del avatar, que ya viaja como @image(1) y ya ES una imagen
+  // válida de esa escena: generarle un ancla sería pagar por una copia.
+  it('el primer lote no necesita ninguna ancla', () => {
     const lote = groupIntoLotes([toma(1, 't1', PERSONA), toma(2, 't2', PERSONA)])[0]
     expect(anchorSpecs({ lote, planoPorTiempo: planos, productDesc: 'frasco' })).toEqual([])
+  })
+
+  // ⚠️ EL EJE QUE ANCLA EL FONDO ENTRE CLIPS. Sin esto, con `maxPlanos = 1` un lote de una
+  // sola escena no generaba ninguna ancla — medido, **0 anclas en dos sesiones enteras** —
+  // y cada clip re-imaginaba el entorno: en `7e4ccbcf` los 5 clips conservaron la persona y
+  // el suéter pero pasaron por un marco de puerta, dos cuadros, una puerta blanca y una
+  // planta. La premisa se midió antes de cablearlo: dos anclas generadas desde el mismo
+  // avatar conservan su habitación (gpt-image-2 conserva al editar; grok re-inventa al
+  // generar video).
+  it('todo lote que no sea el primero abre con su propia ancla', () => {
+    const base = groupIntoLotes([toma(1, 't1', PERSONA), toma(2, 't2', PERSONA)])[0]
+    const specs = anchorSpecs({ lote: { ...base, n: 3 }, planoPorTiempo: planos, productDesc: 'frasco' })
+    expect(specs).toHaveLength(1)
+    expect(specs[0].tiempo).toBe('t1')
+    expect(specs[0].soloProducto).toBe(false)
   })
 
   it('un cambio de encuadre abre una escena nueva y pide su ancla', () => {

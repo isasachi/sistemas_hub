@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildIdentityInstruction, buildCharacterParts, CharacterIdentitySchema, ACENTO_PENDIENTE } from './character'
+import { buildIdentityInstruction, buildCharacterParts, CharacterIdentitySchema, ACENTO_PENDIENTE, vozDe, VOZ_POR_DEFECTO } from './character'
 import type { UserInputs } from './types'
 import type { ForensicReport } from './forensic'
 import type { Personaje } from './personajes'
@@ -380,5 +380,39 @@ describe('buildIdentityInstruction — el ritmo tiene que llegar al movimiento',
 
   it('prohíbe la etiqueta genérica que devuelve todo video', () => {
     expect(p).toMatch(/PROHIBIDO responder solo "movimientos fluidos y continuos"/)
+  })
+})
+
+describe('vozDe — la voz es estándar salvo que haya de quién diferenciarse', () => {
+  const identidad = {
+    sexoVocal: 'mujer' as const,
+    edadVocal: '30 años',
+    // El valor REAL de la sesión `ca62aaed`: no es un timbre, es una frase de estilo — y
+    // contradice al `entonacion` del perfil fijo ("sin locución publicitaria").
+    timbre: 'Voz clara, brillante y con matiz cálido, con una entonación natural y expresiva propia de una locución de redes sociales.',
+  }
+
+  it('con UN personaje devuelve el perfil fijo, sin una palabra del modelo', () => {
+    expect(vozDe(identidad)).toEqual(VOZ_POR_DEFECTO.mujer)
+  })
+
+  it('la voz fija es la misma para dos sesiones distintas', () => {
+    const otra = { sexoVocal: 'mujer' as const, edadVocal: '41 años', timbre: 'Otra cosa larguísima que el modelo inventó' }
+    expect(vozDe(identidad)).toEqual(vozDe(otra))
+  })
+
+  // ⚠️ El campo NO contradice al perfil fijo: por eso se recorta en vez de copiarse. Con la
+  // frase entera, el mismo bloque decía "sin locución publicitaria" y "propia de una
+  // locución de redes sociales".
+  it('con VARIOS personajes conserva los diferenciadores, pero como etiqueta corta', () => {
+    const v = vozDe(identidad, true)
+    expect(v.edadVocal).toBe('30 años')
+    expect(v.timbre.length).toBeLessThanOrEqual(40)
+    expect(v.timbre).not.toContain('locución')
+    expect(v.timbre).not.toMatch(/[,;:.]$/)
+  })
+
+  it('sin diferenciadores del modelo cae al fijo aunque se pida diferenciar', () => {
+    expect(vozDe({ sexoVocal: 'hombre' }, true)).toEqual(VOZ_POR_DEFECTO.hombre)
   })
 })

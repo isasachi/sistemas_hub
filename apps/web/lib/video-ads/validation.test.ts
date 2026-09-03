@@ -55,10 +55,13 @@ describe('buildValidationMatrix', () => {
     expect(m.rows.find((r) => r.variable === 'Personaje')!.estado).toBe('PENDIENTE')
   })
 
-  it('la voz es opcional: vacía no bloquea', () => {
-    const m = buildValidationMatrix({ ...FULL, voice: '' }, false)
-    const row = m.rows.find((r) => r.variable === 'Voz')!
-    expect(row.estado).toBe('CONFIRMADA')
+  // ⚠️ LA FILA DE VOZ SE ELIMINÓ y esta aserción la reemplaza en vez de aflojarse: el campo
+  // salió del wizard en 2026-08-25, así que `inputs.voice` no lo llenaba nadie y la fila
+  // imprimía "No especificada" en TODAS las sesiones. Lo que hay que fijar ahora es que no
+  // vuelva, y que su ausencia no cambie el gate (era `critica: false`).
+  it('no muestra una fila de voz: la voz ya no la elige el usuario', () => {
+    const m = buildValidationMatrix({ ...FULL, voice: 'grave y pausada' }, false)
+    expect(m.rows.find((r) => r.variable === 'Voz')).toBeUndefined()
     expect(canProceed(m)).toBe(true)
   })
 })

@@ -266,7 +266,6 @@ const VOZ = {
 const ARGS = {
   consistencyBlock: BLOQUE,
   productDesc: 'Frasco de vidrio celeste de 30 ml con gotero blanco y etiqueta "EUNOIA".',
-  escenario: 'Dormitorio con pared clara y repisas blancas',
   camara: 'Primer plano, altura de ojos, cámara en mano',
   voz: VOZ,
   images: [
@@ -316,20 +315,37 @@ describe('buildLotePrompt', () => {
     expect(p).toContain('Perú - Lima')
   })
 
-  // El spec lista "Iluminación" como bloque obligatorio de cada lote. El `fondo` del
-  // forense ya la describe (su prompt la pide ahí), así que lo que faltaba era el
-  // rótulo — sacarla a un campo propio obligaría a re-correr el análisis forense de
-  // cada sesión guardada, que es el paso caro.
-  it('rotula la iluminación junto al escenario', () => {
-    expect(p).toContain(`SETTING AND LIGHTING: ${ARGS.escenario}`)
+  // ⚠️ ESTE TEST AFIRMABA QUE EL ESCENARIO VIAJA Y AHORA AFIRMA LO CONTRARIO, por una
+  // medición de 4 renders (ver el bloque de `buildLotePrompt`): con la descripción puesta
+  // el fondo no era ni el de la imagen ni el mismo entre draws; sin ella, la imagen manda
+  // y los dos draws dan la misma habitación. La escena la define el píxel, no la prosa.
+  it('no describe el escenario: lo define la imagen de referencia', () => {
+    expect(p).not.toContain('SETTING AND LIGHTING')
+    // Y la continuidad tiene que apuntar a la imagen, no a un bloque que ya no existe:
+    // una referencia colgando ("exactly as above") es el fallo que este repo ya registró
+    // tres veces.
+    expect(p).not.toContain('exactly as above')
+    expect(p).toMatch(/CONTINUITY: the room and lighting are the ones in the reference image/)
   })
 
   // Bloque "Continuidad" del spec: qué debe permanecer idéntico durante todo el lote.
   it('declara qué no puede cambiar dentro del clip', () => {
     expect(p).toContain('CONTINUITY:')
-    for (const invariante of ['character', 'product', 'wardrobe', 'setting', 'lighting']) {
+    for (const invariante of ['character', 'product', 'wardrobe', 'room', 'lighting']) {
       expect(p.slice(p.indexOf('CONTINUITY:'), p.indexOf('VOICE AND ACCENT'))).toContain(invariante)
     }
+  })
+
+  // El clip trae su propia banda de audio y hasta este cambio el prompt no decía una
+  // palabra de ella: lo que llenara el silencio lo elegía el modelo. Con la
+  // concatenación, cuatro clips con cuatro camas de música distintas se oyen como cuatro
+  // anuncios pegados.
+  it('describe el sonido del clip, no solo lo que se dice', () => {
+    const sonido = p.slice(p.indexOf('SOUND:'))
+    expect(p).toContain('SOUND:')
+    expect(sonido).toContain('room tone')
+    expect(sonido).toContain('foley')
+    expect(sonido).toContain('No background music')
   })
 
   it('entra en el tope de prompt de KIE', () => {
@@ -392,6 +408,13 @@ describe('buildLotePrompt', () => {
     // 4. Y algo SÍ se cedió — si no, este test no estaría probando la escalera.
     const cedioAlgo = p.includes('…') || !p.includes(productoLargo) || !p.includes('FULL SPOKEN SCRIPT')
     expect(cedioAlgo).toBe(true)
+
+    // 5. SOUND SOBREVIVE al guión global, nunca al revés: aquél duplica las líneas por
+    //    toma, el sonido no lo nombra nadie más. Medido en una corrida real, compartir
+    //    escalón lo dejaba en 2 de 4 lotes — la mitad del anuncio con el ambiente que grok
+    //    invente. Acá la presión llega más abajo que los dos, así que lo que se fija es la
+    //    IMPLICACIÓN: no puede existir un nivel con guión global y sin sonido.
+    expect(!p.includes('FULL SPOKEN SCRIPT') || p.includes('SOUND:')).toBe(true)
   })
 
   // `duracionSeg` sale de un reparto proporcional y llegaba cruda al prompt: medido,
@@ -440,12 +463,16 @@ describe('buildLotePrompt', () => {
 // dan al modelo la escena en píxeles, que le gana a cualquier descripción.
 describe('buildLotePrompt — el escenario', () => {
   const lote = groupIntoLotes([toma(1, 4, 'Hola.')])[0]
-  const conSillon = 'Pared lisa. Paredes lisas, tela suave del sillón, baldosas pulidas.'
 
-  it('manda la descripción del fondo: es lo único que define la escena', () => {
-    const p = buildLotePrompt({ lote, ...ARGS, escenario: conSillon })
-    expect(p).toContain(conSillon)
-    expect(p).toContain('SETTING AND LIGHTING')
+  // ⚠️ LA DEUDA SE CERRÓ QUITANDO EL BLOQUE, no limpiando el texto. `forensic.fondo`
+  // describe el VIDEO ENTERO y ninguna limpieza lo acota a un clip (medido: el campo
+  // `texturas` de la sesión de ropa decía "Paredes lisas, tela suave del sillón, baldosas
+  // pulidas", con el sillón a mitad de frase). Ahora la escena la dan las imágenes, que le
+  // ganan a cualquier descripción — y el A/B de 4 renders lo confirmó: con el bloque, dos
+  // draws dieron dos habitaciones distintas y ninguna era la de la referencia.
+  it('ninguna cadena del fondo del forense puede llegar al prompt', () => {
+    const p = buildLotePrompt({ lote, ...ARGS })
+    for (const rastro of ['sillón', 'baldosas', 'SETTING AND LIGHTING']) expect(p).not.toContain(rastro)
   })
 })
 
@@ -738,6 +765,43 @@ describe('repartirAccion', () => {
 
   it('un solo fragmento devuelve la acción intacta', () => {
     expect(repartirAccion(a, [10])).toEqual([a])
+  })
+
+  // ⚠️ REGRESIÓN DE LA MEJORA DE FASE 1, con datos reales de la sesión `ca62aaed`.
+  // Desde que el forense describe los cortes largos POR TRAMOS con marca de tiempo, el
+  // separador dejó de ser ` Luego, ` (que lo escribe `mergeMicroCortes` al fusionar) y pasó
+  // a ser `; ` delante del siguiente tramo. `repartirAccion` no lo conocía, así que veía UN
+  // solo tramo y mandaba los 20 s de coreografía al primer fragmento: medido, los otros dos
+  // fragmentos (8,3 s de video) salieron a renderizar con la acción VACÍA.
+  const tramos = '0-5 s: aplica con la mano derecha una gota en el rostro; 5-10 s: distribuye el suero con movimientos circulares en pómulos y cuello; 10-15 s: habla mirando a cámara mientras sostiene el frasco con la mano izquierda; 15-20 s: finaliza tocando su barbilla y rostro, mostrando luminosidad.'
+
+  it('reconoce los tramos con marca de tiempo como separador', () => {
+    const out = repartirAccion(tramos, [11.6, 6, 2.3])
+    for (const x of out) expect(x).not.toBe('')
+    expect(out[0]).toContain('aplica con la mano derecha una gota en el rostro')
+    expect(out.at(-1)).toContain('finaliza tocando su barbilla')
+  })
+
+  // ⚠️ LAS MARCAS SE CAEN AL PARTIR, y no es cosmética. Son relativas a la toma ENTERA,
+  // mientras que la duración de cada fragmento sale del reparto proporcional del texto
+  // hablado: un fragmento de 6 s que recibe "10-15 s: …" le está pidiendo al modelo que no
+  // haga nada durante los primeros diez segundos de un clip que dura seis. Ninguna
+  // re-numeración las vuelve ciertas, y dos instrucciones que se contradicen dentro del
+  // mismo prompt es el modo de fallo que este repo ya registró cuatro veces. Mientras la
+  // toma NO se parte, las marcas se conservan: ahí sí son ciertas.
+  it('al partir quita las marcas de tiempo, que ya no corresponden', () => {
+    const out = repartirAccion(tramos, [11.6, 6, 2.3])
+    for (const x of out) expect(x).not.toMatch(/\d+\s*-\s*\d+\s*s\s*:/)
+    expect(repartirAccion(tramos, [20])).toEqual([tramos])
+  })
+
+  // Un corte FUSIONADO cuyos tramos además vienen numerados: existe en la base (1 de 215).
+  // Los dos separadores tienen que convivir, no pelearse.
+  it('convive con los dos separadores a la vez', () => {
+    const mixto = `0-3 s: sujeta el frasco; 3-7 s: lo acerca a la mejilla Luego, gira el frasco para mostrar la etiqueta`
+    const out = repartirAccion(mixto, [5, 5, 5])
+    expect(out.filter(Boolean)).toHaveLength(3)
+    expect(out[2]).toContain('gira el frasco')
   })
 })
 

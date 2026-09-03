@@ -1041,13 +1041,27 @@ export function buildForensicInstruction(): string {
     // respuesta, no en la instrucción. Pedirle "más" otra vez no mueve la aguja; darle una
     // ESTRUCTURA donde colgarlas, sí: dividir el corte en tramos con su marca de tiempo
     // convierte "describí más" en "describí cada tramo", que es una tarea distinta.
+    //
+    // ⚠️ Y EL INTERVALO ERA EL QUE PONÍA EL TECHO: la estructura decía "un tramo cada 4 o 5
+    // segundos" mientras la cuenta de arriba pide "un movimiento cada 2". Las dos
+    // instrucciones se contradicen y gana la estructura, porque es la que da la forma de la
+    // respuesta. Medido en la sesión `7e4ccbcf`: un corte de 18,7 s volvió con 4 tramos y 7
+    // movimientos — **0,37 mov/s contra los 0,50 pedidos**, o sea exactamente lo que el
+    // intervalo permitía. Con el intervalo alineado a la cuenta, las dos piden lo mismo.
+    //
+    // ⚠️ QUÉ MIRAR EN LA PRÓXIMA CORRIDA: el techo de cláusulas por respuesta puede
+    // reaparecer por el otro lado — más tramos, menos contenido en cada uno, mismo total.
+    // Un corte de ~19 s tiene que volver con ~9 tramos y ~14 movimientos. Si vuelve con 9
+    // tramos de dos palabras, se cambió detalle por estructura y hay que revertir. Se lee
+    // en la línea de `coreografiaEscasa` del log, no hace falta un probe.
     '⚠️ SI EL CORTE PASA DE 10 SEGUNDOS, DESCRÍBELO POR TRAMOS, con su marca de tiempo',
     'dentro del corte y en orden. No es un pedido de estilo: sin la estructura, una toma de',
     '20 segundos se describe con las mismas cuatro frases que una de 5, y se pierden 15',
     'segundos de movimiento.',
-    '  Formato: "0-4 s: …; 4-9 s: …; 9-14 s: …; 14-20 s: …"',
-    '  Un tramo por cada 4 o 5 segundos, y dentro de cada uno el detalle de siempre: qué',
-    '  mano, cómo agarra, hacia dónde mira, dónde cae en el cuadro.',
+    '  Formato: "0-2 s: …; 2-4 s: …; 4-6 s: …; 6-8 s: …"',
+    '  Un tramo por cada 2 segundos — la MISMA cuenta que se pide arriba, no otra: un corte',
+    '  de 20 s son 10 tramos. Dentro de cada uno, el detalle de siempre: qué mano, cómo',
+    '  agarra, hacia dónde mira, dónde cae en el cuadro.',
     '',
     'Un ejemplo del nivel esperado: "sostiene el frasco con la mano derecha por el cuerpo,',
     'lo levanta hasta la altura del mentón y lo gira un cuarto de vuelta para que la',

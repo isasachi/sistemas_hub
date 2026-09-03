@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { limpiarProductScan } from './product-scan'
 import type { VideoSessionResponse } from './types'
 
 // Cliente lazy singleton dedicado al wizard de video (espeja landing/db.ts).
@@ -78,7 +79,14 @@ export async function getVideoSession(id: string, uid: string | null): Promise<V
     .eq('user_id', uid)
     .single()
   if (error) return null
-  return data as VideoSessionResponse
+  const row = data as VideoSessionResponse
+  // ⚠️ SE NORMALIZA AL LEER, EN UNA SOLA PUERTA — mismo criterio que `aKind` en anuncios.
+  // El scan describe de paso la puesta en escena de la FOTO del producto (la superficie,
+  // la sombra, "No está flotando"), y eso viaja al prompt de CADA lote como si fuera parte
+  // del envase. Medido: 9 de 35 scans guardados. Limpiarlo acá los repara todos sin
+  // migración y sin re-correr una llamada de visión pagada; los dos consumidores
+  // (`generate-lotes` y `adapt-script`) leen por esta función.
+  return { ...row, product_scan: limpiarProductScan(row.product_scan) }
 }
 
 /**

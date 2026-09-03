@@ -427,6 +427,61 @@ Cuatro condiciones, todas COMPARACIONES y no criterios — es la "matemática" q
 
 ⚠️ **Y `mergeMicroCortes` NO PUEDE FABRICAR UNA TOMA QUE EL REPARTO TENGA QUE VOLVER A PARTIR.** `MIN_TOMA_SEG = 4` se calibró contra el cap de 30 s; con 15, fusionar tres cortes en 17,4 s es pura pérdida — `splitLongToma` la vuelve a cortar enseguida y en el camino ya se descartó el encuadre de los cortes absorbidos. Ahora acepta un `maxSeg` (`Infinity` por defecto, para no tocar a ningún caller existente) y `extract-template` le pasa `LOTE_MAX_SEC`.
 
+⚠️ **EL INTERVALO DE LOS TRAMOS PONÍA EL TECHO DE LA DENSIDAD, Y SE CONTRADECÍA CON LA CUENTA (2026-09-02).** Reportado como *"los movimientos se sienten estirados en una línea de tiempo más extensa, da impresión de lentitud"*.
+
+El prompt de FASE 1 pedía **un movimiento cada 2 segundos** (0,50 mov/s) y, tres párrafos más abajo, **un tramo cada 4 o 5 segundos**. Se contradicen, y **gana la estructura**, porque es la que da la forma de la respuesta. Medido en la sesión `7e4ccbcf`: un corte de 18,7 s volvió con **4 tramos y 7 movimientos = 0,37 mov/s**, exactamente el techo que el intervalo permitía. Con el intervalo alineado a la cuenta, las dos piden lo mismo. Es la sexta vez que este documento registra dos instrucciones opuestas dentro del mismo prompt.
+
+⚠️ **QUÉ MIRAR EN LA PRÓXIMA CORRIDA, porque el techo puede reaparecer por el otro lado:** la estructura existe porque el modelo se topa en ~4-5 cláusulas por respuesta. Un corte de ~19 s tiene que volver con **~9 tramos y ~14 movimientos**; si vuelve con 9 tramos de dos palabras, se cambió detalle por estructura y hay que revertir. Se lee en la línea de `coreografiaEscasa` del log, no hace falta un probe. **Solo alcanza a análisis NUEVOS.**
+
+❌ **LO QUE NO ERA: el desajuste entre la duración del clip y la de sus tramos.** Se propuso alinear las dos y se descartó al medirlo: en la sesión reportada el estiramiento máximo es **1,10×** y dos de cuatro fragmentos están COMPRIMIDOS, no estirados. El desajuste grande (1,45× y 0,44×) es de otra sesión que nadie objetó. No vale 40 líneas de algoritmo para el 10 % mientras la brecha real es 0,27 contra 0,50 mov/s.
+
+⚠️ **CADA LOTE ABRE CON SU PROPIA ANCLA, SALVO EL PRIMERO — y esto es lo que ancla el FONDO entre clips (2026-09-02, decisión del dueño del repo).** Las anclas solo se generaban para un cambio de escena DENTRO de un lote, así que con `maxPlanos = 1` casi nunca se generaba ninguna: medido, **0 anclas en las dos sesiones nuevas**, y los N clips arrancaban del avatar solo por texto. En `7e4ccbcf` la persona, el suéter y el producto se sostienen en los 5 clips, pero **el fondo deriva**: marco de puerta, dos cuadros, una puerta blanca, una planta.
+
+⚠️ **QUITAR `SETTING AND LIGHTING` NO CAUSÓ ESTO, y la distinción importa.** Aquel cambio eliminó la clase CONTRADICCIÓN —habitaciones ajenas, tipo pasillo o cocina— y está medido. Lo que queda es DERIVA dentro de la misma habitación, que es otro modo de fallo. El A/B de 2 draws nunca lo habría visto: era el **mismo lote con el prompt byte-idéntico**, y acá son N lotes con prompts distintos (cada uno con su línea de cámara y su coreografía).
+
+✅ **LA PREMISA SE MIDIÓ ANTES DE CABLEARLO (`scripts/probe-anclas.ts`, 2 imágenes):** dos anclas generadas desde el MISMO avatar conservan su habitación — mismo marco de puerta, misma pared, misma luz, mismo encuadre. O sea **el modelo de imagen conserva el escenario al editar; grok lo re-inventa al generar video**, y esa diferencia es la que hace que el eje funcione.
+
+⚠️ **Y NO SE PODÍA HEREDAR LA MEDICIÓN VIEJA: la de AGENTS.md era de Nano Banana Pro.** Peor: **la primera corrida del probe midió el modelo equivocado** — omitió `preferGemini` y usó gpt-image-2, cuando `generate-lotes` genera las anclas con nano-banana-2 de primario. Se repitió con el par real y ahí sí quedó verificado (el tamaño lo delata: 1536×2752 es el ratio nativo de nano-banana-2, no los 864×1536 de gpt-image-2). **Un probe que arma el prompt a mano tiene que copiar también las OPCIONES del modelo, no solo el prompt.**
+
+⚠️ **El PRIMER lote no lleva ancla a propósito:** arranca del avatar, que ya ES una imagen válida de esa escena. Generarle una sería pagar por una copia.
+
+⚠️ **COSTO: 4,6 imágenes por sesión** medido sobre las 31 sesiones con guión (173 lotes → 143 anclas), contra ~0 antes. Las paga el HUB. Se generan **en paralelo entre todos los lotes**, así que el tiempo de pared es el de la más lenta (~60 s) y no la suma — entra en el `maxDuration = 300` de la ruta.
+
+⚠️ **EL REPARTO SE QUEDÓ SIN LEER EL SEPARADOR NUEVO, Y ESO DEJABA FRAGMENTOS SIN UNA SOLA INSTRUCCIÓN DE MOVIMIENTO (2026-09-02, `repartirAccion`).** Reportado como *"se pierden movimientos: aplicarse el serum con el gotero, acercar el rostro"*.
+
+`repartirAccion` parte la coreografía por ` Luego, `, que **lo escribe `mergeMicroCortes` al fusionar**. Pero desde que FASE 1 pide los cortes de más de 10 s **por tramos con marca de tiempo** (`0-5 s: …; 5-10 s: …`), un corte largo **sin fusionar** trae su separador como un `;`, no como ` Luego, `. La función veía UN tramo y se iba por la rama de "sin separador": todo al primer fragmento, el resto en blanco.
+
+Medido en la sesión `ca62aaed`, una toma de 20 s partida en 11,6 + 6 + 2,3 s:
+
+| fragmento | antes | después |
+|---|---|---|
+| lote 2 · 11,6 s | los **4 tramos** (o sea 20 s de coreografía en 11,6) | *"aplica una gota en el rostro · distribuye con movimientos circulares en pómulos y cuello"* |
+| lote 3 · 6 s | **VACÍA** | *"habla mirando a cámara mientras sostiene el frasco"* |
+| lote 3 · 2,3 s | **VACÍA** | *"finaliza tocando su barbilla y rostro"* |
+
+O sea **8,3 s de los 45 — el 18 % del anuncio — se renderizaban sin ninguna instrucción de movimiento**, y ahí el modelo improvisa. Eso es exactamente el síntoma reportado.
+
+⚠️ **ES UNA REGRESIÓN DE LA MEJORA DE FASE 1, no un hueco viejo.** Antes de que se pidieran los tramos, un corte de 20 s llegaba como UNA frase de prosa y no había nada mejor que repartir; ahora la información de tiempo existe y se estaba tirando. La lección general: **al cambiar el FORMATO que produce el forense hay que mirar quién lo parsea aguas abajo.**
+
+⚠️ **LAS MARCAS DE TIEMPO SE CAEN AL PARTIR, y eso es la otra mitad del arreglo.** Son relativas a la toma ENTERA, mientras que la duración de cada fragmento sale del reparto proporcional del TEXTO HABLADO: un fragmento de 6 s que recibe *"10-15 s: …"* le pide al modelo que no haga nada durante los primeros diez segundos de un clip que dura seis. **Ninguna re-numeración las vuelve ciertas** — el fragmento no hereda la ventana de tiempo de sus tramos — y dos instrucciones que se contradicen en el mismo prompt es el modo de fallo que este documento ya registra cuatro veces. Mientras la toma NO se parte, las marcas se conservan intactas: ahí sí son ciertas.
+
+⚠️ **Medido sobre el corpus, el arreglo mueve poco HOY y mucho MAÑANA:** de 215 cortes con acción, solo **4 traen tramos** (la mejora de FASE 1 es reciente y solo alcanza análisis nuevos) y **169 no traen ningún separador**. Sobre las 33 sesiones guardadas el reparto pasa de **35 a 31 tomas mudas** (161,9 → 146,3 s). El residuo son cortes largos que nunca se fusionaron y cuyo forense es anterior a los tramos: ahí no hay nada que repartir y la rama de "todo al primero" sigue siendo la correcta. Con cada análisis NUEVO ese residuo se achica solo. Los dos separadores se normalizan a uno antes de partir, así que el caso *fusionado Y con tramos* (1 de 215) convive sin pelearse. Con tests sobre la cadena real de esa sesión.
+
+⚠️ **EL SCAN DESCRIBE LA FOTO Y NO SOLO EL PRODUCTO — y eso viajaba al render (`product-scan.ts`).** El síntoma llegó por otro lado: `adapted.tomas[0].accionVisual` terminaba con *"El producto descansa sobre una superficie blanca plana y produce una sombra suave a la derecha. No está flotando."* — escenografía de catálogo dentro del campo de COREOGRAFÍA. Pero la causa **no está en FASE 3**: está en `product_scan.productDescription`, que es de donde el modelo la copió.
+
+`productDescription` sale de mirar la foto del envase, y el modelo describe de paso **la puesta en escena de esa foto**: sobre qué superficie está apoyado, qué sombra proyecta, de dónde viene la luz. Medido sobre los **35 scans guardados, 9 (26 %) traen al menos una frase así**, con *"No está flotando."* como la más común (6 de 16 frases).
+
+⚠️ **No es cosmético: ese campo se emite ÍNTEGRO en el prompt de CADA lote.** O sea el render recibía *"el producto descansa sobre una superficie blanca plana"* dentro de un clip donde la persona lo tiene en la mano en una sala — la misma clase de contaminación que `SETTING AND LIGHTING`, por otra puerta. El síntoma en `accionVisual` era el más visible, no el más caro.
+
+**Tres puertas, y las tres hacen falta:**
+1. **El prompt del scan** ahora dice explícitamente que describa el objeto y NUNCA la fotografía (nada de superficie, sombra, dirección de luz, ángulo de cámara, fondo, ni si flota), con el motivo: en el video va en la mano de alguien, así que la toma de catálogo de la que salió no es parte del producto.
+2. **`getVideoSession` limpia al LEER**, en una sola puerta — mismo criterio que `aKind` en anuncios. Es lo único que repara las sesiones YA guardadas, y el scan es una llamada de visión pagada que no se justifica re-correr por esto. Los dos consumidores (`generate-lotes` y `adapt-script`) leen por ahí.
+3. **`analyze-product` limpia al ESCRIBIR**, para que la fila nazca limpia.
+
+⚠️ **EL ACOTE ES ANGOSTO A PROPÓSITO, y la primera versión ya se pasó.** Con `sobre un fondo` en el patrón se comía *"Las letras son en su mayoría en blanco y rosa sobre un fondo negro"*, que SÍ describe la etiqueta. El modo de fallo correcto es **dejar pasar una frase de escenografía, nunca borrar la identidad del envase**: por eso `sombra` exige un adjetivo de sombra proyectada (si no se comería una *"sombra de ojos"*, que es un producto entero) y por eso, si al limpiar no queda nada, se devuelve el original.
+
+✅ **Verificado contra los 35 scans reales: 16 frases quitadas en 9 scans, todas escenografía de la foto, cero descripción de producto perdida y ninguno vacío.** Con tests sobre el caso real, sobre los dos falsos positivos y sobre el fail-safe.
+
 ⚠️ **El detalle atómico tampoco se repite DENTRO de un clip.** `microPorTiempo` va por `tiempoOriginal`, así que los dos fragmentos de una toma partida lo recibían idéntico en el mismo prompt. Entre LOTES sí se repite y **debe**: cada clip se renderiza sin memoria del anterior (REGLA DE CONTEXTO ABSOLUTO).
 
 ⚠️ **EL ESTADO DE LAS MANOS ES POR MANO Y EN ORDEN — un `{inicio, fin}` no alcanza.** El dueño del repo lo describió con el caso exacto: *"la mujer tiene el producto en la mano izquierda y mueve la mano derecha para destaparlo y aplicárselo, luego lo tapa, sigue sosteniendo el producto con la mano izquierda"*. Con un solo string para las dos manos y dos instantes, eso se aplasta a `frasco → frasco`: se pierde que la izquierda no suelta nunca, que la derecha hace tres cosas distintas y —lo peor— que **la tapa sale y vuelve**. De ahí *"en el lote 1 la tapa reaparece mágicamente en el frasco"*.
@@ -537,6 +592,16 @@ El fallo es silencioso y toca tres sitios: `mergeMicroCortes` y `puedenUnirse` l
 
 ⚠️ **FUERA EL ACENTO Y LA VOZ DEL WIZARD (2026-08-25, decisión del dueño del repo).** Eran dos campos —uno **obligatorio y bloqueante** en la FASE 0— y ahora la voz sale de **`VOZ_POR_DEFECTO`** (character.ts): dos perfiles fijos en español latino neutro, uno de hombre (30-40 años) y uno de mujer (25-35). **Revierte a propósito una regla que este documento tenía como dura** (*"etnia y acento NUNCA se marcan confirmados desde la referencia"*).
 
+⚠️ **Y LA VOZ SE VOLVIÓ COMPLETAMENTE FIJA CUANDO HAY UN SOLO PERSONAJE (2026-09-02).** El bloque `VOICE PROFILE` **ya era byte-idéntico entre los lotes de una sesión** — medido sobre los 4 prompts guardados de `ca62aaed`: 1 bloque distinto de 4. Lo que NO era estándar es entre sesiones: `VOZ_POR_DEFECTO` fija 11 de los 13 campos y los otros dos (`edadVocal`, `timbre`) los ponía el modelo siempre.
+
+⚠️ **Y ese campo libre se CONTRADECÍA con el perfil fijo, que es el defecto de verdad.** En esa sesión el mismo bloque llevaba `entonacion: "Natural y cercana, **sin locución publicitaria**"` (fijo) junto a `timbre: "…con una entonación natural y expresiva propia de una **locución de redes sociales**"` (del modelo). Dos instrucciones opuestas dentro del mismo prompt, el modo de fallo que este documento ya registra cuatro veces. El modelo infla ese campo la mitad de las veces: **10 de 35 perfiles guardados traen un `timbre` de más de 40 caracteres**, contra los 24 del fijo.
+
+`edadVocal` y `timbre` existen por UNA razón —que dos personajes del mismo sexo no suenen idénticos en el mismo anuncio— y **con un solo personaje no hay de quién diferenciarse**: son variación pura en un anuncio que se renderiza clip por clip y después se concatena. Medido: de **18 sesiones con lista de personajes, NINGUNA tiene más de uno**, y el botón *"+ Agregar otro personaje"* está vivo en la UI (o sea es uso real, no una función apagada como los nichos bloqueados). Con varios, los diferenciadores se conservan —es su motivo de ser— pero **recortados a etiqueta corta**: un timbre es una etiqueta, no una frase de estilo con opiniones sobre la locución.
+
+⚠️ **Lo que esto NO arregla:** si la voz suena distinta entre clips, no es el prompt — es el mismo no-determinismo de grok que hacía cambiar el fondo. El prompt ya mandaba la misma voz a los 4 lotes.
+
+⚠️ **LA FILA "Voz" SALIÓ DE LA MATRIZ DE VALIDACIÓN (decisión del dueño del repo).** Era un vestigio: su campo salió del wizard el 2026-08-25, así que `inputs.voice` no lo llenaba NADIE y la fila imprimía *"No especificada"* en todas las sesiones. Una fila que siempre dice lo mismo no es una confirmación, es ruido en la pantalla donde el usuario revisa lo que sí decidió. Era `critica: false`, así que quitarla no puede cambiar si el gate deja pasar — hay un test que fija las dos cosas. `UserInputs.voice` y la columna `voice` quedan sin ningún lector: **no se migran, se dejan de leer** (precedente de `ph_user_seen` y `testimonial_avatars`).
+
 ⚠️ **LA ETNIA NO SE TOCÓ** y sigue siendo obligatoria por personaje: es lo que sostiene la REGLA DE NO-ASUNCIÓN y lo que mantiene vivo el gate de FASE 0 uno por uno con varios personajes.
 
 El modelo ya no devuelve el `VoiceProfile` entero: devuelve **`sexoVocal`** —que sí es una observación, está en la foto y en el video— más `edadVocal` y `timbre`. Esos dos siguen viniendo de él porque con la voz base compartida son **lo único** que impide que dos personajes del mismo sexo suenen idénticos en el mismo anuncio. Las columnas `accent`/`voice` **no se migran, se dejan de leer** (precedente de `ph_user_seen` y `testimonial_avatars`).
@@ -556,6 +621,42 @@ Y en el de 15 s leyó además el **10** de la etiqueta del frasco (*"Pure Niacin
 ⚠️ **DOS MÉTRICAS ANTERIORES DIERON EL VEREDICTO CONTRARIO SOBRE LOS MISMOS CLIPS, y por eso el probe IMPRIME además de puntuar.** La primera avanzaba un puntero sobre las palabras esperadas y **se atascaba en la primera que faltaba sin recuperarse nunca**: con una palabra cambiada de diecisiete reportó **11 %**, o sea "grok no dice el español" sobre una locución correcta. La segunda (LCS por palabra) dio 88 % por artefactos del guion — `anti-envejecimiento`/`antienvejecimiento` y `La Roche-Posay`/`La Roche Posay`, y **las dos normalizaciones posibles del guion pierden uno de los dos casos, que salieron en el MISMO clip**. La que vale es **LCS a nivel de CARÁCTER sin espacios**, donde ninguno de los dos existe. Hay un test (`probe-audio-espanol.test.ts`) con los pares REALES observados, más una traducción al inglés y una locución cortada, que son lo que la métrica tiene que seguir castigando.
 
 ⚠️ **`GEMINI_VIA=direct` HOY NO FUNCIONARÍA:** medido al escribir este probe, la `GOOGLE_API_KEY` del entorno devuelve `429 "Your prepayment credits are depleted"`. El escape documentado para devolver el recurso al SDK de Google existe en el código y no tiene saldo detrás.
+
+⚠️ **EL PROMPT DESCRIBE LA IMAGEN Y NO DESCRIBÍA EL SONIDO — bloque `SOUND` (2026-09-02, huella v10 → v11).** `VOICE PROFILE` dice cómo suena la VOZ y la línea por toma dice qué se dice; del resto de la banda de audio no había **ni una palabra**, y grok genera el audio entero. Lo que llenaba ese silencio lo elegía el modelo, y con la concatenación (`concat.ts`) eso dejó de ser un detalle: cuatro clips con cuatro camas de música distintas se oyen como cuatro anuncios pegados, que es justo lo que el video final viene a evitar. El bloque nombra las tres capas —ambiente de la habitación, foley de la acción, nada de música ni reverb añadido— y **no re-describe el escenario**, que ya viaja arriba y está en las referencias.
+
+⚠️ **EL ESCALÓN LO CORRIGIÓ UNA CORRIDA REAL, no una intuición.** Puesto junto al guión global (`NIVEL_SIN_GUION_GLOBAL`), en la sesión completa de 4 lotes **sobrevivía en 2**: los otros dos degradaban por presupuesto y quedaban sin ninguna instrucción de audio. Un anuncio donde la mitad de los clips lleva el ambiente pedido y la otra mitad lo que grok invente es exactamente la costura que el bloque vino a cerrar.
+
+El orden de la escalera es su propia regla: **lo que se suelta primero es lo que DUPLICA información**. El guión global sale del mismo texto que las líneas por toma y el párrafo de overlay dice quince veces la misma orden; el sonido no lo nombra NADIE más. Así que sobrevive a los dos y cae en `NIVEL_MICRO_CORTO`, cuando se empieza a recortar detalle real. Hasta ahí `accionVisual` está intacta en todos los niveles, así que el corrimiento **no le quita un solo carácter a la coreografía**. Con test que fija la implicación: no puede existir un nivel con guión global y sin sonido.
+
+⚠️ **SIN VERIFICAR, y hay que leerlo así.** `probe-audio-espanol.ts` mide que grok DICE la locución palabra por palabra; **que además honre una descripción de ambiente no lo mide nadie todavía**. Es una hipótesis con su escalón puesto, no un arreglo medido — la comprobación es un render y una escucha.
+
+⚠️ **Lo único observado, y NO es atribuible:** los 4 clips del probe del escenario salieron con el bloque puesto, y en el espectrograma se ven ráfagas de habla sobre un piso de ruido bajo, **sin ninguna banda armónica sostenida — o sea sin cama de música**. No hay brazo de control para esta línea, así que eso no prueba que el bloque haga nada: puede ser el comportamiento por defecto de grok. Si se quiere cerrar, es un A/B de la línea SOUND, no de otra cosa.
+
+⚠️ **LO QUE NO SE HIZO, y por qué.** La guía de prompting de grok que originó esto trae 20 consejos y la mayoría ya están implementados o ya fueron REFUTADOS acá: *"una acción principal por clip"* falló la replicación 2 de 3 veces (ver arriba, `n = 3`) y *"los prompts negativos no son fiables"* choca con los 7 clips sin un solo carácter de texto que produce `BLOQUE_OVERLAY`. Los que SÍ eran ejes nuevos —un solo movimiento de cámara (#6) y verbos de física (#11)— son cambios del prompt de FASE 1, o sea el paso caro, y solo alcanzarían a los análisis NUEVOS.
+
+✅ **EL ESCENARIO DEJA DE VIAJAR COMO TEXTO — MEDIDO CON 4 RENDERS (2026-09-02, `scripts/probe-setting.ts`).** Es el consejo #1 de esa guía (*"la imagen define la escena; el prompt define lo que cambia"*) y era el único con respaldo propio: el A/B de prompt ya había medido que el 38 % del largo da el mismo clip, pero con **n = 1**, y este documento tiene tres rondas perdidas por exactamente ese error.
+
+`SETTING AND LIGHTING: ${escenario}` salía de `forensic.fondo`, que describe el **video ENTERO** dentro del prompt de UN clip (de ahí el sillón de la sesión de ropa). Contra la imagen del avatar —que ES la escena, en píxeles— eso es una contradicción, y el modelo la resuelve distinto en cada draw. Ese es el mecanismo de la costura que se ve al concatenar: *"el FONDO cambia entre clips"*.
+
+A/B sobre el MISMO lote, quitando ESA LÍNEA y nada más (el diff entre los dos prompts es una línea), **dos draws por brazo**:
+
+| | fondo del clip |
+|---|---|
+| avatar de referencia | cocina blanca moderna: alacenas, backsplash de mármol, refri de acero, olla terracota, banqueta de madera |
+| **A1** (con escenario) | pasillo con marco de puerta oscuro y espejo — **no es la cocina** |
+| **A2** (con escenario) | otra habitación distinta — **ni la cocina ni A1** |
+| **B1** (sin escenario) | **LA COCINA, exacta** |
+| **B2** (sin escenario) | **LA COCINA, exacta** — idéntica a B1 |
+
+**2 de 2 en cada brazo.** Con el bloque el fondo no es ni el de la imagen ni el mismo entre draws; sin él, la imagen manda y el resultado es estable. Y libera **208 caracteres medidos** del presupuesto que se come la coreografía (neto −169 con la continuidad reescrita).
+
+⚠️ **`forensic.fondo` NO SALIÓ DEL PIPELINE: sigue alimentando el prompt del AVATAR** (`character.ts`), que es donde el escenario del original TIENE que entrar — es la mitad del arreglo del 2026-08-26 (*"el avatar contradecía al original"*). Lo que se elimina es decirlo **dos veces y en dos idiomas distintos**.
+
+⚠️ **Y HUBO QUE REESCRIBIR `CONTINUITY` EN EL MISMO CAMBIO.** Decía *"setting and lighting identical throughout, **exactly as above**"*, y ese "above" era el bloque que se acaba de borrar: dejarlo es una referencia colgando, el modo de fallo que este repo ya registró tres veces (el `06c8259` de anuncios, `estable` contra el micro-temblor, *"no reescribas"* contra la sección que pide reescribir). Ahora nombra la fuente que de verdad manda: *"the room and lighting are the ones in the reference image"*. Con test que prohíbe las dos cosas (que vuelva el bloque y que vuelva el "as above").
+
+✅ **Y EL CASO DE ACUERDO SE CERRÓ CON UNA SESIÓN COMPLETA POR EL WIZARD (2026-09-02, sesión `ca62aaed`).** El A/B midió el caso donde imagen y texto se contradicen; faltaba el otro. Corrida entera por la ruta real —forense 28,6 s → producto → personaje → plantilla (5 cortes → 3 tomas) → guión → 4 lotes → 4 renders, todos `success`—, con el avatar ya nacido en el escenario del original (`fondo`: *"estantería de madera oscura, marco de puerta al fondo, luz cálida"*). **Los 4 clips y el avatar transcurren en la MISMA habitación**: misma estantería con libros y portarretratos, mismo marco de puerta, misma planta, mismo suéter. Contra el registro de la sesión anterior CON el bloque (*"pasillo, cocina con banquetas, pared lisa, habitación con piso de madera"*), la costura del fondo desapareció. Video final: 45,19 s contra los 46,4 s del original.
+
+⚠️ **CAVEAT DE LA MEDICIÓN, y es el que hay que tener presente antes de generalizar:** un lote, una sesión, y su avatar se generó **31 minutos ANTES** del arreglo del 26-ago — o sea es exactamente el caso donde imagen y texto se contradicen (el forense decía *"pared crema, marco de puerta de madera oscura"* y el avatar salió en una cocina blanca). Con el avatar ya nacido en el escenario del original los dos coinciden y el bloque pasa a ser **redundante** en vez de **contradictorio**. En ninguno de los dos casos aporta, y en uno hace daño.
 
 ❌ **LA PREMISA DEL CAP DE 15 s ES FALSA, Y LO QUE DE VERDAD SE ROMPE ES OTRA COSA (2026-08-27, `scripts/probe-cap-30.ts`, 4 renders).** El cap bajó de 30 a 15 porque *"grok pierde la consistencia del personaje y del entorno en clips largos"*, y eso DUPLICÓ las llamadas pagadas. Medido con **dos draws por duración**, como exige la regla de n=1 de este documento:
 
