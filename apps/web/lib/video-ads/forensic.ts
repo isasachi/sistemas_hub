@@ -1075,6 +1075,34 @@ export const VERBOS_ACCION = {
   quietos: ['holds', 'rests', 'brings', 'shows', 'presents', 'gestures', 'points to', 'looks at'],
 } as const
 
+/**
+ * CÓMO se ejecuta el evento — velocidad y fuerza, lista CERRADA por el mismo motivo que
+ * los verbos: se amplía en el diff, no dejando que el modelo invente.
+ *
+ * ⚠️ MEDIDO ANTES DE PEDIRLO: de las 30 oraciones de acción guardadas, **1 trae manera o
+ * velocidad** (3 %), y esa única la pone en la SUBORDINADA (*"holds the bottle firmly"*),
+ * o sea sobre la mano que no avanza. El evento nunca dice a qué velocidad ocurre.
+ *
+ * ⚠️ NO ES UN SEXTO HUECO, y esa distinción es la que decide si el eje existe. Este repo
+ * tiene medido CINCO veces que un campo nuevo que solapa con otro ya contestado vuelve
+ * vacío (`izquierda`/`derecha`, `Micro.posicion`, `objetoEnMano`, `productInteraction`,
+ * `accesorios`). Acá el cualificador va DENTRO de la cláusula que el modelo ya escribe.
+ *
+ * ⚠️ Y VA AL FINAL DE LA CLÁUSULA PRINCIPAL, NUNCA DELANTE DEL VERBO. `verboDe` busca el
+ * verbo pegado al sujeto (`resto.startsWith(v + ' ')`), así que un `She quickly raises…`
+ * haría que `verificarAcciones` marque *"el primer verbo no está en la lista cerrada"* en
+ * TODA oración con manera — el instrumento roto justo donde se mide. Es la misma lección
+ * que dejaron `repartirAccion` y el contrato de idioma: al cambiar el formato que produce
+ * el forense hay que mirar quién lo parsea aguas abajo.
+ *
+ * ⚠️ `motionProfile.calidadMovimiento` NO lo cubre: ése es el carácter del personaje y es
+ * el MISMO en los 5 lotes del anuncio. Esto es por beat. Dos campos con la misma pregunta
+ * en granularidades distintas no son duplicados — mismo criterio que `micro` contra un beat.
+ */
+export const MANERA_ACCION = [
+  'quickly', 'slowly', 'gently', 'firmly', 'carefully', 'in one smooth motion',
+] as const
+
 /** Todos, del más largo al más corto — `points to` tiene que ganarle a `points`. */
 const VERBOS_TODOS: string[] = [
   ...VERBOS_ACCION.transferencia, ...VERBOS_ACCION.manipulacion, ...VERBOS_ACCION.quietos,
@@ -1103,6 +1131,20 @@ const REGLA_ACCION: string[] = [
   '  3 OBJECT       what moves AND where it ends up. Not the trajectory — the landing.',
   '  4 INSTRUMENT   `with the dropper` · `with her fingertips` · `with both hands`.',
   '  5 SUBORDINATE  the other hand, ALWAYS last and behind the comma.',
+  '',
+  'HOW the event happens — speed or force — goes at the END of the main clause, right',
+  'before the comma, and ONLY from this closed list:',
+  '',
+  `  MANNER · ${MANERA_ACCION.join(' · ')}`,
+  '',
+  '  `She raises the bottle to face level QUICKLY, while her left hand rests at her side.`',
+  '',
+  '  Two rules, both hard:',
+  '  a. NEVER before the verb. The verb comes immediately after the subject, always.',
+  '     `She quickly raises the bottle` is WRONG — write `She raises the bottle quickly`.',
+  '  b. Only when the source SHOWS it. A gesture at an unremarkable pace carries NO manner',
+  '     word: leave it out. Inventing pace is inventing choreography, and the render',
+  '     performs it.',
   '',
   'Pick the FORM by this precedence — the first one that applies wins:',
   '',
@@ -1790,9 +1832,15 @@ export function verificarAcciones(report: ForensicReport): ProblemaAccion[] {
       const verbo = verboDe(texto)
       // 1 y 2 colapsan en la misma comprobación: sin sujeto no hay verbo que encontrar.
       if (!verbo) {
-        marcar(/^(she|he|they|p\d)/i.test(texto)
-          ? 'el primer verbo no está en la lista cerrada'
-          : 'no arranca con el sujeto (¿es un fragmento?)')
+        // ⚠️ La manera adelantada se nombra APARTE. `verboDe` exige el verbo pegado al
+        // sujeto, así que `She quickly raises…` cae acá — y decir "el verbo no está en la
+        // lista" sobre una oración cuyo verbo SÍ está es un diagnóstico que miente.
+        const adelantada = MANERA_ACCION.some((m) => new RegExp(`^(she|he|they)\\s+${m}\\b`, 'i').test(texto))
+        marcar(adelantada
+          ? 'la manera va DELANTE del verbo (tiene que ir al final de la cláusula)'
+          : /^(she|he|they|p\d)/i.test(texto)
+            ? 'el primer verbo no está en la lista cerrada'
+            : 'no arranca con el sujeto (¿es un fragmento?)')
         continue
       }
       // 3. El estado del producto se movió, así que la oración tiene que avanzar.

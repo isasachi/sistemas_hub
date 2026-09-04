@@ -635,6 +635,41 @@ La regla trae su contraparte, porque si no el modelo disfraza la quietud de acci
 
 ✅ **Y VERIFICADO CON UNA CORRIDA REAL DEL REFINAMIENTO** (`reanalizar-forense --solo-motion`, una llamada de texto, sin escribir en la base): **las 10 oraciones salieron con la FORMA de la plantilla** — `She <verbo> <objeto> with <instrumento>, while her <lado> hand <estado>.` Cero fragmentos, cero coletillas de habla, cero apertura con `speaks`, y el corte de la aplicación devolvió la transferencia con su instrumento (*"She releases one drop of serum onto her left cheek with the dropper, while her left hand holds the bottle at chest level"*) seguida del masaje. Contra el 60 % de antes, quedan 5 marcadas.
 
+✅ **LA ORACIÓN GANA CÓMO, NO SOLO QUÉ — `MANERA_ACCION` (2026-09-04).** La plantilla decía qué
+evento ocurre y con qué instrumento, y **nunca a qué velocidad ni con cuánta fuerza**. Medido antes
+de pedirlo, sobre las 30 oraciones guardadas: **1 trae manera (3 %)**, y esa única la pone en la
+SUBORDINADA (*"holds the bottle firmly"*), o sea sobre la mano que no avanza.
+
+⚠️ **NO ES UN SEXTO HUECO, y esa distinción es la que decide si el eje existe.** Este documento
+tiene medido CINCO veces que un campo nuevo que solapa con otro ya contestado vuelve vacío. Acá el
+cualificador va DENTRO de la cláusula que el modelo ya escribe, con **lista cerrada** (`quickly ·
+slowly · gently · firmly · carefully · in one smooth motion`) por el mismo motivo que los verbos:
+se amplía en el diff, no dejando que el modelo invente.
+
+⚠️ **Y VA AL FINAL DE LA CLÁUSULA PRINCIPAL, NUNCA DELANTE DEL VERBO — ahí estaba el riesgo real.**
+`verboDe` busca el verbo **pegado al sujeto** (`resto.startsWith(v + ' ')`), así que un `She quickly
+raises…` haría que `verificarAcciones` marque *"el primer verbo no está en la lista cerrada"* en
+TODA oración con manera: el instrumento roto justo donde se mide. Es la misma lección que dejaron
+`repartirAccion` y el contrato de idioma — **al cambiar el formato que produce el forense hay que
+mirar quién lo parsea aguas abajo**. El verificador además **nombra ese caso aparte**: decir "el
+verbo no está en la lista" sobre una oración cuyo verbo SÍ está es un diagnóstico que miente.
+
+⚠️ **`motionProfile.calidadMovimiento` no lo cubre**: ése es el carácter del personaje y es el MISMO
+en los 5 lotes del anuncio. Esto es por beat. Dos campos con la misma pregunta en granularidades
+distintas no son duplicados — mismo criterio que `micro` contra un beat.
+
+✅ **VERIFICADO CON UNA CORRIDA REAL DEL REFINAMIENTO** (`reanalizar-forense --solo-motion`, una
+llamada de texto, sin escribir en la base): manera en **2 de 10 beats**, las dos al final de la
+cláusula principal —*"She rotates the bottle between both hands **carefully**"*, *"She lowers the
+bottle to her chest **slowly**"*— y **`oración de acción: todas en plantilla`**, o sea el
+verificador no se rompió. 2 de 10 es lo que la regla pide: solo donde el ritmo se VE (una rotación
+y un descenso); los otros ocho son sostenes y una transferencia a ritmo corriente. ⚠️ `n = 1`, y
+**que esas dos sean ciertas del video no se comprobó fotograma a fotograma** — lo medido es que el
+modelo la emite, es selectivo y no rompe el parser.
+
+⚠️ **Solo alcanza a análisis NUEVOS** (paso caro). Y **no lleva bump de huella**: cambia el VALOR de
+`accionVisual`, que `scriptFingerprint` ya hashea como insumo, no la plantilla de `buildLotePrompt`.
+
 ⚠️ **Y LAS QUE QUEDAN SON LA LISTA CORTA, NO EL MODELO: `gestures`, `presents` y `rotates`.** Tres verbos legítimos, elegidos bien y con la oración bien formada, que la lista no tenía. **Se agregaron — ése es el mecanismo funcionando, no una excepción**, y hay un test con las tres frases reales para que un recorte futuro de la lista se vea. La quinta (`points to` con el producto cambiando de estado) se deja marcada: o el beat debía ser forma B, o la cadena de estados está mal encadenada; las dos cosas son algo que mirar, no un falso positivo del guard.
 
 ⚠️ **Es un cambio del paso CARO: solo alcanza a análisis NUEVOS.** Las sesiones guardadas conservan sus oraciones; para pasarlas a la plantilla hay que correr `reanalizar-forense --solo-motion`, que no re-segmenta el video. **NO lleva bump de huella:** `scriptFingerprint` protege la plantilla de `buildLotePrompt`, que no se tocó — lo que cambia es el VALOR de `accionVisual`, que la huella ya hashea como insumo.

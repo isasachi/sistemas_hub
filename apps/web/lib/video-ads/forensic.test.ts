@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { TIMELINE_VACIO } from './motion'
 import { z } from 'zod'
-import { buildForensicInstruction, ForensicReportSchema, repairCutTiming, mergeMicroCortes, muestraPersona, corteMuestraPersona, CPS_MAX, type ForensicReport, type Corte, enProsa, limpiarDialogo, verificarHablantes, unirTomasContinuas, reconciliarConVentana, coreografiaEscasa, MIN_TOMA_SEG, ObjetoEnManoSchema, MicroSchema, CorteSchema , verificarDialogos, verificarAcciones, VERBOS_ACCION, buildMotionRefinementInstruction } from './forensic'
+import { buildForensicInstruction, ForensicReportSchema, repairCutTiming, mergeMicroCortes, muestraPersona, corteMuestraPersona, CPS_MAX, type ForensicReport, type Corte, enProsa, limpiarDialogo, verificarHablantes, unirTomasContinuas, reconciliarConVentana, coreografiaEscasa, MIN_TOMA_SEG, ObjetoEnManoSchema, MicroSchema, CorteSchema , verificarDialogos, verificarAcciones, VERBOS_ACCION, MANERA_ACCION, buildMotionRefinementInstruction } from './forensic'
 
 // El prompt es el contrato con Gemini. Estos asserts fijan las reglas del spec que,
 // si se caen, producen el bug que ya vimos en producción: cortes inventados por
@@ -1288,6 +1288,24 @@ describe('verificarAcciones — la plantilla de la oración', () => {
       'She points to her left cheek with her index finger, while her right hand holds the bottle.',
     )))).toEqual([])
   })
+
+  // ⚠️ LA MANERA AL FINAL NO PUEDE ROMPER AL VERIFICADOR, que es el riesgo entero de este
+  // eje: `verboDe` busca el verbo PEGADO al sujeto.
+  it.each(MANERA_ACCION)('acepta la manera al final de la cláusula principal: %s', (m) => {
+    expect(verificarAcciones(rep(beat(
+      `She raises the serum bottle to face level ${m}, while her left hand rests at her side.`,
+    )))).toEqual([])
+  })
+
+  // Y el diagnóstico del caso roto tiene que NOMBRARLO: decir "el verbo no está en la lista"
+  // sobre una oración cuyo verbo sí está es un mensaje que miente, y este repo ya pagó por eso.
+  it('la manera DELANTE del verbo se reporta como tal, no como verbo desconocido', () => {
+    const p = verificarAcciones(rep(beat(
+      'She quickly raises the serum bottle to face level, while her left hand rests at her side.',
+    )))
+    expect(p).toHaveLength(1)
+    expect(p[0].motivo).toMatch(/manera va DELANTE/)
+  })
 })
 
 // ⚠️ LA PLANTILLA VIVE EN UNA SOLA CONSTANTE Y LOS DOS PROMPTS LA EMITEN. El pase general
@@ -1302,6 +1320,11 @@ describe('la plantilla de acción está en los DOS prompts', () => {
       expect(prompt).toContain('A · TRANSFER')
       expect(prompt).toContain('C · DECLARED STILLNESS')
       for (const v of [...VERBOS_ACCION.transferencia, ...VERBOS_ACCION.quietos]) expect(prompt).toContain(v)
+    })
+    // Mismo argumento que los verbos: si la lista no viaja, el modelo inventa la manera.
+    it(`${nombre}: trae la lista cerrada de manera y dónde va`, () => {
+      for (const m of MANERA_ACCION) expect(prompt).toContain(m)
+      expect(prompt).toContain('NEVER before the verb')
     })
     it(`${nombre}: ya no pide los cuatro campos borrados del schema`, () => {
       expect(prompt).not.toContain('`headAndGaze`')
