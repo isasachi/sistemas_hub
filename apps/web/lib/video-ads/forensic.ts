@@ -1022,12 +1022,27 @@ function ventanasDe(duracionSeg: number, ventanaSeg: number): string {
 }
 
 /**
- * Segundos por ventana del refinamiento. **1,5 s está medido, no elegido**: con ventanas
- * la densidad pasa de 0,18-0,22 a 0,66 beats/s (8-10 → 30 beats sobre los mismos 4 cortes),
- * y los dos draws devolvieron EXACTAMENTE el mismo reparto — o sea la estructura manda
- * sobre el sorteo, que es justo lo que la densidad necesitaba.
+ * Segundos por ventana del refinamiento, o `null` para no pre-partir el corte.
+ *
+ * ✅ LO MEDIDO SIGUE SIENDO CIERTO: con ventanas de 1,5 s la densidad pasa de 0,18-0,22 a
+ * **0,66 beats/s** (8-10 → 30 beats sobre los mismos 4 cortes) y los dos draws devolvieron
+ * el MISMO reparto, o sea la estructura manda sobre el sorteo.
+ *
+ * ❌ **Y AUN ASÍ VA APAGADO, porque resolvía un problema de la emisión VIEJA.** Aquella
+ * mandaba la coreografía como ventanas de tiempo y se quedaba corta de tramos; la del PROMPT
+ * MAESTRO manda **pocos hechos DISTINTOS**, y ahí la densidad juega en contra: medido sobre
+ * este mismo video, un corte de 20 s volvió con 14 beats de los cuales diez decían *"sostiene
+ * el frasco · relajada"*, que con un renglón por casilla son ~56 ítems numerados para un solo
+ * clip. Los shot lists del spec tienen 3 a 5.
+ *
+ * O sea la palanca no era la cantidad sino que los tramos se distingan entre sí — que es
+ * exactamente lo que dijo el contraejemplo del wizard. Sin ventanas el refinamiento devuelve
+ * 2-3 beats por corte, que es la granularidad que el spec pide.
+ *
+ * Se conserva el parámetro y su medición: si algún día la emisión vuelve a necesitar
+ * densidad, se enciende con un número acá.
  */
-export const VENTANA_BEAT_SEG = 1.5
+export const VENTANA_BEAT_SEG: number | null = null
 
 export function buildMotionRefinementInstruction(
   cortes: { n: number; tiempo: string; duracionSeg: number; accion: string }[],
@@ -1064,6 +1079,19 @@ export function buildMotionRefinementInstruction(
     '`referenceFrameMs` absolute in the source video (the frame that best shows the beat);',
     '`body`, `headAndGaze`, `leftHand`, `rightHand`; `productStateBefore` and',
     '`productStateAfter`; `importance`.',
+    '',
+    '⚠️ `leftHand` AND `rightHand` NAME THE INSTRUMENT AND THE TARGET, in the same phrase.',
+    'These two fields become one numbered line each in the render prompt, and a line that',
+    'says only the verb gets performed without the object. MEASURED: with `applies drops to',
+    'face` the render pulled the dropper out, squeezed it back INTO the bottle, and the drop',
+    'appeared on the cheek by itself. Naming the dropper in a DIFFERENT beat does not work —',
+    'the model does not tie them together.',
+    '  BAD  `applying serum to cheek`',
+    '  GOOD `releases one drop with the dropper onto her left cheek`',
+    '  BAD  `extracting serum`',
+    '  GOOD `squeezes the dropper bulb and draws serum up into the pipette`',
+    '  BAD  `massaging skin`',
+    '  GOOD `spreads the serum with her fingertips in upward circles over her cheekbone`',
     '',
     '⚠️ THE PRODUCT STATE IS A CHAIN: what one beat leaves is what the next one finds,',
     'word for word. The code verifies it. If the product is not on screen, both states say',
@@ -1181,16 +1209,43 @@ export function buildForensicInstruction(): string {
     '  - qué expresión tiene y en qué posición empieza y termina el corte — el spec pide',
     '    la secuencia completa (posición inicial → movimiento → interacción → posición',
     '    final), no solo el resultado.',
-    '⚠️ `accion` ES SOLO UN RESUMEN LEGIBLE. Una línea, para que una persona entienda el',
-    'corte de un vistazo. El movimiento de verdad va en `motion`, abajo — y cuando `motion`',
-    'existe, el código RECOMPILA `accion` desde los beats, así que las dos no pueden',
-    'contradecirse. No gastes detalle acá: gástalo en los beats.',
+    '',
+    '⚠️ UN HECHO POR CLÁUSULA, SEPARADAS POR PUNTO Y COMA. `accion` se convierte en la lista',
+    'numerada del prompt de render partiéndola por sus separadores, así que cada cláusula es',
+    'una instrucción que el generador ejecuta por separado. Encadenar tres hechos con comas',
+    'los colapsa en un gesto solo.',
+    '  MAL:  "Sostiene gotero con mano derecha, lo levanta y muestra la gota; aplica"',
+    '  BIEN: "Sostiene el gotero con la mano derecha; extrae una gota apretando el bulbo;',
+    '         deja caer la gota sobre su mejilla izquierda con el gotero; la mano izquierda',
+    '         sostiene el frasco a la altura del pecho; mira a cámara"',
+    '',
+    '⚠️ CADA ACCIÓN QUE MANIPULA ALGO NOMBRA CON QUÉ Y SOBRE QUÉ, en la MISMA cláusula.',
+    'Está medido: con "aplica gota en mejilla izquierda" —sin decir con qué— el render sacó',
+    'el gotero, dejó caer la gota DENTRO del frasco y la gota apareció sola en la mejilla.',
+    'El instrumento nombrado en otra cláusula no alcanza: el modelo no lo ata.',
+    '  MAL:  "aplica gota en mejilla"        BIEN: "deja caer una gota CON EL GOTERO sobre',
+    '                                               su mejilla izquierda"',
+    '  MAL:  "esparce el producto"           BIEN: "esparce el producto con las yemas de los',
+    '                                               dedos en círculos sobre el pómulo"',
+    '',
+    '⚠️ Cuando `motion` existe, el código RECOMPILA `accion` desde los beats, así que las dos',
+    'no pueden contradecirse. Pero `accion` es la fuente cuando no hay timeline, así que se',
+    'escribe completa igual.',
     '',
     '── `motion`: LA LÍNEA DE TIEMPO DEL MOVIMIENTO (lo más importante de este análisis) ──',
     'Do not summarize choreography.',
     'For every real source cut, reconstruct the visible motion as an ORDERED TIMELINE OF',
     'STATE CHANGES. Preserve the real cut boundaries. Do not split a continuous take',
     'because the dialogue changes.',
+    '',
+    '⚠️ EACH HAND FIELD NAMES THE INSTRUMENT AND THE TARGET, in the same phrase. Measured:',
+    'with `applies drops to face` the render pulled the dropper out, squeezed it back INTO',
+    'the bottle and the drop appeared on the cheek by itself. Naming the dropper in a',
+    'different beat does not work — the model does not tie them together.',
+    '  BAD:  `applies product to cheek`',
+    '  GOOD: `releases one drop with the dropper onto her left cheek`',
+    '  BAD:  `massaging skin`',
+    '  GOOD: `spreads the serum with her fingertips over her cheekbone`',
     '',
     'Open a NEW BEAT when one of these MATERIALLY changes — never because a sentence ends:',
     '  body pose · head direction · gaze · what the LEFT hand is doing · what the RIGHT',
