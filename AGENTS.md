@@ -583,6 +583,34 @@ Lo que queda es que los lotes 2 a 4 andan en 18-19 car/s: eso ya no es el repart
 
 ⚠️ **`n = 1`, y hay que leerlo así.** Es un lote, un seed, una sesión. Lo que prueba es que la emisión nueva SÍ produce el clip que se le pide —que es exactamente lo que la anterior no lograba en doce renders— no que lo haga siempre.
 
+### 🔴 EL EXPERIMENTO DE MOTORES — la primitive de movimiento NO es grok (2026-09-04)
+
+**Hipótesis del dueño del repo:** *"el problema no es que falten detalles en el prompt. El pipeline convierte el movimiento original en TEXTO y grok nunca recibe el video fuente como señal física de movimiento."* Cuatro brazos sobre **el mismo tramo de 6 s** del anuncio de sérum (16–22 s: la gota en la mejilla y el extendido con las yemas), con `scripts/probe-video-motores.ts`.
+
+| | movimiento | voz | identidad | producto | limpio |
+|---|---|---|---|---|---|
+| **A · grok** (el pipeline de hoy) | ❌ sostiene el frasco y habla | ✅ nueva | ✅ avatar | ✅ | ✅ |
+| **B · Kling 3.0 Motion Control** | ✅ copia la coreografía | ❌ **la del original** | ✅ avatar | ❌ manos vacías | ✅ |
+| **C · xAI Video Edit** | ✅ (es el original editado) | ❌ **la del original** | ❌ **la creadora** | ~ repintado | ❌ **watermark** |
+| **D · ByteDance Seedance 2.5** | ✅ | ✅ **98 %** | ✅ avatar | ✅ etiqueta legible | ✅ |
+
+✅ **LA HIPÓTESIS SE CONFIRMA: la señal FÍSICA de movimiento es la palanca.** B, C y D copian la coreografía; A no la logró en ~15 renders de esta rama. La representación en texto era el techo, no la falta de detalle.
+
+⚠️ **Y EL EXPERIMENTO AGREGA LO QUE LA HIPÓTESIS NO PREVEÍA: la primitive de MOVIMIENTO no puede ser también la de VOZ.** Kling y xAI Edit **arrastran la pista del video fuente** — la transcripción de sus salidas es palabra por palabra la de la creadora original, con el guion de la OTRA marca. Kling no tiene ningún campo de audio; xAI Edit tampoco sustituyó la identidad y conservó el logo de TikTok, el arroba y los subtítulos quemados. **Los dos quedan descalificados**: por buena que sea la coreografía, un clip con la voz y la cara de otra persona no se publica.
+
+✅ **SEEDANCE 2.5 ES EL ÚNICO QUE TOMA LAS CUATRO SEÑALES EN UNA LLAMADA** — `reference_video_urls` (movimiento), `reference_image_urls` (avatar + producto), el prompt (la locución) y `generate_audio`. Y acepta **30.000 caracteres de prompt** contra los 4.096 de grok: toda la escalera de degradación que este documento describe existe por un presupuesto que con este motor no aplica.
+
+⚠️ **DOS ARREGLOS QUE LO LLEVARON DE "PROMETEDOR" A "CERRADO", los dos medidos con su propio observable:**
+
+1. **EL AUDIO DE LA REFERENCIA CONTAMINA LA LOCUCIÓN — se manda el clip MUDO.** Primera corrida: se pidió *"y nos ayuda a **atenuar**"* y dijo *"**lo que** nos ayuda a **hidratar**"*, que es la construcción literal de la creadora en ese mismo tramo; y *"suero"* le salió *"serum"*, la palabra del original. Con `-an` sobre el clip de referencia: **86 % → 98 % de cobertura**, *"suero"* correcto, *"atenuar"* correcto, y el ingrediente pasa de *"ferul sopinil"* a *"p-resorcinol"*. Se mide TRANSCRIBIENDO, así que no se confunde con el otro arreglo.
+2. **EL ORDEN LO PONE EL FORENSE, NO EL VIDEO.** El prompt decía *"same action order"* **sin decir nunca cuál es ese orden** — una exigencia de fidelidad, no una descripción — y el clip copiaba la acción pero abría por el final. `accionesDelTramo` recorta las oraciones de `MotionBeat.action` al tramo (ventana del corte + `startSec`/`endSec`) y las emite numeradas con `IN THIS EXACT ORDER`. Post-fix los fotogramas van gota → extendido, como la fuente. Se mide MIRANDO LA SECUENCIA.
+
+**Y eso deja el reparto que el dueño del repo anticipó: el video es la señal física, el forense es el PLANNER.** No un sustituto de la señal de movimiento — el plan que le fija el orden. La plantilla de la oración de acción (arriba) es justamente lo que hace que ese plan sea emitible.
+
+⚠️ **EL CANARIO GRATIS ES POR MODELO, NO DE KIE — y esto costó una lectura equivocada.** Con grok, una `duration` fuera de rango vuelve sin `taskId`. Con **kling y seedance un campo válido DESPACHA**: lo único que no despacha es un **modelo inexistente**; un **asset inalcanzable** sí despacha pero vuelve con `creditsConsumed: 0.0`, así que ése es el canario de estos dos. De paso: la doc de KIE dice que el `mode` de kling es `std`/`pro` y **es falsa** — medido, `std` devuelve *"mode is not within the range of allowed options"* y `720p` se acepta.
+
+⚠️ **LO QUE NO SE MIDIÓ:** un solo tramo de 6 s, una sesión, un draw por brazo. El precio por clip de seedance tampoco está medido, y el pipeline de producción **no se tocó** — esto determina la primitive, no la cablea.
+
 ### EL CANDADO DE MOVIMIENTO (V2) — cableado, verificado y **sin efecto medible todavía** (2026-09-03)
 
 La coreografía deja de viajar como prosa y viaja como una **máquina de estados**: `MotionTimeline` (`lib/video-ads/motion.ts`) con `startState` / `beats` / `endState`, y el prompt del lote emite
