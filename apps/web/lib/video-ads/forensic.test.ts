@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { TIMELINE_VACIO } from './motion'
 import { z } from 'zod'
-import { buildForensicInstruction, ForensicReportSchema, repairCutTiming, mergeMicroCortes, muestraPersona, corteMuestraPersona, CPS_MAX, type ForensicReport, type Corte, enProsa, limpiarDialogo, verificarHablantes, unirTomasContinuas, reconciliarConVentana, coreografiaEscasa, MIN_TOMA_SEG, ObjetoEnManoSchema, MicroSchema, CorteSchema , verificarDialogos } from './forensic'
+import { buildForensicInstruction, ForensicReportSchema, repairCutTiming, mergeMicroCortes, muestraPersona, corteMuestraPersona, CPS_MAX, type ForensicReport, type Corte, enProsa, limpiarDialogo, verificarHablantes, unirTomasContinuas, reconciliarConVentana, coreografiaEscasa, MIN_TOMA_SEG, ObjetoEnManoSchema, MicroSchema, CorteSchema , verificarDialogos, verificarAcciones, VERBOS_ACCION, buildMotionRefinementInstruction } from './forensic'
 
 // El prompt es el contrato con Gemini. Estos asserts fijan las reglas del spec que,
 // si se caen, producen el bug que ya vimos en producción: cortes inventados por
@@ -1210,4 +1210,90 @@ describe('verificarDialogos', () => {
     ], 'Este serum me cambió la piel. Si tú también estás por los treinta.'))
     expect(p).toEqual([])
   })
+})
+
+// ⚠️ LAS CUATRO REGLAS SALEN DE LOS 5 LOTES REALES DE `7e4ccbcf`: con la oración libre el
+// patrón bueno salía 1 de cada 3, y cada test de acá es una de las frases que salieron mal.
+describe('verificarAcciones — la plantilla de la oración', () => {
+  const beat = (action: string, antes = 'bottle in left hand', despues = 'bottle in left hand') =>
+    ({ startSec: 0, endSec: 2, referenceFrameMs: 0, action, productStateBefore: antes, productStateAfter: despues, importance: 'major' })
+  const rep = (...acciones: ReturnType<typeof beat>[]) =>
+    ({ cortes: [{ n: 1, motion: { beats: acciones } }] } as never)
+
+  it('acepta la forma A — transferencia, con instrumento y subordinada al final', () => {
+    expect(verificarAcciones(rep(beat(
+      'She releases one drop of serum onto her left cheek with the dropper, while her left hand holds the bottle at chest level.',
+      'dropper full, above cheek', 'serum on her left cheek',
+    )))).toEqual([])
+  })
+
+  it('acepta la forma C — quietud declarada como cláusula principal', () => {
+    expect(verificarAcciones(rep(beat(
+      'She holds the bottle at chest level with both hands and looks at the camera.',
+    )))).toEqual([])
+  })
+
+  // El lote 2 real devolvió exactamente esto.
+  it('caza el fragmento sin sujeto ni verbo', () => {
+    const p = verificarAcciones(rep(beat('bottle rotation')))
+    expect(p[0].motivo).toMatch(/no arranca con el sujeto/)
+  })
+
+  // El lote 1 shot 1 real: la acción enterrada detrás de un verbo de habla.
+  it('caza el verbo que no está en la lista cerrada', () => {
+    const p = verificarAcciones(rep(beat(
+      'She speaks to the camera while holding the open dropper near her cheek with her right hand.',
+    )))
+    expect(p[0].motivo).toMatch(/no está en la lista cerrada/)
+  })
+
+  // El lote 4 real: 9,8 segundos con un verbo que no avanza mientras el producto sí se mueve.
+  it('caza el verbo quieto cuando el producto cambia de estado', () => {
+    const p = verificarAcciones(rep(beat(
+      'She holds the bottle up near her chin with her right hand, while her left hand rests at her side.',
+      'bottle at chest level', 'bottle near her chin',
+    )))
+    expect(p.some((x) => /no avanza/.test(x.motivo))).toBe(true)
+  })
+
+  it('caza la coletilla de habla', () => {
+    const p = verificarAcciones(rep(beat(
+      'She raises the bottle to her chin with her right hand and talking, while her left hand rests.',
+      'bottle at chest', 'bottle at chin',
+    )))
+    expect(p.some((x) => /coletilla de habla/.test(x.motivo))).toBe(true)
+  })
+
+  // El modo de fallo SILENCIOSO que tenía el pase general: pedía cuatro campos borrados del
+  // schema, así que `action` volvía vacía y el lote caía a la prosa sin que nada lo dijera.
+  it('caza el beat sin oración', () => {
+    expect(verificarAcciones(rep(beat('')))[0].motivo).toMatch(/sin oración/)
+  })
+
+  // `points to` tiene que ganarle a un prefijo más corto, si algún día se agrega uno.
+  it('resuelve los verbos de varias palabras', () => {
+    expect(verificarAcciones(rep(beat(
+      'She points to her left cheek with her index finger, while her right hand holds the bottle.',
+    )))).toEqual([])
+  })
+})
+
+// ⚠️ LA PLANTILLA VIVE EN UNA SOLA CONSTANTE Y LOS DOS PROMPTS LA EMITEN. El pase general
+// declaraba `action` pidiendo cuatro campos que ya no existen en el schema: cuando el
+// refinamiento falla, ese pase es el único que escribe la coreografía.
+describe('la plantilla de acción está en los DOS prompts', () => {
+  for (const [nombre, prompt] of [
+    ['pase general', buildForensicInstruction()],
+    ['pase de refinamiento', buildMotionRefinementInstruction([{ n: 1, tiempo: '00:00 - 00:05', duracionSeg: 5 } as never])],
+  ] as const) {
+    it(`${nombre}: trae las tres formas y la lista cerrada`, () => {
+      expect(prompt).toContain('A · TRANSFER')
+      expect(prompt).toContain('C · DECLARED STILLNESS')
+      for (const v of [...VERBOS_ACCION.transferencia, ...VERBOS_ACCION.quietos]) expect(prompt).toContain(v)
+    })
+    it(`${nombre}: ya no pide los cuatro campos borrados del schema`, () => {
+      expect(prompt).not.toContain('`headAndGaze`')
+      expect(prompt).not.toContain('`leftHand` · `rightHand`')
+    })
+  }
 })

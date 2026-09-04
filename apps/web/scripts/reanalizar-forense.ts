@@ -29,7 +29,7 @@ import { callVideoAds } from '../lib/video-ads/llm'
 import {
   ForensicReportSchema, buildForensicInstruction, buildMotionRefinementInstruction,
   MotionRefinementSchema, limpiarDialogos, verificarHablantes, reconciliarConVentana,
-  repairCutTiming, verificarDialogos, type ForensicReport,
+  repairCutTiming, verificarDialogos, verificarAcciones, type ForensicReport,
 } from '../lib/video-ads/forensic'
 import {
   normalizeMotionTimeline, validateMotionTimeline, objetoEnManoFromMotion, compileAccion, tieneMotion,
@@ -111,6 +111,12 @@ async function main() {
   const problemas = verificarDialogos(final)
   console.log(`\nreparto del diálogo: ${problemas.length ? `${problemas.length} problema(s)` : 'sin problemas'}`)
   for (const x of problemas) console.log(`  corte ${x.corte}: ${x.motivo}`)
+
+  // ⚠️ Y LA PLANTILLA DE LA ORACIÓN DE ACCIÓN. Es la razón de ser de `--solo-motion`:
+  // iterar el prompt del movimiento sin volver a segmentar el video, mirando esta lista.
+  const redaccion = verificarAcciones(final)
+  console.log(`oración de acción: ${redaccion.length ? `${redaccion.length} fuera de plantilla` : 'todas en plantilla'}`)
+  for (const x of redaccion) console.log(`  corte ${x.corte} beat ${x.beat}: ${x.motivo} · "${x.texto}"`)
 
   // ⚠️ El guión adaptado se emparejó con las ventanas VIEJAS.
   const viejas = new Set((r.forensic_analysis?.cortes ?? []).map((c) => c.tiempo))

@@ -521,6 +521,31 @@ La regla trae su contraparte, porque si no el modelo disfraza la quietud de acci
 
 ⚠️ **`norm` (motion.ts) es defensivo con `undefined` por esto mismo:** los beats llegan de un jsonb guardado y un campo agregado después no existe en las filas viejas — normalizar una sesión anterior reventaba con *"Cannot read properties of undefined"*.
 
+✅ **LA ORACIÓN DE ACCIÓN PASA A TENER PLANTILLA — lista CERRADA de verbos y verificación en código (2026-09-04, decisión del dueño del repo).** Reportado como *"algunos clips salen bien y otros no tanto"*, y el diagnóstico se hizo mirando los CINCO lotes reales de `7e4ccbcf` antes de tocar nada:
+
+| lote | lo que emitía | |
+|---|---|---|
+| 3 | *"She **deposits** a drop of serum on her left cheek **with the dropper**, while holding the bottle steady"* | ✅ el patrón que se ejecuta |
+| 1·s1 | *"She **speaks to the camera** while holding the open dropper near her cheek"* | ❌ la acción, en la subordinada |
+| 4 | *"She **holds** the bottle up near her chin… **and talking**"* — 9,8 s | ❌ la cláusula principal no avanza |
+| 2 | *"**bottle rotation**"* | ❌ ni sujeto ni verbo |
+
+**El esqueleto del prompt del lote ya era una plantilla y no varía; lo único que variaba es la ranura de las acciones numeradas, y ahí el patrón bueno salía 1 de cada 3.**
+
+**La plantilla (`REGLA_ACCION`, forensic.ts) tiene cinco ranuras en orden fijo** — sujeto · verbo de evento · objeto y dónde aterriza · instrumento · la otra mano en subordinada al final — y **tres formas con precedencia**: `A · TRANSFER` (el producto llega al cuerpo) → `B · HANDLING` (algo cambia de estado sin llegar al cuerpo) → `C · DECLARED STILLNESS` (no avanza nada, y se dice como cláusula principal). La precedencia es la que mata los tres fallos: el lote 1·s1 y el 4 son B disfrazados de C.
+
+⚠️ **LA LISTA DE VERBOS ES CERRADA (`VERBOS_ACCION`), y es lo que estandariza de verdad.** Tres clases —transferencia, manipulación, quietos— y las clases NO son decoración: el verificador usa `quietos` para cazar el beat que cambia el estado del producto y se describe con un verbo que no avanza. **Se amplía agregando verbos ahí, no dejando que el modelo invente**: un producto que no se pueda describir con la lista (un parche, un roll-on) necesita su verbo escrito, y ese cambio es visible en el diff; un verbo libre no lo es.
+
+⚠️ **Y ESTABA EN UN SOLO PROMPT DE LOS DOS — ésa era la mitad silenciosa del problema.** El pase GENERAL de FASE 1 seguía pidiendo `body` · `headAndGaze` · `leftHand` · `rightHand`: **cuatro campos que ya no existen en el schema**. O sea que cada vez que el refinamiento falla (va en `try/catch`) o no trae más beats que el pase general, `action` volvía VACÍA y el lote caía a la prosa sin que nada lo reportara. La plantilla vive ahora en UNA constante que emiten los dos prompts — **la regla va donde se declara el campo**, tercera vez que este documento lo registra. Con test que exige las tres formas y la lista en los dos, y que ninguno vuelva a nombrar los campos borrados.
+
+**`verificarAcciones` lo comprueba en código y SOLO LOGUEA** (decisión del dueño del repo). Cuatro reglas, cada una por una de las frases de la tabla: (1) arranca con el sujeto — caza el fragmento; (2) el primer verbo está en la lista cerrada — caza la redacción libre y el `speaks` de apertura; (3) si `productStateBefore ≠ productStateAfter`, el verbo no puede ser de clase quieta; (4) sin coletilla `and talking`. Un beat SIN oración también se reporta: es el modo de fallo silencioso de arriba.
+
+⚠️ **NO REPARA, y es deliberado:** reescribir la oración en código sería inventar coreografía, que es exactamente lo que el spec prohíbe. Mismo criterio que `verificarDialogos` y `coreografiaEscasa`. Cuando esté medido cuánto se dispara, el upgrade barato es reintentar el refinamiento — `reanalizar-forense --solo-motion` cuesta UNA llamada y no re-segmenta el video.
+
+✅ **Medido sobre las sesiones guardadas (lectura pura, cero LLM): 12 de 20 beats — el 60 % — están fuera de plantilla**, y los cuatro motivos se disparan (6 verbo fuera de lista · 3 coletilla de habla · 2 fragmento · 1 verbo quieto con el producto en movimiento). Ninguna regla es letra muerta, y el número explica el *"algunos sí y otros no"*.
+
+⚠️ **Es un cambio del paso CARO: solo alcanza a análisis NUEVOS.** Las sesiones guardadas conservan sus oraciones; para pasarlas a la plantilla hay que correr `reanalizar-forense --solo-motion`, que no re-segmenta el video. **NO lleva bump de huella:** `scriptFingerprint` protege la plantilla de `buildLotePrompt`, que no se tocó — lo que cambia es el VALOR de `accionVisual`, que la huella ya hashea como insumo.
+
 🔴 **EL REPARTO DEL DIÁLOGO ENTRE CORTES ERA EL DEFECTO QUE CONTAMINABA TODO CUESTA ABAJO, y estuvo invisible hasta que se midió el RITMO DEL HABLA de un clip.** Reportado como *"el pace del habla estuvo demasiado rápido"*, y la cadena completa resultó ser:
 
 | | medido en `7e4ccbcf` |

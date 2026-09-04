@@ -1044,6 +1044,117 @@ function ventanasDe(duracionSeg: number, ventanaSeg: number): string {
  */
 export const VENTANA_BEAT_SEG: number | null = null
 
+/**
+ * LOS VERBOS DE EVENTO — lista CERRADA (decisión del dueño del repo, 2026-09-04).
+ *
+ * ⚠️ ES LO QUE ESTANDARIZA DE VERDAD. Medido sobre los 5 lotes de `7e4ccbcf`: con la
+ * oración libre, el patrón bueno sale 1 de cada 3 — un lote devolvió `bottle rotation`
+ * (ni sujeto ni verbo), otro *"She **holds** the bottle up… and talking"* para 9,8 s (la
+ * cláusula principal no avanza) y otro *"She **speaks to the camera** while holding the
+ * dropper"* (la acción enterrada en la subordinada, que este repo ya midió que no se
+ * filma). El único que salía bien —*"She deposits a drop of serum on her left cheek with
+ * the dropper, while holding the bottle"*— es el que tiene esta forma.
+ *
+ * ⚠️ SE AMPLÍA AGREGANDO VERBOS ACÁ, no dejando que el modelo invente. Un producto que no
+ * se pueda describir con esta lista (un parche, un roll-on) necesita su verbo escrito,
+ * y ese cambio es visible en el diff; un verbo libre no lo es.
+ *
+ * Las clases NO son decoración: `verificarAcciones` usa QUIETOS para cazar el beat que
+ * cambia el estado del producto y se describe con un verbo que no avanza.
+ */
+export const VERBOS_ACCION = {
+  /** El producto llega al cuerpo. */
+  transferencia: ['releases', 'applies', 'spreads', 'massages', 'taps', 'dabs', 'deposits', 'rubs'],
+  /** Algo cambia de estado sin llegar al cuerpo. */
+  manipulacion: ['pulls out', 'picks up', 'sets down', 'uncaps', 'caps', 'dips', 'squeezes',
+    'raises', 'lowers', 'turns', 'opens', 'closes', 'shakes', 'pours'],
+  /** No avanza nada: el producto y las manos quedan como estaban. */
+  quietos: ['holds', 'rests', 'brings', 'shows', 'points to', 'looks at'],
+} as const
+
+/** Todos, del más largo al más corto — `points to` tiene que ganarle a `points`. */
+const VERBOS_TODOS: string[] = [
+  ...VERBOS_ACCION.transferencia, ...VERBOS_ACCION.manipulacion, ...VERBOS_ACCION.quietos,
+].sort((a, b) => b.length - a.length)
+
+/**
+ * LA PLANTILLA DE LA ORACIÓN DE ACCIÓN — una sola definición, los DOS prompts.
+ *
+ * ⚠️ VA EN LOS DOS PORQUE LOS DOS DECLARAN EL CAMPO. El pase general de FASE 1 pedía
+ * `body` · `headAndGaze` · `leftHand` · `rightHand`, cuatro campos que **ya no existen en
+ * el schema**: o sea que cuando el refinamiento falla o no trae más beats, `action` volvía
+ * VACÍA y el lote caía a la prosa. Ésa es la mitad silenciosa de *"algunos clips salen
+ * bien y otros no"*. La regla vive donde se declara el campo — tercera vez que este repo
+ * lo paga.
+ */
+const REGLA_ACCION: string[] = [
+  '── `action`: ONE WRITTEN SENTENCE, ON A FIXED TEMPLATE. Emitted VERBATIM to the render ──',
+  '',
+  'The sentence has FIVE slots and they always come in this order:',
+  '',
+  '  <SUBJECT> <EVENT VERB> <OBJECT + WHERE IT LANDS> with <INSTRUMENT>,',
+  '                                          while her <SIDE> hand <STATE>.',
+  '',
+  '  1 SUBJECT      always explicit — `She` / `He`, or the character label with several.',
+  '  2 EVENT VERB   from the CLOSED LIST below. Nothing else is a valid verb here.',
+  '  3 OBJECT       what moves AND where it ends up. Not the trajectory — the landing.',
+  '  4 INSTRUMENT   `with the dropper` · `with her fingertips` · `with both hands`.',
+  '  5 SUBORDINATE  the other hand, ALWAYS last and behind the comma.',
+  '',
+  'Pick the FORM by this precedence — the first one that applies wins:',
+  '',
+  '  A · TRANSFER — the product reaches the body.',
+  '    `She releases one drop of serum onto her left cheek with the dropper, while her',
+  '     left hand holds the bottle at chest level.`',
+  '  B · HANDLING — something changes state without reaching the body.',
+  '    `She pulls the dropper out of the bottle with her right hand, while her left hand',
+  '     holds the bottle at chest level.`',
+  '  C · DECLARED STILLNESS — nothing advances, and that is said as the MAIN clause.',
+  '    `She holds the bottle at chest level with both hands and looks at the camera.`',
+  '',
+  `  EVENT VERBS · transfer: ${VERBOS_ACCION.transferencia.join(' · ')}`,
+  `                handling: ${VERBOS_ACCION.manipulacion.join(' · ')}`,
+  `                still:    ${VERBOS_ACCION.quietos.join(' · ')}`,
+  '',
+  'FIVE PROHIBITIONS, each one from a real render:',
+  '  1. Never open with `speaks` / `smiles` / `looks` when anything else happens in the',
+  '     beat. The spoken line already travels in its own field, and making it the main',
+  '     clause is what makes the render film a talking head.',
+  '  2. Never end in `and talking` / `and explaining`. Same reason.',
+  '  3. Never a fragment. `bottle rotation` is a field value, not an instruction.',
+  '  4. ONE event per line. Two advancing verbs are two beats.',
+  '  5. The subordinate clause NEVER goes first. MEASURED: written as `She maintains the',
+  '     bottle in her left hand and places a drop on her cheek`, the render performed the',
+  '     main verb (holding, talking) and skipped the drop entirely. The model films the',
+  '     main clause; a buried action does not get filmed.',
+  '',
+  '⚠️ NAME THE EVENT, NOT THE TRAJECTORY — this is the one that gets missed. MEASURED on',
+  'the opening of a real ad: the dropper is in her right hand, she releases drops onto her',
+  'cheek, puts the dropper back and spreads with her fingers. The analysis came back as',
+  '`holding the dropper above her cheek` → `moving dropper away from cheek` → `closing the',
+  'dropper into the bottle`: three TRUE positions of the hand, and the actual event — the',
+  'drop leaving the dropper and landing on the skin — never written down. The render then',
+  'performs the travel and applies nothing. So IF THE PRODUCT REACHES THE BODY ANYWHERE IN',
+  'THE CUT, one beat MUST use a TRANSFER verb and its `productStateAfter` must say the',
+  'product is ON the skin. `near the cheek` or `moving away` say where the hand is; they',
+  'are not the event.',
+  '',
+  '⚠️ THE INSTRUMENT AND THE TARGET GO IN THE SAME SENTENCE. MEASURED: with `applies drops',
+  'to face` the render pulled the dropper out, squeezed it back INTO the bottle, and the',
+  'drop appeared on the cheek by itself. Naming the dropper in a DIFFERENT beat does not',
+  'work — the model does not tie them together.',
+  '',
+  '⚠️ THE TWO HANDS ARE TRACKED SEPARATELY and this is not optional: in a real ad one hand',
+  'holds while the other manipulates, and when they are collapsed into "gestures naturally"',
+  'the render model swaps the tasks between them. BOTH HANDS ALWAYS APPEAR in the sentence,',
+  'even when one is only holding. If the posture or the gaze CHANGES in this beat, fold it',
+  'into the same sentence; if it does not change, leave it out.',
+  '',
+  '⚠️ THE PRODUCT STATE IS A CHAIN: what one beat leaves is what the next one finds, word',
+  'for word. The code verifies it. If the product is not on screen, both states say',
+  '`not in frame`.',
+]
+
 export function buildMotionRefinementInstruction(
   cortes: { n: number; tiempo: string; duracionSeg: number; accion: string }[],
   /** Segundos por ventana. `null` = sin ventanas (el prompt de antes). */
@@ -1079,74 +1190,7 @@ export function buildMotionRefinementInstruction(
     '`referenceFrameMs` absolute in the source video (the frame that best shows the beat);',
     '`action` (see below); `productStateBefore` and `productStateAfter`; `importance`.',
     '',
-    '── `action`: ONE WRITTEN SENTENCE. It is emitted VERBATIM into the render prompt ──',
-    'Write the beat as a single descriptive sentence, the way a director writes a shot, NOT',
-    'as separate fields. It must name, inside that one sentence: what each hand does, the',
-    'instrument it uses, and where the action lands.',
-    '',
-    '  GOOD `She gently raises the dropper in her right hand and releases one drop of serum',
-    '        onto her left cheek while her left hand holds the bottle low, almost out of frame.`',
-    '  GOOD `She spreads the serum into her cheekbone with her fingertips in slow upward',
-    '        circles, the bottle still resting in her left hand at chest level.`',
-    '  BAD  `Holding the dropper.`            (a field value, not an instruction)',
-    '  BAD  `applies product to cheek`        (no instrument, no side, no direction)',
-    '  BAD  `She moves her hands.`            (says nothing a camera could film)',
-    '',
-    '⚠️ START THE SENTENCE WITH THE ACTION THAT ADVANCES. The hand that is only holding goes',
-    'LAST, in a subordinate clause. MEASURED: written the other way round —`She maintains the',
-    'bottle in her left hand and places a drop of serum on her cheek`— the render performed the',
-    'main verb (holding the bottle, talking) and skipped the drop entirely. The model executes',
-    'the main clause; a buried action does not get filmed.',
-    '  GOOD `She releases one drop of serum onto her left cheek with the dropper, while her',
-    '        left hand holds the bottle at chest level.`',
-    '  BAD  `She maintains the bottle in her left hand and places a drop on her cheek.`',
-    '',
-    'When NOTHING advances in a beat — she is only holding and talking — say that as the main',
-    'clause (`She holds the bottle at chest level and speaks to the camera`). Declared stillness',
-    'is data; a static beat dressed up as an action is not.',
-    '',
-    'BOTH HANDS ALWAYS APPEAR in the sentence, even when one is only holding: measured, when',
-    'one hand goes unmentioned the render swaps their tasks. If the body posture or the gaze',
-    'CHANGES in this beat, fold it into the same sentence; if it does not change, leave it out',
-    'rather than repeating it.',
-    '',
-    '⚠️ Do NOT also fill `body`, `headAndGaze`, `leftHand` or `rightHand`. They exist only to',
-    'read sessions analysed before this rule. Everything they used to carry goes in `action`,',
-    'and splitting it across both is how one of them comes back empty.',
-    '',
-    '⚠️ `leftHand` AND `rightHand` NAME THE INSTRUMENT AND THE TARGET, in the same phrase.',
-    'These two fields become one numbered line each in the render prompt, and a line that',
-    'says only the verb gets performed without the object. MEASURED: with `applies drops to',
-    'face` the render pulled the dropper out, squeezed it back INTO the bottle, and the drop',
-    'appeared on the cheek by itself. Naming the dropper in a DIFFERENT beat does not work —',
-    'the model does not tie them together.',
-    '  BAD  `applying serum to cheek`',
-    '  GOOD `releases one drop with the dropper onto her left cheek`',
-    '  BAD  `extracting serum`',
-    '  GOOD `squeezes the dropper bulb and draws serum up into the pipette`',
-    '  BAD  `massaging skin`',
-    '  GOOD `spreads the serum with her fingertips in upward circles over her cheekbone`',
-    '',
-    '⚠️ NAME THE EVENT, NOT THE TRAJECTORY — and this is the one that gets missed.',
-    'MEASURED on the opening of a real ad: the dropper is in her right hand, she releases',
-    'drops onto her cheek, puts the dropper back and spreads with her fingers. The analysis',
-    'came back as `holding the dropper above her cheek` → `moving dropper away from cheek` →',
-    '`closing the dropper into the bottle`: three TRUE positions of the hand, and the actual',
-    'event — the drop leaving the dropper and landing on her skin — never written down. The',
-    'render then performs the travel and applies nothing.',
-    '',
-    'So: IF THE PRODUCT REACHES THE BODY ANYWHERE IN THE CUT, one beat MUST say the',
-    'TRANSFER — `releases two drops onto her left cheek`, `deposits the cream on her',
-    'fingertips`, `spreads it into the skin` — and its `productStateAfter` must say the',
-    'product is ON the skin. `near the cheek`, `above her cheek` or `moving away` describe',
-    'where the hand is; they are not the event. Approaching and withdrawing are the',
-    'CONSEQUENCES of the transfer, never a replacement for it.',
-    '',
-    '⚠️ THE PRODUCT STATE IS A CHAIN: what one beat leaves is what the next one finds,',
-    'word for word. The code verifies it. If the product is not on screen, both states say',
-    '`not in frame`.',
-    '⚠️ THE TWO HANDS ARE SEPARATE. One holds while the other works; collapsing them makes',
-    'the render swap their tasks.',
+    ...REGLA_ACCION,
     '',
     'Also return `startState` and `endState` per cut: body pose, head, gaze, each hand,',
     'expression, product state, props and camera at the first and last frame of the cut.',
@@ -1333,11 +1377,7 @@ export function buildForensicInstruction(): string {
     '  `referenceFrameMs` — one absolute instant in the source video: the frame that best',
     '    shows this beat\'s key state. It is the frame that will be pulled to anchor the',
     '    pose, so choose it deliberately.',
-    '  `body` · `headAndGaze` · `leftHand` · `rightHand` — telegraphic. No articles, no',
-    '    "we can observe that". Three to eight words each.',
-    '  ⚠️ THE TWO HANDS ARE TRACKED SEPARATELY and this is not optional: in a real ad one',
-    '    hand holds while the other manipulates, and when they are collapsed into "gestures',
-    '    naturally" the render model swaps the tasks between them.',
+    '  `action` — ONE sentence on the fixed template, spelled out at the end of this block.',
     '  `productStateBefore` · `productStateAfter`.',
     '  ⚠️ THE PRODUCT STATE IS A STATE MACHINE, not a description. What a beat LEAVES is',
     '    what the next one FINDS, word for word: "bottle on the table, closed" → "bottle in',
@@ -1355,6 +1395,12 @@ export function buildForensicInstruction(): string {
     '',
     '⚠️ `objetoEnMano` YA NO SE PIDE: sale de `productStateBefore` del primer beat y',
     'de `productStateAfter` del último. Déjalo en null.',
+    '',
+    // ⚠️ LA MISMA PLANTILLA QUE EL PASE DEDICADO, y por eso está en una sola constante.
+    // Este pase declara el campo igual que aquél: si acá se pide otra cosa —o no se pide—,
+    // `action` vuelve vacía cada vez que el refinamiento falla o no trae más beats, y el
+    // lote cae a la prosa sin que nada lo reporte.
+    ...REGLA_ACCION,
     '',
     'Un ejemplo del nivel esperado: "holds the bottle by its body with her right hand,',
     'raises it to chin height and turns it a quarter turn so the label faces front; her',
@@ -1690,6 +1736,74 @@ const soloPalabras = (x: string) =>
  * inventar el corte. Así que se LOGUEA y se muestra, como `coreografiaEscasa` y
  * `desalineadas`: el arreglo es re-analizar o corregir a mano, y para eso hay que verlo.
  */
+/**
+ * ¿CADA ORACIÓN DE ACCIÓN SIGUE LA PLANTILLA? — determinista, y SOLO LOGUEA.
+ *
+ * El modelo redacta, el código verifica: el reparto de siempre en este repo. Cuatro reglas,
+ * cada una por un fallo medido sobre los 5 lotes de `7e4ccbcf`:
+ *
+ * | # | qué mira | qué cazó |
+ * |---|---|---|
+ * | 1 | arranca con el sujeto | `bottle rotation` — un valor de campo, no una instrucción |
+ * | 2 | el primer verbo está en `VERBOS_ACCION` | la redacción libre, que sale bien 1 de 3 |
+ * | 3 | si el producto cambia de estado, el verbo AVANZA | *"She **holds** the bottle up…"* para 9,8 s |
+ * | 4 | sin coletilla de habla | *"…and talking"*, que hace que el render filme una cabeza parlante |
+ *
+ * ⚠️ **NO REPARA, y es deliberado** (decisión del dueño del repo): reescribir la oración en
+ * código sería inventar coreografía, que es exactamente lo que el spec prohíbe. Se loguea y
+ * se ve, como `coreografiaEscasa` y `verificarDialogos`. Cuando esté medido cuánto se
+ * dispara, el upgrade barato es reintentar el refinamiento — `reanalizar-forense
+ * --solo-motion` cuesta UNA llamada y no re-segmenta el video.
+ *
+ * ⚠️ Un beat SIN oración también es un problema y se reporta: es el modo de fallo silencioso
+ * que tenía el pase general (pedía cuatro campos que ya no existen en el schema).
+ */
+export interface ProblemaAccion { corte: number; beat: number; motivo: string; texto: string }
+
+/** El verbo con el que ARRANCA la oración, o `null` si no empieza por sujeto + verbo. */
+function verboDe(action: string): string | null {
+  const t = action.trim().toLowerCase().replace(/^p\d+\s*\([^)]*\)\s*/, '')
+  const m = /^(she|he|they)\s+(.*)$/s.exec(t)
+  if (!m) return null
+  const resto = m[2]
+  // Del más largo al más corto: `points to` tiene que ganarle a `points`.
+  return VERBOS_TODOS.find((v) => resto.startsWith(v + ' ')) ?? null
+}
+
+/** Para comparar dos estados del producto: importan las palabras, no la puntuación. */
+const normEstado = (x: string | undefined | null) =>
+  String(x ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim()
+
+export function verificarAcciones(report: ForensicReport): ProblemaAccion[] {
+  const problemas: ProblemaAccion[] = []
+  for (const c of report?.cortes ?? []) {
+    const beats = c.motion?.beats ?? []
+    for (const [i, b] of beats.entries()) {
+      const texto = String(b?.action ?? '').trim()
+      const marcar = (motivo: string) => problemas.push({ corte: c.n, beat: i + 1, motivo, texto })
+      if (!texto) { marcar('sin oración de acción'); continue }
+
+      const verbo = verboDe(texto)
+      // 1 y 2 colapsan en la misma comprobación: sin sujeto no hay verbo que encontrar.
+      if (!verbo) {
+        marcar(/^(she|he|they|p\d)/i.test(texto)
+          ? 'el primer verbo no está en la lista cerrada'
+          : 'no arranca con el sujeto (¿es un fragmento?)')
+        continue
+      }
+      // 3. El estado del producto se movió, así que la oración tiene que avanzar.
+      const quieto = (VERBOS_ACCION.quietos as readonly string[]).includes(verbo)
+      if (quieto && normEstado(b.productStateBefore) !== normEstado(b.productStateAfter))
+        marcar(`el producto cambia de estado y el verbo (\`${verbo}\`) no avanza`)
+      // 4. El habla ya viaja en su propio campo.
+      if (/\b(and|while)\s+(talking|speaking|explaining|smiling|saying)\b/i.test(texto))
+        marcar('termina en una coletilla de habla')
+    }
+  }
+  return problemas
+}
+
 export interface ProblemaDialogo { corte: number; motivo: string }
 
 export function verificarDialogos(report: ForensicReport): ProblemaDialogo[] {

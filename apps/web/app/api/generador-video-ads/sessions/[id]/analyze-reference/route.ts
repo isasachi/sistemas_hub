@@ -6,7 +6,7 @@ import { geminiCallStructured, geminiEsDirecto } from '@/lib/gemini'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 import { ForensicReportSchema } from '@/lib/video-ads/types'
-import { buildForensicInstruction, repairCutTiming, reconciliarConVentana, coreografiaEscasa, MIN_TOMA_SEG, limpiarDialogos, verificarHablantes, verificarDialogos, type ProblemaDialogo, buildMotionRefinementInstruction, MotionRefinementSchema } from '@/lib/video-ads/forensic'
+import { buildForensicInstruction, repairCutTiming, reconciliarConVentana, coreografiaEscasa, MIN_TOMA_SEG, limpiarDialogos, verificarHablantes, verificarDialogos, type ProblemaDialogo, verificarAcciones, type ProblemaAccion, buildMotionRefinementInstruction, MotionRefinementSchema } from '@/lib/video-ads/forensic'
 import { normalizeMotionTimeline, validateMotionTimeline, objetoEnManoFromMotion, compileAccion, tieneMotion } from '@/lib/video-ads/motion'
 import { MAX_VIDEO_MB } from '@/lib/video-ads/limits'
 import { STEP } from '@/lib/video-ads/steps'
@@ -189,6 +189,17 @@ export async function POST(
       console.warn(
         `[video-ads/analyze-reference] sesión ${id}: ${escasos.length} cortes con coreografía escasa para su duración —`,
         escasos.map((e) => `corte ${e.n}: ${e.movimientos} movimientos en ${e.seg.toFixed(1)}s`),
+      )
+
+    // ⚠️ LA MISMA VISIBILIDAD, sobre la PLANTILLA de la oración de acción. Va después del
+    // refinamiento porque es él quien escribe `action`; corre sobre `reparado`, que es lo
+    // que se persiste. NO repara: reescribir la oración en código sería inventar
+    // coreografía, y eso es justo lo que el spec prohíbe.
+    const malRedactadas = verificarAcciones(reparado)
+    if (malRedactadas.length)
+      console.warn(
+        `[video-ads/analyze-reference] sesión ${id}: ${malRedactadas.length} oraciones de acción fuera de plantilla —`,
+        malRedactadas.map((x: ProblemaAccion) => `corte ${x.corte} beat ${x.beat}: ${x.motivo} · "${x.texto}"`),
       )
 
     await updateVideoSession(id, {
