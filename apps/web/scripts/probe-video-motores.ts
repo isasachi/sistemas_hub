@@ -64,7 +64,7 @@ interface StoredLote {
   videoUrl: string | null
 }
 
-interface VideoSessionRow {
+export interface VideoSessionRow {
   id: string
   user_id: string | null
   reference_video_url: string | null
@@ -151,13 +151,13 @@ function run(bin: string, args: string[]): Promise<void> {
   })
 }
 
-async function download(url: string, destination: string): Promise<void> {
+export async function download(url: string, destination: string): Promise<void> {
   const response = await fetch(url, { signal: AbortSignal.timeout(HTTP_TIMEOUT_MS) })
   if (!response.ok) throw new Error(`No se pudo descargar ${url}: HTTP ${response.status}`)
   await writeFile(destination, Buffer.from(await response.arrayBuffer()))
 }
 
-async function createClip(source: string, output: string, start: number, duration: number): Promise<void> {
+export async function createClip(source: string, output: string, start: number, duration: number): Promise<void> {
   if (!ffmpegPath) throw new Error('ffmpeg-static no resolvió un binario para esta plataforma')
   await run(ffmpegPath, [
     '-y', '-loglevel', 'error', '-i', source,
@@ -168,7 +168,7 @@ async function createClip(source: string, output: string, start: number, duratio
   ])
 }
 
-async function createStrip(video: string, output: string, duration: number): Promise<void> {
+export async function createStrip(video: string, output: string, duration: number): Promise<void> {
   if (!ffmpegPath) throw new Error('ffmpeg-static no resolvió un binario para esta plataforma')
   await run(ffmpegPath, [
     '-y', '-loglevel', 'error', '-i', video,
@@ -199,7 +199,7 @@ function characterDescription(session: VideoSessionRow): string {
     || 'el personaje del usuario'
 }
 
-async function kieKey(userId: string | null): Promise<string> {
+export async function kieKey(userId: string | null): Promise<string> {
   if (!userId) throw new Error('La sesión no tiene user_id; no se puede resolver la key BYOK de KIE')
   const { data, error } = await getDb().from('user_settings')
     .select('kie_api_key').eq('user_id', userId).maybeSingle()
@@ -352,11 +352,11 @@ async function runXai(session: VideoSessionRow, clipUrl: string): Promise<{ task
  * de `MotionBeat.action`, una por evento y en orden. Acá se recortan al tramo pedido —
  * ventana del corte + `startSec`/`endSec` del beat— y se emiten numeradas.
  *
- * ⚠️ CABE DE SOBRA, y eso es propio de este motor: seedance acepta **30.000 caracteres** de
+ * ⚠️ CABE DE SOBRA, y eso es propio de este motor: seedance acepta **20.000 caracteres** de
  * prompt contra los 4.096 de grok. Toda la escalera de degradación que el pipeline necesita
  * hoy existe por un presupuesto que acá no aplica.
  */
-function accionesDelTramo(session: VideoSessionRow, start: number, end: number): string[] {
+export function accionesDelTramo(session: VideoSessionRow, start: number, end: number): string[] {
   const manual = String(process.env.PROBE_ACCIONES ?? '').trim()
   if (manual) return manual.split('|').map((x) => x.trim()).filter(Boolean)
   const aSeg = (t: string | undefined): [number, number] | null => {
@@ -379,7 +379,63 @@ function accionesDelTramo(session: VideoSessionRow, start: number, end: number):
   return fuera
 }
 
-async function runSeedance(
+/**
+ * EL PROMPT DE D, EN DOS BRAZOS — `PROBE_PROMPT=v2` cambia SOLO esto y nada más.
+ *
+ * v1 es lo que se midió el 2026-09-04 en los 6 cortes del anuncio: las referencias se nombran
+ * en prosa ("the first reference image") y las acciones van como lista numerada bajo un
+ * "IN THIS EXACT ORDER". De esos 6, el corte 2 —el único con dos acciones sensibles al orden—
+ * salió INVERTIDO: señaló la mejilla antes de presentar el frasco.
+ *
+ * v2 cambia dos cosas y las dos salen de fuentes primarias:
+ *   1. `@Image1` / `@Image2` / `@Video1` con rol explícito. El wizard de KIE trae este ejemplo
+ *      con un video de referencia adjunto: "Reference @Image1 @Image2 for the spear-wielding
+ *      character, @Image3 @Image4 for the scene." Las referencias ligan por POSICIÓN 1-based
+ *      del array, y la guía de ByteDance avisa que una referencia SIN rol asignado se ignora.
+ *   2. Conectores temporales en vez de la lista numerada. El ejemplo oficial encadena con
+ *      "then / subsequently / immediately", no con números — el orden sale de la prosa.
+ *
+ * ⚠️ NO se le asigna a `@Image1` el rol de MANOS, aunque las uñas celestes de la creadora se
+ * filtren desde el video. El avatar es un retrato de cabeza y hombros: no tiene manos en cuadro,
+ * y asignar un rol que la imagen no puede cumplir es peor que no asignarlo. Queda la negativa.
+ */
+export function promptSeedance(session: VideoSessionRow, locucion: string, acciones: string[]): string {
+  const habla = `She speaks this line out loud in Latin American Spanish, verbatim, and nothing else: "${locucion}"`
+  const limpio = 'No on-screen text, captions, watermarks, usernames or platform UI of any kind.'
+  if (process.env.PROBE_PROMPT === 'v2') {
+    // "She presents the bottle…" → "First, she presents the bottle…; then she points…"
+    const encadenadas = acciones
+      .map((a, i) => `${i === 0 ? 'First, she' : 'then she'} ${a.replace(/^She\s+/i, '').replace(/\.\s*$/, '')}`)
+      .join('; ')
+    return [
+      `Reference @Image1 for the woman — her face, hair and clothes. ${characterDescription(session)}`,
+      `Reference @Image2 for the product she handles, reproduced exactly: ${productDescription(session)}.`,
+      'Follow the motion of @Video1: same hand laterality, same cheek, same timing, same',
+      'hand-product-face contacts, same gaze and framing. Take ONLY the movement from @Video1 —',
+      'she is NOT the person in it, and none of her appearance comes from it.',
+      'Do not simplify, reorder, omit or invent actions.',
+      limpio,
+      habla,
+      ...(encadenadas ? ['', `${encadenadas}.`] : []),
+    ].join(' ')
+  }
+  return [
+    'Reproduce the motion of the reference video EXACTLY: same hand laterality, same cheek,',
+    'same action order, same timing, same hand-product-face contacts, same gaze and framing.',
+    'Do not simplify, reorder, omit or invent actions.',
+    `The person is the woman in the first reference image — her face, hair and clothes. ${characterDescription(session)}`,
+    `The product she handles is the one in the second reference image, reproduced exactly: ${productDescription(session)}.`,
+    'She is NOT the person in the reference video: take only the movement from it.',
+    limpio,
+    habla,
+    ...(acciones.length
+      ? ['', 'She performs these actions IN THIS EXACT ORDER, one after the other, none skipped, none reordered:',
+         ...acciones.map((a, i) => `${i + 1}. ${a}`)]
+      : []),
+  ].join(' ')
+}
+
+export async function runSeedance(
   session: VideoSessionRow, clipUrl: string, locucion: string, duration: number,
   acciones: string[] = [],
 ): Promise<{ taskId: string; url: string }> {
@@ -396,20 +452,7 @@ async function runSeedance(
       // sale $17,67; a 480p, $7,91. `seedance-2-fast` topa en 15 s y cuesta menos.
       model: process.env.PROBE_SEEDANCE_MODEL ?? 'bytedance/seedance-2-5',
       input: {
-        prompt: [
-          'Reproduce the motion of the reference video EXACTLY: same hand laterality, same cheek,',
-          'same action order, same timing, same hand-product-face contacts, same gaze and framing.',
-          'Do not simplify, reorder, omit or invent actions.',
-          `The person is the woman in the first reference image — her face, hair and clothes. ${characterDescription(session)}`,
-          `The product she handles is the one in the second reference image, reproduced exactly: ${productDescription(session)}.`,
-          'She is NOT the person in the reference video: take only the movement from it.',
-          'No on-screen text, captions, watermarks, usernames or platform UI of any kind.',
-          `She speaks this line out loud in Latin American Spanish, verbatim, and nothing else: "${locucion}"`,
-          ...(acciones.length
-            ? ['', 'She performs these actions IN THIS EXACT ORDER, one after the other, none skipped, none reordered:',
-               ...acciones.map((a, i) => `${i + 1}. ${a}`)]
-            : []),
-        ].join(' '),
+        prompt: promptSeedance(session, locucion, acciones),
         reference_video_urls: [clipUrl],
         reference_image_urls: [session.avatar_url, session.product_url],
         generate_audio: true,
@@ -658,7 +701,11 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((error) => {
-  console.error(errorText(error))
-  process.exitCode = 1
-})
+// Solo corre invocado directamente: `probe-anuncio.ts` importa sus piezas, y sin este guard
+// el import dispararía una corrida entera. Mismo patrón que `probe-audio-espanol.ts`.
+if (process.argv[1]?.endsWith('probe-video-motores.ts')) {
+  main().catch((error) => {
+    console.error(errorText(error))
+    process.exitCode = 1
+  })
+}

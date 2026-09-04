@@ -225,7 +225,13 @@ export function scriptFingerprint(input: {
     // plantilla entera del prompt y la regla de reparto en lotes. Un resume a través de esto
     // pegaría un clip del modelo viejo con la plantilla vieja a uno nuevo mientras
     // `isPaidResume` jura que es el mismo contenido.
-    'v14',
+    // v14 → v15: LA PLANTILLA DEL PROMPT CAMBIA DE ORDEN. La secuencia de acciones pasa del
+    // bloque 12 de 13 a ir arriba, justo después de las referencias, y la escalera de
+    // degradación se reordena (el encuadre entra como escalón nuevo; el movimiento pasa a
+    // soltarse ÚLTIMO en vez de segundo). La huella hashea INSUMOS y no el texto producido,
+    // así que un cambio de plantilla le es invisible: sin el bump, reanudar pegaría un clip
+    // con el prompt viejo a uno con el nuevo mientras `isPaidResume` jura que es lo mismo.
+    'v15',
     // Pasa por `toNiche`: un nicho BLOQUEADO se renderiza como suplementos, así que su
     // huella tiene que ser la de suplementos. Sin esto, una sesión guardada como 'ropa'
     // con lotes ya pagados reanudaría pegando un clip del camino de prenda a uno del

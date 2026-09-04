@@ -48,12 +48,13 @@ const MODEL = 'grok-imagine-video-1.5'
 const KEY = process.env.XAI_API_KEY
 const SEG = Number(process.env.XAI_SEG ?? 7)
 const OUT = process.env.XAI_OUT ?? `${process.env.HOME}/Downloads/xai-clip`
+const NOMBRE = process.env.XAI_NOMBRE ?? 'tramo2-xai'
 
 // Tramo 2 de la sesión 7e4ccbcf, tal como lo tiene la base (7 s).
 const AVATAR = 'https://hryygojgihqazsmnduvh.supabase.co/storage/v1/object/public/ad-uploads/7e4ccbcf-eeac-42cd-8e22-7a56f1836e09/avatar-P1.png?v=1788391983442'
 const PRODUCTO = 'https://hryygojgihqazsmnduvh.supabase.co/storage/v1/object/public/ad-uploads/7e4ccbcf-eeac-42cd-8e22-7a56f1836e09/product.jpg?v=1788391856564'
-const LOCUCION = 'Si tú también estás entrando a los 30 como yo, es momento de empezar a implementar este tipo de sueros a tu rutina.'
-const CAMARA = 'Medium close-up; camera at eye level.'
+const LOCUCION = process.env.XAI_LOCUCION ?? 'Si tú también estás entrando a los 30 como yo, es momento de empezar a implementar este tipo de sueros a tu rutina.'
+const CAMARA = process.env.XAI_CAMARA ?? 'Medium close-up; camera at eye level.'
 // `carina` es voz de mujer joven (catálogo verificado), coherente con el avatar de 30 años.
 const VOZ = process.env.XAI_VOZ ?? 'carina'
 
@@ -108,7 +109,7 @@ async function main() {
   if (!KEY) throw new Error('falta XAI_API_KEY')
   await mkdir(OUT, { recursive: true })
   const p = prompt()
-  await writeFile(`${OUT}/prompt.txt`, p)
+  await writeFile(`${OUT}/${NOMBRE}-prompt.txt`, p)
   console.log(`\n${p}\n${'─'.repeat(70)}`)
   console.log(`prompt: ${p.length} car · ${SEG} s @480p ≈ $${(SEG * 0.08).toFixed(2)} · voz ${VOZ}`)
   if (process.env.XAI_DRY) return console.log('XAI_DRY: no se genera nada')
@@ -143,9 +144,9 @@ async function main() {
   }
   if (!url) throw new Error(`plazo agotado (request_id ${id})`)
 
-  const mp4 = `${OUT}/tramo2-xai.mp4`
+  const mp4 = `${OUT}/${NOMBRE}.mp4`
   await download(url, mp4)
-  await createStrip(mp4, `${OUT}/tramo2-xai-frames.jpg`, SEG)
+  await createStrip(mp4, `${OUT}/${NOMBRE}-frames.jpg`, SEG)
   const { dicho, idioma } = await transcribir(mp4).catch(() => transcribir(url))
   const cob = cobertura(LOCUCION, dicho)
   console.log(`\n  locución: ${(cob * 100).toFixed(0)}% · idioma: ${idioma}`)

@@ -501,6 +501,95 @@ describe('buildLotePrompt — las acciones numeradas', () => {
   })
 })
 
+// ⚠️ LOS TRES TESTS DE ABAJO FIJAN DECISIONES DE ORDEN, que es justo lo que un refactor
+// deshace sin que nada se entere: el contenido del prompt no cambia, así que ningún test de
+// "contiene el bloque X" los ve caer.
+describe('buildLotePrompt — la coreografía va ARRIBA', () => {
+  const lote = groupIntoLotes([toma(1, 4, 'Hola.')])[0]
+  const p = buildLotePrompt({ lote, ...ARGS, escenario: 'una cocina blanca' })
+
+  // La guía de este modelo: "la acción escrita al PRINCIPIO del prompt aparece al principio
+  // del clip". Estaba en el bloque 12 de 13, detrás de ~3.000 caracteres de contexto.
+  it('la secuencia de acciones precede al bloque de personaje y al de producto', () => {
+    const acciones = p.indexOf('Visual Action Sequence:')
+    expect(acciones).toBeGreaterThan(-1)
+    expect(acciones).toBeLessThan(p.indexOf('Character:'))
+    expect(acciones).toBeLessThan(p.indexOf('Camera:'))
+  })
+
+  // La locución final sigue cerrando el prompt: es el contrato de idioma y el test de arriba
+  // ya fija que va pegada a su rótulo.
+  it('el guion hablado sigue siendo lo último', () => {
+    expect(p.indexOf('Final spoken script:')).toBeGreaterThan(p.indexOf('Visual Action Sequence:'))
+  })
+})
+
+describe('buildLotePrompt — el orden de la escalera', () => {
+  // Un lote que NO entra ni degradando, para recorrer la escalera entera hasta el piso.
+  const apretado = (extra: number) => buildLotePrompt({
+    lote: groupIntoLotes([1, 2, 3].map((n) => ({
+      ...toma(n, 5, 'Una frase que ocupa lo suyo dentro del lote.'),
+      tiempoOriginal: `00:0${n} - 00:0${n + 5}`,
+      accionVisual: 'acción detallada de la mano y del cuerpo. '.repeat(10),
+    })))[0],
+    ...ARGS,
+    escenario: 'una habitación con muchísimo detalle. '.repeat(extra),
+    productDesc: 'Frasco de vidrio. Etiqueta impresa. Texto en negro. '.repeat(extra),
+    movimiento: { calidadMovimiento: 'MOVIMIENTO-FLUIDO-MARCADOR', manerismos: 'se toca el pelo' },
+  })
+
+  // ⚠️ ÉSTE ES EL TEST QUE FIJA LA INVERSIÓN, y hay que escribirlo así para que discrimine:
+  // "sin movimiento ⟹ sin escenario" se cumplía TAMBIÉN con el orden viejo (el escenario ya
+  // era el primer escalón), así que no mide nada. Lo que solo es cierto con el orden nuevo es
+  // que en el escalón donde la ETIQUETA ya se recortó, el movimiento siga estando.
+  it('cuando la etiqueta del producto ya se recortó, el bloque de movimiento TODAVÍA está', () => {
+    let encontrado = false
+    for (let extra = 1; extra <= 40; extra++) {
+      const p = apretado(extra)
+      if (p.includes('El resto de la etiqueta se lee de su imagen.')) {
+        encontrado = true
+        expect(p).toContain('MOVIMIENTO-FLUIDO-MARCADOR')
+        break
+      }
+    }
+    // Si nunca se recorta la etiqueta, el barrido no probó nada y hay que recalibrarlo.
+    expect(encontrado).toBe(true)
+  })
+
+  it('con presión moderada no se suelta nada del movimiento', () => {
+    expect(apretado(1)).toContain('MOVIMIENTO-FLUIDO-MARCADOR')
+  })
+})
+
+describe('buildLotePrompt — el encuadre entra en la escalera', () => {
+  // Medido sobre 146 lotes reales: `camaraDeLote` llega a 411 caracteres y era el único
+  // bloque grande que no estaba en ningún escalón.
+  const CAMARA_LARGA = 'Primer plano a la altura de los ojos, cortando a la altura del pecho. '
+    + 'La luz entra por la izquierda y deja el fondo desenfocado con una caída suave. '.repeat(4)
+
+  it('con holgura se emite entero', () => {
+    const p = buildLotePrompt({ lote: groupIntoLotes([toma(1, 4, 'Hola.')])[0], ...ARGS, camara: CAMARA_LARGA })
+    expect(p).toContain(CAMARA_LARGA.trim())
+  })
+
+  it('bajo presión se recorta a su primera oración en vez de pagarlo entero', () => {
+    const p = buildLotePrompt({
+      lote: groupIntoLotes([1, 2, 3].map((n) => ({
+        ...toma(n, 5, 'Una frase que ocupa lo suyo dentro del lote.'),
+        tiempoOriginal: `00:0${n} - 00:0${n + 5}`,
+        accionVisual: 'acción detallada de la mano y del cuerpo. '.repeat(10),
+      })))[0],
+      ...ARGS,
+      camara: CAMARA_LARGA,
+      escenario: 'una habitación con muchísimo detalle. '.repeat(20),
+      productDesc: 'Frasco de vidrio. Etiqueta impresa. '.repeat(20),
+    })
+    expect(p).toContain('Camera: Primer plano a la altura de los ojos, cortando a la altura del pecho.')
+    expect(p).not.toContain('La luz entra por la izquierda')
+    expect(p.length).toBeLessThanOrEqual(KIE_PROMPT_MAX)
+  })
+})
+
 describe('buildLotePrompt — el presupuesto', () => {
   it('un lote cargado entra en el tope de ESTE modelo', () => {
     const largo = groupIntoLotes([1, 2, 3].map((n) => ({

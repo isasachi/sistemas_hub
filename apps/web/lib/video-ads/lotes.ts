@@ -611,6 +611,16 @@ export function partirEnHechos(accion: string): string[] {
  * palabras, lo que está viendo en píxeles como `@image(2)`. Es el primer escalón de la
  * escalera por eso: duplica una referencia que ya viaja.
  */
+/**
+ * El encuadre sin la prosa de más. Se queda con la primera oración, que es donde el forense
+ * declara el punto de corte del cuadro; lo que sigue suele ser textura ("con la luz entrando
+ * por la izquierda, fondo desenfocado…") que el avatar ya muestra en píxeles.
+ */
+function camaraCorta(c: string): string {
+  const frases = c.split(/(?<=\.)\s+/).filter(Boolean)
+  return frases.length <= 1 ? c : frases[0]
+}
+
 function productoFisico(desc: string): string {
   const frases = desc.split(/(?<=\.)\s+/).filter(Boolean)
   if (frases.length <= 2) return desc
@@ -630,14 +640,28 @@ const NIVEL_COMPLETO = 0
 /** El escenario en TEXTO contra el escenario en la IMAGEN. Ver la nota en `buildLotePrompt`. */
 const NIVEL_SIN_ESCENARIO = 1
 /**
- * El bloque de CÓMO SE MUEVE (FASE 4.6). Se suelta antes que la etiqueta del producto por
- * dos motivos: **no está en el OUTPUT del spec** —es un agregado de este repo— y describe en
- * prosa genérica ("gesticula con ambas manos mientras habla") lo que la secuencia numerada
- * de ESTE clip ya dice en concreto. Son ~400 caracteres.
+ * El ENCUADRE, recortado a su primera oración. Medido sobre 146 lotes reales: `camaraDeLote`
+ * llega a **411 caracteres** —el forense a veces escribe un párrafo por corte— y hasta ahora
+ * era el único bloque grande del prompt que **no estaba en ningún escalón**, así que su costo
+ * se lo terminaba pagando la coreografía en el piso.
  */
-const NIVEL_SIN_MOVIMIENTO = 2
+const NIVEL_CAMARA_CORTA = 2
 /** La etiqueta del producto, que `@image(2)` ya muestra. */
 const NIVEL_PRODUCTO_FISICO = 3
+/**
+ * El bloque de CÓMO SE MUEVE (FASE 4.6) es el ÚLTIMO que se suelta.
+ *
+ * ⚠️ ESTABA DE SEGUNDO Y ERA EL PEOR LUGAR POSIBLE. El argumento para soltarlo temprano era
+ * que no está en el OUTPUT del spec y que la secuencia numerada ya dice lo concreto. Lo que
+ * ese argumento no pesaba es el modo de fallo del modelo: **grok se queda ESTÁTICO cuando no
+ * se le pide movimiento** (guía de Replicate para este mismo modelo). O sea el síntoma de
+ * soltarlo es exactamente el defecto que más se reporta de esta tool —"se queda casi quieto
+ * todo el tiempo"— y se estaba fabricando en **26 de 146 lotes (18 %)** medidos.
+ *
+ * Lo que se suelta antes que él DUPLICA información que las imágenes ya traen (el escenario,
+ * el encuadre, la etiqueta); esto no lo dice nadie más.
+ */
+const NIVEL_SIN_MOVIMIENTO = 4
 
 export function buildLotePrompt(args: {
   lote: Lote
@@ -745,6 +769,17 @@ export function buildLotePrompt(args: {
       'Everything below is in English. The quoted lines are Latin American Spanish: speak them EXACTLY as written, never translate them.',
       `References: ${legend}. They define APPEARANCE — person, product, room — they are not shots to reproduce and they do not set the framing.`,
       '',
+      // ⚠️ LA COREOGRAFÍA VA ARRIBA, ANTES DEL CONTEXTO. Estaba en el bloque 12 de 13, detrás
+      // de ~3.000 caracteres de descripción. La guía de este modelo dice que *"cada fotograma
+      // informa al siguiente, y la acción escrita al PRINCIPIO del prompt aparece al principio
+      // del clip"*, y el ejemplo oficial de xAI abre con el movimiento de cámara y la entrada
+      // del personaje, no con el catálogo de referencias.
+      //
+      // Lo que NO cambia es el CONTENIDO: los mismos bloques, el mismo texto, la misma regla de
+      // contexto absoluto. Solo el orden, que es reversible y no cuesta un carácter.
+      'Visual Action Sequence:',
+      ...secuencia,
+      '',
       // REGLA DE CONTEXTO ABSOLUTO: el generador no recuerda el lote anterior, así que todo
       // se repite entero. Nunca "el mismo personaje" ni "igual que en el Lote 1".
       ...(varios
@@ -757,7 +792,7 @@ export function buildLotePrompt(args: {
       // ⚠️ La línea global de cámara solo cuando el lote NO mezcla planos: con dos, ésta
       // los concatena con ` · ` (ambigua por construcción) y además cada toma ya declara el
       // suyo abajo. Son ~90 caracteres diciendo dos veces algo peor.
-      mezclaPlanos ? '' : `Camera: ${camara}`,
+      mezclaPlanos ? '' : `Camera: ${nivel >= NIVEL_CAMARA_CORTA ? camaraCorta(camara) : camara}`,
       'Continuity: character, wardrobe, product, room and lighting stay identical throughout the clip. Only the action advances.',
       '',
       ...(varios ? [] : [`Voice and accent profile: ${perfilDeVoz(voz)}`]),
@@ -769,14 +804,15 @@ export function buildLotePrompt(args: {
         : []),
       REGLA_VIDEO_LIMPIO,
       '',
-      'Visual Action Sequence:',
-      ...secuencia,
       'Final spoken script:',
       locucionFinal ? `“${locucionFinal}”` : 'No dialogue in this lot.',
     ].filter((x) => x !== '').join('\n')
   }
 
-  for (const nivel of [NIVEL_COMPLETO, NIVEL_SIN_ESCENARIO, NIVEL_SIN_MOVIMIENTO, NIVEL_PRODUCTO_FISICO]) {
+  // ⚠️ EL ORDEN DE ESTA LISTA **ES** LA ESCALERA. Lo que se suelta primero es lo que DUPLICA
+  // información que las imágenes ya traen; el movimiento va último porque sin él el modelo se
+  // queda quieto. Ver los comentarios de cada NIVEL_*.
+  for (const nivel of [NIVEL_COMPLETO, NIVEL_SIN_ESCENARIO, NIVEL_CAMARA_CORTA, NIVEL_PRODUCTO_FISICO, NIVEL_SIN_MOVIMIENTO]) {
     const prompt = render(nivel, null)
     if (prompt.length <= KIE_PROMPT_MAX) return prompt
   }
@@ -788,12 +824,12 @@ export function buildLotePrompt(args: {
   let mejor: string | null = null
   while (lo <= hi) {
     const cap = Math.floor((lo + hi) / 2)
-    const prompt = render(NIVEL_PRODUCTO_FISICO, cap)
+    const prompt = render(NIVEL_SIN_MOVIMIENTO, cap)
     if (prompt.length <= KIE_PROMPT_MAX) { mejor = prompt; lo = cap + 1 } else { hi = cap - 1 }
   }
   if (mejor) return mejor
 
-  const piso = render(NIVEL_PRODUCTO_FISICO, 0)
+  const piso = render(NIVEL_SIN_MOVIMIENTO, 0)
   throw new Error(
     `El prompt del Lote ${lote.n} no entra en el tope de KIE (${KIE_PROMPT_MAX} caracteres) ` +
     `ni recortando cada acción al mínimo (${piso.length} caracteres resultantes). ` +

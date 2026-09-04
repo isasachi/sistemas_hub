@@ -457,6 +457,53 @@ Las diferencias, puestas lado a lado:
 
 **Lo que se BORRÓ de la emisión, todo junto para que se vea el tamaño de la acumulación:** el CANDADO DE MOVIMIENTO (`START STATE` / `TIMED MOTION` / `END STATE` y sus tres prohibiciones), el bloque `SOUND` (que este documento ya marcaba *"SIN VERIFICAR"*), el detalle atómico por corte (`micro`, cubierto ahora por las acciones numeradas), el recorrido por mano (`manosDe`, misma razón), el guion global duplicado, el párrafo de overlay de quince sinónimos —reemplazado por la Regla de Video Limpio del spec, un tercio del largo— y la escalera de **siete** escalones, que queda en **tres** (escenario → etiqueta del producto → recorte de acciones). `probe-motion-lock.ts` se retiró con ellos: A/Beaba una máquina que ya no existe.
 
+⚠️ **TRES CAMBIOS DE ORDEN EN EL PROMPT (2026-09-04), salidos de cruzar una auditoría del pipeline
+con la guía pública de ESTE modelo. Ninguno toca el CONTENIDO: los mismos bloques, el mismo texto.**
+
+1. **LA COREOGRAFÍA VA ARRIBA, no en el bloque 12 de 13.** Estaba detrás de ~3.000 caracteres de
+   contexto. La guía de grok 1.5 dice que *"cada fotograma informa al siguiente, y la acción escrita
+   al PRINCIPIO del prompt aparece al principio del clip"*, y el ejemplo oficial de xAI abre con el
+   movimiento, no con el catálogo de referencias. Ahora va justo después de `References:`.
+2. **EL BLOQUE DE MOVIMIENTO PASA DE SEGUNDO A ÚLTIMO EN LA ESCALERA, y estaba en el peor lugar
+   posible.** El argumento para soltarlo temprano era que no está en el OUTPUT del spec y que la
+   secuencia numerada ya dice lo concreto. Lo que ese argumento no pesaba es el modo de fallo del
+   motor: **grok se queda ESTÁTICO cuando no se le pide movimiento**. O sea el síntoma de soltarlo
+   es exactamente el defecto que más se reporta de esta tool ("se queda casi quieto todo el tiempo").
+3. **EL ENCUADRE ENTRA EN LA ESCALERA (`NIVEL_CAMARA_CORTA`).** Medido sobre 146 lotes reales,
+   `camaraDeLote` llega a **411 caracteres** y era el único bloque grande que **no estaba en ningún
+   escalón**, así que su costo se lo terminaba pagando la coreografía en el piso.
+
+**El orden de la escalera ES la regla:** primero se suelta lo que DUPLICA lo que las imágenes ya
+muestran (escenario → encuadre → etiqueta del producto) y último lo que no dice nadie más (el
+movimiento). Queda en **cuatro** escalones + el recorte de acciones.
+
+✅ **Medido con el MISMO script sobre los 146 lotes reales, antes y después** (lectura pura, cero
+llamadas a modelos):
+
+| | antes | después |
+|---|---|---|
+| prompts completos | 106 | **108** |
+| sin el bloque de movimiento | 20 | **15** |
+| en el PISO, con la coreografía truncada | 12 | **8** |
+
+O sea **5 lotes recuperan el movimiento y 4 dejan de perder coreografía**, y lo que se paga a cambio
+es la etiqueta del producto recortada en 7 lotes más — que es exactamente el intercambio buscado,
+porque la etiqueta la muestra `@image(2)` y la coreografía no la muestra nadie.
+
+⚠️ La medición **no incluye las imágenes ancla** en `images`, así que los prompts reales son algo
+más largos que los medidos; los números son comparables entre sí (mismo script) pero no con los de
+una auditoría que sí las incluya.
+
+⚠️ **`scriptFingerprint` v14 → v15**: la huella hashea INSUMOS y no el texto producido, así que un
+cambio de plantilla le es invisible — sin el bump, reanudar pegaría un clip con el prompt viejo a
+uno con el nuevo mientras `isPaidResume` jura que es el mismo contenido.
+
+⚠️ **Los tres cambios están fijados por tests que FALLAN con el código anterior** (verificado
+revirtiendo cada uno). El de la escalera hubo que escribirlo con cuidado para que discrimine:
+*"sin movimiento ⟹ sin escenario"* se cumplía también con el orden viejo y no mide nada; lo que solo
+es cierto con el orden nuevo es que **en el escalón donde la etiqueta ya se recortó, el movimiento
+siga estando**.
+
 ⚠️ **`scriptFingerprint` v12 → v13**, y los ESTADOS salen del hash: el prompt ya no los emite, y hashear un insumo que el prompt no lee es el espejo del bug que esa función existe para evitar. Los beats SÍ se siguen hasheando, porque son la fuente de las acciones numeradas.
 
 **Herramienta de control: `scripts/probe-prompt-lote.ts`** imprime el prompt real de cualquier lote de una sesión guardada, con los mismos insumos que la ruta. Cero llamadas a modelos, cero renders. Es lo que hay que leer al lado del ejemplo del spec antes de gastar nada.
