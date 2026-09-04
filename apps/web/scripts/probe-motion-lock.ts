@@ -19,14 +19,18 @@
  * **DOS DRAWS POR BRAZO** (4 renders), la regla que este repo se impuso tras el probe del
  * cap de 30: grok es estocástico y un solo draw mide el seed, no el prompt.
  *
- * MÉTRICA PRINCIPAL: cuántos beats DISTINTOS se ejecutan visiblemente, sobre N. El defecto
- * es un fallo de CUENTA (colapso), no de sincronía; el alineamiento temporal se imprime
- * como secundario, porque la historia de `probe-audio-espanol` ya mostró dos métricas
- * plausibles dando veredictos opuestos sobre los mismos clips. Y un binario: si hay algún
- * tramo de más de 2 s de quietud mientras el timeline dice que un beat está corriendo.
+ * ⚠️ NO PUNTÚA, y eso es una corrección: la primera versión contaba cuántos tramos se
+ * ejecutaban mostrándole al juez la lista pedida, y le dio 6 de 6 a un clip donde la
+ * persona sostiene el frasco y habla. Hoy describe A CIEGAS y escribe una tira de cinco
+ * fotogramas por clip; el veredicto lo pone quien mira. Ver `describir` abajo.
  *
- * Cuesta: 2 llamadas de video a Gemini (forense + refinamiento, las paga el hub), 4 renders
- * de KIE (key del usuario) y 4 llamadas de visión para juzgarlos. No escribe en la base.
+ * ⚠️ Y LA COMPARACIÓN QUE VALE ES CONTRA EL VIDEO ORIGINAL, no contra la lista. El probe
+ * imprime la ventana absoluta del fragmento (`ORIGINAL equivalente: 16.0s → 27.1s`) para
+ * poder recortar ese mismo tramo con ffmpeg y ponerlo al lado.
+ *
+ * Cuesta: 2 llamadas de video a Gemini (forense + refinamiento, cacheadas en disco, las
+ * paga el hub), 4 renders de KIE (key del usuario) y 4 descripciones. No escribe en la
+ * base.
  *
  *   PROBE_DRY=1 npx tsx --env-file=.env.local scripts/probe-motion-lock.ts <sessionId> [nLote]
  */
@@ -47,7 +51,7 @@ import {
 import { normalizeMotionTimeline, compileAccion, tieneMotion, type MotionTimeline } from '../lib/video-ads/motion'
 import { personajesDe } from '../lib/video-ads/personajes'
 
-const SALIDA = process.env.PROBE_OUT ?? '/home/isasachi/.claude/jobs/29c3edaa/tmp/motion-lock'
+const SALIDA = process.env.PROBE_OUT ?? `${process.env.HOME}/Downloads/probe-motion-lock`
 const db = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 
 const segundosDe = (tiempo: string) => {
@@ -182,18 +186,13 @@ async function main() {
   // El timeline manda: se elige el corte con MÁS beats y el clip se arma a su medida. La
   // locución sale de la toma adaptada que arranca más cerca, para que el prompt siga
   // teniendo habla — un clip mudo le deja a grok margen que el caso real no tiene.
-  // El bed: un corte que NO se parte (así el clip conserva su timeline y con él los estados
-  // inicial y final) y el MÁS LARGO de los que tienen al menos dos tramos — el defecto que
-  // se mide es el colapso y la quietud posterior, y eso solo se ve cuando sobra tiempo.
-  // `nLote` elige otro de la lista ordenada.
-  // ⚠️ EL BED TIENE QUE SER UN SOLO SHOT CON VARIOS TRAMOS, y eso descarta los cortes que
-  // se parten. La primera corrida se gastó cuatro renders sobre un lote de dos shots con UN
-  // beat cada uno: ahí las tres prohibiciones no tienen referente —no hay nada que
-  // comprimir, nada que adelantar, ningún orden que imponer— y los estados tampoco se
-  // emiten (un fragmento no los trae). El brazo B se reducía a formato.
-  // Por eso: `duracionSeg <= LOTE_MAX_SEC` (así `splitLongToma` no dispara) y >= 2 beats,
-  // desempatando por duración — el colapso solo se ve cuando sobra tiempo después.
-  // `nLote` elige otro de la lista ordenada.
+  // ⚠️ EL BED POR DEFECTO ES UN SOLO SHOT CON VARIOS TRAMOS. La primera corrida se gastó
+  // cuatro renders sobre un lote de dos shots con UN beat cada uno: ahí las tres
+  // prohibiciones no tienen referente —nada que comprimir, nada que adelantar, ningún orden
+  // que imponer— y los estados tampoco se emiten (un fragmento no los trae), o sea el brazo
+  // B se reducía a formato. De ahí `duracionSeg <= LOTE_MAX_SEC` (así `splitLongToma` no
+  // dispara) y >= 2 beats, desempatando por duración: el colapso solo se ve cuando sobra
+  // tiempo después. `nLote` elige otro de la lista ordenada.
   const corte = fresco.cortes
     // `PROBE_SIN_LIMITE=1` deja entrar los cortes que se PARTEN. Se pierden los estados
     // (un fragmento no los trae) pero se gana el corte con coreografía de verdad, que en

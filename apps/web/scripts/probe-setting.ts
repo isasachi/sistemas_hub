@@ -32,7 +32,7 @@ import { AdaptedScriptSchema } from '../lib/video-ads/adapt'
 import { corteMuestraPersona, type ForensicReport } from '../lib/video-ads/forensic'
 import { personajesDe } from '../lib/video-ads/personajes'
 
-const SALIDA = process.env.PROBE_OUT ?? '/home/isasachi/.claude/jobs/29c3edaa/tmp/setting'
+const SALIDA = process.env.PROBE_OUT ?? `${process.env.HOME}/Downloads/probe-setting`
 const db = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 
 /**

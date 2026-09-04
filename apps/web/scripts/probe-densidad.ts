@@ -38,7 +38,7 @@ import {
 } from '../lib/video-ads/forensic'
 import { normalizeMotionTimeline, validateMotionTimeline, type MotionBeat } from '../lib/video-ads/motion'
 
-const SALIDA = process.env.PROBE_OUT ?? '/home/isasachi/.claude/jobs/29c3edaa/tmp/densidad'
+const SALIDA = process.env.PROBE_OUT ?? `${process.env.HOME}/Downloads/probe-densidad`
 const db = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 
 const mediana = (xs: number[]) => {
