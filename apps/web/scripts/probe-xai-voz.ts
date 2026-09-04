@@ -114,9 +114,10 @@ async function main() {
   // español, así que la elección es por sexo y edad, no por idioma:
   //   mujer joven → carina · ara · eve      mujer mayor → celeste · luna
   //   hombre      → altair · orion · zenith
-  // ⚠️ `aurora` está en la PÁGINA de xAI y NO en este endpoint (400 Unknown voice_id): la web
-  // y la API tienen rosters distintos. El canario de abajo lo caza gratis — usalo antes de
-  // copiar un nombre de la web.
+  // ⚠️ LA PÁGINA DE xAI Y ESTE ENDPOINT TIENEN ROSTERS DISTINTOS: `aurora` y `liora` suenan en
+  // la web y devuelven `400 Unknown voice_id` acá (probadas también capitalizadas; la cuenta no
+  // tiene voces custom). Dos de dos nombres traídos de la página fallaron. El canario de abajo
+  // lo caza gratis — pasalo antes de copiar un nombre de la web.
   const voces = (process.env.XAI_VOCES ?? 'celeste').split(',').map((v) => v.trim()).filter(Boolean)
   await mkdir(OUT, { recursive: true })
 
