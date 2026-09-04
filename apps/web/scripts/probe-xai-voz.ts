@@ -110,6 +110,13 @@ async function generar(voz: string): Promise<string | null> {
 
 async function main() {
   if (!KEY) throw new Error('falta XAI_API_KEY')
+  // Catálogo escuchado por el dueño del repo (2026-09-04). TODAS son multilingües y hablan
+  // español, así que la elección es por sexo y edad, no por idioma:
+  //   mujer joven → carina · ara · eve      mujer mayor → celeste · luna
+  //   hombre      → altair · orion · zenith
+  // ⚠️ `aurora` está en la PÁGINA de xAI y NO en este endpoint (400 Unknown voice_id): la web
+  // y la API tienen rosters distintos. El canario de abajo lo caza gratis — usalo antes de
+  // copiar un nombre de la web.
   const voces = (process.env.XAI_VOCES ?? 'celeste').split(',').map((v) => v.trim()).filter(Boolean)
   await mkdir(OUT, { recursive: true })
 
