@@ -133,7 +133,26 @@ export function clampDuration(sec: number, locucionChars = 0, tomas = 1): number
   return Math.min(techo, Math.max(piso, objetivo))
 }
 
-/** 720p fijo: el entregable es un feed vertical, y 1080p además exige UNA sola imagen. */
+/**
+ * 720p FIJO, y NO es un pendiente de parametrizar — está medido (2026-09-04). Ver AGENTS.md.
+ *
+ * ✅ Canario gratis: `480p`, `720p` y `1080p` los tres PASAN la validación de la API (con una
+ * `duration` inválida solo se queja la duración); un valor inventado se rechaza por nombre.
+ * O sea 480p existe y es elegible.
+ *
+ * ⚠️ Y CUESTA 33 % MENOS: medido con un render real del mismo lote, **30 créditos a 480p
+ * contra 45,1 a 720p**. Lo que compra ese descuento es lo que el anuncio vende: 480p
+ * devuelve **416x752** (no 480x854) y la etiqueta del frasco deja de leerse — justo el
+ * observable que el A/B de la cita de imagen acababa de mejorar.
+ *
+ * ⚠️ Y NO SE PARAMETRIZA porque no hay quién encienda el dial: no hay UI, no hay columna y
+ * ningún caller pasaría otra cosa. Además `concat.ts` pega con `-c copy`, que exige
+ * parámetros idénticos entre clips, así que la resolución solo podría ser por SESIÓN y
+ * nunca por lote. Un parámetro con un solo llamador y un solo valor es la interfaz con una
+ * implementación que este repo evita en otros lados.
+ *
+ * 1080p además exige UNA sola imagen, y el render manda siempre avatar + producto.
+ */
 export function resolutionFor(): '720p' {
   return '720p'
 }

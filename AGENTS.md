@@ -1074,6 +1074,29 @@ El orden de la escalera es su propia regla: **lo que se suelta primero es lo que
 
 ⚠️ **LO QUE NO SE HIZO, y por qué.** La guía de prompting de grok que originó esto trae 20 consejos y la mayoría ya están implementados o ya fueron REFUTADOS acá: *"una acción principal por clip"* falló la replicación 2 de 3 veces (ver arriba, `n = 3`) y *"los prompts negativos no son fiables"* choca con los 7 clips sin un solo carácter de texto que produce `BLOQUE_OVERLAY`. Los que SÍ eran ejes nuevos —un solo movimiento de cámara (#6) y verbos de física (#11)— son cambios del prompt de FASE 1, o sea el paso caro, y solo alcanzarían a los análisis NUEVOS.
 
+❌ **480p SE MIDIÓ Y NO SE CABLEA — cierra el pendiente de parametrizar `resolutionFor()`
+(2026-09-04).**
+
+✅ **Canario gratis:** `480p`, `720p` y `1080p` los tres PASAN la validación (mandados con una
+`duration` inválida, la API solo se queja de la duración); un valor inventado se rechaza por nombre
+(*"resolution is not within the range of allowed options"*). O sea 480p existe y es elegible.
+
+⚠️ **Y CUESTA 33 % MENOS: 30 créditos contra 45,1** por el MISMO lote de 10 s — medido con un
+render real y el saldo antes/después, así que KIE sí cobra por resolución.
+
+❌ **Lo que compra ese descuento es lo que el anuncio vende.** 480p devuelve **416x752** (no
+480x854) y la etiqueta del frasco deja de leerse — justo el observable que el A/B de la cita de
+imagen acababa de mejorar. ⚠️ Caveat honesto: en ese draw el frasco ocupa menos cuadro, así que
+parte de la diferencia es encuadre y no resolución; pero el presupuesto de píxeles sobre la
+etiqueta es 1,7× menor y se ve en el fotograma a escala nativa.
+
+⚠️ **Y NO SE PARAMETRIZA, que era el pendiente:** no hay UI, no hay columna y ningún caller pasaría
+otra cosa. Además **`concat.ts` pega con `-c copy`**, que exige parámetros idénticos entre clips, así
+que la resolución solo podría ser por SESIÓN y nunca por lote. Un parámetro con un llamador y un
+valor es la interfaz-con-una-implementación que este repo evita en otros lados. **El hallazgo es la
+palanca con su precio, no el dial**: si algún día el costo del render pesa más que la etiqueta, acá
+está el número.
+
 ✅ **LOS QUINCE SINÓNIMOS DEL BLOQUE DE VIDEO LIMPIO NO COMPRAN NADA — 4 RENDERS
 (`scripts/probe-overlay.ts`, 2026-09-04).** `REGLA_VIDEO_LIMPIO` decía la misma orden quince veces
 (*"No captions. No subtitles. No overlays. No titles. No stickers. No emojis…"*), 313 caracteres.
