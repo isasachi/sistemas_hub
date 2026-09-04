@@ -554,14 +554,22 @@ function accionesNumeradas(t: Lote['tomas'][number], cap: number | null): string
       const i2 = cambia(b.leftHand, previo?.leftHand)
       return [d && `Mano derecha: ${d}`, i2 && `Mano izquierda: ${i2}`].filter(Boolean).join('; ')
     }
+    // ⚠️ EL CAMBIO DE ESTADO DEL PRODUCTO SE EMITE EN SU EVENTO, no solo al final del clip.
+    // Es el defecto que reportó el dueño del repo sobre el arranque del anuncio: *"empieza
+    // con el gotero en la mano derecha y de frente aplica el producto en la mejilla, ese es
+    // el primer movimiento de todo el video"*. El dato ESTABA —la cadena decía "Dropper
+    // releasing drop onto cheek"— y esta función solo imprimía el estado del ÚLTIMO beat,
+    // así que la transferencia se perdía y el render hacía el viaje del gotero sin aplicar.
     const lineas = [contexto]
     grupos.forEach((g, k) => {
-      const l = manos(g[0], k ? grupos[k - 1][0] : null)
+      const a = g[0]
+      const z = g[g.length - 1]
+      const l = manos(a, k ? grupos[k - 1][0] : null)
       if (l) lineas.push(l)
+      const antes = limpia(a.productStateBefore)
+      const luego = limpia(z.productStateAfter)
+      if (luego && luego !== antes) lineas.push(`El producto: ${luego}`)
     })
-    const ultimo = grupos[grupos.length - 1]
-    const fin = limpia(ultimo[ultimo.length - 1].productStateAfter)
-    if (fin && fin !== limpia(a0.productStateBefore)) lineas.push(`El producto queda: ${fin}`)
     return lineas.filter(Boolean).map(corta)
   }
   return partirEnHechos(t.accionVisual).map(corta)

@@ -17,7 +17,12 @@
  *
  * Cuesta 2 llamadas de video a Gemini (las paga el hub). Sin renders.
  *
- *   npx tsx --env-file=.env.local scripts/reanalizar-forense.ts <sessionId> [--write]
+ * ⚠️ `--solo-motion` re-corre ÚNICAMENTE el refinamiento sobre los cortes YA GUARDADOS. Es
+ * la forma de iterar el prompt del movimiento sin volver a segmentar el video: los cortes no
+ * se mueven, así que el guión adaptado NO se desincroniza y la comparación es contra el
+ * mismo material. Cuesta una sola llamada.
+ *
+ *   npx tsx --env-file=.env.local scripts/reanalizar-forense.ts <sessionId> [--write] [--solo-motion]
  */
 import { createClient } from '@supabase/supabase-js'
 import { callVideoAds } from '../lib/video-ads/llm'
@@ -46,8 +51,16 @@ async function main() {
   const video = r.reference_video_url
   const parte = { fileData: { fileUri: video, mimeType: 'video/mp4' } }
 
-  console.log('forense…')
-  const analysis = await callVideoAds('forensic_report', ForensicReportSchema, [parte, { text: buildForensicInstruction() }])
+  const soloMotion = process.argv.includes('--solo-motion')
+  let analysis: ForensicReport
+  if (soloMotion) {
+    if (!r.forensic_analysis?.cortes?.length) throw new Error('La sesión no tiene análisis guardado')
+    analysis = r.forensic_analysis
+    console.log(`(--solo-motion: se conservan los ${analysis.cortes.length} cortes guardados)`)
+  } else {
+    console.log('forense…')
+    analysis = await callVideoAds('forensic_report', ForensicReportSchema, [parte, { text: buildForensicInstruction() }])
+  }
 
   if ((analysis.cortes ?? []).length) try {
     console.log('refinamiento…')
