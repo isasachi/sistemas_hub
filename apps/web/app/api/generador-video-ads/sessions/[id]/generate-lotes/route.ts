@@ -5,6 +5,7 @@ import { currentKieKey } from '@/lib/user-settings'
 import { anchorSpecs, generateAnchorImages } from '@/lib/video-ads/anchors'
 import { personajesDe, hablantesPorTiempo, vozEnOffPorTiempo } from '@/lib/video-ads/personajes'
 import { enProsa, corteMuestraPersona } from '@/lib/video-ads/forensic'
+import { tieneMotion } from '@/lib/video-ads/motion'
 import { uploadToStorage, fetchAsBase64 } from '@/lib/storage'
 import { generateImage } from '@/lib/gemini'
 import { planoPorTiempoDe, groupIntoLotes, buildLotePrompt, camaraDeLote, type Lote } from '@/lib/video-ads/lotes'
@@ -149,20 +150,20 @@ export async function POST(
   // por encuadre (máxima fidelidad, ~4× llamadas pagadas) sin tocar nada más. Y lo
   // consumen igual `anchorSpecs` (para saber dónde empieza cada escena) y el plano por
   // toma del prompt.
+  // ⚠️ EL REPARTO VUELVE A LA REGLA DEL SPEC: agrupar en orden hasta 15 s y nada más. Los
+  // tres cierres que este repo había agregado (encuadre, clase de toma, presupuesto de
+  // coreografía) se fueron con la vuelta al PROMPT MAESTRO — ver `groupIntoLotes`, que
+  // guarda sus mediciones por si hay que reponerlos.
+  //
+  // ⚠️ `planoPorTiempoDe` SIGUE VIVO y se sigue usando: lo consumen `anchorSpecs` (para
+  // saber dónde empieza cada escena) y `buildLotePrompt` (para decir qué plano va con qué
+  // toma). Lo que dejó de hacer es cerrar lotes.
   const planoPorTiempo = planoPorTiempoDe(cortes)
-  // ⚠️ La CLASE de toma (persona / solo producto) cierra el lote: un beat de b-roll que
-  // comparte clip con una toma hablada se lo come el habla. Medido sobre 25 sesiones: los
-  // lotes mezclados pasan de 8 a 0 por 1,07× de llamadas. Ver `clasePorTiempo`.
-  const clasePorTiempo = new Map(cortes.map((c) => [c.tiempo, corteMuestraPersona(c)] as const))
-  // ⚠️ Y `maxPlanos = 1`: UN encuadre por clip. Estaba en `Infinity` —o sea el mapa se
-  // calculaba y no cerraba nada— y el resultado es el salto duro que reportó el dueño del
-  // repo: un clip que empieza en plano de persona y termina en un macro del frasco a
-  // pantalla completa. La frontera de CLASE no lo caza porque en ese plano la persona
-  // sigue en cuadro; lo que cambia es el TEMA del encuadre.
-  // Medido sobre 135 lotes: los que mezclan dos encuadres pasan de 18 a 0 por 1,15× de
-  // llamadas. Y cada clip se renderiza de una sola pasada, así que pedirle dos encuadres
-  // es pedirle un corte de montaje dentro de un plano-secuencia: devuelve uno de los dos.
-  const agrupados = groupIntoLotes(adapted.tomas, planoPorTiempo, 1, clasePorTiempo)
+  // Los beats van por `tiempo` como todo lo demás (nunca por `n`, ver `camaraDeLote`) y se
+  // pasan al REPARTO y no al prompt para que `splitLongToma` pueda partirlos: pedirle a los
+  // dos fragmentos de una toma la coreografía entera es el bug de la coreografía duplicada.
+  const motionPorTiempo = new Map(cortes.filter(tieneMotion).map((c) => [c.tiempo, c.motion] as const))
+  const agrupados = groupIntoLotes(adapted.tomas, motionPorTiempo)
   if (!agrupados.length) return NextResponse.json({ error: 'El guión no tiene tomas' }, { status: 409 })
 
   // Una cámara por lote, con los planos de SUS cortes: el spec pide replicar el
@@ -471,6 +472,12 @@ export async function POST(
           consistencyBlock: session.consistency_block,
           productDesc,
           camara: camaras[i],
+          // ⚠️ EL ESCENARIO VUELVE AL PROMPT porque el spec lo exige por lote (REGLA DE
+          // CONTEXTO ABSOLUTO), y eso revierte una medición de 4 renders: con el bloque
+          // puesto el fondo derivaba contra la imagen del avatar, sin él era estable en 2
+          // de 2 draws por brazo. Es la decisión del dueño del repo al volver a la fuente,
+          // y por eso el escenario es el PRIMER escalón que la escalera suelta.
+          escenario,
           voz: session.voice_profile,
           movimiento: session.motion_profile,
           personajes: gente,

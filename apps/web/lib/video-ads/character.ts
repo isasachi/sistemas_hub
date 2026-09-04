@@ -432,7 +432,17 @@ export function buildIdentityInstruction(
     'Los dos campos describen al personaje NUEVO, pero se leen del video original: es su',
     'lenguaje corporal lo que hay que replicar, no su apariencia.',
     '',
-    'Todo el output va en español.',
+    '── IDIOMA DE LA SALIDA ──',
+    'TODO lo que devuelves va en INGLÉS, y no es una preferencia de estilo: los cuatro',
+    'campos alimentan directamente a dos generadores que trabajan en inglés —',
+    '`promptCreacion` va al modelo de imagen que crea el avatar, y `bloqueConsistencia`,',
+    '`calidadMovimiento` y `manerismos` se repiten ÍNTEGROS dentro del prompt de cada clip.',
+    'Escribirlos en español deja ese prompt mitad y mitad.',
+    '',
+    'Las dos excepciones, que se copian tal cual y NO se traducen:',
+    '  · los nombres propios (la marca del envase, el nombre del producto);',
+    '  · la etnia y el acento que escribió el usuario — son su dato, no una descripción',
+    '    técnica, y traducirlos cambia lo que pidió.',
   ].filter(Boolean).join('\n')
 }
 

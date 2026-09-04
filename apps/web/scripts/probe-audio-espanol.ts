@@ -91,13 +91,18 @@ export function cobertura(esperado: string, dicho: string): number {
   return prev[d.length] / e.length
 }
 
-async function main() {
-  const [ruta, esperado] = process.argv.slice(2)
-  if (!ruta || !esperado) throw new Error('Uso: probe-audio-espanol.ts <clip.mp4> "<locución esperada>"')
-
-  const bytes = await readFile(ruta)
+/** Transcribe un clip. `ruta` es un archivo local o una URL http(s). Exportada para que
+ *  `probe-anuncio.ts` mida los N draws de cada corte sin duplicar la llamada. */
+export async function transcribir(ruta: string): Promise<{ dicho: string; idioma: string }> {
+  // ⚠️ LA BASE64 DEJÓ DE ACEPTARSE PARA VIDEO (medido 2026-09-04): un clip de 2,4 MB devuelve
+  // `400 "Inline data URL is too large. Upload the file and pass an HTTP(S) URL instead."`.
+  // AGENTS.md dice que la base64 sí funciona; eso valía para videos chicos y ya no vale acá.
+  // Por eso `ruta` acepta también una URL http(s), que es el camino que el forense ya usa.
+  const url = /^https?:\/\//.test(ruta)
+    ? ruta
+    : `data:video/mp4;base64,${(await readFile(ruta)).toString('base64')}`
   const salida = (await kieChat([
-    { type: 'image_url', image_url: { url: `data:video/mp4;base64,${bytes.toString('base64')}` } },
+    { type: 'image_url', image_url: { url } },
     {
       type: 'text',
       text: [
@@ -109,16 +114,29 @@ async function main() {
       ].join('\n'),
     },
   ])).trim()
-  const idioma = salida.match(/IDIOMA:\s*(.+)$/im)?.[1]?.trim() ?? '(no lo dijo)'
-  const dicho = salida.replace(/IDIOMA:.*$/im, '').trim()
+  return {
+    idioma: salida.match(/IDIOMA:\s*(.+)$/im)?.[1]?.trim() ?? '(no lo dijo)',
+    dicho: salida.replace(/IDIOMA:.*$/im, '').trim(),
+  }
+}
+
+async function main() {
+  const [ruta, esperado] = process.argv.slice(2)
+  if (!ruta || !esperado) throw new Error('Uso: probe-audio-espanol.ts <clip.mp4> "<locución esperada>"')
+  const { dicho, idioma } = await transcribir(ruta)
   const pct = cobertura(esperado, dicho)
+  // ⚠️ LA COBERTURA SOLA NO VE LAS INSERCIONES, y eso deja pasar un tartamudeo como perfecto:
+  // medido 2026-09-04, un clip que dijo "es momento de DE empezar" dio 100%. El LCS mide qué
+  // fracción de lo ESPERADO aparece, así que una palabra de más no le cuesta nada. La precisión
+  // (el mismo LCS sobre lo DICHO) sí baja, y con las dos el tropiezo se ve.
+  const prec = cobertura(dicho, esperado)
 
   console.log(`\n${ruta.split('/').pop()}`)
   console.log(`  esperado: ${esperado}`)
   console.log(`  dicho:    ${dicho.replace(/\n/g, ' ')}`)
   console.log(`  idioma:   ${idioma}`)
-  console.log(`  cobertura: ${(pct * 100).toFixed(0)}% de las palabras esperadas (LCS)`)
-  console.log(`  ${pct >= 0.9 ? '✅ dice la locución' : pct >= 0.6 ? '⚠️ la dice a medias' : '❌ NO dice la locución'}`)
+  console.log(`  cobertura: ${(pct * 100).toFixed(0)}% de lo esperado · precisión: ${(prec * 100).toFixed(0)}% de lo dicho (LCS)`)
+  console.log(`  ${pct >= 0.9 ? '✅ dice la locución' : pct >= 0.6 ? '⚠️ la dice a medias' : '❌ NO dice la locución'}${prec < 0.99 ? ' — pero AGREGA texto (repeticiones o relleno)' : ''}`)
   // ⚠️ IMPRIME ADEMÁS DE PUNTUAR, a propósito: el umbral es una heurística y ya dio un falso
   // negativo. Lee las dos líneas antes de creerle al símbolo.
 }

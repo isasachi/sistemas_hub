@@ -46,7 +46,7 @@ export default function Section4Template() {
     ? groupIntoLotes(forensicAnalysis.cortes.map((c) => ({
         n: c.n, duracionSeg: c.duracionSeg, locucion: c.dialogo, tiempoOriginal: c.tiempo,
         accionVisual: c.accion, personaje: '', producto: '',
-      })), planoPorTiempoDe(forensicAnalysis.cortes))
+      })))
     : []
 
   const card = (title: string, children: React.ReactNode) => (

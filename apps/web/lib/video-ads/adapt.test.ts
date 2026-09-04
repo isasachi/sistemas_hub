@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { TIMELINE_VACIO } from './motion'
 import { buildAdaptInstruction, AdaptedScriptSchema, applyScriptEdits, resyncTomaDurations, type AdaptedScript, buildCoherenceInstruction } from './adapt'
 import { extractSlots } from './fill'
 import type { ScriptTemplate } from './template'
@@ -20,7 +21,7 @@ const TEMPLATE: ScriptTemplate = {
 const FORENSIC = {
   caracteresGuion: 58,
   guionOriginal: 'Si estás cansado de las marcas, necesitas probar este suero.',
-  cortes: [{ n: 1, tiempo: '00:00 - 00:06', duracionSeg: 6, accion: '', camara: '', dialogo: '', textoOverlay: '', transicion: '', objetoEnMano: null, micro: null }],
+  cortes: [{ n: 1, tiempo: '00:00 - 00:06', duracionSeg: 6, accion: '', camara: '', dialogo: '', textoOverlay: '', transicion: '', objetoEnMano: null, micro: null, motion: TIMELINE_VACIO }],
 } as ForensicReport
 
 const INPUTS: UserInputs = {
@@ -34,6 +35,15 @@ const INPUTS: UserInputs = {
 describe('buildAdaptInstruction', () => {
   const p = buildAdaptInstruction(TEMPLATE, FORENSIC, INPUTS, null, extractSlots(TEMPLATE))
 
+  // ⚠️ `accionVisual` VA LITERAL AL PROMPT DEL RENDER, que trabaja en inglés — mientras
+  // que `valores` y `locuciones` son lo que se PRONUNCIA y van en español. Las dos mitades
+  // se nombran en el mismo bloque a propósito: pedir solo "en inglés" en una fase cuyo
+  // otro output es habla española es la contradicción que este repo ya pagó seis veces.
+  it('parte el idioma: la acción en inglés, lo que se dice en español', () => {
+    expect(p).toMatch(/LA ACCIÓN SE ESCRIBE EN INGLÉS/)
+    expect(p).toMatch(/`valores` y `locuciones`[\s\S]{0,80}español/)
+  })
+
 
 
   // EL CONTEXTO QUE EL SPEC TIENE GRATIS Y ESTA FASE NO TENÍA.
@@ -46,7 +56,7 @@ describe('buildAdaptInstruction', () => {
     const ORIGINAL = 'Tres razones para tomar Gomi Energy para ella.'
     const forense = (dialogo: string) => ({
       caracteresGuion: ORIGINAL.length, guionOriginal: ORIGINAL,
-      cortes: [{ n: 1, tiempo: '00:00 - 00:05', duracionSeg: 5, accion: '', camara: '', dialogo, textoOverlay: '', transicion: '', objetoEnMano: null, micro: null }],
+      cortes: [{ n: 1, tiempo: '00:00 - 00:05', duracionSeg: 5, accion: '', camara: '', dialogo, textoOverlay: '', transicion: '', objetoEnMano: null, micro: null, motion: TIMELINE_VACIO }],
     }) as ForensicReport
     const plantilla = (locucion: string): ScriptTemplate =>
       ({ ...TEMPLATE, tomas: [{ n: 1, accionVisual: 'Sostiene el frasco', locucion, duracionSeg: 5 }] })

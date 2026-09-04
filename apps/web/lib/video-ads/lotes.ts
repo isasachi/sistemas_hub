@@ -1,11 +1,13 @@
 import { z } from 'zod'
 import type { TomaFinal } from './adapt'
 import type { MotionProfile, VoiceProfile } from './character'
-import type { Micro, ObjetoEnMano } from './forensic'
+
 import { CPS_MAX } from './forensic'
 import { KIE_PROMPT_MAX } from './kie'
+import { limpiarEscenaDeFoto } from './product-scan'
 import { nicheSpec } from './niches'
 import { etiqueta, type Personaje } from './personajes'
+import { repartirBeats, MotionBeatSchema, type MotionBeat, type MotionTimeline } from './motion'
 
 /**
  * FASE 5 del prompt maestro — agrupación de tomas en lotes de generación.
@@ -56,25 +58,6 @@ export const LOTE_MAX_SEC = 15
  */
 export const LOTE_MAX_CHARS = LOTE_MAX_SEC * CPS_MAX
 
-/**
- * Presupuesto de COREOGRAFÍA de un lote, en caracteres.
- *
- * ⚠️ La coreografía es lo único del prompt que dice QUÉ HACE EL CUERPO, y es lo último que
- * se puede recortar — pero la escalera de degradación la recortaba igual cuando el resto no
- * alcanzaba. Medido sobre 125 lotes reales: los que llegan truncados piden **1332
- * caracteres de coreografía** contra **259** los sanos. O sea el truncado no es aleatorio:
- * pasa exactamente en los lotes con MÁS movimiento que copiar, que son los que más
- * importan.
- *
- * Y es consecuencia de un cambio bueno: desde que FASE 1 describe un movimiento cada 2
- * segundos, hay mucha más coreografía que meter. Cerrar el lote por este presupuesto lo
- * previene en el reparto en vez de descubrirlo al armar el prompt.
- *
- * El número sale de la medición: con ~900 caracteres el prompt entra con el detalle
- * atómico completo. Cuesta llamadas pagadas —igual que los otros dos cierres— y es el
- * mismo tipo de aritmética determinista.
- */
-export const LOTE_MAX_COREO = 900
 
 export const LoteSchema = z.object({
   n: z.number(),
@@ -86,6 +69,14 @@ export const LoteSchema = z.object({
     producto: z.string(),
     locucion: z.string(),
     tiempoOriginal: z.string(),
+    /**
+     * Los beats de ESTE fragmento. Lo llena el código (`groupIntoLotes`), no el modelo, y
+     * por eso `.optional()` es correcto acá y no la trampa de siempre: una sesión guardada
+     * no lo trae y se lee como antes. Vive en la toma y no se busca por `tiempoOriginal`
+     * porque dos fragmentos de una misma toma COMPARTEN esa marca — y cada uno se queda
+     * solo con los suyos.
+     */
+    beats: z.array(MotionBeatSchema).optional(),
   })),
   duracionSeg: z.number(),
   prompt: z.string(),
@@ -257,10 +248,14 @@ function splitLongToma(t: TomaFinal): TomaFinal[] {
     const minPartes = Math.ceil(dur / LOTE_MAX_SEC)
     const duraciones = Array.from({ length: minPartes }, () => r1(dur / minPartes))
     const acciones = repartirAccion(t.accionVisual, duraciones)
+    const trozos = repartirBeats(t.beats ?? [], duraciones)
     return duraciones.map((d, i) => ({
       ...t,
       duracionSeg: d,
       accionVisual: acciones[i],
+      // Los beats se reparten igual que la prosa y por el mismo motivo: pedirle a los dos
+      // fragmentos la coreografía entera es pedir lo imposible dos veces.
+      beats: trozos[i],
       locucion: i === 0 ? t.locucion : '',
     }))
   }
@@ -273,8 +268,9 @@ function splitLongToma(t: TomaFinal): TomaFinal[] {
   // Reparto proporcional a caracteres — NO es garantía suficiente por sí solo (ver
   // comentario de la función), así que cada fragmento se vuelve a verificar
   // recursivamente antes de aceptarlo.
+  const trozos = repartirBeats(t.beats ?? [], duraciones)
   return partes.flatMap((p, i) =>
-    splitLongToma({ ...t, duracionSeg: duraciones[i], accionVisual: acciones[i], locucion: p }),
+    splitLongToma({ ...t, duracionSeg: duraciones[i], accionVisual: acciones[i], beats: trozos[i], locucion: p }),
   )
 }
 
@@ -322,52 +318,49 @@ export function planoPorTiempoDe(
   return new Map((cortes ?? []).map((c) => [c.tiempo, c.camara.trim()]))
 }
 
+/**
+ * ⚠️ LOS TRES CIERRES PROPIOS DE ESTE REPO SE FUERON (2026-09-03, vuelta al PROMPT
+ * MAESTRO). La FASE 5 del spec tiene UNA regla: agrupar tomas en orden, tope de 15 s, y
+ * nunca partir una toma salvo que ella sola pase de 15. Lo demás lo agregó este archivo a
+ * fuerza de parches, y el propio ejemplo del spec lo contradice: su Lote 1 mete un plano
+ * medio y un primer plano en el mismo clip ("A sequence of two shots").
+ *
+ * Lo que se quitó, con su medición apuntada para que se pueda restaurar sin re-descubrirla:
+ *   - `maxPlanos` — cerraba el lote por cambio de encuadre. Medido: los lotes con dos
+ *     encuadres pasaban de 18 a 0 por 1,15× de llamadas.
+ *   - `clasePorTiempo` — cerraba al pasar de persona a solo-producto. Medido: los lotes
+ *     mezclados pasaban de 8 a 0 por 1,07×.
+ *   - `LOTE_MAX_COREO` — cerraba por presupuesto de coreografía. Medido: los prompts con la
+ *     coreografía truncada pasaban de 10 a 5 de 135.
+ * **Es la decisión del dueño del repo, no un re-descubrimiento**: las tres mediciones
+ * siguen siendo ciertas y las tres describen síntomas del prompt anterior. Si vuelven a
+ * aparecer, están acá para reponerse.
+ *
+ * ⚠️ `LOTE_MAX_CHARS` SE QUEDA, y la distinción importa: no da forma al reparto, protege
+ * contra un fallo medido del RENDER —a 577 caracteres grok deja de recitar y empieza a
+ * improvisar— que el spec no contempla porque sus tomas vienen cronometradas del original a
+ * un ritmo decible, y las nuestras las reescribe FASE 3 y las edita el usuario.
+ */
 export function groupIntoLotes(
   tomas: TomaFinal[],
-  planoPorTiempo?: Map<string, string>,
-  /**
-   * Cuántos encuadres distintos puede contener UN clip.
-   *
-   * ⚠️ EL DEFAULT CAMBIÓ DE 1 A "SIN LÍMITE" (2026-08-24), y eso invierte una regla que
-   * este archivo documentaba como medida. La medición era real pero su PREMISA cambió:
-   * se hizo sobre Veo, donde el clip solo recibía texto y dos keyframes, y ahí pedirle
-   * dos encuadres devolvía uno — el otro se perdía en silencio. Ahora el clip recibe
-   * además una IMAGEN ANCLA por escena (`anchors.ts`, hasta 7 imágenes) y el prompt
-   * describe el corte entre ellas, que es justamente lo que faltaba.
-   *
-   * Con 30 s de techo, mantener el corte por plano daría clips de 1–2 s: el reparto de
-   * ropa medido en AGENTS.md daba 24 clips, o sea 24 llamadas pagadas para 28 s de
-   * video. Concatenar escenas dentro de un clip es lo que pidió el dueño del repo.
-   *
-   * Sigue siendo un PARÁMETRO y no un hardcode porque es el dial de costo: bajarlo a 1
-   * recupera el comportamiento de máxima fidelidad de encuadre al precio de multiplicar
-   * las llamadas.
-   */
-  maxPlanos = Infinity,
-  /**
-   * ⚠️ UNA TOMA DE PRODUCTO NO PUEDE COMPARTIR CLIP CON UNA DE PERSONA.
-   *
-   * `tiempoOriginal` → ¿este corte muestra a la persona? (`corteMuestraPersona`). Cuando
-   * cambia, el lote CIERRA. No es lo mismo que `maxPlanos`: aquel cierra ante cualquier
-   * cambio de encuadre —dos planos de la misma persona hablando también—, y esto solo ante
-   * el cambio de CLASE, que es donde está el defecto.
-   *
-   * Medido sobre un anuncio de serum: el original dedica 8 segundos seguidos al frasco casi
-   * a pantalla completa, y esa toma terminó compartiendo clip con una toma hablada de 19 s.
-   * En un clip con 371 caracteres de locución el modelo se pasa el tiempo hablando, y el
-   * beat de producto quedó en ~1,5 s de los 8. Lo mismo le pasa a cualquier b-roll.
-   *
-   * Medido sobre las 25 sesiones con guión: los lotes que mezclan persona y producto pasan
-   * de 8 a 0, y cuesta 1,06× llamadas — contra 1,27× de `maxPlanos = 1`, que arregla menos.
-   */
-  clasePorTiempo?: Map<string, boolean>,
+  /** `tiempoOriginal` → los beats de ese corte. Se adjuntan ANTES de partir, para que
+   *  `splitLongToma` pueda repartirlos entre los fragmentos. */
+  motionPorTiempo?: Map<string, MotionTimeline>,
 ): Lote[] {
   // Renumeramos TODA la secuencia expandida en orden: si una toma se divide, sus
   // fragmentos no pueden compartir el `n` original (colisionarían al rotular "Toma N"
   // en el prompt de Task 5 — dos "Toma 1" en el mismo guión). Numerar secuencial y
   // global es la forma más simple de garantizar unicidad y orden sin inventar un
   // esquema paralelo (sufijos, decimales) que Task 5 tendría que aprender a leer.
-  const expandidas = tomas.flatMap(splitLongToma).map((t, i) => ({ ...t, n: i + 1 }))
+  // Los beats se adjuntan ANTES de partir: `splitLongToma` los reparte entre los
+  // fragmentos igual que la prosa, y cada uno se queda solo con los suyos.
+  const conBeats = motionPorTiempo
+    ? tomas.map((t) => {
+        const tl = motionPorTiempo.get(t.tiempoOriginal)
+        return { ...t, beats: tl?.beats ?? [] }
+      })
+    : tomas
+  const expandidas = conBeats.flatMap(splitLongToma).map((t, i) => ({ ...t, n: i + 1 }))
   const lotes: Lote[] = []
   let actual: TomaFinal[] = []
   let acumulado = 0
@@ -382,6 +375,10 @@ export function groupIntoLotes(
         n: t.n, duracionSeg: t.duracionSeg, accionVisual: t.accionVisual,
         personaje: t.personaje, producto: t.producto, locucion: t.locucion,
         tiempoOriginal: t.tiempoOriginal,
+        // Los beats de ESTE fragmento. La proyección es explícita a propósito (lo que se
+        // guarda en el jsonb es lo que el prompt lee), así que un campo que no se nombra
+        // acá no llega al render — que es justo lo que pasaba con el candado.
+        beats: t.beats,
       })),
       // Redondeamos recién acá, para mostrar: el check que decide si el lote cierra ya
       // pasó por `excedeTope` sobre el acumulado SIN redondear, así que este r1 no
@@ -401,41 +398,14 @@ export function groupIntoLotes(
   for (const t of expandidas) {
     // "Si agregar la siguiente Toma provoca que el lote supere 15.0 segundos: NO la
     // agregues. Esa Toma pasa automáticamente a ser la primera del siguiente Lote."
-    // Nota: `t.duracionSeg` ya viene <= LOTE_MAX_SEC garantizado por `splitLongToma`
-    // (recursivamente), así que una toma sola SIEMPRE entra en un lote propio aunque
-    // el lote esté vacío — el guard de abajo solo protege la SUMA con lo ya acumulado.
+    // `t.duracionSeg` ya viene <= LOTE_MAX_SEC garantizado por `splitLongToma`, así que una
+    // toma sola SIEMPRE entra en un lote propio aunque el lote esté vacío.
     if (actual.length && excedeTope(acumulado + t.duracionSeg)) cerrar()
-    // …y también cuando cambia la CLASE de toma: ver `clasePorTiempo`.
-    else if (
-      actual.length && clasePorTiempo
-      && clasePorTiempo.get(t.tiempoOriginal) !== clasePorTiempo.get(actual[actual.length - 1].tiempoOriginal)
-    ) cerrar()
-    // …y también por CARACTERES: ver `LOTE_MAX_CHARS`. Sin esto el piso de habla de
-    // `clampDuration` devuelve una duración por encima del cap y el clip sale más largo
-    // de lo que este módulo promete.
+    // …y por CARACTERES, que es lo único que sobrevive de los cierres propios: ver arriba.
     else if (actual.length && chars + t.locucion.length > LOTE_MAX_CHARS) cerrar()
-    // …y por COREOGRAFÍA: ver `LOTE_MAX_COREO`. Sin esto, el lote con más movimiento que
-    // copiar es justo el que llega con la coreografía cortada.
-    else if (actual.length && coreo + t.accionVisual.length > LOTE_MAX_COREO) cerrar()
-    // …y también si cambia el encuadre: el clip que sale de acá es continuo (ver la
-    // cabecera). Solo se compara contra la toma anterior DEL LOTE ABIERTO, así que un
-    // plano que vuelve más adelante abre su propio lote, igual que en el original.
-    else if (actual.length && planoPorTiempo) {
-      const ahora = planoPorTiempo.get(t.tiempoOriginal)
-      if (ahora) {
-        const yaEnLote = new Set(
-          actual.map((x) => planoPorTiempo.get(x.tiempoOriginal)).filter(Boolean),
-        )
-        // Cierra si este encuadre es nuevo Y el lote ya llegó a su cupo. Con
-        // `maxPlanos = 1` es "cierra en cuanto cambie el plano"; con 2 o 3 el clip
-        // puede contener ese número de encuadres distintos.
-        if (!yaEnLote.has(ahora) && yaEnLote.size >= maxPlanos) cerrar()
-      }
-    }
     actual.push(t)
     acumulado += t.duracionSeg
     chars += t.locucion.length
-    coreo += t.accionVisual.length
   }
   cerrar()
 
@@ -519,247 +489,228 @@ export function camaraDeLote(
  * insumos— o re-correr el análisis de cada sesión guardada, que es el paso caro. El
  * camino barato, si hace falta: pedirle a FASE 1/FASE 4 esos campos también en inglés.
  */
-const BLOQUE_OVERLAY_EN = [
-  'NO TEXT / NO OVERLAY.',
-  'Do not generate captions, subtitles, on-screen text, titles, lower thirds, banners,',
-  'stickers, emojis, arrows, callouts, graphics, watermarks, interfaces or UI elements.',
-  'The frame stays visually clean, centered on the character and the product.',
-  'The only text allowed is text physically printed on the product or on real props in',
-  'the scene, as part of their appearance.',
-  // La contraparte FÍSICA de la regla de overlay: lo de arriba prohíbe gráficos añadidos,
-  // esto prohíbe el equipo con el que se grabó el original. Un micrófono en cuadro
-  // delata que es una grabación y no un video casero, que es lo contrario del formato.
-  'No recording gear is visible either: no handheld or lavalier microphones, no booms,',
-  'no tripods, no ring lights, no cameras or phones on camera.',
-  'Do not invent dialogue to fill time: the clip ends when the spoken lines end.',
-]
-
 /**
- * SONIDO — la única capa del clip que el prompt nunca nombró.
+ * LA REGLA DE VIDEO LIMPIO, literal del PROMPT MAESTRO.
  *
- * `VOICE PROFILE` dice cómo suena la VOZ y la línea por toma dice qué se dice; del resto
- * del audio no había ni una palabra, y grok genera la banda entera. Lo que llena ese
- * silencio lo elige el modelo, y con la concatenación (`concat.ts`) eso pasó de ser un
- * detalle a ser una costura: cuatro clips con cuatro camas de música distintas se oyen
- * como cuatro anuncios pegados, que es justo lo que el video final viene a evitar.
- *
- * ⚠️ NO SE DERIVA DE UN CAMPO NUEVO DEL FORENSE, a propósito. Ese es el paso caro (manda
- * el video a Gemini) y solo alcanzaría a los análisis NUEVOS: las sesiones guardadas
- * seguirían sin audio descrito. Esta línea es fija y no re-describe la habitación — el
- * escenario ya viaja arriba y las referencias lo muestran.
- *
- * ⚠️ SIN VERIFICAR. `probe-audio-espanol.ts` mide que grok DICE la locución en español
- * palabra por palabra; que además honre una descripción de ambiente no lo mide nadie
- * todavía. Es una hipótesis, no un arreglo medido.
+ * Reemplaza al párrafo de quince sinónimos que este repo fue engordando (`captions,
+ * subtítulos, títulos, lower thirds, banners, stickers, emojis, flechas, callouts…`) y a su
+ * escalón de degradación. Dice lo mismo en un tercio del espacio, y con 4.096 caracteres de
+ * tope ese espacio es la coreografía.
  */
-const BLOQUE_SONIDO_EN = [
-  'SOUND: real audio captured by the phone in this room — quiet natural room tone, plus',
-  'the foley the action makes (clothing rustle, the product picked up, opened, set down).',
-  'No background music, no sound-effects bed, no added reverb.',
-]
+/**
+ * ⚠️ UNA LÍNEA, NO QUINCE SINÓNIMOS — MEDIDO CON 4 RENDERS (`scripts/probe-overlay.ts`).
+ * Este bloque decía la misma orden quince veces (*"No captions. No subtitles. No overlays.
+ * No titles. No stickers. No emojis…"*), 313 caracteres. A/B con 2 draws por brazo sobre el
+ * mismo lote: **los 20 fotogramas de los cuatro clips salen sin un solo carácter de texto,
+ * sin watermark y sin UI**, con el bloque completo y con éste. Los sinónimos no compran
+ * nada observable.
+ *
+ * ✅ Y el premio se midió ANTES de gastar, sobre los 146 lotes reales: **completos 99 → 105
+ * y sin movimiento 30 → 25**. Seis lotes recuperan el prompt entero y cinco recuperan el
+ * bloque de movimiento — el mismo orden de magnitud que los tres cambios de orden.
+ *
+ * ⚠️ LAS DOS ÚLTIMAS FRASES NO SE COMPRIMEN MÁS, y no son relleno: *"Only the character,
+ * the product and the real room"* es lo que impide que aparezcan objetos inventados, y
+ * *"Text printed on the product itself stays"* es lo que impide que el modelo BORRE la
+ * etiqueta del frasco al obedecer la prohibición de texto.
+ *
+ * ⚠️ LO QUE NO SE MIDIÓ: la tasa base de fuga. No hubo brazo SIN bloque, así que esto dice
+ * que comprimir no introduce texto, **no** que el bloque sobre. Y no debe medirse a la
+ * ligera: 36 de 36 análisis guardados detectan subtítulos o watermark en su original, así
+ * que publicar un clip con una caption quemada de otra marca es un riesgo real y el
+ * fail-safe es conservar la protección.
+ */
+const REGLA_VIDEO_LIMPIO =
+  'Clean video rule: no on-screen text or graphics of any kind — no captions, watermarks, ' +
+  'UI. Only the character, the product and the real room. Text printed on the product itself stays.'
 
 /**
- * Niveles de detalle del prompt, de más a menos detallado.
+ * LA SECUENCIA DE ACCIONES DE UNA TOMA, NUMERADA — es el corazón de la emisión nueva.
  *
- * ⚠️ ESTA ESCALERA VOLVIÓ (2026-08-24) y no es opcional. Se había BORRADO con la
- * migración a Veo, donde el tope era 60.000 caracteres y no había nada que recortar.
- * Este modelo topa en **5.000**, y encima los clips ahora duran hasta 30 s en vez de 8:
- * el mismo prompt tiene que sostener ~4× las tomas en 1/12 del espacio. Sin escalera,
- * `buildLotePrompt` lanzaría en cuanto un lote tenga contenido real.
+ * ⚠️ NACE DE UN CONTRAEJEMPLO MEDIDO. El dueño del repo generó desde el wizard de KIE un
+ * clip que SÍ ejecuta la coreografía (suelta la gota en la mejilla, la masajea y presenta el
+ * frasco) con la forma del spec: **una lista numerada de acciones distintas, sin marcas de
+ * tiempo**. Lo que emitía este repo eran seis ventanas de 1,5 s en telegrama, y cinco de las
+ * seis eran la misma acción rebanada. Un modelo que no puede distinguir un tramo del
+ * siguiente hace un gesto genérico y se queda quieto — que es exactamente lo que salía.
  *
- * Lo que se suelta primero es lo que DUPLICA información que ya está en otro lado. La
- * línea hablada de cada toma NO está en esa categoría y nunca se suelta (ver
- * `renderAcciones`): es la única señal de qué frase va con qué acción y en cuántos
- * segundos. El orden viene de incidentes medidos, documentados en AGENTS.md — no lo
- * reordenes sin volver a medir.
+ * La REGLA DE ACCIONES del spec pide la secuencia completa: posición inicial, movimiento,
+ * interacción, dirección de manos, manipulación del producto, mirada, expresión y posición
+ * final. Eso es, campo por campo, lo que trae un `MotionBeat`, así que el timeline de V2 se
+ * REUSA como fuente — sin sus ventanas de tiempo, que es lo único que se descarta.
+ *
+ * Los beats `micro` se absorben en el evento anterior: el spec quiere acciones que se
+ * distingan entre sí, no un muestreo del segundo a segundo.
+ *
+ * Sin timeline —toda sesión guardada— se cae a partir `accionVisual` por sus separadores,
+ * que es el camino de siempre.
+ */
+function accionesNumeradas(t: Lote['tomas'][number], cap: number | null): string[] {
+  const corta = (x: string) => (cap != null && x.length > cap ? `${x.slice(0, cap).trimEnd()}…` : x)
+  const limpia = (x: unknown) => String(x ?? '').trim().replace(/^[·;,.\s]+|[;,.\s]+$/g, '')
+  const beats = (t.beats ?? []) as MotionBeat[]
+  if (beats.length) {
+    const grupos: MotionBeat[][] = []
+    for (const b of beats) {
+      if (!grupos.length || b.importance !== 'micro') grupos.push([b])
+      else grupos[grupos.length - 1].push(b)
+    }
+    // ⚠️ UNA ORACIÓN DESCRIPTIVA POR EVENTO — pedido explícito del dueño del repo, con su
+    // ejemplo: *"The avatar gently raises the dropper in her left hand and releases a drop of
+    // serum on her left cheek while holding the bottle with her right hand down almost out of
+    // frame"*. No `Mano derecha: …`, que es una etiqueta de campo y no una instrucción.
+    //
+    // Se llegó acá por descarte, y las dos formas anteriores fallaron por lados opuestos:
+    // un ítem con cuatro hechos encadenados se ejecuta como un gesto solo, y una línea por
+    // casilla da 5×N ítems que el presupuesto recorta a trece caracteres. Una oración por
+    // evento, con las dos manos tejidas y la transferencia del producto dentro, tiene el
+    // tamaño de los bullets del spec y nombra el instrumento junto a su acción.
+    const g = (x: unknown) => {
+      const v = limpia(x)
+      return v ? v[0].toLowerCase() + v.slice(1) : ''
+    }
+    return grupos.map((grupo, k) => {
+      const a = grupo[0]
+      const z = grupo[grupo.length - 1]
+      const previo = k ? grupos[k - 1][0] : null
+      // ⚠️ LA ORACIÓN VIENE ESCRITA DEL FORENSE. Coserla acá desde cuatro casillas producía
+      // una frase que suena a inventario (*"is holding the dropper with her right hand while
+      // her left hand is holding bottle in place"*); el prompt que sí se ejecuta al detalle
+      // la trae redactada, y ahora el forense la escribe así.
+      // ⚠️ EL ESTADO DEL PRODUCTO YA NO SE APENDA, y es el mismo criterio de siempre: la
+      // oración tiene que nombrar el instrumento y el destino, o sea YA dice la
+      // transferencia. Apendarlo daba *"places a drop of serum on her cheek, and serum on
+      // cheek"* — el duplicado que este repo mide una y otra vez. Los estados siguen en el
+      // beat porque de ellos salen `objetoEnManoFromMotion` y el validador de la cadena.
+      return corta(limpia(a.action))
+    }).filter(Boolean)
+  }
+  return partirEnHechos(t.accionVisual).map(corta)
+}
+
+/**
+ * Parte la coreografía en HECHOS ATÓMICOS: uno por línea numerada.
+ *
+ * ⚠️ ES LO QUE FALTABA, y lo cazó el ojo del dueño del repo sobre un render que por lo demás
+ * salió bien: *"cuando saca el gotero no llega a aplicar la gota en el rostro CON EL GOTERO,
+ * sino que saca el gotero, deja caer la gota en el frasco y la gota aparece en la mejilla"*.
+ *
+ * La causa no es la lista numerada —eso ya estaba— sino cuánto se mete en cada ítem. El
+ * prompt del wizard que SÍ se ejecutó al detalle pone **un hecho por línea**:
+ *
+ *     Holding gotero in right hand.
+ *     Gently releasing one clear drop onto her left cheek.
+ *     Product bottle is held below.
+ *     Looking at the camera with a confident smile.
+ *
+ * El nuestro emitía *"Sostiene gotero con mano derecha, lo levanta y muestra la gota; mano
+ * izquierda sostiene el frasco. Mirada a cámara."* como UN ítem: cuatro hechos encadenados
+ * con comas y punto y coma. El modelo los resuelve como un gesto —mostrar el gotero— y la
+ * aplicación de la línea siguiente queda huérfana del instrumento, así que la gota "aparece".
+ *
+ * Se parte por punto, punto y coma, el separador de fusión (` Luego, `) y los conectores de
+ * secuencia (`, luego`, ` y luego`). NO por coma a secas: *"gotero con mano derecha"* y
+ * *"mejilla izquierda"* llevan comas que no separan hechos, y partir ahí deja fragmentos sin
+ * verbo — que es peor que un ítem largo.
+ */
+export function partirEnHechos(accion: string): string[] {
+  return accion
+    .split(TRAMO_SEP).join(' Luego, ')
+    // ⚠️ ` y luego ` NO parte, y es un falso positivo medido: *"Mira producto y luego a
+    // cámara"* son dos destinos de la MISMA mirada, y partirlo deja "a cámara" sin verbo.
+    // `, luego ` sí, que es como el forense encadena dos acciones distintas.
+    .split(/\s+Luego,\s+|\s*;\s*|(?<=[a-záéíóúñ)])\.\s+|,\s+luego\s+/i)
+    // El `Luego,` de cabeza sobrevive cuando el corte anterior fue por punto.
+    .map((x) => x.replace(TRAMO_MARCA, '').replace(/^\s*Luego,\s*/i, '').trim().replace(/^[·,;.\s]+|[,;.\s]+$/g, ''))
+    .filter((x) => x.length > 2)
+}
+
+/**
+ * Recorta la descripción del producto a su parte física.
+ *
+ * El scan transcribe la etiqueta entera y eso son ~677 caracteres contándole al modelo, en
+ * palabras, lo que está viendo en píxeles como `@image(2)`. Es el primer escalón de la
+ * escalera por eso: duplica una referencia que ya viaja.
+ */
+/**
+ * El encuadre sin la prosa de más. Se queda con la primera oración, que es donde el forense
+ * declara el punto de corte del cuadro; lo que sigue suele ser textura ("con la luz entrando
+ * por la izquierda, fondo desenfocado…") que el avatar ya muestra en píxeles.
+ */
+function camaraCorta(c: string): string {
+  const frases = c.split(/(?<=\.)\s+/).filter(Boolean)
+  return frases.length <= 1 ? c : frases[0]
+}
+
+function productoFisico(desc: string): string {
+  const frases = desc.split(/(?<=\.)\s+/).filter(Boolean)
+  if (frases.length <= 2) return desc
+  return `${frases.slice(0, 2).join(' ')} El resto de la etiqueta se lee de su imagen.`
+}
+
+/**
+ * LA ESCALERA, de siete escalones a TRES.
+ *
+ * Con 4.096 caracteres hay menos aire que antes, pero también mucho menos que emitir: la
+ * emisión del spec no repite el guion global (la locución del lote ya está una vez), no
+ * lleva el detalle atómico por corte (las acciones numeradas lo cubren) y su regla de video
+ * limpio ocupa un tercio del párrafo viejo. Lo que se cede sigue siendo, en orden, lo que
+ * DUPLICA información que ya viaja por otro lado.
  */
 const NIVEL_COMPLETO = 0
-const NIVEL_SIN_OVERLAY_POR_TOMA = 1
-const NIVEL_SIN_GUION_GLOBAL = 2
+/** El escenario en TEXTO contra el escenario en la IMAGEN. Ver la nota en `buildLotePrompt`. */
+const NIVEL_SIN_ESCENARIO = 1
 /**
- * Comprime el párrafo de prohibición de overlay antes de tocar la coreografía. Es el
- * último escalón que se puede bajar sin perder información: la lista larga son quince
- * sinónimos de la misma orden, mientras que `accionVisual` es el único texto del prompt
- * que describe QUÉ HACE EL CUERPO — justo lo que se reportó que no se copia.
+ * El ENCUADRE, recortado a su primera oración. Medido sobre 146 lotes reales: `camaraDeLote`
+ * llega a **411 caracteres** —el forense a veces escribe un párrafo por corte— y hasta ahora
+ * era el único bloque grande del prompt que **no estaba en ningún escalón**, así que su costo
+ * se lo terminaba pagando la coreografía en el piso.
  */
-const NIVEL_OVERLAY_COMPACTO = 3
+const NIVEL_CAMARA_CORTA = 2
+/** La etiqueta del producto, que `@image(2)` ya muestra. */
+const NIVEL_PRODUCTO_FISICO = 3
 /**
- * Recorta la descripción del producto a su parte FÍSICA. Es el último escalón antes de
- * tocar la coreografía, y el que más presupuesto libera.
+ * El bloque de CÓMO SE MUEVE (FASE 4.6) es el ÚLTIMO que se suelta.
  *
- * `productDescription` viene del scan y transcribe la etiqueta entera — medido: 677
- * caracteres listando "SÉRUM FACIAL CON VITAMINA C", "30 ml / 1.01 fl oz"… El envase va
- * como imagen en TODOS los lotes y el prompt ya ordena reproducirlo idéntico: esa
- * transcripción le cuenta en palabras lo que el modelo está viendo en píxeles, y lo hace
- * a costa del único texto que describe qué hace el cuerpo. Medido en su momento: la
- * coreografía conservada pasó de 46 % a 84 % en el lote 1.
+ * ⚠️ ESTABA DE SEGUNDO Y ERA EL PEOR LUGAR POSIBLE. El argumento para soltarlo temprano era
+ * que no está en el OUTPUT del spec y que la secuencia numerada ya dice lo concreto. Lo que
+ * ese argumento no pesaba es el modo de fallo del modelo: **grok se queda ESTÁTICO cuando no
+ * se le pide movimiento** (guía de Replicate para este mismo modelo). O sea el síntoma de
+ * soltarlo es exactamente el defecto que más se reporta de esta tool —"se queda casi quieto
+ * todo el tiempo"— y se estaba fabricando en **26 de 146 lotes (18 %)** medidos.
+ *
+ * Lo que se suelta antes que él DUPLICA información que las imágenes ya traen (el escenario,
+ * el encuadre, la etiqueta); esto no lo dice nadie más.
  */
-const NIVEL_MICRO_CORTO = 4
-const NIVEL_PRODUCTO_FISICO = 5
-/**
- * ⚠️ EL DETALLE ATÓMICO SE SUELTA ENTERO ANTES DE TOCAR LA COREOGRAFÍA.
- *
- * Hasta acá `micro` solo se ENCOGÍA (a 60 caracteres por casilla) y nunca se soltaba, así
- * que al llegar al piso la búsqueda binaria recortaba `accionVisual` y `micro` con el
- * MISMO cap — o sea el pelo y el fondo se llevaban presupuesto que le hacía falta a lo
- * único que dice QUÉ HACE EL CUERPO.
- *
- * Medido en un render real: el prompt llegó con *"aplica una gota en la…"*, cortado justo
- * antes de la zona, y el clip salió con la chica sosteniendo el frasco 11 segundos sin
- * aplicarse nada. Sobre los prompts guardados, **10 de 73 lotes (14 %) llevan texto
- * truncado**.
- *
- * `micro` es refinamiento; `accionVisual` es el contenido. Cuando no entran los dos, gana
- * el contenido.
- *
- * ⚠️ Y EN ESTE MISMO NIVEL SE SUELTA `MOVEMENT` (el `motion_profile`), por el mismo
- * argumento un escalón más arriba: describe cómo se mueve la persona EN GENERAL, mientras
- * `accionVisual` describe qué hace EN ESTA TOMA. Con el detalle atómico ya fuera, el
- * bloque general es lo siguiente más prescindible — y medido, soltar solo `micro` dejaba
- * todavía 16 de 124 lotes con la coreografía cortada.
- */
-const NIVEL_SIN_MICRO = 6
+const NIVEL_SIN_MOVIMIENTO = 4
 
-/** Las dos primeras oraciones: la forma del envase, sin la transcripción de la etiqueta. */
-function productoFisico(desc: string): string {
-  const frases = desc.match(/[^.!?]+[.!?]+/g)
-  if (!frases || frases.length <= 2) return desc
-  return `${frases.slice(0, 2).join('').trim()} Read the rest of the label from its reference image and reproduce it exactly.`
-}
-
-/** El párrafo de overlay, largo o comprimido. Dice lo mismo; el largo lo dice 15 veces. */
-function bloqueOverlay(nivel: number): string[] {
-  if (nivel >= NIVEL_OVERLAY_COMPACTO)
-    return [
-      'NO TEXT / NO OVERLAY: no captions, subtitles, on-screen text, graphics, watermarks or UI.',
-      'Only text physically printed on the product or real props. No recording gear on camera.',
-      'Do not invent dialogue to fill time.',
-    ]
-  return BLOQUE_OVERLAY_EN
-}
-
-/**
- * EL DETALLE ATÓMICO DE UNA TOMA, en una línea.
- *
- * Pedido del dueño del repo (2026-08-25): que el prompt copie *"cada movimiento, cada
- * expresión, el lipsync, el cabello, el vaivén de las manos, el balanceo del cuerpo, más
- * rigidez si no se mueve mucho, el movimiento del entorno"*. `accion` dice QUÉ hace el
- * cuerpo; esto dice CÓMO, y es la capa que separa un video que se parece de uno que es
- * el mismo.
- *
- * ⚠️ VA EN UNA SOLA LÍNEA CON ETIQUETAS DE UNA PALABRA, y eso no es cosmético: son cinco
- * campos POR TOMA dentro de un prompt topado en 5000 caracteres. Medido sobre las 22
- * sesiones reales, antes de comprimir el andamiaje quedaban ~21 caracteres libres por
- * toma — o sea esto no entraba de ninguna forma. Cada etiqueta larga ("Body movement:")
- * se paga cinco veces por toma y otra vez por cada toma del lote.
- *
- * `cap` lo fija la escalera de degradación: recorta cada campo antes que soltar el
- * bloque entero, porque medio detalle sigue siendo más de lo que había.
- */
-/**
- * EL RECORRIDO DE CADA MANO Y EL ESTADO DE LOS ACCESORIOS.
- *
- * ⚠️ Sin esto, el forense extraía el dato y nadie lo emitía — el defecto que este repo ya
- * tiene documentado con `elementosGraficos` (generado, persistido y leído por nadie).
- *
- * `accesorios` es la línea que evita el fallo más visible: *"en el lote 1 la tapa
- * reaparece mágicamente en el frasco"*. El modelo no puede conservar el estado de una
- * pieza que nadie le nombró.
- */
-function manosDe(m: ObjetoEnMano | undefined, cap: number | null): string {
-  if (!m) return ''
-  const corto = (x: string) => (cap != null && x.length > cap ? `${x.slice(0, cap).trimEnd()}…` : x)
-  const acc = m.accesorios?.trim()
-  if (!acc) return ''
-  return `Detachable parts (follow this order exactly; they never appear or vanish on their own): ${corto(acc)}`
-}
-
-function microDe(m: Micro | undefined, cap: number | null): string {
-  if (!m) return ''
-  const corto = (x: string) => {
-    const t = x.trim()
-    if (!t) return ''
-    return cap != null && t.length > cap ? `${t.slice(0, cap).trimEnd()}…` : t
-  }
-  const partes = [
-    m.cuerpo && `body ${corto(m.cuerpo)}`,
-    m.manos && `hands ${corto(m.manos)}`,
-    m.rostro && `face ${corto(m.rostro)}`,
-    m.cabello && `hair ${corto(m.cabello)}`,
-    m.entorno && `bg ${corto(m.entorno)}`,
-  ].filter(Boolean)
-  return partes.length ? `Micro-detail (reproduce exactly): ${partes.join(' · ')}` : ''
-}
-
-/**
- * ⚠️ EL ESCENARIO YA NO VIAJA COMO TEXTO — MEDIDO CON 4 RENDERS (2026-09-02,
- * `scripts/probe-setting.ts`).
- *
- * `SETTING AND LIGHTING: ${escenario}` salía de `forensic.fondo`, que describe el VIDEO
- * ENTERO dentro del prompt de UN clip (de ahí el sillón de la sesión de ropa). Contra la
- * imagen del avatar —que ES la escena, en píxeles— eso es una contradicción, y el modelo
- * la resuelve distinto en cada draw. Ese es el mecanismo de la costura que se ve al
- * concatenar: *"el FONDO cambia entre clips"*.
- *
- * A/B sobre el MISMO lote, quitando ESA LÍNEA y nada más, **dos draws por brazo** (la
- * regla que impuso el probe del cap de 30: con uno solo se mide el seed, no el prompt):
- *
- *   avatar de referencia │ cocina blanca: alacenas, backsplash de mármol, refri de acero,
- *                        │ olla terracota, banqueta de madera
- *   A1 (con escenario)   │ pasillo con marco de puerta oscuro y espejo — NO es la cocina
- *   A2 (con escenario)   │ otra habitación distinta — ni la cocina ni A1
- *   B1 (sin escenario)   │ LA COCINA, exacta
- *   B2 (sin escenario)   │ LA COCINA, exacta — idéntica a B1
- *
- * 2 de 2 en cada brazo. Con el bloque, el fondo no es ni el de la imagen ni el mismo
- * entre draws; sin él, la imagen manda y el resultado es estable. Y de paso libera ~208
- * caracteres (medidos) que van al presupuesto que se le come la coreografía.
- *
- * ⚠️ Lo que NO se tocó: `forensic.fondo` sigue alimentando el prompt del AVATAR
- * (`character.ts`), que es donde el escenario del original SÍ tiene que entrar — es la
- * mitad del arreglo de 2026-08-26 (*"el avatar contradecía al original"*). El escenario no
- * desaparece del pipeline: deja de decirse dos veces y en dos idiomas distintos.
- *
- * ⚠️ CAVEAT DE LA MEDICIÓN: un lote, una sesión, y su avatar se generó 31 minutos ANTES de
- * ese arreglo — o sea es el caso donde imagen y texto se contradicen. Con el avatar ya
- * nacido en el escenario del original los dos coinciden y el bloque pasa a ser redundante
- * en vez de contradictorio; en ninguno de los dos casos aporta.
- */
 export function buildLotePrompt(args: {
   lote: Lote
   consistencyBlock: string
   productDesc: string
   camara: string
   voz: VoiceProfile
+  /** Escenario e iluminación. El spec los EXIGE por lote (REGLA DE CONTEXTO ABSOLUTO).
+   *  ⚠️ Ver la nota de `buildLotePrompt`: está medido que contradice a la imagen. */
+  escenario?: string
   /** Cómo se mueve. Null en sesiones anteriores a FASE 4.6: el bloque no se emite. */
   movimiento?: MotionProfile | null
   images: LoteImage[]
-  /** Los cortes del forense, para poder decir QUÉ plano va con QUÉ toma (ver abajo). */
-  cortes?: { tiempo: string; camara: string; micro?: Micro | null; objetoEnMano?: ObjetoEnMano | null }[]
-  /** Nicho de la sesión: en ropa/zapatos el producto se LLEVA PUESTO, y el bloque que
-   *  lo describe como "un objeto" contradice al bloque de consistencia. Ver niches.ts. */
+  /** Los cortes del forense, para poder decir QUÉ plano va con QUÉ toma. */
+  cortes?: { tiempo: string; camara: string }[]
+  /** Nicho de la sesión: en ropa/zapatos el producto se LLEVA PUESTO. Ver niches.ts. */
   niche?: unknown
-  /** Todos los personajes del anuncio. Con uno solo (o sin la lista) el prompt sale
-   *  exactamente igual que antes del soporte de varios. */
+  /** Todos los personajes del anuncio. */
   personajes?: Personaje[]
   /** Quién habla en cada `tiempoOriginal` (ver `hablantesPorTiempo`). */
   quien?: Map<string, Personaje[]>
-  /** Qué `tiempoOriginal` son VOZ EN OFF: se oye la narración pero nadie habla en cuadro. */
+  /** Qué `tiempoOriginal` son VOZ EN OFF. */
   vozEnOff?: Set<string>
-  /**
-   * `tiempoOriginal` → índice 1-based dentro de `images` de la IMAGEN ANCLA con la que
-   * arranca esa toma. Lo llena `anchors.ts` cuando el video cambia tanto de escena que
-   * una sola referencia no alcanza. Vacío = todas las tomas parten del avatar.
-   */
+  /** `tiempoOriginal` → índice 1-based de su IMAGEN ANCLA dentro de `images`. */
   anclas?: Map<string, number>
 }): string {
   const { lote, consistencyBlock, productDesc, camara, voz, movimiento, images, cortes } = args
 
-  /**
-   * VARIOS PERSONAJES. Quiénes salen en ESTE lote: la unión de los hablantes de sus
-   * tomas. Con uno solo —o sin atribución, que es toda sesión anterior— el prompt se arma
-   * exactamente como antes: un bloque de personaje, uno de voz y uno de movimiento.
-   */
   const quien = args.quien ?? new Map<string, Personaje[]>()
   const presentes: Personaje[] = []
   for (const t of lote.tomas) {
@@ -770,311 +721,146 @@ export function buildLotePrompt(args: {
   const varios = presentes.length > 1
   const off = args.vozEnOff ?? new Set<string>()
   const anclas = args.anclas ?? new Map<string, number>()
-  /**
-   * ⚠️ EN VOZ EN OFF LA LÍNEA NO ES DE NADIE EN CUADRO. Rotularla como diálogo de
-   * alguien hace que el modelo le mueva la boca; el original solo mostraba el producto
-   * mientras una voz narraba por encima.
-   */
-  const dice = (t: { tiempoOriginal: string }) => {
-    // ⚠️ La etiqueta se acortó (2026-08-25): la cabecera del prompt ya dice que TODO lo
-    // entrecomillado es español latino literal, así que repetir "(Latin American Spanish,
-    // verbatim)" en cada toma cuesta ~47 caracteres por toma sin agregar ninguna regla —
-    // y ese presupuesto es justo el que financia el detalle atómico. Lo que NO se toca es
-    // que la línea EXISTA por toma: es la sincronización audio↔imagen.
-    if (off.has(t.tiempoOriginal)) return 'VOICE-OVER (nobody on camera)'
-    const gente = quien.get(t.tiempoOriginal) ?? []
-    return gente.length === 1 ? `${etiqueta(gente[0])} says` : 'Says'
-  }
-  /** El lote entero es narración por encima: ninguna de sus tomas se dice en cuadro. */
-  const todoEnOff = lote.tomas.length > 0
-    && lote.tomas.every((t) => !t.locucion || off.has(t.tiempoOriginal))
-    && lote.tomas.some((t) => !!t.locucion)
-
-  /** El bloque completo de un personaje: cómo se ve, cómo suena y cómo se mueve. */
-  const bloqueDe = (p: Personaje) => [
-    `CHARACTER ${etiqueta(p)} — full description, no external references:`,
-    p.consistencyBlock ?? '',
-    p.voiceProfile
-      ? `  VOICE: ${p.voiceProfile.idioma} · ${p.voiceProfile.varianteRegional} · acento ${p.voiceProfile.acento} · ${p.voiceProfile.tono} · ${p.voiceProfile.timbre} · edad vocal ${p.voiceProfile.edadVocal} · ritmo ${p.voiceProfile.ritmo} · energía ${p.voiceProfile.energia} · estilo ${p.voiceProfile.estilo}`
-      : '',
-    p.motionProfile
-      ? `  HOW THEY MOVE: ${p.motionProfile.calidadMovimiento} Mannerisms: ${p.motionProfile.manerismos}`
-      : '',
-  ].filter(Boolean).join('\n')
   const spec = nicheSpec(args.niche)
 
-  /**
-   * EL PLANO, POR TOMA — solo cuando el lote mezcla más de uno.
-   *
-   * `camaraDeLote` deduplica y concatena los planos de las tomas del lote en UN string,
-   * y esa línea es todo lo que el render sabía del encuadre. Con un solo plano alcanza;
-   * con dos es ambigua por construcción, y ahora que un clip puede contener varias
-   * escenas (ver `maxPlanos`) es el caso NORMAL, no la excepción.
-   *
-   * El emparejamiento va por `tiempoOriginal` y NO por `n`, por el mismo motivo que en
-   * `camaraDeLote`: `groupIntoLotes` renumera después de `splitLongToma`.
-   *
-   * Se emite solo cuando el plano CAMBIA respecto de la toma anterior: un shot list se
-   * lee así, el plano vale hasta que se anuncia otro. Medido en su momento, emitirlo en
-   * todas las tomas costaba ~285 caracteres y hundía la coreografía del 54 % al 33 %.
-   *
-   * Cuando se emite no se suelta en ningún nivel de degradación — es alineación, no
-   * contenido, el mismo argumento que la línea hablada.
-   */
+  /** El plano de cada toma, por `tiempoOriginal` y nunca por `n` (`groupIntoLotes`
+   *  renumera después de `splitLongToma`). Se emite cuando CAMBIA. */
   const porTiempo = new Map((cortes ?? []).map((c) => [c.tiempo, c.camara.trim()]))
-  // El detalle atómico de cada corte, por la MISMA clave que el plano (`tiempoOriginal`,
-  // nunca `n`: `groupIntoLotes` renumera después de `splitLongToma`).
-  const microPorTiempo = new Map((cortes ?? []).flatMap((c) => (c.micro ? [[c.tiempo, c.micro] as const] : [])))
-  // El recorrido de cada mano y el estado de la tapa, por la misma clave.
-  const manosPorTiempo = new Map((cortes ?? []).flatMap((c) => (c.objetoEnMano ? [[c.tiempo, c.objetoEnMano] as const] : [])))
   const planos = lote.tomas.map((t) => porTiempo.get(t.tiempoOriginal) ?? '')
   const mezclaPlanos = new Set(planos.filter(Boolean)).size >= 2
   const planoPorToma = (i: number) =>
     mezclaPlanos && planos[i] && planos[i] !== planos[i - 1] ? planos[i] : ''
 
-  const legend = images.map((img, i) => `@image(${i + 1}) = ${img.role}`).join('\n')
+  // ⚠️ `<IMAGE_n>` Y CITADO DENTRO DE LA CLÁUSULA, no una leyenda que después nadie nombra.
+  // Es la forma del ejemplo oficial de xAI ("The woman from <IMAGE_1>… the shirt from
+  // <IMAGE_2>") y está medida con 4 renders (`scripts/probe-cita-imagen.ts`) — ver AGENTS.md.
+  // Ni `@image(2)` ni `<IMAGE_2>` los parsea ningún deserializador: por KIE el prompt es texto
+  // libre. Lo que cambia es que el rol viaja PEGADO a la descripción que lo usa.
+  const legend = images.map((img, i) => `<IMAGE_${i + 1}> = ${img.role}`).join(' · ')
   const locucionFinal = lote.tomas.map((t) => t.locucion).filter(Boolean).join(' ')
+  const todoEnOff = lote.tomas.length > 0
+    && lote.tomas.every((t) => !t.locucion || off.has(t.tiempoOriginal))
+    && lote.tomas.some((t) => !!t.locucion)
 
-  /**
-   * ¿Este clip contiene más de una escena? Con el techo de 30 s y sin frontera de plano,
-   * un lote normalmente abarca varios cortes del original. Eso cambia qué hay que
-   * prometerle al modelo: antes era "una sola toma continua", ahora es "cortes secos
-   * entre escenas, sin efectos de transición".
-   */
-  const variasEscenas = new Set(planos.filter(Boolean)).size >= 2 || anclas.size > 1
+  const perfilDeVoz = (v: VoiceProfile) =>
+    `${v.idioma}, regional variant ${v.varianteRegional}, accent ${v.acento}. Delivery ${v.pronunciacion}. ` +
+    `Pace ${v.ritmo}, speed ${v.velocidad}, intonation ${v.entonacion}, energy ${v.energia}, pauses ${v.pausas}. ` +
+    `Tone ${v.tono}, timbre ${v.timbre}, vocal age ${v.edadVocal}. Style ${v.estilo}.`
 
-  /**
-   * `t.personaje` y `t.producto` (FASE 3, preservados en `Lote.tomas`) NO se leen acá a
-   * propósito. Son dato de shot list —lectura para el usuario en el wizard, no
-   * instrucción para el modelo— y a nivel de render los supersede el bloque de
-   * consistencia y `productDesc`, que ya cubren esa información una vez para todo el
-   * lote. Repetirlos por toma duplicaría contenido y se comería justo el presupuesto que
-   * esta función administra.
-   */
-  // ⚠️ Dentro de UN clip, el detalle atómico no se repite. `microPorTiempo` va por
-  // `tiempoOriginal`, así que los dos fragmentos de una toma partida lo reciben idéntico —
-  // y pedirle al modelo el mismo detalle dos veces en el mismo clip es la versión chica del
-  // bug de la coreografía duplicada. Entre LOTES sí se repite, y debe: cada clip se
-  // renderiza sin memoria del anterior (REGLA DE CONTEXTO ABSOLUTO).
-  const microYaEmitido = new Set<string>()
+  /** Un personaje: cómo se ve, cómo suena y cómo se mueve, entero y sin referencias. */
+  const bloqueDe = (p: Personaje) => [
+    `Character ${etiqueta(p)}: ${p.consistencyBlock ?? ''}`,
+    p.voiceProfile ? `  Voice of ${etiqueta(p)}: ${perfilDeVoz(p.voiceProfile)}` : '',
+    p.motionProfile
+      ? `  How they move: ${p.motionProfile.calidadMovimiento} Mannerisms: ${p.motionProfile.manerismos}`
+      : '',
+  ].filter(Boolean).join('\n')
 
-  const renderAcciones = (nivel: number, capAccion: number | null) => {
-    microYaEmitido.clear()
-    return lote.tomas
-      .map((t, i) => {
-        const accionVisual =
-          capAccion != null && t.accionVisual.length > capAccion
-            ? `${t.accionVisual.slice(0, capAccion).trimEnd()}…`
-            : t.accionVisual
-        const plano = planoPorToma(i)
-        const ancla = anclas.get(t.tiempoOriginal)
-        return [
-          // r1: `duracionSeg` sale de un reparto proporcional y llegaba cruda al prompt
-          // ("Toma 1 — 0.8854477611940298 s", medido). Es ruido en un presupuesto que ya
-          // trunca coreografía, y una precisión que el render no tiene.
-          `### Shot ${t.n} — ${r1(t.duracionSeg)}s`,
-          // La imagen ancla de esta escena. Es lo que hace posible que un clip contenga
-          // varios encuadres: sin ella, el modelo tiene que inventar cómo se ve la escena
-          // nueva y devuelve el mismo plano de antes.
-          ancla ? `Starts from @image(${ancla}): match that framing and setting exactly.` : '',
-          // Ver `planoPorToma`: nunca se degrada, por el mismo motivo que la línea hablada.
-          plano ? `Camera: ${plano}` : '',
-          accionVisual,
-          // Debajo de la coreografía a propósito: primero QUÉ hace el cuerpo, después CÓMO.
-          // ⚠️ El detalle atómico se ENCOGE con la búsqueda binaria del piso, no se
-          // suelta: medido sobre las 87 combinaciones reales, soltarlo dejaba 7 lotes sin
-          // prompt válido (la función lanza y la cuota ya está gastada). Medio detalle
-          // sigue siendo más de lo que había, y el modo de fallo pasa a ser "menos
-          // detalle" en vez de "no se puede renderizar".
-          (() => {
-            if (microYaEmitido.has(t.tiempoOriginal)) return ''
-            microYaEmitido.add(t.tiempoOriginal)
-            // ⚠️ LAS MANOS DEGRADAN DESPUÉS QUE EL DETALLE. `micro` se recorta ya en
-            // `NIVEL_MICRO_CORTO`; el recorrido de las manos solo en el piso de la
-            // búsqueda binaria. No es una preferencia estética: el pelo y el fondo son
-            // textura, y el estado de la tapa es lo que impide que un objeto reaparezca
-            // en el aire — perder eso reintroduce el fallo que el campo vino a arreglar.
-            const capMicro = capAccion != null ? capAccion : nivel >= NIVEL_MICRO_CORTO ? 60 : null
-            return [
-              manosDe(manosPorTiempo.get(t.tiempoOriginal), capAccion),
-              // Ver `NIVEL_SIN_MICRO`: el detalle se suelta entero antes que la coreografía.
-              nivel >= NIVEL_SIN_MICRO ? '' : microDe(microPorTiempo.get(t.tiempoOriginal), capMicro),
-            ].filter(Boolean).join('\n')
-          })(),
-          // NUNCA se suelta, en ningún nivel de degradación. Esta línea es lo único que
-          // le dice al generador QUÉ FRASE va con QUÉ ACCIÓN y en cuántos segundos: es la
-          // sincronización audio↔imagen, no una copia del guion global. Con el tope viejo
-          // llegó a perderse en un lote y no en los otros, y el resultado fue "una habla
-          // muy rápido y la otra muy lento".
-          //
-          // ⚠️ Una toma muda tiene que DECLARARSE muda. El silencio por omisión es
-          // ambiguo: el modelo genera audio y ante una toma sin línea rellena con habla
-          // inventada.
-          t.locucion
-            ? `${dice(t)}: “${t.locucion}”`
-            : 'No dialogue: the person does NOT speak in this shot. Action and ambient sound only; do not invent lines and do not move their mouth as if speaking.',
-          nivel < NIVEL_SIN_OVERLAY_POR_TOMA ? 'No text / no overlay.' : '',
-        ].filter(Boolean).join('\n')
-      })
-      .join('\n\n')
+  const dice = (t: { tiempoOriginal: string }) => {
+    if (off.has(t.tiempoOriginal)) return 'VOICE-OVER (nobody speaks on camera)'
+    // ⚠️ Solo se atribuye cuando hay VARIOS personajes en el clip. Con uno, `P1 dice:` es
+    // ruido: no hay a quién confundirlo. Con dos o más, es lo que impide que el modelo le
+    // dé toda la línea a la misma persona.
+    const gente = quien.get(t.tiempoOriginal) ?? []
+    return varios && gente.length === 1 ? `${etiqueta(gente[0])} says` : 'Spoken line'
   }
 
-  const render = (nivel: number, capAccion: number | null) =>
-    [
-      `Vertical 9:16 UGC video, ${lote.duracionSeg} seconds total, shot on a phone.`,
-      // La única línea del prompt que habla de idiomas. Sin ella, un prompt en inglés con
-      // frases en español entrecomilladas es ambiguo: el modelo puede traducirlas.
-      'Instructions in English. Quoted lines are Latin American Spanish: speak them EXACTLY, never translate.',
+  const render = (nivel: number, capAccion: number | null) => {
+    const secuencia = lote.tomas.flatMap((t, i) => {
+      const plano = planoPorToma(i)
+      const ancla = anclas.get(t.tiempoOriginal)
+      const acciones = accionesNumeradas(t, capAccion)
+      return [
+        `Shot ${t.n} — ${r1(t.duracionSeg)} seconds`,
+        ancla ? `Starts from <IMAGE_${ancla}>: same framing and same room.` : '',
+        plano ? `Camera: ${plano}` : '',
+        ...acciones.map((a, k) => `${k + 1}. ${a}`),
+        // ⚠️ Una toma muda tiene que DECLARARSE muda: el silencio por omisión es ambiguo
+        // para un modelo que genera audio, y ante una toma sin línea rellena con habla
+        // inventada.
+        t.locucion
+          ? `${dice(t)}: “${t.locucion}”`
+          : 'No dialogue: she does NOT speak in this shot. Action and ambient sound only.',
+        'Text / Overlay: NONE.',
+        '',
+      ].filter((x) => x !== '')
+    })
+
+    return [
+      'Visual Generation Prompt (absolute context):',
+      `Vertical 9:16 UGC video, ${r1(lote.duracionSeg)} seconds, shot handheld on a phone with natural micro-shake.`,
+      // ⚠️ LA ÚNICA LÍNEA DEL PROMPT QUE HABLA DE IDIOMAS, y no es decorativa: todo el
+      // prompt va en inglés y lo entrecomillado es español que hay que decir literal. Sin
+      // esto el modelo puede traducir la locución, que es el entregable.
+      'Everything below is in English. The quoted lines are Latin American Spanish: speak them EXACTLY as written, never translate them.',
+      `References: ${legend}. They define APPEARANCE — person, product, room — they are not shots to reproduce and they do not set the framing.`,
       '',
-      legend,
-      // ⚠️ MEDIDO: en un render real el producto apareció FLOTANDO a pantalla completa.
-      // La leyenda declaraba qué ES cada imagen y nada sobre cómo puede usarse, así que
-      // animar hacia la foto de referencia es una interpretación legal del input. Las
-      // referencias definen APARIENCIA, no son tomas a reproducir.
-      'The reference images define APPEARANCE ONLY — they are not shots to reproduce, and',
-      'they do NOT set the framing: the CAMERA line below does. If this clip is closer or',
-      'wider than the reference image, follow the CAMERA line.',
-      'The product exists inside the scene: in the hands or resting on a surface. NEVER show',
-      'it as a floating cut-out, an inserted product shot, or a full-frame image.',
+      // ⚠️ LA COREOGRAFÍA VA ARRIBA, ANTES DEL CONTEXTO. Estaba en el bloque 12 de 13, detrás
+      // de ~3.000 caracteres de descripción. La guía de este modelo dice que *"cada fotograma
+      // informa al siguiente, y la acción escrita al PRINCIPIO del prompt aparece al principio
+      // del clip"*, y el ejemplo oficial de xAI abre con el movimiento de cámara y la entrada
+      // del personaje, no con el catálogo de referencias.
+      //
+      // Lo que NO cambia es el CONTENIDO: los mismos bloques, el mismo texto, la misma regla de
+      // contexto absoluto. Solo el orden, que es reversible y no cuesta un carácter.
+      'Visual Action Sequence:',
+      ...secuencia,
       '',
+      // REGLA DE CONTEXTO ABSOLUTO: el generador no recuerda el lote anterior, así que todo
+      // se repite entero. Nunca "el mismo personaje" ni "igual que en el Lote 1".
       ...(varios
-        ? [
-            `THERE ARE ${presentes.length} PEOPLE IN THIS CLIP. They look different from each`,
-            'other and each one keeps their own face, voice and way of moving for the whole',
-            'clip. Do not mix them up, do not swap them, do not give one the other’s voice.',
-            '',
-            ...presentes.map(bloqueDe),
-          ]
-        : ['CHARACTER (no external references):', consistencyBlock]),
+        ? [`${presentes.length} people appear in this clip.`, ...presentes.map(bloqueDe)]
+        : [`Character — the person from <IMAGE_1>: ${consistencyBlock}`]),
       '',
-      spec.productBlockEn,
-      nivel >= NIVEL_PRODUCTO_FISICO ? productoFisico(productDesc) : productDesc,
+      `${spec.productBlock.replace(/:\s*$/, '')} — the product from <IMAGE_2>: ${nivel >= NIVEL_PRODUCTO_FISICO ? productoFisico(productDesc) : productDesc}`,
+      spec.wornProduct ? '' : 'The product exists inside the scene — in her hands or resting on a surface — never as a floating cut-out or a full-frame product shot.',
+      ...(nivel < NIVEL_SIN_ESCENARIO && args.escenario ? [`Setting and lighting: ${limpiarEscenaDeFoto(args.escenario)}`] : []),
+      // ⚠️ La línea global de cámara solo cuando el lote NO mezcla planos: con dos, ésta
+      // los concatena con ` · ` (ambigua por construcción) y además cada toma ya declara el
+      // suyo abajo. Son ~90 caracteres diciendo dos veces algo peor.
+      mezclaPlanos ? '' : `Camera: ${nivel >= NIVEL_CAMARA_CORTA ? camaraCorta(camara) : camara}`,
+      'Continuity: character, wardrobe, product, room and lighting stay identical throughout the clip. Only the action advances.',
       '',
-      // ⚠️ NO digas "estable". Durante mucho tiempo esta línea inyectaba esa palabra en
-      // todos los prompts mientras el formato UGC se define por lo contrario: teléfono en
-      // mano o apoyado, ángulo bajo, micro-temblor. Era pedirle trípode a un lenguaje
-      // visual que no lo tiene.
-      `CAMERA: ${camara.replace(/\.\s*$/, '')}. Handheld phone, natural micro-shake, focus on character and product.`,
-      // ⚠️ ACÁ ESTÁ EL CAMBIO DE ARQUITECTURA. Con Veo el clip era un plano único y este
-      // bloque decía "TOMA CONTINUA, sin cortes internos". Ahora un clip de hasta 30 s
-      // abarca varias escenas del original a propósito, así que hay que decir cómo se
-      // pasa de una a otra — y sobre todo cómo NO: los efectos de transición son lo que
-      // delata un video generado, y un cambio de entorno no pedido rompe la continuidad.
-      ...(variasEscenas
-        ? [
-            'CUTS: several shots from the same piece, joined by straight hard cuts like a real edit.',
-            'NO crossfades, dissolves, whip pans, zoom transitions, morphing, speed ramps or fly-throughs.',
-            'Across every cut the person, wardrobe, product, room and lighting stay THE SAME — only framing',
-            'and action change. Never move or redecorate the scene.',
-          ]
-        : [
-            'CONTINUOUS TAKE: one single shot, no internal cuts, no jump cuts, no scene changes.',
-          ]),
-      // ⚠️ APUNTA A LA IMAGEN, NO A UN BLOQUE DE TEXTO. Decía "exactly as above" cuando
-      // arriba había un `SETTING AND LIGHTING`; al quitarlo, esa referencia quedaría
-      // colgando — el modo de fallo que este repo ya registró tres veces (el `06c8259` de
-      // anuncios, `estable` contra el micro-temblor, "no reescribas" contra la sección que
-      // pide reescribir). Ahora nombra la fuente que de verdad manda.
-      'CONTINUITY: the room and lighting are the ones in the reference image; keep them, plus character, product and wardrobe, identical throughout. Only the action advances.',
-      '',
-      varios ? '' : 'VOICE PROFILE:',
-      varios ? '' : `  Idioma: ${voz.idioma} · Variante: ${voz.varianteRegional} · Acento: ${voz.acento}`,
-      varios ? '' : `  Pronunciación: ${voz.pronunciacion} · Ritmo: ${voz.ritmo} · Velocidad: ${voz.velocidad}`,
-      varios ? '' : `  Entonación: ${voz.entonacion} · Energía: ${voz.energia} · Pausas: ${voz.pausas}`,
-      varios ? '' : `  Tono: ${voz.tono} · Timbre: ${voz.timbre} · Edad vocal: ${voz.edadVocal} · Estilo: ${voz.estilo}`,
-      '',
-      // ⚠️ Va SIEMPRE que exista, íntegro y en cada lote, por la misma REGLA DE CONTEXTO
-      // ABSOLUTO que el bloque de consistencia: el generador no recuerda el lote anterior,
-      // así que un personaje que se mueve distinto en el lote 3 que en el 1 es el mismo
-      // fallo que uno que cambia de cara.
-      ...(movimiento && !varios && nivel < NIVEL_SIN_MICRO
-        ? [
-            'MOVEMENT (whole clip, also between gestures):',
-            `  Calidad del movimiento: ${movimiento.calidadMovimiento}`,
-            `  Manerismos: ${movimiento.manerismos}`,
-            '',
-          ]
+      ...(varios ? [] : [`Voice and accent profile: ${perfilDeVoz(voz)}`]),
+      ...(movimiento && !varios && nivel < NIVEL_SIN_MOVIMIENTO
+        ? [`How she moves: ${movimiento.calidadMovimiento} Mannerisms: ${movimiento.manerismos}`]
         : []),
       ...(todoEnOff
-        ? [
-            'VOICE-OVER: the narration is HEARD but whoever says it is NOT on camera.',
-            'NO mouth moves in this clip, nobody looks at the camera to speak and there is no',
-            'presenter: it is the product on screen while a voice narrates over it.',
-            '',
-          ]
+        ? ['VOICE-OVER: the narration is HEARD but whoever says it is NOT on camera. No mouth moves and nobody looks at the camera to speak.']
         : []),
-      'SHOT LIST:',
-      renderAcciones(nivel, capAccion),
+      REGLA_VIDEO_LIMPIO,
       '',
-      // El guion completo de una vez. Es lo PRIMERO que se suelta bajo presión de
-      // presupuesto: sale del mismo texto que las líneas de cada toma, así que soltarlo no
-      // pierde ni una palabra — solo deja de repetirlas juntas.
-      ...(nivel < NIVEL_SIN_GUION_GLOBAL
-        ? [
-            todoEnOff
-              ? 'FULL VOICE-OVER SCRIPT in Latin American Spanish (exact: do not summarize, extend, correct, add or remove lines). It is heard over the image; nobody says it on camera:'
-              : 'FULL SPOKEN SCRIPT in Latin American Spanish (exact: do not summarize, extend, correct, add or remove lines):',
-            `“${locucionFinal}”`,
-            '',
-          ]
-        : []),
-      // ⚠️ DEGRADA ANTES QUE LA COREOGRAFÍA PERO DESPUÉS DE LO QUE DUPLICA — y el escalón
-      // salió de una corrida real, no de una intuición. Puesto junto al guion global
-      // (`NIVEL_SIN_GUION_GLOBAL`), en una sesión de 4 lotes **sobrevivía en 2**: los otros
-      // dos degradaban por presupuesto y quedaban sin ninguna instrucción de audio. Un
-      // anuncio donde la mitad de los clips lleva ambiente pedido y la otra mitad lo que
-      // grok invente es exactamente la costura que este bloque vino a cerrar.
-      //
-      // Acá el orden de la escalera es su propia regla: lo que se suelta primero es lo que
-      // DUPLICA información. El guion global sale del mismo texto que las líneas por toma y
-      // el párrafo de overlay dice quince veces la misma orden; el sonido no lo nombra
-      // NADIE más. Así que sobrevive a los dos y cae recién cuando se empieza a recortar
-      // detalle real (`NIVEL_MICRO_CORTO`). Hasta ahí `accionVisual` sigue intacta en todos
-      // los niveles, así que este corrimiento no le quita ni un carácter a la coreografía.
-      ...(nivel < NIVEL_MICRO_CORTO ? BLOQUE_SONIDO_EN : []),
-      ...bloqueOverlay(nivel),
-    ].join('\n')
+      'Final spoken script:',
+      locucionFinal ? `“${locucionFinal}”` : 'No dialogue in this lot.',
+    ].filter((x) => x !== '').join('\n')
+  }
 
-  for (const nivel of [
-    NIVEL_COMPLETO,
-    NIVEL_SIN_OVERLAY_POR_TOMA,
-    NIVEL_SIN_GUION_GLOBAL,
-    NIVEL_OVERLAY_COMPACTO,
-    NIVEL_MICRO_CORTO,
-    NIVEL_PRODUCTO_FISICO,
-    NIVEL_SIN_MICRO,
-  ]) {
+  // ⚠️ EL ORDEN DE ESTA LISTA **ES** LA ESCALERA. Lo que se suelta primero es lo que DUPLICA
+  // información que las imágenes ya traen; el movimiento va último porque sin él el modelo se
+  // queda quieto. Ver los comentarios de cada NIVEL_*.
+  for (const nivel of [NIVEL_COMPLETO, NIVEL_SIN_ESCENARIO, NIVEL_CAMARA_CORTA, NIVEL_PRODUCTO_FISICO, NIVEL_SIN_MOVIMIENTO]) {
     const prompt = render(nivel, null)
     if (prompt.length <= KIE_PROMPT_MAX) return prompt
   }
 
-  // Piso: el nivel más bajo sin truncar `accionVisual` sigue sin entrar. Se busca el cap
-  // de caracteres por toma más grande que sí entra (búsqueda binaria — el largo total es
-  // monótono no-decreciente en el cap, así que es válida). Con cap 0 cada acción queda
-  // reducida a "…"; si ni así entra, el exceso vive en las partes fijas y no hay nada más
-  // que este nivel pueda recortar sin violar el propósito de la función.
-  const maxAccionLen = Math.max(0, ...lote.tomas.map((t) => t.accionVisual.length))
+  // Piso: se busca el cap por acción más grande que entra (búsqueda binaria — el largo
+  // total es monótono no-decreciente en el cap).
   let lo = 0
-  let hi = maxAccionLen
+  let hi = 400
   let mejor: string | null = null
   while (lo <= hi) {
     const cap = Math.floor((lo + hi) / 2)
-    const prompt = render(NIVEL_SIN_MICRO, cap)
-    if (prompt.length <= KIE_PROMPT_MAX) {
-      mejor = prompt
-      lo = cap + 1
-    } else {
-      hi = cap - 1
-    }
+    const prompt = render(NIVEL_SIN_MOVIMIENTO, cap)
+    if (prompt.length <= KIE_PROMPT_MAX) { mejor = prompt; lo = cap + 1 } else { hi = cap - 1 }
   }
   if (mejor) return mejor
 
-  const piso = render(NIVEL_SIN_MICRO, 0)
+  const piso = render(NIVEL_SIN_MOVIMIENTO, 0)
   throw new Error(
     `El prompt del Lote ${lote.n} no entra en el tope de KIE (${KIE_PROMPT_MAX} caracteres) ` +
-    `ni truncando la acción de cada toma al mínimo (${piso.length} caracteres resultantes). ` +
-    'El bloque de consistencia, la descripción del producto, el escenario o la cámara son ' +
-    'demasiado largos por sí solos y hay que acortarlos antes de reintentar — crear la tarea ' +
-    'así fallaría y la cuota de KIE ya estaría gastada.',
+    `ni recortando cada acción al mínimo (${piso.length} caracteres resultantes). ` +
+    'El bloque de consistencia o la descripción del producto son demasiado largos por sí ' +
+    'solos y hay que acortarlos antes de reintentar — crear la tarea así fallaría y la ' +
+    'cuota de KIE ya estaría gastada.',
   )
 }

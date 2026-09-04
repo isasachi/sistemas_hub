@@ -211,7 +211,33 @@ export function scriptFingerprint(input: {
     // UN personaje la voz sale íntegra de `VOZ_POR_DEFECTO`, o sea los 13 campos que la
     // huella hashea uno por uno se mueven. Los parciales anteriores cuentan como generación
     // nueva, fail-closed.
-    'v11',
+    // v11 → v12: EL CANDADO DE MOVIMIENTO. La plantilla del prompt cambia de forma (la
+    // coreografía deja de ser prosa y pasa a ser `START STATE` / `TIMED MOTION` con la
+    // ventana de tiempo de cada tramo / `END STATE`), y la huella hashea los INSUMOS y no
+    // el texto producido: sin el bump, reanudar a través del cambio pegaría un clip con la
+    // coreografía en prosa a uno con la línea de tiempo explícita mientras `isPaidResume`
+    // jura que es el mismo contenido.
+    // v13 → v14: el beat pasa a traer la acción como UNA ORACIÓN escrita (`action`) y las
+    // cuatro casillas sueltas se borraron del schema, así que el texto que llega al render
+    // cambia entero para toda sesión re-analizada.
+    // v12 → v13: VUELTA AL PROMPT MAESTRO. Cambia el MODELO de render
+    // (`grok-imagine-video-1-5-preview`, con su propio tope de prompt y de duración), la
+    // plantilla entera del prompt y la regla de reparto en lotes. Un resume a través de esto
+    // pegaría un clip del modelo viejo con la plantilla vieja a uno nuevo mientras
+    // `isPaidResume` jura que es el mismo contenido.
+    // v14 → v15: LA PLANTILLA DEL PROMPT CAMBIA DE ORDEN. La secuencia de acciones pasa del
+    // bloque 12 de 13 a ir arriba, justo después de las referencias, y la escalera de
+    // degradación se reordena (el encuadre entra como escalón nuevo; el movimiento pasa a
+    // soltarse ÚLTIMO en vez de segundo). La huella hashea INSUMOS y no el texto producido,
+    // así que un cambio de plantilla le es invisible: sin el bump, reanudar pegaría un clip
+    // con el prompt viejo a uno con el nuevo mientras `isPaidResume` jura que es lo mismo.
+    // v15 → v16: la cita de las imágenes pasa de una LEYENDA `@image(n)` que después nadie
+    // vuelve a nombrar, a `<IMAGE_n>` citado DENTRO de la cláusula del personaje y del
+    // producto — la forma del ejemplo oficial de xAI. Mismo motivo de bump: la huella no ve
+    // el texto emitido.
+    // v16 → v17: el bloque de video limpio pasa de quince sinónimos a una línea (313 → 183
+    // caracteres). Mismo motivo de bump.
+    'v17',
     // Pasa por `toNiche`: un nicho BLOQUEADO se renderiza como suplementos, así que su
     // huella tiene que ser la de suplementos. Sin esto, una sesión guardada como 'ropa'
     // con lotes ya pagados reanudaría pegando un clip del camino de prenda a uno del
@@ -257,6 +283,21 @@ export function scriptFingerprint(input: {
       // toma a otra. Las sesiones sin ninguno de los dos campos pushean '' y '0', que es
       // lo mismo que hashearían antes de que existieran… salvo por el bump de versión,
       // que es lo que las invalida a propósito.
+      // ⚠️ LOS BEATS SE HASHEAN, y no alcanza con `accionVisual`. Desde el CANDADO DE
+      // MOVIMIENTO la prosa ya no se emite cuando hay timeline: la compila `compileAccion`
+      // desde estos mismos beats, y esa proyección DESCARTA los `micro` y —lo que importa
+      // acá— los TIEMPOS. Dos timelines que difieren solo en la ventana de cada tramo
+      // compilan a la misma prosa: misma huella, prompts distintos, y `isPaidResume`
+      // jurando que es el mismo contenido. Y la ventana de tiempo es justamente lo único
+      // que el candado agrega sobre la prosa.
+      const beats = t.beats ?? []
+      campos.push(String(beats.length))
+      for (const b of beats) {
+        campos.push(
+          num(b.startSec), num(b.endSec), num(b.referenceFrameMs), b.importance,
+          b.action, b.productStateBefore, b.productStateAfter,
+        )
+      }
       campos.push((input.enOff?.has(t.tiempoOriginal) ? '1' : '0'))
       const hablan = input.quien?.get(t.tiempoOriginal) ?? []
       campos.push(String(hablan.length), ...hablan.map((p) => p.id))

@@ -9,9 +9,9 @@ import { CPS_MAX, CPS_MIN } from './forensic'
 // Sin API key no se puede probar el render en vivo, así que lo que se verifica acá es el
 // CONTRATO con `grok-imagine/image-to-video` — las reglas que, si se rompen, devuelven
 // 422 con la cuota ya gastada o un video silenciosamente malo:
-//   - `duration` es STRING y va entre 6 y 30 (el grok viejo era INTEGER 1–15, Veo era
+//   - `duration` es un ENTERO entre 1 y 15 (el modelo anterior tomaba string 6–30, Veo
 //     el conjunto {4,6,8}: los tres contratos son distintos);
-//   - `prompt` <= 5000 caracteres;
+//   - `prompt` <= 4096 caracteres;
 //   - hasta 7 imágenes, y `aspect_ratio` es inválido con UNA sola;
 //   - `nsfw_checker: true` = filtro ACTIVADO (el default de la API es false, que lo apaga).
 // Si alguien cambia MODEL, estos asserts tienen que cambiar con él.
@@ -35,23 +35,33 @@ describe('clampDuration', () => {
 
   it('conserva la duración de la toma cuando ya es legal', () => {
     expect(clampDuration(12)).toBe(12)
-    expect(clampDuration(29.4)).toBe(29)
-    // El cap nuevo es 30: una toma de 24 s ya NO se parte en cuatro clips como con Veo.
-    expect(clampDuration(24)).toBe(24)
+    expect(clampDuration(14.4)).toBe(14)
+    // El cap de ESTE modelo son 15 s: lo que pase se recorta, y de eso se encarga antes
+    // el reparto en lotes (`LOTE_MAX_SEC`).
+    expect(clampDuration(24)).toBe(MAX_DURATION)
   })
 
-  it('sube al mínimo del modelo lo que dura menos de 6 s', () => {
+  it('sube al mínimo del modelo lo que dura menos de 1 s', () => {
     // Un lote de cola corta existe; el mínimo de la API es 6 y deja algo de aire, que es
     // preferible a no poder renderizarlo.
     expect(clampDuration(0.6)).toBe(MIN_DURATION)
-    expect(clampDuration(3)).toBe(MIN_DURATION)
+    // Con el piso de la API en 1 s, una toma de 3 s se renderiza como 3 s: ya no se infla.
+    expect(clampDuration(3)).toBe(3)
   })
 
   it('nunca elige una duración en la que la locución no entre a CPS_MAX', () => {
-    // 400 caracteres necesitan >= 20 s a 20 car/s, aunque la toma durase 8.
-    expect(clampDuration(8, 400)).toBeGreaterThanOrEqual(400 / CPS_MAX)
+    // 200 caracteres necesitan >= 10 s a 20 car/s, aunque la toma durase 4.
+    expect(clampDuration(4, 200)).toBeGreaterThanOrEqual(200 / CPS_MAX)
     // Y el piso duro gana al techo blando cuando chocan.
-    expect(clampDuration(6, 700)).toBe(MAX_DURATION)
+    expect(clampDuration(2, 280)).toBe(14)
+  })
+
+  // ⚠️ CON EL CAP EN 15 s EL PISO DE HABLA PUEDE NO CABER, y eso es nuevo: con el modelo
+  // anterior el techo eran 30 s y un piso de 20 entraba. Acá la API no acepta más de 15,
+  // así que `clampDuration` recorta y el texto sale apurado. Lo que impide llegar a ese
+  // caso es el reparto: `LOTE_MAX_CHARS` cierra el lote a 15 × CPS_MAX = 300 caracteres.
+  it('el cap del modelo gana cuando el piso de habla no cabe', () => {
+    expect(clampDuration(8, 400)).toBe(MAX_DURATION)
   })
 
   // ⚠️ EL OTRO LADO DEL MISMO PROBLEMA, medido en un render real de la época de Veo: 23
@@ -68,8 +78,8 @@ describe('clampDuration', () => {
   // de más — justo las que ya tienen su imagen ancla generada y pagada.
   it('un clip de VARIAS escenas conserva su duración aunque el diálogo sea escaso', () => {
     // Los dos casos medidos: sin el acote caían a 22 s y a 13 s respectivamente.
-    expect(clampDuration(30, 200, 5)).toBe(30)
-    expect(clampDuration(30, 120, 8)).toBe(30)
+    expect(clampDuration(15, 200, 5)).toBe(15)
+    expect(clampDuration(15, 120, 8)).toBe(15)
   })
 
   it('el piso duro sigue mandando con varias escenas: el texto tiene que poder decirse', () => {
@@ -78,12 +88,15 @@ describe('clampDuration', () => {
   })
 
   it('una toma MUDA conserva su duración: no hay audio que rellenar', () => {
-    expect(clampDuration(19, 0)).toBe(19)
-    expect(clampDuration(30, 0)).toBe(30)
+    expect(clampDuration(9, 0)).toBe(9)
+    expect(clampDuration(15, 0)).toBe(15)
   })
 
   it('la densidad resultante se queda dentro de la banda decible', () => {
-    for (const [sec, chars] of [[12, 200], [20, 340], [8, 120]] as const) {
+    // ⚠️ Los pares tienen que caber en 15 s a CPS_MAX: por encima de 300 caracteres el
+    // cap del modelo gana y la densidad se sale de la banda por construcción. Eso lo evita
+    // `LOTE_MAX_CHARS` en el reparto, no esta función.
+    for (const [sec, chars] of [[12, 200], [14, 260], [8, 120]] as const) {
       const cps = chars / clampDuration(sec, chars)
       expect(cps).toBeLessThanOrEqual(CPS_MAX)
       expect(cps).toBeGreaterThanOrEqual(CPS_MIN)
@@ -106,7 +119,7 @@ describe('clampDuration', () => {
 describe('buildTaskBody', () => {
   it('manda el contrato del marketplace de grok, vertical y 720p', () => {
     const b = buildTaskBody({ images: IMAGES, prompt: 'hola', durationSec: 12 })
-    expect(b.model).toBe('grok-imagine/image-to-video')
+    expect(b.model).toBe('grok-imagine-video-1-5-preview')
     // ⚠️ Todo cuelga de `input`, no de la raíz — Veo era plano y grok anida.
     expect(b.input.aspect_ratio).toBe('9:16')
     expect(b.input.resolution).toBe('720p')
@@ -116,10 +129,10 @@ describe('buildTaskBody', () => {
 
   // El fallo silencioso más caro de este contrato: number pasa el typecheck del objeto
   // pero la API lo rechaza con 422 y la cuota ya gastada.
-  it('la duración viaja como STRING, no como número', () => {
+  it('la duración viaja como ENTERO', () => {
     const b = buildTaskBody({ images: IMAGES, prompt: 'x', durationSec: 12 })
-    expect(typeof b.input.duration).toBe('string')
-    expect(b.input.duration).toBe('12')
+    expect(typeof b.input.duration).toBe('number')
+    expect(b.input.duration).toBe(12)
   })
 
   // ⚠️ `false` DESACTIVA el filtro y es el default de la API. Queremos lo contrario.
@@ -128,8 +141,8 @@ describe('buildTaskBody', () => {
   })
 
   it('respeta la locución al elegir la duración del body', () => {
-    const b = buildTaskBody({ images: IMAGES, prompt: 'x', durationSec: 6, locucionChars: 400 })
-    expect(Number(b.input.duration)).toBeGreaterThanOrEqual(400 / CPS_MAX)
+    const b = buildTaskBody({ images: IMAGES, prompt: 'x', durationSec: 4, locucionChars: 200 })
+    expect(Number(b.input.duration)).toBeGreaterThanOrEqual(200 / CPS_MAX)
   })
 
   it('resolutionFor es 720p fijo — 1080p además exige una sola imagen', () => {
@@ -137,10 +150,10 @@ describe('buildTaskBody', () => {
   })
 
   it('los topes son los de ESTE modelo, no los de Veo ni los del grok viejo', () => {
-    expect(KIE_PROMPT_MAX).toBe(5000)
+    expect(KIE_PROMPT_MAX).toBe(4096)
     expect(MAX_IMAGES).toBe(7)
-    expect(MIN_DURATION).toBe(6)
-    expect(MAX_DURATION).toBe(30)
+    expect(MIN_DURATION).toBe(1)
+    expect(MAX_DURATION).toBe(15)
   })
 })
 
@@ -195,7 +208,7 @@ describe('createVideoTask', () => {
     // KIE devuelve status 200 con `code` de error adentro. Mirar solo `res.ok` dejaría
     // pasar el fallo como éxito, y el polling esperaría para siempre un taskId que no
     // existe — el lote quedaría "generando" sin nada detrás.
-    ok({ code: 422, msg: 'duration must be between 6 and 30' })
+    ok({ code: 422, msg: 'duration must be between 1 and 15' })
     await expect(createVideoTask({ images: IMAGES, prompt: 'x', durationSec: 12 }, 'key-del-usuario'))
       .rejects.toThrow(/422/)
   })
@@ -243,14 +256,18 @@ describe('clampDuration — el b-roll está exento del techo blando', () => {
   })
 })
 
-// ⚠️ `MIN_TOMA_SEG` (la fusión de micro-cortes) TIENE que ser el piso del modelo de
-// render. No se puede importar `MIN_DURATION` desde forensic.ts —kie.ts ya importa de
-// ahí, sería un ciclo— así que la constante está duplicada y esto es lo único que impide
-// que se desincronicen. Ya pasó una vez: quedó en 4 (el piso de Veo 3.1) al volver a
-// grok, cuyo piso es 6, y el resultado fue que 48 de 189 lotes le pedían al modelo más
-// segundos de los que su contenido tenía. Grok rellena esa holgura inventando.
-describe('MIN_TOMA_SEG sigue al piso del modelo', () => {
+// ⚠️ `MIN_TOMA_SEG` (la fusión de micro-cortes) NO PUEDE BAJAR DEL PISO DEL MODELO, pero ya
+// no tiene por qué IGUALARLO — y esa distinción se aprendió de las dos formas.
+//
+// La equivalencia estricta se puso cuando el piso de grok eran 6 s: la constante había
+// quedado en 4 (el piso de Veo 3.1) y el resultado fue que 48 de 189 lotes le pedían al
+// modelo más segundos de los que su contenido tenía, holgura que grok rellena inventando.
+// Con `grok-imagine-video-1-5-preview` el piso de la API es **1 s**, y fusionar hasta 1 s
+// no fusionaría nada: un corte de 1 s es renderable para la API y sigue sin ser una toma
+// que valga un clip. Los 3 s son el valor propio de la fusión —el que tenía antes de que se
+// lo comiera el piso del modelo de turno— y coinciden con la toma más corta del spec.
+describe('MIN_TOMA_SEG contra el piso del modelo', () => {
   it('la fusión no fabrica tomas más cortas de lo que el render acepta', () => {
-    expect(MIN_TOMA_SEG).toBe(MIN_DURATION)
+    expect(MIN_TOMA_SEG).toBeGreaterThanOrEqual(MIN_DURATION)
   })
 })

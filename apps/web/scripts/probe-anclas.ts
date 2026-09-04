@@ -22,7 +22,7 @@ import { buildAnchorPrompt } from '../lib/video-ads/anchors'
 import { generateImage } from '../lib/gemini'
 import { camaraDeLote, type Lote } from '../lib/video-ads/lotes'
 
-const SALIDA = process.env.PROBE_OUT ?? '/home/isasachi/.claude/jobs/29c3edaa/tmp/anclas2'
+const SALIDA = process.env.PROBE_OUT ?? `${process.env.HOME}/Downloads/probe-anclas`
 const db = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 
 async function main() {

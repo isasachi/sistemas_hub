@@ -77,7 +77,7 @@ async function main() {
   const clase = new Map(f.cortes.map((c) => [c.tiempo, corteMuestraPersona(c)]))
   const iLote = Number(process.argv[3] ?? 0)
   const K = Number(process.argv[4] ?? 2)
-  const lote = groupIntoLotes(adapted.tomas, plano, 1, clase)[iLote]
+  const lote = groupIntoLotes(adapted.tomas)[iLote]
   const t = lote.tomas[0]
 
   // El reparto: la acción se parte por su separador y la locución por frases.

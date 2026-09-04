@@ -102,7 +102,7 @@ async function main() {
   const seg = clampDuration(acumulado, locucion.length, tomas.length)
   // Solo para reusar `camaraDeLote`, que empareja por `tiempoOriginal`.
   const lote = { n: 1, tomas, duracionSeg: acumulado } as Parameters<typeof camaraDeLote>[0]
-  const lotes = groupIntoLotes(adapted.tomas, plano, 1, clase)
+  const lotes = groupIntoLotes(adapted.tomas)
 
   const scan = (r.product_scan ?? {}) as { productDescription?: string }
   const prompt = promptCorto({

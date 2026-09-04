@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { TIMELINE_VACIO } from './motion'
 import { buildIdentityInstruction, buildCharacterParts, CharacterIdentitySchema, ACENTO_PENDIENTE, vozDe, VOZ_POR_DEFECTO } from './character'
 import type { UserInputs } from './types'
 import type { ForensicReport } from './forensic'
@@ -22,6 +23,17 @@ const CON_FOTO: Personaje = { ...SIN_FOTO, fotoUrl: 'https://cdn/foto.png' }
 const FORENSIC = { sujeto: 'Mujer joven de cabello oscuro', vestuario: 'Polo azul', fondo: 'Dormitorio' } as ForensicReport
 
 describe('buildIdentityInstruction', () => {
+  // Los cuatro campos de esta fase alimentan a dos generadores que trabajan en inglés:
+  // `promptCreacion` al modelo de imagen, y los otros tres se repiten ÍNTEGROS dentro del
+  // prompt de cada clip. Las dos excepciones existen porque no son descripciones técnicas.
+  it('pide la salida en inglés, salvo los nombres propios y el dato del usuario', () => {
+    const p = buildIdentityInstruction(INPUTS, FORENSIC, [SIN_FOTO])
+    expect(p).toMatch(/TODO lo que devuelves va en INGLÉS/)
+    expect(p).toMatch(/nombres propios/)
+    expect(p).toMatch(/etnia y el acento que escribió el usuario/)
+    expect(p).not.toMatch(/Todo el output va en español/)
+  })
+
   it('prohíbe los cuatro atajos de identidad que el spec lista', () => {
     const p = buildIdentityInstruction(INPUTS, FORENSIC, [SIN_FOTO])
     expect(p).toMatch(/el mismo personaje/i)
@@ -185,7 +197,7 @@ describe('buildIdentityInstruction — producto que se lleva puesto', () => {
     duracionTotalSeg: 28, caracteresGuion: 385, guionOriginal: 'x',
     sujeto: 'Mujer joven de cabello oscuro', vestuario: 'Camiseta rosa de manga larga',
     producto: 'Camisa', fondo: 'Pared blanca', elementosGraficos: 'Subtítulos',
-    cortes: [{ n: 1, tiempo: '00:00 - 00:01', duracionSeg: 1, accion: 'a', camara: 'Plano medio', dialogo: 'd', textoOverlay: 'No aparece', transicion: 'corte', objetoEnMano: null, micro: null }],
+    cortes: [{ n: 1, tiempo: '00:00 - 00:01', duracionSeg: 1, accion: 'a', camara: 'Plano medio', dialogo: 'd', textoOverlay: 'No aparece', transicion: 'corte', objetoEnMano: null, micro: null, motion: TIMELINE_VACIO }],
     tomas: [{ n: 1, encuadre: 'Plano medio', posicion: 'De pie', accionFisica: 'a', objeto: 'camisa', dialogo: 'd', duracionSeg: 1 }],
     edicion: { sincronizacion: 'x', textoOverlay: 'x', escalaZoom: 'x', cortes: 'x', ritmo: 'x', corteFinal: 'x' },
     resumenParaUsuario: 'x',
@@ -337,7 +349,7 @@ describe('buildIdentityInstruction — el encuadre sale del original', () => {
     ...FORENSIC,
     cortes: cortes.map((c, i) => ({
       n: i + 1, tiempo: `00:0${i} - 00:0${i + 1}`, duracionSeg: 1,
-      dialogo: '', textoOverlay: '', transicion: '', objetoEnMano: null, micro: null, ...c,
+      dialogo: '', textoOverlay: '', transicion: '', objetoEnMano: null, micro: null, motion: TIMELINE_VACIO, ...c,
     })),
   } as ForensicReport)
 
