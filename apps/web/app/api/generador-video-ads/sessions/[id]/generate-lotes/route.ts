@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getVideoSession, updateVideoSession, claimFreshLotes } from '@/lib/video-ads/db'
 import { createVideoTask, resolveKey, clampDuration, KIE_PROMPT_MAX, SIN_KEY, type VideoImage } from '@/lib/video-ads/kie'
 import { currentKieKey } from '@/lib/user-settings'
-import { extraerFotogramas } from '@/lib/video-ads/pose-frames'
 import { anchorSpecs, generateAnchorImages } from '@/lib/video-ads/anchors'
 import { personajesDe, hablantesPorTiempo, vozEnOffPorTiempo } from '@/lib/video-ads/personajes'
 import { enProsa, corteMuestraPersona } from '@/lib/video-ads/forensic'
@@ -370,32 +369,6 @@ export async function POST(
     anclasPlanas = guardadas
   } else {
     try {
-      /**
-       * El fotograma REAL del original en el instante en que abre cada escena.
-       *
-       * `referenceFrameMs` lo produce el refinamiento de movimiento desde que existe el
-       * timeline y hasta ahora no lo leía nadie. Con él, el ancla deja de ser una
-       * ilustración del texto y pasa a copiar la pose que el anuncio tiene de verdad.
-       *
-       * ⚠️ DEGRADA, NO FALLA: sin video o sin fotograma el ancla se genera como siempre.
-       * Y corre solo en la rama que SÍ genera anclas — al reanudar no se toca nada.
-       */
-      const conInstante = specsPorLote.flatMap((specs, i) =>
-        specs.map((spec, j) => ({ spec, nombre: `pose-${seed[i].n}-${j + 1}` })).filter((x) => x.spec.referenceFrameMs),
-      )
-      if (session.reference_video_url && conInstante.length) {
-        // Una sola descarga del original para TODAS las anclas de la sesión.
-        const cuadros = await extraerFotogramas(
-          session.reference_video_url,
-          conInstante.map((x) => x.spec.referenceFrameMs!),
-        )
-        await Promise.all(
-          conInstante.map(async ({ spec, nombre }, k) => {
-            const bytes = cuadros[k]
-            if (bytes) spec.poseUrl = await uploadToStorage(id, bytes, 'image/jpeg', nombre)
-          }),
-        )
-      }
       // Por lote y en paralelo dentro de cada uno. Las anclas son independientes entre sí
       // (no hay cadena que encadenar, al revés que con los keyframes), así que el tiempo
       // total es el de la más lenta y no la suma.
