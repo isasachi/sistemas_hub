@@ -70,7 +70,13 @@ async function main() {
     const porN = new Map((refinado.cortes ?? []).map((c) => [c.n, c.motion]))
     for (const c of analysis.cortes) {
       const m = porN.get(c.n)
-      if (m && m.beats.length > (c.motion?.beats?.length ?? 0)) c.motion = m
+      // ⚠️ CON `--solo-motion` SE PISA SIEMPRE. La ruta solo acepta el refinamiento cuando
+      // trae MÁS beats —para no cambiar un timeline por uno más pobre— y esa regla bloquea
+      // justo el caso de este script: cambiar el FORMATO de los beats sin cambiar su número.
+      // Medido: tras agregar `action` la corrida devolvía los beats viejos porque 3 no es
+      // mayor que 3, y el campo nuevo quedaba en `undefined` sin que nada lo dijera.
+      if (!m?.beats?.length) continue
+      if (soloMotion || m.beats.length > (c.motion?.beats?.length ?? 0)) c.motion = m
     }
   } catch (err) {
     console.warn('el refinamiento falló, se conserva el del pase general —', err)
@@ -96,7 +102,7 @@ async function main() {
     console.log(`\n── corte ${c.n} [${c.tiempo}] ${c.duracionSeg}s · ${c.motion?.beats?.length ?? 0} beats`)
     console.log(`   accion: ${c.accion}`)
     for (const b of c.motion?.beats ?? []) {
-      console.log(`     · ${b.body} | L: ${b.leftHand} | R: ${b.rightHand}`)
+      console.log(`     · ${b.action}`)
     }
   }
 

@@ -217,12 +217,15 @@ export function scriptFingerprint(input: {
     // el texto producido: sin el bump, reanudar a través del cambio pegaría un clip con la
     // coreografía en prosa a uno con la línea de tiempo explícita mientras `isPaidResume`
     // jura que es el mismo contenido.
+    // v13 → v14: el beat pasa a traer la acción como UNA ORACIÓN escrita (`action`) y las
+    // cuatro casillas sueltas se borraron del schema, así que el texto que llega al render
+    // cambia entero para toda sesión re-analizada.
     // v12 → v13: VUELTA AL PROMPT MAESTRO. Cambia el MODELO de render
     // (`grok-imagine-video-1-5-preview`, con su propio tope de prompt y de duración), la
     // plantilla entera del prompt y la regla de reparto en lotes. Un resume a través de esto
     // pegaría un clip del modelo viejo con la plantilla vieja a uno nuevo mientras
     // `isPaidResume` jura que es el mismo contenido.
-    'v13',
+    'v14',
     // Pasa por `toNiche`: un nicho BLOQUEADO se renderiza como suplementos, así que su
     // huella tiene que ser la de suplementos. Sin esto, una sesión guardada como 'ropa'
     // con lotes ya pagados reanudaría pegando un clip del camino de prenda a uno del
@@ -280,7 +283,7 @@ export function scriptFingerprint(input: {
       for (const b of beats) {
         campos.push(
           num(b.startSec), num(b.endSec), num(b.referenceFrameMs), b.importance,
-          b.body, b.headAndGaze, b.leftHand, b.rightHand, b.productStateBefore, b.productStateAfter,
+          b.action, b.productStateBefore, b.productStateAfter,
         )
       }
       campos.push((input.enOff?.has(t.tiempoOriginal) ? '1' : '0'))

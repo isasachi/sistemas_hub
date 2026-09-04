@@ -71,7 +71,7 @@ async function main() {
     console.log(`   beats ${tl.beats.length} (major ${tl.majorBeatCount}, ${tl.majorBeatsPerSecond}/s) · transiciones de producto ${tl.productStateTransitionCount}`)
     console.log(`   startState: ${tl.startState.bodyPose} | producto: ${tl.startState.productState}`)
     for (const b of tl.beats) {
-      console.log(`   · [${b.startSec}–${b.endSec}s @${b.referenceFrameMs}ms] ${b.importance.padEnd(10)} L:${b.leftHand || '—'} | R:${b.rightHand || '—'}`)
+      console.log(`   · [${b.startSec}–${b.endSec}s @${b.referenceFrameMs}ms] ${b.importance.padEnd(10)} ${b.action || '—'}`)
       console.log(`       producto: "${b.productStateBefore}" → "${b.productStateAfter}"`)
     }
     console.log(`   endState: ${tl.endState.bodyPose} | producto: ${tl.endState.productState}`)

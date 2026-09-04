@@ -95,10 +95,29 @@ export const MotionBeatSchema = z.object({
   /** El instante del video ORIGINAL del que se extrae el fotograma que ancla la pose. */
   referenceFrameMs: z.number().catch(0),
 
-  body: casilla(),
-  headAndGaze: casilla(),
-  leftHand: casilla(),
-  rightHand: casilla(),
+  /**
+   * LA ACCIÓN, COMO UNA ORACIÓN. Es lo que el prompt del lote emite tal cual.
+   *
+   * ⚠️ REEMPLAZA A LAS CUATRO CASILLAS DE ABAJO, no se suma a ellas — y eso es doctrina
+   * medida de este repo: *"un campo que solapa con otro que el modelo ya llenó vuelve
+   * vacío"*, y el arreglo es borrar el duplicado, no insistir en el schema. Con `body` +
+   * `headAndGaze` + `leftHand` + `rightHand` pedidos por separado, el prompt del lote las
+   * cosía en una frase que suena a inventario (*"is holding the dropper with her right hand
+   * while her left hand is holding bottle in place"*); el prompt del wizard que sí se
+   * ejecuta al detalle las trae ya redactadas (*"gently raises the dropper and releases a
+   * drop onto her left cheek while holding the bottle down almost out of frame"*).
+   *
+   * ⚠️ Y LAS CUATRO SE BORRARON DEL SCHEMA, no alcanzaba con dejar de pedirlas. Medido: con
+   * `action` agregada y la instrucción diciendo explícitamente *"do NOT also fill body,
+   * headAndGaze, leftHand or rightHand"*, el refinamiento devolvió las cuatro llenas y
+   * `action` VACÍA en los 5 cortes — el campo que el modelo ya sabía contestar le ganó al
+   * nuevo. Es la quinta vez que este repo lo paga, y la conclusión escrita es siempre la
+   * misma: **el arreglo es borrar el duplicado, no insistir en el schema.**
+   *
+   * Las sesiones analizadas antes de esto siguen funcionando por el otro lado: sin `action`,
+   * el prompt del lote parte `accionVisual` en hechos, que es el camino de siempre.
+   */
+  action: casilla(),
 
   productStateBefore: casilla(),
   productStateAfter: casilla(),
@@ -171,8 +190,11 @@ export function tieneMotion(c: { motion?: MotionTimeline | null }): boolean {
 }
 
 const r2 = (n: number) => Math.round(n * 100) / 100
-const norm = (x: string) =>
-  x.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim()
+// ⚠️ Defensivo con `undefined`: los beats llegan de un jsonb guardado y un campo agregado
+// después —`action`— no existe en las filas viejas. Sin esto, normalizar una sesión anterior
+// revienta con `Cannot read properties of undefined`.
+const norm = (x: string | undefined | null) =>
+  String(x ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim()
 
 /**
  * Acota los tiempos de los beats a la ventana del corte y recalcula los contadores.
@@ -233,8 +255,7 @@ export function normalizeMotionTimeline(tl: MotionTimeline, duracionSeg: number)
 function colapsarQuietud(beats: MotionBeat[]): MotionBeat[] {
   const RANGO = { major: 3, supporting: 2, micro: 1 } as const
   const igual = (a: MotionBeat, b: MotionBeat) =>
-    norm(a.body) === norm(b.body) && norm(a.headAndGaze) === norm(b.headAndGaze) &&
-    norm(a.leftHand) === norm(b.leftHand) && norm(a.rightHand) === norm(b.rightHand) &&
+    norm(a.action) === norm(b.action) &&
     norm(a.productStateAfter) === norm(b.productStateBefore) &&
     norm(a.productStateAfter) === norm(b.productStateAfter)
   const out: MotionBeat[] = []
@@ -348,8 +369,7 @@ export function objetoEnManoFromMotion(tl: MotionTimeline): { inicio: string; fi
 export function compileAccion(tl: MotionTimeline): string {
   const partes = (tl.beats ?? [])
     .filter((b) => b.importance !== 'micro')
-    .map((b) => [b.body, b.leftHand && `left: ${b.leftHand}`, b.rightHand && `right: ${b.rightHand}`, b.headAndGaze]
-      .map((x) => String(x ?? '').trim()).filter(Boolean).join('; '))
+    .map((b) => String(b.action ?? '').trim())
     .filter(Boolean)
   return partes.join(' Luego, ')
 }

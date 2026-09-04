@@ -459,7 +459,7 @@ describe('buildLotePrompt — el escenario', () => {
 describe('buildLotePrompt — las acciones numeradas', () => {
   const beat = (i: number, importance: 'major' | 'micro') => ({
     startSec: i, endSec: i + 1, referenceFrameMs: 0,
-    body: `postura ${i}`, headAndGaze: 'mira a cámara', leftHand: `izquierda ${i}`, rightHand: 'sostiene el frasco',
+    action: `The avatar raises the dropper ${i} with her right hand while her left hand holds the bottle`,
     productStateBefore: 'en la mano', productStateAfter: 'en la mano', importance,
   })
 
@@ -475,10 +475,10 @@ describe('buildLotePrompt — las acciones numeradas', () => {
     const t = { ...toma(1, 6, 'hola'), beats }
     const lote = groupIntoLotes([t], new Map([[t.tiempoOriginal, { ...TIMELINE_VACIO, beats }]]))[0]
     const p = buildLotePrompt({ lote, ...ARGS })
-    expect(p).toContain('1. The avatar, postura 0, is sostiene el frasco with her right hand while her left hand is izquierda 0, mira a cámara.')
+    expect(p).toContain('1. The avatar raises the dropper 0 with her right hand while her left hand holds the bottle')
     // El beat `micro` se absorbe; la postura y la mirada no se repiten si no cambian.
-    expect(p).toContain('2. The avatar, postura 2, is sostiene el frasco with her right hand while her left hand is izquierda 2.')
-    expect(p).not.toContain('izquierda 1')
+    expect(p).toContain('2. The avatar raises the dropper 2 with her right hand while her left hand holds the bottle')
+    expect(p).not.toContain('dropper 1')
     expect(p).not.toContain('3. ')
   })
 

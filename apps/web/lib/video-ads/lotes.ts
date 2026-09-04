@@ -552,31 +552,16 @@ function accionesNumeradas(t: Lote['tomas'][number], cap: number | null): string
       const a = grupo[0]
       const z = grupo[grupo.length - 1]
       const previo = k ? grupos[k - 1][0] : null
-      const manos = [
-        g(a.rightHand) && `is ${g(a.rightHand)} with her right hand`,
-        g(a.leftHand) && `her left hand is ${g(a.leftHand)}`,
-      ].filter(Boolean).join(' while ')
-      // El estado del producto solo cuando CAMBIA: es el EVENTO (la gota que sale del gotero
-      // y llega a la piel), y sin él el render hace el viaje del instrumento sin transferir.
-      const producto = limpia(z.productStateAfter) !== limpia(a.productStateBefore)
-        ? g(z.productStateAfter)
-        : ''
-      // La postura y la mirada abren la toma y después solo se repiten si cambian: son
-      // contexto, no acción, y repetirlas en cada oración es el ruido que ya se midió.
-      const postura = !previo || g(a.body) !== g(previo.body) ? g(a.body) : ''
-      const mirada = !previo || g(a.headAndGaze) !== g(previo.headAndGaze) ? g(a.headAndGaze) : ''
-      // ⚠️ SE DEGRADA POR CLÁUSULA, NO CORTANDO A MITAD DE PALABRA. Con el tope en 4.096 la
-      // oración larga se truncaba y quedaba *"…and dropper r…"*: la mitad de una instrucción
-      // no es media instrucción, es ruido. Se suelta primero la mirada y después la postura
-      // —contexto— y nunca las manos ni la transferencia del producto, que son el evento.
-      const arma = (conMirada: boolean, conPostura: boolean) => [
-        conPostura && postura ? `The avatar, ${postura}, ${manos}` : `The avatar ${manos}`,
-        producto && `, and ${producto}`,
-        conMirada && mirada && `, ${mirada}`,
-      ].filter(Boolean).join('') + '.'
-      const frase = [arma(true, true), arma(false, true), arma(false, false)]
-        .find((x) => cap == null || x.length <= cap) ?? arma(false, false)
-      return corta(frase)
+      // ⚠️ LA ORACIÓN VIENE ESCRITA DEL FORENSE. Coserla acá desde cuatro casillas producía
+      // una frase que suena a inventario (*"is holding the dropper with her right hand while
+      // her left hand is holding bottle in place"*); el prompt que sí se ejecuta al detalle
+      // la trae redactada, y ahora el forense la escribe así.
+      // ⚠️ EL ESTADO DEL PRODUCTO YA NO SE APENDA, y es el mismo criterio de siempre: la
+      // oración tiene que nombrar el instrumento y el destino, o sea YA dice la
+      // transferencia. Apendarlo daba *"places a drop of serum on her cheek, and serum on
+      // cheek"* — el duplicado que este repo mide una y otra vez. Los estados siguen en el
+      // beat porque de ellos salen `objetoEnManoFromMotion` y el validador de la cadena.
+      return corta(limpia(a.action))
     }).filter(Boolean)
   }
   return partirEnHechos(t.accionVisual).map(corta)

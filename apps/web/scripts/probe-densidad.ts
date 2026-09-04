@@ -64,7 +64,7 @@ function medir(cortes: Corte[]) {
     rotos += validateMotionTimeline(tl).length
     for (const b of tl.beats as MotionBeat[]) {
       if (!b.referenceFrameMs) sinFrame++
-      for (const v of [b.body, b.headAndGaze, b.leftHand, b.rightHand]) {
+      for (const v of [b.action]) {
         const t = String(v ?? '').trim()
         if (t) largos.push(t.split(/\s+/).length)
       }
@@ -120,7 +120,7 @@ async function main() {
     console.log(`  eslabones rotos : ${m.rotos}  ·  sin referenceFrameMs: ${m.sinFrame}`)
     const mas = cortes.reduce((a, c) => ((c.motion?.beats?.length ?? 0) > (a.motion?.beats?.length ?? 0) ? c : a), cortes[0])
     for (const b of (mas.motion?.beats ?? []).slice(0, 12)) {
-      console.log(`    · [${b.startSec}–${b.endSec}] ${b.body} | L:${b.leftHand} | R:${b.rightHand}`)
+      console.log(`    · [${b.startSec}–${b.endSec}] ${b.action}`)
     }
     console.log()
   }

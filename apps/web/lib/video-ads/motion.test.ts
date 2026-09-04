@@ -2,8 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { normalizeMotionTimeline, validateMotionTimeline, objetoEnManoFromMotion, compileAccion, tieneMotion, TIMELINE_VACIO, ESTADO_VACIO, MotionTimelineSchema, type MotionBeat , repartirBeats } from './motion'
 
 const beat = (over: Partial<MotionBeat> = {}): MotionBeat => ({
-  startSec: 0, endSec: 1, referenceFrameMs: 500,
-  body: '', headAndGaze: '', leftHand: '', rightHand: '',
+  startSec: 0, endSec: 1, referenceFrameMs: 500, action: '',
   productStateBefore: '', productStateAfter: '', importance: 'major', ...over,
 })
 const tl = (beats: MotionBeat[]) => ({ ...TIMELINE_VACIO, beats })
@@ -30,9 +29,9 @@ describe('el schema no le ofrece al modelo una salida', () => {
   // de todas). Cada pieza aguanta sola.
   it('una pieza rota no destruye lo que el modelo sí produjo', () => {
     const r = MotionTimelineSchema.catch(() => TIMELINE_VACIO)
-      .parse({ startState: 'basura', beats: [beat({ body: 'sways' })], endState: null })
+      .parse({ startState: 'basura', beats: [beat({ action: 'sways' })], endState: null })
     expect(r.beats).toHaveLength(1)
-    expect(r.beats[0].body).toBe('sways')
+    expect(r.beats[0].action).toBe('sways')
     expect(r.startState).toEqual(ESTADO_VACIO)
   })
 
@@ -54,7 +53,7 @@ describe('normalizeMotionTimeline', () => {
 
   it('un beat nunca empieza antes de donde terminó el anterior', () => {
     const r = normalizeMotionTimeline(
-      tl([beat({ startSec: 0, endSec: 3, body: 'gira' }), beat({ startSec: 1, endSec: 4, body: 'vuelve' })]), 10)
+      tl([beat({ startSec: 0, endSec: 3, action: 'gira' }), beat({ startSec: 1, endSec: 4, action: 'vuelve' })]), 10)
     expect(r.beats[1].startSec).toBeGreaterThanOrEqual(r.beats[0].endSec)
   })
 
@@ -151,11 +150,11 @@ describe('lo que se DERIVA en vez de pedirse', () => {
   // timeline cambia, la prosa cambia con él y no pueden contradecirse.
   it('compila la acción desde los beats, con el separador que el reparto ya sabe partir', () => {
     const a = compileAccion(tl([
-      beat({ body: 'leans in', leftHand: 'holds bottle', rightHand: 'uncaps' }),
-      beat({ body: 'straightens', rightHand: 'applies to cheek' }),
-      beat({ importance: 'micro', body: 'blinks' }),
+      beat({ action: 'leans in, holds bottle, uncaps' }),
+      beat({ action: 'straightens and applies to cheek' }),
+      beat({ importance: 'micro', action: 'blinks' }),
     ]))
-    expect(a).toBe('leans in; left: holds bottle; right: uncaps Luego, straightens; right: applies to cheek')
+    expect(a).toBe('leans in, holds bottle, uncaps Luego, straightens and applies to cheek')
     expect(a).not.toContain('blinks')
   })
 })
@@ -165,14 +164,13 @@ describe('lo que se DERIVA en vez de pedirse', () => {
 // el candado del primero ya pidió.
 describe('repartirBeats — piso de un beat por fragmento', () => {
   const b = (i: number) => ({
-    startSec: i, endSec: i + 1, referenceFrameMs: 0, body: `b${i}`, headAndGaze: '',
-    leftHand: '', rightHand: '', productStateBefore: '', productStateAfter: '',
+    startSec: i, endSec: i + 1, referenceFrameMs: 0, action: `b${i}`, productStateBefore: '', productStateAfter: '',
     importance: 'major' as const,
   })
   it('le presta el beat vecino al fragmento que quedó vacío', () => {
     const [uno, dos] = repartirBeats([b(0), b(1), b(2)], [9, 1])
-    expect(uno.map((x) => x.body)).toEqual(['b0', 'b1'])
-    expect(dos.map((x) => x.body)).toEqual(['b2'])
+    expect(uno.map((x) => x.action)).toEqual(['b0', 'b1'])
+    expect(dos.map((x) => x.action)).toEqual(['b2'])
     expect(dos[0].endSec).toBe(1)
   })
   it('no presta cuando el donante se quedaría sin ninguno', () => {
@@ -186,8 +184,7 @@ describe('repartirBeats — piso de un beat por fragmento', () => {
 // bordes. Sin clamp se emite "[6.5–13.2s]" en un clip de 11,6 s.
 it('repartirBeats clampea cada beat a la ventana de su fragmento', () => {
   const b = (s: number, e: number): MotionBeat => ({
-    startSec: s, endSec: e, referenceFrameMs: 0, body: `${s}`, headAndGaze: '',
-    leftHand: '', rightHand: '', productStateBefore: '', productStateAfter: '', importance: 'major',
+    startSec: s, endSec: e, referenceFrameMs: 0, action: `${s}`, productStateBefore: '', productStateAfter: '', importance: 'major',
   })
   const [uno, dos] = repartirBeats([b(0, 6.5), b(6.5, 13.2), b(13.2, 19.5)], [11.6, 7.9])
   for (const [i, frag] of [uno, dos].entries()) {
@@ -204,8 +201,8 @@ it('repartirBeats clampea cada beat a la ventana de su fragmento', () => {
 // ventana por ventana (medido: 5 beats idénticos seguidos en un corte de 9,8 s).
 describe('colapsar la quietud repetida', () => {
   const b = (s: number, e: number, mano: string, imp: MotionBeat['importance'] = 'micro'): MotionBeat => ({
-    startSec: s, endSec: e, referenceFrameMs: s * 1000, body: 'Still', headAndGaze: 'to camera',
-    leftHand: mano, rightHand: 'holding bottle', productStateBefore: 'in hand', productStateAfter: 'in hand',
+    startSec: s, endSec: e, referenceFrameMs: s * 1000,
+    action: `Still, ${mano}, holding bottle`, productStateBefore: 'in hand', productStateAfter: 'in hand',
     importance: imp,
   })
   it('une los beats consecutivos idénticos en uno que abarca su ventana entera', () => {
@@ -219,7 +216,7 @@ describe('colapsar la quietud repetida', () => {
     // La importancia más alta sobrevive: el tramo unido sigue siendo un beat mayor.
     expect(tl.beats[0].importance).toBe('major')
     expect(tl.beats[0].referenceFrameMs).toBe(0)
-    expect(tl.beats[1].leftHand).toBe('raising bottle')
+    expect(tl.beats[1].action).toContain('raising bottle')
   })
   it('NO une cuando la mano cambia de tarea, que es la densidad que las ventanas compraron', () => {
     const tl = normalizeMotionTimeline(
