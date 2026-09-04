@@ -4,6 +4,7 @@ import {
   countApproved, countRawPending,
   getRawNicheStatus, upsertRawNiche, isBlocked,
   RAW_BUCKETS, RAW_BUCKET_LABEL, isRawBucket, isCategoryId, categoryOf,
+  CATEGORIES, clavesReclamadas,
   PLANS, lockedBuckets, unlocksBucket, isPais, isAntiguedad,
   type RawBucket, type RawProductEntry, type RawBucketGroup, type RawSearchResponse,
   type RawFilters, type Tier,
@@ -53,6 +54,9 @@ export async function POST(req: NextRequest) {
   let body: {
     niche?: string; bucket?: string; category?: string
     country?: string; minDias?: number
+    // Qué INTERFAZ pide el inventario. Ausente = la lista de siempre; 'flujo' =
+    // el de un producto por vez, que sirve el MISMO inventario con otra forma.
+    motor?: string; seed?: string
   }
   try { body = await req.json() } catch {
     return NextResponse.json({ error: 'Petición inválida' }, { status: 400 })
@@ -99,6 +103,43 @@ export async function POST(req: NextRequest) {
   // siempre en "100 a más", que es justo el rango que no compró.
   const ordenAuto = ORDEN_AUTO.filter((b) => unlocksBucket(tier, b))
   const aProbar = pedido ? [pedido] : ordenAuto
+
+  // ─── Flujo de UN PRODUCTO POR VEZ ─────────────────────────────────────────
+  // ⚠️ NO ES OTRO MOTOR: es otra INTERFAZ sobre el mismo inventario (`ph_*`) y
+  // el mismo gate de plan. El motor `disc_*` del prototipo NO se trajo — lo que
+  // se portó es la pantalla, cableada a este worker.
+  //
+  // Dos diferencias con la lista, y las dos son del flujo, no del inventario:
+  //   1. las "semillas" son las CATEGORÍAS que ya existen, porque son la
+  //      navegación real de la herramienta;
+  //   2. se excluye lo ya reclamado — tomar un producto lo oculta para todos, y
+  //      esa es la promesa entera del flujo.
+  if (body.motor === 'flujo') {
+    const semilla = isCategoryId(body.seed) ? body.seed : null
+    const seeds = CATEGORIES.map((c) => c.id)
+    const inventario = await getNichesWithInventory()
+    const niches = semilla ? inventario.filter((n) => categoryOf(n) === semilla) : inventario
+    const reclamadas = await clavesReclamadas()
+    let servidoFlujo: RawBucket = aProbar[0]
+    let productos: RawProductEntry[] = []
+    for (const bucket of aProbar) {
+      servidoFlujo = bucket
+      // Se pide de más porque el filtro de reclamados corre DESPUÉS: sin el
+      // margen, una categoría con varios productos ya tomados devolvería menos
+      // de los que el flujo necesita para ofrecer uno distinto cada vez.
+      productos = (await getApprovedByCategory(niches, bucket, limite * 2, filters))
+        .map(toEntry).filter((p) => !reclamadas.has(p.id)).slice(0, limite)
+      if (productos.length) break
+    }
+    return responder({
+      niche: semilla ?? 'todos',
+      status: productos.length > 0 || pedido ? 'ready' : 'empty',
+      groups: [{ bucket: servidoFlujo, label: RAW_BUCKET_LABEL[servidoFlujo], products: productos }],
+      total: productos.length,
+      motor: 'flujo',
+      seeds,
+    })
+  }
 
   // ─── Búsqueda por CATEGORÍA (los chips de la UI) ───────────────────────────
   // Una categoría son decenas de nichos: se resuelve la lista contra el

@@ -1180,3 +1180,142 @@ export async function saveRefresh(
   if (error) throw new Error(error.message)
   return outcome
 }
+
+// ─── RECLAMOS (flujo de un producto por vez) ──────────────────────────────────
+//
+// ⚠️ ESTA ES LA MITAD DEL FLUJO QUE NO ES PANTALLA. El cupo y "un producto lo
+// toma UNA persona" tienen que vivir en la base: en el estado de React,
+// recargar devuelve el cupo entero y el producto tomado se le sigue ofreciendo
+// a todos los demás — o sea el problema que el flujo existe para resolver.
+//
+// ⚠️ La clave es `RawProductEntry.id`, o sea lo que la card ya usa:
+// `nicho:page_id:cluster_key` sirviendo clusters, `nicho:page_id` sirviendo
+// anunciantes. Así el flujo no necesita saber qué tabla sirve hoy.
+
+export interface ClaimResumen {
+  /** Productos que este usuario ya se llevó (los descartados no cuentan). */
+  productos: number
+  /** Cambios gastados. */
+  comodines: number
+}
+
+/**
+ * Parte el id de la card en sus columnas.
+ *
+ * ⚠️ SE PARTE POR LOS DOS PRIMEROS `:` Y NADA MÁS. El `cluster_key` es host+path
+ * y puede traer sus propios dos puntos (un puerto, un `:` en la query); con un
+ * `split(':')` a secas se perdería la cola de la clave y el producto no se
+ * encontraría nunca. El nicho y el page_id sí son atómicos.
+ */
+export function partirEntryId(
+  id: string,
+): { niche: string; pageId: string; clusterKey: string | null } | null {
+  const a = id.indexOf(':')
+  if (a < 1) return null
+  const b = id.indexOf(':', a + 1)
+  return b === -1
+    ? { niche: id.slice(0, a), pageId: id.slice(a + 1), clusterKey: null }
+    : { niche: id.slice(0, a), pageId: id.slice(a + 1, b), clusterKey: id.slice(b + 1) }
+}
+
+/**
+ * Las filas de inventario detrás de esos ids de card.
+ *
+ * ⚠️ UNA sola consulta por `page_id` y el resto se filtra en memoria. La
+ * alternativa —un `.or()` con N tríos de columnas— arma una querystring que
+ * crece con cada reclamo y se rompe sola; acá los ids son pocos (el cupo tope es
+ * 20) y el índice de page_id hace el trabajo.
+ */
+export async function getRawByEntryIds(
+  ids: string[],
+): Promise<(RawProductRow | RawClusterRow)[]> {
+  const partes = ids.map(partirEntryId).filter((p): p is NonNullable<typeof p> => !!p)
+  if (!partes.length) return []
+  const { data, error } = await getDb().from(TABLA_SERVING).select('*')
+    .in('page_id', [...new Set(partes.map((p) => p.pageId))])
+  if (error) throw new Error(`getRawByEntryIds: ${error.message}`)
+  const quiero = new Set(ids)
+  const idDe = (r: RawProductRow | RawClusterRow) =>
+    'cluster_key' in r ? `${r.niche}:${r.page_id}:${r.cluster_key}` : `${r.niche}:${r.page_id}`
+  // Se conserva el ORDEN de `ids` (el más reciente primero, como lo pidió quien
+  // llama): el orden de PostgREST no lo respeta.
+  const porId = new Map((data ?? []).filter((r: RawProductRow | RawClusterRow) => quiero.has(idDe(r)))
+    .map((r: RawProductRow | RawClusterRow) => [idDe(r), r]))
+  return ids.map((i) => porId.get(i)).filter((r): r is RawProductRow | RawClusterRow => !!r)
+}
+
+/** Cuánto lleva usado del cupo este usuario. */
+export async function claimResumen(userId: string): Promise<ClaimResumen> {
+  const { data, error } = await getDb().from('ph_claims')
+    .select('descartado').eq('user_id', userId).limit(5000)
+  if (error) throw new Error(`ph_claims: ${error.message}`)
+  const filas = (data ?? []) as { descartado: boolean }[]
+  return {
+    productos: filas.filter((f) => !f.descartado).length,
+    comodines: filas.filter((f) => f.descartado).length,
+  }
+}
+
+/**
+ * Lo que este usuario ya se llevó, lo más reciente primero.
+ *
+ * ⚠️ Devuelve las FILAS, no las claves: tiene que poder volver a un producto que
+ * ya pagó con su cupo. Si cierra la pestaña y no lo tiene, gastó el cupo en algo
+ * que no puede recuperar.
+ */
+export async function claimsDe(
+  userId: string, limit = 200,
+): Promise<(RawProductRow | RawClusterRow)[]> {
+  const { data, error } = await getDb().from('ph_claims')
+    .select('entry_id,descartado,taken_at').eq('user_id', userId)
+    .order('taken_at', { ascending: false }).limit(limit)
+  if (error) throw new Error(`ph_claims: ${error.message}`)
+  const ids = ((data ?? []) as { entry_id: string; descartado: boolean }[])
+    .filter((c) => !c.descartado).map((c) => c.entry_id)
+  return ids.length ? getRawByEntryIds(ids) : []
+}
+
+/**
+ * Las claves reclamadas por CUALQUIERA — el serving del flujo las excluye.
+ *
+ * ponytail: lee hasta `limit` filas y filtra en memoria. Con el cupo tope de 20
+ * por usuario hacen falta 1.000 usuarios activos para acercarse; cuando pese, el
+ * upgrade es excluirlas en la consulta con un `not.in`.
+ */
+export async function clavesReclamadas(limit = 20_000): Promise<Set<string>> {
+  const { data, error } = await getDb().from('ph_claims').select('entry_id').limit(limit)
+  if (error) throw new Error(`ph_claims: ${error.message}`)
+  return new Set(((data ?? []) as { entry_id: string }[]).map((c) => c.entry_id))
+}
+
+/**
+ * Reclama un producto. Devuelve false si ya estaba reclamado (por cualquiera).
+ *
+ * ⚠️ EL INSERT ES LA CARRERA GANADA. Dos usuarios pueden pedir el mismo producto
+ * en el mismo instante —el serving se lo muestra a los dos hasta que uno
+ * escribe—, así que gana quien inserta primero y la PK rechaza al segundo.
+ * Comprobar antes con un SELECT deja la ventana abierta.
+ */
+export async function tomarProducto(
+  userId: string, entryId: string, seed: string | null,
+): Promise<boolean> {
+  const { error } = await getDb().from('ph_claims')
+    .insert({ user_id: userId, entry_id: entryId, seed_query: seed })
+  if (!error) return true
+  if ((error as { code?: string }).code === '23505') return false   // unique_violation
+  throw new Error(`tomarProducto: ${error.message}`)
+}
+
+/** Guarda la encuesta y, si gastó un cambio, marca el producto como descartado. */
+export async function cerrarClaim(
+  userId: string, entryId: string,
+  encuesta: { anuncios: boolean | null; unSoloProducto: boolean | null },
+  comodin: boolean,
+): Promise<void> {
+  const { error } = await getDb().from('ph_claims').update({
+    ok_anuncios: encuesta.anuncios,
+    ok_monoproducto: encuesta.unSoloProducto,
+    descartado: comodin,
+  }).eq('user_id', userId).eq('entry_id', entryId)
+  if (error) throw new Error(`cerrarClaim: ${error.message}`)
+}
