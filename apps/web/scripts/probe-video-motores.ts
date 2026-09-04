@@ -13,11 +13,11 @@
  *     error}`. El modelo SE VALIDA antes de despachar (un nombre inexistente da 404), así
  *     que ahí el canario gratis sí funciona. Lo que NO se pudo ver sin pagar es el string
  *     del estado de ÉXITO ni dónde vive la URL — el poller tolera varias formas.
- *   · Kling — `mode` es `std` (720p) o `pro` (1080p), NO '720p'. Y ⚠️ **el canario de
- *     campo inválido NO sirve en este modelo**: KIE aceptó un `mode` inválido y DESPACHÓ.
- *     Lo que no despacha es un modelo inexistente o un asset inalcanzable — el canario de
- *     kling tiene que ir por ahí. (La tarea que se despachó falló al bajar la imagen y
- *     `creditsConsumed` volvió 0.0, así que no costó nada.)
+ *   · Kling — `mode` toma RESOLUCIONES (`720p`), no los `std`/`pro` que dice la doc:
+ *     medido, `std` vuelve *"mode is not within the range of allowed options"*. ⚠️ Y el
+ *     canario de kling NO puede ir por un campo inválido, porque un campo VÁLIDO despacha:
+ *     tiene que llevar un **asset inalcanzable**, que es lo que corta sin cobrar (medido:
+ *     la tarea falló con *"Image fetch failed"* y `creditsConsumed: 0.0`).
  *
  * Desde apps/web:
  *   PROBE_RUN=1 XAI_API_KEY=... npx tsx --env-file=.env.local \
@@ -200,10 +200,10 @@ async function runKling(session: VideoSessionRow, clipUrl: string): Promise<{ ta
         ].join(' '),
         input_urls: [session.avatar_url],
         video_urls: [clipUrl],
-        // ⚠️ `std` = 720p, `pro` = 1080p. NO es '720p': ese valor NO lo rechaza la
-        // validación de KIE — despacha igual (verificado con el canario), así que el
-        // valor equivocado es un riesgo silencioso, no un error.
-        mode: 'std',
+        // ⚠️ SON RESOLUCIONES, NO `std`/`pro`. La doc de KIE dice `std` (720p) y `pro`
+        // (1080p) y es FALSA: medido contra la API, `std` vuelve *"mode is not within the
+        // range of allowed options"* y `720p` se acepta y despacha.
+        mode: '720p',
         character_orientation: orientation(),
         background_source: 'input_video',
       },
