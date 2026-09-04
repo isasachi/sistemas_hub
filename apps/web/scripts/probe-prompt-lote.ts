@@ -9,6 +9,10 @@
  * ⚠️ Reemplaza a `probe-motion-lock.ts`, que A/Beaba el CANDADO DE MOVIMIENTO: esa máquina
  * se fue con la vuelta a la fuente, así que su probe medía una diferencia que ya no existe.
  *
+ * Con `PROBE_RENDER=1` además RENDERIZA el lote elegido: una llamada pagada con la key del
+ * usuario, el mp4 a `~/Downloads/probe-lote/` y una tira de cinco fotogramas para poder
+ * compararlo con el original sin abrir el video.
+ *
  *   npx tsx --env-file=.env.local scripts/probe-prompt-lote.ts <sessionId> [nLote]
  */
 import { createClient } from '@supabase/supabase-js'
@@ -17,7 +21,9 @@ import { AdaptedScriptSchema } from '../lib/video-ads/adapt'
 import { enProsa, type ForensicReport } from '../lib/video-ads/forensic'
 import { tieneMotion } from '../lib/video-ads/motion'
 import { personajesDe, hablantesPorTiempo, vozEnOffPorTiempo } from '../lib/video-ads/personajes'
-import { KIE_PROMPT_MAX, clampDuration } from '../lib/video-ads/kie'
+import { KIE_PROMPT_MAX, clampDuration, createVideoTask, getTaskDetail } from '../lib/video-ads/kie'
+import { mkdir, writeFile } from 'node:fs/promises'
+import { spawn } from 'node:child_process'
 
 const db = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 
@@ -69,7 +75,47 @@ async function main() {
     console.log('═'.repeat(78))
     console.log(prompt)
     console.log()
+
+    if (!process.env.PROBE_RENDER) continue
+    const { data: st } = await db.from('user_settings').select('kie_api_key').eq('user_id', r.user_id as string).single()
+    const key = (st as { kie_api_key?: string } | null)?.kie_api_key
+    if (!key) throw new Error('El usuario no tiene key de KIE guardada')
+    const imagenes = [
+      { url: r.avatar_url as string, role: 'la persona' },
+      { url: r.product_url as string, role: 'el producto' },
+    ]
+    const taskId = await createVideoTask(
+      { images: imagenes, prompt, durationSec: lote.duracionSeg, locucionChars: chars, tomas: lote.tomas.length }, key)
+    console.log(`tarea ${taskId} — esperando…`)
+    const limite = Date.now() + 10 * 60_000
+    let url: string | null = null
+    while (Date.now() < limite && !url) {
+      const d = await getTaskDetail(taskId, key)
+      if (d.state === 'success' && d.videoUrl) url = d.videoUrl
+      else if (d.state === 'fail') throw new Error(`FALLÓ — ${d.failMsg ?? '(sin motivo)'}`)
+      else await new Promise((ok) => setTimeout(ok, 6000))
+    }
+    if (!url) throw new Error('se agotó el plazo')
+    const salida = `${process.env.HOME}/Downloads/probe-lote`
+    await mkdir(salida, { recursive: true })
+    const mp4 = `${salida}/lote-${lote.n}.mp4`
+    await writeFile(mp4, Buffer.from(await (await fetch(url)).arrayBuffer()))
+    await tira(mp4, `${salida}/lote-${lote.n}-tira.jpg`, dur)
+    console.log(`clip: ${mp4}`)
+    console.log(`tira: ${salida}/lote-${lote.n}-tira.jpg`)
   }
+}
+
+/** Cinco fotogramas repartidos, en una sola imagen: es lo único de este probe que no
+ *  depende de que un modelo mire bien. */
+async function tira(mp4: string, salida: string, dur: number): Promise<void> {
+  const ts = [0.05, 0.28, 0.5, 0.72, 0.95].map((f) => (dur * f).toFixed(2))
+  const args = ts.flatMap((t) => ['-ss', t, '-i', mp4, '-frames:v', '1'])
+  await new Promise<void>((ok) => {
+    const p = spawn('ffmpeg', ['-y', '-v', 'error', ...args,
+      '-filter_complex', `hstack=inputs=${ts.length},scale=1500:-1`, salida], { stdio: 'ignore' })
+    p.on('exit', () => ok())
+  })
 }
 
 main().catch((e) => { console.error(e); process.exit(1) })

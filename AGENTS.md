@@ -461,7 +461,19 @@ Las diferencias, puestas lado a lado:
 
 **Herramienta de control: `scripts/probe-prompt-lote.ts`** imprime el prompt real de cualquier lote de una sesión guardada, con los mismos insumos que la ruta. Cero llamadas a modelos, cero renders. Es lo que hay que leer al lado del ejemplo del spec antes de gastar nada.
 
-⚠️ **SIN RENDER TODAVÍA.** Lo verificado es que el prompt sale con la forma del spec y entra en el tope (3.502 de 4.096 en el lote 1 de `7e4ccbcf`, sin recortar). Que grok ejecute la coreografía con esta emisión es lo que falta medir, y el contraejemplo del wizard es la evidencia de que puede.
+✅ **VERIFICADO CON UN RENDER REAL, Y ES EL PRIMERO DE TODA ESTA RONDA QUE EJECUTA LA COREOGRAFÍA.** Lote 1 de `7e4ccbcf` (11 s, prompt de 3.502 de 4.096 sin recortar), con las dos acciones numeradas:
+
+```
+1. Sostiene gotero con mano derecha, lo levanta y muestra la gota; mano izquierda
+   sostiene el frasco. Mirada a cámara.
+2. Muestra el frasco a cámara con ambas manos, luego aplica gota en mejilla izquierda.
+```
+
+Los seis fotogramas del clip, en orden: sostiene el gotero con el frasco abajo → lo levanta y lo muestra → presenta el frasco a cámara con las dos manos → sigue presentándolo hablando → **la mano sobre la mejilla con el producto visible** → extiende sobre el pómulo. **Las dos acciones, en su orden.** Contra el mismo tipo de contenido, la emisión anterior daba *"sostiene el frasco y habla los once segundos"*.
+
+✅ **Y LA LOCUCIÓN SALE EN ESPAÑOL PALABRA POR PALABRA: 99 % de cobertura**, transcrita y comparada con el oráculo mecánico de `probe-audio-espanol.ts`. Lo único que se mueve son los acentos y "los 30" dicho como "los treinta", que es la transcripción y no el habla. **Hacía falta medirlo**: que grok dijera el español entrecomillado estaba verificado sobre el modelo ANTERIOR, y este es otro modelo.
+
+⚠️ **`n = 1`, y hay que leerlo así.** Es un lote, un seed, una sesión. Lo que prueba es que la emisión nueva SÍ produce el clip que se le pide —que es exactamente lo que la anterior no lograba en doce renders— no que lo haga siempre.
 
 ### EL CANDADO DE MOVIMIENTO (V2) — cableado, verificado y **sin efecto medible todavía** (2026-09-03)
 
