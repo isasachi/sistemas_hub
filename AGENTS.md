@@ -476,6 +476,20 @@ La comparación es **igualdad exacta normalizada**, no el subconjunto de `mismoE
 
 ⚠️ **Solo alcanza a análisis NUEVOS** — es un cambio en el paso caro. Y **el veredicto del candado queda ABIERTO otra vez**: se midió con 2-3 tramos por clip, que era todo lo que el forense daba; ahora da 12. Ese A/B hay que rehacerlo sobre el bed denso.
 
+🔴 **CON EL TIMELINE YA DENSO Y EL FRAGMENTO ORIGINAL AL LADO: NINGUNO DE LOS CUATRO CLIPS REPRODUCE LA COREOGRAFÍA, Y EL DEFECTO ESTÁ EN EL RENDER, NO EN EL PROMPT (2026-09-03).** Tercera corrida de 4 renders, ahora sobre el bed bueno —el corte de 19,3 s con 12 beats, partido, midiendo el fragmento de 11,1 s con **6 tramos de aplicación real**— y con el tramo equivalente del video original recortado con ffmpeg (`16.0s → 27.1s`) para comparar.
+
+**Veredicto del dueño del repo mirando los cinco:** *"ninguno se parece, todos se quedan casi quietos todo el tiempo, lo máximo que hacen es tocarse la mejilla o acercar el frasco a la cámara"*. Verificado además fotograma a fotograma: en el original la mano **trabaja sobre la cara** —dedos abiertos masajeando mejilla y pómulo en cuatro de los cinco fotogramas—; en el clip generado la persona sostiene el frasco a la altura del pecho, señala con un dedo y habla. Nunca se aplica nada.
+
+**Entonces la representación de la coreografía es una palanca MUERTA para grok.** Prosa y candado dan lo mismo porque el modelo no ejecuta seis tramos en once segundos, le llegue como le llegue. Es la confirmación de la hipótesis que este documento ya tenía escrita sin cerrar (*"el límite no es cuánto le podemos contar a grok, es cuánta coreografía ejecuta por clip"*), y ahora con el original al lado en vez de contra una lista.
+
+⚠️ **EL TRABAJO DEL TIMELINE NO SE TIRA, pero hay que saber qué compró y qué no.** La densidad (0,22 → 0,66 beats/s) y el encadenado de estados son insumos correctos y son lo que habilita las anclas de pose; lo que NO compran por sí solos es un render distinto. Las dos palancas que quedan son de otra clase: **(a) anclas de pose DENTRO del clip** —el timeline ya trae `referenceFrameMs` en el 100 % de los beats, y este repo tiene medido cinco veces que **la imagen le gana al texto**, así que es la única que cambia de modalidad; sin medir que grok interpole hacia referencias intermedias— y **(b) cambiar el modelo de render**, que es decisión del dueño del repo.
+
+🔴 **Y EL JUEZ AUTOMÁTICO DEL PROBE ERA FALSO — se retiró.** Le daba al clip la lista de tramos que se le habían pedido al render y preguntaba cuáles se ejecutaban: sobre ESE clip —el de la cabeza parlante— devolvió **6 de 6**. Con la lista delante, *"mano cerca de la cara"* se convierte en *"aplica producto en la mejilla"*: el oráculo confirmaba su propio enunciado. Ya había dado dos señales antes (el ojo humano eligió dos veces el clip peor puntuado) y se leyeron como discrepancia de criterio en vez de como lo que eran.
+
+Ahora el probe **describe A CIEGAS** —el modelo no sabe qué se pidió— y además escribe una **tira de cinco fotogramas por clip** con ffmpeg, que es determinista y gratis. La comparación la hace quien lee. Mismo criterio que el probe del español y el de tipografía: **cuando la métrica automática es frágil, lo que vale es imprimir.**
+
+⚠️ **LA LECCIÓN GENERAL, y es la más cara de esta ronda: un oráculo al que se le muestra la respuesta esperada no mide, confirma.** Antes de creerle a un juez de visión, hay que preguntarse qué vería si le mostráramos un clip vacío.
+
 ⚠️ **Lo que NO se midió, y no hay que leerlo como medido:** que el candado no sirva NUNCA. Se midió que no cambia nada **con 2-3 tramos por clip**, que es todo lo que el forense da hoy. Si algún día la densidad sube, esto se vuelve a medir — el probe está escrito y sus cuatro guards también.
 
 ✅ **Lo que la corrida SÍ dejó, y no es poco: cinco defectos que solo aparecen armando el prompt de verdad.** Los cinco están arreglados y con test.

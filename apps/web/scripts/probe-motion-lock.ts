@@ -32,6 +32,8 @@
  */
 import { createClient } from '@supabase/supabase-js'
 import { mkdir, writeFile, readFile } from 'node:fs/promises'
+import { spawn } from 'node:child_process'
+import ffmpeg from 'ffmpeg-static'
 import { z } from 'zod'
 import { callVideoAds } from '../lib/video-ads/llm'
 import { groupIntoLotes, buildLotePrompt, camaraDeLote } from '../lib/video-ads/lotes'
@@ -53,37 +55,43 @@ const segundosDe = (tiempo: string) => {
   return m ? Number(m[1]) * 60 + Number(m[2]) : 0
 }
 
-const VeredictoSchema = z.object({
-  beats: z.array(z.object({
-    n: z.number().catch(0),
-    ejecutado: z.enum(['si', 'parcial', 'no']).catch('no'),
-    segundoObservado: z.number().catch(-1),
-    queSeVe: z.string().catch(''),
+/**
+ * ⚠️ EL JUEZ NO PUEDE VER LA LISTA ESPERADA, y esto se aprendió gastando renders.
+ *
+ * La primera versión le pasaba a Gemini el clip MÁS los tramos que se le habían pedido al
+ * render y preguntaba cuáles se ejecutaban. Resultado medido: **6 de 6 a un clip donde la
+ * persona sostiene el frasco a la altura del pecho y habla** — nunca se aplica nada. Con la
+ * lista delante, "mano cerca de la cara" se convierte en "aplica producto en la mejilla".
+ * El oráculo estaba confirmando su propio enunciado, y encima dos veces eligió distinto que
+ * el ojo del dueño del repo.
+ *
+ * Ahora describe A CIEGAS —sin saber qué se pidió— y la comparación la hace quien lee. Es
+ * el mismo criterio que este repo ya aplicó al probe del español y al de tipografía: **el
+ * probe IMPRIME**, y cuando la métrica automática es frágil, imprimir es lo que vale.
+ */
+const DescripcionSchema = z.object({
+  porSegundo: z.array(z.object({
+    desdeSeg: z.number().catch(0),
+    hasta: z.number().catch(0),
+    queHace: z.string().catch(''),
   })),
-  quietudLarga: z.string().catch(''),
+  manosSobreElCuerpo: z.string().catch(''),
+  resumen: z.string().catch(''),
 })
 
-async function juzgar(url: string, beats: { body: string; leftHand: string; rightHand: string; startSec: number; endSec: number }[]) {
-  const lista = beats.map((b, i) =>
-    `${i + 1}. [${b.startSec.toFixed(1)}–${b.endSec.toFixed(1)}s] ${b.body}; mano izquierda: ${b.leftHand}; mano derecha: ${b.rightHand}`).join('\n')
-  return callVideoAds('veredicto_motion', VeredictoSchema, [
+async function describir(url: string) {
+  return callVideoAds('descripcion_ciega', DescripcionSchema, [
     { fileData: { fileUri: url, mimeType: 'video/mp4' } },
     { text: [
-      'Mira el clip y decide, para CADA acción de la lista, si el cuerpo la ejecuta de verdad.',
+      'Describe lo que hace el CUERPO en este clip, tramo por tramo. No sabes qué se le',
+      'pidió al modelo y no hace falta: describe solo lo que ves.',
       '',
-      'ACCIONES ESPERADAS (con la ventana en la que deberían ocurrir):',
-      lista,
-      '',
-      'Reglas:',
-      '- "si" solo si el movimiento ocurre y se distingue de los otros de la lista.',
-      '- "parcial" si se insinúa pero no se completa, o si dos acciones se resuelven en un',
-      '  mismo gesto genérico (ese colapso es exactamente lo que se está midiendo).',
-      '- "no" si no ocurre.',
-      '- `segundoObservado`: en qué segundo del clip empieza (-1 si no ocurre).',
-      '- `queSeVe`: qué hace el cuerpo en ese momento, en pocas palabras. Describe lo que',
-      '  ves, no lo que la lista pide.',
-      '- `quietudLarga`: si hay algún tramo de MÁS DE 2 SEGUNDOS sin movimiento del cuerpo,',
-      '  dilo con sus segundos ("4.0-7.5s quieta sosteniendo el frasco"). Si no hay, vacío.',
+      '- `porSegundo`: un tramo por cada cambio visible, con el segundo en que empieza y',
+      '  termina y qué hace el cuerpo (manos, cabeza, torso, el producto).',
+      '- `manosSobreElCuerpo`: ¿alguna mano TOCA la cara, el cuello o la piel en algún',
+      '  momento? Di cuándo y qué hace ahí (aplicar, masajear, tocar, señalar). Si ninguna',
+      '  mano llega a la piel, dilo con esas palabras.',
+      '- `resumen`: una frase con lo que pasa en el clip entero.',
     ].join('\n') },
   ])
 }
@@ -187,7 +195,11 @@ async function main() {
   // desempatando por duración — el colapso solo se ve cuando sobra tiempo después.
   // `nLote` elige otro de la lista ordenada.
   const corte = fresco.cortes
-    .filter((c) => tieneMotion(c) && c.motion!.beats.length >= 2 && c.duracionSeg <= 15)
+    // `PROBE_SIN_LIMITE=1` deja entrar los cortes que se PARTEN. Se pierden los estados
+    // (un fragmento no los trae) pero se gana el corte con coreografía de verdad, que en
+    // un anuncio de aplicación es el largo. Cuál de las dos cosas importa más depende de
+    // qué se esté midiendo, así que es un interruptor y no un default nuevo.
+    .filter((c) => tieneMotion(c) && c.motion!.beats.length >= 2 && (process.env.PROBE_SIN_LIMITE ? true : c.duracionSeg <= 15))
     .sort((a, b) => (b.motion!.beats.length - a.motion!.beats.length) || (b.duracionSeg - a.duracionSeg))[nLote ? nLote - 1 : 0]
   if (!corte) throw new Error('El forense no devolvió ningún corte con timeline')
   const cerca = adapted.tomas
@@ -216,7 +228,14 @@ async function main() {
   const lote = conCandado.slice().sort((a, b) =>
     b.tomas.reduce((n, t) => n + (t.beats?.length ?? 0), 0) - a.tomas.reduce((n, t) => n + (t.beats?.length ?? 0), 0))[0]
   if (!lote) throw new Error('No hay lote')
-  if (conCandado.length > 1) console.log(`  (la toma se partió en ${conCandado.length} clips; se mide el ${lote.n}º)`)
+  if (conCandado.length > 1) {
+    // La ventana ABSOLUTA del fragmento dentro del video original, para poder recortar el
+    // mismo tramo y ponerlo al lado. Sin esto la comparación con el original es a ojo.
+    const antes = conCandado.filter((l) => l.n < lote.n).reduce((n, l) => n + l.duracionSeg, 0)
+    const desde = segundosDe(corte.tiempo) + antes
+    console.log(`  (la toma se partió en ${conCandado.length} clips; se mide el ${lote.n}º)`)
+    console.log(`  ORIGINAL equivalente: ${desde.toFixed(1)}s → ${(desde + lote.duracionSeg).toFixed(1)}s`)
+  }
   console.log(`  corte elegido ${corte.tiempo} · ${corte.duracionSeg}s · ${corte.motion!.beats.length} beats` +
     ` · locución de la toma ${cerca?.tiempoOriginal ?? '(ninguna)'}`)
 
@@ -295,20 +314,35 @@ async function main() {
     return [et, taskId] as const
   }))
 
-  console.log('\n── VEREDICTOS')
+  console.log('\n── DESCRIPCIÓN A CIEGAS (el juez no ve la lista pedida)')
   for (const [et, taskId] of tareas) {
     const url = await esperar(taskId, key, et)
     if (!url) continue
-    await writeFile(`${SALIDA}/${et}.mp4`, Buffer.from(await (await fetch(url)).arrayBuffer()))
-    const v = await juzgar(url, beats)
-    const si = v.beats.filter((b) => b.ejecutado === 'si').length
-    const parcial = v.beats.filter((b) => b.ejecutado === 'parcial').length
-    console.log(`\n${et} — ${si}/${beats.length} ejecutados, ${parcial} parciales`)
-    for (const b of v.beats) {
-      console.log(`  ${String(b.n).padStart(2)}. ${b.ejecutado.padEnd(7)} ${b.segundoObservado >= 0 ? `${b.segundoObservado}s` : '—'}  ${b.queSeVe}`)
-    }
-    console.log(`  quietud: ${v.quietudLarga || '(ninguna de más de 2 s)'}`)
+    const mp4 = `${SALIDA}/${et}.mp4`
+    await writeFile(mp4, Buffer.from(await (await fetch(url)).arrayBuffer()))
+    // La tira de fotogramas es determinista y gratis: es lo único de este probe que no
+    // depende de que un modelo mire bien.
+    await tira(mp4, `${SALIDA}/${et}-tira.jpg`, lote.duracionSeg)
+    const d = await describir(url)
+    console.log(`\n${et}`)
+    for (const t of d.porSegundo) console.log(`  [${t.desdeSeg}–${t.hasta}s] ${t.queHace}`)
+    console.log(`  manos sobre la piel: ${d.manosSobreElCuerpo}`)
+    console.log(`  resumen: ${d.resumen}`)
+    console.log(`  tira: ${SALIDA}/${et}-tira.jpg`)
   }
+}
+
+/** Cinco fotogramas repartidos, en una sola imagen. Sin esto la revisión humana es abrir
+ *  cuatro videos y acordarse. */
+async function tira(mp4: string, salida: string, dur: number): Promise<void> {
+  const ts = [0.05, 0.28, 0.5, 0.72, 0.95].map((f) => (dur * f).toFixed(2))
+  const args = ts.flatMap((t) => ['-ss', t, '-i', mp4, '-frames:v', '1'])
+  await new Promise<void>((ok) => {
+    const p = spawn(ffmpeg as unknown as string,
+      ['-y', '-v', 'error', ...args, '-filter_complex', `hstack=inputs=${ts.length},scale=1500:-1`, salida],
+      { stdio: 'ignore' })
+    p.on('exit', () => ok())
+  })
 }
 
 main().catch((e) => { console.error(e); process.exit(1) })
