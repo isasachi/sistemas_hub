@@ -149,6 +149,13 @@ async function main() {
   return base
   })()
 
+  // Se normaliza SIEMPRE, también viniendo del caché: `normalizeMotionTimeline` es
+  // idempotente y es donde vive el colapso de la quietud repetida — sin esto el caché
+  // congela el timeline con las reglas del día en que se guardó.
+  for (const c of fresco.cortes) {
+    if (tieneMotion(c)) c.motion = normalizeMotionTimeline(c.motion!, c.duracionSeg)
+  }
+
   console.log('\n── LO QUE EL REFINAMIENTO DEVOLVIÓ, corte por corte')
   for (const c of fresco.cortes) {
     console.log(`  ${c.tiempo} · ${c.duracionSeg}s · ${c.motion?.beats?.length ?? 0} beats`)

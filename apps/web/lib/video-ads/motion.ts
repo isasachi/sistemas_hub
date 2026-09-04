@@ -198,15 +198,57 @@ export function normalizeMotionTimeline(tl: MotionTimeline, duracionSeg: number)
     cursor = end
     return { ...b, startSec: r2(start), endSec: r2(end) }
   })
-  const major = beats.filter((b) => b.importance === 'major')
-  const transiciones = beats.filter((b) => norm(b.productStateBefore) !== norm(b.productStateAfter)).length
+  const fusionados = colapsarQuietud(beats)
+  const major = fusionados.filter((b) => b.importance === 'major')
+  const transiciones = fusionados.filter((b) => norm(b.productStateBefore) !== norm(b.productStateAfter)).length
   return {
     ...tl,
-    beats,
+    beats: fusionados,
     majorBeatCount: major.length,
     productStateTransitionCount: transiciones,
     majorBeatsPerSecond: dur > 0 ? r2(major.length / dur) : 0,
   }
+}
+
+/**
+ * Une los beats CONSECUTIVOS que dicen exactamente lo mismo.
+ *
+ * ⚠️ ES LA CONTRAPARTE OBLIGATORIA DE LAS VENTANAS. Pre-partir el corte en tramos de 1,5 s
+ * es lo que rompió el techo de densidad (0,18-0,22 → 0,66 beats/s, replicado), pero un
+ * tramo genuinamente quieto vuelve repetido ventana por ventana: medido, un corte de 9,8 s
+ * devolvió **cinco beats idénticos seguidos** (`Still · left: lowered · right: holding
+ * bottle`). El prompt ya pide fusionarlos y el modelo no lo hace — así que se hace en
+ * código, que es la doctrina de este repo cada vez que una instrucción no alcanza.
+ *
+ * Sin esto el candado le dice al render "cambiá algo" cinco veces donde no pasa nada, y
+ * gasta el presupuesto que la densidad acaba de comprar. **La quietud declarada sigue
+ * siendo un dato válido — lo que se elimina es decirla seis veces, no decirla.**
+ *
+ * La comparación es IGUALDAD EXACTA normalizada de las cuatro casillas de contenido, no el
+ * subconjunto de `mismoEstado`: acá el modo de fallo de pasarse es borrar un cambio real de
+ * coreografía, así que se une solo lo que es literalmente lo mismo. El beat resultante
+ * abarca la unión de las ventanas, se queda con la importancia más alta y con el primer
+ * `referenceFrameMs` — el fotograma que mejor muestra el tramo es el de su arranque.
+ */
+function colapsarQuietud(beats: MotionBeat[]): MotionBeat[] {
+  const RANGO = { major: 3, supporting: 2, micro: 1 } as const
+  const igual = (a: MotionBeat, b: MotionBeat) =>
+    norm(a.body) === norm(b.body) && norm(a.headAndGaze) === norm(b.headAndGaze) &&
+    norm(a.leftHand) === norm(b.leftHand) && norm(a.rightHand) === norm(b.rightHand) &&
+    norm(a.productStateAfter) === norm(b.productStateBefore) &&
+    norm(a.productStateAfter) === norm(b.productStateAfter)
+  const out: MotionBeat[] = []
+  for (const b of beats) {
+    const previo = out[out.length - 1]
+    if (previo && igual(previo, b)) {
+      previo.endSec = b.endSec
+      previo.productStateAfter = b.productStateAfter
+      if (RANGO[b.importance] > RANGO[previo.importance]) previo.importance = b.importance
+      continue
+    }
+    out.push({ ...b })
+  }
+  return out
 }
 
 export interface MotionIssue { beat: string; motivo: string }

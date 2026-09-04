@@ -1004,7 +1004,36 @@ export const MotionRefinementSchema = z.object({
 })
 export type MotionRefinement = z.infer<typeof MotionRefinementSchema>
 
-export function buildMotionRefinementInstruction(cortes: { n: number; tiempo: string; duracionSeg: number; accion: string }[]): string {
+/**
+ * Parte un corte en ventanas fijas para colgar los beats de ellas.
+ *
+ * ⚠️ NO ES UNA CUOTA DE MOVIMIENTO, que es lo que el spec prohíbe (fabricar gestos que el
+ * original no tiene, y que el render después ejecuta). Es una cuota de OBSERVACIONES: una
+ * ventana quieta se responde con un beat que DICE que está quieta, que este documento ya
+ * registra como dato válido. La diferencia importa: pedir "describí más" no movió la aguja
+ * en dos rondas; pedir "describí cada tramo" fue lo que subió la prosa de 0,24 a 0,39
+ * movimientos por segundo.
+ */
+function ventanasDe(duracionSeg: number, ventanaSeg: number): string {
+  const n = Math.max(1, Math.round(duracionSeg / ventanaSeg))
+  const paso = duracionSeg / n
+  return Array.from({ length: n }, (_, i) =>
+    `[${(i * paso).toFixed(1)}-${((i + 1) * paso).toFixed(1)}]`).join(' ')
+}
+
+/**
+ * Segundos por ventana del refinamiento. **1,5 s está medido, no elegido**: con ventanas
+ * la densidad pasa de 0,18-0,22 a 0,66 beats/s (8-10 → 30 beats sobre los mismos 4 cortes),
+ * y los dos draws devolvieron EXACTAMENTE el mismo reparto — o sea la estructura manda
+ * sobre el sorteo, que es justo lo que la densidad necesitaba.
+ */
+export const VENTANA_BEAT_SEG = 1.5
+
+export function buildMotionRefinementInstruction(
+  cortes: { n: number; tiempo: string; duracionSeg: number; accion: string }[],
+  /** Segundos por ventana. `null` = sin ventanas (el prompt de antes). */
+  ventanaSeg: number | null = VENTANA_BEAT_SEG,
+): string {
   return [
     'You already analysed this video. The cuts below are FINAL and AUTHORITATIVE.',
     '',
@@ -1047,8 +1076,23 @@ export function buildMotionRefinementInstruction(cortes: { n: number; tiempo: st
     '',
     'All motion text in ENGLISH. Do not translate or return any dialogue.',
     '',
+    ...(ventanaSeg
+      ? [
+          '⚠️ EVERY CUT BELOW COMES PRE-SPLIT INTO WINDOWS. Return AT LEAST ONE BEAT PER',
+          'WINDOW, in order, covering the whole cut with no gaps. A window where the body',
+          'does nothing new is still a beat: say that it holds the previous position. Two',
+          'windows may hold the same beat ONLY if the action genuinely spans both, and then',
+          'the beat covers both windows — never leave a window unaccounted for.',
+          'This is not a quota of MOVEMENT (never invent a gesture): it is a quota of',
+          'OBSERVATIONS. Declared stillness is data; an unexamined second is not.',
+          '',
+        ]
+      : []),
     'CUTS (authoritative — one `motion` per `n`):',
-    JSON.stringify(cortes.map((c) => ({ n: c.n, window: c.tiempo, durationSec: c.duracionSeg, coarseAction: c.accion }))),
+    JSON.stringify(cortes.map((c) => ({
+      n: c.n, window: c.tiempo, durationSec: c.duracionSeg, coarseAction: c.accion,
+      ...(ventanaSeg ? { windows: ventanasDe(c.duracionSeg, ventanaSeg) } : {}),
+    }))),
   ].join('\n')
 }
 

@@ -53,7 +53,8 @@ describe('normalizeMotionTimeline', () => {
   })
 
   it('un beat nunca empieza antes de donde terminó el anterior', () => {
-    const r = normalizeMotionTimeline(tl([beat({ startSec: 0, endSec: 3 }), beat({ startSec: 1, endSec: 4 })]), 10)
+    const r = normalizeMotionTimeline(
+      tl([beat({ startSec: 0, endSec: 3, body: 'gira' }), beat({ startSec: 1, endSec: 4, body: 'vuelve' })]), 10)
     expect(r.beats[1].startSec).toBeGreaterThanOrEqual(r.beats[0].endSec)
   })
 
@@ -197,4 +198,34 @@ it('repartirBeats clampea cada beat a la ventana de su fragmento', () => {
     }
   }
   expect(uno.at(-1)!.endSec).toBe(11.6)
+})
+
+// Las ventanas de 1,5 s rompen el techo de densidad, pero un tramo quieto vuelve repetido
+// ventana por ventana (medido: 5 beats idénticos seguidos en un corte de 9,8 s).
+describe('colapsar la quietud repetida', () => {
+  const b = (s: number, e: number, mano: string, imp: MotionBeat['importance'] = 'micro'): MotionBeat => ({
+    startSec: s, endSec: e, referenceFrameMs: s * 1000, body: 'Still', headAndGaze: 'to camera',
+    leftHand: mano, rightHand: 'holding bottle', productStateBefore: 'in hand', productStateAfter: 'in hand',
+    importance: imp,
+  })
+  it('une los beats consecutivos idénticos en uno que abarca su ventana entera', () => {
+    const tl = normalizeMotionTimeline(
+      { ...TIMELINE_VACIO, beats: [b(0, 1.5, 'lowered'), b(1.5, 3, 'lowered', 'major'), b(3, 4.5, 'lowered'), b(4.5, 6, 'raising bottle')] },
+      6,
+    )
+    expect(tl.beats).toHaveLength(2)
+    expect(tl.beats[0].startSec).toBe(0)
+    expect(tl.beats[0].endSec).toBe(4.5)
+    // La importancia más alta sobrevive: el tramo unido sigue siendo un beat mayor.
+    expect(tl.beats[0].importance).toBe('major')
+    expect(tl.beats[0].referenceFrameMs).toBe(0)
+    expect(tl.beats[1].leftHand).toBe('raising bottle')
+  })
+  it('NO une cuando la mano cambia de tarea, que es la densidad que las ventanas compraron', () => {
+    const tl = normalizeMotionTimeline(
+      { ...TIMELINE_VACIO, beats: [b(0, 1.5, 'blending cheek'), b(1.5, 3, 'blending chin'), b(3, 4.5, 'blending neck')] },
+      4.5,
+    )
+    expect(tl.beats).toHaveLength(3)
+  })
 })

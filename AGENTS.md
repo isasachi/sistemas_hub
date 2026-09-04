@@ -447,9 +447,34 @@ más las tres prohibiciones (`Do not compress…`, `Do not start the next beat e
 
 **A 2 de 6, B 1 de 6.** La varianza del seed vuelve a dominar —cada brazo tiene un clip que ejecuta y uno que se queda quieto los diez segundos— y en los dos brazos el clip promedio ejecuta **un tercio** de lo que se le pidió. Con n=2 por brazo no hay efecto que reportar, y la dirección del ruido tampoco favorece al candado. Clips y prompts en `~/Downloads/probe-motion-lock/`.
 
+⚠️ **Y EL DUEÑO DEL REPO MIRÓ LOS CUATRO CLIPS Y ELIGIÓ B1 — que es al que el juez le dio 1 de 3.** No es un detalle: el juez automático cuenta **cuántos tramos de la lista se ejecutan**, y una persona juzga si el clip se ve bien. Son dos preguntas distintas y acá se separaron. Lo que la discrepancia dice es que **la métrica de ejecución no es un proxy de la calidad percibida**, así que un veredicto sobre el candado basado solo en ella queda incompleto; lo que NO dice es que el candado gane, porque es un juicio sobre un clip. Si esto se vuelve a medir, hace falta el ojo humano sobre los cuatro clips a ciegas, no solo el conteo.
+
 ⚠️ **LO QUE SÍ ESTÁ SOSTENIDO POR LA MEDICIÓN, y es el hallazgo:** el refinamiento devuelve **2 o 3 beats por corte sin importar cuánto dure el corte** — medido sobre el pase fresco de **tres sesiones** (`2849e595`, `7e4ccbcf`, `1f231b1d`): un corte de 20 s vuelve con 3, uno de 3,4 s también con 3. Es exactamente el mismo techo que este documento ya midió para la prosa (*"los cortes LARGOS se quedan en ~4 frases pase lo que pase"*), y el pase dedicado NO lo rompió: **el techo es semántico, no de presupuesto ni de formato**. Y se ve en el render: los dos clips quietos lo están justo donde el timeline no pide nada.
 
 **Entonces la palanca siguiente no es el prompt del lote: es la DENSIDAD del timeline.** Ninguna forma de emitir 3 tramos hace que grok ejecute diez movimientos.
+
+✅ **Y LA DENSIDAD SE ROMPIÓ, con la MISMA táctica que ya había funcionado para la prosa: darle una ESTRUCTURA donde colgar las respuestas en vez de pedirle "más" (`scripts/probe-densidad.ts`, 2026-09-03).** El refinamiento recibe ahora cada corte **pre-partido en ventanas de 1,5 s** (`VENTANA_BEAT_SEG`) y se le pide **al menos un beat por ventana**. Dos draws por brazo sobre los mismos 4 cortes:
+
+| | beats por corte | total | beats/s | palabras por casilla |
+|---|---|---|---|---|
+| A1 (prompt actual) | 2, 2, 2, 2 | 8 | 0,18 | 3 |
+| A2 (prompt actual) | 3, 2, 3, 2 | 10 | 0,22 | 3 |
+| **B1 (ventanas 1,5 s)** | **7, 4, 13, 6** | **30** | **0,66** | 3 |
+| **B2 (ventanas 1,5 s)** | **7, 4, 13, 6** | **30** | **0,66** | 2 |
+
+**3× la densidad, y los dos draws devolvieron EXACTAMENTE el mismo reparto** — o sea la estructura manda sobre el sorteo, que es justo lo que un techo estocástico no hace. El corte de 19,3 s pasa de 2-3 beats a 13, y esos 13 son una progresión real: *aplica → mezcla → cambia de dirección → mandíbula → mentón → cuello*.
+
+⚠️ **NO ES LA CUOTA QUE EL SPEC PROHÍBE, y la distinción es la que hace legítimo el cambio.** Aquélla es una cuota de MOVIMIENTO —inventar gestos que el original no tiene, que el render después ejecuta—; ésta es de **OBSERVACIONES**: una ventana quieta se responde con un beat que dice que está quieta, que este documento ya registra como dato válido. Y el prompt lo dice explícito: *"never invent a gesture… declared stillness is data; an unexamined second is not"*.
+
+⚠️ **EL RIESGO ANOTADO ANTES DE INTENTARLO —cambiar detalle por estructura— NO SE MATERIALIZÓ, pero se midió:** la mediana de palabras por casilla se mantiene en 3 (B2 baja a 2). Por eso el probe imprime las dos cosas: nueve beats de dos palabras habrían sido una regresión disfrazada de mejora.
+
+⚠️ **LAS VENTANAS TRAEN SU PROPIO DEFECTO, y se arregla en CÓDIGO: un tramo quieto vuelve repetido ventana por ventana.** Medido: un corte de 9,8 s devolvió **cinco beats idénticos seguidos** (*Still · left: lowered · right: holding bottle*), con el prompt pidiendo ya fusionarlos. `colapsarQuietud` (dentro de `normalizeMotionTimeline`) une los beats consecutivos que dicen literalmente lo mismo en las cuatro casillas de contenido y en el estado del producto; el resultante abarca la unión de las ventanas y se queda con la importancia más alta. Efecto medido sobre la misma sesión: el corte quieto **7 → 3 beats** y el de aplicación **13 → 12** (solo se fusionan dos *"Massaging skin"* idénticos). O sea recorta la redundancia y no la coreografía.
+
+La comparación es **igualdad exacta normalizada**, no el subconjunto de `mismoEstado`: acá el modo de fallo de pasarse es borrar un cambio real, así que se une solo lo que es literalmente lo mismo. Con test en las dos direcciones.
+
+⚠️ **El presupuesto aguanta:** el prompt del lote con el timeline denso sale en **4.860 caracteres sin truncar**, y el test del piso ya cubre el caso extremo (con la prosa fuera, la búsqueda binaria encoge las líneas del candado y con cap 0 deja la ventana de tiempo sola).
+
+⚠️ **Solo alcanza a análisis NUEVOS** — es un cambio en el paso caro. Y **el veredicto del candado queda ABIERTO otra vez**: se midió con 2-3 tramos por clip, que era todo lo que el forense daba; ahora da 12. Ese A/B hay que rehacerlo sobre el bed denso.
 
 ⚠️ **Lo que NO se midió, y no hay que leerlo como medido:** que el candado no sirva NUNCA. Se midió que no cambia nada **con 2-3 tramos por clip**, que es todo lo que el forense da hoy. Si algún día la densidad sube, esto se vuelve a medir — el probe está escrito y sus cuatro guards también.
 
