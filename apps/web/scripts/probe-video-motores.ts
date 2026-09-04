@@ -7,6 +7,18 @@
  *
  * IMPORTANTE: no hace llamadas pagadas sin PROBE_RUN=1.
  *
+ * ✅ SONDEADO GRATIS ANTES DE GASTAR (`scripts/canary-motores.ts`):
+ *   · xAI — `POST /v1/videos/edits` con `{model:'grok-imagine-video', prompt, video:{url}}`
+ *     devuelve 200 con `request_id`, y `GET /v1/videos/{request_id}` devuelve `{status,
+ *     error}`. El modelo SE VALIDA antes de despachar (un nombre inexistente da 404), así
+ *     que ahí el canario gratis sí funciona. Lo que NO se pudo ver sin pagar es el string
+ *     del estado de ÉXITO ni dónde vive la URL — el poller tolera varias formas.
+ *   · Kling — `mode` es `std` (720p) o `pro` (1080p), NO '720p'. Y ⚠️ **el canario de
+ *     campo inválido NO sirve en este modelo**: KIE aceptó un `mode` inválido y DESPACHÓ.
+ *     Lo que no despacha es un modelo inexistente o un asset inalcanzable — el canario de
+ *     kling tiene que ir por ahí. (La tarea que se despachó falló al bajar la imagen y
+ *     `creditsConsumed` volvió 0.0, así que no costó nada.)
+ *
  * Desde apps/web:
  *   PROBE_RUN=1 XAI_API_KEY=... npx tsx --env-file=.env.local \
  *     scripts/probe-video-motores.ts <sessionId> 0 6 1
@@ -188,7 +200,10 @@ async function runKling(session: VideoSessionRow, clipUrl: string): Promise<{ ta
         ].join(' '),
         input_urls: [session.avatar_url],
         video_urls: [clipUrl],
-        mode: '720p',
+        // ⚠️ `std` = 720p, `pro` = 1080p. NO es '720p': ese valor NO lo rechaza la
+        // validación de KIE — despacha igual (verificado con el canario), así que el
+        // valor equivocado es un riesgo silencioso, no un error.
+        mode: 'std',
         character_orientation: orientation(),
         background_source: 'input_video',
       },
@@ -247,19 +262,38 @@ async function runXai(session: VideoSessionRow, clipUrl: string): Promise<{ task
     throw new Error(`xAI edits falló (${response.status}): ${JSON.stringify(created?.error ?? created)}`)
   }
 
+  // ⚠️ EL CANARIO GRATIS CONFIRMÓ LA CREACIÓN Y EL FALLO, NO EL ÉXITO. Verificado sin
+  // gastar: `POST /v1/videos/edits` con `{model, prompt, video:{url}}` devuelve 200 con
+  // `request_id`, y `GET /v1/videos/{id}` devuelve `{status:'failed', error:{...}}`. El
+  // string del estado de ÉXITO y dónde vive la URL solo se pueden ver con una generación
+  // pagada, así que acá se aceptan varias formas y —lo importante— **se imprime el cuerpo
+  // crudo la primera vez que el estado no se reconoce**: adivinar mal significaría colgarse
+  // veinte minutos y reportar "timeout" sobre un video que ya estaba listo.
+  const LISTO = new Set(['done', 'completed', 'succeeded', 'success', 'ready'])
+  const MUERTO = new Set(['failed', 'expired', 'cancelled', 'canceled', 'error'])
+  const urlDe = (d: Record<string, unknown> | null): string | undefined => {
+    const video = d?.video as { url?: string } | undefined
+    const videos = d?.videos as { url?: string }[] | undefined
+    return video?.url ?? (typeof d?.url === 'string' ? d.url : undefined) ?? videos?.[0]?.url
+  }
+  const desconocidos = new Set<string>()
   const deadline = Date.now() + POLL_TIMEOUT_MS
   while (Date.now() < deadline) {
     const poll = await xaiFetch(`/${encodeURIComponent(taskId)}`, key)
-    const detail = await poll.json().catch(() => null) as
-      | { status?: string; video?: { url?: string }; error?: unknown }
-      | null
+    const detail = await poll.json().catch(() => null) as Record<string, unknown> | null
     if (!poll.ok) throw new Error(`xAI poll falló (${poll.status}): ${JSON.stringify(detail)}`)
-    if (detail?.status === 'done') {
-      if (!detail.video?.url) throw new Error('xAI terminó sin URL de video')
-      return { taskId, url: detail.video.url }
+    const status = String(detail?.status ?? '')
+    if (LISTO.has(status) || urlDe(detail)) {
+      const url = urlDe(detail)
+      if (!url) throw new Error(`xAI dice \`${status}\` y no trae URL: ${JSON.stringify(detail)}`)
+      return { taskId, url }
     }
-    if (detail?.status === 'failed' || detail?.status === 'expired') {
-      throw new Error(`xAI terminó con estado ${detail.status}: ${JSON.stringify(detail.error ?? detail)}`)
+    if (MUERTO.has(status)) {
+      throw new Error(`xAI terminó con estado ${status}: ${JSON.stringify(detail?.error ?? detail)}`)
+    }
+    if (status && !desconocidos.has(status)) {
+      desconocidos.add(status)
+      console.log(`  [xAI] estado no catalogado \`${status}\` — cuerpo: ${JSON.stringify(detail)}`)
     }
     await sleep(POLL_INTERVAL_MS)
   }
