@@ -676,6 +676,19 @@ El prompt de FASE 1 pedía **un movimiento cada 2 segundos** (0,50 mov/s) y, tre
 
 ⚠️ **Y LA LÍNEA QUE CITA EL ANCLA NO PEDÍA LA POSE — el render lo destapó.** Decía *"Starts from @image(3): same framing and same room"*, o sea le pedía al fotograma lo único que el avatar ya daba. Medido con el lote 1 renderizado (10 s): **la habitación salió clavada en los 5 fotogramas** —pared crema, marco de puerta oscuro, contra el cuarto blanco y abierto del render anterior, así que el eje del fondo funciona— y **la coreografía se abandonó en el primer segundo**: destapa, y los 9 s restantes sostiene el frasco hablando. El ancla abría con el gotero en la mejilla y el prompt no le pidió empezar ahí. Ahora la línea dice que **el primer fotograma del clip ES esa foto**, con las manos y el producto ya en esa posición, y que continúe desde ahí en vez de moverse hacia ella. **Huella v14 → v15** (cambia la plantilla del prompt).
 
+❌ **Y ESO NO ALCANZÓ: GROK NO ARRANCA DESDE EL ANCLA, LE DIGAS LO QUE LE DIGAS.** Se midió por el fotograma 0 —que es lo que discrimina, porque *"¿ejecutó la coreografía?"* es estocástico y no sobrevive n=1, mientras que *"¿el clip ARRANCA en la foto del ancla?"* está condicionado por la imagen y se lee de un solo cuadro:
+
+| render | fotograma 0 | ¿es la pose del ancla? |
+|---|---|---|
+| línea vieja (*"same framing and same room"*) | saca el gotero del frasco | ❌ |
+| línea nueva (*"the first frame of this shot is that photograph"*) | sostiene el frasco cerrado con las dos manos, hablando | ❌ |
+
+Las dos veces el ancla mostraba el gotero en la mejilla y el frasco abajo. **Es el techo del modo de referencia, no una redacción floja:** las anclas son material citado como `@image(n)`, no un fotograma inicial — no hay interpolación forzada ni frame de arranque, y eso lo dice el propio diseño del sistema. La palanca que queda para la POSE no es más texto sino el ORDEN de las imágenes (poner el ancla de apertura en `@image(1)`), y eso choca con *"el orden ES el contrato"* y con el `+3` de `anclasPorTiempo`: es un cambio a pensar, no un ajuste.
+
+✅ **Lo que SÍ replica, 2 de 2 renders: la habitación.** Los cinco fotogramas de los dos clips transcurren en el cuarto del avatar —pared crema, marco de puerta oscuro, cuadro— contra el cuarto blanco y abierto del render anterior sin ancla en el lote 1. Ese es el eje que las anclas ya tenían medido, y ahora también cubre el primer lote.
+
+⚠️ **DECISIÓN ABIERTA, y es de costo:** el eje de pose cuesta **+1 imagen del hub por sesión** (lote 1) más la descarga del original, y su beneficio de POSE está **refutado para grok**. Lo que compra medido es la habitación del primer clip, que el avatar ya daba por su cuenta. Se conserva porque el ancla generada SÍ mejoró —retrata la pose real del original en vez de ilustrar el texto— y sigue siendo una de las 7 referencias del clip, pero eso **no está medido**.
+
 ✅ **Verificado con las dos anclas reales del lote 1** (`scripts/probe-anclas-pose.ts`, imágenes del hub): salen con la cara, el suéter y la habitación del avatar, con el frasco de La Roche-Posay del usuario —no el APIVITA rojo del original—, **con el gotero ya en la mejilla y el frasco sostenido abajo**, y sin un solo carácter de texto, watermark ni arroba. El probe **imprime y guarda, no puntúa**: lo único que decide si una pose es la correcta es mirarla al lado del original, y este documento ya registra qué pasa cuando un oráculo automático juzga un fotograma.
 
 ⚠️ **COSTO: 4,6 imágenes por sesión** medido sobre las 31 sesiones con guión (173 lotes → 143 anclas), contra ~0 antes. Las paga el HUB. Se generan **en paralelo entre todos los lotes**, así que el tiempo de pared es el de la más lenta (~60 s) y no la suma — entra en el `maxDuration = 300` de la ruta.
