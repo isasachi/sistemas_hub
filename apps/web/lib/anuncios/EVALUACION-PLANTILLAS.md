@@ -26,6 +26,13 @@ para compilar blueprints, más `Section1Reference` convertido en camino alternat
 spec ("una plantilla → 8 anuncios") a una fracción del costo, y deja A como decisión de producto
 separada que se puede tomar después con B ya funcionando.
 
+⚠️ **Esto INVIERTE el MVP del propio spec (§32) a propósito.** Ahí se propone arrancar por seis
+familias de plantillas —o sea el eje A— y dejar el lote para después. La razón para darlo vuelta es
+que §32 asume que la biblioteca habilita la generación múltiple, y no la habilita: B corre sobre la
+referencia que el wizard ya sube. Empezando por A se paga el 70 % del trabajo antes de entregar
+nada de lo que el spec promete en su título. Queda dicho explícitamente para que sea una posición
+que se acepta o se rechaza, no una contradicción que aparezca después.
+
 ---
 
 ## 2. §6 ("no correr el forense en cada generación") ya está resuelto
@@ -100,6 +107,14 @@ y el fallo se reporta como 429 a mitad de lote, con parte de los créditos ya ga
 
 **Corolario de diseño:** la cuota se tiene que verificar para las N tareas **antes de crear la
 primera**, igual que hace `generate-lotes` en video — medio lote es dinero gastado en algo inservible.
+
+### 4.2b 🟡 Hay una TERCERA capa de cuota, y es la que produce un 429 que nadie sabe atribuir
+
+Por encima de las dos anteriores está `GEN_GLOBAL_DAILY_LIMIT` (500/día, **todos los usuarios,
+todos los kinds, imagen y texto**). Un lote de 8 no la roza; varios usuarios generando lotes el
+mismo día sí. El mensaje que devuelve es *"El servicio alcanzó su límite diario de generaciones"* —
+o sea el usuario no puede hacer nada al respecto y el soporte no puede saber de quién fue el gasto
+sin mirar `ph_gen_usage`. No bloquea el MVP; hay que tenerlo presente al elegir el tope de N.
 
 ### 4.3 🟡 §28 lleva razón, pero el blueprint NO puede reemplazar a la imagen de referencia
 
