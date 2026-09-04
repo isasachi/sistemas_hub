@@ -465,22 +465,22 @@ describe('buildLotePrompt — las acciones numeradas', () => {
 
   // El timeline de V2 se REUSA como fuente de la secuencia: sus campos son, uno a uno, lo
   // que pide la REGLA DE ACCIONES del spec. Lo único que se descarta son sus ventanas.
-  // ⚠️ UN HECHO POR LÍNEA. No un ítem por beat: el render que lo destapó sacaba el gotero,
-  // dejaba caer la gota en el frasco y la gota "aparecía" en la mejilla, porque
-  // "sostiene + levanta + muestra" iban en el mismo ítem y la aplicación quedaba huérfana
-  // del instrumento. Cada casilla del beat es su propia línea.
-  it('salen de los beats, una línea por casilla, agrupando los micro', () => {
+  // ⚠️ UNA LÍNEA DE CONTEXTO Y UNA POR ACCIÓN, que es el tamaño de los bullets del spec.
+  // El render que lo destapó sacaba el gotero, dejaba caer la gota en el frasco y la gota
+  // "aparecía" en la mejilla, porque "sostiene + levanta + muestra" iban en el mismo ítem.
+  // Pero una línea por CASILLA de cada beat da 5×N ítems y el presupuesto los recorta a
+  // trece caracteres: la postura y la mirada se declaran una vez y cada beat aporta manos.
+  it('declara el contexto una vez y después solo lo que avanza', () => {
     const beats = [beat(0, 'major'), beat(1, 'micro'), beat(2, 'major')]
     const t = { ...toma(1, 6, 'hola'), beats }
     const lote = groupIntoLotes([t], new Map([[t.tiempoOriginal, { ...TIMELINE_VACIO, beats }]]))[0]
     const p = buildLotePrompt({ lote, ...ARGS })
-    expect(p).toContain('1. postura 0')
-    expect(p).toContain('2. Mano izquierda: izquierda 0')
-    expect(p).toContain('3. Mano derecha: sostiene el frasco')
-    expect(p).toContain('4. mira a cámara')
-    // El beat `micro` se absorbe: el evento 2 arranca en el beat 2, no en el 1.
-    expect(p).toContain('5. postura 2')
+    expect(p).toContain('1. postura 0, mira a cámara')
+    expect(p).toContain('2. Mano derecha: sostiene el frasco; Mano izquierda: izquierda 0')
+    // El beat `micro` se absorbe, y del evento 2 solo avanza la mano izquierda.
+    expect(p).toContain('3. Mano izquierda: izquierda 2')
     expect(p).not.toContain('izquierda 1')
+    expect(p).not.toContain('4. ')
   })
 
   // ⚠️ SIN MARCAS DE TIEMPO. El prompt que sí se ejecuta pide acciones distintas, no un

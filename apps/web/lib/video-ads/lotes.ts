@@ -534,21 +534,35 @@ function accionesNumeradas(t: Lote['tomas'][number], cap: number | null): string
       if (!grupos.length || b.importance !== 'micro') grupos.push([b])
       else grupos[grupos.length - 1].push(b)
     }
-    return grupos.flatMap((g) => {
-      const a = g[0]
-      const z = g[g.length - 1]
-      return [
-        limpia(a.body),
-        a.leftHand && `Mano izquierda: ${limpia(a.leftHand)}`,
-        a.rightHand && `Mano derecha: ${limpia(a.rightHand)}`,
-        limpia(a.headAndGaze),
-        // El estado del producto solo cuando CAMBIA: repetir "en la mano" en cada evento es
-        // el ruido que este archivo ya pagó una vez.
-        limpia(a.productStateBefore) !== limpia(z.productStateAfter) && limpia(z.productStateAfter)
-          ? `El producto queda: ${limpia(z.productStateAfter)}`
-          : '',
-      ].filter(Boolean).map((x) => corta(String(x)))
+    // ⚠️ UNA LÍNEA DE CONTEXTO Y UNA POR ACCIÓN — es lo que le da a la lista el tamaño del
+    // spec. Sus bullets son cinco por toma; emitir las cuatro casillas de CADA beat da 5×N,
+    // y medido sobre este video eso fueron **15 ítems por toma** (30 en el lote), recortados
+    // por el presupuesto a trece caracteres cada uno.
+    //
+    // Y "solo lo que cambia" no alcanza: el refinamiento parafrasea la postura en cada beat
+    // (*"Standing upright" · "Remaining still" · "Subtle shift"*), así que ninguna casilla se
+    // repite literal y no colapsa nada. La postura y la mirada se declaran UNA VEZ, al
+    // arranque, y después cada beat aporta lo único que de verdad avanza: las manos.
+    const a0 = grupos[0][0]
+    const contexto = [limpia(a0.body), limpia(a0.headAndGaze)].filter(Boolean).join(', ')
+    const manos = (b: MotionBeat, previo: MotionBeat | null) => {
+      const cambia = (v: unknown, antes: unknown) => {
+        const x = limpia(v)
+        return x && x !== limpia(antes) ? x : ''
+      }
+      const d = cambia(b.rightHand, previo?.rightHand)
+      const i2 = cambia(b.leftHand, previo?.leftHand)
+      return [d && `Mano derecha: ${d}`, i2 && `Mano izquierda: ${i2}`].filter(Boolean).join('; ')
+    }
+    const lineas = [contexto]
+    grupos.forEach((g, k) => {
+      const l = manos(g[0], k ? grupos[k - 1][0] : null)
+      if (l) lineas.push(l)
     })
+    const ultimo = grupos[grupos.length - 1]
+    const fin = limpia(ultimo[ultimo.length - 1].productStateAfter)
+    if (fin && fin !== limpia(a0.productStateBefore)) lineas.push(`El producto queda: ${fin}`)
+    return lineas.filter(Boolean).map(corta)
   }
   return partirEnHechos(t.accionVisual).map(corta)
 }
@@ -615,8 +629,15 @@ function productoFisico(desc: string): string {
 const NIVEL_COMPLETO = 0
 /** El escenario en TEXTO contra el escenario en la IMAGEN. Ver la nota en `buildLotePrompt`. */
 const NIVEL_SIN_ESCENARIO = 1
+/**
+ * El bloque de CÓMO SE MUEVE (FASE 4.6). Se suelta antes que la etiqueta del producto por
+ * dos motivos: **no está en el OUTPUT del spec** —es un agregado de este repo— y describe en
+ * prosa genérica ("gesticula con ambas manos mientras habla") lo que la secuencia numerada
+ * de ESTE clip ya dice en concreto. Son ~400 caracteres.
+ */
+const NIVEL_SIN_MOVIMIENTO = 2
 /** La etiqueta del producto, que `@image(2)` ya muestra. */
-const NIVEL_PRODUCTO_FISICO = 2
+const NIVEL_PRODUCTO_FISICO = 3
 
 export function buildLotePrompt(args: {
   lote: Lote
@@ -733,7 +754,7 @@ export function buildLotePrompt(args: {
       'Continuidad: personaje, vestuario, producto, habitación e iluminación idénticos durante todo el clip. Solo avanza la acción.',
       '',
       ...(varios ? [] : [`Perfil de Voz y Acento: ${perfilDeVoz(voz)}`]),
-      ...(movimiento && !varios
+      ...(movimiento && !varios && nivel < NIVEL_SIN_MOVIMIENTO
         ? [`Cómo se mueve: ${movimiento.calidadMovimiento} Manerismos: ${movimiento.manerismos}`]
         : []),
       ...(todoEnOff
@@ -748,7 +769,7 @@ export function buildLotePrompt(args: {
     ].filter((x) => x !== '').join('\n')
   }
 
-  for (const nivel of [NIVEL_COMPLETO, NIVEL_SIN_ESCENARIO, NIVEL_PRODUCTO_FISICO]) {
+  for (const nivel of [NIVEL_COMPLETO, NIVEL_SIN_ESCENARIO, NIVEL_SIN_MOVIMIENTO, NIVEL_PRODUCTO_FISICO]) {
     const prompt = render(nivel, null)
     if (prompt.length <= KIE_PROMPT_MAX) return prompt
   }
