@@ -498,10 +498,10 @@ export function camaraDeLote(
  * tope ese espacio es la coreografía.
  */
 const REGLA_VIDEO_LIMPIO =
-  'Regla de Video Limpio: No texto en pantalla. No captions. No subtítulos. No overlays. ' +
-  'No títulos. No stickers. No emojis. No flechas. No gráficos. No UI. No watermarks. Solo ' +
-  'personaje, producto y elementos físicos reales del escenario. El texto físicamente ' +
-  'impreso en el producto puede mantenerse como parte del producto.'
+  'Clean video rule: no on-screen text. No captions. No subtitles. No overlays. No titles. ' +
+  'No stickers. No emojis. No arrows. No graphics. No UI. No watermarks. Only the character, ' +
+  'the product and real physical elements of the room. Text physically printed on the product ' +
+  'may stay as part of the product.'
 
 /**
  * LA SECUENCIA DE ACCIONES DE UNA TOMA, NUMERADA — es el corazón de la emisión nueva.
@@ -534,43 +534,50 @@ function accionesNumeradas(t: Lote['tomas'][number], cap: number | null): string
       if (!grupos.length || b.importance !== 'micro') grupos.push([b])
       else grupos[grupos.length - 1].push(b)
     }
-    // ⚠️ UNA LÍNEA DE CONTEXTO Y UNA POR ACCIÓN — es lo que le da a la lista el tamaño del
-    // spec. Sus bullets son cinco por toma; emitir las cuatro casillas de CADA beat da 5×N,
-    // y medido sobre este video eso fueron **15 ítems por toma** (30 en el lote), recortados
-    // por el presupuesto a trece caracteres cada uno.
+    // ⚠️ UNA ORACIÓN DESCRIPTIVA POR EVENTO — pedido explícito del dueño del repo, con su
+    // ejemplo: *"The avatar gently raises the dropper in her left hand and releases a drop of
+    // serum on her left cheek while holding the bottle with her right hand down almost out of
+    // frame"*. No `Mano derecha: …`, que es una etiqueta de campo y no una instrucción.
     //
-    // Y "solo lo que cambia" no alcanza: el refinamiento parafrasea la postura en cada beat
-    // (*"Standing upright" · "Remaining still" · "Subtle shift"*), así que ninguna casilla se
-    // repite literal y no colapsa nada. La postura y la mirada se declaran UNA VEZ, al
-    // arranque, y después cada beat aporta lo único que de verdad avanza: las manos.
-    const a0 = grupos[0][0]
-    const contexto = [limpia(a0.body), limpia(a0.headAndGaze)].filter(Boolean).join(', ')
-    const manos = (b: MotionBeat, previo: MotionBeat | null) => {
-      const cambia = (v: unknown, antes: unknown) => {
-        const x = limpia(v)
-        return x && x !== limpia(antes) ? x : ''
-      }
-      const d = cambia(b.rightHand, previo?.rightHand)
-      const i2 = cambia(b.leftHand, previo?.leftHand)
-      return [d && `Mano derecha: ${d}`, i2 && `Mano izquierda: ${i2}`].filter(Boolean).join('; ')
+    // Se llegó acá por descarte, y las dos formas anteriores fallaron por lados opuestos:
+    // un ítem con cuatro hechos encadenados se ejecuta como un gesto solo, y una línea por
+    // casilla da 5×N ítems que el presupuesto recorta a trece caracteres. Una oración por
+    // evento, con las dos manos tejidas y la transferencia del producto dentro, tiene el
+    // tamaño de los bullets del spec y nombra el instrumento junto a su acción.
+    const g = (x: unknown) => {
+      const v = limpia(x)
+      return v ? v[0].toLowerCase() + v.slice(1) : ''
     }
-    // ⚠️ EL CAMBIO DE ESTADO DEL PRODUCTO SE EMITE EN SU EVENTO, no solo al final del clip.
-    // Es el defecto que reportó el dueño del repo sobre el arranque del anuncio: *"empieza
-    // con el gotero en la mano derecha y de frente aplica el producto en la mejilla, ese es
-    // el primer movimiento de todo el video"*. El dato ESTABA —la cadena decía "Dropper
-    // releasing drop onto cheek"— y esta función solo imprimía el estado del ÚLTIMO beat,
-    // así que la transferencia se perdía y el render hacía el viaje del gotero sin aplicar.
-    const lineas = [contexto]
-    grupos.forEach((g, k) => {
-      const a = g[0]
-      const z = g[g.length - 1]
-      const l = manos(a, k ? grupos[k - 1][0] : null)
-      if (l) lineas.push(l)
-      const antes = limpia(a.productStateBefore)
-      const luego = limpia(z.productStateAfter)
-      if (luego && luego !== antes) lineas.push(`El producto: ${luego}`)
-    })
-    return lineas.filter(Boolean).map(corta)
+    return grupos.map((grupo, k) => {
+      const a = grupo[0]
+      const z = grupo[grupo.length - 1]
+      const previo = k ? grupos[k - 1][0] : null
+      const manos = [
+        g(a.rightHand) && `is ${g(a.rightHand)} with her right hand`,
+        g(a.leftHand) && `her left hand is ${g(a.leftHand)}`,
+      ].filter(Boolean).join(' while ')
+      // El estado del producto solo cuando CAMBIA: es el EVENTO (la gota que sale del gotero
+      // y llega a la piel), y sin él el render hace el viaje del instrumento sin transferir.
+      const producto = limpia(z.productStateAfter) !== limpia(a.productStateBefore)
+        ? g(z.productStateAfter)
+        : ''
+      // La postura y la mirada abren la toma y después solo se repiten si cambian: son
+      // contexto, no acción, y repetirlas en cada oración es el ruido que ya se midió.
+      const postura = !previo || g(a.body) !== g(previo.body) ? g(a.body) : ''
+      const mirada = !previo || g(a.headAndGaze) !== g(previo.headAndGaze) ? g(a.headAndGaze) : ''
+      // ⚠️ SE DEGRADA POR CLÁUSULA, NO CORTANDO A MITAD DE PALABRA. Con el tope en 4.096 la
+      // oración larga se truncaba y quedaba *"…and dropper r…"*: la mitad de una instrucción
+      // no es media instrucción, es ruido. Se suelta primero la mirada y después la postura
+      // —contexto— y nunca las manos ni la transferencia del producto, que son el evento.
+      const arma = (conMirada: boolean, conPostura: boolean) => [
+        conPostura && postura ? `The avatar, ${postura}, ${manos}` : `The avatar ${manos}`,
+        producto && `, and ${producto}`,
+        conMirada && mirada && `, ${mirada}`,
+      ].filter(Boolean).join('') + '.'
+      const frase = [arma(true, true), arma(false, true), arma(false, false)]
+        .find((x) => cap == null || x.length <= cap) ?? arma(false, false)
+      return corta(frase)
+    }).filter(Boolean)
   }
   return partirEnHechos(t.accionVisual).map(corta)
 }
@@ -701,26 +708,26 @@ export function buildLotePrompt(args: {
     && lote.tomas.some((t) => !!t.locucion)
 
   const perfilDeVoz = (v: VoiceProfile) =>
-    `${v.idioma}, variante ${v.varianteRegional}, acento ${v.acento}. Pronunciación ${v.pronunciacion}. ` +
-    `Ritmo ${v.ritmo}, velocidad ${v.velocidad}, entonación ${v.entonacion}, energía ${v.energia}, pausas ${v.pausas}. ` +
-    `Tono ${v.tono}, timbre ${v.timbre}, edad vocal ${v.edadVocal}. Estilo ${v.estilo}.`
+    `${v.idioma}, regional variant ${v.varianteRegional}, accent ${v.acento}. Delivery ${v.pronunciacion}. ` +
+    `Pace ${v.ritmo}, speed ${v.velocidad}, intonation ${v.entonacion}, energy ${v.energia}, pauses ${v.pausas}. ` +
+    `Tone ${v.tono}, timbre ${v.timbre}, vocal age ${v.edadVocal}. Style ${v.estilo}.`
 
   /** Un personaje: cómo se ve, cómo suena y cómo se mueve, entero y sin referencias. */
   const bloqueDe = (p: Personaje) => [
-    `Personaje ${etiqueta(p)}: ${p.consistencyBlock ?? ''}`,
-    p.voiceProfile ? `  Voz de ${etiqueta(p)}: ${perfilDeVoz(p.voiceProfile)}` : '',
+    `Character ${etiqueta(p)}: ${p.consistencyBlock ?? ''}`,
+    p.voiceProfile ? `  Voice of ${etiqueta(p)}: ${perfilDeVoz(p.voiceProfile)}` : '',
     p.motionProfile
-      ? `  Cómo se mueve: ${p.motionProfile.calidadMovimiento} Manerismos: ${p.motionProfile.manerismos}`
+      ? `  How they move: ${p.motionProfile.calidadMovimiento} Mannerisms: ${p.motionProfile.manerismos}`
       : '',
   ].filter(Boolean).join('\n')
 
   const dice = (t: { tiempoOriginal: string }) => {
-    if (off.has(t.tiempoOriginal)) return 'VOZ EN OFF (nadie habla en cuadro)'
+    if (off.has(t.tiempoOriginal)) return 'VOICE-OVER (nobody speaks on camera)'
     // ⚠️ Solo se atribuye cuando hay VARIOS personajes en el clip. Con uno, `P1 dice:` es
     // ruido: no hay a quién confundirlo. Con dos o más, es lo que impide que el modelo le
     // dé toda la línea a la misma persona.
     const gente = quien.get(t.tiempoOriginal) ?? []
-    return varios && gente.length === 1 ? `${etiqueta(gente[0])} dice` : 'Locución'
+    return varios && gente.length === 1 ? `${etiqueta(gente[0])} says` : 'Spoken line'
   }
 
   const render = (nivel: number, capAccion: number | null) => {
@@ -729,51 +736,58 @@ export function buildLotePrompt(args: {
       const ancla = anclas.get(t.tiempoOriginal)
       const acciones = accionesNumeradas(t, capAccion)
       return [
-        `Toma ${t.n} — ${r1(t.duracionSeg)} segundos`,
-        ancla ? `Arranca de @image(${ancla}): mismo encuadre y mismo escenario.` : '',
-        plano ? `Cámara: ${plano}` : '',
+        `Shot ${t.n} — ${r1(t.duracionSeg)} seconds`,
+        ancla ? `Starts from @image(${ancla}): same framing and same room.` : '',
+        plano ? `Camera: ${plano}` : '',
         ...acciones.map((a, k) => `${k + 1}. ${a}`),
         // ⚠️ Una toma muda tiene que DECLARARSE muda: el silencio por omisión es ambiguo
         // para un modelo que genera audio, y ante una toma sin línea rellena con habla
         // inventada.
         t.locucion
           ? `${dice(t)}: “${t.locucion}”`
-          : 'Sin diálogo: la persona NO habla en esta toma. Solo acción y sonido ambiente.',
-        'Texto / Overlay: NINGUNO.',
+          : 'No dialogue: she does NOT speak in this shot. Action and ambient sound only.',
+        'Text / Overlay: NONE.',
         '',
       ].filter((x) => x !== '')
     })
 
     return [
-      'Prompt de Generación Visual (Contexto Absoluto):',
-      `Video UGC vertical 9:16, ${r1(lote.duracionSeg)} segundos, grabado con teléfono en mano con micro-temblor natural.`,
-      `Referencias: ${legend}. Definen APARIENCIA —persona, producto, escenario—, no son tomas a reproducir ni fijan el encuadre.`,
+      'Visual Generation Prompt (absolute context):',
+      `Vertical 9:16 UGC video, ${r1(lote.duracionSeg)} seconds, shot handheld on a phone with natural micro-shake.`,
+      // ⚠️ LA ÚNICA LÍNEA DEL PROMPT QUE HABLA DE IDIOMAS, y no es decorativa: todo el
+      // prompt va en inglés y lo entrecomillado es español que hay que decir literal. Sin
+      // esto el modelo puede traducir la locución, que es el entregable.
+      'Everything below is in English. The quoted lines are Latin American Spanish: speak them EXACTLY as written, never translate them.',
+      `References: ${legend}. They define APPEARANCE — person, product, room — they are not shots to reproduce and they do not set the framing.`,
       '',
       // REGLA DE CONTEXTO ABSOLUTO: el generador no recuerda el lote anterior, así que todo
       // se repite entero. Nunca "el mismo personaje" ni "igual que en el Lote 1".
       ...(varios
-        ? [`En este clip salen ${presentes.length} personas.`, ...presentes.map(bloqueDe)]
-        : [`Personaje: ${consistencyBlock}`]),
+        ? [`${presentes.length} people appear in this clip.`, ...presentes.map(bloqueDe)]
+        : [`Character: ${consistencyBlock}`]),
       '',
       `${spec.productBlock.replace(/:\s*$/, '')}: ${nivel >= NIVEL_PRODUCTO_FISICO ? productoFisico(productDesc) : productDesc}`,
-      spec.wornProduct ? '' : 'El producto existe dentro de la escena —en las manos o sobre una superficie—, nunca como recorte flotante ni a pantalla completa.',
-      ...(nivel < NIVEL_SIN_ESCENARIO && args.escenario ? [`Escenario e iluminación: ${limpiarEscenaDeFoto(args.escenario)}`] : []),
-      `Cámara: ${camara}`,
-      'Continuidad: personaje, vestuario, producto, habitación e iluminación idénticos durante todo el clip. Solo avanza la acción.',
+      spec.wornProduct ? '' : 'The product exists inside the scene — in her hands or resting on a surface — never as a floating cut-out or a full-frame product shot.',
+      ...(nivel < NIVEL_SIN_ESCENARIO && args.escenario ? [`Setting and lighting: ${limpiarEscenaDeFoto(args.escenario)}`] : []),
+      // ⚠️ La línea global de cámara solo cuando el lote NO mezcla planos: con dos, ésta
+      // los concatena con ` · ` (ambigua por construcción) y además cada toma ya declara el
+      // suyo abajo. Son ~90 caracteres diciendo dos veces algo peor.
+      mezclaPlanos ? '' : `Camera: ${camara}`,
+      'Continuity: character, wardrobe, product, room and lighting stay identical throughout the clip. Only the action advances.',
       '',
-      ...(varios ? [] : [`Perfil de Voz y Acento: ${perfilDeVoz(voz)}`]),
+      ...(varios ? [] : [`Voice and accent profile: ${perfilDeVoz(voz)}`]),
       ...(movimiento && !varios && nivel < NIVEL_SIN_MOVIMIENTO
-        ? [`Cómo se mueve: ${movimiento.calidadMovimiento} Manerismos: ${movimiento.manerismos}`]
+        ? [`How she moves: ${movimiento.calidadMovimiento} Mannerisms: ${movimiento.manerismos}`]
         : []),
       ...(todoEnOff
-        ? ['VOZ EN OFF: la narración se OYE pero quien la dice NO está en cuadro. Ninguna boca se mueve y nadie mira a cámara para hablar.']
+        ? ['VOICE-OVER: the narration is HEARD but whoever says it is NOT on camera. No mouth moves and nobody looks at the camera to speak.']
         : []),
       REGLA_VIDEO_LIMPIO,
       '',
-      'Secuencia de Acciones Visuales:',
+      'Visual Action Sequence:',
       ...secuencia,
-      'Guion de Locución Final:',
-      locucionFinal ? `“${locucionFinal}”` : 'Sin diálogo en este lote.',
+      'Final spoken script:',
+      locucionFinal ? `“${locucionFinal}”` : 'No dialogue in this lot.',
     ].filter((x) => x !== '').join('\n')
   }
 

@@ -392,9 +392,9 @@ describe('buildLotePrompt', () => {
 
   it('emite los bloques que el spec exige, con sus rótulos', () => {
     for (const bloque of [
-      'Prompt de Generación Visual (Contexto Absoluto):',
-      'Personaje:', 'Cámara:', 'Continuidad:', 'Perfil de Voz y Acento:',
-      'Regla de Video Limpio:', 'Secuencia de Acciones Visuales:', 'Guion de Locución Final:',
+      'Visual Generation Prompt (absolute context):',
+      'Character:', 'Camera:', 'Continuity:', 'Voice and accent profile:',
+      'Clean video rule:', 'Visual Action Sequence:', 'Final spoken script:',
     ]) expect(p).toContain(bloque)
   })
 
@@ -413,27 +413,27 @@ describe('buildLotePrompt', () => {
 
   // La secuencia va NUMERADA por toma, que es la forma que sí se ejecuta.
   it('numera las acciones de cada toma y cierra cada una con Texto / Overlay', () => {
-    expect(p).toContain('Toma 1 — 4 segundos')
+    expect(p).toContain('Shot 1 — 4 seconds')
     expect(p).toContain('1. accion 1')
-    expect(p).toContain('Toma 2 — 4 segundos')
-    expect(p.split('Texto / Overlay: NINGUNO.').length - 1).toBe(2)
+    expect(p).toContain('Shot 2 — 4 seconds')
+    expect(p.split('Text / Overlay: NONE.').length - 1).toBe(2)
   })
 
   // Es la sincronización audio↔imagen: qué frase va con qué acción. Perderla en un lote y
   // no en otro produjo "una habla muy rápido y la otra muy lento".
   it('cada toma lleva su línea hablada, y el lote su guion final', () => {
     expect(p).toContain('“Hola, te cuento algo.”')
-    expect(p).toContain('Guion de Locución Final:\n“Hola, te cuento algo. Este suero me cambió la piel.”')
+    expect(p).toContain('Final spoken script:\n“Hola, te cuento algo. Este suero me cambió la piel.”')
   })
 
   it('una toma muda se DECLARA muda', () => {
     const mudo = groupIntoLotes([toma(1, 4, '')])[0]
-    expect(buildLotePrompt({ lote: mudo, ...ARGS })).toContain('Sin diálogo')
+    expect(buildLotePrompt({ lote: mudo, ...ARGS })).toContain('No dialogue')
   })
 
   it('no imprime la duración con la basura del float', () => {
     const raro = groupIntoLotes([{ ...toma(1, 0.8854477611940298), locucion: 'x' }])[0]
-    expect(buildLotePrompt({ lote: raro, ...ARGS })).toContain('Toma 1 — 0.9 segundos')
+    expect(buildLotePrompt({ lote: raro, ...ARGS })).toContain('Shot 1 — 0.9 seconds')
   })
 
   it('la cámara que recibe es la que sale en el prompt', () => {
@@ -449,10 +449,10 @@ describe('buildLotePrompt — el escenario', () => {
   const lote = groupIntoLotes([toma(1, 5, 'hola')])[0]
   it('se emite cuando la sesión lo trae', () => {
     const p = buildLotePrompt({ lote, ...ARGS, escenario: 'habitación con estantería de madera' })
-    expect(p).toContain('Escenario e iluminación: habitación con estantería de madera')
+    expect(p).toContain('Setting and lighting: habitación con estantería de madera')
   })
   it('sin escenario no deja el rótulo colgando', () => {
-    expect(buildLotePrompt({ lote, ...ARGS })).not.toContain('Escenario e iluminación')
+    expect(buildLotePrompt({ lote, ...ARGS })).not.toContain('Setting and lighting')
   })
 })
 
@@ -465,22 +465,21 @@ describe('buildLotePrompt — las acciones numeradas', () => {
 
   // El timeline de V2 se REUSA como fuente de la secuencia: sus campos son, uno a uno, lo
   // que pide la REGLA DE ACCIONES del spec. Lo único que se descarta son sus ventanas.
-  // ⚠️ UNA LÍNEA DE CONTEXTO Y UNA POR ACCIÓN, que es el tamaño de los bullets del spec.
-  // El render que lo destapó sacaba el gotero, dejaba caer la gota en el frasco y la gota
-  // "aparecía" en la mejilla, porque "sostiene + levanta + muestra" iban en el mismo ítem.
-  // Pero una línea por CASILLA de cada beat da 5×N ítems y el presupuesto los recorta a
-  // trece caracteres: la postura y la mirada se declaran una vez y cada beat aporta manos.
-  it('declara el contexto una vez y después solo lo que avanza', () => {
+  // ⚠️ UNA ORACIÓN DESCRIPTIVA POR EVENTO, no `Mano derecha: …` — pedido del dueño del repo
+  // con su ejemplo ("The avatar gently raises the dropper in her left hand and releases a
+  // drop of serum on her left cheek while holding the bottle with her right hand"). Se llegó
+  // por descarte: un ítem con cuatro hechos se ejecuta como un gesto solo, y una línea por
+  // casilla da 5×N ítems que el presupuesto recorta a trece caracteres.
+  it('escribe una oración por evento, con las dos manos tejidas', () => {
     const beats = [beat(0, 'major'), beat(1, 'micro'), beat(2, 'major')]
     const t = { ...toma(1, 6, 'hola'), beats }
     const lote = groupIntoLotes([t], new Map([[t.tiempoOriginal, { ...TIMELINE_VACIO, beats }]]))[0]
     const p = buildLotePrompt({ lote, ...ARGS })
-    expect(p).toContain('1. postura 0, mira a cámara')
-    expect(p).toContain('2. Mano derecha: sostiene el frasco; Mano izquierda: izquierda 0')
-    // El beat `micro` se absorbe, y del evento 2 solo avanza la mano izquierda.
-    expect(p).toContain('3. Mano izquierda: izquierda 2')
+    expect(p).toContain('1. The avatar, postura 0, is sostiene el frasco with her right hand while her left hand is izquierda 0, mira a cámara.')
+    // El beat `micro` se absorbe; la postura y la mirada no se repiten si no cambian.
+    expect(p).toContain('2. The avatar, postura 2, is sostiene el frasco with her right hand while her left hand is izquierda 2.')
     expect(p).not.toContain('izquierda 1')
-    expect(p).not.toContain('4. ')
+    expect(p).not.toContain('3. ')
   })
 
   // ⚠️ SIN MARCAS DE TIEMPO. El prompt que sí se ejecuta pide acciones distintas, no un

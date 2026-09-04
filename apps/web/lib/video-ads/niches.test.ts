@@ -34,7 +34,7 @@ describe('niches', () => {
     for (const [n, s] of Object.entries(NICHE_SPEC)) {
       expect(s.wornProduct).toBe(n !== 'suplementos')
       expect(s.avatarNote.length > 0).toBe(s.wornProduct)
-      if (s.wornProduct) expect(s.productBlock).toMatch(/LLEVA PUEST[OA]/) // concuerda con el género de la prenda
+      if (s.wornProduct) expect(s.productBlock).toMatch(/IS WEARING/) // concuerda con el género de la prenda
     }
   })
 })

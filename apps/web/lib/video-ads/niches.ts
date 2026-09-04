@@ -72,7 +72,7 @@ export const NICHE_SPEC: Record<Niche, NicheSpec> = {
     productHint: 'Foto del envase sobre fondo limpio',
     avatarNote: '',
     productBlock:
-      'PRODUCTO (debe verse idéntico a su imagen de referencia — misma forma, etiqueta,\ncolores y texto; nunca lo rediseñes):',
+      'PRODUCT (must look identical to its reference image — same shape, label, colors and text; never redesign it):',
   },
   ropa: {
     label: 'Ropa',
@@ -86,7 +86,7 @@ export const NICHE_SPEC: Record<Niche, NicheSpec> = {
       'con prendas neutras y lisas que no compitan con ella. El vestuario del video ' +
       'original NO se copia: la prenda del usuario lo reemplaza.',
     productBlock:
-      'PRODUCTO — ES LA PRENDA QUE EL PERSONAJE LLEVA PUESTA, no un objeto que sostiene.\nDebe verse idéntica a su imagen de referencia (mismo corte, color, tejido y detalles):',
+      'PRODUCT — IT IS THE GARMENT SHE IS WEARING, not an object she holds. It must look identical to its reference image (same cut, color, fabric and details):',
   },
   zapatos: {
     label: 'Calzado',
@@ -99,7 +99,7 @@ export const NICHE_SPEC: Record<Niche, NicheSpec> = {
       'personaje con prendas neutras que dejen el calzado visible. El calzado del video ' +
       'original NO se copia: el del usuario lo reemplaza.',
     productBlock:
-      'PRODUCTO — ES EL CALZADO QUE EL PERSONAJE LLEVA PUESTO, no un objeto que sostiene.\nDebe verse idéntico a su imagen de referencia (misma forma, color, material y suela):',
+      'PRODUCT — IT IS THE FOOTWEAR SHE IS WEARING, not an object she holds. It must look identical to its reference image (same shape, color, material and sole):',
   },
 }
 
