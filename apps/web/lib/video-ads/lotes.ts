@@ -497,11 +497,32 @@ export function camaraDeLote(
  * escalón de degradación. Dice lo mismo en un tercio del espacio, y con 4.096 caracteres de
  * tope ese espacio es la coreografía.
  */
+/**
+ * ⚠️ UNA LÍNEA, NO QUINCE SINÓNIMOS — MEDIDO CON 4 RENDERS (`scripts/probe-overlay.ts`).
+ * Este bloque decía la misma orden quince veces (*"No captions. No subtitles. No overlays.
+ * No titles. No stickers. No emojis…"*), 313 caracteres. A/B con 2 draws por brazo sobre el
+ * mismo lote: **los 20 fotogramas de los cuatro clips salen sin un solo carácter de texto,
+ * sin watermark y sin UI**, con el bloque completo y con éste. Los sinónimos no compran
+ * nada observable.
+ *
+ * ✅ Y el premio se midió ANTES de gastar, sobre los 146 lotes reales: **completos 99 → 105
+ * y sin movimiento 30 → 25**. Seis lotes recuperan el prompt entero y cinco recuperan el
+ * bloque de movimiento — el mismo orden de magnitud que los tres cambios de orden.
+ *
+ * ⚠️ LAS DOS ÚLTIMAS FRASES NO SE COMPRIMEN MÁS, y no son relleno: *"Only the character,
+ * the product and the real room"* es lo que impide que aparezcan objetos inventados, y
+ * *"Text printed on the product itself stays"* es lo que impide que el modelo BORRE la
+ * etiqueta del frasco al obedecer la prohibición de texto.
+ *
+ * ⚠️ LO QUE NO SE MIDIÓ: la tasa base de fuga. No hubo brazo SIN bloque, así que esto dice
+ * que comprimir no introduce texto, **no** que el bloque sobre. Y no debe medirse a la
+ * ligera: 36 de 36 análisis guardados detectan subtítulos o watermark en su original, así
+ * que publicar un clip con una caption quemada de otra marca es un riesgo real y el
+ * fail-safe es conservar la protección.
+ */
 const REGLA_VIDEO_LIMPIO =
-  'Clean video rule: no on-screen text. No captions. No subtitles. No overlays. No titles. ' +
-  'No stickers. No emojis. No arrows. No graphics. No UI. No watermarks. Only the character, ' +
-  'the product and real physical elements of the room. Text physically printed on the product ' +
-  'may stay as part of the product.'
+  'Clean video rule: no on-screen text or graphics of any kind — no captions, watermarks, ' +
+  'UI. Only the character, the product and the real room. Text printed on the product itself stays.'
 
 /**
  * LA SECUENCIA DE ACCIONES DE UNA TOMA, NUMERADA — es el corazón de la emisión nueva.

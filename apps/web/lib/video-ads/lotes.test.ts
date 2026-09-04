@@ -517,6 +517,17 @@ describe('buildLotePrompt — la coreografía va ARRIBA', () => {
     expect(acciones).toBeLessThan(p.indexOf('Camera:'))
   })
 
+  // ⚠️ EL BLOQUE DE VIDEO LIMPIO YA SE COMPRIMIÓ UNA VEZ (313 → 183, medido con 4 renders).
+  // Estas dos frases son lo que queda y NO son relleno: la primera impide objetos inventados,
+  // la segunda impide que el modelo BORRE la etiqueta del frasco al obedecer la prohibición
+  // de texto. Un recorte futuro que se las lleve se ve acá.
+  it('la regla de video limpio conserva las dos frases que no son sinónimos', () => {
+    expect(p).toContain('Only the character, the product and the real room')
+    expect(p).toContain('Text printed on the product itself stays')
+    // Y no vuelve a la letanía de quince sinónimos.
+    expect(p).not.toContain('No stickers.')
+  })
+
   // ⚠️ MEDIDO CON 4 RENDERS (`scripts/probe-cita-imagen.ts`, 2 draws por brazo): con la
   // leyenda `@image(n)` arriba y sin volver a nombrarla, la etiqueta del producto sale
   // legible en 1 de 2 y el gotero no se separa del frasco en ninguno; citando `<IMAGE_n>`

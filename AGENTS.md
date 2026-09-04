@@ -1074,6 +1074,43 @@ El orden de la escalera es su propia regla: **lo que se suelta primero es lo que
 
 ⚠️ **LO QUE NO SE HIZO, y por qué.** La guía de prompting de grok que originó esto trae 20 consejos y la mayoría ya están implementados o ya fueron REFUTADOS acá: *"una acción principal por clip"* falló la replicación 2 de 3 veces (ver arriba, `n = 3`) y *"los prompts negativos no son fiables"* choca con los 7 clips sin un solo carácter de texto que produce `BLOQUE_OVERLAY`. Los que SÍ eran ejes nuevos —un solo movimiento de cámara (#6) y verbos de física (#11)— son cambios del prompt de FASE 1, o sea el paso caro, y solo alcanzarían a los análisis NUEVOS.
 
+✅ **LOS QUINCE SINÓNIMOS DEL BLOQUE DE VIDEO LIMPIO NO COMPRAN NADA — 4 RENDERS
+(`scripts/probe-overlay.ts`, 2026-09-04).** `REGLA_VIDEO_LIMPIO` decía la misma orden quince veces
+(*"No captions. No subtitles. No overlays. No titles. No stickers. No emojis…"*), 313 caracteres.
+Este documento ya tenía medido que el bloque **funciona** —7 clips sin un carácter de texto sobre
+originales saturados de subtítulos y watermark de TikTok— pero **nunca hubo brazo de control**, así
+que no se sabía si protegían los sinónimos o la orden a secas.
+
+✅ **EL PREMIO SE MIDIÓ ANTES DE GASTAR**, sobre los 146 lotes reales (lectura pura): comprimiendo
+a 183 caracteres, **completos 99 → 105 y sin movimiento 30 → 25**. Seis lotes recuperan el prompt
+entero y cinco recuperan el bloque de movimiento — el mismo orden de magnitud que los tres cambios
+de orden. Sin ese número el A/B no valía la pena; con él, sí.
+
+| | texto en pantalla, en los 5 fotogramas |
+|---|---|
+| **A1 · A2** (bloque completo, 313 car.) | ✅ ninguno |
+| **B1 · B2** (una línea, 183 car.) | ✅ ninguno |
+
+**Los 20 fotogramas de los cuatro clips salen sin un solo carácter de texto, sin watermark y sin
+UI.** Costo: **$0,90** los cuatro renders.
+
+⚠️ **LAS DOS ÚLTIMAS FRASES NO SE COMPRIMEN MÁS, y no son relleno:** *"Only the character, the
+product and the real room"* es lo que impide objetos inventados, y *"Text printed on the product
+itself stays"* es lo que impide que el modelo **BORRE la etiqueta del frasco** al obedecer la
+prohibición de texto. Hay un test que exige las dos y que la letanía no vuelva.
+
+⚠️ **LO QUE NO SE MIDIÓ, y no hay que leerlo como medido: la tasa base de fuga.** No hubo brazo SIN
+bloque, así que esto dice que **comprimir no introduce texto**, no que el bloque sobre. Y ese
+experimento no conviene: 36 de 36 análisis guardados detectan subtítulos o watermark en su original,
+publicar un clip con una caption quemada de otra marca es un riesgo real, y el fail-safe es
+conservar la protección. `n = 2` por brazo, un lote, una sesión.
+
+⚠️ **`scriptFingerprint` v16 → v17.** Cambia la plantilla del prompt.
+
+⚠️ **EL PROBE SE INVIRTIÓ AL ADOPTAR EL RESULTADO:** el brazo A reconstruye el bloque LARGO, porque
+el corto ya es lo que emite el código. Sin eso el probe deja de ser re-corrible — mismo criterio que
+`probe-setting.ts` con el escenario.
+
 ✅ **EL ESCENARIO DEJA DE VIAJAR COMO TEXTO — MEDIDO CON 4 RENDERS (2026-09-02, `scripts/probe-setting.ts`).** Es el consejo #1 de esa guía (*"la imagen define la escena; el prompt define lo que cambia"*) y era el único con respaldo propio: el A/B de prompt ya había medido que el 38 % del largo da el mismo clip, pero con **n = 1**, y este documento tiene tres rondas perdidas por exactamente ese error.
 
 `SETTING AND LIGHTING: ${escenario}` salía de `forensic.fondo`, que describe el **video ENTERO** dentro del prompt de UN clip (de ahí el sillón de la sesión de ropa). Contra la imagen del avatar —que ES la escena, en píxeles— eso es una contradicción, y el modelo la resuelve distinto en cada draw. Ese es el mecanismo de la costura que se ve al concatenar: *"el FONDO cambia entre clips"*.

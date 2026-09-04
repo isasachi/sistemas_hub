@@ -235,7 +235,9 @@ export function scriptFingerprint(input: {
     // vuelve a nombrar, a `<IMAGE_n>` citado DENTRO de la cláusula del personaje y del
     // producto — la forma del ejemplo oficial de xAI. Mismo motivo de bump: la huella no ve
     // el texto emitido.
-    'v16',
+    // v16 → v17: el bloque de video limpio pasa de quince sinónimos a una línea (313 → 183
+    // caracteres). Mismo motivo de bump.
+    'v17',
     // Pasa por `toNiche`: un nicho BLOQUEADO se renderiza como suplementos, así que su
     // huella tiene que ser la de suplementos. Sin esto, una sesión guardada como 'ropa'
     // con lotes ya pagados reanudaría pegando un clip del camino de prenda a uno del
