@@ -48,7 +48,7 @@ import {
   buildMotionRefinementInstruction, MotionRefinementSchema,
   corteMuestraPersona, type ForensicReport,
 } from '../lib/video-ads/forensic'
-import { normalizeMotionTimeline, compileAccion, tieneMotion, type MotionTimeline } from '../lib/video-ads/motion'
+import { normalizeMotionTimeline, compileAccion, tieneMotion, type MotionBeat, type MotionTimeline } from '../lib/video-ads/motion'
 import { personajesDe } from '../lib/video-ads/personajes'
 
 const SALIDA = process.env.PROBE_OUT ?? `${process.env.HOME}/Downloads/probe-motion-lock`
@@ -98,6 +98,50 @@ async function describir(url: string) {
       '- `resumen`: una frase con lo que pasa en el clip entero.',
     ].join('\n') },
   ])
+}
+
+/**
+ * Agrupa los beats en EVENTOS y los escribe como ORACIONES.
+ *
+ * ⚠️ NACE DE UN CONTRAEJEMPLO: el dueño del repo generó desde el wizard de KIE un clip que
+ * SÍ ejecuta la coreografía —suelta la gota en la mejilla, la masajea, y lleva el frasco al
+ * pecho— con un prompt que pide **dos o tres eventos distintos escritos como oraciones**,
+ * sin marcas de tiempo por acción. El nuestro pedía SEIS ventanas de 1,5 s en telegrama, y
+ * cinco de las seis eran la misma acción rebanada (*"Massaging skin" · "Rubbing cheek" ·
+ * "Massaging cheek area" · "Patting serum into skin"*). Un modelo que no puede distinguir
+ * un tramo del siguiente hace un gesto genérico y se queda quieto.
+ *
+ * El corte en eventos usa `importance`, que ya existe para esto: **un evento nuevo empieza
+ * en cada beat `major` o `supporting`, y los `micro` se absorben en el anterior** — el mismo
+ * criterio con el que la escalera de degradación ya trata a los `micro` como textura.
+ *
+ * Las casillas del beat vienen en gerundio ("Rubbing cheek"), así que la oración se arma
+ * con "is …ing" y sale bien sin conjugar nada.
+ */
+function compileEventos(beats: MotionBeat[]): string {
+  const bajo = (x: unknown) => {
+    const t = String(x ?? '').trim().replace(/\.+$/, '')
+    return t ? t[0].toLowerCase() + t.slice(1) : ''
+  }
+  const grupos: MotionBeat[][] = []
+  for (const b of beats) {
+    if (!grupos.length || b.importance !== 'micro') grupos.push([b])
+    else grupos[grupos.length - 1].push(b)
+  }
+  return grupos.map((g) => {
+    const p = g[0]
+    const u = g[g.length - 1]
+    const manos = [p.leftHand && `her left hand is ${bajo(p.leftHand)}`,
+                   p.rightHand && `her right hand is ${bajo(p.rightHand)}`]
+      .filter(Boolean).join(' while ')
+    // El evento tiene principio Y FIN, como en el prompt que sí funcionó ("touches the
+    // drop, beginning to massage"). Sin el cierre, agrupar sería simplemente perder los
+    // últimos beats del grupo.
+    const cierra = u !== p && u.leftHand && u.leftHand !== p.leftHand
+      ? `, and finishes with her left hand ${bajo(u.leftHand)}`
+      : ''
+    return `${manos}${cierra}.`
+  }).join(' Then, ')
 }
 
 async function esperar(taskId: string, key: string, etiqueta: string): Promise<string | null> {
@@ -262,6 +306,17 @@ async function main() {
   }
   const promptA = buildLotePrompt({ lote: control, ...comun })
   const promptB = buildLotePrompt({ lote, ...comun })
+  // ── BRAZO C: los MISMOS beats agrupados en eventos y en prosa, sin ventanas. Va por el
+  // camino de `accionVisual` (sin beats no hay candado), o sea el mismo slot del prompt que
+  // usa producción hoy — lo único que cambia es qué se escribe ahí.
+  const eventos = {
+    ...lote,
+    tomas: lote.tomas.map((t) => ({
+      ...t, beats: undefined, startState: undefined, endState: undefined,
+      accionVisual: t.beats?.length ? compileEventos(t.beats) : t.accionVisual,
+    })),
+  }
+  const promptC = buildLotePrompt({ lote: eventos, ...comun })
 
   // Con el MISMO corrimiento que usa el prompt: el juez tiene que leer el mismo reloj que
   // el modelo, o estaría midiendo la sincronía contra ventanas que nadie pidió.
@@ -271,8 +326,10 @@ async function main() {
   })
   console.log(`\nsesión ${id.slice(0, 8)} · lote ${lote.n} de ${conCandado.length} · ` +
     `${lote.duracionSeg}s · ${lote.tomas.length} toma(s) · ${beats.length} beats`)
-  console.log(`  A (prosa):   ${promptA.length} caracteres`)
-  console.log(`  B (candado): ${promptB.length} caracteres`)
+  console.log(`  A (prosa telegrama, ya medido y perdido): ${promptA.length} caracteres`)
+  console.log(`  B (candado):  ${promptB.length} caracteres`)
+  console.log(`  C (eventos):  ${promptC.length} caracteres`)
+  console.log(`\n  C dice: ${eventos.tomas.map((t) => t.accionVisual).join(' / ')}`)
 
   // Los tres guards que impiden gastar 4 renders midiendo nada.
   if (!promptB.includes('TIMED MOTION')) throw new Error('El brazo B no lleva candado: los beats no llegaron al prompt')
@@ -305,7 +362,9 @@ async function main() {
   if (process.env.PROBE_DRY) { console.log(`\nPROBE_DRY: prompts en ${SALIDA}, no se creó ninguna tarea.`); return }
 
   const dur = clampDuration(lote.duracionSeg, chars, lote.tomas.length)
-  const brazos = [['A1', promptA], ['A2', promptA], ['B1', promptB], ['B2', promptB]] as const
+  // B contra C: la prosa telegrama (A) ya se midió dos veces y no gana, así que gasta
+  // renders sin responder nada nuevo. Se conserva armado para poder volver a pedirla.
+  const brazos = [['B1', promptB], ['B2', promptB], ['C1', promptC], ['C2', promptC]] as const
   const tareas = await Promise.all(brazos.map(async ([et, prompt]) => {
     const taskId = await createVideoTask(
       { images: comun.images, prompt, durationSec: dur, locucionChars: chars, tomas: lote.tomas.length }, key)
