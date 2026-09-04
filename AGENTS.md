@@ -504,6 +504,48 @@ revirtiendo cada uno). El de la escalera hubo que escribirlo con cuidado para qu
 es cierto con el orden nuevo es que **en el escalón donde la etiqueta ya se recortó, el movimiento
 siga estando**.
 
+✅ **LA CITA DE LAS IMÁGENES SE MUDA A LA CLÁUSULA — 4 RENDERS, 2 DRAWS POR BRAZO
+(`scripts/probe-cita-imagen.ts`, 2026-09-04).** El repo declaraba una LEYENDA en la primera línea
+(`References: @image(1) = la persona · @image(2) = el producto`) y después **no la volvía a nombrar
+nunca** en el cuerpo. El ejemplo oficial de xAI hace lo contrario: cita la referencia DENTRO de la
+frase que la usa (*"The woman from `<IMAGE_1>`… the shirt from `<IMAGE_2>`"*).
+
+⚠️ **LA VARIABLE NO ES EL TOKEN, ES DÓNDE SE CITA — y hay que leerlo así.** Por KIE el prompt es
+texto libre que se reenvía a grok: ni `@image(2)` ni `<IMAGE_2>` los parsea ningún deserializador,
+los dos son palabras. Con dos imágenes, persona y producto se distinguen solas por contenido, así
+que cambiar solo el token sería un no-op. Lo que puede mover la aguja es que el rol viaje **pegado a
+la descripción que lo usa**. El brazo B cambió las dos cosas juntas porque ésa es la forma
+documentada; **si hace falta aislar cuál mitad ganó, ese A/B está sin hacer.**
+
+Mismo lote (`7e4ccbcf` lote 1, 10,4 s), diff de **3 líneas** entre brazos:
+
+| | etiqueta del frasco legible | la apertura con el gotero |
+|---|---|---|
+| **A1** (leyenda `@image(n)`) | ❌ etiqueta genérica, texto ilegible | ❌ nunca separa el gotero |
+| **A2** (leyenda `@image(n)`) | ✅ *"Niacinamide 10"* en 3 de 5 cuadros | ~ algo en la mano, el gotero no llega a la cara |
+| **B1** (`<IMAGE_n>` en la cláusula) | ✅ *"La Roche-Posay · Niacinamide 10"* | ✅ **gotero afuera y junto a la mejilla**, cuadros 1-2 |
+| **B2** (`<IMAGE_n>` en la cláusula) | ✅ la más legible de las cuatro | ✅ **gotero afuera y junto a la cara**, cuadros 1-2 |
+
+**B: 2 de 2 en los dos observables. A: 1 de 2 y 0 de 2.** Costo: **$0,90 los cuatro renders**
+(45 créditos cada uno).
+
+⚠️ **EL OBSERVABLE FUERTE ES LA ETIQUETA, NO EL GOTERO.** Que el gotero salga es coreografía, y
+este documento tiene medido tres veces que ahí manda la varianza del seed (`n = 3` en el A/B de un
+beat por clip). La etiqueta es binding de la imagen del producto, que es justamente lo que la cita
+declara. Con n=2 por brazo esto **no es un efecto medido, es una señal favorable** — lo que hace
+adoptable el cambio es que sale gratis, no que esté probado.
+
+✅ **Y el "gratis" está medido, no supuesto: 146 lotes reales, +57 caracteres cada uno, y CERO
+bajan de escalón** en la escalera de degradación. Era la única forma en que este cambio podía hacer
+daño (empujar un lote a soltar el movimiento o a truncar la coreografía) y no ocurre.
+
+⚠️ **`scriptFingerprint` v15 → v16**, por el motivo de siempre: la huella hashea insumos, no el
+texto emitido.
+
+⚠️ **Con varios personajes la cláusula NO se toca.** `bloqueDe` emite `Character P1: …` y ahí no hay
+un mapeo imagen→personaje en esa función; solo cambia el token de la leyenda. Es el camino sin
+ejercitar (medido: de 18 sesiones con lista de personajes, ninguna tiene más de uno).
+
 ⚠️ **`scriptFingerprint` v12 → v13**, y los ESTADOS salen del hash: el prompt ya no los emite, y hashear un insumo que el prompt no lee es el espejo del bug que esa función existe para evitar. Los beats SÍ se siguen hasheando, porque son la fuente de las acciones numeradas.
 
 **Herramienta de control: `scripts/probe-prompt-lote.ts`** imprime el prompt real de cualquier lote de una sesión guardada, con los mismos insumos que la ruta. Cero llamadas a modelos, cero renders. Es lo que hay que leer al lado del ejemplo del spec antes de gastar nada.

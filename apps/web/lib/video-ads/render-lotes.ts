@@ -231,7 +231,11 @@ export function scriptFingerprint(input: {
     // soltarse ÚLTIMO en vez de segundo). La huella hashea INSUMOS y no el texto producido,
     // así que un cambio de plantilla le es invisible: sin el bump, reanudar pegaría un clip
     // con el prompt viejo a uno con el nuevo mientras `isPaidResume` jura que es lo mismo.
-    'v15',
+    // v15 → v16: la cita de las imágenes pasa de una LEYENDA `@image(n)` que después nadie
+    // vuelve a nombrar, a `<IMAGE_n>` citado DENTRO de la cláusula del personaje y del
+    // producto — la forma del ejemplo oficial de xAI. Mismo motivo de bump: la huella no ve
+    // el texto emitido.
+    'v16',
     // Pasa por `toNiche`: un nicho BLOQUEADO se renderiza como suplementos, así que su
     // huella tiene que ser la de suplementos. Sin esto, una sesión guardada como 'ropa'
     // con lotes ya pagados reanudaría pegando un clip del camino de prenda a uno del

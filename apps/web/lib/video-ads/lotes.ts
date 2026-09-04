@@ -710,7 +710,12 @@ export function buildLotePrompt(args: {
   const planoPorToma = (i: number) =>
     mezclaPlanos && planos[i] && planos[i] !== planos[i - 1] ? planos[i] : ''
 
-  const legend = images.map((img, i) => `@image(${i + 1}) = ${img.role}`).join(' · ')
+  // ⚠️ `<IMAGE_n>` Y CITADO DENTRO DE LA CLÁUSULA, no una leyenda que después nadie nombra.
+  // Es la forma del ejemplo oficial de xAI ("The woman from <IMAGE_1>… the shirt from
+  // <IMAGE_2>") y está medida con 4 renders (`scripts/probe-cita-imagen.ts`) — ver AGENTS.md.
+  // Ni `@image(2)` ni `<IMAGE_2>` los parsea ningún deserializador: por KIE el prompt es texto
+  // libre. Lo que cambia es que el rol viaja PEGADO a la descripción que lo usa.
+  const legend = images.map((img, i) => `<IMAGE_${i + 1}> = ${img.role}`).join(' · ')
   const locucionFinal = lote.tomas.map((t) => t.locucion).filter(Boolean).join(' ')
   const todoEnOff = lote.tomas.length > 0
     && lote.tomas.every((t) => !t.locucion || off.has(t.tiempoOriginal))
@@ -746,7 +751,7 @@ export function buildLotePrompt(args: {
       const acciones = accionesNumeradas(t, capAccion)
       return [
         `Shot ${t.n} — ${r1(t.duracionSeg)} seconds`,
-        ancla ? `Starts from @image(${ancla}): same framing and same room.` : '',
+        ancla ? `Starts from <IMAGE_${ancla}>: same framing and same room.` : '',
         plano ? `Camera: ${plano}` : '',
         ...acciones.map((a, k) => `${k + 1}. ${a}`),
         // ⚠️ Una toma muda tiene que DECLARARSE muda: el silencio por omisión es ambiguo
@@ -784,9 +789,9 @@ export function buildLotePrompt(args: {
       // se repite entero. Nunca "el mismo personaje" ni "igual que en el Lote 1".
       ...(varios
         ? [`${presentes.length} people appear in this clip.`, ...presentes.map(bloqueDe)]
-        : [`Character: ${consistencyBlock}`]),
+        : [`Character — the person from <IMAGE_1>: ${consistencyBlock}`]),
       '',
-      `${spec.productBlock.replace(/:\s*$/, '')}: ${nivel >= NIVEL_PRODUCTO_FISICO ? productoFisico(productDesc) : productDesc}`,
+      `${spec.productBlock.replace(/:\s*$/, '')} — the product from <IMAGE_2>: ${nivel >= NIVEL_PRODUCTO_FISICO ? productoFisico(productDesc) : productDesc}`,
       spec.wornProduct ? '' : 'The product exists inside the scene — in her hands or resting on a surface — never as a floating cut-out or a full-frame product shot.',
       ...(nivel < NIVEL_SIN_ESCENARIO && args.escenario ? [`Setting and lighting: ${limpiarEscenaDeFoto(args.escenario)}`] : []),
       // ⚠️ La línea global de cámara solo cuando el lote NO mezcla planos: con dos, ésta

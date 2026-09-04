@@ -393,7 +393,7 @@ describe('buildLotePrompt', () => {
   it('emite los bloques que el spec exige, con sus rótulos', () => {
     for (const bloque of [
       'Visual Generation Prompt (absolute context):',
-      'Character:', 'Camera:', 'Continuity:', 'Voice and accent profile:',
+      'Character — the person from <IMAGE_1>:', 'Camera:', 'Continuity:', 'Voice and accent profile:',
       'Clean video rule:', 'Visual Action Sequence:', 'Final spoken script:',
     ]) expect(p).toContain(bloque)
   })
@@ -513,8 +513,20 @@ describe('buildLotePrompt — la coreografía va ARRIBA', () => {
   it('la secuencia de acciones precede al bloque de personaje y al de producto', () => {
     const acciones = p.indexOf('Visual Action Sequence:')
     expect(acciones).toBeGreaterThan(-1)
-    expect(acciones).toBeLessThan(p.indexOf('Character:'))
+    expect(acciones).toBeLessThan(p.indexOf('Character — the person from <IMAGE_1>:'))
     expect(acciones).toBeLessThan(p.indexOf('Camera:'))
+  })
+
+  // ⚠️ MEDIDO CON 4 RENDERS (`scripts/probe-cita-imagen.ts`, 2 draws por brazo): con la
+  // leyenda `@image(n)` arriba y sin volver a nombrarla, la etiqueta del producto sale
+  // legible en 1 de 2 y el gotero no se separa del frasco en ninguno; citando `<IMAGE_n>`
+  // DENTRO de la cláusula —la forma del ejemplo oficial de xAI— la etiqueta sale legible en
+  // 2 de 2 y la apertura con el gotero se ejecuta en 2 de 2.
+  it('cita <IMAGE_n> dentro de la cláusula y no deja ningún @image(n) suelto', () => {
+    expect(p).toMatch(/References: <IMAGE_1> = .+ · <IMAGE_2> = /)
+    expect(p).toContain('Character — the person from <IMAGE_1>:')
+    expect(p).toMatch(/the product from <IMAGE_2>:/)
+    expect(p).not.toMatch(/@image\(/)
   })
 
   // La locución final sigue cerrando el prompt: es el contrato de idioma y el test de arriba
