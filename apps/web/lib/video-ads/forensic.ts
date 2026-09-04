@@ -1240,6 +1240,19 @@ export function buildForensicInstruction(): string {
     'Si la mano está ocupada con equipo, describe solo dónde está la mano y qué hace la',
     'otra — nunca el objeto.',
     '',
+    '⚠️ EL DIÁLOGO DE UN CORTE ES SOLO LO QUE SE DICE DENTRO DE SU VENTANA.',
+    'Pegar todos los `dialogo` en orden tiene que reconstruir `guionOriginal` EXACTO: sin',
+    'repetir una frase en dos cortes, sin dejar ninguna afuera y sin adelantar a un corte lo',
+    'que se dice en el siguiente. El código lo comprueba y lo reporta.',
+    'Medido, y las dos formas de romperlo aparecieron en la misma corrida: dos cortes',
+    'seguidos devolvieron LA MISMA frase (82 caracteres duplicados que inflaron el guión un',
+    '19 %), y un corte de 4 segundos se llevó 163 caracteres —dos frases que en el video van',
+    'de 0 a 10 s—, o sea 40 car/s, el doble de lo que una persona puede decir.',
+    '',
+    '⚠️ SI EL TEXTO NO ENTRA EN LA VENTANA, EL CORTE ESTÁ MAL PARTIDO. Un ritmo normal son',
+    '15-18 caracteres por segundo. Antes de meterle a un corte más texto del que cabe, revisa',
+    'dónde está su límite real: casi siempre hay un corte de edición ahí que no se detectó.',
+    '',
     'LA `accion` DE CADA CORTE ES COREOGRAFÍA, NO RESUMEN.',
     'Lo que se reconstruye después es un video: si la acción dice "muestra el producto",',
     'el generador inventa un gesto cualquiera y el resultado deja de parecerse al',
@@ -1654,6 +1667,80 @@ export function limpiarDialogos(report: ForensicReport): ForensicReport {
 const soloPalabras = (x: string) =>
   (x ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
     .replace(/[^a-z0-9ñ ]+/g, ' ').replace(/\s+/g, ' ').trim()
+
+/**
+ * ¿EL REPARTO DEL DIÁLOGO ENTRE CORTES RECONSTRUYE EL GUION? — solo REPORTA, nunca repara.
+ *
+ * ⚠️ ES EL DEFECTO QUE CONTAMINA TODO CUESTA ABAJO, y estuvo invisible hasta que se midió el
+ * ritmo del habla de un clip. Medido sobre `7e4ccbcf`:
+ *   - los cortes **2 y 3 traían LA MISMA línea** (*"Este es el serum antienvejecimiento de la
+ *     marca Apivita y se llama Beevine Elixir."*), 82 caracteres duplicados que inflaron el
+ *     guión adaptado un 19 % (903 contra 760);
+ *   - el corte 1 traía **163 caracteres en una ventana de 4 s** — 40 car/s, el doble de lo
+ *     decible — porque se le asignaron dos frases que en el original van de 0 a 10 s.
+ *
+ * Y el segundo se auto-ocultaba: `repairCutTiming` infla ese corte a 8,2 s tomando tiempo de
+ * los que tienen holgura, así que el análisis guardado se ve consistente y lo único que se
+ * nota, tres pasos más abajo, es que **el clip habla a 20 car/s contra los 16,3 del
+ * original**. Por eso el chequeo mira la VENTANA (`tiempo`) y no la duración reparada.
+ *
+ * ⚠️ NO REPARA, y la diferencia con `verificarHablantes` es deliberada: aquél tiene un
+ * fallback seguro —descartar la atribución y quedarse con `dialogo`, que es el comportamiento
+ * de siempre— y un reparto mal partido no lo tiene. Adivinar dónde va cada frase sería
+ * inventar el corte. Así que se LOGUEA y se muestra, como `coreografiaEscasa` y
+ * `desalineadas`: el arreglo es re-analizar o corregir a mano, y para eso hay que verlo.
+ */
+export interface ProblemaDialogo { corte: number; motivo: string }
+
+export function verificarDialogos(report: ForensicReport): ProblemaDialogo[] {
+  const cortes = Array.isArray(report?.cortes) ? report.cortes : []
+  const problemas: ProblemaDialogo[] = []
+
+  // 1. DUPLICACIÓN — no es un juicio: dos cortes con el mismo texto es un error de reparto.
+  const vistos = new Map<string, number>()
+  for (const c of cortes) {
+    const clave = soloPalabras(c.dialogo ?? '')
+    if (!clave) continue
+    const antes = vistos.get(clave)
+    if (antes !== undefined) problemas.push({ corte: c.n, motivo: `repite el diálogo del corte ${antes}` })
+    else vistos.set(clave, c.n)
+  }
+
+  // 2. OMISIÓN / SOBRANTE — la concatenación tiene que reconstruir el guion.
+  const junto = soloPalabras(cortes.map((c) => c.dialogo ?? '').join(' '))
+  const guion = soloPalabras(report?.guionOriginal ?? '')
+  if (guion && junto !== guion) {
+    const dif = junto.length - guion.length
+    problemas.push({
+      corte: 0,
+      motivo: `la suma de los diálogos no reconstruye el guion (${dif > 0 ? '+' : ''}${dif} caracteres)`,
+    })
+  }
+
+  // 3. NO CABE EN SU VENTANA — contra `tiempo`, no contra la duración ya reparada.
+  for (const c of cortes) {
+    const ventana = segundosDeVentana(c.tiempo)
+    const largo = (c.dialogo ?? '').length
+    if (!ventana || !largo) continue
+    const cps = largo / ventana
+    if (cps > CPS_MAX) {
+      problemas.push({
+        corte: c.n,
+        motivo: `${largo} caracteres en una ventana de ${ventana.toFixed(1)} s = ${cps.toFixed(1)} car/s (el techo decible es ${CPS_MAX})`,
+      })
+    }
+  }
+  return problemas
+}
+
+/** Segundos que abarca una ventana `"00:04 - 00:10"`. `0` si no se puede leer. */
+function segundosDeVentana(tiempo: string): number {
+  const m = String(tiempo ?? '').match(/(\d+):(\d+)\s*-\s*(\d+):(\d+)/)
+  if (!m) return 0
+  const a = Number(m[1]) * 60 + Number(m[2])
+  const b = Number(m[3]) * 60 + Number(m[4])
+  return b > a ? b - a : 0
+}
 
 /**
  * Verifica que el desglose por hablante REPRODUZCA el diálogo del corte.

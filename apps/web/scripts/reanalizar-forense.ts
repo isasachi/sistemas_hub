@@ -29,7 +29,7 @@ import { callVideoAds } from '../lib/video-ads/llm'
 import {
   ForensicReportSchema, buildForensicInstruction, buildMotionRefinementInstruction,
   MotionRefinementSchema, limpiarDialogos, verificarHablantes, reconciliarConVentana,
-  repairCutTiming, type ForensicReport,
+  repairCutTiming, verificarDialogos, type ForensicReport,
 } from '../lib/video-ads/forensic'
 import {
   normalizeMotionTimeline, validateMotionTimeline, objetoEnManoFromMotion, compileAccion, tieneMotion,
@@ -106,6 +106,12 @@ async function main() {
     }
   }
 
+  // ⚠️ EL REPARTO DEL DIÁLOGO, que es el defecto que contamina todo cuesta abajo. Se imprime
+  // SIEMPRE porque es lo que decide si el análisis nuevo sirve o hay que volver a pedirlo.
+  const problemas = verificarDialogos(final)
+  console.log(`\nreparto del diálogo: ${problemas.length ? `${problemas.length} problema(s)` : 'sin problemas'}`)
+  for (const x of problemas) console.log(`  corte ${x.corte}: ${x.motivo}`)
+
   // ⚠️ El guión adaptado se emparejó con las ventanas VIEJAS.
   const viejas = new Set((r.forensic_analysis?.cortes ?? []).map((c) => c.tiempo))
   const nuevas = new Set(final.cortes.map((c) => c.tiempo))
@@ -116,6 +122,18 @@ async function main() {
     ` · tomas del guión que se quedan sin corte: ${huerfanas} de ${tomas.length}`)
 
   if (!escribir) { console.log('\n(sin --write no se guardó nada)'); return }
+
+  // ⚠️ NO SE PERSISTE UN ANÁLISIS CON EL DIÁLOGO MAL REPARTIDO. El forense es estocástico:
+  // dos corridas seguidas sobre el MISMO video dieron 5 cortes limpios y 3 cortes con dos
+  // problemas. Guardar la tirada mala contamina la plantilla, el guión y los cinco prompts
+  // de render, y el síntoma aparece recién en el clip. Volver a correr cuesta dos llamadas;
+  // descontaminar la sesión cuesta rehacerla entera. `--force` existe para el caso en que
+  // el problema esté en el video y no en la tirada.
+  if (problemas.length && !process.argv.includes('--force')) {
+    console.log('\n⛔ NO se guardó: el reparto del diálogo tiene problemas. Volvé a correrlo')
+    console.log('   (el forense es estocástico) o forzalo con --force si el defecto es del video.')
+    process.exit(2)
+  }
   if (huerfanas) {
     console.log('\n⚠️ Se guarda igual, pero el guión adaptado quedó desincronizado:')
     console.log('   hay que volver al paso de plantilla y re-adaptar el guión en el wizard.')

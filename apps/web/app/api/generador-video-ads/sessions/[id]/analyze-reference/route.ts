@@ -6,7 +6,7 @@ import { geminiCallStructured, geminiEsDirecto } from '@/lib/gemini'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 import { ForensicReportSchema } from '@/lib/video-ads/types'
-import { buildForensicInstruction, repairCutTiming, reconciliarConVentana, coreografiaEscasa, MIN_TOMA_SEG, limpiarDialogos, verificarHablantes, buildMotionRefinementInstruction, MotionRefinementSchema } from '@/lib/video-ads/forensic'
+import { buildForensicInstruction, repairCutTiming, reconciliarConVentana, coreografiaEscasa, MIN_TOMA_SEG, limpiarDialogos, verificarHablantes, verificarDialogos, type ProblemaDialogo, buildMotionRefinementInstruction, MotionRefinementSchema } from '@/lib/video-ads/forensic'
 import { normalizeMotionTimeline, validateMotionTimeline, objetoEnManoFromMotion, compileAccion, tieneMotion } from '@/lib/video-ads/motion'
 import { MAX_VIDEO_MB } from '@/lib/video-ads/limits'
 import { STEP } from '@/lib/video-ads/steps'
@@ -145,6 +145,14 @@ export async function POST(
     // texto fantasma.
     // Orden: limpiar → verificar atribución → recronometrar. La limpieza puede sacar un
     // marcador de dentro de `hablantes`, así que verificar antes daría un falso negativo.
+    // ⚠️ EL REPARTO DEL DIÁLOGO SE COMPRUEBA Y SE REPORTA, no se repara: un corte mal
+    // partido no se puede arreglar en código sin inventar dónde va cada frase. Y es el
+    // defecto que contamina todo cuesta abajo — ver `verificarDialogos`.
+    const malReparto = verificarDialogos(limpiarDialogos(analysis))
+    if (malReparto.length) {
+      console.warn(`[video-ads/analyze-reference] sesión ${id}: el reparto del diálogo entre cortes tiene ${malReparto.length} problema(s) —`,
+        malReparto.map((x: ProblemaDialogo) => `corte ${x.corte}: ${x.motivo}`))
+    }
     const { report: atribuido, descartados } = verificarHablantes(limpiarDialogos(analysis))
     if (descartados.length) {
       console.warn(`[video-ads/analyze-reference] sesión ${id}: el reparto por hablante no reproducía el diálogo en los cortes ${descartados.join(', ')} — se descartó su atribución`)

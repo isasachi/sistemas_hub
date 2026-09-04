@@ -521,6 +521,35 @@ La regla trae su contraparte, porque si no el modelo disfraza la quietud de acci
 
 ⚠️ **`norm` (motion.ts) es defensivo con `undefined` por esto mismo:** los beats llegan de un jsonb guardado y un campo agregado después no existe en las filas viejas — normalizar una sesión anterior reventaba con *"Cannot read properties of undefined"*.
 
+🔴 **EL REPARTO DEL DIÁLOGO ENTRE CORTES ERA EL DEFECTO QUE CONTAMINABA TODO CUESTA ABAJO, y estuvo invisible hasta que se midió el RITMO DEL HABLA de un clip.** Reportado como *"el pace del habla estuvo demasiado rápido"*, y la cadena completa resultó ser:
+
+| | medido en `7e4ccbcf` |
+|---|---|
+| los cortes **2 y 3 traían LA MISMA línea** | 82 caracteres duplicados → el guión adaptado se infló **+143 caracteres (19 %)** |
+| el corte 1 traía **163 caracteres en una ventana de 4 s** | **40,8 car/s**, el doble de lo decible — dos frases que en el original van de 0 a 10 s |
+| `repairCutTiming` lo tapó | infló ese corte a 8,2 s tomando tiempo de los que tenían holgura, así que el análisis guardado se veía consistente |
+| el síntoma, tres pasos más abajo | el clip habla a **20,0 car/s** contra los **16,3** del original |
+
+**`verificarDialogos` (forensic.ts) lo comprueba en código, y solo REPORTA.** Tres chequeos: diálogo repetido entre cortes, la concatenación que no reconstruye `guionOriginal`, y —el que se auto-ocultaba— diálogo que no entra en su **VENTANA** (`tiempo`), nunca en la duración ya reparada.
+
+⚠️ **NO REPARA, y la diferencia con `verificarHablantes` es deliberada:** aquél tiene un fallback seguro —descartar la atribución y quedarse con `dialogo`, que es el comportamiento de siempre— y un reparto mal partido no lo tiene. Adivinar dónde va cada frase sería inventar el corte. Se loguea y se muestra, como `coreografiaEscasa` y `desalineadas`.
+
+**Y la regla en el prompt de FASE 1**: el diálogo de un corte es SOLO lo que se dice dentro de su ventana, pegar todos en orden tiene que reconstruir el guion exacto, y —lo que apunta a la causa— *si el texto no entra en la ventana, el corte está mal partido: revisá dónde está su límite real, casi siempre hay un corte de edición que no se detectó*.
+
+✅ **MEDIDO DESPUÉS, y el ritmo se arregló EN LA FUENTE:**
+
+| | antes | después |
+|---|---|---|
+| cortes | 5, con ventanas que no cuadraban con las duraciones | 5, cada uno con su ventana real (3 · 7 · 5 · 20 · 11 s) |
+| guión adaptado | +143 caracteres | **+17** |
+| ritmo del análisis | — | **16,5 car/s** contra los 16,5 del original |
+| lote 1 | **20,0 car/s** | **17,0** |
+| problemas | 3 | **0** |
+
+Lo que queda es que los lotes 2 a 4 andan en 18-19 car/s: eso ya no es el reparto sino que FASE 3 escribe un poco largo por toma, que es otra palanca y `Section5Script` ya avisa por línea sobre 1,3×.
+
+⚠️ **`--write` NO PERSISTE UN ANÁLISIS CON PROBLEMAS.** El forense es **estocástico**: dos corridas seguidas sobre el mismo video dieron 5 cortes limpios y 3 cortes con dos problemas — y la mala se llegó a guardar antes de poner el guard. Guardar la tirada mala contamina la plantilla, el guión y los cinco prompts de render, y el síntoma aparece recién en el clip; volver a correr cuesta dos llamadas y descontaminar la sesión cuesta rehacerla entera. `--force` existe para cuando el defecto está en el video y no en la tirada.
+
 ⚠️ **RE-ANALIZAR UNA SESIÓN DESINCRONIZA SU GUION, y hay que saberlo antes de apretar.** `scripts/reanalizar-forense.ts` re-corre FASE 1 sobre una sesión guardada (existe porque este documento repite *"solo alcanza a análisis NUEVOS"* en cada arreglo del paso caro). Replica el orden exacto de la ruta y **no escribe sin `--write`**; antes compara las ventanas de tiempo nuevas contra las viejas y dice cuántas tomas del guión se quedan sin corte. Medido en `7e4ccbcf`: el análisis nuevo devolvió **5 cortes donde había 4** y **3 de 4 tomas quedaron huérfanas**, así que después de re-analizar hay que volver al paso de plantilla y re-adaptar el guión en el wizard. Es la misma razón por la que `repairCutTiming` no toca `tiempo`.
 
 ⚠️ **`n = 1`, y hay que leerlo así.** Es un lote, un seed, una sesión. Lo que prueba es que la emisión nueva SÍ produce el clip que se le pide —que es exactamente lo que la anterior no lograba en doce renders— no que lo haga siempre.

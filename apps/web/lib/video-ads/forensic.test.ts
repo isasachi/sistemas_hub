@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { TIMELINE_VACIO } from './motion'
 import { z } from 'zod'
-import { buildForensicInstruction, ForensicReportSchema, repairCutTiming, mergeMicroCortes, muestraPersona, corteMuestraPersona, CPS_MAX, type ForensicReport, type Corte, enProsa, limpiarDialogo, verificarHablantes, unirTomasContinuas, reconciliarConVentana, coreografiaEscasa, MIN_TOMA_SEG, ObjetoEnManoSchema, MicroSchema, CorteSchema } from './forensic'
+import { buildForensicInstruction, ForensicReportSchema, repairCutTiming, mergeMicroCortes, muestraPersona, corteMuestraPersona, CPS_MAX, type ForensicReport, type Corte, enProsa, limpiarDialogo, verificarHablantes, unirTomasContinuas, reconciliarConVentana, coreografiaEscasa, MIN_TOMA_SEG, ObjetoEnManoSchema, MicroSchema, CorteSchema , verificarDialogos } from './forensic'
 
 // El prompt es el contrato con Gemini. Estos asserts fijan las reglas del spec que,
 // si se caen, producen el bug que ya vimos en producción: cortes inventados por
@@ -1174,3 +1174,40 @@ describe('buildForensicInstruction — la línea de tiempo del movimiento', () =
   })
 })
 
+
+// ⚠️ El defecto que contamina todo cuesta abajo, con los casos REALES de `7e4ccbcf`.
+describe('verificarDialogos', () => {
+  const rep = (cortes: { n: number; tiempo: string; dialogo: string }[], guion: string) =>
+    ({ guionOriginal: guion, cortes } as never)
+
+  it('caza la línea repetida en dos cortes', () => {
+    const linea = 'Este es el serum antienvejecimiento de la marca Apivita y se llama Beevine Elixir.'
+    const p = verificarDialogos(rep([
+      { n: 2, tiempo: '00:04 - 00:10', dialogo: linea },
+      { n: 3, tiempo: '00:10 - 00:15', dialogo: linea },
+    ], `${linea} ${linea}`))
+    expect(p.some((x) => x.corte === 3 && /repite el diálogo del corte 2/.test(x.motivo))).toBe(true)
+  })
+
+  // ⚠️ Contra la VENTANA y no contra la duración: `repairCutTiming` infla el corte para que
+  // el texto entre, y ahí el defecto deja de verse en el análisis guardado.
+  it('caza el diálogo que no cabe en su ventana', () => {
+    const largo = 'x'.repeat(163)
+    const p = verificarDialogos(rep([{ n: 1, tiempo: '00:00 - 00:04', dialogo: largo }], largo))
+    expect(p.some((x) => x.corte === 1 && /40\.8 car\/s/.test(x.motivo))).toBe(true)
+  })
+
+  it('caza que la suma de los diálogos no reconstruya el guion', () => {
+    const p = verificarDialogos(rep(
+      [{ n: 1, tiempo: '00:00 - 00:10', dialogo: 'hola' }], 'hola que tal'))
+    expect(p.some((x) => /no reconstruye el guion/.test(x.motivo))).toBe(true)
+  })
+
+  it('un reparto correcto no reporta nada', () => {
+    const p = verificarDialogos(rep([
+      { n: 1, tiempo: '00:00 - 00:04', dialogo: 'Este serum me cambió la piel.' },
+      { n: 2, tiempo: '00:04 - 00:10', dialogo: 'Si tú también estás por los treinta.' },
+    ], 'Este serum me cambió la piel. Si tú también estás por los treinta.'))
+    expect(p).toEqual([])
+  })
+})
