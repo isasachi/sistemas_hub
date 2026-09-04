@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { groupIntoLotes, LOTE_MAX_SEC, LOTE_MAX_CHARS, LoteSchema, buildLotePrompt, camaraDeLote, repartirAccion, CAMARA_SIN_DATO, type Lote } from './lotes'
+import { groupIntoLotes, LOTE_MAX_SEC, LOTE_MAX_CHARS, LoteSchema, buildLotePrompt, camaraDeLote, repartirAccion, partirEnHechos, CAMARA_SIN_DATO, type Lote } from './lotes'
 import { clampDuration } from './kie'
 import type { TomaFinal } from './adapt'
 import { TIMELINE_VACIO } from './motion'
@@ -465,14 +465,22 @@ describe('buildLotePrompt — las acciones numeradas', () => {
 
   // El timeline de V2 se REUSA como fuente de la secuencia: sus campos son, uno a uno, lo
   // que pide la REGLA DE ACCIONES del spec. Lo único que se descarta son sus ventanas.
-  it('salen de los beats cuando el corte tiene timeline, agrupando los micro', () => {
+  // ⚠️ UN HECHO POR LÍNEA. No un ítem por beat: el render que lo destapó sacaba el gotero,
+  // dejaba caer la gota en el frasco y la gota "aparecía" en la mejilla, porque
+  // "sostiene + levanta + muestra" iban en el mismo ítem y la aplicación quedaba huérfana
+  // del instrumento. Cada casilla del beat es su propia línea.
+  it('salen de los beats, una línea por casilla, agrupando los micro', () => {
     const beats = [beat(0, 'major'), beat(1, 'micro'), beat(2, 'major')]
     const t = { ...toma(1, 6, 'hola'), beats }
     const lote = groupIntoLotes([t], new Map([[t.tiempoOriginal, { ...TIMELINE_VACIO, beats }]]))[0]
     const p = buildLotePrompt({ lote, ...ARGS })
-    expect(p).toContain('1. postura 0, left hand izquierda 0')
-    expect(p).toContain('2. postura 2, left hand izquierda 2')
-    expect(p).not.toContain('3. ')
+    expect(p).toContain('1. postura 0')
+    expect(p).toContain('2. Mano izquierda: izquierda 0')
+    expect(p).toContain('3. Mano derecha: sostiene el frasco')
+    expect(p).toContain('4. mira a cámara')
+    // El beat `micro` se absorbe: el evento 2 arranca en el beat 2, no en el 1.
+    expect(p).toContain('5. postura 2')
+    expect(p).not.toContain('izquierda 1')
   })
 
   // ⚠️ SIN MARCAS DE TIEMPO. El prompt que sí se ejecuta pide acciones distintas, no un
@@ -507,5 +515,35 @@ describe('buildLotePrompt — el presupuesto', () => {
       productDesc: 'Frasco de vidrio. Etiqueta impresa. '.repeat(30),
     })
     expect(p.length).toBeLessThanOrEqual(KIE_PROMPT_MAX)
+  })
+})
+
+// ⚠️ El caso REAL que lo destapó, del forense de `7e4ccbcf`: cuatro hechos encadenados con
+// comas y punto y coma dentro de un solo ítem numerado.
+describe('partirEnHechos', () => {
+  it('parte por punto, punto y coma y conectores de secuencia', () => {
+    expect(partirEnHechos(
+      'Sostiene gotero con mano derecha, lo levanta y muestra la gota; mano izquierda sostiene el frasco. Mirada a cámara.',
+    )).toEqual([
+      'Sostiene gotero con mano derecha, lo levanta y muestra la gota',
+      'mano izquierda sostiene el frasco',
+      'Mirada a cámara',
+    ])
+  })
+
+  it('parte por "luego", que es como el forense encadena', () => {
+    expect(partirEnHechos('Muestra el frasco a cámara con ambas manos, luego aplica gota en mejilla izquierda'))
+      .toEqual(['Muestra el frasco a cámara con ambas manos', 'aplica gota en mejilla izquierda'])
+  })
+
+  // ⚠️ NO se parte por coma a secas: "gotero con mano derecha" y "mejilla izquierda" llevan
+  // comas que no separan hechos, y partir ahí deja fragmentos sin verbo — peor que un ítem
+  // largo.
+  it('no parte por coma a secas', () => {
+    expect(partirEnHechos('aplica una gota en la mejilla, el pómulo y el cuello')).toHaveLength(1)
+  })
+
+  it('conserva el separador de fusión de mergeMicroCortes', () => {
+    expect(partirEnHechos('gira a perfil Luego, vuelve de frente')).toEqual(['gira a perfil', 'vuelve de frente'])
   })
 })

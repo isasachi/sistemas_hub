@@ -526,10 +526,7 @@ const REGLA_VIDEO_LIMPIO =
  */
 function accionesNumeradas(t: Lote['tomas'][number], cap: number | null): string[] {
   const corta = (x: string) => (cap != null && x.length > cap ? `${x.slice(0, cap).trimEnd()}…` : x)
-  const bajo = (x: unknown) => {
-    const v = String(x ?? '').trim().replace(/\.+$/, '')
-    return v ? v[0].toLowerCase() + v.slice(1) : ''
-  }
+  const limpia = (x: unknown) => String(x ?? '').trim().replace(/^[·;,.\s]+|[;,.\s]+$/g, '')
   const beats = (t.beats ?? []) as MotionBeat[]
   if (beats.length) {
     const grupos: MotionBeat[][] = []
@@ -537,30 +534,60 @@ function accionesNumeradas(t: Lote['tomas'][number], cap: number | null): string
       if (!grupos.length || b.importance !== 'micro') grupos.push([b])
       else grupos[grupos.length - 1].push(b)
     }
-    return grupos.map((g) => {
+    return grupos.flatMap((g) => {
       const a = g[0]
       const z = g[g.length - 1]
-      const partes = [
-        a.body && bajo(a.body),
-        a.leftHand && `left hand ${bajo(a.leftHand)}`,
-        a.rightHand && `right hand ${bajo(a.rightHand)}`,
-        a.headAndGaze && bajo(a.headAndGaze),
-        // El evento tiene principio Y FIN, como en el prompt que sí funcionó ("touches the
-        // drop, beginning to massage"). Sin el cierre, agrupar sería perder los últimos
-        // beats del grupo.
-        z !== a && z.leftHand && z.leftHand !== a.leftHand && `ends with left hand ${bajo(z.leftHand)}`,
-      ].filter(Boolean).join(', ')
-      return corta(partes)
-    }).filter(Boolean)
+      return [
+        limpia(a.body),
+        a.leftHand && `Mano izquierda: ${limpia(a.leftHand)}`,
+        a.rightHand && `Mano derecha: ${limpia(a.rightHand)}`,
+        limpia(a.headAndGaze),
+        // El estado del producto solo cuando CAMBIA: repetir "en la mano" en cada evento es
+        // el ruido que este archivo ya pagó una vez.
+        limpia(a.productStateBefore) !== limpia(z.productStateAfter) && limpia(z.productStateAfter)
+          ? `El producto queda: ${limpia(z.productStateAfter)}`
+          : '',
+      ].filter(Boolean).map((x) => corta(String(x)))
+    })
   }
-  // ⚠️ Los dos separadores: ` Luego, ` lo escribe `mergeMicroCortes` al fusionar y el `;`
-  // viene de los tramos con marca de tiempo del forense. Se normalizan igual que en
-  // `repartirAccion`, y por el mismo motivo.
-  return t.accionVisual
+  return partirEnHechos(t.accionVisual).map(corta)
+}
+
+/**
+ * Parte la coreografía en HECHOS ATÓMICOS: uno por línea numerada.
+ *
+ * ⚠️ ES LO QUE FALTABA, y lo cazó el ojo del dueño del repo sobre un render que por lo demás
+ * salió bien: *"cuando saca el gotero no llega a aplicar la gota en el rostro CON EL GOTERO,
+ * sino que saca el gotero, deja caer la gota en el frasco y la gota aparece en la mejilla"*.
+ *
+ * La causa no es la lista numerada —eso ya estaba— sino cuánto se mete en cada ítem. El
+ * prompt del wizard que SÍ se ejecutó al detalle pone **un hecho por línea**:
+ *
+ *     Holding gotero in right hand.
+ *     Gently releasing one clear drop onto her left cheek.
+ *     Product bottle is held below.
+ *     Looking at the camera with a confident smile.
+ *
+ * El nuestro emitía *"Sostiene gotero con mano derecha, lo levanta y muestra la gota; mano
+ * izquierda sostiene el frasco. Mirada a cámara."* como UN ítem: cuatro hechos encadenados
+ * con comas y punto y coma. El modelo los resuelve como un gesto —mostrar el gotero— y la
+ * aplicación de la línea siguiente queda huérfana del instrumento, así que la gota "aparece".
+ *
+ * Se parte por punto, punto y coma, el separador de fusión (` Luego, `) y los conectores de
+ * secuencia (`, luego`, ` y luego`). NO por coma a secas: *"gotero con mano derecha"* y
+ * *"mejilla izquierda"* llevan comas que no separan hechos, y partir ahí deja fragmentos sin
+ * verbo — que es peor que un ítem largo.
+ */
+export function partirEnHechos(accion: string): string[] {
+  return accion
     .split(TRAMO_SEP).join(' Luego, ')
-    .split(' Luego, ')
-    .map((x) => corta(x.replace(TRAMO_MARCA, '').trim()))
-    .filter(Boolean)
+    // ⚠️ ` y luego ` NO parte, y es un falso positivo medido: *"Mira producto y luego a
+    // cámara"* son dos destinos de la MISMA mirada, y partirlo deja "a cámara" sin verbo.
+    // `, luego ` sí, que es como el forense encadena dos acciones distintas.
+    .split(/\s+Luego,\s+|\s*;\s*|(?<=[a-záéíóúñ)])\.\s+|,\s+luego\s+/i)
+    // El `Luego,` de cabeza sobrevive cuando el corte anterior fue por punto.
+    .map((x) => x.replace(TRAMO_MARCA, '').replace(/^\s*Luego,\s*/i, '').trim().replace(/^[·,;.\s]+|[,;.\s]+$/g, ''))
+    .filter((x) => x.length > 2)
 }
 
 /**

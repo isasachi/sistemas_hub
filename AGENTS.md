@@ -473,6 +473,21 @@ Los seis fotogramas del clip, en orden: sostiene el gotero con el frasco abajo �
 
 ✅ **Y LA LOCUCIÓN SALE EN ESPAÑOL PALABRA POR PALABRA: 99 % de cobertura**, transcrita y comparada con el oráculo mecánico de `probe-audio-espanol.ts`. Lo único que se mueve son los acentos y "los 30" dicho como "los treinta", que es la transcripción y no el habla. **Hacía falta medirlo**: que grok dijera el español entrecomillado estaba verificado sobre el modelo ANTERIOR, y este es otro modelo.
 
+⚠️ **UN HECHO POR LÍNEA, y no un ítem por acción — lo cazó el ojo del dueño del repo sobre ese mismo render.** Su observación: *"cuando saca el gotero no llega a aplicar la gota en el rostro CON EL GOTERO, sino que saca el gotero, deja caer la gota en el frasco y la gota aparece en la mejilla"*. Y el contraste con el prompt del wizard es exacto:
+
+| | el que se ejecuta al detalle | el que emitíamos |
+|---|---|---|
+| | `Holding gotero in right hand.` | `1. Sostiene gotero con mano derecha, lo levanta y muestra la gota; mano izquierda sostiene el frasco. Mirada a cámara.` |
+| | `Gently releasing one clear drop onto her left cheek.` | `2. Muestra el frasco a cámara con ambas manos, luego aplica gota en mejilla izquierda.` |
+| | `Product bottle is held below.` | |
+| | `Looking at the camera with a confident smile.` | |
+
+**No era la lista numerada —eso ya estaba— sino cuánto entra en cada ítem.** Con *"sostiene + levanta + muestra"* en un solo renglón el modelo lo resuelve como UN gesto (mostrar el gotero) y la aplicación de la línea siguiente queda huérfana del instrumento, así que la gota "aparece". `partirEnHechos` parte por punto, punto y coma, el separador de fusión y `, luego`; con timeline, cada casilla del beat es su propia línea.
+
+⚠️ **Y NO SE PARTE POR COMA A SECAS, que es un falso positivo medido:** *"Mira producto y luego a cámara"* son dos destinos de la MISMA mirada y partirlo deja *"a cámara"* sin verbo. Under-partir es preferible a producir fragmentos sin verbo — misma jerarquía que el acote de `limpiarEscenaDeFoto`.
+
+⚠️ **LO QUE ESTO NO ARREGLA, y es el hueco siguiente:** el prompt que funciona dice *"releasing one clear drop of SERUM **onto her left cheek**"* —instrumento, objeto y destino en una cláusula— y el nuestro dice *"aplica gota en mejilla izquierda"*, sin nombrar con qué. Eso lo escribe FASE 1, así que el arreglo es del prompt del forense y **solo alcanza a análisis NUEVOS**.
+
 ⚠️ **`n = 1`, y hay que leerlo así.** Es un lote, un seed, una sesión. Lo que prueba es que la emisión nueva SÍ produce el clip que se le pide —que es exactamente lo que la anterior no lograba en doce renders— no que lo haga siempre.
 
 ### EL CANDADO DE MOVIMIENTO (V2) — cableado, verificado y **sin efecto medible todavía** (2026-09-03)
