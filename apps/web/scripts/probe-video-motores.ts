@@ -38,9 +38,23 @@ const KIE_CREATE_URL = 'https://api.kie.ai/api/v1/jobs/createTask'
 const XAI_BASE_URL = 'https://api.x.ai/v1/videos'
 const HTTP_TIMEOUT_MS = 120_000
 const POLL_INTERVAL_MS = 8_000
-const POLL_TIMEOUT_MS = 20 * 60_000
+/**
+ * ⚠️ SE CONFIGURA POR ENV PORQUE LA COLA DEL PROVEEDOR NO ES LA GENERACIÓN. Medido:
+ * `seedance-2-5` devolvía en 3-4 minutos y `seedance-2-fast` —el modelo que se llama
+ * *fast*— pasó de 20 sin entregar. Un plazo fijo convierte una cola larga en una tarea
+ * pagada que se abandona.
+ */
+const POLL_TIMEOUT_MS = Number(process.env.PROBE_POLL_MIN ?? 20) * 60_000
 const MIN_CLIP_SEC = 3
+// ⚠️ EL TOPE LO PONE EL BRAZO MÁS ESTRECHO QUE SE VAYA A CORRER, no una constante global.
+// xAI topa en 8,7 s y kling en 30; seedance acepta 2–30 s de referencia y 4–30 de salida.
+// Con un tope único de 8,7 no se podía medir un corte entero, que es justo la pregunta de
+// arquitectura que abre el pricing por SEGUNDO de seedance: con él, el número de clips
+// dejó de costar dinero y el cap pasa a ser una decisión de calidad.
 const MAX_CLIP_SEC = 8.7
+const MAX_CLIP_SEC_D = 30
+/** `seedance-2-fast` topa la referencia y la salida en 15 s. */
+const MAX_CLIP_SEC_D_FAST = 15
 
 type Arm = 'B' | 'C' | 'D'
 type ProbeStatus = 'success' | 'failed' | 'skipped'
@@ -92,6 +106,9 @@ function usage(): string {
     '',
     'Opcionales: PROBE_ARMS=B,C,D PROBE_OUT=/ruta PROBE_KLING_ORIENTATION=video|image',
     'Brazo D: PROBE_LOCUCION="…" (obligatorio) · PROBE_MUDO=1 (referencia sin audio)',
+    '        PROBE_SEEDANCE_MODEL=bytedance/seedance-2-fast · PROBE_RESOLUTION=480p',
+    'Espera: PROBE_POLL_MIN=40 (minutos; el default de 20 no le alcanza a seedance-2-fast)',
+    '        PROBE_SEEDANCE_MODEL=bytedance/seedance-2-fast · PROBE_RESOLUTION=480p',
   ].join('\n')
 }
 
@@ -224,6 +241,7 @@ async function runKling(session: VideoSessionRow, clipUrl: string): Promise<{ ta
   if (!response.ok || !taskId) {
     throw new Error(`KIE createTask falló (${json?.code ?? response.status}): ${json?.msg ?? 'sin respuesta'}`)
   }
+  console.log(`  [B] tarea creada: ${taskId}`)
 
   const deadline = Date.now() + POLL_TIMEOUT_MS
   while (Date.now() < deadline) {
@@ -235,7 +253,7 @@ async function runKling(session: VideoSessionRow, clipUrl: string): Promise<{ ta
     if (detail.state === 'fail') throw new Error(detail.failMsg ?? 'KIE reportó fallo sin detalle')
     await sleep(POLL_INTERVAL_MS)
   }
-  throw new Error(`KIE excedió el timeout de ${POLL_TIMEOUT_MS / 60_000} minutos`)
+  throw new Error(`KIE excedió el timeout de ${POLL_TIMEOUT_MS / 60_000} minutos — la tarea ${taskId} sigue viva, recupérala con recordInfo`)
 }
 
 async function xaiFetch(path: string, key: string, init: RequestInit = {}): Promise<Response> {
@@ -268,6 +286,7 @@ async function runXai(session: VideoSessionRow, clipUrl: string): Promise<{ task
   if (!response.ok || !taskId) {
     throw new Error(`xAI edits falló (${response.status}): ${JSON.stringify(created?.error ?? created)}`)
   }
+  console.log(`  [C] tarea creada: ${taskId}`)
 
   // ⚠️ EL CANARIO GRATIS CONFIRMÓ LA CREACIÓN Y EL FALLO, NO EL ÉXITO. Verificado sin
   // gastar: `POST /v1/videos/edits` con `{model, prompt, video:{url}}` devuelve 200 con
@@ -304,7 +323,7 @@ async function runXai(session: VideoSessionRow, clipUrl: string): Promise<{ task
     }
     await sleep(POLL_INTERVAL_MS)
   }
-  throw new Error(`xAI excedió el timeout de ${POLL_TIMEOUT_MS / 60_000} minutos`)
+  throw new Error(`xAI excedió el timeout de ${POLL_TIMEOUT_MS / 60_000} minutos — la petición ${taskId} sigue viva`)
 }
 
 /**
@@ -370,7 +389,11 @@ async function runSeedance(
     method: 'POST',
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: 'bytedance/seedance-2-5',
+      // ⚠️ EL MODELO Y LA RESOLUCIÓN VAN POR ENV, y el motivo es el COSTO. El tarifario de
+      // seedance cobra `precio × (input + output)` cuando hay video de referencia — o sea
+      // un clip de 20 s con 20 s de referencia se paga como 40 s. A 720p el anuncio entero
+      // sale $17,67; a 480p, $7,91. `seedance-2-fast` topa en 15 s y cuesta menos.
+      model: process.env.PROBE_SEEDANCE_MODEL ?? 'bytedance/seedance-2-5',
       input: {
         prompt: [
           'Reproduce the motion of the reference video EXACTLY: same hand laterality, same cheek,',
@@ -389,7 +412,7 @@ async function runSeedance(
         reference_video_urls: [clipUrl],
         reference_image_urls: [session.avatar_url, session.product_url],
         generate_audio: true,
-        resolution: '720p',
+        resolution: process.env.PROBE_RESOLUTION ?? '720p',
         aspect_ratio: '9:16',
         duration: Math.max(4, Math.round(duration)),
       },
@@ -403,6 +426,11 @@ async function runSeedance(
   if (!response.ok || !taskId) {
     throw new Error(`KIE createTask (seedance) falló (${json?.code ?? response.status}): ${json?.msg ?? 'sin respuesta'}`)
   }
+  // ⚠️ SE IMPRIME APENAS SE CREA, no al terminar. Con el `taskId` solo en el retorno, un
+  // timeout tira una tarea YA PAGADA y no queda forma de recuperar el video: KIE no tiene
+  // endpoint de listado (probadas cuatro rutas, las cuatro 404), así que el único rastro
+  // sería el panel web. Pasó de verdad con la primera corrida de `seedance-2-fast`.
+  console.log(`  [D] tarea creada: ${taskId} — recuperable con recordInfo si esto se corta`)
   const deadline = Date.now() + POLL_TIMEOUT_MS
   while (Date.now() < deadline) {
     const detail = await getTaskDetail(taskId, key)
@@ -413,7 +441,7 @@ async function runSeedance(
     if (detail.state === 'fail') throw new Error(detail.failMsg ?? 'KIE reportó fallo sin detalle')
     await sleep(POLL_INTERVAL_MS)
   }
-  throw new Error(`KIE (seedance) excedió el timeout de ${POLL_TIMEOUT_MS / 60_000} minutos`)
+  throw new Error(`KIE (seedance) excedió el timeout de ${POLL_TIMEOUT_MS / 60_000} minutos — la tarea ${taskId} sigue viva, recupérala con recordInfo o subí PROBE_POLL_MIN`)
 }
 
 function evaluationMarkdown(sessionId: string, start: number, end: number, baseline: number): string {
@@ -472,12 +500,15 @@ async function main(): Promise<void> {
   const end = parseNumber(process.argv[4], 6, 'fin')
   const baseline = parseNumber(process.argv[5], 1, 'lote baseline')
   const duration = end - start
+  const arms = selectedArms()
   if (start < 0 || end <= start) throw new Error('El rango debe cumplir 0 <= inicio < fin')
-  if (duration < MIN_CLIP_SEC || duration > MAX_CLIP_SEC) {
-    throw new Error(`El clip debe durar entre ${MIN_CLIP_SEC} y ${MAX_CLIP_SEC} s; recibido ${duration}`)
+  const tope = arms.has('B') || arms.has('C')
+    ? MAX_CLIP_SEC
+    : (process.env.PROBE_SEEDANCE_MODEL ?? '').includes('fast') ? MAX_CLIP_SEC_D_FAST : MAX_CLIP_SEC_D
+  if (duration < MIN_CLIP_SEC || duration > tope) {
+    throw new Error(`El clip debe durar entre ${MIN_CLIP_SEC} y ${tope} s con estos brazos; recibido ${duration}`)
   }
   if (!Number.isInteger(baseline) || baseline < 1) throw new Error('El lote baseline debe ser un entero >= 1')
-  const arms = selectedArms()
   orientation()
 
   if (process.env.PROBE_RUN !== '1') {
