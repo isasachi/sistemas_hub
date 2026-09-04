@@ -225,7 +225,7 @@ export function scriptFingerprint(input: {
     // plantilla entera del prompt y la regla de reparto en lotes. Un resume a través de esto
     // pegaría un clip del modelo viejo con la plantilla vieja a uno nuevo mientras
     // `isPaidResume` jura que es el mismo contenido.
-    'v14',
+    'v15',
     // Pasa por `toNiche`: un nicho BLOQUEADO se renderiza como suplementos, así que su
     // huella tiene que ser la de suplementos. Sin esto, una sesión guardada como 'ropa'
     // con lotes ya pagados reanudaría pegando un clip del camino de prenda a uno del

@@ -22,6 +22,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { spawn } from 'node:child_process'
+import ffmpeg from 'ffmpeg-static'
 import { groupIntoLotes, buildLotePrompt, camaraDeLote } from '../lib/video-ads/lotes'
 import { AdaptedScriptSchema } from '../lib/video-ads/adapt'
 import { enProsa, type ForensicReport } from '../lib/video-ads/forensic'
@@ -83,8 +84,12 @@ async function main() {
       spec.poseUrl = archivo
     }
 
-    if (!process.env.PROBE_GEN) continue
-    const urls = await generateAnchorImages({
+    if (!process.env.PROBE_GEN && !process.env.PROBE_ANCLAS) continue
+    // ⚠️ DOS DRAWS POR BRAZO ES EL MÍNIMO EN ESTE REPO, y regenerar las anclas en cada uno
+    // cambia dos cosas a la vez (el prompt del lote Y la imagen). `PROBE_ANCLAS` reusa las
+    // que ya están en el bucket, así que el segundo draw cuesta solo el render y el único
+    // que se mueve es el seed de grok.
+    const urls = process.env.PROBE_ANCLAS ? process.env.PROBE_ANCLAS.split(',') : await generateAnchorImages({
       avatarUrl: (r.avatar_url as string) ?? (r.character_url as string),
       productUrl: r.product_url as string,
       specs, lote: lote.n,
@@ -135,16 +140,22 @@ async function main() {
       quien: hablantesPorTiempo(cortes, gente),
       vozEnOff: vozEnOffPorTiempo(cortes),
     })
+    // El brazo de control: la línea de ancla ANTERIOR, que solo pedía encuadre y
+    // habitación. Se sustituye acá y no con un parámetro de producción — es un brazo de
+    // medición, no una opción del producto.
+    const prompt2 = process.env.PROBE_ANCLA_VIEJA
+      ? prompt.replace(/(Starts from @image\(\d+\)): [^\n]+/g, '$1: same framing and same room.')
+      : prompt
     const chars = lote.tomas.reduce((n, t) => n + t.locucion.length, 0)
     const dur = clampDuration(lote.duracionSeg, chars, lote.tomas.length)
-    console.log(prompt)
-    console.log(`\n${prompt.length} caracteres · duration ${dur} · ${images.length} imágenes`)
+    console.log(prompt2)
+    console.log(`\n${prompt2.length} caracteres · duration ${dur} · ${images.length} imágenes`)
 
     const { data: st } = await db.from('user_settings').select('kie_api_key').eq('user_id', r.user_id as string).single()
     const key = (st as { kie_api_key?: string } | null)?.kie_api_key
     if (!key) throw new Error('El usuario no tiene key de KIE guardada')
     const taskId = await createVideoTask(
-      { images, prompt, durationSec: lote.duracionSeg, locucionChars: chars, tomas: lote.tomas.length }, key)
+      { images, prompt: prompt2, durationSec: lote.duracionSeg, locucionChars: chars, tomas: lote.tomas.length }, key)
     console.log(`tarea ${taskId} — esperando…`)
     const limite = Date.now() + 10 * 60_000
     let url: string | null = null
@@ -155,21 +166,33 @@ async function main() {
       else await new Promise((ok) => setTimeout(ok, 6000))
     }
     if (!url) throw new Error('se agotó el plazo')
-    const mp4 = `${SALIDA}/lote-${lote.n}.mp4`
+    const sufijo = `${process.env.PROBE_ANCLA_VIEJA ? 'vieja' : 'pose'}${process.env.PROBE_DRAW ?? ''}`
+    const mp4 = `${SALIDA}/lote-${lote.n}-${sufijo}.mp4`
     await writeFile(mp4, Buffer.from(await (await fetch(url)).arrayBuffer()))
-    await tira(mp4, `${SALIDA}/lote-${lote.n}-tira.jpg`, dur)
-    console.log(`clip: ${mp4}\ntira: ${SALIDA}/lote-${lote.n}-tira.jpg`)
+    await tira(mp4, `${SALIDA}/lote-${lote.n}-${sufijo}-tira.jpg`, dur)
+    // ⚠️ EL FOTOGRAMA 0 ES LO QUE DISCRIMINA. "¿ejecutó la coreografía?" es estocástico y
+    // no sobrevive n=1; "¿el clip ARRANCA en la foto del ancla?" está condicionado por la
+    // imagen y se lee de un solo cuadro. La tira empieza en 0,05·dur, o sea ya derivó.
+    await tira(mp4, `${SALIDA}/lote-${lote.n}-${sufijo}-frame0.jpg`, 0)
+    console.log(`clip: ${mp4}\ntira: ${SALIDA}/lote-${lote.n}-${sufijo}-tira.jpg`)
   }
 }
 
 /** Cinco fotogramas repartidos, en una sola imagen. Lo único de este probe que no depende
  *  de que un modelo mire bien. */
 async function tira(mp4: string, salida: string, dur: number): Promise<void> {
-  const ts = [0.05, 0.28, 0.5, 0.72, 0.95].map((f) => (dur * f).toFixed(2))
-  const args = ts.flatMap((t) => ['-ss', t, '-i', mp4, '-frames:v', '1'])
+  // `dur = 0` pide el fotograma 0 solo: el que se compara contra la imagen del ancla.
+  const ts = (dur ? [0.05, 0.28, 0.5, 0.72, 0.95] : [0]).map((f) => (dur * f).toFixed(2))
   await new Promise<void>((ok) => {
-    const p = spawn('ffmpeg', ['-y', '-v', 'error', ...args,
-      '-filter_complex', `hstack=inputs=${ts.length},scale=1500:-1`, salida], { stdio: 'ignore' })
+    // ⚠️ `ffmpeg-static`, no el `ffmpeg` del sistema: en esta máquina no hay ninguno y el
+    // probe se quedaba sin tira sin decir nada. Y `-frames:v` va DESPUÉS del filtro, si no
+    // ffmpeg lo lee como opción de entrada y se niega.
+    const p = spawn(ffmpeg as unknown as string, [
+      '-y', '-v', 'error',
+      ...ts.flatMap((t) => ['-ss', t, '-i', mp4]),
+      '-filter_complex', `${ts.map((_, i) => `[${i}:v]`).join('')}hstack=inputs=${ts.length},scale=2400:-1[o]`,
+      '-map', '[o]', '-frames:v', '1', salida,
+    ], { stdio: 'ignore' })
     p.on('exit', () => ok())
   })
 }

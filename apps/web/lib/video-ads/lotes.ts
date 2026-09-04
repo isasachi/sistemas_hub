@@ -722,7 +722,14 @@ export function buildLotePrompt(args: {
       const acciones = accionesNumeradas(t, capAccion)
       return [
         `Shot ${t.n} — ${r1(t.duracionSeg)} seconds`,
-        ancla ? `Starts from @image(${ancla}): same framing and same room.` : '',
+        // ⚠️ EL ANCLA TRAE LA POSE, Y ESTA LÍNEA NO LA PEDÍA. Decía *"same framing and same
+        // room"* — o sea le pedía al ancla lo único que el avatar ya daba. Medido con el
+        // render del lote 1: la habitación salió clavada (el eje del fondo funciona) y la
+        // coreografía se abandonó en el primer segundo, porque el fotograma abría con el
+        // gotero en la mejilla y el prompt no le pidió empezar ahí. Desde que el ancla se
+        // extrae del video ORIGINAL (`pose-frames.ts`) esa imagen es la pose de apertura,
+        // y hay que nombrarla: el primer fotograma del clip ES esa foto.
+        ancla ? `Starts from @image(${ancla}): the first frame of this shot is that photograph — same framing, same room, and the hands, the product and the body already in that exact position. Continue the action from there; do not move into that pose, you are already in it.` : '',
         plano ? `Camera: ${plano}` : '',
         ...acciones.map((a, k) => `${k + 1}. ${a}`),
         // ⚠️ Una toma muda tiene que DECLARARSE muda: el silencio por omisión es ambiguo
