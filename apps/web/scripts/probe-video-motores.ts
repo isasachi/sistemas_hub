@@ -62,6 +62,9 @@ interface VideoSessionRow {
   character_prompt: string | null
   consistency_block: string | null
   lotes: StoredLote[] | null
+  forensic_analysis: {
+    cortes?: { n: number; tiempo?: string; motion?: { beats?: { startSec?: number; endSec?: number; action?: string }[] } }[]
+  } | null
 }
 
 interface ArmResult {
@@ -87,7 +90,8 @@ function usage(): string {
     'Uso: PROBE_RUN=1 XAI_API_KEY=... npx tsx --env-file=.env.local',
     '  scripts/probe-video-motores.ts <sessionId> [inicio=0] [fin=6] [lote=1]',
     '',
-    'Opcionales: PROBE_ARMS=B,C PROBE_OUT=/ruta PROBE_KLING_ORIENTATION=video|image',
+    'Opcionales: PROBE_ARMS=B,C,D PROBE_OUT=/ruta PROBE_KLING_ORIENTATION=video|image',
+    'Brazo D: PROBE_LOCUCION="…" (obligatorio) · PROBE_MUDO=1 (referencia sin audio)',
   ].join('\n')
 }
 
@@ -315,8 +319,49 @@ async function runXai(session: VideoSessionRow, clipUrl: string): Promise<{ task
  * 576x1024. Se re-encoda a 720x1280 SOLO para este brazo, para que B y C conserven
  * exactamente el input con el que ya se midieron.
  */
+/**
+ * LAS ACCIONES DEL TRAMO, EN ORDEN — el forense como PLANNER, que es la mitad que faltaba.
+ *
+ * Medido en la primera corrida de D: copió la ACCIÓN (gotero a la mejilla, gotas en la
+ * piel) pero no la SECUENCIA — la fuente abre con el gotero ya aplicando y después extiende
+ * con las yemas; D abrió mostrando el frasco. Y se entiende: el prompt le decía *"same
+ * action order"* sin decirle NUNCA cuál es ese orden. Es una exigencia de fidelidad, no una
+ * descripción.
+ *
+ * El pipeline ya produce esa descripción y con plantilla desde el 2026-09-04: las oraciones
+ * de `MotionBeat.action`, una por evento y en orden. Acá se recortan al tramo pedido —
+ * ventana del corte + `startSec`/`endSec` del beat— y se emiten numeradas.
+ *
+ * ⚠️ CABE DE SOBRA, y eso es propio de este motor: seedance acepta **30.000 caracteres** de
+ * prompt contra los 4.096 de grok. Toda la escalera de degradación que el pipeline necesita
+ * hoy existe por un presupuesto que acá no aplica.
+ */
+function accionesDelTramo(session: VideoSessionRow, start: number, end: number): string[] {
+  const manual = String(process.env.PROBE_ACCIONES ?? '').trim()
+  if (manual) return manual.split('|').map((x) => x.trim()).filter(Boolean)
+  const aSeg = (t: string | undefined): [number, number] | null => {
+    const m = /(\d+):(\d+)\s*[-–]\s*(\d+):(\d+)/.exec(String(t ?? ''))
+    return m ? [Number(m[1]) * 60 + Number(m[2]), Number(m[3]) * 60 + Number(m[4])] : null
+  }
+  const fuera: string[] = []
+  for (const corte of session.forensic_analysis?.cortes ?? []) {
+    const v = aSeg(corte.tiempo)
+    if (!v || v[1] <= start || v[0] >= end) continue
+    for (const b of corte.motion?.beats ?? []) {
+      const desde = v[0] + Number(b.startSec ?? 0)
+      const hasta = v[0] + Number(b.endSec ?? 0)
+      const accion = String(b.action ?? '').trim()
+      // Solape con el tramo pedido. Un beat sin ventana útil (0-0) igual entra si su corte
+      // entra: perder una acción es peor que emitir una de más.
+      if (accion && (hasta <= desde || (hasta > start && desde < end))) fuera.push(accion)
+    }
+  }
+  return fuera
+}
+
 async function runSeedance(
   session: VideoSessionRow, clipUrl: string, locucion: string, duration: number,
+  acciones: string[] = [],
 ): Promise<{ taskId: string; url: string }> {
   if (!session.avatar_url) throw new Error('La sesión no tiene avatar_url')
   if (!session.product_url) throw new Error('La sesión no tiene product_url')
@@ -336,6 +381,10 @@ async function runSeedance(
           'She is NOT the person in the reference video: take only the movement from it.',
           'No on-screen text, captions, watermarks, usernames or platform UI of any kind.',
           `She speaks this line out loud in Latin American Spanish, verbatim, and nothing else: "${locucion}"`,
+          ...(acciones.length
+            ? ['', 'She performs these actions IN THIS EXACT ORDER, one after the other, none skipped, none reordered:',
+               ...acciones.map((a, i) => `${i + 1}. ${a}`)]
+            : []),
         ].join(' '),
         reference_video_urls: [clipUrl],
         reference_image_urls: [session.avatar_url, session.product_url],
@@ -438,7 +487,7 @@ async function main(): Promise<void> {
   const { data, error } = await getDb().from('video_sessions').select([
     'id', 'user_id', 'reference_video_url', 'avatar_url', 'character_url',
     'product_url', 'product_name', 'product_scan', 'character_prompt',
-    'consistency_block', 'lotes',
+    'consistency_block', 'lotes', 'forensic_analysis',
   ].join(',')).eq('id', sessionId).single()
   if (error) throw new Error(`No se pudo cargar la sesión: ${error.message}`)
   const session = data as unknown as VideoSessionRow
@@ -476,13 +525,20 @@ async function main(): Promise<void> {
   // midieron.
   let clip720 = clipUrl
   if (arms.has('D')) {
-    const f = join(outputDir, 'source-clip-720.mp4')
+    // ⚠️ `PROBE_MUDO=1` MANDA EL CLIP SIN PISTA DE AUDIO. Medido en la primera corrida de D:
+    // la locución generada se contaminó con la del video de referencia — se pidió *"y nos
+    // ayuda a atenuar"* y dijo *"lo que nos ayuda a hidratar"*, que es la construcción
+    // literal de la creadora. O sea el audio de la referencia influye en el habla que
+    // genera. Con `-an` esa vía se cierra, y de paso se mide cuánto de la señal de
+    // movimiento dependía del sonido.
+    const mudo = process.env.PROBE_MUDO === '1'
+    const f = join(outputDir, `source-clip-720${mudo ? '-mudo' : ''}.mp4`)
     if (!ffmpegPath) throw new Error('ffmpeg-static no resolvió un binario')
     await run(ffmpegPath, ['-y', '-loglevel', 'error', '-i', sourceClip,
       '-vf', 'scale=720:1280', '-c:v', 'libx264', '-preset', 'medium', '-crf', '18',
-      '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-movflags', '+faststart', f])
+      '-pix_fmt', 'yuv420p', ...(mudo ? ['-an'] : ['-c:a', 'aac']), '-movflags', '+faststart', f])
     clip720 = await uploadToStorage(sessionId, await readFile(f), 'video/mp4',
-      `probe-motion-720-${start}-${end}`.replace(/\./g, '_'))
+      `probe-motion-720${mudo ? '-mudo' : ''}-${start}-${end}`.replace(/\./g, '_'))
   }
 
   const jobs: Promise<ArmResult>[] = []
@@ -517,7 +573,11 @@ async function main(): Promise<void> {
   if (arms.has('D')) {
     jobs.push((async () => {
       try {
-        const generated = await runSeedance(session, clip720, locucionDeD(), duration)
+        const acciones = accionesDelTramo(session, start, end)
+        console.log(acciones.length
+          ? `  [D] ${acciones.length} acciones del forense, en orden:\n${acciones.map((a, i) => `      ${i + 1}. ${a}`).join('\n')}`
+          : '  [D] el forense no dio acciones para este tramo — se manda solo el video')
+        const generated = await runSeedance(session, clip720, locucionDeD(), duration, acciones)
         const file = join(outputDir, 'D-seedance-2-5.mp4')
         const frames = join(outputDir, 'D-seedance-2-5-frames.jpg')
         await download(generated.url, file)
