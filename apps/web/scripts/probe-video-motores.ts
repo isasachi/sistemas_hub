@@ -304,6 +304,12 @@ function evaluationMarkdown(sessionId: string, start: number, end: number, basel
   const rows = [
     'Mano correcta', 'Mejilla correcta', 'Orden de acciones', 'Timing',
     'Contactos mano/producto/cara', 'Producto', 'Identidad', 'Cámara',
+    // ⚠️ LA VOZ ES CRITERIO ELIMINATORIO Y FALTABA. Medido en el brazo B: Kling Motion
+    // Control ARRASTRA la pista del video fuente — la transcripción de su salida es
+    // palabra por palabra la de la creadora original, con el guion de la OTRA marca. Un
+    // clip así no se puede publicar por bueno que sea el movimiento, así que esta fila
+    // vale 0 si la voz es la del original, sin importar el resto.
+    'Voz (0 = es la del video original)',
   ]
   return [
     '# Evaluación: Grok vs Kling Motion Control vs xAI Video Edit',
@@ -317,12 +323,14 @@ function evaluationMarkdown(sessionId: string, start: number, end: number, basel
     '| Criterio | A · Grok actual | B · Kling | C · xAI Edit |',
     '|---|---:|---:|---:|',
     ...rows.map((row) => `| ${row} |  |  |  |`),
-    '| **Total / 16** |  |  |  |',
+    '| **Total / 18** |  |  |  |',
     '',
     '## Regla de decisión',
     '',
     '- Gana el mayor total.',
     '- Mano, orden, timing y contactos no pueden tener 0.',
+    '- **La voz en 0 descalifica el brazo entero**: publicar la voz de la creadora',
+    '  original con el guion de otra marca no es una opción, gane lo que gane en movimiento.',
     '- En empate, prioriza movimiento/contactos sobre identidad/producto.',
     '',
     'Decisión:  ',
