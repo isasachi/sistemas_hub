@@ -1270,6 +1270,18 @@ describe('verificarAcciones — la plantilla de la oración', () => {
     expect(verificarAcciones(rep(beat('')))[0].motivo).toMatch(/sin oración/)
   })
 
+  // ⚠️ LOS TRES VERBOS QUE LA PRIMERA CORRIDA REAL DEVOLVIÓ Y LA LISTA NO TENÍA. El modelo
+  // los eligió bien —la forma de la oración era correcta en las tres— y la lista estaba
+  // corta: se amplía acá, que es el mecanismo previsto. Si alguna se cae, la lista se
+  // recortó de más.
+  it.each([
+    'She gestures towards her left cheek with her right hand, while her left hand holds the serum bottle at chest level.',
+    'She presents the serum bottle to the camera with both hands, while her left hand grips the upper bottle part.',
+    'She rotates the serum bottle with both hands, while her left hand supports the bottle base.',
+  ])('acepta el verbo que la primera corrida real trajo: %s', (frase) => {
+    expect(verificarAcciones(rep(beat(frase)))).toEqual([])
+  })
+
   // `points to` tiene que ganarle a un prefijo más corto, si algún día se agrega uno.
   it('resuelve los verbos de varias palabras', () => {
     expect(verificarAcciones(rep(beat(

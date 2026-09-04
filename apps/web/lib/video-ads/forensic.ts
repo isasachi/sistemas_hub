@@ -1055,7 +1055,10 @@ export const VENTANA_BEAT_SEG: number | null = null
  * filma). El único que salía bien —*"She deposits a drop of serum on her left cheek with
  * the dropper, while holding the bottle"*— es el que tiene esta forma.
  *
- * ⚠️ SE AMPLÍA AGREGANDO VERBOS ACÁ, no dejando que el modelo invente. Un producto que no
+ * ⚠️ SE AMPLÍA AGREGANDO VERBOS ACÁ, no dejando que el modelo invente — y ya se ejerció:
+ * la primera corrida con la plantilla puesta devolvió `gestures`, `presents` y `rotates`,
+ * tres verbos legítimos que la lista no tenía. El modelo los eligió BIEN; la lista estaba
+ * corta. Ése es el mecanismo funcionando, no una excepción. Un producto que no
  * se pueda describir con esta lista (un parche, un roll-on) necesita su verbo escrito,
  * y ese cambio es visible en el diff; un verbo libre no lo es.
  *
@@ -1067,9 +1070,9 @@ export const VERBOS_ACCION = {
   transferencia: ['releases', 'applies', 'spreads', 'massages', 'taps', 'dabs', 'deposits', 'rubs'],
   /** Algo cambia de estado sin llegar al cuerpo. */
   manipulacion: ['pulls out', 'picks up', 'sets down', 'uncaps', 'caps', 'dips', 'squeezes',
-    'raises', 'lowers', 'turns', 'opens', 'closes', 'shakes', 'pours'],
+    'raises', 'lowers', 'turns', 'rotates', 'tilts', 'opens', 'closes', 'shakes', 'pours'],
   /** No avanza nada: el producto y las manos quedan como estaban. */
-  quietos: ['holds', 'rests', 'brings', 'shows', 'points to', 'looks at'],
+  quietos: ['holds', 'rests', 'brings', 'shows', 'presents', 'gestures', 'points to', 'looks at'],
 } as const
 
 /** Todos, del más largo al más corto — `points to` tiene que ganarle a `points`. */
