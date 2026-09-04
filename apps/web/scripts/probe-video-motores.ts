@@ -107,6 +107,7 @@ function usage(): string {
     'Opcionales: PROBE_ARMS=B,C,D PROBE_OUT=/ruta PROBE_KLING_ORIENTATION=video|image',
     'Brazo D: PROBE_LOCUCION="…" (obligatorio) · PROBE_MUDO=1 (referencia sin audio)',
     '        PROBE_SEEDANCE_MODEL=bytedance/seedance-2-fast · PROBE_RESOLUTION=480p',
+    '        PROBE_REF_RES=480 (la referencia en 480x854 en vez de 720x1280)',
     'Espera: PROBE_POLL_MIN=40 (minutos; el default de 20 no le alcanza a seedance-2-fast)',
     '        PROBE_SEEDANCE_MODEL=bytedance/seedance-2-fast · PROBE_RESOLUTION=480p',
   ].join('\n')
@@ -563,13 +564,18 @@ async function main(): Promise<void> {
     // genera. Con `-an` esa vía se cierra, y de paso se mide cuánto de la señal de
     // movimiento dependía del sonido.
     const mudo = process.env.PROBE_MUDO === '1'
-    const f = join(outputDir, `source-clip-720${mudo ? '-mudo' : ''}.mp4`)
+    // ⚠️ EL TAMAÑO DE LA REFERENCIA ES OTRO EJE, y tiene un piso duro: seedance exige que
+    // el video esté entre 409.600 y 927.408 PÍXELES. 720x1280 = 921.600 entra por poco por
+    // arriba; 480x854 = 410.112 entra por poco por abajo. Cualquier otra cosa lo rechaza.
+    const ref = process.env.PROBE_REF_RES === '480' ? { w: 480, h: 854, tag: '480' } : { w: 720, h: 1280, tag: '720' }
+    const f = join(outputDir, `source-clip-${ref.tag}${mudo ? '-mudo' : ''}.mp4`)
     if (!ffmpegPath) throw new Error('ffmpeg-static no resolvió un binario')
     await run(ffmpegPath, ['-y', '-loglevel', 'error', '-i', sourceClip,
-      '-vf', 'scale=720:1280', '-c:v', 'libx264', '-preset', 'medium', '-crf', '18',
+      '-vf', `scale=${ref.w}:${ref.h}`, '-c:v', 'libx264', '-preset', 'medium', '-crf', '18',
       '-pix_fmt', 'yuv420p', ...(mudo ? ['-an'] : ['-c:a', 'aac']), '-movflags', '+faststart', f])
+    console.log(`  [D] referencia ${ref.w}x${ref.h} = ${(ref.w * ref.h).toLocaleString('es')} px`)
     clip720 = await uploadToStorage(sessionId, await readFile(f), 'video/mp4',
-      `probe-motion-720${mudo ? '-mudo' : ''}-${start}-${end}`.replace(/\./g, '_'))
+      `probe-motion-${ref.tag}${mudo ? '-mudo' : ''}-${start}-${end}`.replace(/\./g, '_'))
   }
 
   const jobs: Promise<ArmResult>[] = []

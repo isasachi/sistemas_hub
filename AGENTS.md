@@ -607,6 +607,25 @@ Lo que queda es que los lotes 2 a 4 andan en 18-19 car/s: eso ya no es el repart
 
 **Y eso deja el reparto que el dueño del repo anticipó: el video es la señal física, el forense es el PLANNER.** No un sustituto de la señal de movimiento — el plan que le fija el orden. La plantilla de la oración de acción (arriba) es justamente lo que hace que ese plan sea emitible.
 
+✅ **LA PRIMITIVE ES `bytedance/seedance-2` A 480p (decisión del dueño del repo, 2026-09-04).** Cuatro configuraciones medidas sobre el MISMO tramo de 6 s, todas con referencia muda y las acciones del forense numeradas:
+
+| | voz | orden | producto | tiempo | costo del clip | anuncio 46,5 s |
+|---|---|---|---|---|---|---|
+| `seedance-2-5` @720p, ref 720p | **98 %** | ✅ | ✅ | ~4 min | — | $17,67 |
+| **`seedance-2` @480p, ref 720p** | **94 %** | ✅ | ✅ | 254 s | **$0,690** | **~$5,35** |
+| `seedance-2-fast` @480p, ref 480p | 92 % | ✅ | ✅ | 165 s | $0,408 | ~$3,16 |
+| `seedance-2-fast` @480p, ref **720p** | — | — | — | 1840 s | $0 | ❌ falló |
+
+Los tres que salieron ejecutan las dos acciones EN ORDEN, con el frasco del usuario, la identidad del avatar y sin marca de agua. **La diferencia entre 92 y 98 es UNA palabra** —el ingrediente, que sale destrozado en los tres y bien en ninguno (*"ferrespitona"*, *"feresutinol"*, *"feresopinil"*)—, así que la elección se hizo por precio y por cómo se ve, no por cobertura.
+
+⚠️ **EL COBRO ES `precio × (input + output)` CUANDO HAY VIDEO DE REFERENCIA, y está verificado empíricamente**: `fast` a 480p devolvió 81,6 créditos por un clip de 6 s con referencia de 6 s = 12 s × $0,034, exacto. O sea **el anuncio se factura como el doble de su duración**, y ése es el número que hay que usar al presupuestar, no la duración del video.
+
+⚠️ **LA REFERENCIA SE MANDA EN 480x854, y el motivo es un fallo medido.** Seedance exige que el video de referencia esté entre **409.600 y 927.408 píxeles**: 720x1280 = 921.600 entra por 5.808 px y 480x854 = 410.112 por 512. La única corrida que falló fue `fast` con la referencia de 720p — 30 minutos para devolver *"The upstream API service timed out"*, con créditos 0. ⚠️ **No está probado que la causa sea el tamaño**: `seedance-2` corrió con referencia de 720p sin problema, así que puede haber sido un pico del proveedor. Pero re-encodar a 480p no cuesta nada y esquiva el único caso que se cayó.
+
+⚠️ **LA REFERENCIA LE PASA APARIENCIA AL AVATAR, no solo movimiento — y esto es nuevo.** Las uñas salieron **celestes en los dos modelos y con las dos resoluciones de referencia**: es el esmalte de la creadora del video original. No es varianza. Es la misma clase que la voz y la cara —contaminación de identidad desde la referencia— solo que mucho más chica, y hay que tenerla presente antes de dar por cerrada la sustitución de identidad.
+
+⚠️ **EL INGREDIENTE SE ROMPE EN LOS TRES MODELOS, y no es el mismo fallo que el del guion.** Aquél era el LLM completando de memoria y se arregló con la transcripción de la etiqueta; éste es la síntesis de voz tropezando con un nombre químico raro. El arreglo barato sería escribirlo fonéticamente SOLO en la locución que viaja al render (`fe-re-sorcinol`), sin tocar el guion que el usuario lee — el repo ya separa esos dos artefactos. **Sin implementar.**
+
 ⚠️ **EL CANARIO GRATIS ES POR MODELO, NO DE KIE — y esto costó una lectura equivocada.** Con grok, una `duration` fuera de rango vuelve sin `taskId`. Con **kling y seedance un campo válido DESPACHA**: lo único que no despacha es un **modelo inexistente**; un **asset inalcanzable** sí despacha pero vuelve con `creditsConsumed: 0.0`, así que ése es el canario de estos dos. De paso: la doc de KIE dice que el `mode` de kling es `std`/`pro` y **es falsa** — medido, `std` devuelve *"mode is not within the range of allowed options"* y `720p` se acepta.
 
 ⚠️ **LO QUE NO SE MIDIÓ:** un solo tramo de 6 s, una sesión, un draw por brazo. El precio por clip de seedance tampoco está medido, y el pipeline de producción **no se tocó** — esto determina la primitive, no la cablea.
