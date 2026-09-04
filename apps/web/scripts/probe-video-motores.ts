@@ -4,6 +4,9 @@
  * A = lote existente del pipeline Grok (no vuelve a renderizarse)
  * B = Kling 3.0 Motion Control vía KIE
  * C = xAI Video Edit directo
+ * D = ByteDance Seedance 2.5 vía KIE — el único que toma video + imágenes + audio + texto
+ *     en la misma llamada, o sea el único que puede resolver movimiento, identidad,
+ *     producto y VOZ de una vez. B arrastra la voz del original y C además su cara.
  *
  * IMPORTANTE: no hace llamadas pagadas sin PROBE_RUN=1.
  *
@@ -39,7 +42,7 @@ const POLL_TIMEOUT_MS = 20 * 60_000
 const MIN_CLIP_SEC = 3
 const MAX_CLIP_SEC = 8.7
 
-type Arm = 'B' | 'C'
+type Arm = 'B' | 'C' | 'D'
 type ProbeStatus = 'success' | 'failed' | 'skipped'
 
 interface StoredLote {
@@ -97,9 +100,9 @@ function parseNumber(raw: string | undefined, fallback: number, label: string): 
 function selectedArms(): Set<Arm> {
   const raw = process.env.PROBE_ARMS ?? 'B,C'
   const values = raw.split(',').map((x) => x.trim().toUpperCase()).filter(Boolean)
-  const invalid = values.filter((x) => x !== 'B' && x !== 'C')
+  const invalid = values.filter((x) => !['B', 'C', 'D'].includes(x))
   if (invalid.length || !values.length) {
-    throw new Error(`PROBE_ARMS inválido: ${raw}. Usa B, C o B,C.`)
+    throw new Error(`PROBE_ARMS inválido: ${raw}. Usa B, C, D o una lista.`)
   }
   return new Set(values as Arm[])
 }
@@ -300,6 +303,70 @@ async function runXai(session: VideoSessionRow, clipUrl: string): Promise<{ task
   throw new Error(`xAI excedió el timeout de ${POLL_TIMEOUT_MS / 60_000} minutos`)
 }
 
+/**
+ * D · SEEDANCE 2.5 — el único brazo que recibe las CUATRO señales a la vez.
+ *
+ * `reference_video_urls` es el movimiento, `reference_image_urls` la identidad y el
+ * producto, el prompt la locución, y `generate_audio` la voz. B demostró que la señal
+ * física de movimiento funciona y se quedó sin producto y con la voz del original; C
+ * conservó además la cara y la marca de agua. Acá se prueba si un solo motor cubre todo.
+ *
+ * ⚠️ EL VIDEO DE REFERENCIA VA EN 720p. La doc exige 480p o 720p, y el clip fuente sale a
+ * 576x1024. Se re-encoda a 720x1280 SOLO para este brazo, para que B y C conserven
+ * exactamente el input con el que ya se midieron.
+ */
+async function runSeedance(
+  session: VideoSessionRow, clipUrl: string, locucion: string, duration: number,
+): Promise<{ taskId: string; url: string }> {
+  if (!session.avatar_url) throw new Error('La sesión no tiene avatar_url')
+  if (!session.product_url) throw new Error('La sesión no tiene product_url')
+  const key = await kieKey(session.user_id)
+  const response = await fetch(KIE_CREATE_URL, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'bytedance/seedance-2-5',
+      input: {
+        prompt: [
+          'Reproduce the motion of the reference video EXACTLY: same hand laterality, same cheek,',
+          'same action order, same timing, same hand-product-face contacts, same gaze and framing.',
+          'Do not simplify, reorder, omit or invent actions.',
+          `The person is the woman in the first reference image — her face, hair and clothes. ${characterDescription(session)}`,
+          `The product she handles is the one in the second reference image, reproduced exactly: ${productDescription(session)}.`,
+          'She is NOT the person in the reference video: take only the movement from it.',
+          'No on-screen text, captions, watermarks, usernames or platform UI of any kind.',
+          `She speaks this line out loud in Latin American Spanish, verbatim, and nothing else: "${locucion}"`,
+        ].join(' '),
+        reference_video_urls: [clipUrl],
+        reference_image_urls: [session.avatar_url, session.product_url],
+        generate_audio: true,
+        resolution: '720p',
+        aspect_ratio: '9:16',
+        duration: Math.max(4, Math.round(duration)),
+      },
+    }),
+    signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
+  })
+  const json = await response.json().catch(() => null) as
+    | { code?: number; msg?: string; data?: { taskId?: string } }
+    | null
+  const taskId = json?.data?.taskId
+  if (!response.ok || !taskId) {
+    throw new Error(`KIE createTask (seedance) falló (${json?.code ?? response.status}): ${json?.msg ?? 'sin respuesta'}`)
+  }
+  const deadline = Date.now() + POLL_TIMEOUT_MS
+  while (Date.now() < deadline) {
+    const detail = await getTaskDetail(taskId, key)
+    if (detail.state === 'success') {
+      if (!detail.videoUrl) throw new Error('KIE terminó sin URL de video')
+      return { taskId, url: detail.videoUrl }
+    }
+    if (detail.state === 'fail') throw new Error(detail.failMsg ?? 'KIE reportó fallo sin detalle')
+    await sleep(POLL_INTERVAL_MS)
+  }
+  throw new Error(`KIE (seedance) excedió el timeout de ${POLL_TIMEOUT_MS / 60_000} minutos`)
+}
+
 function evaluationMarkdown(sessionId: string, start: number, end: number, baseline: number): string {
   const rows = [
     'Mano correcta', 'Mejilla correcta', 'Orden de acciones', 'Timing',
@@ -336,6 +403,17 @@ function evaluationMarkdown(sessionId: string, start: number, end: number, basel
     'Decisión:  ',
     'Observaciones:  ',
   ].join('\n')
+}
+
+/**
+ * La línea que D tiene que decir. Va por env y no se deduce del guión: el tramo medido es
+ * de SEIS segundos dentro de una toma de veinte, así que ninguna locución guardada le
+ * corresponde entera — recortarla en código sería inventar dónde parte la frase.
+ */
+function locucionDeD(): string {
+  const linea = String(process.env.PROBE_LOCUCION ?? '').trim()
+  if (!linea) throw new Error('El brazo D necesita PROBE_LOCUCION="…" (la frase que debe decir)')
+  return linea
 }
 
 async function main(): Promise<void> {
@@ -393,6 +471,20 @@ async function main(): Promise<void> {
     createStrip(baselineFile, baselineFrames, duration),
   ])
 
+  // ⚠️ SOLO PARA D, y por eso es un archivo aparte: seedance exige 480p o 720p y el clip
+  // sale a 576x1024. Re-encodar el compartido cambiaría el input con el que B y C ya se
+  // midieron.
+  let clip720 = clipUrl
+  if (arms.has('D')) {
+    const f = join(outputDir, 'source-clip-720.mp4')
+    if (!ffmpegPath) throw new Error('ffmpeg-static no resolvió un binario')
+    await run(ffmpegPath, ['-y', '-loglevel', 'error', '-i', sourceClip,
+      '-vf', 'scale=720:1280', '-c:v', 'libx264', '-preset', 'medium', '-crf', '18',
+      '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-movflags', '+faststart', f])
+    clip720 = await uploadToStorage(sessionId, await readFile(f), 'video/mp4',
+      `probe-motion-720-${start}-${end}`.replace(/\./g, '_'))
+  }
+
   const jobs: Promise<ArmResult>[] = []
   if (arms.has('B')) {
     jobs.push((async () => {
@@ -422,8 +514,22 @@ async function main(): Promise<void> {
       }
     })())
   }
+  if (arms.has('D')) {
+    jobs.push((async () => {
+      try {
+        const generated = await runSeedance(session, clip720, locucionDeD(), duration)
+        const file = join(outputDir, 'D-seedance-2-5.mp4')
+        const frames = join(outputDir, 'D-seedance-2-5-frames.jpg')
+        await download(generated.url, file)
+        await createStrip(file, frames, duration)
+        return { arm: 'D', status: 'success', taskId: generated.taskId, remoteUrl: generated.url, file, frames }
+      } catch (error) {
+        return { arm: 'D', status: 'failed', error: errorText(error) }
+      }
+    })())
+  }
   const results = await Promise.all(jobs)
-  for (const arm of ['B', 'C'] as Arm[]) {
+  for (const arm of ['B', 'C', 'D'] as Arm[]) {
     if (!arms.has(arm)) results.push({ arm, status: 'skipped' })
   }
   results.sort((a, b) => a.arm.localeCompare(b.arm))

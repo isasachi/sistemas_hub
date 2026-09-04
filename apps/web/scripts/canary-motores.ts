@@ -61,6 +61,17 @@ async function main() {
     mode: '720p', character_orientation: 'video', background_source: 'input_video',
   }, 'kling-3.0/motion-control')
 
+  console.log('\nKIE · Seedance 2.5')
+  // 1. Modelo inexistente: no puede despachar.
+  await kieCanario('modelo inexistente        ', kie, { prompt: 'x' }, 'bytedance/seedance-2-5-NO')
+  // 2. Modelo real con los campos que va a usar el brazo D y assets INALCANZABLES: si el
+  //    envelope está mal, la validación se queja del campo; si está bien, despacha y muere
+  //    bajando el asset — que es lo que no cuesta nada (medido con kling: creditsConsumed 0).
+  await kieCanario('envelope del brazo D      ', kie, {
+    prompt: 'x', reference_video_urls: [video], reference_image_urls: [imagen],
+    generate_audio: true, resolution: '720p', aspect_ratio: '9:16', duration: 6,
+  }, 'bytedance/seedance-2-5')
+
   console.log(`\nxAI · Video Edit  (key ${xai ? 'ok' : 'FALTA'})`)
   // Modelo inexistente en cada ruta candidata: descubre cuál existe sin poder despachar.
   for (const path of ['/v1/videos/edits', '/v1/videos/generations', '/v1/videos']) {
