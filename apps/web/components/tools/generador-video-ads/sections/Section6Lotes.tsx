@@ -41,7 +41,7 @@ export default function Section6Lotes() {
   // frontera de plano y prometía menos clips —o sea menos llamadas pagadas— de los que
   // el servidor iba a crear un click después.
   const preview = adapted
-    ? groupIntoLotes(adapted.tomas, planoPorTiempoDe(forensicAnalysis?.cortes))
+    ? groupIntoLotes(adapted.tomas)
     : []
 
   useEffect(() => {

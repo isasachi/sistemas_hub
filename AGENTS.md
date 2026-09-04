@@ -419,6 +419,50 @@ Cuatro condiciones, todas COMPARACIONES y no criterios — es la "matemática" q
 
 ⚠️ **Medido: en el video real de producción, 0 uniones de 5 cortes — y es CORRECTO.** Sus cinco cortes tienen trabajos de cámara genuinamente distintos (*"posición fija frontal"* contra *"zoom digital lento"* contra *"plano completo, handheld"*), así que unirlos habría metido el corte adentro del clip. El ahorro por esta vía solo aparece cuando el original repite el mismo setup; **el grueso del presupuesto lo liberó la compresión del andamiaje**, no la fusión.
 
+### 🔴 VUELTA AL PROMPT MAESTRO — el prompt del lote recupera su forma (2026-09-03)
+
+**Decisión del dueño del repo, con sus palabras:** *"TODO EL SISTEMA DE VIDEO ESTÁ CONTAMINADO DESPUÉS DE TANTAS ITERACIONES PARA TRATAR DE ARREGLARLO. Vamos a volver a la fuente de verdad, el prompt maestro."* La fuente es `PROMPT_MAESTRO_VIDEO_UGC_ACTUALIZADO.md` y su OUTPUT — PARTE 3.
+
+**Lo que lo detonó es un CONTRAEJEMPLO, no una opinión.** Generó desde el wizard de KIE, con `grok-imagine-video-1-5-preview` y un prompt con la forma del spec, un clip que **sí ejecuta la coreografía**: suelta la gota en la mejilla, la masajea y lleva el frasco al pecho. Verificado acá fotograma a fotograma, y sin cortes de escena (detección a umbral 0,15 y 0,3): **una toma continua**. Lo que este repo emitía para el mismo tipo de contenido no lo ejecuta nunca.
+
+Las diferencias, puestas lado a lado:
+
+| | el prompt del spec (funciona) | el que emitía este repo |
+|---|---|---|
+| acciones | **2-3 eventos distintos**, lista numerada, **sin marcas de tiempo** | 6 ventanas de 1,5 s |
+| qué dicen | *"Left hand gently touches the drop on her cheek, beginning to massage"* | *"Massaging skin"* · *"Rubbing cheek"* · *"Massaging cheek area"* |
+| redundancia | la mano derecha se nombra cuando cambia | *"right hand: Holding bottle"* **seis veces** |
+| forma | oraciones | telegrama |
+| ocupación | prompt corto, casi todo contenido | 4.963 de 5.000 |
+
+**Cinco de nuestros seis tramos eran la misma acción rebanada.** Un modelo que no puede distinguir un tramo del siguiente hace un gesto genérico y se queda quieto — que es exactamente lo que salía. **La densidad empujó en la dirección equivocada: no hacían falta más tramos, hacían falta tramos DISTINTOS.**
+
+**EL MODELO VUELVE A `grok-imagine-video-1-5-preview`.** ✅ Canario gratis (2026-09-03): **prompt 4.096** (4.097 rechazado por largo), **7 imágenes aceptadas**, `aspect_ratio` validado contra lista y `9:16` la pasa, `duration` entera con 0 y 999 fuera de rango, `mode` y `nsfw_checker` aceptados. ⚠️ El rango exacto de `duration` **no se pudo aislar gratis**: cada canario enmascara al siguiente (con `aspect_ratio` basura la API ya no evalúa la duración). No importa: todo lote cae en 1–15 por la regla del spec.
+
+⚠️ **904 CARACTERES MENOS DE PROMPT**, así que el presupuesto vuelve a ser un problema real — y por eso la emisión nueva es más corta, no más larga.
+
+**La forma que se emite ahora**, literal del spec: `Prompt de Generación Visual (Contexto Absoluto)` con los bloques rotulados (Personaje, Producto, Escenario e iluminación, Cámara, Continuidad, Perfil de Voz y Acento, Regla de Video Limpio), después `Secuencia de Acciones Visuales` con `Toma N — X segundos` y una **lista NUMERADA** por toma, y al final `Guion de Locución Final`. En español, con los campos visuales en inglés — el contrato de idioma de FASE 1 encaja sin tocarse.
+
+⚠️ **DE DÓNDE SALEN LAS ACCIONES NUMERADAS, que es la decisión de diseño y no el formato.** La REGLA DE ACCIONES del spec pide posición inicial → movimiento → interacción → dirección de manos → manipulación del producto → mirada → posición final. Eso es, campo por campo, lo que trae un `MotionBeat`, así que **el timeline de V2 se REUSA como fuente** y lo único que se descarta son sus ventanas de tiempo. Los beats `micro` se absorben en el evento anterior. Sin timeline —toda sesión guardada— se parte `accionVisual` por sus separadores, que es el camino de siempre.
+
+⚠️ **LOS TRES CIERRES DE LOTE PROPIOS DE ESTE REPO SE FUERON, y es la decisión del dueño del repo, NO un re-descubrimiento.** La FASE 5 del spec tiene una sola regla: agrupar en orden, tope de 15 s, nunca partir una toma salvo que ella sola pase. Y su propio ejemplo mete un plano medio y un primer plano en el mismo lote (*"A sequence of two shots"*). Lo que se quitó, con su medición apuntada en `groupIntoLotes` para reponerlo sin re-descubrirlo: **`maxPlanos`** (lotes con dos encuadres 18 → 0 por 1,15×), **`clasePorTiempo`** (lotes que mezclan persona y producto 8 → 0 por 1,07×) y **`LOTE_MAX_COREO`** (prompts con la coreografía truncada 10 → 5 de 135). Las tres mediciones siguen siendo ciertas y las tres describen síntomas del prompt anterior.
+
+⚠️ **`LOTE_MAX_CHARS` SE QUEDA, y la distinción importa:** no da forma al reparto, protege contra un fallo medido del RENDER —a 577 caracteres grok deja de recitar y empieza a improvisar— que el spec no contempla porque sus tomas vienen cronometradas del original a un ritmo decible, y las nuestras las reescribe FASE 3 y las edita el usuario.
+
+⚠️ **Y CON EL CAP EN 15 s EL PISO DE HABLA PUEDE NO CABER.** Con el modelo anterior el techo eran 30 s y un piso de 20 entraba; acá la API no acepta más de 15, así que `clampDuration` recorta y el texto saldría apurado. Lo que impide llegar a ese caso es justamente `LOTE_MAX_CHARS` (15 × `CPS_MAX` = 300). Con test.
+
+⚠️ **`MIN_TOMA_SEG` VUELVE A 3 y su test deja de exigir IGUALDAD con el piso del modelo.** El piso de la API es ahora **1 s**, y fusionar hasta 1 s no fusionaría nada: un corte de 1 s es renderable para la API y sigue sin ser una toma que valga un clip. Los 3 s son el valor propio de la fusión —el que tenía antes de que se lo comiera el piso del modelo de turno— y coinciden con la toma más corta del spec. El test pasa a `>=`.
+
+⚠️ **EL ESCENARIO VUELVE AL PROMPT, y eso revierte una medición de 4 renders.** El spec lo exige por lote (REGLA DE CONTEXTO ABSOLUTO); está medido que el bloque de escenario en TEXTO hace derivar el fondo cuando contradice a la imagen del avatar (2 de 2 draws por brazo). Se emite igual, **y por eso es el PRIMER escalón que la escalera suelta**: si el fondo vuelve a derivar, el arreglo es bajarlo un nivel, no rediscutir el spec.
+
+**Lo que se BORRÓ de la emisión, todo junto para que se vea el tamaño de la acumulación:** el CANDADO DE MOVIMIENTO (`START STATE` / `TIMED MOTION` / `END STATE` y sus tres prohibiciones), el bloque `SOUND` (que este documento ya marcaba *"SIN VERIFICAR"*), el detalle atómico por corte (`micro`, cubierto ahora por las acciones numeradas), el recorrido por mano (`manosDe`, misma razón), el guion global duplicado, el párrafo de overlay de quince sinónimos —reemplazado por la Regla de Video Limpio del spec, un tercio del largo— y la escalera de **siete** escalones, que queda en **tres** (escenario → etiqueta del producto → recorte de acciones). `probe-motion-lock.ts` se retiró con ellos: A/Beaba una máquina que ya no existe.
+
+⚠️ **`scriptFingerprint` v12 → v13**, y los ESTADOS salen del hash: el prompt ya no los emite, y hashear un insumo que el prompt no lee es el espejo del bug que esa función existe para evitar. Los beats SÍ se siguen hasheando, porque son la fuente de las acciones numeradas.
+
+**Herramienta de control: `scripts/probe-prompt-lote.ts`** imprime el prompt real de cualquier lote de una sesión guardada, con los mismos insumos que la ruta. Cero llamadas a modelos, cero renders. Es lo que hay que leer al lado del ejemplo del spec antes de gastar nada.
+
+⚠️ **SIN RENDER TODAVÍA.** Lo verificado es que el prompt sale con la forma del spec y entra en el tope (3.502 de 4.096 en el lote 1 de `7e4ccbcf`, sin recortar). Que grok ejecute la coreografía con esta emisión es lo que falta medir, y el contraejemplo del wizard es la evidencia de que puede.
+
 ### EL CANDADO DE MOVIMIENTO (V2) — cableado, verificado y **sin efecto medible todavía** (2026-09-03)
 
 La coreografía deja de viajar como prosa y viaja como una **máquina de estados**: `MotionTimeline` (`lib/video-ads/motion.ts`) con `startState` / `beats` / `endState`, y el prompt del lote emite

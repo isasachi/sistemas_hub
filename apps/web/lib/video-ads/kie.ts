@@ -7,31 +7,39 @@ import { CPS_MAX, CPS_MIN } from './forensic'
  * resultado se consulta con recordInfo. Por eso el render NO usa el patrón SSE del
  * generador de anuncios: la ruta crea la tarea y responde, y el cliente hace polling.
  *
- * ⚠️ VUELTA A GROK DESDE VEO 3.1 (2026-08-24, decisión del dueño del repo). Veo vivía en
- * `/api/v1/veo/*` con `successFlag` numérico; este modelo está en el MARKETPLACE
- * (`/api/v1/jobs/createTask` + `recordInfo`), con `state` string y `resultJson` como
- * STRING con JSON adentro. No es un cambio de string de modelo: es otro cliente, otro
- * parser y otro contrato de duraciones.
+ * ⚠️ VUELTA AL PROMPT MAESTRO Y A `grok-imagine-video-1-5-preview` (2026-09-03, decisión
+ * del dueño del repo). Su palabra: *"todo el sistema de video está contaminado después de
+ * tantas iteraciones para tratar de arreglarlo"*. La fuente de verdad vuelve a ser
+ * `PROMPT_MAESTRO_VIDEO_UGC_ACTUALIZADO.md`, y el prompt que llega a grok vuelve a su forma
+ * —bloques rotulados y una secuencia de acciones NUMERADA por toma— en vez de la plantilla
+ * en telegrama que fue creciendo a fuerza de parches.
  *
- * ⚠️ Y NO ES EL MISMO GROK QUE HUBO ANTES. `grok-imagine-video-1-5-preview` (el de la
- * primera época de esta tool) tomaba `duration` INTEGER 1–15, prompt de 4096 y rechazaba
- * `mode`. Éste toma `duration` STRING 6–30, prompt de 5000 y acepta `mode`. Copiar el
- * cliente viejo tal cual lo rechaza la validación.
+ * ⚠️ ES OTRO MODELO QUE `grok-imagine/image-to-video`, y el contrato cambia con él.
  *
- * Contrato (docs.kie.ai/market/grok-imagine/image-to-video):
- *   - `image_urls`: hasta **7** imágenes, **10 MB** cada una (no 20), JPEG/PNG/WEBP, y
- *     URLs públicas. Con `resolution: 1080p` solo se admite UNA — otra razón para 720p.
- *   - `prompt`: máx **5000** caracteres, y la doc dice *English only*. Ver `KIE_PROMPT_MAX`
- *     y la nota de idioma en `buildLotePrompt`: el andamiaje va en inglés y la locución
- *     entrecomillada en español, que es lo que el anuncio tiene que decir.
- *   - `duration`: **STRING**, 6–30 segundos en pasos de 1. ⚠️ Medido con el canario: la
- *     API acepta TAMBIÉN el number, así que el `String()` no es lo que evita un 422 —
- *     se manda string porque es lo que dice la doc, no porque el number falle. Los dos
- *     extremos del rango ("6" y "30") pasaron la validación.
- *   - `resolution`: `480p` (default) | `720p` | `1080p`.
- *   - `aspect_ratio`: `9:16` para UGC vertical. ⚠️ "This parameter is invalid if it is a
- *     single image": con UNA sola imagen manda el ratio del origen — ver `vertical.ts`.
- *   - `mode`: `fun` | `normal` (default) | `spicy`. Va `normal` explícito.
+ * ✅ MEDIDO CON EL CANARIO GRATIS (2026-09-03), que es lo único que vale acá: la validación
+ * de KIE corre ANTES de despachar, así que un campo inválido vuelve sin `taskId` y sin
+ * cobrar. Mandando siempre UN campo inválido se comprueba el resto de balde.
+ *   - `prompt`: **4.096** caracteres. 4.097 devuelve *"The text length cannot exceed the
+ *     maximum limit"* y 4.096 pasa. Son 904 MENOS que el modelo anterior, así que el
+ *     presupuesto del prompt vuelve a ser un problema real.
+ *   - `image_urls`: **7 aceptadas** (probado con 3 y con 7).
+ *   - `aspect_ratio`: se valida contra una lista cerrada —un valor basura devuelve
+ *     *"aspect_ratio is not within the range of allowed options"*— y `9:16` la pasa.
+ *   - `duration`: entero. 0 y 999 devuelven *"Value must be within the specified range"*;
+ *     el rango de la ficha del modelo es 1–15. Acepta number y también string.
+ *   - `mode` y `nsfw_checker`: aceptados.
+ *
+ * ⚠️ EL RANGO EXACTO DE `duration` NO SE PUDO AISLAR GRATIS, y conviene saber por qué: el
+ * único canario disponible enmascara al siguiente (con `aspect_ratio` basura la API se
+ * queja de eso y ya no evalúa la duración; con el prompt largo, del largo). Lo que sí está
+ * medido son los extremos rechazados. Todo lote nuestro cae dentro de 1–15 por la REGLA
+ * MÁXIMA DE 15 SEGUNDOS del spec, así que el rango no se ejercita en los bordes.
+ *
+ * Contrato (marketplace: `/api/v1/jobs/createTask` + `recordInfo`, `state` string y
+ * `resultJson` como STRING con JSON adentro):
+ *   - `resolution`: `480p` (default) | `720p` | `1080p`. Va 720p.
+ *   - `aspect_ratio`: `9:16`. ⚠️ Sigue siendo inválido con UNA sola imagen — ver
+ *     `vertical.ts`, el salvavidas documentado para ese caso.
  *   - `nsfw_checker`: ⚠️ el default de la API es **false**, y false DESACTIVA el filtro.
  *     Acá va **true** a propósito: queremos el filtro puesto.
  *   - Las imágenes se citan en el prompt como @image(1), @image(2)… en el orden del
@@ -40,17 +48,10 @@ import { CPS_MAX, CPS_MIN } from './forensic'
  * ⚠️ LOS ERRORES VIENEN EN HTTP 200 CON `code: 500` ADENTRO (no 422, y no en el status).
  * Mirar solo `res.ok` deja pasar el fallo como éxito y el polling espera para siempre un
  * taskId que no existe. Por eso `createVideoTask` exige `data.taskId`.
- *
- * EL CANARIO GRATIS (`scripts/canary-grok.ts`, medido el 2026-08-24): la validación corre
- * ANTES de despachar, así que un campo inválido devuelve error SIN `taskId` y sin cobrar.
- * Mandando una `duration` fuera de rango se verifica gratis todo lo demás; y al revés,
- * mandando un prompt de 5001 caracteres se verifica gratis la duración. Así se
- * confirmaron, sin gastar un render: prompt de 5000 OK y 5001 rechazado ("The text length
- * cannot exceed the maximum limit"), 7 imágenes OK, y "6"/"12"/"30" válidas.
  */
 
 const KIE_BASE = 'https://api.kie.ai/api/v1/jobs'
-const MODEL = 'grok-imagine/image-to-video'
+const MODEL = 'grok-imagine-video-1-5-preview'
 
 export type KieState = 'waiting' | 'queuing' | 'generating' | 'success' | 'fail'
 
@@ -72,8 +73,8 @@ export interface VideoTaskInput {
 }
 
 /** Rango legal de `duration` en este modelo. Entero, y viaja como STRING. */
-export const MIN_DURATION = 6
-export const MAX_DURATION = 30
+export const MIN_DURATION = 1
+export const MAX_DURATION = 15
 
 /**
  * Cuántas imágenes acepta el modelo por tarea. Es el techo del sistema de anclas:
@@ -82,7 +83,7 @@ export const MAX_DURATION = 30
 export const MAX_IMAGES = 7
 
 /** Tope de `input.prompt`, CONFIRMADO con el canario. Pasarse = tarea rechazada. */
-export const KIE_PROMPT_MAX = 5000
+export const KIE_PROMPT_MAX = 4096
 
 /**
  * Ajusta la duración de un lote al rango legal, sin perder ninguna de las dos lecciones
@@ -117,8 +118,9 @@ export const KIE_PROMPT_MAX = 5000
  * segundos de shot list descartados en silencio, justo los que tienen su imagen ancla
  * ya generada y pagada.
  *
- * ⚠️ Un lote más corto que `MIN_DURATION` se sube a 6 s: es el mínimo de la API. Deja un
- * poco de aire al final, que es preferible a no poder renderizarlo.
+ * ⚠️ El piso de la API es 1 s, así que ya no infla ningún lote: con el modelo anterior era
+ * 6 s y eso metía holgura —que grok rellena inventando— en toda toma corta. La toma de 3 s
+ * del spec se renderiza como 3 s.
  */
 export function clampDuration(sec: number, locucionChars = 0, tomas = 1): number {
   const objetivo = Number.isFinite(sec) && sec > 0 ? Math.round(sec) : MIN_DURATION
@@ -143,8 +145,8 @@ export function buildTaskBody(input: VideoTaskInput) {
     input: {
       image_urls: input.images.map((i) => i.url),
       prompt: input.prompt,
-      // ⚠️ STRING, no number. Es la diferencia de contrato con el grok viejo y con Veo.
-      duration: String(clampDuration(input.durationSec, input.locucionChars, input.tomas)),
+      // Entero, que es lo que dice la ficha de este modelo (acepta string también).
+      duration: clampDuration(input.durationSec, input.locucionChars, input.tomas),
       resolution: resolutionFor(),
       aspect_ratio: '9:16',
       mode: 'normal',

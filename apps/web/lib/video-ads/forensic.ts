@@ -294,7 +294,7 @@ export const CPS_MIN = 9
  * frontera de plano abre un lote por encuadre, así que un montaje de micro-cortes
  * multiplica el costo por la granularidad del original.
  */
-export const MIN_TOMA_SEG = 6
+export const MIN_TOMA_SEG = 3
 
 /**
  * ¿Este corte muestra a la PERSONA, o solo al producto?

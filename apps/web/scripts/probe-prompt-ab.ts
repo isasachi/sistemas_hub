@@ -77,7 +77,7 @@ async function main() {
   const f = r.forensic_analysis
   const plano = new Map(f.cortes.map((c) => [c.tiempo, String(c.camara).trim()]))
   const clase = new Map(f.cortes.map((c) => [c.tiempo, corteMuestraPersona(c)]))
-  const lotes = groupIntoLotes(adapted.tomas, plano, 1, clase)
+  const lotes = groupIntoLotes(adapted.tomas)
 
   // El lote con MÁS coreografía: si el recorte gana ahí, la respuesta es contundente.
   const lote = [...lotes].sort((a, b) =>

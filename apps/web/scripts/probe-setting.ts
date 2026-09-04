@@ -76,7 +76,7 @@ async function main() {
   const f = r.forensic_analysis
   const plano = new Map(f.cortes.map((c) => [c.tiempo, String(c.camara).trim()]))
   const clase = new Map(f.cortes.map((c) => [c.tiempo, corteMuestraPersona(c)]))
-  const lotes = groupIntoLotes(adapted.tomas, plano, 1, clase)
+  const lotes = groupIntoLotes(adapted.tomas)
 
   // Por defecto el PRIMERO: es el que arranca del avatar, o sea el caso donde la imagen
   // lleva la escena de la forma más limpia. Si la escena no se sostiene ahí, no se

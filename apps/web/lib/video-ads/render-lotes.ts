@@ -217,7 +217,12 @@ export function scriptFingerprint(input: {
     // el texto producido: sin el bump, reanudar a través del cambio pegaría un clip con la
     // coreografía en prosa a uno con la línea de tiempo explícita mientras `isPaidResume`
     // jura que es el mismo contenido.
-    'v12',
+    // v12 → v13: VUELTA AL PROMPT MAESTRO. Cambia el MODELO de render
+    // (`grok-imagine-video-1-5-preview`, con su propio tope de prompt y de duración), la
+    // plantilla entera del prompt y la regla de reparto en lotes. Un resume a través de esto
+    // pegaría un clip del modelo viejo con la plantilla vieja a uno nuevo mientras
+    // `isPaidResume` jura que es el mismo contenido.
+    'v13',
     // Pasa por `toNiche`: un nicho BLOQUEADO se renderiza como suplementos, así que su
     // huella tiene que ser la de suplementos. Sin esto, una sesión guardada como 'ropa'
     // con lotes ya pagados reanudaría pegando un clip del camino de prenda a uno del
@@ -276,16 +281,6 @@ export function scriptFingerprint(input: {
         campos.push(
           num(b.startSec), num(b.endSec), num(b.referenceFrameMs), b.importance,
           b.body, b.headAndGaze, b.leftHand, b.rightHand, b.productStateBefore, b.productStateAfter,
-        )
-      }
-      // Y los ESTADOS, por lo mismo: se imprimen como `START STATE:` / `END STATE:` en el
-      // prompt, así que dos tomas con los mismos beats y estados distintos son dos prompts
-      // distintos. Las nueve casillas en orden fijo, `''` cuando no hay estado (una toma
-      // partida no lo lleva) — que es lo que hashearía una sesión sin timeline.
-      for (const e of [t.startState, t.endState]) {
-        campos.push(
-          e?.bodyPose ?? '', e?.headPose ?? '', e?.gaze ?? '', e?.leftHand ?? '', e?.rightHand ?? '',
-          e?.facialExpression ?? '', e?.productState ?? '', e?.propsState ?? '', e?.cameraState ?? '',
         )
       }
       campos.push((input.enOff?.has(t.tiempoOriginal) ? '1' : '0'))
