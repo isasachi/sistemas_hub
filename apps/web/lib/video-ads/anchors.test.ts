@@ -28,11 +28,25 @@ describe('primeraAccion', () => {
 describe('anchorSpecs', () => {
   const planos = new Map([['t1', 'Plano medio'], ['t2', 'Plano medio'], ['t3', 'Primer plano']])
 
-  // El PRIMER lote arranca del avatar, que ya viaja como @image(1) y ya ES una imagen
-  // válida de esa escena: generarle un ancla sería pagar por una copia.
-  it('el primer lote no necesita ninguna ancla', () => {
+  // ⚠️ INVIERTE la regla anterior (*"el primer lote no lleva ancla, arranca del avatar"*).
+  // El avatar es una imagen válida del ESCENARIO y no de la POSE: es un retrato neutro, y
+  // un anuncio que abre con el gotero ya en la mejilla gastaba sus primeros segundos
+  // llegando ahí.
+  it('el primer lote TAMBIÉN abre con su propia ancla', () => {
     const lote = groupIntoLotes([toma(1, 't1', PERSONA), toma(2, 't2', PERSONA)])[0]
-    expect(anchorSpecs({ lote, planoPorTiempo: planos, productDesc: 'frasco' })).toEqual([])
+    const specs = anchorSpecs({ lote, planoPorTiempo: planos, productDesc: 'frasco' })
+    expect(specs).toHaveLength(1)
+    expect(specs[0].tiempo).toBe('t1')
+  })
+
+  // El instante del original del que sale el fotograma de la pose. Sin timeline no hay
+  // ninguno y el ancla se genera como siempre, solo desde el texto.
+  it('el ancla lleva el instante del primer beat de su toma', () => {
+    const t1 = { ...toma(1, 't1', PERSONA), beats: [{ startSec: 0, endSec: 2, referenceFrameMs: 3500, action: 'a', productStateBefore: '', productStateAfter: '', importance: 'major' as const }] }
+    const specs = anchorSpecs({ lote: groupIntoLotes([t1])[0], productDesc: 'frasco' })
+    expect(specs[0].referenceFrameMs).toBe(3500)
+    expect(anchorSpecs({ lote: groupIntoLotes([toma(1, 't1', PERSONA)])[0], productDesc: 'frasco' })[0].referenceFrameMs)
+      .toBeUndefined()
   })
 
   // ⚠️ EL EJE QUE ANCLA EL FONDO ENTRE CLIPS. Sin esto, con `maxPlanos = 1` un lote de una
@@ -53,9 +67,9 @@ describe('anchorSpecs', () => {
   it('un cambio de encuadre abre una escena nueva y pide su ancla', () => {
     const lote = groupIntoLotes([toma(1, 't1', PERSONA), toma(3, 't3', PERSONA)])[0]
     const specs = anchorSpecs({ lote, planoPorTiempo: planos, productDesc: 'frasco' })
-    expect(specs).toHaveLength(1)
-    expect(specs[0].tiempo).toBe('t3')
-    expect(specs[0].role).toContain('Primer plano')
+    expect(specs).toHaveLength(2)
+    expect(specs[1].tiempo).toBe('t3')
+    expect(specs[1].role).toContain('Primer plano')
   })
 
   // Es el mismo criterio con el que `mergeMicroCortes` decide qué puede fusionar: un
@@ -63,10 +77,10 @@ describe('anchorSpecs', () => {
   it('pasar de un plano de persona a uno sin persona abre escena nueva', () => {
     const lote = groupIntoLotes([toma(1, 't1', PERSONA), toma(2, 't2', PRODUCTO)])[0]
     const specs = anchorSpecs({ lote, productDesc: 'frasco' })
-    expect(specs).toHaveLength(1)
+    expect(specs).toHaveLength(2)
     // ⚠️ Y se marca como plano SIN persona: `images.edit` conserva lo que se le da, así
     // que mandarle el avatar a un flat-lay devuelve a alguien sosteniendo el producto.
-    expect(specs[0].soloProducto).toBe(true)
+    expect(specs[1].soloProducto).toBe(true)
   })
 
   it('un flat-lay pide el producto SOLO como referencia, sin el avatar', async () => {
@@ -79,10 +93,35 @@ describe('anchorSpecs', () => {
       generate: async (i) => { pedidos.push(i.imageUrls); return Buffer.from('x') },
       upload: async () => 'https://cdn/x.png',
     })
-    expect(pedidos[0]).toEqual(['https://cdn/producto.png'])
+    expect(pedidos[1]).toEqual(['https://cdn/producto.png'])
     // Y su prompt prohíbe explícitamente que aparezca nadie.
-    expect(specs[0].prompt).toMatch(/NO PERSON IN FRAME/)
-    expect(specs[0].prompt).not.toMatch(/pose of the person/)
+    expect(specs[1].prompt).toMatch(/NO PERSON IN FRAME/)
+    expect(specs[1].prompt).not.toMatch(/pose of the person/)
+  })
+
+  // ⚠️ EL FOTOGRAMA VA ÚLTIMO PORQUE EL PROMPT LO CITA ASÍ ("the LAST image"). Y el bloque
+  // de pose solo se emite cuando hay fotograma: nombrar una imagen que no se manda es la
+  // referencia colgante que este repo ya registró tres veces.
+  it('el fotograma de pose va como última imagen, y su bloque solo existe con él', async () => {
+    const lote = groupIntoLotes([toma(1, 't1', PERSONA)])[0]
+    const specs = anchorSpecs({ lote, productDesc: 'frasco' })
+    const pedidos: { prompt: string; imageUrls: string[] }[] = []
+    const correr = () => generateAnchorImages({
+      avatarUrl: 'https://cdn/avatar.png', productUrl: 'https://cdn/producto.png',
+      lote: 1, specs,
+      generate: async (i) => { pedidos.push(i); return Buffer.from('x') },
+      upload: async () => 'https://cdn/x.png',
+    })
+    await correr()
+    expect(pedidos[0].imageUrls).toEqual(['https://cdn/avatar.png', 'https://cdn/producto.png'])
+    expect(pedidos[0].prompt).not.toMatch(/POSE REFERENCE/)
+
+    specs[0].poseUrl = 'https://cdn/pose.jpg'
+    await correr()
+    expect(pedidos[1].imageUrls).toEqual(['https://cdn/avatar.png', 'https://cdn/producto.png', 'https://cdn/pose.jpg'])
+    expect(pedidos[1].prompt).toMatch(/POSE REFERENCE — the LAST image/)
+    // El fotograma sale de un video de redes: trae marca de agua y subtítulos quemados.
+    expect(pedidos[1].prompt).toMatch(/no watermark, no username, no caption/)
   })
 
   // ⚠️ El avatar y el producto ocupan dos de las siete plazas de `image_urls`. Pasarse

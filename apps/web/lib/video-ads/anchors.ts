@@ -73,6 +73,14 @@ export interface AnchorSpec {
   prompt: string
   /** Cómo se cita en la leyenda `@image(n)` del prompt del lote. */
   role: string
+  /**
+   * El instante del video ORIGINAL que mejor muestra la pose con la que ABRE esta escena
+   * (`referenceFrameMs` del primer beat). Quien genera las anclas extrae ese fotograma y lo
+   * pasa como referencia de POSE — ver `poseUrl`.
+   */
+  referenceFrameMs?: number
+  /** El fotograma ya extraído y subido. Lo llena la ruta, no `anchorSpecs`. */
+  poseUrl?: string
 }
 
 /**
@@ -133,12 +141,20 @@ export function anchorSpecs(args: {
      * lo re-inventa al generar video.** Esa diferencia es la que hace que esto funcione, y
      * NO se podía heredar: la medición que había en AGENTS.md era de Nano Banana Pro.
      *
-     * El PRIMER lote no lleva ancla a propósito: arranca del avatar, que ya ES una imagen
-     * válida de esa escena. Generarle una sería pagar por una copia.
+     * ⚠️ *"El PRIMER lote no lleva ancla a propósito"* fue la regla hasta la ANCLA DE POSE
+     * y ya NO vale — se conserva escrita porque su razonamiento sigue siendo correcto para
+     * lo que medía: el avatar ya es una imagen válida de ese ESCENARIO. Lo que no es, es
+     * una imagen válida de esa POSE. Ver el comentario de `abreLote`.
      *
-     * Cuesta N−1 imágenes por sesión, las paga el hub. Es el precio del eje.
+     * Cuesta N imágenes por sesión (era N−1), las paga el hub. Es el precio del eje.
      */
-    const abreLote = primera && lote.n > 1
+    // ⚠️ EL PRIMER LOTE TAMBIÉN LLEVA ANCLA, y esto INVIERTE la decisión de arriba.
+    // Aquélla decía que arrancar del avatar alcanzaba porque "ya ES una imagen válida de esa
+    // escena". Lo es del ESCENARIO, no de la POSE: el avatar es un retrato neutro, así que
+    // un anuncio que —como éste— ABRE con el gotero ya en la mejilla obliga al clip a gastar
+    // sus primeros segundos llegando a esa posición. Lo señaló el dueño del repo mirando el
+    // original: *"no lleva el gotero a su mejilla sino que ya empieza ahí"*.
+    const abreLote = primera
     if (!abreLote && (primera || !cambia)) continue
     if (specs.length >= MAX_IMAGES - 2) {
       // ⚠️ SE LOGUEA, no se traga. Un recorte silencioso "se lee como que cubrimos todo"
@@ -156,6 +172,9 @@ export function anchorSpecs(args: {
 
     specs.push({
       tiempo: t.tiempoOriginal,
+      // El instante del original que retrata esta pose. Sin timeline no hay ninguno y el
+      // ancla se genera como siempre, solo desde el texto.
+      referenceFrameMs: (t.beats ?? [])[0]?.referenceFrameMs || undefined,
       // ⚠️ Una escena SIN persona (un flat-lay del producto) no lleva el avatar como
       // referencia: `images.edit` conserva lo que se le da, así que mandarle una persona
       // para una foto en la que no debe haber nadie es pedirle las dos cosas a la vez.
@@ -281,6 +300,42 @@ export function buildAnchorPrompt(args: {
 }
 
 /**
+ * Le agrega al prompt del ancla la referencia de POSE: el fotograma real del original en
+ * el instante en que esta escena empieza.
+ *
+ * ⚠️ VA COMO ÚLTIMA IMAGEN Y MANDA SOBRE EL TEXTO. Todo este módulo está construido sobre
+ * que **la imagen le gana al texto** —es lo que hace que el escenario deje de derivar—, y
+ * la pose es justamente lo que peor sobrevive escrita: *"releases one drop onto her cheek"*
+ * no dice a qué altura está el frasco ni hacia dónde mira. Dejar las dos fuentes sin
+ * jerarquía es la contradicción dentro del mismo prompt que este repo ya pagó cinco veces.
+ *
+ * ⚠️ Y EL GUARD ES EL MISMO QUE YA ESTABA MEDIDO PARA EL TEXTO, ahora contra una imagen:
+ * el fotograma es de OTRA persona, con otra ropa y otra habitación. De él se toma el
+ * movimiento y nada más.
+ */
+function conPose(prompt: string, soloProducto?: boolean): string {
+  return [
+    prompt,
+    '',
+    'POSE REFERENCE — the LAST image is a real frame from the video being replicated.',
+    soloProducto
+      ? 'Copy from it where the product sits, at what angle and how the shot is framed. It overrides the text above wherever they disagree.'
+      : 'Copy the POSE from it: where each hand is, what each hand holds, how close it is to the face or body, which way the body is turned and how the shot is framed. It overrides the POSE text above wherever they disagree.',
+    'Take ONLY that from it. The person, the face, the hair, the clothes, the product and',
+    'the room are the ones in the FIRST images — ignore everything else in the pose',
+    'reference: it is a different person, in different clothes, in a different room,',
+    'holding a different bottle.',
+    // ⚠️ El fotograma sale de un video de redes: trae la marca de agua de la plataforma,
+    // el arroba del autor y los subtítulos quemados. Es EXACTAMENTE la clase de artefacto
+    // que este pipeline separa en `elementosGraficos` para que no se reproduzca, y acá
+    // entra por una puerta nueva — dentro de una imagen que se ordena copiar.
+    'The pose reference is a still from a social video: it has a platform watermark, a',
+    'username and burned-in captions on top of it. NONE of that exists in the photograph',
+    'you produce — no watermark, no username, no caption, no text of any kind.',
+  ].join('\n')
+}
+
+/**
  * Genera los fotogramas ancla de un lote y devuelve sus URLs ya subidas al bucket.
  *
  * Se suben en vez de usar la URL que devuelva el generador porque esa es temporal: las
@@ -307,12 +362,16 @@ export async function generateAnchorImages(args: {
   return Promise.all(
     args.specs.map(async (spec, i) => {
       const bytes = await args.generate({
-        prompt: spec.prompt,
+        prompt: spec.poseUrl ? conPose(spec.prompt, spec.soloProducto) : spec.prompt,
         // La persona primero (es la identidad), el producto detrás para que no derive
         // cuando la acción lo mete en cuadro. El orden es el que cita el prompt.
         // ⚠️ En un plano SIN persona va solo el producto: darle el avatar a una foto en la
         // que no debe salir nadie es pedirle que conserve a alguien que sobra.
-        imageUrls: spec.soloProducto ? [args.productUrl] : [args.avatarUrl, args.productUrl],
+        // ⚠️ La pose va ÚLTIMA porque el prompt la cita así ("the LAST image").
+        imageUrls: [
+          ...(spec.soloProducto ? [args.productUrl] : [args.avatarUrl, args.productUrl]),
+          ...(spec.poseUrl ? [spec.poseUrl] : []),
+        ],
       })
       return args.upload(bytes, `ancla-${args.lote}-${i + 1}`)
     }),
