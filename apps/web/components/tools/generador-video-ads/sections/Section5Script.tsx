@@ -22,6 +22,11 @@ export default function Section5Script() {
   // `toma.n`, que lo hereda el forense y puede repetirse). Solo las tomas que tocó
   // entran acá; el resto queda tal cual está guardado.
   const [ediciones, setEdiciones] = useState<Record<number, string>>({})
+  // El guion llega COMPLETO, así que por defecto se muestra para LEERLO: un párrafo, como
+  // se va a escuchar. Los textareas por renglón son para corregir, no para rellenar —
+  // con huecos que había que completar a mano un formulario tenía sentido; con el guion
+  // ya cerrado lo que estorba es el formulario. Decisión del dueño del repo.
+  const [editando, setEditando] = useState(false)
   const [guardando, setGuardando] = useState(false)
 
   async function run() {
@@ -156,18 +161,31 @@ export default function Section5Script() {
         <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[#c9a227]">
           Guión final adaptado
         </div>
-        {/* El spec de la FASE 3 dice "No preguntes nada": lo que no se puede completar
-            con seguridad queda marcado en el guión y lo escribe el usuario. Antes había
-            un formulario con un campo por variable pendiente — preguntaba justo lo que
-            el spec prohíbe y, encima, no dejaba tocar el resto de la frase cuando el
-            modelo elegía un valor que no concordaba ("un efecto iluminadora"). Editar la
-            línea cubre los dos casos con un solo mecanismo. */}
-        <p className="mb-3 text-[11.5px] leading-relaxed text-[#8b8b8b]">
-          Una línea por toma, en el orden del original. Edítalas si algo no suena natural.
-          Lo que quedó entre corchetes no lo inventamos: escríbelo tú.
-        </p>
+        {/* Editar la LÍNEA y no un campo por variable: cuando el modelo elige un valor
+            que no concuerda ("un efecto iluminadora") lo que hay que tocar es la frase,
+            y un campo etiquetado "Resultado" no deja tocarla. Un solo mecanismo para los
+            dos casos. */}
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <p className="text-[11.5px] leading-relaxed text-[#8b8b8b]">
+            {editando
+              ? 'Una línea por toma, en el orden del original. Corrige lo que no suene natural.'
+              : 'Así se va a escuchar, de corrido. Si algo no suena natural, edítalo por toma.'}
+          </p>
+          <button
+            onClick={() => setEditando(!editando)}
+            className="shrink-0 rounded-lg border border-white/[0.12] px-3 py-1.5 text-[11.5px] text-[#c9c9c9] hover:bg-white/[0.04]"
+          >
+            {editando ? 'Ver el guión seguido' : 'Editar por toma'}
+          </button>
+        </div>
 
-        <div className="flex flex-col gap-3">
+        {!editando && (
+          <p className="whitespace-pre-wrap text-[13.5px] leading-[1.75] text-[#e6e6e6]">
+            {guionActual}
+          </p>
+        )}
+
+        <div className={`flex-col gap-3 ${editando ? 'flex' : 'hidden'}`}>
           {lineas.map((l) => {
             const falta = l.texto.includes('[PENDIENTE:')
             const cabe = cabenEn(l.duracionSeg)
@@ -211,7 +229,7 @@ export default function Section5Script() {
         <div className="rounded-2xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-[12.5px] leading-relaxed text-amber-300">
           {pendientes.length === 1 ? 'Queda un dato' : `Quedan ${pendientes.length} datos`} sin
           completar. No los inventamos porque no estaban en lo que nos diste, y el video los
-          leería en voz alta tal cual. Escríbelos arriba y guarda.
+          leería en voz alta tal cual. Ábrelos con “Editar por toma”, escríbelos y guarda.
         </div>
       )}
 
