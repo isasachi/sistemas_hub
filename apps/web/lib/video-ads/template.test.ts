@@ -36,14 +36,27 @@ describe('buildTemplateInstruction', () => {
     expect(p).toMatch(/ni una\s+palabra añadida, quitada ni reordenada/i)
   })
 
-  // Tensión real: empujar a marcar MÁS (para que no sobreviva el nicho del original)
-  // hizo que los corchetes se tragaran posesivos y preposiciones — "mi cara" quedó como
-  // "[parte del cuerpo]" y "en cara y en cuello" perdió el segundo "en".
-  it('exige que el corchete cubra el mínimo, sin tragarse palabras funcionales', () => {
-    expect(p).toContain('El corchete cubre el MÍNIMO')
-    expect(p).toContain('El corchete cubre el MÍNIMO')
-    expect(p).toMatch(/Nunca metas una\s+oración entera/i)
+  // El hueco tiene DOS bordes y los dos fallan distinto. Corto de más deja el dato del
+  // anuncio original colgando fuera ("[Beneficio] las capas más profundas de la piel" le
+  // publica al usuario un claim de La Roche-Posay); largo de más se traga el andamiaje
+  // que hace que la plantilla espeje al original.
+  it('exige que el corchete cubra el DATO COMPLETO sin tragarse el andamiaje', () => {
+    expect(p).toContain('EL CORCHETE CUBRE EL DATO COMPLETO')
+    expect(p).toMatch(/NO SE TRAGA EL ANDAMIAJE/i)
+    expect(p).toMatch(/una\s+oración entera nunca va dentro/i)
     expect(p).toContain('[Este es el Producto]')
+    // La regla vieja decía lo contrario y producía justo el hueco de una palabra.
+    expect(p).not.toMatch(/cubre el M[IÍ]NIMO/i)
+  })
+
+  // "No marques de menos" es una prohibición y no se puede ejecutar. La prueba sí:
+  // poné el valor de OTRO producto y mirá si lo que queda sigue siendo cierto.
+  it('da la prueba de sustitución y la asimetría de los dos errores', () => {
+    expect(p).toMatch(/un valor de OTRO producto/i)
+    expect(p).toMatch(/afirma algo falso sobre ese otro producto/i)
+    expect(p).toMatch(/creciste de m[aá]s/i)
+    expect(p).toMatch(/ANTE LA DUDA, MARCAR/i)
+    expect(p).toMatch(/encajar? gramaticalmente|ENCAJAR GRAMATICALMENTE/i)
   })
 
   // El spec da una lista CERRADA de 12 variables y dice "no reemplaces palabras
@@ -63,9 +76,13 @@ describe('buildTemplateInstruction', () => {
 
   // "cara" y "los 30" las diría igual un anuncio de cualquier producto; "menstruación"
   // no. Ese es el criterio, y sin él el modelo marca todo o nada.
-  it('da el criterio y un techo de volumen', () => {
+  // El techo de "entre cinco y ocho" era invención de este repo: la plantilla de
+  // referencia del dueño para este mismo video tiene 23 huecos, y el techo empujaba a
+  // marcar de menos justo donde marcar de menos publica el claim de otra marca.
+  it('da el criterio y NO impone un techo de volumen', () => {
     expect(p).toMatch(/un anuncio de otro producto NO la\s+podría decir igual/i)
-    expect(p).toMatch(/entre cinco y\s+ocho huecos/i)
+    expect(p).not.toMatch(/entre cinco y\s+ocho huecos/i)
+    expect(p).not.toMatch(/te pasas de diez/i)
   })
 
   it('exige NO GENERAR subtítulos ni overlays', () => {
