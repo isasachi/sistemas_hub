@@ -214,6 +214,22 @@ export default function Section5Script() {
           })}
         </div>
 
+        {/* La única excepción a la copia literal del andamiaje se MUESTRA, no se aplica
+            en silencio: permitir el cambio se justifica en que se pueda ver. */}
+        {!!adapted.ajustesAndamiaje?.length && (
+          <div className="mt-3 rounded-lg border border-white/[0.08] bg-white/[0.02] px-3 py-2">
+            <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[#8b8b8b]">
+              Ajustes de concordancia
+            </div>
+            {adapted.ajustesAndamiaje.map((a) => (
+              <p key={a.n} className="text-[11.5px] leading-relaxed text-[#8b8b8b]">
+                Toma {a.n}: <span className="line-through opacity-60">{a.antes.slice(0, 40)}</span>{' '}
+                → <span className="text-[#c9c9c9]">{a.ahora.slice(0, 40)}</span>
+              </p>
+            ))}
+          </div>
+        )}
+
         <p className="mt-3 text-[11.5px] text-[#8b8b8b]">
           {guionActual.length} caracteres ({diferencia >= 0 ? '+' : ''}{diferencia} vs. el original)
         </p>

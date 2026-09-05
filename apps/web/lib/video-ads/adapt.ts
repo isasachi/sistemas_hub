@@ -34,6 +34,26 @@ export const SlotValuesSchema = z.object({
     n: z.number(),
     accionVisual: z.string(),
   })),
+  /**
+   * LA ÚNICA EXCEPCIÓN A LA COPIA LITERAL DEL ANDAMIAJE, y existe porque el dueño del
+   * repo la nombró: "la única razón para cambiar una palabra en el andamiaje es aplicar
+   * un ajuste gramatical causado por el llenado de los blanks".
+   *
+   * El andamiaje lo copia CÓDIGO, así que sin esto el modelo no puede arreglar una
+   * concordancia que su propio valor rompió: medido 1 de 3, "Por sus fórmula
+   * concentrada" — el original decía "ingredientes naturales" (plural) y el valor nuevo
+   * es singular. Ningún valor arregla eso, porque lo que sobra es el "sus".
+   *
+   * Opcional: una sesión sin ajustes es el caso normal.
+   */
+  ajustes: z.array(z.object({
+    n: z.number(),
+    /** El hueco cuyo valor rompió la concordancia. Ata el cambio a su justificación. */
+    idHueco: z.string(),
+    /** La locución de esa toma con el ajuste aplicado, y NADA más cambiado. */
+    locucion: z.string(),
+    motivo: z.string(),
+  })).optional(),
 })
 export type SlotValues = z.infer<typeof SlotValuesSchema>
 
@@ -65,6 +85,21 @@ export const AdaptedScriptSchema = z.object({
   diferenciaCaracteres: z.number(),
   tomas: z.array(TomaFinalSchema).min(1),
   variablesPendientes: z.array(z.string()),
+  /**
+   * Los ajustes de andamiaje que se aplicaron, con el texto de ANTES. Es un registro
+   * auditable y no un contador, porque la justificación entera de permitir el cambio es
+   * poder verlo.
+   *
+   * `.optional()` DE VERDAD: `generate-lotes` hace `AdaptedScriptSchema.parse` sobre el
+   * jsonb ya persistido, así que sin esto toda sesión anterior reventaría con un 500 al
+   * renderizar.
+   */
+  ajustesAndamiaje: z.array(z.object({
+    n: z.number(),
+    antes: z.string(),
+    ahora: z.string(),
+    motivo: z.string(),
+  })).optional(),
 })
 export type AdaptedScript = z.infer<typeof AdaptedScriptSchema>
 
@@ -186,6 +221,18 @@ export function buildAdaptInstruction(
     'del envase; (2) lo que se deduzca de ellos — el ángulo, el problema, el público, la',
     'categoría, lo que se ve en la foto del producto; (3) lo más razonable para un',
     'producto de esa categoría, dicho sin comprometer a nadie.',
+    '',
+    '── AJUSTE GRAMATICAL DEL ANDAMIAJE (`ajustes`) ──',
+    'Hay frases donde ningún valor cabe porque el andamiaje concuerda con el dato VIEJO:',
+    'el original decía "Por sus ingredientes naturales" (plural) y tu valor es singular,',
+    'así que "Por sus fórmula concentrada" queda mal escrito y no hay valor que lo',
+    'arregle — lo que sobra es el "sus".',
+    'Para esos casos, y SOLO para esos, devuelve un `ajustes` con la toma, el id del',
+    'hueco que rompió la concordancia, la locución entera ya corregida y el motivo.',
+    'Se permite mover artículo, género, número, preposición y tiempo verbal. No se',
+    'permite reescribir la frase, cambiar su sentido, resolver otro hueco ni agregar',
+    'palabras que aporten información. Si la frase ya está bien escrita, NO mandes',
+    'ningún ajuste para ella.',
     '',
     'LA ÚNICA REGLA INVIOLABLE ES EL ANDAMIAJE: el texto que rodea a los corchetes es el',
     'del anuncio original y se copia palabra por palabra. Lo reconstruye el código, así',

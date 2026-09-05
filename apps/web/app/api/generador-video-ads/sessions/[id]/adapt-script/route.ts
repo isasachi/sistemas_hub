@@ -5,7 +5,7 @@ import { callVideoAds } from '@/lib/video-ads/llm'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 import { SlotValuesSchema, buildAdaptInstruction } from '@/lib/video-ads/adapt'
-import { extractSlots, fillTemplate, rejectBadValues } from '@/lib/video-ads/fill'
+import { extractSlots, fillTemplate, rejectBadValues, acceptScaffoldFix, type Slot } from '@/lib/video-ads/fill'
 import { extractPending } from '@/lib/video-ads/pending'
 import { canProceed } from '@/lib/video-ads/validation'
 import { STEP } from '@/lib/video-ads/steps'
@@ -38,7 +38,7 @@ export async function POST(
   try {
     const slots = extractSlots(session.template)
 
-    const { valores, acciones } = await callVideoAds('slot_values', SlotValuesSchema, [
+    const { valores, acciones, ajustes } = await callVideoAds('slot_values', SlotValuesSchema, [
       {
         text: buildAdaptInstruction(
           session.template,
@@ -82,13 +82,54 @@ export async function POST(
       console.warn(`[video-ads/adapt-script] sesión ${id}: valores descartados por no ser valores:`, rechazados)
 
     const relleno = fillTemplate(session.template, limpios)
+
+    // LA ÚNICA EXCEPCIÓN A LA COPIA LITERAL: el ajuste gramatical que el valor insertado
+    // provocó ("Por sus fórmula concentrada" → "Por su fórmula concentrada"). Se aplica
+    // sobre el guion ADAPTADO y nunca sobre la plantilla, que es la que espeja la
+    // referencia. `acceptScaffoldFix` decide; lo rechazado se loguea con su motivo y la
+    // toma queda como estaba, así que el modo de fallo es "sin ajustar", no "reescrito".
+    const ajustados: { n: number; antes: string; ahora: string; motivo: string }[] = []
+    const slotsPorToma = new Map<number, Slot[]>()
+    for (const sl of extractSlots(session.template))
+      slotsPorToma.set(sl.toma, [...(slotsPorToma.get(sl.toma) ?? []), sl])
+
+    for (const aj of ajustes ?? []) {
+      const toma = relleno.tomas.find((t) => t.n === aj.n)
+      // El hueco nombrado tiene que existir EN ESA TOMA: ata el cambio a su
+      // justificación en vez de ser un permiso abierto sobre cualquier frase.
+      const suyos = slotsPorToma.get(aj.n) ?? []
+      const hueco = suyos.find((sl) => sl.id === aj.idHueco)
+      if (!toma || !hueco) {
+        console.warn(`[video-ads/adapt-script] sesión ${id}: ajuste de la toma ${aj.n} ignorado — el hueco ${aj.idHueco} no es de esa toma`)
+        continue
+      }
+      const veredicto = acceptScaffoldFix(
+        toma.locucion,
+        aj.locucion,
+        limpios[hueco.id] ?? '',
+        suyos.map((sl) => limpios[sl.id]).filter(Boolean),
+      )
+      if (!veredicto.ok) {
+        console.warn(`[video-ads/adapt-script] sesión ${id}: ajuste de la toma ${aj.n} rechazado — ${veredicto.motivo}`)
+        continue
+      }
+      ajustados.push({ n: aj.n, antes: toma.locucion, ahora: aj.locucion.trim(), motivo: aj.motivo })
+      toma.locucion = aj.locucion.trim()
+    }
+    // `guionFinal` es la concatenación de las locuciones, así que se rearma después de
+    // los ajustes: sin esto el usuario leería el guion corregido y el render mandaría el
+    // texto anterior.
+    const guionFinal = relleno.tomas.map((t) => t.locucion).join(' ')
+    if (ajustados.length)
+      console.warn(`[video-ads/adapt-script] sesión ${id}: ${ajustados.length} andamiaje(s) ajustado(s)`)
+
     const porToma = new Map(acciones.map((a) => [a.n, a.accionVisual]))
     const cortes = session.forensic_analysis.cortes
 
     const adapted = {
-      guionFinal: relleno.guionFinal,
-      caracteresAdaptado: relleno.guionFinal.length,
-      diferenciaCaracteres: relleno.guionFinal.length - session.forensic_analysis.guionOriginal.length,
+      guionFinal,
+      caracteresAdaptado: guionFinal.length,
+      diferenciaCaracteres: guionFinal.length - session.forensic_analysis.guionOriginal.length,
       tomas: relleno.tomas.map((t, i) => ({
         n: t.n,
         tiempoOriginal: cortes[i]?.tiempo ?? '',
@@ -102,7 +143,10 @@ export async function POST(
       })),
       // Se derivan del texto, no se le preguntan al modelo: `fillTemplate` deja un
       // marcador por cada hueco que quedó sin valor.
-      variablesPendientes: extractPending(relleno.guionFinal),
+      variablesPendientes: extractPending(guionFinal),
+      // Se guarda el texto de ANTES y no un contador: la justificación entera de
+      // permitir el cambio es que sea auditable.
+      ajustesAndamiaje: ajustados,
     }
 
     await updateVideoSession(id, { step: STEP.SCRIPT, adapted })

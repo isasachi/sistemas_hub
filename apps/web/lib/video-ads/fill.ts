@@ -506,3 +506,55 @@ export function assembleTemplate(
     resumenParaUsuario: draft.resumenParaUsuario,
   }
 }
+
+/**
+ * ¿Se acepta un ajuste gramatical del andamiaje?
+ *
+ * El andamiaje es lo único que hace que el guion nuevo espeje al anuncio original, así
+ * que dejar que el modelo lo reescriba sería perder la garantía entera. Pero hay frases
+ * donde ningún valor cabe —"Por sus ⟦…⟧" con un valor singular— y ahí el arreglo no está
+ * dentro del corchete. La excepción existe por eso y se acota en código, no en el prompt.
+ *
+ * Cinco comprobaciones, cada una contra un modo de fallo distinto:
+ *  1. el largo se mueve menos de ±35 % — un ajuste gramatical no reescribe la frase;
+ *  2. sobrevive al menos la mitad de las palabras del piso;
+ *  3. TODOS los demás valores de la toma siguen presentes — cambiar la concordancia no
+ *     puede llevarse por delante un dato;
+ *  4. no aparecen marcadores nuevos;
+ *  5. no desaparece ningún `[PENDIENTE:…]` — resolver un hueco por la puerta de atrás
+ *     se salta `rejectBadValues`.
+ *
+ * ⚠️ El valor del hueco NOMBRADO se EXCLUYE de la comprobación 3 a propósito: es
+ * justamente el que no cabía, y exigir que sobreviva rechaza el único caso para el que
+ * la excepción existe.
+ *
+ * Se aplica SOLO sobre el guion adaptado, nunca sobre la plantilla: esa es la que tiene
+ * que seguir espejando la referencia.
+ */
+export function acceptScaffoldFix(
+  piso: string,
+  propuesta: string,
+  valorDelHueco: string,
+  otrosValores: string[],
+): { ok: true } | { ok: false; motivo: string } {
+  const p = propuesta.trim()
+  if (!p) return { ok: false, motivo: 'llega vacía' }
+
+  const largo = Math.abs(p.length - piso.length) / Math.max(1, piso.length)
+  if (largo > 0.35) return { ok: false, motivo: `el largo cambia demasiado (${Math.round(largo * 100)}%)` }
+
+  const antes = norm(piso)
+  const despues = new Set(norm(p))
+  const conservadas = antes.filter((w) => despues.has(w)).length
+  if (conservadas < antes.length / 2) return { ok: false, motivo: 'conserva menos de la mitad de las palabras' }
+
+  for (const v of otrosValores) {
+    if (v && v !== valorDelHueco && !p.includes(v)) return { ok: false, motivo: `pierde el valor "${v}"` }
+  }
+
+  const marcadores = (t: string) => (t.match(/\[PENDIENTE:[^\]]*\]/gi) ?? []).length
+  if (marcadores(p) > marcadores(piso)) return { ok: false, motivo: 'introduce marcadores nuevos' }
+  if (marcadores(p) < marcadores(piso)) return { ok: false, motivo: 'resuelve un pendiente por la puerta de atrás' }
+
+  return { ok: true }
+}

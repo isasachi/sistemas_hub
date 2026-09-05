@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractSlots, fillTemplate, validateTemplate, assembleTemplate, rejectBadValues, alignSlots, normalizeSlots, slotOriginals, podarEco } from './fill'
+import { extractSlots, fillTemplate, validateTemplate, assembleTemplate, rejectBadValues, alignSlots, normalizeSlots, slotOriginals, podarEco, acceptScaffoldFix } from './fill'
 import type { ScriptTemplate } from './template'
 
 // Plantilla recortada del caso real (serum Apivita → suero de niacinamida). Trae los
@@ -543,5 +543,40 @@ describe('podarEco', () => {
 
   it('prefiere repetir antes que quedarse sin dato', () => {
     expect(podarEco('efecto', ctx('un efecto ', ' ya'))).toBe('efecto')
+  })
+})
+
+// La excepción de la directiva 13: el andamiaje concuerda con el dato VIEJO y ningún
+// valor arregla la frase. Se acota en código para que no sea un permiso abierto.
+describe('acceptScaffoldFix', () => {
+  const piso = 'Por sus fórmula concentrada es para todo tipo de piel.'
+  const ok = (p: string, otros: string[] = ['todo tipo de piel']) =>
+    acceptScaffoldFix(piso, p, 'fórmula concentrada', otros)
+
+  it('acepta el arreglo del artículo, que es el caso más frecuente', () => {
+    expect(ok('Por su fórmula concentrada es para todo tipo de piel.')).toEqual({ ok: true })
+  })
+
+  it('rechaza la reescritura disfrazada de ajuste', () => {
+    const r = ok('Gracias a su avanzada tecnología dermatológica de última generación, resulta ideal.')
+    expect(r.ok).toBe(false)
+  })
+
+  it('rechaza el ajuste que se lleva por delante otro valor', () => {
+    const r = ok('Por su fórmula concentrada es para pieles sensibles.')
+    expect(r).toEqual({ ok: false, motivo: 'pierde el valor "todo tipo de piel"' })
+  })
+
+  // El valor que NO cabía se excluye a propósito: exigir que sobreviva rechazaría el
+  // único caso para el que la excepción existe.
+  it('no exige que sobreviva el valor del hueco nombrado', () => {
+    expect(acceptScaffoldFix(piso, 'Por su fórmula es para todo tipo de piel.',
+      'fórmula concentrada', ['fórmula concentrada', 'todo tipo de piel']).ok).toBe(true)
+  })
+
+  it('rechaza resolver un pendiente por la puerta de atrás', () => {
+    const conHueco = 'Por sus [PENDIENTE: atributo] es para todo tipo de piel.'
+    const r = acceptScaffoldFix(conHueco, 'Por su fórmula suave es para todo tipo de piel.', '', ['todo tipo de piel'])
+    expect(r).toEqual({ ok: false, motivo: 'resuelve un pendiente por la puerta de atrás' })
   })
 })
