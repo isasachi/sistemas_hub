@@ -52,9 +52,12 @@ describe('buildTemplateInstruction', () => {
   // "No marques de menos" es una prohibición y no se puede ejecutar. La prueba sí:
   // poné el valor de OTRO producto y mirá si lo que queda sigue siendo cierto.
   it('da la prueba de sustitución y la asimetría de los dos errores', () => {
-    expect(p).toMatch(/un valor de OTRO producto/i)
-    expect(p).toMatch(/afirma algo falso sobre ese otro producto/i)
+    expect(p).toMatch(/el valor de un producto\s+de otro rubro/i)
+    expect(p).toMatch(/afirma algo que ese otro producto no hace/i)
     expect(p).toMatch(/creciste de m[aá]s/i)
+    // Medido 3/3: mostrarle el hueco MAL cortado de una frase del propio guion se lo
+    // hace copiar tal cual. La prueba se explica; la frase rota no se escribe.
+    expect(p).not.toMatch(/\[Beneficio\] las capas/i)
     expect(p).toMatch(/ANTE LA DUDA, MARCAR/i)
     expect(p).toMatch(/encajar? gramaticalmente|ENCAJAR GRAMATICALMENTE/i)
   })

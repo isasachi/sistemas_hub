@@ -496,3 +496,19 @@ describe('slotOriginals', () => {
     expect(o['beneficio#1']).toBe('energía')
   })
 })
+
+// Al empezar a marcar el dato completo, el modelo dejó un espacio antes de la puntuación
+// y la alineación se caía en 4 de 6 tomas — con ella, el original por hueco que la FASE 3
+// necesita. Un espacio no cambia qué palabras delimitan el hueco; una paráfrasis sí.
+describe('alignSlots · espacio de bordes', () => {
+  const dialogo = 'Este serum está cambiando la piel.'
+
+  it('alinea aunque el modelo deje un espacio antes del punto', () => {
+    const r = alignSlots(dialogo, 'Este [Producto] está cambiando la [Característica] .')
+    expect(r?.huecos.map((h) => h.original)).toEqual(['serum', 'piel'])
+  })
+
+  it('sigue devolviendo null cuando el andamiaje NO es una copia', () => {
+    expect(alignSlots(dialogo, 'Este [Producto] transformó mi cutis.')).toBeNull()
+  })
+})

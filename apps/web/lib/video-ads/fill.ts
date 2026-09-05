@@ -210,17 +210,36 @@ export function alignSlots(
   for (let i = 0; i < nombres.length; i++) {
     const antes = literales[i]
     if (antes) {
-      const k = dialogo.indexOf(antes, pos)
+      const k = buscar(dialogo, antes, pos)
       if (k < 0) return null
-      pos = k + antes.length
+      pos = k + (dialogo.startsWith(antes, k) ? antes.length : antes.trim().length)
     }
     const sig = literales[i + 1]
-    const fin = sig ? dialogo.indexOf(sig, pos) : dialogo.length
+    const fin = sig ? buscar(dialogo, sig, pos) : dialogo.length
     if (fin < 0) return null
-    huecos.push({ nombre: nombres[i], original: dialogo.slice(pos, fin) })
+    huecos.push({ nombre: nombres[i], original: dialogo.slice(pos, fin).trim() })
     pos = fin
   }
   return { literales, huecos }
+}
+
+/**
+ * Busca un trozo de andamiaje en el diálogo, tolerando SOLO el espacio de los bordes.
+ *
+ * Medido: al marcar el dato completo, el modelo empezó a dejar un espacio antes de la
+ * puntuación —`está cambiando la [Característica] .`— y con búsqueda exacta eso se lee
+ * como "no copió": `alignSlots` devuelve `null` y `slotOriginals` se calla para esa toma,
+ * que es justo el dato del que depende la FASE 3. Cuatro de seis tomas en una corrida.
+ *
+ * El acote es a propósito. Un espacio de más no puede atribuirle a un hueco un texto que
+ * no le toca: las palabras que delimitan siguen siendo las mismas y en el mismo orden.
+ * Una PARÁFRASIS sí podría, y esa sigue devolviendo `null` — no aflojes esto más.
+ */
+function buscar(dialogo: string, frag: string, desde: number): number {
+  const exacto = dialogo.indexOf(frag, desde)
+  if (exacto >= 0) return exacto
+  const podado = frag.trim()
+  return podado ? dialogo.indexOf(podado, desde) : -1
 }
 
 /**
