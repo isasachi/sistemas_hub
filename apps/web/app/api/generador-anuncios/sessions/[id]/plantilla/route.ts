@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession, updateSession } from '@/lib/db'
 import { readUserId } from '@/lib/product-hunter/session'
 import { getTemplate, templateImageUrl } from '@/lib/anuncios/templates'
+import { STEP } from '@/lib/anuncios/steps'
 
 /**
  * Elegir una plantilla — el paso 1 del flujo de plantilla.
@@ -48,7 +49,7 @@ export async function POST(
     )
 
   await updateSession(id, {
-    step: 1,
+    step: STEP.PRODUCTO,
     template_id: template.id,
     reference_url: templateImageUrl(template.id),
     reference_analysis: template.blueprint,

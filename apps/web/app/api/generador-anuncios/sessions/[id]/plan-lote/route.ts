@@ -6,6 +6,7 @@ import { readUserId } from '@/lib/product-hunter/session'
 import { currentCreditStatus } from '@/lib/credits'
 import { ProductScanSchema, type AdVariant } from '@/lib/types'
 import { getTemplate, slotsDelModelo } from '@/lib/anuncios/templates'
+import { STEP } from '@/lib/anuncios/steps'
 import {
   PlanLoteSchema, CopyVarianteSchema, buildPlanPrompt, buildCopyPrompt,
   slotsLargos, correccionDeSlots, conceptosDuplicados,
@@ -118,7 +119,7 @@ export async function POST(
     if (duplicados.length)
       console.warn(`[plan-lote] ${id}: conceptos parecidos entre sí — ${JSON.stringify(duplicados)}`)
 
-    await updateSession(id, { step: 3, tiktok_comments: comments, variants })
+    await updateSession(id, { step: STEP.CONCEPTOS, tiktok_comments: comments, variants })
     // ponytail: UNA fila por planificación, no una por llamada de texto. Las N+1 llamadas son de
     // texto barato; lo que se cuenta fila por fila son las imágenes, que es donde está el costo.
     await recordGenQuota(id, 'anuncios-plan', userId)

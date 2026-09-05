@@ -175,13 +175,21 @@ export const TEMPLATES: CreativeTemplate[] = [
         'Banda inferior con el producto a la izquierda y el plazo a su derecha',
       ],
       physicalPosition: 'El producto descansa sobre la banda inferior, apoyado, alineado a la izquierda, con sombra suave de contacto. Cámara frontal a la altura del envase.',
+      // ⚠️ El plazo se dibuja MUCHO más grande que el resto — es el segundo elemento tipográfico
+      // en peso después de las pastillas. Está acá porque STEP5 congela la jerarquía de tamaños
+      // entre bloques (§6) y arma el instructivo con TEXTO PURO: lo que no diga este campo, no
+      // existe para él.
+      typography: `${TIPOGRAFIA_NEUTRA} El plazo de la banda inferior va en un cuerpo MUY grande, del alto del envase que tiene al lado, en la misma sans bold en caja normal: es el remate visual del anuncio, no una línea de pie.`,
       persuasiveLogic: 'Prueba por contraste: el espectador ve el estado que padece a la izquierda y el que desea a la derecha, y el plazo hace la promesa creíble.',
       layoutDescription: 'División vertical 50/50 con banda inferior de marca. Lectura en Z: pastilla izquierda → pastilla derecha → textos → producto.',
       sceneElements: {
-        people: [],
-        props: ['envase genérico sin etiqueta'],
+        // ⚠️ LA MISMA PERSONA EN LAS DOS MITADES, y por eso está declarada. Con `people` vacío,
+        // §10 de STEP5 no tendría sujeto primario que adaptar al público del usuario — y el
+        // anuncio saldría con la demografía de la maqueta pase lo que pase.
+        people: ['la misma persona adulta en las dos mitades, de medio cuerpo y en el mismo ángulo, mostrando el estado inicial a la izquierda y el resultado a la derecha'],
+        props: ['envase genérico sin etiqueta en la banda inferior'],
         brandElements: [],
-        setting: 'Fondo de estudio claro y uniforme, idéntico en las dos mitades para que el único cambio sea el estado.',
+        setting: 'Fondo de estudio claro y uniforme, idéntico en las dos mitades para que el único cambio sea el estado de la persona.',
       },
       creativeConcept:
         'Antes/después: dos mitades verticales de la MISMA escena, la izquierda rotulada con el estado inicial y su problema, la derecha con el estado final y su resultado, separadas por una línea y cerradas por una banda con el producto y el plazo.',
@@ -227,19 +235,19 @@ export const TEMPLATES: CreativeTemplate[] = [
       ...blueprintBase(),
       style: 'Contenido generado por usuario: foto casera con luz de ventana, encuadre de teléfono en mano, sobre ella una caja de texto tipo subtítulo de red social y un bloque publicitario limpio abajo.',
       composition: [
-        'Foto vertical tipo selfie ocupando los dos tercios superiores',
+        'Foto vertical tipo selfie ocupando los dos tercios superiores, con la persona sosteniendo el producto junto a su rostro',
         'Caja de texto blanca de esquinas redondeadas superpuesta en la parte alta de la foto',
         'Tercio inferior de fondo liso con el texto de beneficio',
         'Botón de acción rectangular redondeado al pie, en el color de acento',
       ],
-      physicalPosition: 'El producto está SOSTENIDO en la mano de la persona, a la altura del pecho, ligeramente girado hacia la cámara. Sin sombra proyectada propia: la ilumina la misma luz de ventana que a ella.',
+      physicalPosition: 'El producto está SOSTENIDO en la mano de la persona, a la altura de su rostro y junto a él, ligeramente girado hacia la cámara. Sin sombra proyectada propia: la ilumina la misma luz de ventana que a ella.',
       layoutDescription: 'Foto arriba, caja de subtítulo superpuesta, bloque de texto y botón abajo. Lectura vertical de arriba a abajo.',
       persuasiveLogic: 'Prueba social por identificación: quien mira reconoce su propia objeción en la voz de alguien igual a ella, no en la de una marca.',
       sceneElements: {
         people: ['una persona adulta sosteniendo el producto a la altura del pecho, mirando a cámara'],
         props: ['envase genérico sin etiqueta'],
         brandElements: [],
-        setting: 'Interior doméstico corriente con luz natural de ventana, fondo desenfocado.',
+        setting: 'Interior doméstico corriente con luz natural de ventana: se ven un sofá, una planta y un cuadro desenfocados al fondo.',
       },
       creativeConcept:
         'Testimonio UGC: una foto casera de la usuaria sosteniendo el producto, con su frase de apertura superpuesta como subtítulo de red social y el beneficio y el llamado a la acción en un bloque limpio al pie.',
@@ -445,18 +453,24 @@ export const TEMPLATES: CreativeTemplate[] = [
       ...blueprintBase(),
       composition: [
         'Número enorme en color de acento en el ángulo superior izquierdo',
-        'Titular de dos líneas a la derecha del número',
-        'Tres viñetas apiladas, cada una precedida por un guion largo de acento',
-        'Producto pequeño al pie, alineado a la derecha',
+        'Titular de tres líneas a la derecha del número, que empieza a media altura de este',
+        'Tres viñetas apiladas en la mitad izquierda, cada una precedida por un guion largo de acento',
+        'Escena fotográfica del producto ocupando el cuadrante inferior derecho, detrás de las viñetas',
       ],
-      physicalPosition: 'El producto descansa al pie del lienzo, alineado a la derecha y a menor escala que en el resto de las plantillas, con sombra suave de contacto. Cámara frontal.',
-      layoutDescription: 'Encabezado de número + titular, cuerpo de tres viñetas, cierre con el producto en la esquina. Lectura de arriba a abajo, con el número como ancla de entrada.',
+      // ⚠️ ES LA ÚNICA DE LAS OCHO CON ESCENOGRAFÍA, y el blueprint tiene que decirlo. La maestra
+      // salió con una escena de baño real (superficie de piedra, eucalipto, toalla) ocupando el
+      // cuadrante inferior derecho en vez del envase pequeño en la esquina que pedía el prompt.
+      // Se conserva porque el resultado es bueno; lo que NO se puede es dejar el blueprint
+      // diciendo "sin escenografía", porque STEP5 lo lee como texto y estaría contradiciendo a
+      // la Imagen 1 — el modo de fallo que este repo ya midió con el escenario de video.
+      physicalPosition: 'El producto se apoya sobre una superficie de piedra clara en el cuadrante inferior derecho, a escala media, acompañado por una ramita de eucalipto y una toalla enrollada desenfocada al fondo. Luz natural lateral y suave, sombra de contacto marcada.',
+      layoutDescription: 'Encabezado de número + titular, tres viñetas en la mitad izquierda, y una escena fotográfica del producto ocupando el cuadrante inferior derecho. Lectura de arriba a abajo por la columna izquierda, con el número como ancla de entrada.',
       persuasiveLogic: 'Enumeración en primera persona: el formato de lista promete que la lectura es corta y el "yo cambié" convierte la recomendación en experiencia vivida.',
       sceneElements: {
         people: [],
-        props: ['envase genérico sin etiqueta'],
+        props: ['envase genérico sin etiqueta', 'ramita de eucalipto', 'toalla enrollada', 'superficie de piedra clara'],
         brandElements: [],
-        setting: 'Fondo liso de papel hueso, sin escenografía.',
+        setting: 'La mitad superior izquierda es fondo liso de papel hueso; el cuadrante inferior derecho es una escena fotográfica de baño con luz natural.',
       },
       creativeConcept:
         'Lista de razones: un número enorme de entrada, un titular en primera persona que lo completa, tres viñetas con una razón cada una y el producto pequeño cerrando en la esquina inferior.',

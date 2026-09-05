@@ -8,6 +8,7 @@ import { readUserId } from '@/lib/product-hunter/session'
 import { currentCreditStatus } from '@/lib/credits'
 import { ReferenceAnalysisSchema, ProductScanSchema, AdBatchSchema, type AdVariant } from '@/lib/types'
 import { getTemplate } from '@/lib/anuncios/templates'
+import { STEP } from '@/lib/anuncios/steps'
 import { contextoStep5 } from '@/lib/anuncios/step5-context'
 
 export const dynamic = 'force-dynamic'
@@ -187,7 +188,7 @@ export async function POST(
         )
 
         const listas = estado.filter((v) => v.estado === 'lista').length
-        await updateSession(id, { step: 4 })
+        await updateSession(id, { step: STEP.ANUNCIOS })
         await cola
         send({ status: 'done', listas, fallidas: estado.length - listas, variants: estado })
       } catch (err) {
