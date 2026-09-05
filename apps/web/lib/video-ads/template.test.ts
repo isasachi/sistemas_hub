@@ -62,28 +62,35 @@ describe('buildTemplateInstruction', () => {
     expect(p).toMatch(/encajar? gramaticalmente|ENCAJAR GRAMATICALMENTE/i)
   })
 
-  // El spec da una lista CERRADA de 12 variables y dice "no reemplaces palabras
-  // universales innecesariamente". Autorizar nombres inventados produjo [frecuencia]
-  // para una edad y 14 huecos en un guion de un minuto: ilegible y engorroso de llenar.
-  it('impone la lista cerrada del spec y prohíbe inventar nombres', () => {
-    expect(p).toMatch(/Esa lista es CERRADA/i)
-    expect(p).toMatch(/No inventes nombres nuevos/i)
-    expect(p).toContain('[Situación frustrante]')
-    expect(p).not.toMatch(/inv[eé]ntalo/i)
+  // La lista cerrada de 14 nombres forzaba ~23 roles distintos dentro de 14 etiquetas:
+  // [Beneficio] caía sobre una ranura de mecanismo y [Resultado] sobre una de beneficio.
+  // El nombre correcto es el del ROL que el dato cumple en SU frase.
+  it('no impone lista de nombres: el nombre describe el rol del dato', () => {
+    expect(p).toMatch(/NO HAY LISTA DE NOMBRES/i)
+    expect(p).toMatch(/ROL QUE ESE DATO\s+CUMPLE EN SU PROPIA FRASE/i)
+    expect(p).toMatch(/NO es una lista cerrada/i)
+    expect(p).not.toMatch(/Esa lista es CERRADA/i)
+    expect(p).not.toMatch(/No inventes nombres nuevos/i)
   })
 
-  it('repite la regla del spec sobre palabras universales', () => {
-    expect(p).toMatch(/NO REEMPLACES PALABRAS UNIVERSALES/i)
-    expect(p).toMatch(/PR[AÁ]CTICAMENTE IGUAL al guion original/i)
+  // Sin barras, un dato ambiguo recibe una etiqueta que miente; sin número, tres
+  // ingredientes distintos reciben el mismo valor y la frase lo enumera tres veces.
+  it('pide barras para el dato ambiguo y número para el repetido distinto', () => {
+    expect(p).toMatch(/BARRAS cuando el dato admite/i)
+    expect(p).toMatch(/N[UÚ]MERO cuando el MISMO tipo de dato/i)
+    expect(p).toMatch(/MISMO dato repetido[\s\S]{0,80}NO lleva n[uú]mero/i)
   })
 
-  // "cara" y "los 30" las diría igual un anuncio de cualquier producto; "menstruación"
-  // no. Ese es el criterio, y sin él el modelo marca todo o nada.
-  // El techo de "entre cinco y ocho" era invención de este repo: la plantilla de
-  // referencia del dueño para este mismo video tiene 23 huecos, y el techo empujaba a
-  // marcar de menos justo donde marcar de menos publica el claim de otra marca.
-  it('da el criterio y NO impone un techo de volumen', () => {
-    expect(p).toMatch(/un anuncio de otro producto NO la\s+podría decir igual/i)
+  // El criterio viejo ("¿otro anuncio podría decir esta palabra igual?") declaraba
+  // universales justo los datos que la plantilla de referencia del dueño SÍ marca —la
+  // frecuencia, la zona de aplicación y la edad—, o sea contradecía a la regla de "ante
+  // la duda, marcar" que vive unas líneas más abajo en el MISMO prompt. Y el techo de
+  // "entre cinco y ocho" era invención de este repo: esa plantilla tiene 23 huecos.
+  it('decide por la consecuencia de no marcar, no por si la palabra suena corriente', () => {
+    expect(p).toMatch(/qué pasa si NO la\s+marcas/i)
+    expect(p).toMatch(/de día y de noche/i)
+    expect(p).toMatch(/en cara y en cuello/i)
+    expect(p).not.toMatch(/son palabras corrientes: van tal cual/i)
     expect(p).not.toMatch(/entre cinco y\s+ocho huecos/i)
     expect(p).not.toMatch(/te pasas de diez/i)
   })
@@ -121,7 +128,7 @@ describe('ScriptTemplateSchema', () => {
   // se corta a mitad de idea o repite, la plantilla tiene que hacerlo igual.
   it('exige conservar los cambios de idea y las repeticiones del original', () => {
     const p = buildTemplateInstruction(FORENSIC)
-    expect(p).toMatch(/cambios de idea/i)
-    expect(p).toMatch(/repite una palabra o se[\s\S]{0,20}corta a mitad de idea/i)
+    expect(p).toMatch(/cambios de\s+idea/i)
+    expect(p).toMatch(/repite una palabra o se[\s\S]{0,20}corta a mitad\s+de idea/i)
   })
 })
