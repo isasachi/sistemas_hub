@@ -25,11 +25,16 @@ vi.mock('@/lib/product-hunter/session', () => ({
   readUserId: vi.fn().mockResolvedValue('user-1'),
 }))
 
+vi.mock('@/lib/user-settings', () => ({
+  currentKieKey: vi.fn(),
+}))
+
 import { NextRequest } from 'next/server'
 import { POST } from './route'
 import { getVideoSession, updateVideoSession, claimFreshLotes } from '@/lib/video-ads/db'
 import { createVideoTask } from '@/lib/video-ads/kie'
 import { checkGenQuota, checkGlobalBackstop, recordGenQuota } from '@/lib/gen-quota'
+import { currentKieKey } from '@/lib/user-settings'
 import type { VideoSessionResponse } from '@/lib/video-ads/types'
 import type { Lote } from '@/lib/video-ads/lotes'
 
@@ -121,6 +126,7 @@ function conPendiente(guardados: Lote[]): Lote[] {
 describe('POST generate-lotes — fix round 2: cuota por video, no por lote', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(currentKieKey).mockResolvedValue('kie-del-usuario')
     vi.mocked(claimFreshLotes).mockResolvedValue(true)
     vi.mocked(checkGenQuota).mockResolvedValue({ blocked: null, regensLeft: null })
     vi.mocked(checkGlobalBackstop).mockResolvedValue({ blocked: null })
@@ -268,9 +274,16 @@ describe('POST generate-lotes — fix round 2: cuota por video, no por lote', ()
   })
 
   it('fallo total en el primer lote (prompt que nunca cabe): NO cobra video-generation y guarda placeholders', async () => {
-    // consistency_block absurdamente largo: ni el nivel mínimo de buildLotePrompt
-    // entra en KIE_PROMPT_MAX, así que lanza antes de llamar a KIE por primera vez.
-    vi.mocked(getVideoSession).mockResolvedValue(session({ consistency_block: 'x'.repeat(6000) }))
+    // Coreografía absurda en la PRIMERA toma: el prompt del lote es hoy casi solo
+    // movimiento, así que es lo único que puede desbordar `KIE_PROMPT_MAX` — y una
+    // toma sola no se puede repartir, así que `buildLotePrompt` lanza antes de llamar
+    // a KIE por primera vez.
+    vi.mocked(getVideoSession).mockResolvedValue(session({
+      adapted: {
+        ...ADAPTED_2_LOTES,
+        tomas: [{ ...toma(1, 10), accionVisual: 'x'.repeat(6000) }, toma(2, 10)],
+      },
+    } as unknown as Partial<VideoSessionResponse>))
 
     const res = await POST(req(), ctx())
     expect(res.status).toBe(400)
@@ -291,6 +304,7 @@ describe('POST generate-lotes — fix round 2: cuota por video, no por lote', ()
 describe('POST generate-lotes — fix round 3', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(currentKieKey).mockResolvedValue('kie-del-usuario')
     vi.mocked(claimFreshLotes).mockResolvedValue(true)
     vi.mocked(checkGenQuota).mockResolvedValue({ blocked: null, regensLeft: null })
     vi.mocked(checkGlobalBackstop).mockResolvedValue({ blocked: null })
@@ -387,6 +401,7 @@ describe('POST generate-lotes — fix round 3', () => {
 describe('POST generate-lotes — fix round 4: huella de contenido', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(currentKieKey).mockResolvedValue('kie-del-usuario')
     vi.mocked(claimFreshLotes).mockResolvedValue(true)
     vi.mocked(checkGenQuota).mockResolvedValue({ blocked: null, regensLeft: null })
     vi.mocked(checkGlobalBackstop).mockResolvedValue({ blocked: null })

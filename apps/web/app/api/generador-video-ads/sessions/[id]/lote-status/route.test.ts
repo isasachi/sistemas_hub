@@ -13,10 +13,15 @@ vi.mock('@/lib/storage', () => ({
   uploadToStorage: vi.fn(),
 }))
 
+vi.mock('@/lib/user-settings', () => ({
+  currentKieKey: vi.fn(),
+}))
+
 import { NextRequest } from 'next/server'
 import { GET } from './route'
 import { getVideoSession, updateVideoSession } from '@/lib/video-ads/db'
 import { getTaskDetail } from '@/lib/video-ads/kie'
+import { currentKieKey } from '@/lib/user-settings'
 import type { VideoSessionResponse } from '@/lib/video-ads/types'
 import type { Lote } from '@/lib/video-ads/lotes'
 
@@ -58,6 +63,7 @@ function session(lotes: Lote[], renderDone: boolean): VideoSessionResponse {
 describe('GET lote-status — render_done desincronizado sin lotes que se muevan', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+  vi.mocked(currentKieKey).mockResolvedValue('kie-del-usuario')
     process.env.SUPABASE_URL = OUR_HOST
     process.env.NEXT_PUBLIC_SUPABASE_URL = OUR_HOST
   })
@@ -119,7 +125,27 @@ describe('GET lote-status — render_done desincronizado sin lotes que se muevan
     expect(body.done).toBe(true) // único lote, terminó en fail explícito
     expect(updateVideoSession).toHaveBeenCalledWith('s1', expect.objectContaining({ render_done: true }))
   })
+
+  // BYOK: sin key no hay a quién preguntarle por la tarea (en KIE solo la ve la cuenta
+  // que la creó), pero eso NO puede tumbar la ruta: el resto sigue reconciliando
+  // `render_done`, que es lo que lee el dashboard.
+  it('sin API key se salta el sondeo, pero sigue reconciliando render_done', async () => {
+    vi.mocked(currentKieKey).mockResolvedValue(null)
+    const lotes = [failLote(1)]
+    vi.mocked(getVideoSession).mockResolvedValue(session(lotes, false))
+
+    const res = await GET(req(), ctx())
+    const body = await res.json()
+
+    expect(getTaskDetail).not.toHaveBeenCalled()
+    expect(body.done).toBe(true)
+    expect(updateVideoSession).toHaveBeenCalledWith('s1', expect.objectContaining({ render_done: true }))
+  })
 })
+
+function failLote(n: number): Lote {
+  return { ...idleLote(n), taskId: `t${n}`, status: 'fail', failMsg: 'boom' }
+}
 
 function idleLoteConTask(n: number): Lote {
   return { ...idleLote(n), taskId: `t${n}`, status: 'waiting' }

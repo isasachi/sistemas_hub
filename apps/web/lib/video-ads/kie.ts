@@ -83,17 +83,25 @@ export function buildTaskBody(input: VideoTaskInput) {
   }
 }
 
-function apiKey(): string {
-  const key = process.env.KIE_API_KEY
-  if (!key) throw new Error('KIE_API_KEY no está configurada')
-  return key
+/**
+ * BYOK: la key la pone el USUARIO (`user_settings.kie_api_key`, se carga en /cuenta) y
+ * viaja por parámetro. NO hay respaldo de entorno a propósito: un `process.env` de
+ * reserva es el peor modo de fallo de un control de costo, porque nada distingue
+ * "el BYOK funciona" de "lo está pagando el hub". Sin key, la llamada falla.
+ */
+export const SIN_KEY =
+  'Carga tu API key de KIE en Mi cuenta para renderizar: el video lo paga tu propia cuenta de KIE.'
+
+function auth(apiKey: string): Record<string, string> {
+  if (!apiKey?.trim()) throw new Error(SIN_KEY)
+  return { Authorization: `Bearer ${apiKey.trim()}` }
 }
 
 /** Crea la tarea de render. Devuelve el taskId; NO espera al video. */
-export async function createVideoTask(input: VideoTaskInput): Promise<string> {
+export async function createVideoTask(input: VideoTaskInput, apiKey: string): Promise<string> {
   const res = await fetch(`${KIE_BASE}/createTask`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey()}`, 'Content-Type': 'application/json' },
+    headers: { ...auth(apiKey), 'Content-Type': 'application/json' },
     body: JSON.stringify(buildTaskBody(input)),
   })
   const json = (await res.json().catch(() => null)) as
@@ -137,9 +145,9 @@ export function parseTaskDetail(data: unknown): TaskDetail {
   }
 }
 
-export async function getTaskDetail(taskId: string): Promise<TaskDetail> {
+export async function getTaskDetail(taskId: string, apiKey: string): Promise<TaskDetail> {
   const res = await fetch(`${KIE_BASE}/recordInfo?taskId=${encodeURIComponent(taskId)}`, {
-    headers: { Authorization: `Bearer ${apiKey()}` },
+    headers: auth(apiKey),
   })
   const json = (await res.json().catch(() => null)) as { data?: unknown; msg?: string } | null
   if (!res.ok) throw new Error(`KIE recordInfo falló (${res.status}): ${json?.msg ?? ''}`)

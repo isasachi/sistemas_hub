@@ -62,6 +62,13 @@ export interface VideoSessionResponse {
   reference_video_url: string | null
   forensic_analysis: ForensicReport | null
   character_url: string | null
+  /**
+   * El avatar GENERADO a partir de `character_url` — una persona nueva, nunca la de la
+   * foto (requisito legal). Es el ancla visual del personaje en cada lote. Columna
+   * `avatar_url` (migración 20260819000001), nullable: una sesión vieja no lo tiene y
+   * el render cae a `character_url`, o sea se comporta como antes.
+   */
+  avatar_url: string | null
   product_url: string | null
   product_scan: ProductScan | null
   product_name: string | null

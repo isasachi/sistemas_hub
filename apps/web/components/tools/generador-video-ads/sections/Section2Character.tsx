@@ -7,9 +7,10 @@ import { uploadDirect, measureAsset, isPortrait } from '@/lib/video-ads/upload-c
 import { STEP } from '@/lib/video-ads/steps'
 import { btnPrimary, errorBox, warnBox, spinner } from './shared'
 
-// Paso 2: personaje y voz. Etnia y acento son campos LIBRES y obligatorios: el spec
-// prohíbe inferirlos de la apariencia, así que no hay chips ni defaults — si el
-// usuario no los escribe, la FASE 0 los marca PENDIENTE y el flujo se detiene.
+// Paso 2: el personaje. UNA sola entrada, la foto, y es OBLIGATORIA: el personaje se
+// toma siempre de ella y nunca se infiere, así que no hay campo de descripción, ni de
+// etnia (se lee de la foto sin declararla), ni de acento (lo infiere la FASE 4 del
+// propio personaje), ni de voz (son cuatro perfiles fijos, VOZ_ESTANDAR).
 export default function Section2Character() {
   const { sessionId, inputs, characterUrl, patch, setLoading, isLoading } = useVideoStore()
   const [preview, setPreview] = useState<string | null>(characterUrl)
@@ -36,20 +37,23 @@ export default function Section2Character() {
     setLoading(true)
     try {
       const url = await uploadDirect(sessionId, 'character', f)
-      // `uploadDirect` solo sube al bucket, no toca la sesión: el propio `submit`
-      // manda `characterUrl` junto con el resto de `inputs` a la ruta `/inputs`,
-      // que recién ahí lo persiste en `video_sessions.character_url`. Sin este
-      // segundo patch a `inputs`, la matriz de validación nunca confirmaba
-      // "Personaje" por imagen aunque la foto ya estuviera en el bucket.
-      //
       // OJO: se lee `useVideoStore.getState().inputs` (fresco), NO el `inputs` del
-      // closure de este render. `uploadDirect` cruza dos viajes de red (firmar +
-      // PUT); nada deshabilita los campos de texto durante esa ventana, así que si
-      // el usuario tipea en Personaje/Etnia/Acento/Voz/Restricciones mientras la
-      // foto sube, el `inputs` capturado en el closure queda desactualizado. Si se
-      // usa ese closure acá, este patch lo pisa y borra en silencio lo que el
-      // usuario acaba de escribir. No "simplificar" esto de vuelta a `...inputs`.
+      // closure de este render. `uploadDirect` cruza dos viajes de red (firmar + PUT) y
+      // nada bloquea los campos durante esa ventana, así que el closure puede quedar
+      // desactualizado y este patch pisaría lo que el usuario acaba de escribir.
       patch({ characterUrl: url, inputs: { ...useVideoStore.getState().inputs, characterUrl: url } })
+
+      // FASE 4 EN SEGUNDO PLANO. Generar el avatar tarda ~40-55 s y el usuario los pasa
+      // avanzando por validación, plantilla y guión: arrancarlo acá se los ahorra. Se
+      // le manda la URL en el body porque `uploadDirect` solo subió al bucket — la fila
+      // recibe `character_url` recién al enviar este paso, y sin la URL la ruta
+      // generaría un avatar sin referencia. Sin `await` y con el error solo logueado:
+      // si falla, el paso del guión lo reintenta y ahí sí se le muestra al usuario.
+      void fetch(`/api/generador-video-ads/sessions/${sessionId}/character`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ characterUrl: url }),
+      }).catch((e) => console.error('[video-ads] avatar en segundo plano', e))
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -76,36 +80,25 @@ export default function Section2Character() {
     }
   }
 
-  const field = (label: string, k: keyof typeof inputs, placeholder: string, hint?: string) => (
-    <div className="flex flex-col gap-1.5">
-      <label htmlFor={k} className="text-[13px] font-semibold text-[#ededed]">{label}</label>
-      {hint && <span className="text-[11.5px] leading-relaxed text-[#8b8b8b]">{hint}</span>}
-      <input id={k} value={inputs[k]} onChange={(e) => set(k, e.target.value)}
-        placeholder={placeholder} className="jr-field h-11 rounded-lg px-3 text-[13px]" />
-    </div>
-  )
-
   return (
     <div className="flex flex-col gap-5">
-      <FileUpload label="Foto del personaje (opcional)" accept="image/*" preview={preview} onFile={pickCharacter} />
+      <FileUpload label="Foto del personaje" accept="image/*" preview={preview} onFile={pickCharacter} />
       <p className="text-[12px] leading-relaxed text-[#8b8b8b]">
-        Si la subes, es la fuente de verdad de la cara: edad, piel, cabello, facciones y
-        complexión salen de ahí. Si no la subes, hoy no se genera ninguna foto — tu
-        descripción queda como referencia para el guión. Vertical.
+        Obligatoria y vertical. De ella salen edad, piel, cabello, facciones y complexión —
+        y también el acento y la voz del anuncio. La cara del video será una persona
+        nueva construida con ese mismo tipo físico, nunca la de la foto. Empezamos a
+        generarla apenas la subas, mientras avanzas por los siguientes pasos.
       </p>
       {notVertical && <div className={warnBox}>{notVertical}</div>}
 
-      {field('Personaje que aparecerá', 'characterDesc', 'Mujer de 25, cabello negro recogido, piel clara',
-        'Edad aproximada, sexo, apariencia general.')}
-      {field('Raza / etnia / origen cultural', 'characterEthnicity', 'Latina peruana',
-        'Obligatorio y solo tuyo: nunca lo deducimos de una foto ni del video de referencia.')}
-      {field('Acento / variante de habla', 'accent', 'Español peruano de Lima',
-        'Obligatorio. Sin esto la voz saldría con un acento genérico que no elegiste.')}
-      {field('Voz (opcional)', 'voice', 'Femenina joven, ritmo conversacional, energía media')}
-      {field('Restricciones (opcional)', 'constraints', 'No mencionar precios')}
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="constraints" className="text-[13px] font-semibold text-[#ededed]">Restricciones (opcional)</label>
+        <input id="constraints" value={inputs.constraints} onChange={(e) => set('constraints', e.target.value)}
+          placeholder="No mencionar precios" className="jr-field h-11 rounded-lg px-3 text-[13px]" />
+      </div>
 
       {error && <div className={errorBox}>{error}</div>}
-      <button onClick={submit} disabled={isLoading || measuring} className={btnPrimary}>
+      <button onClick={submit} disabled={isLoading || measuring || !characterUrl} className={btnPrimary}>
         {isLoading ? <><span className={spinner} />Guardando...</> : 'Validar datos →'}
       </button>
     </div>

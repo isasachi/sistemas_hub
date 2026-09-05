@@ -9,8 +9,16 @@ import type { UserInputs } from './types'
  * sería caro y, peor, abriría la puerta a que "rellene" lo que falta — exactamente
  * lo que la REGLA DE NO-ASUNCIÓN prohíbe.
  *
- * Las dos filas que NUNCA pueden marcarse CONFIRMADA desde la referencia son etnia
- * y acento: el spec es explícito en que deben venir del usuario.
+ * SEIS variables críticas y ninguna más: producto, descripción del producto, ángulo,
+ * público objetivo, problema/deseo y personaje.
+ *
+ * El PERSONAJE se toma SIEMPRE de la imagen de referencia y nunca se infiere: por eso
+ * su única fuente válida es la foto, y sin foto la fila queda PENDIENTE y el flujo se
+ * detiene. Las tres filas que había antes —etnia, acento y voz— ya no se le piden al
+ * usuario: la etnia se lee del personaje sin declararla aparte, el acento lo infiere
+ * la FASE 4 del mismo personaje y la voz es uno de los cuatro perfiles estándar
+ * (`VOZ_ESTANDAR`, character.ts). Sus columnas siguen en la tabla, sin lector
+ * (precedente de `ph_user_seen`).
  */
 
 /** Literal del spec. Se guarda tal cual en el valor de una fila pendiente. */
@@ -50,11 +58,11 @@ export function buildValidationMatrix(
     critica,
   })
 
-  // El personaje se da por confirmado si hay imagen de referencia: el spec la trata
-  // como "fuente de verdad visual" para edad, piel, cabello, facciones y complexión.
+  // El personaje SOLO puede venir de la imagen: es la fuente de verdad visual de edad,
+  // piel, cabello, facciones y complexión, y describirlo con palabras sería inferirlo.
   const personaje: ValidationRow = hasCharacterImage
     ? { variable: 'Personaje', valor: 'Imagen de referencia adjunta', fuente: 'REFERENCIA', estado: 'CONFIRMADA', critica: true }
-    : row('Personaje', inputs.characterDesc, 'USUARIO')
+    : { variable: 'Personaje', valor: `${CONFIRMACION_REQUERIDA} foto del personaje`, fuente: 'REFERENCIA', estado: 'PENDIENTE', critica: true }
 
   const rows: ValidationRow[] = [
     row('Producto', inputs.productName, 'USUARIO'),
@@ -63,11 +71,6 @@ export function buildValidationMatrix(
     row('Público objetivo', inputs.targetAudience, 'USUARIO'),
     row('Problema / deseo', inputs.problem, 'USUARIO'),
     personaje,
-    // Fuente USUARIO aunque haya imagen: una foto no confirma origen cultural.
-    row('Raza / etnia / origen cultural', inputs.characterEthnicity, 'USUARIO'),
-    row('Acento', inputs.accent, 'USUARIO'),
-    // La voz es el único campo que el spec marca "SOLO SI ES RELEVANTE".
-    { variable: 'Voz', valor: filled(inputs.voice) ? inputs.voice : 'No especificada', fuente: 'USUARIO', estado: 'CONFIRMADA', critica: false },
   ]
 
   return {

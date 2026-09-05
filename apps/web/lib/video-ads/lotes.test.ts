@@ -233,20 +233,17 @@ describe('camaraDeLote', () => {
   })
 })
 
-const BLOQUE = 'Mujer de 25 años, latina peruana, cabello negro liso recogido en moño bajo, piel clara, ojos marrón claro, complexión delgada, polo blanco de algodón sin estampado.'
 const VOZ = {
-  idioma: 'Español', varianteRegional: 'Perú - Lima', acento: 'Limeño', pronunciacion: 'Clara',
-  ritmo: 'Conversacional', velocidad: 'Media', entonacion: 'Natural', energia: 'Media',
-  pausas: 'Naturales', tono: 'Cálido', timbre: 'Claro', edadVocal: '25', estilo: 'Amiga',
+  idioma: 'Español', varianteRegional: 'Perú - Lima', acento: 'Español peruano de Lima',
+  pronunciacion: 'Clara', ritmo: 'Conversacional', velocidad: 'Media',
+  entonacion: 'Natural y cercana', energia: 'Media', pausas: 'Naturales',
+  tono: 'Medio-agudo', timbre: 'Claro', edadVocal: '25-35 años', estilo: 'Amiga',
 }
 const ARGS = {
-  consistencyBlock: BLOQUE,
-  productDesc: 'Frasco de vidrio celeste de 30 ml con gotero blanco y etiqueta "EUNOIA".',
-  escenario: 'Dormitorio con pared clara y repisas blancas',
   camara: 'Primer plano, altura de ojos, cámara en mano',
   voz: VOZ,
   images: [
-    { url: 'https://x/character.png', role: 'la persona' },
+    { url: 'https://x/avatar.png', role: 'la persona' },
     { url: 'https://x/product.png', role: 'el producto' },
   ],
 }
@@ -255,12 +252,19 @@ describe('buildLotePrompt', () => {
   const lote = groupIntoLotes([toma(1, 5, 'Hola, te cuento algo.'), toma(2, 5, 'Este suero me cambió la piel.')])[0]
   const p = buildLotePrompt({ lote, ...ARGS })
 
-  it('repite el bloque de consistencia íntegro (contexto absoluto)', () => {
-    expect(p).toContain(BLOQUE)
+  it('cita las imágenes como ImageN, en el orden del array', () => {
+    expect(p).toContain('Image1 = la persona')
+    expect(p).toContain('Image2 = el producto')
   })
 
-  it('repite la descripción del producto íntegra', () => {
-    expect(p).toContain(ARGS.productDesc)
+  // El reparto: las imágenes son las anclas visuales y el prompt es motion control.
+  // Redescribir con palabras lo que la imagen ya muestra solo puede contradecirla, y
+  // cuando se contradicen el resultado deja de ser estable.
+  it('NO redescribe con texto lo que las imágenes ya muestran', () => {
+    expect(p).not.toMatch(/ESCENARIO/i)
+    expect(p).not.toMatch(/PERSONAJE \(descripción/i)
+    expect(p).not.toMatch(/PRODUCTO \(debe verse/i)
+    expect(p).toMatch(/no las redescribas/i)
   })
 
   it('nunca usa referencias a lotes anteriores', () => {
@@ -269,86 +273,28 @@ describe('buildLotePrompt', () => {
     }
   })
 
-  it('lleva la locución exacta de sus tomas y nada más', () => {
+  it('lleva la locución exacta de sus tomas, atada a su toma', () => {
     expect(p).toContain('Hola, te cuento algo.')
     expect(p).toContain('Este suero me cambió la piel.')
+    expect(p).toMatch(/Toma 1 \(5 s\)/)
+    expect(p).toMatch(/Dice, literal: “Hola/)
+  })
+
+  it('una toma muda se declara muda en vez de dejar el hueco', () => {
+    const mudo = groupIntoLotes([{ ...toma(1, 4, ''), locucion: '' }])[0]
+    expect(buildLotePrompt({ lote: mudo, ...ARGS })).toContain('No habla en esta toma')
+  })
+
+  it('ancla la voz y el acento', () => {
+    expect(p).toContain('Español peruano de Lima')
+    expect(p).toContain('25-35 años')
+    expect(p).toMatch(/no resumas, no extiendas/i)
   })
 
   it('prohíbe todo overlay', () => {
-    expect(p).toMatch(/TEXTO \/ OVERLAY: NINGUNO/)
+    expect(p).toMatch(/Sin texto en pantalla/i)
     expect(p).toMatch(/watermark/i)
-    expect(p).toMatch(/subt[ií]tulos|captions/i)
-  })
-
-  it('numera las imágenes en el orden del array', () => {
-    expect(p).toContain('@image(1) = la persona')
-    expect(p).toContain('@image(2) = el producto')
-  })
-
-  it('incluye el perfil de voz completo', () => {
-    expect(p).toContain('Limeño')
-    expect(p).toContain('Perú - Lima')
-  })
-
-  // El spec lista "Iluminación" como bloque obligatorio de cada lote. El `fondo` del
-  // forense ya la describe (su prompt la pide ahí), así que lo que faltaba era el
-  // rótulo — sacarla a un campo propio obligaría a re-correr el análisis forense de
-  // cada sesión guardada, que es el paso caro.
-  it('rotula la iluminación junto al escenario', () => {
-    expect(p).toContain(`ESCENARIO E ILUMINACIÓN: ${ARGS.escenario}`)
-  })
-
-  // Bloque "Continuidad" del spec: qué debe permanecer idéntico durante todo el lote.
-  it('declara qué no puede cambiar dentro del clip', () => {
-    expect(p).toContain('CONTINUIDAD:')
-    for (const invariante of ['personaje', 'producto', 'vestuario', 'escenario', 'iluminación']) {
-      expect(p.slice(p.indexOf('CONTINUIDAD:'), p.indexOf('PERFIL DE VOZ'))).toContain(invariante)
-    }
-  })
-
-  it('entra en el tope de prompt de KIE', () => {
-    expect(p.length).toBeLessThanOrEqual(KIE_PROMPT_MAX)
-  })
-
-  it('un lote de muchas tomas también entra en el tope', () => {
-    const largo = groupIntoLotes(Array.from({ length: 8 }, (_, i) =>
-      toma(i + 1, 1.8, `Frase número ${i + 1} del guión adaptado que dice bastante.`)))[0]
-    expect(buildLotePrompt({ lote: largo, ...ARGS }).length).toBeLessThanOrEqual(KIE_PROMPT_MAX)
-  })
-
-  // Fix round 1 — el test anterior usa `accionVisual` sintético de ~9 caracteres
-  // (`accion ${n}`), muy por debajo del detalle forense real (AGENTS.md: ~6300 chars
-  // con ~11 beats). Este caso fuerza la degradación de verdad: bloque de consistencia
-  // y descripción de producto verbosos, y 8 tomas con `accionVisual` largo (secuencial:
-  // posición inicial, movimiento, manos, mirada, expresión, posición final).
-  it('con contenido de tamaño realista, degrada la sección de acciones pero conserva la cámara y entra en el tope', () => {
-    const bloqueLargo = 'Mujer de 25 años, latina peruana, cabello negro liso recogido en moño bajo, piel clara, ojos marrón claro, complexión delgada, cejas pobladas naturales, nariz recta, labios medianos, polo blanco de algodón sin estampado ni logo, pantalón deportivo gris, sin joyas visibles, manicura natural, uñas cortas. '.repeat(2)
-    const productoLargo = 'Frasco de vidrio celeste translúcido de 30 ml con gotero de plástico blanco, tapa rosca plateada, etiqueta blanca centrada con el texto "EUNOIA" en tipografía serif dorada, borde dorado fino alrededor de la etiqueta, sin otros textos ni logos adicionales. '.repeat(2)
-    const accionLarga = 'La modelo empieza de pie frente al espejo del baño con las manos a los costados, gira lentamente el torso hacia la cámara, levanta la mano derecha y toma el frasco del producto desde la repisa con dos dedos, lo sostiene a la altura del pecho, lo inclina levemente para mostrar la etiqueta, mira directo a cámara con expresión cálida y sonríe, termina con el frasco cerca del rostro y la mirada fija en el lente. '
-
-    const argsLargos = { ...ARGS, consistencyBlock: bloqueLargo, productDesc: productoLargo }
-    const muchasTomas = groupIntoLotes(Array.from({ length: 8 }, (_, i) =>
-      ({ ...toma(i + 1, 1.8, `Frase número ${i + 1} del guión adaptado, bastante larga también, para sumar presión de caracteres sobre el presupuesto del prompt.`), accionVisual: accionLarga })))[0]
-
-    const p = buildLotePrompt({ lote: muchasTomas, ...argsLargos })
-    expect(p.length).toBeLessThanOrEqual(KIE_PROMPT_MAX)
-    // La cámara nunca se recorta (regla de AGENTS.md: es corta y sostiene el encuadre).
-    expect(p).toContain(argsLargos.camara)
-    // El bloque de consistencia y la descripción de producto tampoco se recortan bajo
-    // presión de presupuesto — solo la sección de acciones se degrada.
-    expect(p).toContain(bloqueLargo)
-    expect(p).toContain(productoLargo)
-    // Prueba que SÍ llegó a degradar, no que por casualidad entró en el nivel completo:
-    // sin el bloque global de locución (nivel 2) y con `accionVisual` truncada (piso).
-    expect(p).not.toContain('GUION DE LOCUCIÓN FINAL')
-    expect(p).toContain('…')
-    // Lo que NUNCA se suelta: la locución de cada toma, junto a su acción y sus
-    // segundos. Es la sincronización audio↔imagen — el bloque global que sí se soltó
-    // traía el mismo texto pero sin decir qué frase va con qué toma.
-    expect(p).toMatch(/### Toma 8 — 1\.8 s/)
-    expect(p).toContain('Locución: “Frase número 8')
-    // Y el texto sigue completo: soltar el bloque global no perdió ni una frase.
-    for (let i = 1; i <= 8; i++) expect(p).toContain(`Frase número ${i}`)
+    expect(p).toMatch(/subt[ií]tulos/i)
   })
 
   it('la cámara que recibe es la que sale en el prompt, no una fija del video', () => {
@@ -356,10 +302,37 @@ describe('buildLotePrompt', () => {
       .toContain('CÁMARA: Plano medio, cámara fija en trípode.')
   })
 
-  it('si ni el bloque de consistencia por sí solo entra en el tope, lanza un error explicando el exceso', () => {
-    const bloqueImposible = 'x'.repeat(KIE_PROMPT_MAX * 2)
-    expect(() => buildLotePrompt({ lote, ...ARGS, consistencyBlock: bloqueImposible })).toThrow()
-    expect(() => buildLotePrompt({ lote, ...ARGS, consistencyBlock: bloqueImposible }))
-      .toThrow(new RegExp(String(KIE_PROMPT_MAX)))
+  // Este es el test que sostiene haber BORRADO la escalera de degradación. El caso
+  // pesado de verdad —8 tomas con la coreografía detallada que pide la FASE 1, ~400
+  // caracteres cada una— ya no se resuelve recortando texto sino cerrando el lote
+  // antes: TODOS los prompts entran y NADA se trunca. Con la emisión anterior (bloque
+  // de consistencia + producto + escenario) esto era imposible sin degradar.
+  it('con coreografía pesada, el reparto la reparte y ningún prompt se trunca', () => {
+    const accionLarga = 'La modelo empieza de pie frente al espejo del baño con las manos a los costados, gira lentamente el torso hacia la cámara, levanta la mano derecha y toma el frasco del producto desde la repisa con dos dedos, lo sostiene a la altura del pecho, lo inclina levemente para mostrar la etiqueta, mira directo a cámara con expresión cálida y sonríe, termina con el frasco cerca del rostro y la mirada fija en el lente. '
+    const muchas = groupIntoLotes(Array.from({ length: 8 }, (_, i) =>
+      ({ ...toma(i + 1, 1.8, `Frase número ${i + 1} del guión adaptado, bastante larga también, para sumar presión de caracteres.`), accionVisual: accionLarga })))
+
+    expect(muchas.length).toBeGreaterThan(1) // el presupuesto de coreografía lo partió
+    const prompts = muchas.map((l) => buildLotePrompt({ lote: l, ...ARGS }))
+    for (const p of prompts) {
+      expect(p.length).toBeLessThan(KIE_PROMPT_MAX)
+      expect(p).not.toContain('…')
+    }
+    // Y no se perdió ninguna toma en el camino: las 8 locuciones siguen ahí.
+    const todo = prompts.join('\n')
+    for (let i = 1; i <= 8; i++) expect(todo).toContain(`Frase número ${i}`)
+  })
+
+  // El caso de 15 s hablado normal, que es el 99 % del uso: un solo lote, sin partir.
+  it('un lote hablado normal no roza ninguno de los dos topes', () => {
+    const normal = groupIntoLotes(Array.from({ length: 3 }, (_, i) =>
+      ({ ...toma(i + 1, 5, `Frase ${i + 1} del guión.`), accionVisual: 'Sostiene el frasco a la altura del pecho con la mano derecha, lo gira para mostrar la etiqueta y mira a cámara.' })))
+    expect(normal).toHaveLength(1)
+    expect(buildLotePrompt({ lote: normal[0], ...ARGS }).length).toBeLessThan(KIE_PROMPT_MAX / 2)
+  })
+
+  it('si aun así no entra, lanza un error explicando el exceso en vez de gastar la cuota', () => {
+    const imposible = groupIntoLotes([{ ...toma(1, 5, 'Hola.'), accionVisual: 'x'.repeat(KIE_PROMPT_MAX * 2) }])[0]
+    expect(() => buildLotePrompt({ lote: imposible, ...ARGS })).toThrow(new RegExp(String(KIE_PROMPT_MAX)))
   })
 })

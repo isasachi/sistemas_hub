@@ -23,10 +23,28 @@ describe('buildForensicInstruction', () => {
     expect(p).toMatch(/no deben reproducirse/i)
   })
 
-  it('prohíbe inferir etnia y acento', () => {
-    expect(p).toMatch(/nunca infieras|no infieras/i)
+  // El acento SÍ se infiere ahora, pero del personaje que sube el usuario (FASE 4) y
+  // no del sujeto del video, que es otra persona. Lo que sigue prohibido acá es
+  // etiquetar a ese sujeto con una raza o un origen que el video no puede sostener.
+  it('describe al sujeto sin etiquetarlo con una raza o un origen', () => {
+    expect(p).toMatch(/No etiquetes al sujeto/i)
     expect(p).toMatch(/raza|etnia/i)
-    expect(p).toMatch(/acento/i)
+    expect(p).toMatch(/tono de piel, cabello, facciones/i)
+  })
+
+  // La directriz que el dueño del repo fijó como regla principal de esta fase.
+  it('lleva la lista de inspección cronológica completa', () => {
+    expect(p).toMatch(/inspecciona el video CRONOLÓGICAMENTE/i)
+    for (const item of ['silencios', 'jump cuts', 'zooms', 'gestos', 'overlays', 'subtítulos', 'fondos']) {
+      expect(p).toContain(item)
+    }
+  })
+
+  // Los dieciocho puntos son qué MIRAR, no campos nuevos: un campo que solapa con otro
+  // ya contestado vuelve vacío, y este repo lo pagó cinco veces.
+  it('mapea esa lista a los campos que ya existen, sin inventar claves', () => {
+    expect(p).toMatch(/DÓNDE VA CADA COSA DE ESA LISTA/)
+    expect(p).toMatch(/No inventes campos fuera del esquema/)
   })
 
   // El render reconstruye un video: "muestra el producto" hace que el generador invente

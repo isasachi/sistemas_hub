@@ -49,14 +49,14 @@ export async function POST(
             angle: session.angle ?? '',
             targetAudience: session.target_audience ?? '',
             problem: session.problem ?? '',
-            characterDesc: session.character_desc ?? '',
-            characterEthnicity: session.character_ethnicity ?? '',
-            accent: session.accent ?? '',
-            voice: session.voice ?? '',
+            characterDesc: '', characterEthnicity: '', accent: '', voice: '',
             constraints: session.constraints ?? '',
           },
           session.product_scan,
           slots,
+          // El acento ya no es un input: lo infiere la FASE 4 del personaje y vive en
+          // el perfil de voz. Sin perfil todavía, la locución sale en neutro.
+          session.voice_profile?.acento || 'Español latino neutro',
         ),
       },
     ])

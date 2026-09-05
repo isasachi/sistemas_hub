@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getVideoSession, updateVideoSession } from '@/lib/video-ads/db'
 import { getTaskDetail } from '@/lib/video-ads/kie'
+import { currentKieKey } from '@/lib/user-settings'
 import { uploadToStorage } from '@/lib/storage'
 import { renderDone } from '@/lib/video-ads/render-lotes'
 import type { Lote } from '@/lib/video-ads/lotes'
@@ -49,6 +50,11 @@ export async function GET(
   if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (!session.lotes?.length) return NextResponse.json({ lotes: [], done: false })
 
+  // BYOK: en KIE una tarea solo la ve la cuenta que la creó, así que sin key no hay a
+  // quién preguntarle. Lo único que se salta es el SONDEO: el resto de la ruta sigue
+  // corriendo para recalcular `done` y reconciliar la columna cacheada `render_done`.
+  const kieKey = await currentKieKey()
+
   const lotes: Lote[] = []
   let changed = false
 
@@ -64,10 +70,10 @@ export async function GET(
       continue
     }
 
-    if (!l.taskId) { lotes.push(l); continue }
+    if (!l.taskId || !kieKey) { lotes.push(l); continue }
 
     try {
-      const d = await getTaskDetail(l.taskId)
+      const d = await getTaskDetail(l.taskId, kieKey)
       const videoUrl = d.videoUrl ? await mirror(id, `lote-${l.n}`, d.videoUrl) : null
       if (d.state !== l.status || videoUrl || d.failMsg !== l.failMsg) changed = true
       lotes.push({ ...l, status: d.state, videoUrl, failMsg: d.failMsg })

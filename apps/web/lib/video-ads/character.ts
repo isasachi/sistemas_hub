@@ -12,12 +12,18 @@ import type { ForensicReport } from './forensic'
  * Por eso el spec prohíbe explícitamente "el mismo personaje" / "igual al anterior":
  * son referencias a un contexto que no existe.
  *
- * Etnia y acento vienen del usuario, nunca de la imagen ni del video. Sin acento
- * confirmado se propaga el marcador, no un default: un acento genérico es una
- * decisión de producto tomada por el modelo a espaldas del usuario.
+ * El personaje SALE DE LA FOTO de referencia y de ningún otro lado: ni de una
+ * descripción escrita ni del video original, cuyo protagonista es otra persona. De la
+ * foto se lee el TIPO físico; la cara es nueva (ver `promptCreacion`).
+ *
+ * La VOZ no se le pregunta al usuario: son cuatro perfiles fijos (`VOZ_ESTANDAR`) y el
+ * modelo solo elige cuál corresponde al personaje. El ACENTO tampoco: se infiere del
+ * mismo personaje. Los dos eran campos del wizard y ya no lo son.
  */
 
-export const ACENTO_PENDIENTE = '[ACENTO PENDIENTE DE CONFIRMACIÓN]'
+/** Los cuatro perfiles vocales estándar. Lo único que el modelo elige es CUÁL. */
+export const PERFILES_VOCALES = ['mujer-joven', 'mujer-mayor', 'varon-joven', 'varon-mayor'] as const
+export type PerfilVocal = (typeof PERFILES_VOCALES)[number]
 
 export const VoiceProfileSchema = z.object({
   idioma: z.string(),
@@ -36,80 +42,102 @@ export const VoiceProfileSchema = z.object({
 })
 export type VoiceProfile = z.infer<typeof VoiceProfileSchema>
 
+/**
+ * Los cuatro perfiles. Comparten todo lo que hace a una locución UGC creíble —español
+ * latino neutro, ritmo conversacional, sin locución publicitaria— y se diferencian
+ * solo en lo que depende del cuerpo: tono, timbre y edad vocal. `acento` lo rellena
+ * la inferencia del personaje, por eso nace vacío acá.
+ */
+const BASE = {
+  idioma: 'Español',
+  varianteRegional: 'Español latinoamericano',
+  acento: '',
+  pronunciacion: 'Clara y natural, sin sobrearticular',
+  ritmo: 'Conversacional, con pausas naturales entre frases',
+  velocidad: 'Media',
+  entonacion: 'Natural y cercana, sin locución publicitaria',
+  energia: 'Media, cálida',
+  pausas: 'Breves, donde caen en el habla espontánea',
+  estilo: 'Habla a cámara como a una amiga, tono UGC',
+} as const
+
+export const VOZ_ESTANDAR: Record<PerfilVocal, VoiceProfile> = {
+  'mujer-joven': { ...BASE, tono: 'Medio-agudo', timbre: 'Claro y luminoso', edadVocal: '25-35 años' },
+  'mujer-mayor': { ...BASE, tono: 'Medio', timbre: 'Cálido y con cuerpo', edadVocal: '45-60 años' },
+  'varon-joven': { ...BASE, tono: 'Medio', timbre: 'Claro y directo', edadVocal: '25-35 años' },
+  'varon-mayor': { ...BASE, tono: 'Medio-grave', timbre: 'Grave y sereno', edadVocal: '45-60 años' },
+}
+
 export const CharacterIdentitySchema = z.object({
   promptCreacion: z.string(),
   bloqueConsistencia: z.string(),
-  voz: VoiceProfileSchema,
+  /** Cuál de los cuatro perfiles fijos corresponde al personaje de la foto. */
+  perfilVocal: z.enum(PERFILES_VOCALES),
+  /** Inferido del personaje. No se le pregunta al usuario. */
+  acento: z.string(),
 })
 export type CharacterIdentity = z.infer<typeof CharacterIdentitySchema>
+
+/** El perfil fijo que le toca al personaje, con su acento inferido dentro. */
+export function vozDe(identity: CharacterIdentity): VoiceProfile {
+  return { ...VOZ_ESTANDAR[identity.perfilVocal], acento: identity.acento.trim() || 'Español latino neutro' }
+}
 
 export function buildIdentityInstruction(
   inputs: UserInputs,
   forensic: ForensicReport,
-  hasImage: boolean,
 ): string {
-  const acento = inputs.accent.trim() || ACENTO_PENDIENTE
   return [
     'Actúa como director creativo de anuncios UGC.',
-    'Construye la identidad visual maestra del personaje y su perfil vocal.',
+    'Construye la identidad visual maestra del personaje y elige su perfil vocal.',
     '',
-    'DATOS DEL USUARIO (fuente de verdad, no los contradigas):',
-    `  Personaje: ${inputs.characterDesc || '[VARIABLE PENDIENTE]'}`,
-    `  Raza / etnia / origen cultural: ${inputs.characterEthnicity || '[VARIABLE PENDIENTE]'}`,
-    `  Acento: ${acento}`,
-    inputs.voice ? `  Voz: ${inputs.voice}` : '',
+    'LA FOTO ADJUNTA ES EL PERSONAJE. Es la única fuente de su apariencia: edad',
+    'aparente, tono de piel, cabello, complexión y rasgos salen de ahí, nunca de una',
+    'descripción escrita ni del video original (su protagonista es otra persona).',
     '',
-    'CONTEXTO DEL VIDEO ORIGINAL (solo para encuadre y vestuario equivalente):',
+    'CONTEXTO DEL VIDEO ORIGINAL (para vestuario y escenario equivalentes, no para la cara):',
     `  Sujeto observado: ${forensic.sujeto}`,
     `  Vestuario observado: ${forensic.vestuario}`,
     `  Fondo observado: ${forensic.fondo}`,
     '',
-    hasImage
-      ? [
-          'HAY IMAGEN DE REFERENCIA DEL PERSONAJE. Es la fuente primaria de identidad',
-          'visual: analiza únicamente rasgos observables y conserva proporciones faciales,',
-          'estructura del rostro, cabello (corte y color), complexión, rasgos distintivos',
-          'visibles y edad aparente. No mezcles rasgos con otros personajes. Si un rasgo',
-          'no puede observarse con certeza, no inventes ese rasgo.',
-          'De la foto SOLO se leen rasgos observables (edad aparente, tono de piel,',
-          'cabello, facciones, complexión). NUNCA infieras de la foto la etnia, el',
-          'origen cultural ni el acento del personaje: esos dos datos vienen',
-          'exclusivamente del usuario, en la sección de arriba, y de nadie más — ni de',
-          'la imagen ni del video original.',
-        ].join('\n')
-      : [
-          'NO hay imagen de referencia: construye el personaje desde la descripción del',
-          'usuario. No inventes rasgos que el usuario no mencionó ni los deduzcas del',
-          'video original — el personaje del original NO es el personaje nuevo.',
-        ].join('\n'),
+    'DATOS DEL PRODUCTO (contexto del anuncio):',
+    `  Producto: ${inputs.productName}`,
+    `  Público objetivo: ${inputs.targetAudience}`,
+    inputs.constraints ? `  Restricciones: ${inputs.constraints}` : '',
     '',
     '`promptCreacion`: un prompt autónomo, listo para un generador de imagen, que cree',
-    'la foto base del personaje. Debe incluir identidad visual, edad aparente, sexo /',
-    'presentación, rasgos faciales visibles, forma del rostro, ojos, cejas, nariz,',
-    'labios, piel, cabello (corte, color, textura), complexión, proporciones corporales',
-    'observables, vestuario, accesorios, postura neutra, expresión neutra, iluminación',
-    'neutra, fondo neutro, encuadre de referencia, relación de aspecto retrato 2:3 y',
-    'nivel de realismo fotográfico. (El generador de imagen solo produce retrato 2:3;',
-    'el ratio vertical final del video lo impone después el modelo de video, porque',
-    'el personaje nunca va solo en el render.)',
+    'la foto del personaje.',
+    '',
+    '⚠️ LA CARA ES NUEVA, NO LA DE LA FOTO. Toma de la foto el TIPO físico —rango de',
+    'edad, complexión, tono de piel, corte y color de cabello, presentación— y construye',
+    'con él a OTRA persona: distinta nariz, distinta boca, distintos ojos, distinta',
+    'mandíbula. La foto la pudo sacar el usuario de cualquier lado, así que reproducir',
+    'esa cara sería publicar la imagen de alguien que no dio permiso. Es un requisito',
+    'legal, no estético.',
+    '',
+    'El prompt debe incluir: edad aparente, sexo / presentación, rasgos faciales, forma',
+    'del rostro, ojos, cejas, nariz, labios, piel, cabello (corte, color, textura),',
+    'complexión, proporciones observables, vestuario equivalente al del video original,',
+    'accesorios, postura y expresión neutras, iluminación natural, el escenario del',
+    'video original de fondo, encuadre de referencia, relación de aspecto vertical 9:16',
+    'y realismo fotográfico estricto: piel con poros, vello fino, lunares, brillo',
+    'natural y líneas de expresión. Nada de piel suavizada, acabado acartonado,',
+    'ilustración, render 3D ni filtro de belleza.',
+    'El 9:16 es el del anuncio: esta foto es el ancla visual del personaje en cada lote,',
+    'así que su encuadre es el del video.',
     'Sin texto, sin logos, sin watermarks y sin el producto en el encuadre.',
     '',
-    '`bloqueConsistencia`: la descripción EXACTA y reutilizable del personaje, pensada',
-    'para copiarse íntegra dentro de cada lote de video. Trátala como una identidad',
-    'bloqueada: no la reemplaces nunca ni la resumas con ninguno de estos atajos —',
-    '"el mismo personaje", "igual al anterior", "idéntica persona", "as before" — el',
-    'generador de video no recuerda nada entre lotes, así que una referencia a algo',
-    'anterior produce otra persona.',
-    'Debe ser autosuficiente y describir edad, etnia (la del usuario), rostro, cabello,',
-    'piel, ojos, complexión, vestuario y accesorios.',
+    '`bloqueConsistencia`: la descripción EXACTA y reutilizable del personaje. Debe ser',
+    'autosuficiente —edad, rostro, cabello, piel, ojos, complexión, vestuario y',
+    'accesorios— y no puede resumirse con "el mismo personaje", "igual al anterior" ni',
+    '"idéntica persona": son referencias a un contexto que no existe.',
     '',
-    '`voz`: perfil vocal completo — idioma, variante regional, acento, pronunciación,',
-    'ritmo, velocidad, entonación, energía, pausas, tono, timbre, edad vocal aproximada',
-    'y estilo conversacional.',
-    `El acento debe ser explícito y estable: usa "${acento}" tal cual.`,
-    acento === ACENTO_PENDIENTE
-      ? 'NO lo sustituyas por un acento genérico ni "neutro": propaga el marcador.'
-      : '',
+    '`perfilVocal`: cuál de estos cuatro le corresponde al personaje de la foto, por su',
+    'sexo y su edad aparentes — mujer-joven, mujer-mayor, varon-joven, varon-mayor.',
+    '',
+    '`acento`: el acento con el que hablaría este personaje, inferido de él y del',
+    'contexto del anuncio (por ejemplo "español peruano de Lima"). Concreto, no',
+    '"neutro" a secas.',
     '',
     'Todo el output va en español.',
   ].filter(Boolean).join('\n')
@@ -125,10 +153,7 @@ export function buildIdentityInstruction(
  */
 export function buildCharacterParts(
   instruction: string,
-  image?: { data: string; mimeType: string },
+  image: { data: string; mimeType: string },
 ): Part[] {
-  const parts: Part[] = []
-  if (image) parts.push({ inlineData: { mimeType: image.mimeType, data: image.data } })
-  parts.push({ text: instruction })
-  return parts
+  return [{ inlineData: { mimeType: image.mimeType, data: image.data } }, { text: instruction }]
 }

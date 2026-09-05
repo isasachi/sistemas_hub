@@ -23,9 +23,6 @@ const VOZ = {
 
 const fpInput = (over: Partial<Parameters<typeof scriptFingerprint>[0]> = {}) => ({
   lotes: [lote(1), lote(2)],
-  consistencyBlock: 'Mujer de 25, cabello negro',
-  productDesc: 'Frasco celeste',
-  escenario: 'cocina',
   camaras: ['primer plano', 'plano medio'],
   voz: VOZ,
   images: [{ url: 'https://x/p.png', role: 'la persona' }, { url: 'https://x/prod.png', role: 'el producto' }],
@@ -151,16 +148,15 @@ describe('scriptFingerprint', () => {
 
   // Ensanchamiento deliberado: rehacer la FASE 4/4.5 cambia la PERSONA y la VOZ, así
   // que reanudar a través de ese cambio pegaría dos personajes distintos en un video.
-  it('cambia si cambia el personaje, la voz o la imagen de referencia', () => {
+  // La identidad viaja ahora en la URL del AVATAR (el prompt ya no lleva el bloque de
+  // consistencia), así que es la imagen la que tiene que mover la huella.
+  it('cambia si cambia el avatar, la voz o la cámara', () => {
     const original = scriptFingerprint(fpInput())
-    expect(scriptFingerprint(fpInput({ consistencyBlock: 'Hombre de 40' }))).not.toBe(original)
     expect(scriptFingerprint(fpInput({ voz: { ...VOZ, acento: 'mexicano' } }))).not.toBe(original)
     expect(scriptFingerprint(fpInput({
       images: [{ url: 'https://x/OTRA.png', role: 'la persona' }, { url: 'https://x/prod.png', role: 'el producto' }],
     }))).not.toBe(original)
-    expect(scriptFingerprint(fpInput({ escenario: 'playa' }))).not.toBe(original)
     expect(scriptFingerprint(fpInput({ camaras: ['plano general', 'plano medio'] }))).not.toBe(original)
-    expect(scriptFingerprint(fpInput({ productDesc: 'Otro frasco' }))).not.toBe(original)
   })
 
   // La cámara pasó de un string único a una por lote: si el reparto de planos entre
@@ -235,7 +231,9 @@ describe('isPaidResume', () => {
   // tomas en buckets de hasta 15 s—, y sin este chequeo el resultado era un video que
   // mezclaba el lote ya renderizado (guión viejo) con los nuevos (guión actual).
   it('misma cantidad de lotes pero contenido distinto: NO es reanudación real', () => {
-    const otraHuella = scriptFingerprint(fpInput({ consistencyBlock: 'Hombre de 40' }))
+    const otraHuella = scriptFingerprint(fpInput({
+      images: [{ url: 'https://x/OTRO-AVATAR.png', role: 'la persona' }, { url: 'https://x/prod.png', role: 'el producto' }],
+    }))
     expect(isPaidResume(true, [pagado(1), pendiente(2)], [lote(1), lote(2)], otraHuella)).toBe(false)
   })
 

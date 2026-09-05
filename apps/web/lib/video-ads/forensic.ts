@@ -179,10 +179,26 @@ export function repairCutTiming(
 export function buildForensicInstruction(): string {
   return [
     'Actúa como analista forense experto en videos de respuesta directa.',
-    'Analiza el VIDEO ORIGINAL completo, en orden cronológico.',
+    'Analiza el VIDEO ORIGINAL completo.',
+    '',
+    'DIRECTRIZ PRINCIPAL — inspecciona el video CRONOLÓGICAMENTE y detecta:',
+    '  audio · palabras · silencios · escenas · cortes · jump cuts · cambios de plano ·',
+    '  zooms · movimientos · acciones · producto · objetos · textos · overlays ·',
+    '  subtítulos · gestos · fondos · cambios visuales.',
     '',
     'REGLA DE CORTES — la más importante:',
     '  Registra una nueva escena/corte ÚNICAMENTE cuando exista un cambio visual real o un corte de edición identificable. NO dividas una toma continua solo porque cambia el diálogo. Una toma de 8 segundos con tres frases es UN corte, no tres.',
+    '',
+    // Los dieciocho puntos de la directriz no son campos nuevos: se reparten entre los
+    // que ya existen, y decirlo evita que el modelo invente claves que el schema no
+    // tiene. Un campo que solapa con otro ya contestado vuelve vacío — este repo lo
+    // pagó cinco veces.
+    'DÓNDE VA CADA COSA DE ESA LISTA: los silencios, los gestos, los movimientos y la',
+    'manipulación del producto y de los objetos van en `accion`; los zooms, los cambios',
+    'de plano y los movimientos de cámara en `camara`; los cortes y jump cuts en',
+    '`transicion`; los textos, overlays y subtítulos en `elementosGraficos` y en',
+    '`textoOverlay`; las palabras en `dialogo` y en `guionOriginal`; los fondos en',
+    '`fondo`. No inventes campos fuera del esquema.',
     '',
     'MÉTRICAS GLOBALES:',
     '  - `duracionTotalSeg`: duración total del video en segundos.',
@@ -261,9 +277,10 @@ export function buildForensicInstruction(): string {
     '',
     'PROHIBICIONES:',
     '  - No describas como hecho nada que no sea visible o audible en el video.',
-    '  - NUNCA infieras raza, etnia, origen cultural ni acento a partir de la',
-    '    apariencia visual. Esos datos los entrega el usuario, no el análisis.',
-    '    Descríbe lo que se ve (tono de piel, cabello, facciones) sin etiquetarlo.',
+    '  - No etiquetes al sujeto con una raza, una etnia ni un origen cultural: describe',
+    '    lo que se ve (tono de piel, cabello, facciones). El personaje del anuncio nuevo',
+    '    es OTRO —sale de la foto que sube el usuario— así que etiquetar a este no',
+    '    aporta nada y es una lectura que no se puede sostener con el video.',
     '  - Si algo no se puede determinar con seguridad, dilo explícitamente en el',
     '    campo correspondiente en vez de inventarlo.',
     '',

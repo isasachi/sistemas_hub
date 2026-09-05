@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getVideoSession, updateVideoSession, claimFreshLotes } from '@/lib/video-ads/db'
-import { createVideoTask, clampDuration, KIE_PROMPT_MAX, type VideoImage } from '@/lib/video-ads/kie'
+import { createVideoTask, clampDuration, KIE_PROMPT_MAX, SIN_KEY, type VideoImage } from '@/lib/video-ads/kie'
+import { currentKieKey } from '@/lib/user-settings'
 import { groupIntoLotes, buildLotePrompt, camaraDeLote, type Lote } from '@/lib/video-ads/lotes'
 import { totalDuration, resumeSeed, mergeRescue, isPaidResume, scriptFingerprint, renderDone } from '@/lib/video-ads/render-lotes'
 import { AdaptedScriptSchema, type AdaptedScript } from '@/lib/video-ads/adapt'
@@ -93,7 +94,10 @@ export async function POST(
   // Orden = numeración @image(n) del prompt. Siempre dos imágenes → modo multi-imagen,
   // que es donde `aspect_ratio: 9:16` sí se respeta.
   const images: VideoImage[] = [
-    { url: session.character_url, role: 'la persona' },
+    // El avatar generado, no la foto que subió el usuario: es una persona nueva y es lo
+    // que ancla la identidad, la ropa y el escenario del clip. Una sesión anterior a
+    // `avatar_url` cae a `character_url` y se comporta como antes.
+    { url: session.avatar_url ?? session.character_url, role: 'la persona' },
     { url: session.product_url, role: 'el producto' },
   ]
 
@@ -101,10 +105,8 @@ export async function POST(
   // huella de contenido, así que calcularlos dos veces (una para hashear y otra para
   // renderizar) sería la forma más fácil de que la huella deje de describir lo que
   // realmente se renderizó.
-  const productDesc = session.product_scan?.productDescription ?? adapted.tomas[0]?.producto ?? 'el producto'
-  // El `fondo` del forense incluye la iluminación (su prompt la pide ahí dentro), por
-  // eso el prompt del lote lo rotula "ESCENARIO E ILUMINACIÓN".
-  const escenario = session.forensic_analysis?.fondo ?? 'interior con luz natural'
+  // El producto y el escenario ya NO viajan como texto: las imágenes son las anclas
+  // visuales y describirlas otra vez en palabras solo puede contradecirlas.
   const cortes = session.forensic_analysis?.cortes ?? []
   const camaraFallback = cortes[0]?.camara?.trim() || 'primer plano, cámara en mano'
 
@@ -123,8 +125,7 @@ export async function POST(
   // llamada pueda comprobar, sin adivinar, si está reanudando el MISMO video o
   // empezando otro distinto (ver `isPaidResume`).
   const huella = scriptFingerprint({
-    lotes: agrupados, consistencyBlock: session.consistency_block, productDesc,
-    escenario, camaras, voz: session.voice_profile, images,
+    lotes: agrupados, camaras, voz: session.voice_profile, images,
   })
   const base: Lote[] = agrupados.map((l) => ({ ...l, scriptHash: huella }))
 
@@ -186,6 +187,12 @@ export async function POST(
   // Nada por crear: o reanuda una sesión ya completa, o es un doble submit sobre una
   // que terminó justo antes — de cualquier modo, no hay nada pagado de más que hacer.
   if (!pendientes.length) return NextResponse.json({ lotes: seed })
+
+  // BYOK: la key se resuelve ANTES de tocar la cuota. Al revés, `checkGenQuota` ya
+  // habría escrito su fila y la primera llamada a KIE moriría con un 401: el usuario
+  // perdería una generación de su tope por no haber cargado la key.
+  const kieKey = await currentKieKey()
+  if (!kieKey) return NextResponse.json({ error: SIN_KEY }, { status: 400 })
 
   // El backstop global diario aplica SIEMPRE que se vaya a llamar a KIE — reanudar
   // también gasta (crea tarea para los lotes que quedaron pendientes). El gate
@@ -283,19 +290,14 @@ export async function POST(
       try {
         prompt = buildLotePrompt({
           lote: loteParaPrompt,
-          consistencyBlock: session.consistency_block,
-          productDesc,
-          escenario,
           camara: camaras[i],
           voz: session.voice_profile,
           images,
         })
       } catch (err) {
-        // `buildLotePrompt` administra su propio presupuesto de caracteres (arma el
-        // prompt por niveles de detalle decrecientes) y solo lanza cuando ni el nivel
-        // mínimo entra en KIE_PROMPT_MAX. Ese mensaje ya es claro y está en español —
-        // se propaga tal cual en vez de perderlo detrás del 500 genérico del catch de
-        // afuera.
+        // `buildLotePrompt` lanza cuando el prompt no entra en KIE_PROMPT_MAX. Ese
+        // mensaje ya es claro y está en español — se propaga tal cual en vez de
+        // perderlo detrás del 500 genérico del catch de afuera.
         promptError = err instanceof Error ? err.message : 'No se pudo armar el prompt del lote.'
         break
       }
@@ -308,7 +310,7 @@ export async function POST(
         break
       }
 
-      const taskId = await createVideoTask({ images, prompt, durationSec })
+      const taskId = await createVideoTask({ images, prompt, durationSec }, kieKey)
       creados++
       lotes.push({ ...lote, duracionSeg: durationSec, prompt, taskId, status: 'waiting', videoUrl: null, failMsg: null })
       // Fila por lote: visibilidad del costo real y backstop global diario. Ya NO topa

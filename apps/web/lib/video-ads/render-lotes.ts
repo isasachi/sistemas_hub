@@ -100,15 +100,12 @@ const num = (n: number) => (Number.isFinite(n) ? String(Math.round(n * 1000) / 1
  */
 export function scriptFingerprint(input: {
   lotes: Lote[]
-  consistencyBlock: string
-  productDesc: string
-  escenario: string
   /** Una por lote, en el mismo orden que `lotes` (ver `camaraDeLote`, lotes.ts). */
   camaras: string[]
   voz: VoiceProfile
   images: LoteImage[]
 }): string {
-  const { lotes, consistencyBlock, productDesc, escenario, camaras, voz, images } = input
+  const { lotes, camaras, voz, images } = input
   const campos: string[] = [
     // Versión del formato canónico: si algún día cambia qué entra en la huella, este
     // prefijo hace que las huellas viejas no coincidan (que es lo correcto: dejan de
@@ -122,8 +119,12 @@ export function scriptFingerprint(input: {
     // incoherencia que la huella existe para evitar, entrando por una puerta que no
     // vigila. Con el bump, esos parciales cuentan como generación nueva: fail-closed,
     // igual que las sesiones legadas sin `scriptHash`.
-    'v2',
-    consistencyBlock, productDesc, escenario,
+    // v2 → v3: el prompt del lote pasó a ser motion control puro (las imágenes son las
+    // anclas visuales), así que cambió entero la plantilla Y salieron de la huella el
+    // bloque de consistencia, la descripción del producto y el escenario: hashear un
+    // insumo que el prompt ya no lee es el espejo del bug que esta función evita. La
+    // identidad ahora viaja en la URL del avatar, que sí se hashea con las imágenes.
+    'v3',
     voz.idioma, voz.varianteRegional, voz.acento, voz.pronunciacion, voz.ritmo,
     voz.velocidad, voz.entonacion, voz.energia, voz.pausas, voz.tono, voz.timbre,
     voz.edadVocal, voz.estilo,

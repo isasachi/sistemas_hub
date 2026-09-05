@@ -8,16 +8,24 @@ const FULL: UserInputs = {
   angle: 'Testimonio de resultados en 4 semanas',
   targetAudience: 'Mujeres 20-35 con piel grasa',
   problem: 'Marcas de acné que no se van',
-  characterDesc: 'Mujer de 25, cabello negro recogido, piel clara',
-  characterEthnicity: 'Latina peruana',
-  accent: 'Español peruano de Lima',
-  voice: 'Femenina, joven, ritmo conversacional',
+  // Los cuatro campos de abajo ya no se le piden al usuario ni se leen: el personaje
+  // sale de la foto, la etnia de ahí mismo sin declararla, el acento lo infiere la
+  // FASE 4 y la voz es uno de los cuatro perfiles fijos. Quedan en el tipo porque sus
+  // columnas siguen en la tabla (precedente de `ph_user_seen`).
+  characterDesc: '',
+  characterEthnicity: '',
+  accent: '',
+  voice: '',
   constraints: '',
 }
 
+// El segundo argumento es "¿hay foto del personaje?", y sin ella la matriz NO deja
+// pasar: por eso el caso completo la trae puesta.
+const CON_FOTO = true
+
 describe('buildValidationMatrix', () => {
   it('marca CONFIRMADA lo que el usuario entregó', () => {
-    const m = buildValidationMatrix(FULL, false)
+    const m = buildValidationMatrix(FULL, CON_FOTO)
     const producto = m.rows.find((r) => r.variable === 'Producto')!
     expect(producto.estado).toBe('CONFIRMADA')
     expect(producto.fuente).toBe('USUARIO')
@@ -25,56 +33,51 @@ describe('buildValidationMatrix', () => {
   })
 
   it('marca PENDIENTE lo que falta y usa el literal del spec', () => {
-    const m = buildValidationMatrix({ ...FULL, accent: '' }, false)
-    const acento = m.rows.find((r) => r.variable === 'Acento')!
-    expect(acento.estado).toBe('PENDIENTE')
-    expect(acento.valor).toBe(`${CONFIRMACION_REQUERIDA} Acento`)
+    const m = buildValidationMatrix({ ...FULL, angle: '' }, CON_FOTO)
+    const angulo = m.rows.find((r) => r.variable === 'Ángulo')!
+    expect(angulo.estado).toBe('PENDIENTE')
+    expect(angulo.valor).toBe(`${CONFIRMACION_REQUERIDA} Ángulo`)
   })
 
-  // El spec: "nunca infieras raza/etnia, origen cultural o acento únicamente a
-  // partir de la apariencia visual. Deben provenir del usuario."
-  it('etnia y acento NUNCA salen de la referencia, ni con imagen de personaje', () => {
-    const m = buildValidationMatrix({ ...FULL, characterEthnicity: '', accent: '' }, true)
-    for (const v of ['Raza / etnia / origen cultural', 'Acento']) {
-      const row = m.rows.find((r) => r.variable === v)!
-      expect(row.estado).toBe('PENDIENTE')
-      expect(row.fuente).toBe('USUARIO')
-    }
+  // Son SEIS y ninguna más: etnia, acento y voz salieron de la matriz porque salieron
+  // del wizard. Este test es el que se entera si alguna vuelve a colarse.
+  it('valida exactamente las seis variables, sin etnia, acento ni voz', () => {
+    const m = buildValidationMatrix(FULL, CON_FOTO)
+    expect(m.rows.map((r) => r.variable)).toEqual([
+      'Producto', 'Descripción del producto', 'Ángulo', 'Público objetivo',
+      'Problema / deseo', 'Personaje',
+    ])
   })
 
-  it('la imagen de personaje confirma la apariencia, no la identidad cultural', () => {
-    const m = buildValidationMatrix({ ...FULL, characterDesc: '' }, true)
+  it('la foto es la ÚNICA fuente del personaje', () => {
+    const m = buildValidationMatrix(FULL, CON_FOTO)
     const row = m.rows.find((r) => r.variable === 'Personaje')!
     expect(row.estado).toBe('CONFIRMADA')
     expect(row.fuente).toBe('REFERENCIA')
   })
 
-  it('sin imagen ni descripción, el personaje queda pendiente', () => {
-    const m = buildValidationMatrix({ ...FULL, characterDesc: '' }, false)
+  // El personaje nunca se infiere, así que una descripción escrita no lo confirma:
+  // sin foto el flujo se detiene aunque todo lo demás esté completo.
+  it('sin foto el personaje queda pendiente y NO se avanza', () => {
+    const m = buildValidationMatrix({ ...FULL, characterDesc: 'Mujer de 25, pelo negro' }, false)
     expect(m.rows.find((r) => r.variable === 'Personaje')!.estado).toBe('PENDIENTE')
-  })
-
-  it('la voz es opcional: vacía no bloquea', () => {
-    const m = buildValidationMatrix({ ...FULL, voice: '' }, false)
-    const row = m.rows.find((r) => r.variable === 'Voz')!
-    expect(row.estado).toBe('CONFIRMADA')
-    expect(canProceed(m)).toBe(true)
+    expect(canProceed(m)).toBe(false)
   })
 })
 
 describe('canProceed', () => {
   it('deja avanzar cuando todo lo crítico está confirmado', () => {
-    expect(canProceed(buildValidationMatrix(FULL, false))).toBe(true)
+    expect(canProceed(buildValidationMatrix(FULL, CON_FOTO))).toBe(true)
   })
 
   it('bloquea con una sola crítica pendiente', () => {
-    expect(canProceed(buildValidationMatrix({ ...FULL, angle: '' }, false))).toBe(false)
-    expect(canProceed(buildValidationMatrix({ ...FULL, accent: '' }, false))).toBe(false)
+    expect(canProceed(buildValidationMatrix({ ...FULL, angle: '' }, CON_FOTO))).toBe(false)
+    expect(canProceed(buildValidationMatrix(FULL, false))).toBe(false)
   })
 
   it('lista las pendientes para mostrarlas en el wizard', () => {
-    const m = buildValidationMatrix({ ...FULL, accent: '', problem: '' }, false)
-    expect(m.pending.sort()).toEqual(['Acento', 'Problema / deseo'])
+    const m = buildValidationMatrix({ ...FULL, problem: '' }, false)
+    expect(m.pending.sort()).toEqual(['Personaje', 'Problema / deseo'])
   })
 })
 
@@ -83,8 +86,8 @@ describe('canProceed', () => {
 // campo crítico y reenviar dejaba "Plantilla" clickeable en el riel aunque la
 // matriz hubiera vuelto a PENDIENTE. `capMaxReached` es el tope que cierra ese hueco.
 describe('capMaxReached', () => {
-  const OK = buildValidationMatrix(FULL, false)
-  const PENDING = buildValidationMatrix({ ...FULL, accent: '' }, false)
+  const OK = buildValidationMatrix(FULL, CON_FOTO)
+  const PENDING = buildValidationMatrix({ ...FULL, angle: '' }, CON_FOTO)
   const VALIDATION_STEP = 3
 
   it('con la matriz OK, no topa nada: se puede llegar hasta donde ya se llegó', () => {

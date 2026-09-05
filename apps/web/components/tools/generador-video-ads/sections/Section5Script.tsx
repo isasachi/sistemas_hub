@@ -54,12 +54,18 @@ export default function Section5Script() {
     }
 
     try {
-      const c = await fetch(`/api/generador-video-ads/sessions/${sessionId}/character`, { method: 'POST' })
-      const dc = (await c.json()) as { characterUrl?: string; consistencyBlock?: string; voiceProfile?: VoiceProfile; error?: string }
+      // La FASE 4 ya arrancó en segundo plano al subir la foto (Section2Character).
+      // Esta llamada es la RED: si aquélla terminó, la ruta devuelve lo guardado sin
+      // regenerar ni cobrar cuota; si falló o sigue corriendo, ésta la hace.
+      const c = await fetch(`/api/generador-video-ads/sessions/${sessionId}/character`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      })
+      const dc = (await c.json()) as { avatarUrl?: string; consistencyBlock?: string; voiceProfile?: VoiceProfile; error?: string }
       if (!c.ok) throw new Error(dc.error ?? 'No se pudo construir el personaje')
 
       patch({
-        characterUrl: dc.characterUrl!,
         consistencyBlock: dc.consistencyBlock!,
         voiceProfile: dc.voiceProfile!,
       })

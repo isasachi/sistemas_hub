@@ -1,93 +1,107 @@
 import { describe, it, expect } from 'vitest'
-import { buildIdentityInstruction, buildCharacterParts, CharacterIdentitySchema, ACENTO_PENDIENTE } from './character'
+import {
+  buildIdentityInstruction, buildCharacterParts, CharacterIdentitySchema,
+  VOZ_ESTANDAR, vozDe, PERFILES_VOCALES,
+} from './character'
 import type { UserInputs } from './types'
 import type { ForensicReport } from './forensic'
 
 const INPUTS: UserInputs = {
   productName: 'Serum Eunoia', productDescription: 'Suero', angle: 'Testimonio',
   targetAudience: 'Mujeres 20-35', problem: 'Marcas de acné',
-  characterDesc: 'Mujer de 25, cabello negro recogido, piel clara, ojos claros',
-  characterEthnicity: 'Latina peruana', accent: 'Español peruano de Lima',
-  voice: 'Femenina joven, ritmo conversacional', constraints: '',
+  characterDesc: '', characterEthnicity: '', accent: '', voice: '', constraints: '',
 }
 const FORENSIC = { sujeto: 'Mujer joven de cabello oscuro', vestuario: 'Polo azul', fondo: 'Dormitorio' } as ForensicReport
 
 describe('buildIdentityInstruction', () => {
-  it('prohíbe los cuatro atajos de identidad que el spec lista', () => {
-    const p = buildIdentityInstruction(INPUTS, FORENSIC, false)
+  it('prohíbe los tres atajos de identidad que el spec lista', () => {
+    const p = buildIdentityInstruction(INPUTS, FORENSIC)
     expect(p).toMatch(/el mismo personaje/i)
     expect(p).toMatch(/igual al anterior/i)
     expect(p).toMatch(/idéntica persona/i)
-    expect(p).toMatch(/as before/i)
-    expect(p).toMatch(/no.*reemplac/i)
   })
 
-  it('usa la etnia y el acento del usuario, literales', () => {
-    const p = buildIdentityInstruction(INPUTS, FORENSIC, false)
-    expect(p).toContain('Latina peruana')
-    expect(p).toContain('Español peruano de Lima')
+  // El requisito legal: la foto es de una persona real que no dio permiso. Si esta
+  // aserción cae, el avatar pasa a ser el retrato de alguien.
+  it('LA CARA ES NUEVA: pide el tipo físico y prohíbe reproducir la de la foto', () => {
+    const p = buildIdentityInstruction(INPUTS, FORENSIC)
+    expect(p).toMatch(/la cara es nueva/i)
+    expect(p).toMatch(/tipo físico/i)
+    expect(p).toMatch(/distinta nariz/i)
   })
 
-  it('marca el acento pendiente en vez de poner uno genérico', () => {
-    const p = buildIdentityInstruction({ ...INPUTS, accent: '' }, FORENSIC, false)
-    expect(p).toContain(ACENTO_PENDIENTE)
+  it('la foto es la única fuente de la apariencia, no el video ni una descripción', () => {
+    const p = buildIdentityInstruction(INPUTS, FORENSIC)
+    expect(p).toMatch(/la foto adjunta es el personaje/i)
+    expect(p).toMatch(/nunca de una\s+descripción escrita/i)
   })
 
-  it('no marca el acento como pendiente cuando el usuario sí lo confirmó', () => {
-    const p = buildIdentityInstruction(INPUTS, FORENSIC, false)
-    expect(p).not.toContain(ACENTO_PENDIENTE)
-  })
-
-  it('con imagen de referencia manda observar, no inventar', () => {
-    const p = buildIdentityInstruction(INPUTS, FORENSIC, true)
-    expect(p).toMatch(/imagen de referencia/i)
-    expect(p).toMatch(/no inventes/i)
-  })
-
-  it('con imagen, prohíbe inferir etnia o acento de la foto (mismo guard que sin imagen)', () => {
-    const p = buildIdentityInstruction(INPUTS, FORENSIC, true)
-    expect(p).toMatch(/nunca infieras de la foto la etnia/i)
-    expect(p).toMatch(/exclusivamente del usuario/i)
+  it('el acento y el perfil vocal se infieren del personaje, no se piden', () => {
+    const p = buildIdentityInstruction(INPUTS, FORENSIC)
+    expect(p).toMatch(/`perfilVocal`/)
+    expect(p).toMatch(/`acento`.*inferido de/is)
+    for (const perfil of PERFILES_VOCALES) expect(p).toContain(perfil)
   })
 
   it('prohíbe overlays en la imagen del personaje', () => {
-    const p = buildIdentityInstruction(INPUTS, FORENSIC, false)
+    const p = buildIdentityInstruction(INPUTS, FORENSIC)
     expect(p).toMatch(/sin texto|no text/i)
   })
 
-  it('pide 2:3 en el prompt de creación, no 9:16 — coincide con la llamada a gpt-image-2', () => {
-    const p = buildIdentityInstruction(INPUTS, FORENSIC, false)
-    expect(p).toMatch(/2:3/)
-    expect(p).not.toMatch(/9:16/)
+  // El avatar es el ancla visual del clip, así que su encuadre es el del anuncio.
+  it('pide 9:16, no el 2:3 de la época en que el personaje nunca iba solo', () => {
+    const p = buildIdentityInstruction(INPUTS, FORENSIC)
+    expect(p).toMatch(/9:16/)
+    expect(p).not.toMatch(/2:3/)
   })
 })
 
 describe('buildCharacterParts', () => {
-  it('sin imagen: un único part de texto', () => {
-    const parts = buildCharacterParts('instrucción')
-    expect(parts).toEqual([{ text: 'instrucción' }])
+  it('el part de imagen va ANTES del de texto', () => {
+    const parts = buildCharacterParts('instrucción', { data: 'YQ==', mimeType: 'image/png' })
+    expect(parts).toEqual([
+      { inlineData: { mimeType: 'image/png', data: 'YQ==' } },
+      { text: 'instrucción' },
+    ])
+  })
+})
+
+describe('perfiles de voz', () => {
+  it('los cuatro existen y solo se diferencian en lo que depende del cuerpo', () => {
+    const perfiles = Object.values(VOZ_ESTANDAR)
+    expect(perfiles).toHaveLength(4)
+    expect(new Set(perfiles.map((v) => v.ritmo)).size).toBe(1)
+    expect(new Set(perfiles.map((v) => `${v.tono}|${v.timbre}|${v.edadVocal}`)).size).toBe(4)
   })
 
-  it('con imagen: el part de imagen va ANTES del de texto', () => {
-    const parts = buildCharacterParts('instrucción', { data: 'YQ==', mimeType: 'image/png' })
-    expect(parts).toHaveLength(2)
-    expect(parts[0]).toEqual({ inlineData: { mimeType: 'image/png', data: 'YQ==' } })
-    expect(parts[1]).toEqual({ text: 'instrucción' })
+  it('vozDe pega el acento inferido dentro del perfil fijo', () => {
+    const voz = vozDe({
+      promptCreacion: 'x', bloqueConsistencia: 'y',
+      perfilVocal: 'mujer-joven', acento: 'Español peruano de Lima',
+    })
+    expect(voz.acento).toBe('Español peruano de Lima')
+    expect(voz.edadVocal).toBe(VOZ_ESTANDAR['mujer-joven'].edadVocal)
+  })
+
+  it('sin acento cae a neutro en vez de dejar el campo vacío en el prompt', () => {
+    expect(vozDe({ promptCreacion: 'x', bloqueConsistencia: 'y', perfilVocal: 'varon-mayor', acento: '  ' }).acento)
+      .toBe('Español latino neutro')
   })
 })
 
 describe('CharacterIdentitySchema', () => {
   it('acepta una identidad completa', () => {
-    const ok = CharacterIdentitySchema.safeParse({
-      promptCreacion: 'Retrato vertical de mujer de 25 años, cabello negro...',
-      bloqueConsistencia: 'Mujer de 25 años, latina peruana, cabello negro liso recogido en moño bajo, piel clara, ojos marrón claro, complexión delgada, polo blanco de algodón sin estampado.',
-      voz: {
-        idioma: 'Español', varianteRegional: 'Perú - Lima', acento: 'Limeño neutro',
-        pronunciacion: 'Clara, seseo', ritmo: 'Conversacional', velocidad: 'Media',
-        entonacion: 'Ascendente en preguntas', energia: 'Media-alta', pausas: 'Naturales',
-        tono: 'Cálido', timbre: 'Claro', edadVocal: '25 años', estilo: 'Amiga que recomienda',
-      },
-    })
-    expect(ok.success).toBe(true)
+    expect(CharacterIdentitySchema.safeParse({
+      promptCreacion: 'Retrato vertical 9:16 de mujer de 25 años...',
+      bloqueConsistencia: 'Mujer de 25 años, cabello negro liso recogido, piel clara...',
+      perfilVocal: 'mujer-joven',
+      acento: 'Español peruano de Lima',
+    }).success).toBe(true)
+  })
+
+  it('rechaza un perfil vocal fuera de los cuatro', () => {
+    expect(CharacterIdentitySchema.safeParse({
+      promptCreacion: 'x', bloqueConsistencia: 'y', perfilVocal: 'robot', acento: 'z',
+    }).success).toBe(false)
   })
 })

@@ -32,19 +32,26 @@ const INPUTS: UserInputs = {
 }
 
 describe('buildAdaptInstruction', () => {
-  const p = buildAdaptInstruction(TEMPLATE, FORENSIC, INPUTS, null, extractSlots(TEMPLATE))
+  const p = buildAdaptInstruction(TEMPLATE, FORENSIC, INPUTS, null, extractSlots(TEMPLATE), 'Español peruano de Lima')
 
 
 
-  // Caso real: el usuario dio solo "Suero de niacinamida" y el guión salió afirmando
-  // que contiene PHE-resorcinol y agua termal de La Roche-Posay — la fórmula de otra
-  // marca, sacada de la memoria del modelo. Una declaración falsa de composición
-  // nombrando a un competidor, en un anuncio que se publica.
-  it('prohíbe inventar ingredientes y marcas, con el caso real como ejemplo', () => {
-    expect(p).toMatch(/no inventes/i)
-    expect(p).toContain('PHE-resorcinol')
-    expect(p).toMatch(/marca/i)
-    expect(p).toMatch(/conocimiento del mundo NO es una fuente/i)
+  // La política es rellenar, pero no a costa de firmar cosas en nombre del usuario:
+  // una marca que no escribió o un ingrediente que no está en la etiqueta son una
+  // declaración falsa de composición dentro de un anuncio que se publica.
+  it('acota lo que NUNCA se inventa: marcas, ingredientes y cifras', () => {
+    expect(p).toMatch(/LO QUE NO SE INVENTA NUNCA/)
+    expect(p).toMatch(/una MARCA que\s+el usuario no escribió/)
+    expect(p).toMatch(/el hueco va vacío/)
+  })
+
+  // El ejemplo del "incidente PHE-resorcinol" que este prompt citaba era doblemente
+  // malo: el incidente nunca ocurrió (la etiqueta de esa sesión SÍ decía
+  // PHE-RESORCINOL) y, sobre todo, era un anti-ejemplo con forma de valor — o sea una
+  // plantilla que rellenar. Que no vuelva.
+  it('no trae anti-ejemplos con forma de valor', () => {
+    expect(p).not.toContain('PHE-resorcinol')
+    expect(p).not.toContain('La Roche-Posay')
   })
 
 
@@ -59,9 +66,19 @@ describe('buildAdaptInstruction', () => {
     expect(p).toMatch(/qué\s+mano,\s+cómo\s+agarra/i)
   })
 
-  it('le dice al modelo que NO escriba el guión', () => {
-    expect(p).toMatch(/TU TRABAJO NO ES ESCRIBIR UN GUION/i)
-    expect(p).toMatch(/se reconstruye copi[aá]ndolo con c[oó]digo/i)
+  // La orden de rellenar tiene que ir arriba: medido, entre los bullets el modelo se
+  // queda con el tono conservador del encabezado y devuelve el doble de pendientes.
+  it('la orden de RELLENAR va en la cabecera, no entre los bullets', () => {
+    const cabecera = p.slice(0, p.indexOf('── HUECOS ──'))
+    expect(cabecera).toMatch(/RELLENA TODOS LOS HUECOS/)
+    expect(cabecera).toMatch(/lo m[áa]s veros[íi]mil/i)
+  })
+
+  it('el andamiaje es la única regla inviolable, con la excepción gramatical', () => {
+    expect(p).toMatch(/ÚNICA REGLA INVIOLABLE ES EL ANDAMIAJE/)
+    expect(p).toMatch(/copia palabra por palabra/)
+    expect(p).toMatch(/concordancia gramatical/)
+    expect(p).toMatch(/Dentro de los corchetes tienes libertad; fuera, ninguna/)
   })
 
   it('lista los huecos con su id y su contexto', () => {
@@ -91,9 +108,15 @@ describe('buildAdaptInstruction', () => {
     expect(p).toContain('tipo de producto')
   })
 
-  it('pide dejar el valor VACÍO en vez de adivinar', () => {
-    expect(p).toMatch(/devuelve `valor` VAC[IÍ]O/i)
-    expect(p).toMatch(/hueco\s+vac[ií]o\s+es\s+un\s+resultado\s+correcto/i)
+  // Se invierte a propósito la política anterior ("un hueco vacío es un resultado
+  // correcto"): el guion es un borrador que el usuario corrige línea por línea, y uno
+  // completo se corrige mientras que uno con agujeros hay que rellenarlo a mano. Lo
+  // único que sigue quedando vacío es lo que el usuario tendría que salir a demostrar.
+  it('solo deja vacío lo que compromete al usuario', () => {
+    expect(p).toMatch(/Un hueco se deja VACÍO solo si/)
+    expect(p).toMatch(/aval médico|estudio clínico|certificación/)
+    expect(p).toMatch(/En todo lo demás, rellena/)
+    expect(p).not.toMatch(/hueco\s+vac[ií]o\s+es\s+un\s+resultado\s+correcto/i)
   })
 
   it('fija TEXTO EN PANTALLA: NINGUNO', () => {
@@ -109,8 +132,10 @@ describe('buildAdaptInstruction', () => {
   })
 
 
-  it('incluye el acento regional en los INPUTS', () => {
-    expect(p).toContain('ACENTO REGIONAL: Español peruano de Lima')
+  // El acento ya no es un input del usuario: lo infiere la FASE 4 del personaje y
+  // llega por parámetro desde el perfil de voz.
+  it('incluye el acento inferido del personaje', () => {
+    expect(p).toContain('ACENTO DEL PERSONAJE: Español peruano de Lima')
     expect(p).toMatch(/variante\s+regional\s+del\s+español/i)
     expect(p).toMatch(/"tú"\s*\/\s*"vos"/)
   })
