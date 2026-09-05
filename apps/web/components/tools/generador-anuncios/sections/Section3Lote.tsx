@@ -22,12 +22,13 @@ const btnPrimary = 'h-11 w-full rounded-xl jr-cta text-[13px] font-bold disabled
  * prometiendo lo que no entrega.
  */
 export default function Section3Lote() {
-  const { sessionId, setVariants, setLoading, isLoading } = useWizardStore()
+  const { sessionId, setVariants, setStep, setLoading, isLoading } = useWizardStore()
   const [comments, setComments] = useState('')
   const [n, setN] = useState<number | null>(null)
   const [opciones, setOpciones] = useState<number[]>([])
   const [restantes, setRestantes] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [recorte, setRecorte] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/generador-anuncios/plantillas')
@@ -52,9 +53,25 @@ export default function Section3Lote() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ comments, n }),
       })
-      const data = await res.json() as { variants?: AdBatch; error?: string }
+      const data = await res.json() as {
+        variants?: AdBatch; error?: string; pedido?: number; servido?: number; maximo?: number
+      }
       if (!res.ok) throw new Error(data.error ?? 'No se pudo planificar el lote')
-      setVariants(data.variants!, STEP.CONCEPTOS)
+      // ⚠️ SI SE SIRVIERON MENOS DE LOS PEDIDOS, HAY QUE DECIRLO Y NO PASAR DE LARGO. El cap lo
+      // aplica el SERVIDOR (plan + créditos) y una variante que no se pudo redactar se descarta,
+      // así que el usuario puede elegir 5 y recibir 3 sin ninguna señal. Cuando eso pasa el lote
+      // se guarda igual pero el wizard se queda acá con el aviso: avanzar solo lo dejaría contando
+      // tarjetas para descubrirlo.
+      const servido = data.servido ?? data.variants!.length
+      const pedido = data.pedido ?? servido
+      const aviso =
+        servido >= pedido
+          ? null
+          : data.maximo !== undefined && pedido > data.maximo
+            ? `Pediste ${pedido}, pero tu plan y tus créditos permiten ${data.maximo} por lote: se planificaron ${servido}.`
+            : `Se planificaron ${servido} de ${pedido}: alguna variante no se pudo redactar.`
+      setRecorte(aviso)
+      setVariants(data.variants!, aviso ? undefined : STEP.CONCEPTOS)
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -112,6 +129,13 @@ export default function Section3Lote() {
 
       {error && (
         <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-[12px] text-red-400">{error}</div>
+      )}
+
+      {recorte && (
+        <div className="flex flex-col gap-3 rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3">
+          <span className="text-[12px] leading-snug text-amber-300">{recorte}</span>
+          <button onClick={() => setStep(STEP.CONCEPTOS)} className={btnPrimary}>Ver los conceptos →</button>
+        </div>
       )}
 
       <button onClick={handleSubmit} disabled={!comments.trim() || !n || isLoading} className={btnPrimary}>

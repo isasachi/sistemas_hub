@@ -98,6 +98,15 @@ export async function POST(
         console.warn(`[plan-lote] ${id}: la variante ${i + 1} no se pudo redactar`, r.reason)
         return
       }
+      // ⚠️ UNA VARIANTE SIN TEXTO NO SE GUARDA, y este guard vale un crédito. `escribirVariante`
+      // descarta los slots que la plantilla no declara, así que un modelo que devuelva ids
+      // inventados deja el array VACÍO — y una variante vacía se persiste como `planificada`, se
+      // muestra como una tarjeta sin copy y después se RENDERIZA: un crédito gastado en un
+      // anuncio sin una palabra. Se descarta acá, igual que una que falló al redactarse.
+      if (r.value.length === 0) {
+        console.warn(`[plan-lote] ${id}: la variante ${i + 1} volvió sin ningún hueco válido`)
+        return
+      }
       variants.push({
         id: `v${variants.length + 1}`,
         concepto: planeadas[i].concepto,
