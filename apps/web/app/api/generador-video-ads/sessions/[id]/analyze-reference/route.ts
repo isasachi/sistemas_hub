@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getVideoSession, updateVideoSession } from '@/lib/video-ads/db'
-import { fetchAsBase64, PayloadTooLargeError } from '@/lib/storage'
-import { geminiCallStructured } from '@/lib/gemini'
+import { fetchAsBase64, headStorageFile, PayloadTooLargeError } from '@/lib/storage'
+import { geminiCallStructured, geminiEsDirecto } from '@/lib/gemini'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 import { ForensicReportSchema } from '@/lib/video-ads/types'
@@ -40,15 +40,24 @@ export async function POST(
   if (!parsed.success) return NextResponse.json({ error: 'Falta el video de referencia' }, { status: 400 })
 
   try {
-    // El tope de MAX_VIDEO_MB hoy solo se valida en el browser (Section0Reference) —
-    // UX, no seguridad: un request armado a mano se lo salta. `fetchAsBase64` revisa
-    // `content-length` ANTES de bufferear el video entero (que además se infla 4/3 en
-    // base64), así que un video sobredimensionado falla acá con un 413 claro en vez
-    // de reventar el runtime de Node por memoria o timeout minutos después.
-    const { data, mimeType } = await fetchAsBase64(parsed.data.videoUrl, MAX_VIDEO_MB * 1024 * 1024)
+    // El tope de MAX_VIDEO_MB también se valida en el browser (Section0Reference), pero
+    // eso es UX: un request armado a mano se lo salta. Acá se comprueba con un HEAD
+    // —junto con el allowlist de host, que importa MÁS que antes porque la URL se la
+    // damos a KIE para que la busque él— sin bajar el archivo.
+    const { mimeType } = await headStorageFile(parsed.data.videoUrl, MAX_VIDEO_MB * 1024 * 1024)
 
+    // ⚠️ EL VIDEO VA POR URL, NO EN BASE64. El texto y la visión de Gemini salen hoy por
+    // KIE, y ahí un data URI de video es un 400 duro: "Inline data URL is too large.
+    // Upload the file and pass an HTTP(S) URL instead" — medido con este mismo video
+    // (18,1 MB de base64, 60 s de espera y un 500 al usuario). El video ya vive en el
+    // bucket, así que además nos ahorramos bajarlo y volver a subirlo dentro del request.
+    //
+    // Bajo `GEMINI_VIA=direct` se manda inline: el SDK de Google solo acepta un `fileUri`
+    // de su propia Files API, no una URL de Supabase.
     const parts: Part[] = [
-      { inlineData: { mimeType, data } },
+      geminiEsDirecto()
+        ? { inlineData: await fetchAsBase64(parsed.data.videoUrl, MAX_VIDEO_MB * 1024 * 1024) }
+        : { fileData: { fileUri: parsed.data.videoUrl, mimeType } },
       { text: buildForensicInstruction() },
     ]
     const analysis = await geminiCallStructured('forensic_report', ForensicReportSchema, parts)
