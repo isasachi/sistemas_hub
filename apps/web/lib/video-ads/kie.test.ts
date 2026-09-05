@@ -118,13 +118,44 @@ describe('clampDuration', () => {
 
 describe('buildTaskBody', () => {
   it('manda el contrato del marketplace de grok, vertical y 720p', () => {
-    const b = buildTaskBody({ images: IMAGES, prompt: 'hola', durationSec: 12 })
+    const b = buildTaskBody({ images: IMAGES, prompt: 'hola', durationSec: 12 }, 'grok')
     expect(b.model).toBe('grok-imagine-video-1-5-preview')
     // ⚠️ Todo cuelga de `input`, no de la raíz — Veo era plano y grok anida.
     expect(b.input.aspect_ratio).toBe('9:16')
     expect(b.input.resolution).toBe('720p')
     expect(b.input.image_urls).toEqual(IMAGES.map((i) => i.url))
     expect(b.input.mode).toBe('normal')
+  })
+
+  // ⚠️ ESTE ES EL TEST QUE NINGÚN CANARIO PUEDE REEMPLAZAR. Medido: un campo de referencias
+  // con el nombre equivocado NO se rechaza — KIE crea la tarea, la termina en `success` y
+  // devuelve un video hecho solo desde el prompt. Es la misma trampa que `kie-image.ts`
+  // documenta para gpt-image-2 vs nano-banana-2, y acá cuesta un render entero.
+  it('manda el contrato de Wan, con los nombres de campo que Wan lee', () => {
+    const b = buildTaskBody(
+      { images: IMAGES, prompt: 'hola', durationSec: 12, referenceVideoUrl: 'https://x/ref.mp4' }, 'wan')
+    expect(b.model).toBe('wan/3-0-video')
+    expect(b.input.reference_image_urls).toEqual(IMAGES.map((i) => i.url))
+    expect(b.input.reference_video_urls).toEqual(['https://x/ref.mp4'])
+    expect(b.input.image_urls).toBeUndefined()
+    expect(b.input.aspect_ratio).toBe('9:16')
+    // Wan genera el audio; sin esto el clip sale mudo y no hay locución que entregar.
+    expect(b.input.audio).toBe(true)
+    // grok tiene `mode`, Wan lo ignora: no se copia por inercia.
+    expect(b.input.mode).toBeUndefined()
+  })
+
+  // ⚠️ Medido con el canario: `720p` devuelve "resolution is not within the range of
+  // allowed options" y `720P` pasa. El enum de Wan es sensible a la caja.
+  it('la resolución de Wan va en MAYÚSCULA', () => {
+    const b = buildTaskBody({ images: IMAGES, prompt: 'x', durationSec: 6 }, 'wan')
+    expect(b.input.resolution).toBe('720P')
+  })
+
+  // Sin tramo derivado no se manda un array vacío: es una forma más de decirle algo a la API.
+  it('un lote sin tramo de referencia va sin el campo', () => {
+    const b = buildTaskBody({ images: IMAGES, prompt: 'x', durationSec: 6 }, 'wan')
+    expect(b.input.reference_video_urls).toBeUndefined()
   })
 
   // El fallo silencioso más caro de este contrato: number pasa el typecheck del objeto
@@ -149,10 +180,14 @@ describe('buildTaskBody', () => {
     expect(resolutionFor()).toBe('720p')
   })
 
-  it('los topes son los de ESTE modelo, no los de Veo ni los del grok viejo', () => {
-    expect(KIE_PROMPT_MAX).toBe(4096)
+  it('los topes son los del MOTOR activo, no los de Veo ni los del grok viejo', () => {
+    // Medidos con el canario contra la API, no leídos de la doc: 20.001 caracteres se
+    // rechazan por largo y 20.000 pasan.
+    expect(KIE_PROMPT_MAX).toBe(20_000)
+    // ⚠️ Sigue en 7 aunque Wan acepte 10: es el presupuesto de ANCLAS, y cada ancla es una
+    // imagen pagada por el HUB. Subirlo es una decisión de costo, no de transporte.
     expect(MAX_IMAGES).toBe(7)
-    expect(MIN_DURATION).toBe(1)
+    expect(MIN_DURATION).toBe(2)
     expect(MAX_DURATION).toBe(15)
   })
 })

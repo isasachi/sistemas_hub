@@ -21,6 +21,11 @@ const nextConfig: NextConfig = {
   // El síntoma sería el mismo ENOENT, pero solo en producción.
   outputFileTracingIncludes: {
     "/api/generador-video-ads/sessions/[id]/concat": ["../../node_modules/ffmpeg-static/ffmpeg"],
+    // El mismo binario para el render: `tramo.ts` recorta del original el tramo de cada lote
+    // (la señal de movimiento que lee Wan). Sin esta línea el trazador deja el binario fuera
+    // de ESTA función y el síntoma es un ENOENT que solo aparece en producción — el
+    // `spawn /ROOT/node_modules/ffmpeg-static/ffmpeg` que ya se pagó una vez con `concat`.
+    "/api/generador-video-ads/sessions/[id]/generate-lotes": ["../../node_modules/ffmpeg-static/ffmpeg"],
     // Los .ttf de la barra de confianza: `resvg` los abre por RUTA en runtime, así que ningún
     // `require` los menciona y el trazador los dejaría fuera de la función. El síntoma sería
     // texto sin fuente SOLO en producción — la misma clase de fallo que el binario de ffmpeg.

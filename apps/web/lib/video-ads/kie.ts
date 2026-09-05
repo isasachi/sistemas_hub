@@ -1,11 +1,43 @@
 import { CPS_MAX, CPS_MIN } from './forensic'
 
 /**
- * Cliente de KIE AI (Grok Imagine `image-to-video`) para el render de video.
+ * Cliente de KIE AI para el render de video. DOS MOTORES, UN SOLO TRANSPORTE.
  *
  * KIE es ASÍNCRONO: createTask devuelve un taskId al instante (200 ≠ terminado) y el
  * resultado se consulta con recordInfo. Por eso el render NO usa el patrón SSE del
  * generador de anuncios: la ruta crea la tarea y responde, y el cliente hace polling.
+ *
+ * 🔴 EL MOTOR ACTIVO ES **`wan/3-0-video`** (ver `MOTOR`, abajo). `grok` se queda entero
+ * porque volver es una línea. Lo de abajo describe a los dos: el endpoint, el polling y el
+ * parser son idénticos, y lo único que cambia es el cuerpo del POST (`buildTaskBody`).
+ *
+ * ✅ CONTRATO DE WAN, MEDIDO CON EL CANARIO GRATIS (`scripts/canary-wan.ts`, 2026-09-04) —
+ * Wan también valida ANTES de despachar, así que el truco del campo inválido sirve igual:
+ *   - `prompt`: **20.000** caracteres exactos (20.001 se rechaza por largo). 4,9× grok.
+ *   - `resolution`: **SENSIBLE A LA CAJA**. `720P` pasa; `720p` devuelve *"resolution is
+ *     not within the range of allowed options"*. Es el error más fácil de cometer copiando
+ *     el cuerpo de grok, y falla ruidoso — que es la parte buena.
+ *   - `aspect_ratio`: `9:16` válido. `duration`: entero 2–30 (999 fuera de rango).
+ *   - `reference_video_urls`: hasta 5 clips, 1–15 s cada uno, ≤15 s en total, ≤100 MB.
+ *     Y además **duración de entrada + duración de salida ≤ 30 s**.
+ *   - `audio`: booleano, default true. `nsfw_checker`: default **false** = filtro APAGADO.
+ *
+ * 🔴 **EL NOMBRE DEL CAMPO DE IMÁGENES NO SE VALIDA, Y NINGÚN CANARIO PUEDE CAZARLO.**
+ * Medido: `reference_image_urls`, `image_urls` y hasta un campo inventado devuelven todos
+ * la misma queja (la del campo inválido que se mandó a propósito), o sea KIE IGNORA en
+ * silencio lo que no conoce. Con el nombre equivocado la tarea se crea, termina en
+ * `success` y devuelve un video hecho SOLO desde el prompt — la misma trampa que
+ * `kie-image.ts` documenta para gpt-image-2 vs nano-banana-2. Lo único que lo fija es el
+ * test del cuerpo de cada motor.
+ *
+ * ⚠️ EL COBRO ES `precio × (entrada + salida)` CUANDO HAY VIDEO DE REFERENCIA — verificado
+ * con un render real: 10 s de salida + 10 s de referencia a 720P costaron **320 créditos**
+ * exactos (20 × 16), no 160. Es el mismo modelo de cobro que ya se había medido para
+ * Seedance. **Un anuncio se factura como el doble de su duración**, y ése es el número con
+ * el que hay que presupuestar.
+ *
+ * ---------------------------------------------------------------------------
+ * LO QUE SIGUE ES EL CONTRATO DE **GROK**, que sigue vivo detrás de `MOTOR`:
  *
  * ⚠️ VUELTA AL PROMPT MAESTRO Y A `grok-imagine-video-1-5-preview` (2026-09-03, decisión
  * del dueño del repo). Su palabra: *"todo el sistema de video está contaminado después de
@@ -51,7 +83,44 @@ import { CPS_MAX, CPS_MIN } from './forensic'
  */
 
 const KIE_BASE = 'https://api.kie.ai/api/v1/jobs'
-const MODEL = 'grok-imagine-video-1-5-preview'
+
+/**
+ * EL MOTOR DE RENDER. Los dos viven en el MISMO endpoint del marketplace
+ * (`createTask` + `recordInfo`, `state` string y `resultJson` como string con JSON
+ * adentro), así que lo único que cambia entre ellos es el CUERPO del POST — el parser de
+ * abajo y el polling son los mismos. Por eso esto es una constante y no dos clientes.
+ *
+ * 🔴 WAN ES LA PRIMITIVE DE MOVIMIENTO, y ése es el motivo del cambio, no el precio.
+ * Toma un video de REFERENCIA (`reference_video_urls`) y copia la coreografía; grok solo
+ * recibe texto e imágenes, y AGENTS.md tiene medido que con ~15 renders de esta rama nunca
+ * llegó a ejecutar la aplicación del producto sobre la piel. El experimento de motores
+ * (2026-09-04) ya lo había aislado: la representación en TEXTO del movimiento era el techo.
+ *
+ * ⚠️ Y NO ES GRATIS: 16 créditos/s a 720P contra los ~4,3 medidos de grok, o sea ~3,7× por
+ * segundo de clip. La resolución es decisión del dueño del repo (720P por calidad).
+ *
+ * ⚠️ `grok` SE QUEDA ENTERO, no comentado: es la vuelta atrás de una línea si Wan decepciona,
+ * y su cuerpo está fijado por test para que un cambio en el de Wan no lo arrastre.
+ */
+export type Motor = 'grok' | 'wan'
+export const MOTOR: Motor = 'wan'
+
+/**
+ * Lo que cada motor publica como tope. Todo esto está MEDIDO contra la API con el canario
+ * gratis (`scripts/canary-wan.ts`), no leído de la doc:
+ *
+ *  - `promptMax` de Wan es exactamente **20.000** (20.001 → *"The text length cannot exceed
+ *    the maximum limit"*). Es 4,9× el de grok, así que la escalera de degradación de
+ *    `buildLotePrompt` queda inerte — se conserva porque es lo que sostiene a grok.
+ *  - `minDur` de Wan es 2, no 1.
+ *  - `imagenes` se queda en **7 para los dos** aunque Wan acepte 10: ese número es el
+ *    presupuesto de ANCLAS (`anchors.ts` topa en `MAX_IMAGES - 2`) y cada ancla es una
+ *    imagen PAGADA POR EL HUB. Subirlo es una decisión de costo, no de transporte.
+ */
+const CONTRATO = {
+  grok: { model: 'grok-imagine-video-1-5-preview', promptMax: 4096, minDur: 1 },
+  wan: { model: 'wan/3-0-video', promptMax: 20_000, minDur: 2 },
+} as const
 
 export type KieState = 'waiting' | 'queuing' | 'generating' | 'success' | 'fail'
 
@@ -70,10 +139,25 @@ export interface VideoTaskInput {
   locucionChars?: number
   /** Cuántas tomas trae el lote. >1 desactiva el techo blando — ver `clampDuration`. */
   tomas?: number
+  /**
+   * El tramo del video ORIGINAL que le toca a este lote (`tramo.ts`), ya recortado y MUDO.
+   * Solo lo lee Wan; grok lo ignora porque no tiene dónde ponerlo.
+   *
+   * ⚠️ TIENE QUE IR SIN AUDIO. Medido en el experimento de motores: con la pista del
+   * original puesta, la locución generada se contamina con las palabras de la creadora
+   * (cobertura 86 % → 98 % al mutear) y hasta cambia las palabras del guion.
+   *
+   * Opcional a propósito: un lote cuya ventana no se pudo derivar se renderiza sin
+   * referencia — degradado, no roto.
+   */
+  referenceVideoUrl?: string | null
 }
 
-/** Rango legal de `duration` en este modelo. Entero, y viaja como STRING. */
-export const MIN_DURATION = 1
+/** Rango legal de `duration` en el motor activo. Entero.
+ *  ⚠️ El techo se queda en 15 aunque Wan acepte 30: es `LOTE_MAX_SEC`, y además con
+ *  referencia rige `entrada + salida <= 30`, así que 15 + 15 es el reparto que deja
+ *  el tramo más largo posible (ver `tramo.ts`). */
+export const MIN_DURATION: number = CONTRATO[MOTOR].minDur
 export const MAX_DURATION = 15
 
 /**
@@ -82,8 +166,8 @@ export const MAX_DURATION = 15
  */
 export const MAX_IMAGES = 7
 
-/** Tope de `input.prompt`, CONFIRMADO con el canario. Pasarse = tarea rechazada. */
-export const KIE_PROMPT_MAX = 4096
+/** Tope de `input.prompt` del motor activo, CONFIRMADO con el canario. Pasarse = rechazo. */
+export const KIE_PROMPT_MAX: number = CONTRATO[MOTOR].promptMax
 
 /**
  * Ajusta la duración de un lote al rango legal, sin perder ninguna de las dos lecciones
@@ -157,18 +241,52 @@ export function resolutionFor(): '720p' {
   return '720p'
 }
 
-/** Cuerpo exacto del POST. Puro y exportado para poder verificarlo sin API key. */
-export function buildTaskBody(input: VideoTaskInput) {
+/**
+ * Cuerpo exacto del POST. Puro y exportado para poder verificarlo sin API key.
+ *
+ * ⚠️ CADA MOTOR NOMBRA DISTINTO EL CAMPO DE REFERENCIAS Y EQUIVOCARSE NO FALLA RUIDOSO —
+ * la misma trampa que `kie-image.ts` ya documenta para gpt-image-2 contra nano-banana-2, y
+ * confirmada con el canario para Wan: mandando `image_urls` en vez de
+ * `reference_image_urls`, KIE **crea la tarea igual**, la termina en `success` y entrega un
+ * video generado SOLO desde el prompt. Ningún canario puede cazarlo (el campo desconocido
+ * se ignora en silencio, no se rechaza), así que lo que lo fija es el test de este cuerpo.
+ *
+ * `motor` es parámetro para poder fijar los dos cuerpos con un test; en producción siempre
+ * es el activo.
+ */
+export function buildTaskBody(input: VideoTaskInput, motor: Motor = MOTOR): { model: string; input: Record<string, unknown> } {
+  const duration = clampDuration(input.durationSec, input.locucionChars, input.tomas)
+  if (motor === 'grok') {
+    return {
+      model: CONTRATO.grok.model,
+      input: {
+        image_urls: input.images.map((i) => i.url),
+        prompt: input.prompt,
+        // Entero, que es lo que dice la ficha de este modelo (acepta string también).
+        duration,
+        resolution: resolutionFor(),
+        aspect_ratio: '9:16',
+        mode: 'normal',
+        // true = filtro de contenido ACTIVADO (el default de la API es false, que lo apaga).
+        nsfw_checker: true,
+      },
+    }
+  }
   return {
-    model: MODEL,
+    model: CONTRATO.wan.model,
     input: {
-      image_urls: input.images.map((i) => i.url),
       prompt: input.prompt,
-      // Entero, que es lo que dice la ficha de este modelo (acepta string también).
-      duration: clampDuration(input.durationSec, input.locucionChars, input.tomas),
-      resolution: resolutionFor(),
+      reference_image_urls: input.images.map((i) => i.url),
+      // Sin tramo derivado no se manda el campo: un array vacío es una forma más de
+      // decirle a la API algo que no queremos decirle.
+      ...(input.referenceVideoUrl ? { reference_video_urls: [input.referenceVideoUrl] } : {}),
+      duration,
+      // ⚠️ MAYÚSCULA: medido con el canario, `720p` devuelve *"resolution is not within the
+      // range of allowed options"* y `720P` pasa. Este enum es sensible a la caja.
+      resolution: '720P',
       aspect_ratio: '9:16',
-      mode: 'normal',
+      // Wan genera el audio: sin esto no hay locución, que es medio entregable.
+      audio: true,
       // true = filtro de contenido ACTIVADO (el default de la API es false, que lo apaga).
       nsfw_checker: true,
     },

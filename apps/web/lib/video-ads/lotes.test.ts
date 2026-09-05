@@ -5,6 +5,15 @@ import type { TomaFinal } from './adapt'
 import { TIMELINE_VACIO } from './motion'
 import { KIE_PROMPT_MAX } from './kie'
 
+/**
+ * El tope de GROK, escrito a mano. La escalera de degradación existe por él: con Wan
+ * (`KIE_PROMPT_MAX` = 20.000) ningún lote real se le acerca y la escalera queda INERTE, así
+ * que sus tests pasarían por vacío — verdes sin haber ejercitado nada. Se le pasa el tope
+ * viejo por parámetro para que sigan midiendo la máquina que sostiene a grok, y que volver
+ * a grok (una línea, `MOTOR` en kie.ts) siga estando cubierto.
+ */
+const TOPE_GROK = 4096
+
 const toma = (n: number, duracionSeg: number, locucion = `linea ${n}`): TomaFinal => ({
   n, duracionSeg, locucion,
   tiempoOriginal: '00:00 - 00:00',
@@ -559,6 +568,7 @@ describe('buildLotePrompt — el orden de la escalera', () => {
     escenario: 'una habitación con muchísimo detalle. '.repeat(extra),
     productDesc: 'Frasco de vidrio. Etiqueta impresa. Texto en negro. '.repeat(extra),
     movimiento: { calidadMovimiento: 'MOVIMIENTO-FLUIDO-MARCADOR', manerismos: 'se toca el pelo' },
+    promptMax: TOPE_GROK,
   })
 
   // ⚠️ ÉSTE ES EL TEST QUE FIJA LA INVERSIÓN, y hay que escribirlo así para que discrimine:
@@ -606,10 +616,11 @@ describe('buildLotePrompt — el encuadre entra en la escalera', () => {
       camara: CAMARA_LARGA,
       escenario: 'una habitación con muchísimo detalle. '.repeat(20),
       productDesc: 'Frasco de vidrio. Etiqueta impresa. '.repeat(20),
+      promptMax: TOPE_GROK,
     })
     expect(p).toContain('Camera: Primer plano a la altura de los ojos, cortando a la altura del pecho.')
     expect(p).not.toContain('La luz entra por la izquierda')
-    expect(p.length).toBeLessThanOrEqual(KIE_PROMPT_MAX)
+    expect(p.length).toBeLessThanOrEqual(TOPE_GROK)
   })
 })
 

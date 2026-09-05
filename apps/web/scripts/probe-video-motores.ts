@@ -157,14 +157,21 @@ export async function download(url: string, destination: string): Promise<void> 
   await writeFile(destination, Buffer.from(await response.arrayBuffer()))
 }
 
-export async function createClip(source: string, output: string, start: number, duration: number): Promise<void> {
+export async function createClip(
+  source: string, output: string, start: number, duration: number,
+  // ⚠️ `mudo` NO es opcional de verdad: para un clip de REFERENCIA es obligatorio. Medido en el
+  // experimento de motores — con el audio del original puesto, la locución generada se contamina
+  // con las palabras de la creadora (cobertura 86 % → 98 % al mutear).
+  opts: { mudo?: boolean } = {},
+): Promise<void> {
   if (!ffmpegPath) throw new Error('ffmpeg-static no resolvió un binario para esta plataforma')
   await run(ffmpegPath, [
     '-y', '-loglevel', 'error', '-i', source,
     '-ss', String(start), '-t', String(duration),
-    '-map', '0:v:0', '-map', '0:a:0?',
+    '-map', '0:v:0',
+    ...(opts.mudo ? ['-an'] : ['-map', '0:a:0?', '-c:a', 'aac']),
     '-c:v', 'libx264', '-preset', 'medium', '-crf', '18', '-pix_fmt', 'yuv420p',
-    '-c:a', 'aac', '-movflags', '+faststart', output,
+    '-movflags', '+faststart', output,
   ])
 }
 

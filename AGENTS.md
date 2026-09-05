@@ -754,6 +754,123 @@ Los tres que salieron ejecutan las dos acciones EN ORDEN, con el frasco del usua
 
 ⚠️ **LO QUE NO SE MIDIÓ:** un solo tramo de 6 s, una sesión, un draw por brazo. El precio por clip de seedance tampoco está medido, y el pipeline de producción **no se tocó** — esto determina la primitive, no la cablea.
 
+### 🔴 EL MOTOR PASA A `wan/3-0-video` — cableado y verificado con un render (2026-09-04)
+
+**Decisión del dueño del repo, con su precio explícito:** *"Vamos a ir con 720p como default, por
+calidad aunque el precio crezca un poco"*. Cierra lo que el experimento de motores dejó abierto:
+la primitive de movimiento tenía que ser un motor que reciba el VIDEO fuente, y Wan es el que
+además toma las cuatro señales en una sola llamada (movimiento, imágenes, locución y audio).
+
+**Pricing del proveedor:** 480P 8 cr/s ($0,04/s) · **720P 16 cr/s ($0,08/s)** · 1080P 32 cr/s
+($0,16/s). Grok medía ~4,3 cr/s, o sea **720P Wan cuesta ~3,7× por segundo de clip**.
+
+⚠️ **Y EL COBRO ES `precio × (entrada + salida)`, VERIFICADO CON EL RENDER:** 10 s de salida +
+10 s de referencia costaron **320 créditos exactos** (20 × 16), no 160. Es el mismo modelo que ya
+se había medido para Seedance. **Un anuncio se factura como el DOBLE de su duración**: los 45 s
+de `520c9169` son ~1.440 créditos ≈ **$7,20**, y ése es el número con el que hay que
+presupuestar, no la duración del video.
+
+✅ **PASO 0 — ¿Wan honra la emisión REAL de `buildLotePrompt`?** Era la pregunta que decidía el
+tamaño del trabajo, y no se podía deducir leyendo: el render que abrió esta puerta se hizo desde
+el wizard con un prompt escrito A MANO en bloques `【0.0–4.0 s】`, y el pipeline emite otra forma
+(`Shot N — X seconds` + lista numerada). **Sí la honra**, así que el cableado es de TRANSPORTE y
+la plantilla no se toca.
+
+El bed fue un duelo directo, no un lote cualquiera: el **lote 1 de `520c9169`**, que tiene el plan
+CORRECTO (*"She releases one drop of serum onto her left cheek with the dropper"*) y del que ya
+estaba verificado que **grok lo falló** — su clip pagado muestra a la mujer sosteniendo el frasco y
+hablando, sin sacar el gotero.
+
+| | grok (verificado antes) | **Wan, mismo prompt** |
+|---|---|---|
+| saca el gotero | ❌ | ✅ ~1,5 s |
+| lleva el gotero a la mejilla | ❌ | ✅ el gotero llega a la cara y vuelve al frasco |
+| locución | — | ✅ **99 % cobertura / 99 % precisión** (`probe-audio-espanol.ts`) |
+| resolución | 720x1280 | 720x1280 |
+| identidad · suéter · habitación · frasco | ✅ | ✅ |
+
+❌ **Y EL "FRAGMENTO MUDO DE DOS SEGUNDOS" NO SE REPRODUCE — era el prompt, no el motor.** El
+render del wizard abría con 3,5 s de silencio (medido con `silencedetect`), y la causa era que
+ESE prompt ponía *"She looks at the camera and speaks"* al FINAL del bloque `0.0–4.0 s`. Con la
+emisión del pipeline —que pone `Spoken line:` debajo de cada toma— `silencedetect` no encuentra
+**ni un silencio** en todo el clip. **El arreglo que el plan tenía previsto para esto es un
+no-op**: no hay que distribuir la locución en bloques con marca de tiempo. De paso confirma por el
+otro lado que Wan honra el orden en el que se le escriben las cosas.
+
+⚠️ **EL NOMBRE DEL CAMPO DE IMÁGENES NO SE VALIDA Y NINGÚN CANARIO PUEDE CAZARLO.** Medido con
+`scripts/canary-wan.ts`: `reference_image_urls`, `image_urls` y hasta un campo inventado devuelven
+todos la MISMA queja (la del campo inválido que se mandó a propósito), o sea KIE ignora en
+silencio lo que no conoce. Con el nombre equivocado la tarea se crea, termina en `success` y
+devuelve un video hecho solo desde el prompt. Es la misma trampa que `kie-image.ts` ya documenta
+para gpt-image-2 vs nano-banana-2, y lo único que la fija es el **test del cuerpo de cada motor**.
+
+✅ **Lo que el canario SÍ midió gratis** (Wan también valida antes de despachar, así que el truco
+del campo inválido sirve igual): `prompt` **20.000** exactos · `resolution` **sensible a la caja**
+(`720P` pasa, `720p` devuelve *"resolution is not within the range of allowed options"*) ·
+`aspect_ratio: 9:16` válido · `duration` entera fuera de rango con 999. ⚠️ El orden de validación
+es `resolution → prompt → duration`, así que **no hay escudo después de `duration`** y su piso no
+se puede aislar gratis: 2–30 sale de la doc y falla ruidoso si está mal.
+
+**`MOTOR` (kie.ts) es una constante y volver a grok es UNA LÍNEA.** Los dos motores viven en el
+mismo endpoint del marketplace con el mismo polling y el mismo parser; lo único que cambia es el
+cuerpo del POST. Por eso `grok` se conserva ENTERO, con su cuerpo fijado por test, y no comentado.
+
+⚠️ **`KIE_PROMPT_MAX` pasa de 4.096 a 20.000, así que LA ESCALERA DE DEGRADACIÓN QUEDA INERTE** —
+ningún lote real se acerca. **No se borra**: es lo que sostiene a grok. Pero sus tests dejaban de
+medirla y pasaban en vacío (verdes sin ejercitar nada), así que `buildLotePrompt` acepta
+`promptMax` y esos tests le pasan el tope viejo. Mismo criterio que invertir un probe al adoptar
+su resultado.
+
+⚠️ **`MAX_IMAGES` SE QUEDA EN 7 aunque Wan acepte 10.** Ese número es el presupuesto de ANCLAS
+(`anchors.ts` topa en `MAX_IMAGES - 2`) y cada ancla es una imagen **pagada por el hub**. Subirlo
+es una decisión de costo, no de transporte. Igual `MIN_DURATION` sube de 1 a 2 (piso de Wan) y
+`MAX_DURATION` se queda en 15: es `LOTE_MAX_SEC`, y con referencia rige `entrada + salida ≤ 30`,
+así que 15 + 15 es el reparto que deja el tramo más largo posible.
+
+#### El tramo de referencia (`lib/video-ads/tramo.ts`)
+
+Cada lote recibe **su** tramo del original, mudo. Mandarle el video entero a cada lote sería
+pedirle 45 s de coreografía dentro de un clip de 10 — la coreografía duplicada de `repartirAccion`
+otra vez, en otra modalidad.
+
+🔴 **LA TRAMPA ES LA TOMA PARTIDA, Y ESTÁ EN LOS DATOS REALES.** `splitLongToma` corre ANTES de
+`groupIntoLotes` y los fragmentos **comparten `tiempoOriginal`**: en `520c9169` los lotes 3 y 4
+apuntan los DOS a la ventana `16-35s`. Derivando el tramo de esa marca a secas los dos reciben el
+MISMO clip de 19 s — el lote 4 pide movimiento que ya ocurrió y el 3 pide el que todavía no. Por
+eso el reparto es **proporcional y se calcula sobre TODOS los lotes a la vez**: desde un lote
+suelto es imposible saber cuánto de su ventana ya se llevó un hermano de otro lote. Y esa misma
+ventana de 19 s viola los dos topes de Wan al mismo tiempo (15 s por clip, `entrada + salida ≤ 30`).
+Con test sobre esos números reales, que falla con la derivación ingenua.
+
+⚠️ **`-an` OBLIGATORIO.** Medido en el experimento de motores: con la pista del original puesta la
+locución copia las palabras de la creadora (86 % → 98 % al mutear). Es la misma contaminación que
+descalificó a Kling y a xAI Edit.
+
+⚠️ **Se RE-ENCODA, no `-c copy`**, al revés que `concat.ts`: un corte por copia empieza en el
+keyframe anterior y el clip arrancaría antes del gesto que se quiere copiar. Acá el fotograma
+exacto es el punto.
+
+⚠️ **Falla CERRADO (502, cero cobrado) y antes de crear la primera tarea.** Dejarlo pasar sin
+referencia sería cobrarle al usuario 3,7× por segundo un clip con exactamente la calidad de
+movimiento que veníamos a arreglar. Una ventana ilegible o más corta que el piso de 1 s sí devuelve
+`null` para ESE lote: ahí el degradado es a un render solo-texto, que es el comportamiento de grok.
+
+⚠️ **`next.config.ts` necesitó la SEGUNDA línea de `outputFileTracingIncludes`**, para
+`generate-lotes`. El binario de ffmpeg es un archivo de datos que ningún `require` menciona, así
+que sin eso el trazador lo deja fuera de ESA función y el síntoma es un `spawn
+/ROOT/…/ffmpeg ENOENT` **solo en producción** — que este repo ya pagó una vez con `concat`.
+
+⚠️ **`scriptFingerprint` v17 → v18, y ahora el MOTOR entra en la huella.** El bump manual cubre
+este cambio; hashear `MOTOR` cubre el siguiente, porque volver a grok es una línea y un ida y
+vuelta entre motores no se vería de otra forma.
+
+⚠️ **LO QUE NO ESTÁ MEDIDO, y no hay que leerlo como medido:** un lote, un seed, una sesión.
+**Ninguna sesión completa corrió por el wizard con Wan** — quedó bloqueada por saldo (704 → 384
+créditos ≈ $1,92 tras el paso 0, y una sesión de 45 s cuesta ~$7,20). Tampoco está medido si Wan
+aguanta clips más largos que los 15 s de `LOTE_MAX_SEC` —ese cap se bajó por la deriva de
+consistencia de GROK, no de Wan— ni si las imágenes ancla siguen aportando algo cuando el
+movimiento ya viaja como video.
+
 ### EL CANDADO DE MOVIMIENTO (V2) — cableado, verificado y **sin efecto medible todavía** (2026-09-03)
 
 La coreografía deja de viajar como prosa y viaja como una **máquina de estados**: `MotionTimeline` (`lib/video-ads/motion.ts`) con `startState` / `beats` / `endState`, y el prompt del lote emite
