@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractSlots, fillTemplate, validateTemplate, assembleTemplate, rejectBadValues, alignSlots, normalizeSlots, slotOriginals } from './fill'
+import { extractSlots, fillTemplate, validateTemplate, assembleTemplate, rejectBadValues, alignSlots, normalizeSlots, slotOriginals, podarEco } from './fill'
 import type { ScriptTemplate } from './template'
 
 // Plantilla recortada del caso real (serum Apivita → suero de niacinamida). Trae los
@@ -518,4 +518,30 @@ describe('alignSlots · espacio de bordes', () => {
 it('alignSlots no recorta el espacio que el desmarcado necesita', () => {
   const r = alignSlots('a los 30 como yo', 'a los[Problema] como yo')
   expect(r?.huecos[0].original).toBe(' 30')
+})
+
+// Con la política de rellenar TODO, el modelo devuelve el dato con la palabra que el
+// andamiaje ya trae pegada: `nos da un efecto` + "efecto lifting".
+describe('podarEco', () => {
+  const ctx = (izq: string, der: string) => `…${izq}⟦resultado⟧${der}…`
+
+  it('quita la palabra que el andamiaje ya dice a la izquierda', () => {
+    expect(podarEco('efecto lifting', ctx('nos da un efecto ', ' de inmediato'))).toBe('lifting')
+  })
+
+  it('quita la que se repite a la derecha', () => {
+    expect(podarEco('glow increíble', ctx('darme este ', ' increíble.'))).toBe('glow')
+  })
+
+  it('no toca un valor que no hace eco', () => {
+    expect(podarEco('niacinamida', ctx('contiene ', ', ácido'))).toBe('niacinamida')
+  })
+
+  it('no toca la palabra repetida por DENTRO del valor', () => {
+    expect(podarEco('crema de manos', ctx('una ', ' buena'))).toBe('crema de manos')
+  })
+
+  it('prefiere repetir antes que quedarse sin dato', () => {
+    expect(podarEco('efecto', ctx('un efecto ', ' ya'))).toBe('efecto')
+  })
 })

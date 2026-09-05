@@ -160,6 +160,34 @@ function ngramas(palabras: string[], n: number): Set<string> {
  * `[PENDIENTE: …]` y el usuario lo escribe él. Es el mismo desenlace que un valor que el
  * modelo no supo rellenar: preferible a texto ilegible dentro de un lote pagado.
  */
+/**
+ * Poda del valor la palabra que YA está escrita pegada al hueco.
+ *
+ * Medido con la política de rellenar todo: la plantilla decía `nos da un efecto [X]` y el
+ * modelo devolvió "efecto lifting" — correcto como dato, y al sustituirlo la frase sale
+ * "nos da un efecto efecto lifting". El eco de UNA palabra no lo ve `rejectBadValues`,
+ * que busca tres seguidas.
+ *
+ * Se PODA en vez de rechazar, y esa es la decisión: rechazar dejaría un `[PENDIENTE:…]`,
+ * y la política del dueño del repo es que el guion sale completo. Quitar una palabra que
+ * el andamiaje ya dice no inventa nada — deja exactamente la frase que el original tenía.
+ *
+ * Solo mira los BORDES y solo una palabra por lado: un valor que legítimamente empieza
+ * con la misma palabra dos veces no existe, pero un valor que la contiene por dentro sí
+ * ("crema de manos" junto a "de"), y ahí no se toca nada. Si podar lo vacía, se devuelve
+ * el valor tal cual: perder el dato es peor que repetir una palabra.
+ */
+export function podarEco(valor: string, contexto: string): string {
+  const [izq = '', der = ''] = contexto.split(/⟦[^⟧]*⟧/)
+  const ultima = norm(izq).at(-1)
+  const primera = norm(der)[0]
+  let palabras = valor.trim().split(/\s+/).filter(Boolean)
+  if (palabras.length > 1 && norm(palabras[0])[0] === ultima) palabras = palabras.slice(1)
+  if (palabras.length > 1 && norm(palabras.at(-1)!)[0] === primera) palabras = palabras.slice(0, -1)
+  const podado = palabras.join(' ')
+  return podado || valor
+}
+
 export function rejectBadValues(
   t: ScriptTemplate,
   valores: Record<string, string>,
@@ -174,8 +202,9 @@ export function rejectBadValues(
   const limpios: Record<string, string> = {}
   const rechazados: string[] = []
   for (const s of extractSlots(t)) {
-    const v = valores[s.id]?.trim()
-    if (!v) continue
+    const crudo = valores[s.id]?.trim()
+    if (!crudo) continue
+    const v = podarEco(crudo, s.contexto)
 
     const malo =
       v.length > MAX_VALOR ||

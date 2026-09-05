@@ -39,10 +39,14 @@ describe('buildAdaptInstruction', () => {
   // La política es rellenar, pero no a costa de firmar cosas en nombre del usuario:
   // una marca que no escribió o un ingrediente que no está en la etiqueta son una
   // declaración falsa de composición dentro de un anuncio que se publica.
+  // El candado sigue en pie —una marca, un ingrediente o una cifra que nadie escribió
+  // es firmar en nombre del usuario— pero ya no manda al hueco vacío: manda a decir algo
+  // cierto de ESTE producto sin nombrar ese dato.
   it('acota lo que NUNCA se inventa: marcas, ingredientes y cifras', () => {
     expect(p).toMatch(/LO QUE NO SE INVENTA NUNCA/)
     expect(p).toMatch(/una MARCA que\s+el usuario no escribió/)
-    expect(p).toMatch(/el hueco va vacío/)
+    expect(p).toMatch(/el hueco NO va vacío/)
+    expect(p).not.toMatch(/si no está ahí, el hueco va vacío/i)
   })
 
   // El ejemplo del "incidente PHE-resorcinol" que este prompt citaba era doblemente
@@ -72,13 +76,16 @@ describe('buildAdaptInstruction', () => {
   // ninguno sostiene queda PENDIENTE. La escala vieja tenía un tercer escalón —"lo más
   // verosímil para un producto de esa categoría"— que es exactamente la licencia para
   // inventar que la regla nueva prohíbe.
-  it('la orden de RELLENAR va en la cabecera, y se corta en los INPUTS', () => {
+  // Está medido que esta orden solo se obedece desde la CABECERA: metida entre los
+  // bullets de "reglas de los valores", dos corridas de la misma sesión dieron 4 y 9
+  // pendientes. Y desde el 2026-09-05 no admite excepciones: el guion sale completo.
+  it('la orden de RELLENAR TODO va en la cabecera, sin escalón que la corte', () => {
     const cabecera = p.slice(0, p.indexOf('── HUECOS ──'))
-    expect(cabecera).toMatch(/RELLENA CADA HUECO QUE LOS INPUTS PERMITAN/)
-    expect(cabecera).toMatch(/NO LO INVENTES/)
+    expect(cabecera).toMatch(/RELLENA TODOS LOS HUECOS/)
+    expect(cabecera).toMatch(/Todos, sin excepción/)
     expect(cabecera).toMatch(/NO\s+ESCRIBAS\s+UN\s+GUION\s+NUEVO/)
-    // el tercer escalón no puede volver por la puerta de atrás
-    expect(cabecera).toMatch(/veros[íi]mil[\s\S]{0,60}NO es una fuente/i)
+    expect(cabecera).not.toMatch(/NO LO INVENTES/)
+    expect(cabecera).not.toMatch(/NO es una fuente/i)
   })
 
   // Punto 12 de la spec: el modelo tiene que ver el guion original AL LADO de su
@@ -151,10 +158,14 @@ describe('buildAdaptInstruction', () => {
   // correcto"): el guion es un borrador que el usuario corrige línea por línea, y uno
   // completo se corrige mientras que uno con agujeros hay que rellenarlo a mano. Lo
   // único que sigue quedando vacío es lo que el usuario tendría que salir a demostrar.
-  it('solo deja vacío lo que compromete al usuario', () => {
-    expect(p).toMatch(/Un hueco se deja VACÍO solo si/)
+  // La excepción de los premios/avales/certificaciones la revocó el dueño del repo: el
+  // modelo llena TODO. Lo que no puede es firmar por el usuario, así que ese caso se
+  // resuelve diciendo algo cierto del producto, no dejando el corchete.
+  it('no deja ningún hueco vacío, ni el que compromete al usuario', () => {
+    expect(p).toMatch(/Ningún hueco se deja vacío/)
     expect(p).toMatch(/aval médico|estudio clínico|certificación/)
-    expect(p).toMatch(/En todo lo demás, rellena/)
+    expect(p).toMatch(/tampoco lo dejas vacío/)
+    expect(p).not.toMatch(/Un hueco se deja VACÍO solo si/)
     expect(p).not.toMatch(/hueco\s+vac[ií]o\s+es\s+un\s+resultado\s+correcto/i)
   })
 
@@ -311,5 +322,28 @@ describe('AdaptedScriptSchema', () => {
 
   it('rechaza un guión sin tomas', () => {
     expect(AdaptedScriptSchema.safeParse({ guionFinal: 'x', tomas: [] }).success).toBe(false)
+  })
+})
+
+// Los tres defectos que salieron al medir la política de rellenar TODO: un verbo en una
+// ranura de sustantivo ("aporta iluminar la piel"), el eco de la palabra pegada al hueco
+// ("un efecto efecto lifting") y una nota-meta dentro del anuncio del usuario
+// ("(sustancia adicional no mencionada)").
+describe('reglas de valor que la política de rellenar todo destapó', () => {
+  const p = buildAdaptInstruction(TEMPLATE, FORENSIC, INPUTS, null, extractSlots(TEMPLATE), 'Español peruano de Lima', '')
+
+  it('exige que el valor encaje en su ranura gramatical', () => {
+    expect(p).toMatch(/ENCAJAR EN SU RANURA/)
+    expect(p).toMatch(/pide un sustantivo/)
+    expect(p).toMatch(/pide un infinitivo/)
+  })
+
+  it('prohíbe repetir la palabra pegada al hueco', () => {
+    expect(p).toMatch(/NO REPITAS LA PALABRA QUE YA ESTÁ PEGADA AL HUECO/)
+  })
+
+  it('prohíbe la nota entre paréntesis como valor', () => {
+    expect(p).toMatch(/nunca es una nota/)
+    expect(p).toMatch(/EL VALOR SE DICE EN VOZ ALTA/)
   })
 })
