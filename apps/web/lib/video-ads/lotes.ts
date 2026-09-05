@@ -141,8 +141,11 @@ function splitLongToma(t: TomaFinal): TomaFinal[] {
  * coreografía es perder justo lo que el clip tiene que ejecutar. Cierra el lote antes,
  * que es la respuesta correcta cuando el contenido no cabe en un clip.
  *
- * ⚠️ Un lote de más es una llamada pagada de más. Solo se dispara en montajes muy
- * picados (muchos cortes cortos dentro de 15 s); un anuncio hablado normal no lo roza.
+ * ⚠️ Un lote de más es una llamada pagada de más, así que el costo se midió antes de
+ * cablearlo (lectura pura de las sesiones guardadas, cero LLM): de 36 sesiones con
+ * guión, **3 ganan lotes** y el total pasa de 152 a 156 — +2,6 % de llamadas pagadas.
+ * Solo se dispara en montajes muy picados (muchos cortes cortos dentro de 15 s); un
+ * anuncio hablado normal no lo roza.
  */
 export const LOTE_MAX_COREO = 2600
 

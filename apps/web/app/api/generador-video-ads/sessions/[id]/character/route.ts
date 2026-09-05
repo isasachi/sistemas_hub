@@ -47,10 +47,24 @@ export async function POST(
   if (!characterUrl)
     return NextResponse.json({ error: 'Sube la foto del personaje primero' }, { status: 409 })
 
-  // Ya está construido: se devuelve tal cual. Va ANTES del gate de cuota a propósito —
-  // el disparo en segundo plano y el del paso del guión pueden coincidir sobre la misma
-  // sesión, y cobrarle una regeneración por un acierto de caché sería quemarle el tope.
-  if (session.avatar_url && session.consistency_block && session.voice_profile) {
+  // Ya está construido PARA ESTA FOTO: se devuelve tal cual. Va ANTES del gate de cuota
+  // a propósito — el disparo en segundo plano y el del paso del guión pueden coincidir
+  // sobre la misma sesión, y cobrarle una regeneración por un acierto de caché sería
+  // quemarle el tope.
+  //
+  // ⚠️ La comparación con `character_url` NO es de más: sin ella, cambiar la foto
+  // devolvía el avatar de la ANTERIOR. La fila termina con la foto nueva y el avatar
+  // viejo —o sea afirmando que ese avatar salió de esa foto— y el render usa el viejo,
+  // sin error, sin cuota gastada y sin nada en pantalla que lo diga.
+  //
+  // ponytail: dos llamadas simultáneas sobre una sesión virgen (el disparo de fondo
+  // todavía en vuelo cuando el paso del guión reintenta) generan dos avatares y gana
+  // la última escritura. Cuesta una imagen y una regeneración del tope de 1+3; si se
+  // mide que pasa seguido, el upgrade es un claim atómico como el de `generate-lotes`.
+  if (
+    session.avatar_url && session.consistency_block && session.voice_profile &&
+    session.character_url === characterUrl
+  ) {
     return NextResponse.json({
       avatarUrl: session.avatar_url,
       consistencyBlock: session.consistency_block,
