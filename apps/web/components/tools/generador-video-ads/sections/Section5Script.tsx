@@ -244,8 +244,9 @@ export default function Section5Script() {
       {!!pendientes.length && (
         <div className="rounded-2xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-[12.5px] leading-relaxed text-amber-300">
           {pendientes.length === 1 ? 'Queda un dato' : `Quedan ${pendientes.length} datos`} sin
-          completar. No los inventamos porque no estaban en lo que nos diste, y el video los
-          leería en voz alta tal cual. Ábrelos con “Editar por toma”, escríbelos y guarda.
+          completar: descartamos el valor que salió porque no encajaba en la frase, y el video
+          lo leería en voz alta tal cual. Ábrelos con “Editar por toma”, escríbelos y guarda —
+          o vuelve a adaptar el guión.
         </div>
       )}
 
