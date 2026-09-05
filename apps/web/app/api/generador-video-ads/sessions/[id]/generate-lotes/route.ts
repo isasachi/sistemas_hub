@@ -427,17 +427,24 @@ export async function POST(
    * pasar sin referencia sería cobrarle al usuario 3,7× por segundo un clip con exactamente
    * la calidad de movimiento que veníamos a arreglar.
    *
-   * ponytail: se vuelve a cortar en cada reanudación en vez de persistir la URL. Los lotes ya
-   * pagados se saltan antes de esto, así que lo único que se repite es CPU sobre los
-   * pendientes — no dinero. Si el tiempo de la ruta molesta, la mejora es guardar la URL en
-   * el lote.
+   * ⚠️ SE DERIVA SOBRE **TODOS** LOS LOTES Y SE CORTA SOLO LOS PENDIENTES, y ese reparto de
+   * responsabilidades no es intercambiable: la proporción de `tramosDeLotes` necesita a los
+   * lotes ya pagados para construir el denominador de cada ventana compartida — sacarlos ahí
+   * correría el tramo de los que sobreviven. El filtro va DESPUÉS, en el corte.
+   *
+   * ponytail: se vuelve a derivar en cada reanudación en vez de persistir la URL en el lote.
+   * Cortar y subir cuesta CPU sobre los pendientes, no dinero. Si el tiempo de la ruta
+   * molesta, la mejora es guardar la URL.
    */
   let tramoUrls: (string | null)[] = seed.map(() => null)
   if (MOTOR === 'wan' && session.reference_video_url) {
     try {
       const tramos = tramosDeLotes(seed, (l) =>
         clampDuration(l.duracionSeg, l.tomas.reduce((n, t) => n + (t.locucion ?? '').length, 0), l.tomas.length))
-      const clips = await cortarTramos(session.reference_video_url, tramos)
+      // Un lote con `taskId` ya está pagado y no se vuelve a crear (ver el bucle de abajo),
+      // así que recortar su tramo es trabajo tirado.
+      const clips = await cortarTramos(
+        session.reference_video_url, tramos.map((t, i) => (seed[i].taskId ? null : t)))
       tramoUrls = await Promise.all(clips.map((bytes, i) =>
         bytes ? uploadToStorage(id, bytes, 'video/mp4', `tramo-lote-${seed[i].n}`) : Promise.resolve(null)))
     } catch (err) {

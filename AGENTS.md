@@ -770,6 +770,14 @@ se había medido para Seedance. **Un anuncio se factura como el DOBLE de su dura
 de `520c9169` son ~1.440 créditos ≈ **$7,20**, y ése es el número con el que hay que
 presupuestar, no la duración del video.
 
+⚠️ **Y HAY UN DELTA QUE NO CUADRA CON ESA REGLA, así que la regla es n=1.** El render que el
+dueño del repo hizo desde el wizard movió el saldo **1.709,41 → 704,65 = 1.004,76 créditos**, y
+eso no es ni solo-salida (20 × 16 = 320) ni entrada+salida (29,8 × 16 = 477) a 720P. A 1080P
+entrada+salida daría ~954, que se le acerca pero tampoco encaja. No se dedujo qué pasó ahí —
+puede haber sido otra resolución, otro reintento o un cobro que agrupa varias cosas. La regla
+`entrada + salida` está verificada en el render controlado; **el delta del wizard sigue sin
+explicación y conviene mirarlo antes de dar el presupuesto por cerrado.**
+
 ✅ **PASO 0 — ¿Wan honra la emisión REAL de `buildLotePrompt`?** Era la pregunta que decidía el
 tamaño del trabajo, y no se podía deducir leyendo: el render que abrió esta puerta se hizo desde
 el wizard con un prompt escrito A MANO en bloques `【0.0–4.0 s】`, y el pipeline emite otra forma
@@ -840,7 +848,9 @@ MISMO clip de 19 s — el lote 4 pide movimiento que ya ocurrió y el 3 pide el 
 eso el reparto es **proporcional y se calcula sobre TODOS los lotes a la vez**: desde un lote
 suelto es imposible saber cuánto de su ventana ya se llevó un hermano de otro lote. Y esa misma
 ventana de 19 s viola los dos topes de Wan al mismo tiempo (15 s por clip, `entrada + salida ≤ 30`).
-Con test sobre esos números reales, que falla con la derivación ingenua.
+Con test sobre esos números reales, y **verificado revirtiendo**: con la derivación ingenua
+(sin acumular lo ya consumido) falla ESE test y pasan los otros seis, que es lo que lo hace
+un test y no una decoración.
 
 ⚠️ **`-an` OBLIGATORIO.** Medido en el experimento de motores: con la pista del original puesta la
 locución copia las palabras de la creadora (86 % → 98 % al mutear). Es la misma contaminación que

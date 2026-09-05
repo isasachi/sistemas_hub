@@ -129,8 +129,14 @@ export async function cortarTramos(videoUrl: string, tramos: (Tramo | null)[]): 
       if (!t) { salida.push(null); continue }
       const ruta = join(dir, `tramo-${i}.mp4`)
       await correr(ffmpegPath, [
-        '-y', '-loglevel', 'error', '-i', fuente,
-        '-ss', String(t.iniSeg), '-t', String(r2(t.finSeg - t.iniSeg)),
+        // ⚠️ `-ss` ANTES de `-i`: con búsqueda de entrada ffmpeg salta al keyframe anterior y
+        // descarta lo sobrante, en vez de decodificar desde 0 por cada corte. Sigue siendo
+        // exacto al fotograma (por eso se re-encoda igual), y el ahorro no es teórico:
+        // el tramo del último lote empieza a los 35 s y con búsqueda de salida cada corte
+        // decodifica esos 35 s de 720p otra vez. Vercel cobra Active CPU, que es el mismo
+        // motivo por el que `concat.ts` se niega a re-encodar.
+        '-y', '-loglevel', 'error',
+        '-ss', String(t.iniSeg), '-i', fuente, '-t', String(r2(t.finSeg - t.iniSeg)),
         '-map', '0:v:0', '-an',
         '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p',
         '-movflags', '+faststart', ruta,

@@ -26,6 +26,7 @@ import { personajesDe, hablantesPorTiempo, vozEnOffPorTiempo } from '../lib/vide
 import { clampDuration, getTaskDetail, buildTaskBody, MOTOR } from '../lib/video-ads/kie'
 import { tramosDeLotes, cortarTramos } from '../lib/video-ads/tramo'
 import { createStrip } from './probe-video-motores'
+import { uploadToStorage } from '../lib/storage'
 
 const SALIDA = process.env.PROBE_OUT ?? `${process.env.HOME}/Downloads/probe-wan`
 const db = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
@@ -95,10 +96,10 @@ async function main() {
   const [bytes] = await cortarTramos(r.reference_video_url as string, [tramo])
   if (bytes) {
     await writeFile(`${SALIDA}/referencia.mp4`, bytes)
-    const path = `probe-wan/${Date.now()}-ref.mp4`
-    const up = await db.storage.from('ad-uploads').upload(path, bytes, { contentType: 'video/mp4', upsert: true })
-    if (up.error) throw up.error
-    refUrl = db.storage.from('ad-uploads').getPublicUrl(path).data.publicUrl
+    // Por `uploadToStorage` y no por el cliente crudo: así la URL que se mide es la MISMA
+    // forma que manda la ruta —con su `?v=<ts>` de cache-bust incluido—. Un probe que sube
+    // distinto que producción mide una URL que producción no manda.
+    refUrl = await uploadToStorage(String(r.id), bytes, 'video/mp4', `probe-wan-tramo-${lote.n}`)
   }
 
   const body = buildTaskBody({
