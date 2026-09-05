@@ -29,7 +29,7 @@ export async function POST(
   if (blocked) return blocked
   const userId = await readUserId()
 
-  const session = await getVideoSession(id)
+  const session = await getVideoSession(id, userId)
   if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   let body: unknown

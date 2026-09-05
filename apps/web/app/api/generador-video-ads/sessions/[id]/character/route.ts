@@ -37,7 +37,8 @@ export async function POST(
 ) {
   const { id } = await params
 
-  const session = await getVideoSession(id)
+  const userId = await readUserId()
+  const session = await getVideoSession(id, userId)
   if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (!session.forensic_analysis)
     return NextResponse.json({ error: 'Analiza el video de referencia primero' }, { status: 409 })
@@ -74,7 +75,6 @@ export async function POST(
 
   const { blocked } = await checkGenQuota(id, 'video-character')
   if (blocked) return blocked
-  const userId = await readUserId()
 
   try {
     // La foto va como part de imagen ANTES del texto (mismo orden que analyze-reference

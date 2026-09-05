@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
+vi.mock('@/lib/product-hunter/session', () => ({
+  readUserId: vi.fn().mockResolvedValue('user-1'),
+}))
+
 vi.mock('@/lib/video-ads/db', () => ({
   getVideoSession: vi.fn(),
   updateVideoSession: vi.fn(),

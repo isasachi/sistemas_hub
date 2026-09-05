@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getVideoSession, deleteVideoSession } from '@/lib/video-ads/db'
+import { readUserId } from '@/lib/product-hunter/session'
 
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
-  const session = await getVideoSession(id)
+  const session = await getVideoSession(id, await readUserId())
   if (!session) return NextResponse.json({ error: 'Session not found' }, { status: 404 })
   return NextResponse.json(session)
 }
@@ -18,7 +19,10 @@ export async function DELETE(
 ) {
   const { id } = await params
   try {
-    await deleteVideoSession(id)
+    // Un DELETE que no matchea NO es error: sin mirar el count responderíamos
+    // `ok` sobre la sesión de otra cuenta, que sigue viva.
+    const borrada = await deleteVideoSession(id, await readUserId())
+    if (!borrada) return NextResponse.json({ error: 'Session not found' }, { status: 404 })
     return NextResponse.json({ ok: true })
   } catch {
     return NextResponse.json({ error: 'No se pudo eliminar' }, { status: 500 })

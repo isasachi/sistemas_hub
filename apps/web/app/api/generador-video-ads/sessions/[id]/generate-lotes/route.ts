@@ -60,7 +60,7 @@ export async function POST(
   const { id } = await params
   const userId = await readUserId()
 
-  const session = await getVideoSession(id)
+  const session = await getVideoSession(id, userId)
   if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (!session.adapted || !session.consistency_block || !session.voice_profile)
     return NextResponse.json({ error: 'Completa los pasos anteriores' }, { status: 409 })

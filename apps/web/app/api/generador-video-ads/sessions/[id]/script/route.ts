@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { getVideoSession, updateVideoSession } from '@/lib/video-ads/db'
 import { AdaptedScriptSchema, applyScriptEdits } from '@/lib/video-ads/adapt'
 import { STEP } from '@/lib/video-ads/steps'
+import { readUserId } from '@/lib/product-hunter/session'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -40,7 +41,7 @@ export async function POST(
     return NextResponse.json({ error: 'Ediciones inválidas' }, { status: 400 })
   }
 
-  const session = await getVideoSession(id)
+  const session = await getVideoSession(id, await readUserId())
   if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (!session.adapted || !session.forensic_analysis)
     return NextResponse.json({ error: 'Adapta el guión primero' }, { status: 409 })

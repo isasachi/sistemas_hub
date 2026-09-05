@@ -52,19 +52,38 @@ export async function listVideoSessions(userId: string): Promise<VideoListRow[]>
   return (data ?? []) as VideoListRow[]
 }
 
-export async function getVideoSession(id: string): Promise<VideoSessionResponse | null> {
+/**
+ * PERTENENCIA — el `uid` llega resuelto por quien llama (`readUserId`: el usuario
+ * autenticado o la cookie `ph_uid`), un `uid` nulo devuelve null, y una fila de otro
+ * dueño es indistinguible de una que no existe. NO se endurece a `getUser()` a secas:
+ * la mayoría de las sesiones están claveadas por COOKIE, y exigir cuenta las dejaría
+ * a todas fuera del alcance de su propio dueño.
+ */
+export async function getVideoSession(id: string, uid: string | null): Promise<VideoSessionResponse | null> {
+  if (!uid) return null
   const { data, error } = await getDb()
     .from('video_sessions')
     .select('*')
     .eq('id', id)
+    .eq('user_id', uid)
     .single()
   if (error) return null
   return data as VideoSessionResponse
 }
 
-export async function deleteVideoSession(id: string): Promise<void> {
-  const { error } = await getDb().from('video_sessions').delete().eq('id', id)
+/**
+ * Devuelve si borró algo. Un DELETE que no matchea NO es error en PostgREST, así que
+ * sin el `count` la ruta respondería `{ok:true}` sobre una sesión ajena que sigue viva.
+ */
+export async function deleteVideoSession(id: string, uid: string | null): Promise<boolean> {
+  if (!uid) return false
+  const { error, count } = await getDb()
+    .from('video_sessions')
+    .delete({ count: 'exact' })
+    .eq('id', id)
+    .eq('user_id', uid)
   if (error) throw new Error(error.message)
+  return (count ?? 0) > 0
 }
 
 export async function updateVideoSession(
