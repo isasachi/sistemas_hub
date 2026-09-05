@@ -512,3 +512,10 @@ describe('alignSlots · espacio de bordes', () => {
     expect(alignSlots(dialogo, 'Este [Producto] transformó mi cutis.')).toBeNull()
   })
 })
+
+// `normalizeSlots` reinserta el original al desmarcar un número, así que recortarle el
+// espacio dentro de `alignSlots` pegaría esa palabra con la anterior.
+it('alignSlots no recorta el espacio que el desmarcado necesita', () => {
+  const r = alignSlots('a los 30 como yo', 'a los[Problema] como yo')
+  expect(r?.huecos[0].original).toBe(' 30')
+})

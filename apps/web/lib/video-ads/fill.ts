@@ -217,7 +217,7 @@ export function alignSlots(
     const sig = literales[i + 1]
     const fin = sig ? buscar(dialogo, sig, pos) : dialogo.length
     if (fin < 0) return null
-    huecos.push({ nombre: nombres[i], original: dialogo.slice(pos, fin).trim() })
+    huecos.push({ nombre: nombres[i], original: dialogo.slice(pos, fin) })
     pos = fin
   }
   return { literales, huecos }
