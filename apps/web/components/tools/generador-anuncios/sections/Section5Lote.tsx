@@ -2,11 +2,13 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
-import { Download, AlertCircle } from 'lucide-react'
-import { useWizardStore } from '@/store/wizard'
+import Link from 'next/link'
+import { Download, AlertCircle, Sparkles, LayoutGrid } from 'lucide-react'
+import { useWizardStore, SESSION_KEY } from '@/store/wizard'
 import type { AdVariant } from '@/lib/types'
 
 const btnPrimary = 'h-11 w-full rounded-xl jr-cta text-[13px] font-bold disabled:opacity-40 transition-all duration-200 cursor-pointer border-0 font-sans flex items-center justify-center gap-2'
+const btnGhost = 'h-11 w-full rounded-xl border border-white/[0.06] bg-transparent text-[13px] text-[#c9b4ae] hover:border-white/20 transition-all duration-200 cursor-pointer font-sans flex items-center justify-center gap-2 disabled:opacity-40'
 
 /**
  * El lote renderizado — paso 5 del flujo de plantilla.
@@ -17,7 +19,7 @@ const btnPrimary = 'h-11 w-full rounded-xl jr-cta text-[13px] font-bold disabled
  * faltan.
  */
 export default function Section5Lote() {
-  const { sessionId, variants, patchVariant, setVariants } = useWizardStore()
+  const { sessionId, variants, patchVariant, setVariants, resetSession } = useWizardStore()
   const [corriendo, setCorriendo] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -133,6 +135,39 @@ export default function Section5Lote() {
           Listo: {listas.length} {listas.length === 1 ? 'anuncio' : 'anuncios'}. Descárgalos con el ícono de cada tarjeta.
         </p>
       )}
+
+      {/* ⚠️ LA SALIDA DEL FLUJO. Sin esto el último paso no tiene adónde ir: el lote queda en
+          pantalla y la única forma de empezar otro es volver a la entrada de la tool a mano.
+          Se emiten SIEMPRE, no solo con el lote completo — si una variante falla para siempre
+          el usuario también está al final, y quedarse sin salida es peor que un botón de más. */}
+      <div className="flex flex-col gap-2 border-t border-white/[0.06] pt-4">
+        {/* ⚠️ NO NAVEGA, Y NO CREA NINGUNA FILA. Basta con vaciar el store y borrar el id
+            guardado: `resetSession` deja `step` en 0, así que el wizard vuelve solo a elegir
+            plantilla, y la sesión nueva nace recién con el primer insumo (elegir una), que es
+            la regla que sacó las filas fantasma del montaje. Borrar el id es obligatorio
+            además de vaciar el store: son las DOS mitades del mismo gesto, y omitir una es el
+            bug que este repo ya pagó — zustand es un singleton de módulo que sobrevive la
+            navegación, y `localStorage` sobrevive al store. */}
+        <button
+          onClick={() => { localStorage.removeItem(SESSION_KEY); resetSession() }}
+          disabled={corriendo}
+          className={btnPrimary}
+          title="Empieza un lote nuevo desde cero. Este queda guardado en tu panel."
+        >
+          <Sparkles size={15} /> Crear otro lote
+        </button>
+        {/* Mientras el stream corre, salir aborta el fetch: lo ya pagado está persistido, pero
+            las que faltan quedarían sin generar y sin avisar. */}
+        {corriendo ? (
+          <button disabled className={btnGhost}>
+            <LayoutGrid size={15} /> Volver al panel
+          </button>
+        ) : (
+          <Link href="/dashboard" className={btnGhost}>
+            <LayoutGrid size={15} /> Volver al panel
+          </Link>
+        )}
+      </div>
     </div>
   )
 }
