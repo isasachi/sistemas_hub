@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import type { ScriptTemplate } from './template'
-import type { Slot } from './fill'
+import { slotOriginals, type Slot } from './fill'
 import type { ForensicReport } from './forensic'
 import type { UserInputs } from './types'
 import type { ProductScan } from '@/lib/types'
@@ -143,6 +143,17 @@ export function resyncTomaDurations(
   return { ...adapted, tomas: adapted.tomas.map((t, i) => ({ ...t, duracionSeg: cortes[i].duracionSeg })) }
 }
 
+/**
+ * El diálogo del corte tal como se le puede mostrar al modelo como "lo que decía el
+ * original". Un corte MUDO llega con `"No aparece"` —el marcador que el prompt de la
+ * FASE 1 pide para `textoOverlay` y que el modelo generaliza a `dialogo`— y mostrarlo
+ * como texto a espejar le pide adaptar una frase que nadie dijo.
+ *
+ * ponytail: se descarta solo la oración COMPLETA que es el marcador, así que "la mancha
+ * ya no aparece" sobrevive; el arreglo de raíz es limpiarlo en la FASE 1.
+ */
+const dichoEn = (d: string) => (/^\s*(no aparece\.?\s*)+$/i.test(d ?? '') ? '' : d)
+
 export function buildAdaptInstruction(
   template: ScriptTemplate,
   forensic: ForensicReport,
@@ -150,18 +161,33 @@ export function buildAdaptInstruction(
   scan: ProductScan | null,
   slots: Slot[],
   acento: string,
+  /** Quién aparece en el video: el bloque de consistencia que produjo la FASE 4. */
+  personaje: string,
 ): string {
+  // QUÉ DECÍA EL ORIGINAL EN CADA HUECO. Sale del `alignSlots` que ya se calculaba y
+  // se tiraba, y es la mitad que le faltaba a esta fase: la etiqueta del hueco no dice
+  // la FORMA que la oración pide (sustantivo o infinitivo, género, número) y el
+  // original sí. También es lo único que separa dos huecos que comparten nombre —
+  // inevitable con una lista cerrada de variables.
+  const originales = slotOriginals(template, forensic.cortes)
+  const porN = new Map(forensic.cortes.map((c) => [c.n, c.dialogo]))
   return [
     'Actúa como estratega de marketing de respuesta directa.',
     '',
     // La orden de rellenar va en la SEGUNDA LÍNEA y no entre los bullets: metida ahí
     // abajo, el modelo se queda con el tono conservador del encabezado y deja huecos.
-    'RELLENA TODOS LOS HUECOS. El guion que sale de acá es un borrador que el usuario',
-    'lee y corrige línea por línea antes de renderizar: uno completo se corrige, uno con',
-    'agujeros hay que rellenarlo a mano. Escala, en este orden: (1) lo que está literal',
-    'en los INPUTS o en la etiqueta del envase; (2) lo que se deduzca de ellos —ángulo,',
-    'problema, público, categoría, la foto del producto—; (3) lo más verosímil para un',
-    'producto de esa categoría.',
+    'NO ESCRIBAS UN GUION NUEVO. El guion ya existe: es el del video de referencia, y lo',
+    'tienes abajo palabra por palabra junto a la plantilla con sus huecos. Tu trabajo es',
+    'sustituir las variables con los INPUTS del usuario, y nada más.',
+    '',
+    'RELLENA CADA HUECO QUE LOS INPUTS PERMITAN, en este orden: (1) lo que está literal',
+    'en un INPUT o en la etiqueta del envase; (2) lo que se deduzca de ellos — el ángulo,',
+    'el problema, el público, la categoría, lo que se ve en la foto del producto.',
+    '',
+    '⛔ Y AHÍ SE ACABA. Si ningún INPUT sostiene ese hueco, NO LO INVENTES: devuélvelo',
+    'VACÍO y queda marcado como pendiente para que lo escriba el usuario. "Lo más',
+    'verosímil para un producto de esta categoría" NO es una fuente. Un hueco pendiente',
+    'se corrige en diez segundos; un dato inventado se publica en nombre del usuario.',
     '',
     'LA ÚNICA REGLA INVIOLABLE ES EL ANDAMIAJE: el texto que rodea a los corchetes es el',
     'del anuncio original y se copia palabra por palabra. Lo reconstruye el código, así',
@@ -171,7 +197,18 @@ export function buildAdaptInstruction(
     '',
     '── HUECOS ──',
     'Devuelve un `valores` por cada `id` de esta lista, exactamente estos ids:',
-    ...slots.map((sl) => `  ${sl.id}  ·  ${sl.contexto}`),
+    ...slots.map((sl) => {
+      const orig = originales[sl.id]
+      return `  ${sl.id}  ·  ${sl.contexto}` + (orig ? `\n      EL ORIGINAL DECÍA AQUÍ: "${orig}"` : '')
+    }),
+    '',
+    // La regla va DENTRO del bloque de huecos, pegada a la lista: este repo tiene
+    // medido tres veces que una regla lejos de su campo es una sugerencia.
+    'EL NOMBRE DEL HUECO ES ORIENTATIVO; EL ORIGINAL MANDA. La etiqueta sale de una lista',
+    'cerrada, así que dos huecos distintos se llaman igual a menudo. Lo que decía el',
+    'original te dice DOS cosas que la etiqueta no: la forma exacta que pide la oración',
+    '—sustantivo o infinitivo, género, número— y cuál es cuál. Si dos huecos con el mismo',
+    'nombre tenían originales distintos, sus valores también son distintos.',
     '',
     'Reglas de los valores:',
     '  - El valor sustituye SOLO lo que estaba entre corchetes; lo de alrededor ya está',
@@ -213,11 +250,36 @@ export function buildAdaptInstruction(
     'Conserva SIEMPRE: qué mano, cómo agarra, dónde toca, hacia dónde mira, y en qué',
     'momento el producto entra y sale del cuadro.',
     '',
+    '── REGLA DE ADAPTACIÓN LITERAL ──',
+    'Se cambia el DATO y se conserva la FRASE. Así:',
+    '',
+    '    ORIGINAL:   "Si estás cansado de [problema original], necesitas probar',
+    '                 [producto original]."',
+    '    ADAPTACIÓN: "Si estás cansado de [nuevo problema], necesitas probar',
+    '                 [nuevo producto]."',
+    '',
+    'NO permitido: "¿Sabías que miles de personas están descubriendo una revolucionaria',
+    'solución…?" — dice lo mismo y cambió la estructura, que es lo único que esta tool',
+    'promete conservar. Esa frase es un CONTRAEJEMPLO: no la copies ni la imites.',
+    '',
+    // Sin el guion original delante, el modelo mide cada valor contra la ETIQUETA del
+    // hueco y no contra el anuncio: "gomitas de melatonina" es la respuesta correcta a
+    // `[Categoría del producto]` y la equivocada al anuncio, que decía el nombre
+    // comercial. Con el par ORIGINAL/ANDAMIAJE por toma, la diferencia se ve.
+    'GUION ORIGINAL Y ANDAMIAJE, toma por toma. Lo de la izquierda es lo que se dijo en',
+    'el video de referencia; lo de la derecha es esa misma frase con sus huecos, y es la',
+    'que hay que rellenar:',
+    ...template.tomas.map((t) => {
+      const dicho = dichoEn(porN.get(t.n) ?? '')
+      return [
+        `  Toma ${t.n}`,
+        dicho ? `    ORIGINAL:  ${dicho}` : '    ORIGINAL:  (sin diálogo: toma muda)',
+        `    ANDAMIAJE: ${t.locucion}`,
+      ].join('\n')
+    }),
+    '',
     'CORTES REALES DE LA REFERENCIA (empareja por índice con las tomas):',
     JSON.stringify(forensic.cortes.map((c) => ({ n: c.n, tiempo: c.tiempo, accion: c.accion, camara: c.camara }))),
-    '',
-    'TOMAS DE LA PLANTILLA (para ver el contexto de cada hueco):',
-    JSON.stringify(template.tomas),
     '',
     '── INPUTS DEL USUARIO ── (jerarquía de sustitución, en este orden)',
     `  1. PRODUCTO: ${inputs.productName}`,
@@ -225,9 +287,13 @@ export function buildAdaptInstruction(
     `  3. ÁNGULO DEL VIDEO: ${inputs.angle}`,
     `  4. AVATAR / PÚBLICO OBJETIVO: ${inputs.targetAudience}`,
     `  5. PROBLEMA O DESEO PRINCIPAL: ${inputs.problem}`,
-    scan?.productDescription ? `  6. IMAGEN DEL PRODUCTO (observado): ${scan.productDescription}` : '',
-    scan?.brandingDescription ? `  7. ETIQUETA DEL ENVASE (transcrita): ${scan.brandingDescription}` : '',
-    inputs.constraints ? `  8. INFORMACIÓN ADICIONAL: ${inputs.constraints}` : '',
+    // El personaje ya no se escribe a mano: sale de la foto de referencia, y lo que la
+    // describe es el bloque de consistencia que produjo la FASE 4. Por ahí llega también
+    // la información de la IMAGEN DEL PERSONAJE de la jerarquía.
+    personaje ? `  6. PERSONAJE QUE APARECE EN EL VIDEO: ${personaje}` : '',
+    scan?.productDescription ? `  7. IMAGEN DEL PRODUCTO (observado): ${scan.productDescription}` : '',
+    scan?.brandingDescription ? `  8. ETIQUETA DEL ENVASE (transcrita): ${scan.brandingDescription}` : '',
+    inputs.constraints ? `  9. INFORMACIÓN ADICIONAL: ${inputs.constraints}` : '',
     '',
     `ACENTO DEL PERSONAJE: ${acento}`,
     'La locución se escribe en la variante regional del español de ese acento:',

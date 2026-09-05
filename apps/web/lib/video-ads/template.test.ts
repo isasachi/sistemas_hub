@@ -97,4 +97,11 @@ describe('ScriptTemplateSchema', () => {
   it('rechaza un template sin tomas', () => {
     expect(ScriptTemplateSchema.safeParse({ guionFillInBlank: 'x', tomas: [] }).success).toBe(false)
   })
+  // Lo pidió el dueño del repo junto al resto de la lista de fidelidad: si el original
+  // se corta a mitad de idea o repite, la plantilla tiene que hacerlo igual.
+  it('exige conservar los cambios de idea y las repeticiones del original', () => {
+    const p = buildTemplateInstruction(FORENSIC)
+    expect(p).toMatch(/cambios de idea/i)
+    expect(p).toMatch(/repite una palabra o se[\s\S]{0,20}corta a mitad de idea/i)
+  })
 })

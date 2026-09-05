@@ -20,7 +20,7 @@ const TEMPLATE: ScriptTemplate = {
 const FORENSIC = {
   caracteresGuion: 58,
   guionOriginal: 'Si estás cansado de las marcas, necesitas probar este suero.',
-  cortes: [{ n: 1, tiempo: '00:00 - 00:06', duracionSeg: 6, accion: '', camara: '', dialogo: '', textoOverlay: '', transicion: '' }],
+  cortes: [{ n: 1, tiempo: '00:00 - 00:06', duracionSeg: 6, accion: '', camara: '', dialogo: 'Si estás cansado de las marcas,', textoOverlay: '', transicion: '' }],
 } as ForensicReport
 
 const INPUTS: UserInputs = {
@@ -32,7 +32,7 @@ const INPUTS: UserInputs = {
 }
 
 describe('buildAdaptInstruction', () => {
-  const p = buildAdaptInstruction(TEMPLATE, FORENSIC, INPUTS, null, extractSlots(TEMPLATE), 'Español peruano de Lima')
+  const p = buildAdaptInstruction(TEMPLATE, FORENSIC, INPUTS, null, extractSlots(TEMPLATE), 'Español peruano de Lima', '')
 
 
 
@@ -66,12 +66,51 @@ describe('buildAdaptInstruction', () => {
     expect(p).toMatch(/qué\s+mano,\s+cómo\s+agarra/i)
   })
 
-  // La orden de rellenar tiene que ir arriba: medido, entre los bullets el modelo se
+  // La orden va arriba y no entre los bullets: medido, metida ahí abajo el modelo se
   // queda con el tono conservador del encabezado y devuelve el doble de pendientes.
-  it('la orden de RELLENAR va en la cabecera, no entre los bullets', () => {
+  // ⚠️ Y su ALCANCE es lo que fija este test: se rellena desde los INPUTS, y lo que
+  // ninguno sostiene queda PENDIENTE. La escala vieja tenía un tercer escalón —"lo más
+  // verosímil para un producto de esa categoría"— que es exactamente la licencia para
+  // inventar que la regla nueva prohíbe.
+  it('la orden de RELLENAR va en la cabecera, y se corta en los INPUTS', () => {
     const cabecera = p.slice(0, p.indexOf('── HUECOS ──'))
-    expect(cabecera).toMatch(/RELLENA TODOS LOS HUECOS/)
-    expect(cabecera).toMatch(/lo m[áa]s veros[íi]mil/i)
+    expect(cabecera).toMatch(/RELLENA CADA HUECO QUE LOS INPUTS PERMITAN/)
+    expect(cabecera).toMatch(/NO LO INVENTES/)
+    expect(cabecera).toMatch(/NO\s+ESCRIBAS\s+UN\s+GUION\s+NUEVO/)
+    // el tercer escalón no puede volver por la puerta de atrás
+    expect(cabecera).toMatch(/veros[íi]mil[\s\S]{0,60}NO es una fuente/i)
+  })
+
+  // Punto 12 de la spec: el modelo tiene que ver el guion original AL LADO de su
+  // andamiaje. Sin eso mide cada valor contra la etiqueta del hueco y no contra el
+  // anuncio, que es de dónde salen los valores correctos-para-la-etiqueta e ilegibles
+  // en su frase.
+  it('manda el guion ORIGINAL emparejado con el andamiaje, toma por toma', () => {
+    expect(p).toContain('GUION ORIGINAL Y ANDAMIAJE')
+    expect(p).toMatch(/ORIGINAL:\s+Si estás cansado de las marcas,/)
+    expect(p).toMatch(/ANDAMIAJE:\s+Si estás cansado de \[Problema\],/)
+  })
+
+  // El original es lo que le dice al modelo la FORMA que pide la oración, y lo que
+  // separa dos huecos que la lista cerrada obliga a llamar igual.
+  it('adjunta a cada hueco lo que decía el original ahí', () => {
+    expect(p).toMatch(/Problema#1[\s\S]{0,200}EL ORIGINAL DECÍA AQUÍ: "las marcas"/)
+    expect(p).toMatch(/EL NOMBRE DEL HUECO ES ORIENTATIVO; EL ORIGINAL MANDA/)
+  })
+
+  // Un corte mudo llega con el marcador de campo vacío de la FASE 1. Presentárselo como
+  // "lo que se dijo" le pide adaptar una frase que nadie pronunció.
+  it('una toma muda no se presenta como si hubiera dicho "No aparece"', () => {
+    const mudo = { ...FORENSIC, cortes: [{ ...FORENSIC.cortes[0], dialogo: 'No aparece.' }] } as ForensicReport
+    const q = buildAdaptInstruction(TEMPLATE, mudo, INPUTS, null, extractSlots(TEMPLATE), 'Español peruano de Lima', '')
+    expect(q).toContain('(sin diálogo: toma muda)')
+    expect(q).not.toMatch(/ORIGINAL:\s+No aparece/)
+  })
+
+  it('trae la REGLA DE ADAPTACIÓN LITERAL con su contraejemplo marcado como tal', () => {
+    expect(p).toContain('REGLA DE ADAPTACIÓN LITERAL')
+    expect(p).toMatch(/ADAPTACIÓN:\s+"Si estás cansado de \[nuevo problema\]/)
+    expect(p).toMatch(/CONTRAEJEMPLO: no la copies ni la imites/)
   })
 
   it('el andamiaje es la única regla inviolable, con la excepción gramatical', () => {

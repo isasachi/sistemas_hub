@@ -71,6 +71,49 @@ export function extractSlots(t: ScriptTemplate): Slot[] {
 }
 
 /**
+ * Qué decía el ORIGINAL en cada hueco, indexado por el `id` de `extractSlots`.
+ * ---------------------------------------------------------------------------
+ * Es el contexto que el spec tiene gratis y esta implementación no tenía: cuando el
+ * PROMPT MAESTRO corre de una sola pasada, el modelo ve el guión original al lado de la
+ * plantilla, así que sabe que en ese hueco iba un NOMBRE COMERCIAL de dos palabras y no
+ * la categoría del producto. Acá la FASE 3 elegía el valor mirando solo la etiqueta del
+ * hueco y sus palabras vecinas — y con esa información "gomitas de melatonina" es una
+ * respuesta correcta para `[producto]`, aunque el original dijera "Gomi Energy".
+ *
+ * Es un EXTRA, no la base: `alignSlots` devuelve `null` cuando el modelo parafraseó, y
+ * justo las sesiones de una sola toma larga son las que más fallan la alineación. Lo que
+ * no puede faltar nunca es el diálogo completo del corte, que va al prompt sin depender
+ * de esto.
+ */
+export function slotOriginals(
+  t: ScriptTemplate,
+  cortes: { n: number; dialogo: string }[],
+): Record<string, string> {
+  const porN = new Map(cortes.map((c) => [c.n, c.dialogo]))
+  const slots = extractSlots(t)
+  const cuantos = (s: string) => (s.match(HUECO) ?? []).length
+  const out: Record<string, string> = {}
+
+  // Se avanza sobre `slots` con un cursor en vez de filtrar por `toma.n`: el `n` viene
+  // del forense y nada garantiza que sea único, así que filtrar mezclaría los huecos de
+  // dos tomas homónimas. `extractSlots` recorre en este mismo orden, por construcción.
+  let k = 0
+  for (const toma of t.tomas) {
+    const propios = slots.slice(k, k + cuantos(toma.locucion))
+    k += cuantos(toma.locucion) + cuantos(toma.accionVisual)
+
+    const dialogo = porN.get(toma.n)
+    const al = dialogo ? alignSlots(dialogo, toma.locucion) : null
+    if (!al) continue
+    al.huecos.forEach((h, i) => {
+      const texto = h.original.trim()
+      if (propios[i] && texto) out[propios[i].id] = texto
+    })
+  }
+  return out
+}
+
+/**
  * Un valor de hueco es una palabra o un sintagma corto. Más largo que esto y no es un
  * valor: es una frase, y meterla dentro de una frase que ya existe produce el engendro
  * que motivó este guard.

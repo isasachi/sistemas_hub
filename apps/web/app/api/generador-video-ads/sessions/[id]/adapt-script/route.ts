@@ -57,6 +57,10 @@ export async function POST(
           // El acento ya no es un input: lo infiere la FASE 4 del personaje y vive en
           // el perfil de voz. Sin perfil todavía, la locución sale en neutro.
           session.voice_profile?.acento || 'Español latino neutro',
+          // El bloque de consistencia describe a quien aparece en el video. Es lo que la
+          // FASE 4 dedujo de la FOTO del personaje, así que la jerarquía recibe por acá
+          // tanto "PERSONAJE" como la información de "IMAGEN DEL PERSONAJE".
+          session.consistency_block ?? '',
         ),
       },
     ])
