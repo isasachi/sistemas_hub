@@ -1,15 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getVideoSession, updateVideoSession, claimFreshLotes } from '@/lib/video-ads/db'
-import { createVideoTask, resolveKey, clampDuration, KIE_PROMPT_MAX, SIN_KEY, MOTOR, type VideoImage } from '@/lib/video-ads/kie'
-import { tramosDeLotes, cortarTramos } from '@/lib/video-ads/tramo'
-import { currentKieKey } from '@/lib/user-settings'
-import { anchorSpecs, generateAnchorImages } from '@/lib/video-ads/anchors'
-import { personajesDe, hablantesPorTiempo, vozEnOffPorTiempo } from '@/lib/video-ads/personajes'
-import { enProsa, corteMuestraPersona } from '@/lib/video-ads/forensic'
-import { tieneMotion } from '@/lib/video-ads/motion'
-import { uploadToStorage, fetchAsBase64 } from '@/lib/storage'
-import { generateImage } from '@/lib/gemini'
-import { planoPorTiempoDe, groupIntoLotes, buildLotePrompt, camaraDeLote, type Lote } from '@/lib/video-ads/lotes'
+import { createVideoTask, clampDuration, KIE_PROMPT_MAX, type VideoImage } from '@/lib/video-ads/kie'
+import { groupIntoLotes, buildLotePrompt, camaraDeLote, type Lote } from '@/lib/video-ads/lotes'
 import { totalDuration, resumeSeed, mergeRescue, isPaidResume, scriptFingerprint, renderDone } from '@/lib/video-ads/render-lotes'
 import { AdaptedScriptSchema, type AdaptedScript } from '@/lib/video-ads/adapt'
 import { extractPending } from '@/lib/video-ads/pending'
@@ -27,7 +19,7 @@ export const maxDuration = 300
  * lanza dentro del catch de arriba, ese throw escapaba del handler y los identificadores
  * ya pagados se perdían sin dejar rastro. Acá quedan al menos logueados.
  */
-async function saveRescue(id: string, lotes: Lote[], frames?: string[]) {
+async function saveRescue(id: string, lotes: Lote[]) {
   try {
     // `render_done` (fix round 5) se recalcula con la MISMA fórmula que `lote-status`
     // usa para su propio `done` — acá casi siempre da `false` (los lotes recién
@@ -41,13 +33,7 @@ async function saveRescue(id: string, lotes: Lote[], frames?: string[]) {
     // "invalid input syntax for type integer" y el render no arranca. Redondear y no
     // migrar la columna a numeric es deliberado: nadie lee este campo, es un resumen
     // para el dashboard, y la décima de segundo no significa nada ahí.
-    // `frames` se escribe junto a `lotes` y no aparte: son el mismo artefacto: si una
-    // reanudación leyera lotes de un intento y frames de otro, el clip pendiente
-    // arrancaría donde no terminó el anterior.
-    await updateVideoSession(id, {
-      step: STEP.LOTES, lotes, duration: Math.round(totalDuration(lotes)),
-      render_done: renderDone(lotes), ...(frames ? { frames } : {}),
-    })
+    await updateVideoSession(id, { step: STEP.LOTES, lotes, duration: Math.round(totalDuration(lotes)), render_done: renderDone(lotes) })
   } catch (err) {
     console.error(
       // Con el id de sesión: un mp4 recuperado a mano desde KIE hay que devolvérselo a
@@ -73,18 +59,11 @@ export async function POST(
   const { id } = await params
   const userId = await readUserId()
 
-  const session = await getVideoSession(id, await readUserId())
-  if (!session) return NextResponse.json({ error: 'No se encontró la sesión' }, { status: 404 })
+  const session = await getVideoSession(id)
+  if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (!session.adapted || !session.consistency_block || !session.voice_profile)
     return NextResponse.json({ error: 'Completa los pasos anteriores' }, { status: 409 })
-  // El personaje del render es el avatar GENERADO. `character_url` es la foto de
-  // referencia que subió el usuario; se conserva como fallback para las sesiones
-  // anteriores a `avatar_url`, que guardaban las dos cosas en la misma columna.
-  // Los personajes del anuncio. Una sesión anterior da UNO, armado con las columnas
-  // singulares, así que todo lo de abajo se comporta igual que antes.
-  const gente = personajesDe(session)
-  const personaUrl = gente[0]?.avatarUrl ?? session.avatar_url ?? session.character_url
-  if (!personaUrl || !session.product_url)
+  if (!session.character_url || !session.product_url)
     return NextResponse.json({ error: 'Faltan las imágenes de personaje y producto' }, { status: 409 })
 
   // El guión guardado pasa por schema en cada escritura previa y debería llegar
@@ -111,13 +90,10 @@ export async function POST(
       { status: 409 },
     )
 
-  // ⚠️ Estas NO son las imágenes que recibe el render: son las FUENTES de las que salen
-  // los keyframes, y entran en la huella. Las del render son los frames frontera de cada
-  // lote, que se generan más abajo y cambian de URL en cada corrida — meterlas en la
-  // huella la volvería distinta siempre y `isPaidResume` no reanudaría nunca. Lo que
-  // importa para saber si el contenido cambió es de qué avatar y qué producto salieron.
+  // Orden = numeración @image(n) del prompt. Siempre dos imágenes → modo multi-imagen,
+  // que es donde `aspect_ratio: 9:16` sí se respeta.
   const images: VideoImage[] = [
-    { url: personaUrl, role: 'la persona' },
+    { url: session.character_url, role: 'la persona' },
     { url: session.product_url, role: 'el producto' },
   ]
 
@@ -128,68 +104,27 @@ export async function POST(
   const productDesc = session.product_scan?.productDescription ?? adapted.tomas[0]?.producto ?? 'el producto'
   // El `fondo` del forense incluye la iluminación (su prompt la pide ahí dentro), por
   // eso el prompt del lote lo rotula "ESCENARIO E ILUMINACIÓN".
-  // ⚠️ YA NO ENTRA AL PROMPT DEL LOTE — desde que el escenario lo define la imagen (ver
-  // `buildLotePrompt`), su ÚNICO consumidor es `scriptFingerprint`. Se conserva prosificado
-  // y con su default a propósito: es un valor estable por sesión, y dejarlo en la huella
-  // solo hace la reanudación MÁS conservadora (re-analizar la referencia invalida un
-  // parcial), que es el lado correcto. Su lugar vivo en el pipeline es el prompt del
-  // AVATAR, en `character.ts`.
-  const escenario = enProsa(session.forensic_analysis?.fondo) || 'interior con luz natural'
+  const escenario = session.forensic_analysis?.fondo ?? 'interior con luz natural'
   const cortes = session.forensic_analysis?.cortes ?? []
-  // ⚠️ NO se pasa `cortes[0].camara` como fallback: mandar el encuadre del corte 1 a todos
-  // los lotes es el defecto que `camaraDeLote` existe para arreglar, y la línea `CAMERA:`
-  // del prompt lo afirma como un hecho. Sin emparejamiento no sabemos el encuadre, así que
-  // el default de `camaraDeLote` no declara ninguna escala. Ver `CAMARA_SIN_DATO`.
+  const camaraFallback = cortes[0]?.camara?.trim() || 'primer plano, cámara en mano'
 
-  // ⚠️ EL MAPA DE PLANOS YA NO CIERRA LOTES por defecto (2026-08-24): `groupIntoLotes`
-  // pasó a `maxPlanos = Infinity`, así que un clip de hasta 30 s concatena varias escenas
-  // del original. Lo que hace viable ese cambio son las IMÁGENES ANCLA — cada escena
-  // nueva del clip lleva su propio fotograma de referencia, que es justo lo que faltaba
-  // cuando se midió que un clip con dos encuadres se renderizaba con uno.
-  //
-  // El mapa se sigue pasando porque es el dial: bajar `maxPlanos` a 1 devuelve el corte
-  // por encuadre (máxima fidelidad, ~4× llamadas pagadas) sin tocar nada más. Y lo
-  // consumen igual `anchorSpecs` (para saber dónde empieza cada escena) y el plano por
-  // toma del prompt.
-  // ⚠️ EL REPARTO VUELVE A LA REGLA DEL SPEC: agrupar en orden hasta 15 s y nada más. Los
-  // tres cierres que este repo había agregado (encuadre, clase de toma, presupuesto de
-  // coreografía) se fueron con la vuelta al PROMPT MAESTRO — ver `groupIntoLotes`, que
-  // guarda sus mediciones por si hay que reponerlos.
-  //
-  // ⚠️ `planoPorTiempoDe` SIGUE VIVO y se sigue usando: lo consumen `anchorSpecs` (para
-  // saber dónde empieza cada escena) y `buildLotePrompt` (para decir qué plano va con qué
-  // toma). Lo que dejó de hacer es cerrar lotes.
-  const planoPorTiempo = planoPorTiempoDe(cortes)
-  // Los beats van por `tiempo` como todo lo demás (nunca por `n`, ver `camaraDeLote`) y se
-  // pasan al REPARTO y no al prompt para que `splitLongToma` pueda partirlos: pedirle a los
-  // dos fragmentos de una toma la coreografía entera es el bug de la coreografía duplicada.
-  const motionPorTiempo = new Map(cortes.filter(tieneMotion).map((c) => [c.tiempo, c.motion] as const))
-  const agrupados = groupIntoLotes(adapted.tomas, motionPorTiempo)
+  const agrupados = groupIntoLotes(adapted.tomas)
   if (!agrupados.length) return NextResponse.json({ error: 'El guión no tiene tomas' }, { status: 409 })
 
   // Una cámara por lote, con los planos de SUS cortes: el spec pide replicar el
   // lenguaje visual del original y antes acá se mandaba el encuadre del corte 1 a
   // todos los lotes. Índice a índice con `agrupados` — y por tanto con `base` y con
   // `seed`, que son `agrupados` mapeado.
-  const camaras = agrupados.map((l) => camaraDeLote(l, cortes))
+  const camaras = agrupados.map((l) => camaraDeLote(l, cortes, camaraFallback))
 
   // Huella del contenido de ESTE intento (guión + personaje + voz + producto +
   // escenario + cámara + imágenes). Se estampa en todos los lotes que se persistan
   // —incluidos los placeholders `idle` de un rescate parcial— para que la próxima
   // llamada pueda comprobar, sin adivinar, si está reanudando el MISMO video o
   // empezando otro distinto (ver `isPaidResume`).
-  // Quién habla en cada toma y cuáles son narración por encima. Se resuelven ACÁ, antes
-  // de la huella, y no más abajo junto a los frames: los dos cambian el prompt del lote
-  // (el rótulo `VOZ EN OFF`, la orden de no mover la boca, la atribución `P2 (padre)
-  // dice:`) y deciden qué frames se generan, así que tienen que ENTRAR en el hash.
-  const quien = hablantesPorTiempo(cortes, gente)
-  const enOff = vozEnOffPorTiempo(cortes)
-
   const huella = scriptFingerprint({
-    niche: session.niche,
     lotes: agrupados, consistencyBlock: session.consistency_block, productDesc,
-    escenario, camaras, voz: session.voice_profile, movimiento: session.motion_profile,
-    personajes: gente, images, quien, enOff,
+    escenario, camaras, voz: session.voice_profile, images,
   })
   const base: Lote[] = agrupados.map((l) => ({ ...l, scriptHash: huella }))
 
@@ -251,21 +186,6 @@ export async function POST(
   // Nada por crear: o reanuda una sesión ya completa, o es un doble submit sobre una
   // que terminó justo antes — de cualquier modo, no hay nada pagado de más que hacer.
   if (!pendientes.length) return NextResponse.json({ lotes: seed })
-
-  // BYOK: el render lo paga el usuario con SU cuenta de KIE. La key se resuelve y se
-  // valida ACÁ, ANTES del gate de cuota: `checkGenQuota` escribiría la fila de
-  // `video-generation` y después el primer `createVideoTask` moriría con un 401 de
-  // KIE — o sea el usuario perdería una generación de su cuota por no haber cargado
-  // una key. El orden es la única forma de que eso no pase.
-  let kieKey: string
-  try {
-    kieKey = resolveKey(await currentKieKey())
-  } catch {
-    return NextResponse.json(
-      { error: SIN_KEY },
-      { status: 400 },
-    )
-  }
 
   // El backstop global diario aplica SIEMPRE que se vaya a llamar a KIE — reanudar
   // también gasta (crea tarea para los lotes que quedaron pendientes). El gate
@@ -335,148 +255,6 @@ export async function POST(
     }
   }
 
-  /**
-   * IMÁGENES ANCLA (`anchors.ts`). Reemplazan a los frames frontera de Veo.
-   *
-   * Un clip puede durar 30 s y contener varias escenas del original. La primera escena
-   * de cada lote arranca del avatar; cada escena SIGUIENTE necesita un fotograma que le
-   * diga cómo se ve, o el modelo la inventa y devuelve el mismo encuadre de antes.
-   *
-   * Se REUSAN las guardadas cuando esto es una reanudación real y coinciden en cantidad:
-   * regenerarlas cambiaría el aspecto de un clip pendiente respecto de los que ya se
-   * pagaron, sin que nada lo reporte. Se guardan en la misma columna `frames` que usaba
-   * el sistema anterior —es un array de URLs y sirve igual—, así que no hay migración.
-   *
-   * ⚠️ La lista es PLANA y se reparte por lote con `porLote`: `frames` es un `string[]`
-   * en la base, y meterle una estructura anidada obligaría a migrar la columna.
-   */
-  const specsPorLote = seed.map((l) =>
-    anchorSpecs({
-      lote: l,
-      quien,
-      planoPorTiempo,
-      // Lo que declara si la escena muestra a una persona. Sin esto, `clase` cae al
-      // heurístico sobre prosa, que el forense en telegrama rompe (ver `corteMuestraPersona`).
-      microPorTiempo: new Map(cortes.flatMap((c) => (c.micro ? [[c.tiempo, c.micro] as const] : []))),
-      vozEnOff: enOff,
-      productDesc,
-      personajes: gente,
-    }),
-  )
-  const totalAnclas = specsPorLote.reduce((n, s) => n + s.length, 0)
-  let anclasPlanas: string[]
-  const guardadas = session.frames
-  if (reanuda && Array.isArray(guardadas) && guardadas.length === totalAnclas) {
-    anclasPlanas = guardadas
-  } else {
-    try {
-      // Por lote y en paralelo dentro de cada uno. Las anclas son independientes entre sí
-      // (no hay cadena que encadenar, al revés que con los keyframes), así que el tiempo
-      // total es el de la más lenta y no la suma.
-      const porLote = await Promise.all(
-        specsPorLote.map((specs, i) =>
-          generateAnchorImages({
-            avatarUrl: personaUrl,
-            productUrl: session.product_url!,
-            specs,
-            lote: seed[i].n,
-            // ⚠️ Gemini 3.1 Flash Image (`nano-banana-2` en KIE) de primario y gpt-image-2 de
-            // respaldo — mismo criterio que el avatar. Las referencias ya están en el bucket, así
-            // que van como `fileData` y el transporte pasa la URL sin bajarla ni resubirla; el
-            // ORDEN se conserva porque el prompt las cita como `@image(n)`.
-            // ⚠️ Lo paga el HUB, no el usuario: lo del usuario es el render del clip.
-            generate: async (input) => {
-              const b64 = await generateImage(
-                [
-                  ...input.imageUrls.map((u) => ({ fileData: { fileUri: u, mimeType: 'image/jpeg' } })),
-                  { text: input.prompt },
-                ],
-                3,
-                { aspectRatio: '9:16', preferGemini: true },
-              )
-              return Buffer.from(b64, 'base64')
-            },
-            upload: (bytes, nombre) => uploadToStorage(id, bytes, 'image/png', nombre),
-          }),
-        ),
-      )
-      anclasPlanas = porLote.flat()
-    } catch (err) {
-      // Falla ANTES de crear ninguna tarea de video, así que no hay nada pagado que
-      // rescatar — 502 y el usuario reintenta.
-      console.error('[video-ads/generate-lotes] anclas:', err)
-      return NextResponse.json({ error: 'No se pudieron generar los fotogramas de referencia.' }, { status: 502 })
-    }
-  }
-
-  /** Reparte la lista plana de anclas de vuelta a su lote, en el mismo orden en que se generó. */
-  const anclasDe = (i: number): string[] => {
-    const desde = specsPorLote.slice(0, i).reduce((n, s) => n + s.length, 0)
-    return anclasPlanas.slice(desde, desde + specsPorLote[i].length)
-  }
-
-  /**
-   * EL TRAMO DEL ORIGINAL QUE LE TOCA A CADA LOTE — la señal FÍSICA de movimiento.
-   *
-   * 🔴 Es la razón entera de haber cambiado de motor. El experimento de motores (AGENTS.md,
-   * 2026-09-04) aisló que la representación en TEXTO de la coreografía era el techo: grok no
-   * ejecutó la aplicación del producto en ~15 renders de esta rama, y los tres motores que
-   * reciben el video fuente sí la copian. Wan lee `reference_video_urls`.
-   *
-   * ⚠️ Se corta ANTES de crear la primera tarea y falla CERRADO (502, cero cobrado). Dejarlo
-   * pasar sin referencia sería cobrarle al usuario 3,7× por segundo un clip con exactamente
-   * la calidad de movimiento que veníamos a arreglar.
-   *
-   * ⚠️ SE DERIVA SOBRE **TODOS** LOS LOTES Y SE CORTA SOLO LOS PENDIENTES, y ese reparto de
-   * responsabilidades no es intercambiable: la proporción de `tramosDeLotes` necesita a los
-   * lotes ya pagados para construir el denominador de cada ventana compartida — sacarlos ahí
-   * correría el tramo de los que sobreviven. El filtro va DESPUÉS, en el corte.
-   *
-   * ponytail: se vuelve a derivar en cada reanudación en vez de persistir la URL en el lote.
-   * Cortar y subir cuesta CPU sobre los pendientes, no dinero. Si el tiempo de la ruta
-   * molesta, la mejora es guardar la URL.
-   */
-  let tramoUrls: (string | null)[] = seed.map(() => null)
-  if (MOTOR === 'wan' && session.reference_video_url) {
-    try {
-      const tramos = tramosDeLotes(seed, (l) =>
-        clampDuration(l.duracionSeg, l.tomas.reduce((n, t) => n + (t.locucion ?? '').length, 0), l.tomas.length))
-      // Un lote con `taskId` ya está pagado y no se vuelve a crear (ver el bucle de abajo),
-      // así que recortar su tramo es trabajo tirado.
-      const clips = await cortarTramos(
-        session.reference_video_url, tramos.map((t, i) => (seed[i].taskId ? null : t)))
-      tramoUrls = await Promise.all(clips.map((bytes, i) =>
-        bytes ? uploadToStorage(id, bytes, 'video/mp4', `tramo-lote-${seed[i].n}`) : Promise.resolve(null)))
-    } catch (err) {
-      console.error('[video-ads/generate-lotes] tramo:', err)
-      return NextResponse.json(
-        { error: 'No se pudo recortar el video de referencia para el render.' }, { status: 502 })
-    }
-  }
-
-
-  /**
-   * Las imágenes que recibe el lote `i`, en el orden en que el prompt las cita:
-   * avatar, producto y después sus fotogramas ancla.
-   *
-   * ⚠️ EL ORDEN ES EL CONTRATO. La leyenda del prompt (`@image(1) = …`) se arma
-   * recorriendo este mismo array, y `anclasPorTiempo` calcula el índice de cada ancla
-   * asumiendo que las dos primeras plazas son avatar y producto. Reordenar acá le da a
-   * una toma la imagen de otra.
-   *
-   * El total nunca pasa de `MAX_IMAGES` porque `anchorSpecs` ya se topa en
-   * `MAX_IMAGES - 2` justamente para dejar estas dos plazas libres.
-   */
-  const imagenesDe = (i: number): VideoImage[] => [
-    { url: personaUrl, role: 'the person (identity reference)' },
-    { url: session.product_url!, role: 'the product (must be reproduced exactly)' },
-    ...anclasDe(i).map((url, j) => ({ url, role: specsPorLote[i][j].role })),
-  ]
-
-  /** `tiempoOriginal` → índice 1-based de su ancla dentro de `imagenesDe(i)`. */
-  const anclasPorTiempo = (i: number): Map<string, number> =>
-    new Map(specsPorLote[i].map((spec, j) => [spec.tiempo, j + 3])) // +3: avatar y producto ocupan 1 y 2
-
   const lotes: Lote[] = []
   // Distinto de un fallo de red/KIE (500): un prompt que no entra ni al piso es un
   // problema del guión, no del servicio — se reporta 400 con el mensaje de
@@ -498,11 +276,7 @@ export async function POST(
       // desincroniza lo que el prompt promete de lo que el modelo renderiza, y el
       // audio sale cortado a mitad de frase — justo lo que advierte la cabecera de
       // lotes.ts sobre "alguien río abajo lo clampea".
-      // Los caracteres de la locución entran en la decisión: `snapDuration` nunca elige
-      // una duración legal en la que el texto no quepa a CPS_MAX, porque eso sale como
-      // diálogo atropellado o cortado a mitad de frase.
-      const locucionChars = lote.tomas.reduce((n, t) => n + (t.locucion ?? '').length, 0)
-      const durationSec = clampDuration(lote.duracionSeg, locucionChars, lote.tomas.length)
+      const durationSec = clampDuration(lote.duracionSeg)
       const loteParaPrompt = durationSec === lote.duracionSeg ? lote : { ...lote, duracionSeg: durationSec }
 
       let prompt: string
@@ -511,25 +285,10 @@ export async function POST(
           lote: loteParaPrompt,
           consistencyBlock: session.consistency_block,
           productDesc,
-          camara: camaras[i],
-          // ⚠️ EL ESCENARIO VUELVE AL PROMPT porque el spec lo exige por lote (REGLA DE
-          // CONTEXTO ABSOLUTO), y eso revierte una medición de 4 renders: con el bloque
-          // puesto el fondo derivaba contra la imagen del avatar, sin él era estable en 2
-          // de 2 draws por brazo. Es la decisión del dueño del repo al volver a la fuente,
-          // y por eso el escenario es el PRIMER escalón que la escalera suelta.
           escenario,
+          camara: camaras[i],
           voz: session.voice_profile,
-          movimiento: session.motion_profile,
-          personajes: gente,
-          quien,
-          vozEnOff: enOff,
-          images: imagenesDe(i),
-          anclas: anclasPorTiempo(i),
-          niche: session.niche,
-          // Para el plano POR TOMA cuando el lote mezcla más de uno: `camaras[i]` ya
-          // viene deduplicado y concatenado, así que solo desde los cortes se puede
-          // saber cuál corresponde a cuál (ver `buildLotePrompt`).
-          cortes,
+          images,
         })
       } catch (err) {
         // `buildLotePrompt` administra su propio presupuesto de caracteres (arma el
@@ -549,10 +308,7 @@ export async function POST(
         break
       }
 
-      const taskId = await createVideoTask({
-        images: imagenesDe(i), prompt, durationSec, locucionChars, tomas: lote.tomas.length,
-        referenceVideoUrl: tramoUrls[i],
-      }, kieKey)
+      const taskId = await createVideoTask({ images, prompt, durationSec })
       creados++
       lotes.push({ ...lote, duracionSeg: durationSec, prompt, taskId, status: 'waiting', videoUrl: null, failMsg: null })
       // Fila por lote: visibilidad del costo real y backstop global diario. Ya NO topa
@@ -578,7 +334,7 @@ export async function POST(
     // (`done = lotes.every(...)` sobre un array corto) y la sesión quedaba marcada
     // terminada con dos tercios del video sin renderizar, sin salida para terminarla.
     const rescatados = mergeRescue(seed, lotes)
-    await saveRescue(id, rescatados, anclasPlanas)
+    await saveRescue(id, rescatados)
     return NextResponse.json({ error: promptError, lotes: rescatados }, { status: 400 })
   }
 
@@ -587,7 +343,7 @@ export async function POST(
     // Mismo rescate que en la rama de arriba: lo que sí arrancó (con taskId real) más
     // lo que queda como placeholder idle, para que la sesión sea reanudable.
     const rescatados = mergeRescue(seed, lotes)
-    await saveRescue(id, rescatados, anclasPlanas)
+    await saveRescue(id, rescatados)
     return NextResponse.json({ error: 'No se pudo iniciar el render de todos los lotes.' }, { status: 500 })
   }
 
@@ -598,6 +354,6 @@ export async function POST(
   // pagadas y huérfanas, sin que `lote-status` supiera que existen. El patch es
   // idéntico al que escribía acá (`step`, `lotes`, `duration`, `render_done`), así
   // que el camino feliz no cambia; sólo se suma el log si la escritura falla.
-  await saveRescue(id, lotes, anclasPlanas)
+  await saveRescue(id, lotes)
   return NextResponse.json({ lotes })
 }

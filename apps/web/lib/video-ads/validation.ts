@@ -9,21 +9,8 @@ import type { UserInputs } from './types'
  * sería caro y, peor, abriría la puerta a que "rellene" lo que falta — exactamente
  * lo que la REGLA DE NO-ASUNCIÓN prohíbe.
  *
- * ⚠️ LAS FILAS DE ACENTO Y DE VOZ SE ELIMINARON (acento 2026-08-25, voz 2026-09-02, las
- * dos por decisión del dueño del repo). El acento y la voz eran dos campos del wizard
- * —uno obligatorio y BLOQUEANTE— y ahora la voz sale de un perfil fijo en español
- * (`VOZ_POR_DEFECTO`, character.ts). Revierte a propósito una regla que este repo tenía
- * como dura.
- *
- * La fila de voz sobrevivió a aquel cambio como vestigio: su campo salió del wizard, así
- * que `inputs.voice` no lo llenaba NADIE y la fila imprimía "No especificada" en todas las
- * sesiones. Una fila que siempre dice lo mismo no es una confirmación, es ruido en la
- * pantalla donde el usuario revisa lo que sí decidió. Era `critica: false`, así que
- * quitarla no puede cambiar si el gate deja pasar.
- *
- * La ETNIA no se tocó y sigue siendo la fila que NUNCA puede marcarse CONFIRMADA desde la
- * referencia: es lo que sostiene la REGLA DE NO-ASUNCIÓN, y con varios personajes es lo
- * que mantiene vivo el gate uno por uno.
+ * Las dos filas que NUNCA pueden marcarse CONFIRMADA desde la referencia son etnia
+ * y acento: el spec es explícito en que deben venir del usuario.
  */
 
 /** Literal del spec. Se guarda tal cual en el valor de una fila pendiente. */
@@ -69,35 +56,18 @@ export function buildValidationMatrix(
     ? { variable: 'Personaje', valor: 'Imagen de referencia adjunta', fuente: 'REFERENCIA', estado: 'CONFIRMADA', critica: true }
     : row('Personaje', inputs.characterDesc, 'USUARIO')
 
-  /**
-   * ⚠️ CON VARIOS PERSONAJES LA FASE 0 BLOQUEA POR CADA UNO. La etnia es el campo que el
-   * spec prohíbe inferir, y que un personaje la tenga no cubre al otro. El nombre de cada
-   * fila lleva el rol para que el usuario sepa a quién le falta qué.
-   */
-  const varios = (inputs.personajes?.length ?? 0) > 1
-  const filasDePersonajes: ValidationRow[] = varios
-    ? inputs.personajes!.flatMap((p) => {
-        const quien = p.rol || p.id
-        return [
-          p.fotoUrl
-            ? { variable: `Personaje · ${quien}`, valor: 'Imagen de referencia adjunta', fuente: 'REFERENCIA' as const, estado: 'CONFIRMADA' as const, critica: true }
-            : row(`Personaje · ${quien}`, p.desc, 'USUARIO'),
-          // Fuente USUARIO aunque haya imagen: una foto no confirma origen cultural.
-          row(`Raza / etnia / origen cultural · ${quien}`, p.etnia, 'USUARIO'),
-        ]
-      })
-    : [
-        personaje,
-        row('Raza / etnia / origen cultural', inputs.characterEthnicity, 'USUARIO'),
-      ]
-
   const rows: ValidationRow[] = [
     row('Producto', inputs.productName, 'USUARIO'),
     row('Descripción del producto', inputs.productDescription, 'USUARIO'),
     row('Ángulo', inputs.angle, 'USUARIO'),
     row('Público objetivo', inputs.targetAudience, 'USUARIO'),
     row('Problema / deseo', inputs.problem, 'USUARIO'),
-    ...filasDePersonajes,
+    personaje,
+    // Fuente USUARIO aunque haya imagen: una foto no confirma origen cultural.
+    row('Raza / etnia / origen cultural', inputs.characterEthnicity, 'USUARIO'),
+    row('Acento', inputs.accent, 'USUARIO'),
+    // La voz es el único campo que el spec marca "SOLO SI ES RELEVANTE".
+    { variable: 'Voz', valor: filled(inputs.voice) ? inputs.voice : 'No especificada', fuente: 'USUARIO', estado: 'CONFIRMADA', critica: false },
   ]
 
   return {

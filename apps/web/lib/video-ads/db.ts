@@ -1,5 +1,4 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import { limpiarProductScan } from './product-scan'
 import type { VideoSessionResponse } from './types'
 
 // Cliente lazy singleton dedicado al wizard de video (espeja landing/db.ts).
@@ -33,7 +32,6 @@ export interface VideoListRow {
   product_name: string | null
   video_url: string | null
   character_url: string | null
-  avatar_url: string | null
   product_url: string | null
   // Señal angosta de "¿terminó el render?" — NO `!!video_url` (ese se estampa con el
   // primer lote listo). Ver render_done en types.ts / la migración
@@ -44,65 +42,29 @@ export interface VideoListRow {
 }
 
 export async function listVideoSessions(userId: string): Promise<VideoListRow[]> {
-  // ⚠️ NO SE LISTAN LAS SESIONES VACÍAS. El wizard crea la fila al MONTAR la página, así
-  // que abrir la tool y no hacer nada deja una sesión en el historial — y en dev, con el
-  // StrictMode de React montando dos veces, deja DOS. Medido sobre la base: 22 de 57 sesiones de video, 103 de 144 de anuncios, 40 de 107 de branding y 25 de 89 de landing.
-  // Una sesión sin video de referencia es una que el usuario nunca empezó: no hay nada
-  // que abrir ni que borrar, solo ruido que empuja hacia abajo el trabajo real.
-  //
-  // Se filtra al LEER y no se borran filas: son inofensivas, y borrarlas es una migración
-  // destructiva para arreglar un problema de presentación. El `step` no sirve de
-  // discriminante (nace en 0 y una sesión real también pasa por 0).
   const { data, error } = await getDb()
     .from('video_sessions')
-    .select('id, created_at, step, product_name, video_url, avatar_url, character_url, product_url, render_done')
+    .select('id, created_at, step, product_name, video_url, character_url, product_url, render_done')
     .eq('user_id', userId)
-    .not('reference_video_url', 'is', null)
     .order('created_at', { ascending: false })
     .limit(24)
   if (error) return []
   return (data ?? []) as VideoListRow[]
 }
 
-/**
- * PERTENENCIA — ver la nota larga en `lib/db.ts` (`getSession`). En corto: el `uid`
- * llega resuelto por quien llama (`readUserId`: usuario autenticado o cookie `ph_uid`),
- * un `uid` nulo devuelve null, y las filas legadas sin `user_id` quedan fuera del
- * alcance de todos — igual que ya lo estaban en los listados del historial.
- */
-export async function getVideoSession(id: string, uid: string | null): Promise<VideoSessionResponse | null> {
-  if (!uid) return null
+export async function getVideoSession(id: string): Promise<VideoSessionResponse | null> {
   const { data, error } = await getDb()
     .from('video_sessions')
     .select('*')
     .eq('id', id)
-    .eq('user_id', uid)
     .single()
   if (error) return null
-  const row = data as VideoSessionResponse
-  // ⚠️ SE NORMALIZA AL LEER, EN UNA SOLA PUERTA — mismo criterio que `aKind` en anuncios.
-  // El scan describe de paso la puesta en escena de la FOTO del producto (la superficie,
-  // la sombra, "No está flotando"), y eso viaja al prompt de CADA lote como si fuera parte
-  // del envase. Medido: 9 de 35 scans guardados. Limpiarlo acá los repara todos sin
-  // migración y sin re-correr una llamada de visión pagada; los dos consumidores
-  // (`generate-lotes` y `adapt-script`) leen por esta función.
-  return { ...row, product_scan: limpiarProductScan(row.product_scan) }
+  return data as VideoSessionResponse
 }
 
-/**
- * Devuelve si borró algo — ver `deleteSession` en `lib/db.ts`. Un DELETE que no
- * matchea no es error en PostgREST, así que sin el `count` la ruta respondería
- * `{ok:true}` sobre una sesión ajena que sigue viva.
- */
-export async function deleteVideoSession(id: string, uid: string | null): Promise<boolean> {
-  if (!uid) return false
-  const { error, count } = await getDb()
-    .from('video_sessions')
-    .delete({ count: 'exact' })
-    .eq('id', id)
-    .eq('user_id', uid)
+export async function deleteVideoSession(id: string): Promise<void> {
+  const { error } = await getDb().from('video_sessions').delete().eq('id', id)
   if (error) throw new Error(error.message)
-  return (count ?? 0) > 0
 }
 
 export async function updateVideoSession(

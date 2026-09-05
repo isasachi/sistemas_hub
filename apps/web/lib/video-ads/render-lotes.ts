@@ -1,9 +1,6 @@
 import { createHash } from 'crypto'
 import type { Lote, LoteImage } from './lotes'
-import type { MotionProfile, VoiceProfile } from './character'
-import type { Personaje } from './personajes'
-import { toNiche } from './niches'
-import { MOTOR } from './kie'
+import type { VoiceProfile } from './character'
 
 /**
  * Lógica pura de orquestación del render por lotes (Task 6, fix rounds 1 a 4).
@@ -60,20 +57,7 @@ export function renderDone(lotes: Lote[]): boolean {
  * lotes que ya se pagaron la primera vez.
  */
 export function resumeSeed(base: Lote[], existentes: Lote[]): Lote[] {
-  return base.map((lote, i) => {
-    const previo = existentes[i]
-    // ⚠️ UN LOTE QUE FALLÓ NO SE CONSERVA, aunque tenga `taskId`. Ese id apunta a una
-    // tarea muerta: no hay video detrás y no lo va a haber. Conservarlo lo dejaba fuera
-    // de `pendientes` (`filter(l => !l.taskId)`), así que "reintentar" no recreaba nada
-    // y —si era el único que faltaba— la ruta salía por el early return de "nada por
-    // crear". El lote quedaba irrecuperable desde la UI: el usuario podía darle a
-    // reintentar para siempre sin que pasara nada.
-    //
-    // Pasó de verdad: Veo devolvió "The Google model was unable to generate audio for
-    // this request" en 1 de 5 lotes, y el MISMO prompt funcionó al reintentarlo. O sea
-    // el fallo es transitorio y reintentar es exactamente lo correcto.
-    return previo?.taskId && previo.status !== 'fail' ? previo : lote
-  })
+  return base.map((lote, i) => (existentes[i]?.taskId ? existentes[i] : lote))
 }
 
 /** Separador de campos del texto canónico de `scriptFingerprint`. Un carácter de
@@ -122,21 +106,7 @@ export function scriptFingerprint(input: {
   /** Una por lote, en el mismo orden que `lotes` (ver `camaraDeLote`, lotes.ts). */
   camaras: string[]
   voz: VoiceProfile
-  /** Cómo se mueve. Cambia el prompt de cada lote, así que cambia el render. */
-  movimiento?: MotionProfile | null
-  /** Todos los personajes: su identidad, su voz y su movimiento entran en el prompt, y
-   *  sus avatares son de donde salen los frames. Cambiar cualquiera cambia el video. */
-  personajes?: Personaje[]
   images: LoteImage[]
-  /** Nicho: cambia el rótulo del bloque de producto y el bloque de consistencia. Sin
-   *  esto, cambiar el chip y re-renderizar deja la huella igual con otro prompt. */
-  niche?: unknown
-  /** Quién habla en cada toma, por `tiempo`. Decide la atribución en el prompt
-   *  (`P2 (padre) dice:`) y de qué avatares salen los frames. */
-  quien?: Map<string, { id: string }[]>
-  /** Tomas narradas por encima, por `tiempo`. Cambia el rótulo de la locución y la
-   *  orden de no mover la boca. */
-  enOff?: Set<string>
 }): string {
   const { lotes, consistencyBlock, productDesc, escenario, camaras, voz, images } = input
   const campos: string[] = [
@@ -152,126 +122,11 @@ export function scriptFingerprint(input: {
     // incoherencia que la huella existe para evitar, entrando por una puerta que no
     // vigila. Con el bump, esos parciales cuentan como generación nueva: fail-closed,
     // igual que las sesiones legadas sin `scriptHash`.
-    //
-    // v2 → v3: misma razón. La plantilla cambió otra vez — el plano por toma cuando el
-    // lote mezcla más de uno, la duración de la toma redondeada a 1 decimal y el nivel
-    // de degradación que comprime el párrafo de overlay antes de truncar la coreografía.
-    // v3 → v4: migración a Veo 3.1. Cambia TODO lo que la huella cubre sin que ella pueda
-    // verlo — el modelo, el tope de lote (15 s → 8 s, o sea otro reparto), la duración
-    // legal ({4,6,8}) y la plantilla del prompt (sin escalera de degradación, sin
-    // "estable", con el bloque de toma continua). Un resume a través de este cambio
-    // pegaría un clip de grok a uno de Veo jurando que es el mismo contenido.
-    // v4 → v5: el render pasa al modo de keyframes. Cambia el `generationType` que se
-    // le manda a Veo y cambia la plantilla del prompt (la leyenda `@image(n)` se
-    // reemplaza por la instrucción de interpolar entre el primer y el último fotograma).
-    // Las URLs de los frames NO entran en la huella a propósito: son salida, cambian en
-    // cada corrida, y meterlas haría que `isPaidResume` no reanudara nunca. Lo que sí
-    // entra —el avatar y el producto de los que salen, más las tomas— es lo que decide
-    // si las poses serían las mismas.
-    // v5 → v6: el perfil de movimiento entra al prompt de cada lote. Cambia el render
-    // sin que ninguno de los otros insumos se mueva, así que sin el bump un resume
-    // pegaría un clip con perfil y otro sin él.
-    // v6 → v7: varios personajes. El prompt de cada lote pasa a llevar un bloque por
-    // persona presente y la locución atribuida (`P2 (padre) dice:`), y los frames salen
-    // de los avatares de quienes salen en cada toma. Nada de eso lo ve la huella sola.
-    // v7 → v8: el eje de voz en off y la atribución de hablantes ENTRAN a la huella.
-    // Estaban en el prompt y en `frameSpecs` desde su slice, pero no acá: se derivan de
-    // `forensic_analysis.cortes`, y `analyze-reference` reescribe esa columna SIN limpiar
-    // `adapted` ni `template`. O sea re-analizar la referencia de una sesión ya renderizada
-    // podía cambiar `vozEnOff`/`hablantes` conservando las tomas; si los `tiempo` no se
-    // movían, `camaras` tampoco, y `isPaidResume` daba `true` sobre contenido distinto —
-    // pegando un clip con la boca moviéndose a otro narrado en off. Angosto, pero es
-    // exactamente la clase de incoherencia que la huella existe para evitar, y toca dinero.
-    // v8 → v9: CAMBIO DE MOTOR. El render vuelve a grok (`grok-imagine/image-to-video`)
-    // desde Veo 3.1, y con él cambia TODO lo que la huella protege: el cap de clip pasa
-    // de 8 a 30 s (o sea el reparto en lotes es otro), desaparecen los keyframes y entran
-    // las imágenes ancla, la plantilla del prompt se reescribe en inglés y vuelve la
-    // escalera de degradación para caber en 5.000 caracteres. Un resume a través de este
-    // cambio pegaría un clip de Veo a uno de grok jurando que es el mismo contenido — que
-    // es exactamente el fallo que esta versión existe para evitar. Los parciales
-    // anteriores pasan a contar como generación nueva, fail-closed.
-    // v9 → v10: EL CAP DE CLIP BAJA DE 30 A 15 s y con él cambia el reparto entero, la
-    // plantilla del prompt se comprime (el andamiaje fijo se reescribió en telegrama para
-    // liberar los ~2.500 caracteres que se comía), aparece el bloque de DETALLE ATÓMICO
-    // por toma y la voz deja de venir del usuario para salir de `VOZ_POR_DEFECTO`. La
-    // huella hashea INSUMOS, no el texto producido, así que el cambio de plantilla es
-    // invisible para ella: sin este bump, reanudar a través del cambio pegaría un clip de
-    // 30 s con la voz vieja a uno de 15 s con la nueva mientras `isPaidResume` jura que es
-    // el mismo contenido. Los parciales anteriores cuentan como generación nueva.
-    // v10 → v11: CUATRO cambios que la huella no vería sola. (a) el prompt del lote gana un bloque SOUND
-    // (ambiente + foley + nada de música), porque el clip trae su propia banda de audio y
-    // hasta ahora nadie la describía; (b) SALE el bloque `SETTING AND LIGHTING` — medido
-    // con 4 renders, con la descripción puesta el fondo no era ni el de la imagen ni el
-    // mismo entre draws (ver `buildLotePrompt`). La huella hashea INSUMOS y no el texto
-    // producido, así que los dos le son invisibles: sin el bump, reanudar a través de este
-    // cambio pegaría un clip en otra habitación y con la banda que grok se inventó a uno
-    // con la habitación de la referencia y el ambiente pedido, mientras `isPaidResume`
-    // jura que es el mismo contenido — y con la concatenación eso se ve Y se oye.
-    // (c) `repartirAccion` aprende el separador de tramos, así que el reparto de una toma
-    // larga entre fragmentos CAMBIA (y con él la coreografía que recibe cada lote); (d) con
-    // UN personaje la voz sale íntegra de `VOZ_POR_DEFECTO`, o sea los 13 campos que la
-    // huella hashea uno por uno se mueven. Los parciales anteriores cuentan como generación
-    // nueva, fail-closed.
-    // v11 → v12: EL CANDADO DE MOVIMIENTO. La plantilla del prompt cambia de forma (la
-    // coreografía deja de ser prosa y pasa a ser `START STATE` / `TIMED MOTION` con la
-    // ventana de tiempo de cada tramo / `END STATE`), y la huella hashea los INSUMOS y no
-    // el texto producido: sin el bump, reanudar a través del cambio pegaría un clip con la
-    // coreografía en prosa a uno con la línea de tiempo explícita mientras `isPaidResume`
-    // jura que es el mismo contenido.
-    // v13 → v14: el beat pasa a traer la acción como UNA ORACIÓN escrita (`action`) y las
-    // cuatro casillas sueltas se borraron del schema, así que el texto que llega al render
-    // cambia entero para toda sesión re-analizada.
-    // v12 → v13: VUELTA AL PROMPT MAESTRO. Cambia el MODELO de render
-    // (`grok-imagine-video-1-5-preview`, con su propio tope de prompt y de duración), la
-    // plantilla entera del prompt y la regla de reparto en lotes. Un resume a través de esto
-    // pegaría un clip del modelo viejo con la plantilla vieja a uno nuevo mientras
-    // `isPaidResume` jura que es el mismo contenido.
-    // v14 → v15: LA PLANTILLA DEL PROMPT CAMBIA DE ORDEN. La secuencia de acciones pasa del
-    // bloque 12 de 13 a ir arriba, justo después de las referencias, y la escalera de
-    // degradación se reordena (el encuadre entra como escalón nuevo; el movimiento pasa a
-    // soltarse ÚLTIMO en vez de segundo). La huella hashea INSUMOS y no el texto producido,
-    // así que un cambio de plantilla le es invisible: sin el bump, reanudar pegaría un clip
-    // con el prompt viejo a uno con el nuevo mientras `isPaidResume` jura que es lo mismo.
-    // v15 → v16: la cita de las imágenes pasa de una LEYENDA `@image(n)` que después nadie
-    // vuelve a nombrar, a `<IMAGE_n>` citado DENTRO de la cláusula del personaje y del
-    // producto — la forma del ejemplo oficial de xAI. Mismo motivo de bump: la huella no ve
-    // el texto emitido.
-    // v16 → v17: el bloque de video limpio pasa de quince sinónimos a una línea (313 → 183
-    // caracteres). Mismo motivo de bump.
-    // v17 → v18: CAMBIA EL MOTOR DE RENDER (`wan/3-0-video`), y con él el clip entero: Wan
-    // recibe además un TRAMO DEL VIDEO ORIGINAL como señal de movimiento y copia la
-    // coreografía, que es justo lo que grok no ejecutaba. Reanudar a través del cambio
-    // pegaría un clip de grok —persona quieta sosteniendo el frasco— a uno de Wan mientras
-    // `isPaidResume` jura que es el mismo contenido, y a 3,7× el precio por segundo.
-    'v18',
-    // ⚠️ Y EL MOTOR ENTRA EN LA HUELLA, no solo la versión: volver a grok es UNA LÍNEA
-    // (`MOTOR` en kie.ts), así que sin esto el ida y vuelta entre motores no se vería. Es la
-    // lección del bump manual automatizada para el único eje que se puede mover sin tocar
-    // la plantilla del prompt.
-    MOTOR,
-    // Pasa por `toNiche`: un nicho BLOQUEADO se renderiza como suplementos, así que su
-    // huella tiene que ser la de suplementos. Sin esto, una sesión guardada como 'ropa'
-    // con lotes ya pagados reanudaría pegando un clip del camino de prenda a uno del
-    // camino de objeto, con la huella jurando que es el mismo contenido.
-    toNiche(input.niche),
-    // ⚠️ `escenario` SIGUE EN LA HUELLA aunque ya NO entre al prompt del lote: alimenta el
-    // prompt del AVATAR, y el avatar es la imagen de la que ahora sale la escena. Sacarlo
-    // haría la reanudación menos conservadora, nunca más — y ese no es el lado correcto.
+    'v2',
     consistencyBlock, productDesc, escenario,
     voz.idioma, voz.varianteRegional, voz.acento, voz.pronunciacion, voz.ritmo,
     voz.velocidad, voz.entonacion, voz.energia, voz.pausas, voz.tono, voz.timbre,
     voz.edadVocal, voz.estilo,
-    // Opcional: las sesiones anteriores a FASE 4.6 no lo tienen, y una cadena vacía las
-    // deja con la misma huella que antes en vez de invalidarlas.
-    input.movimiento?.calidadMovimiento ?? '', input.movimiento?.manerismos ?? '',
-    // Con su largo delante, como las demás listas: dos repartos distintos de los mismos
-    // personajes tienen que dar huellas distintas.
-    String(input.personajes?.length ?? 0),
-    ...(input.personajes ?? []).flatMap((p) => [
-      p.id, p.rol, p.avatarUrl ?? '', p.consistencyBlock ?? '',
-      p.voiceProfile?.acento ?? '', p.voiceProfile?.tono ?? '', p.voiceProfile?.edadVocal ?? '',
-      p.motionProfile?.calidadMovimiento ?? '', p.motionProfile?.manerismos ?? '',
-    ]),
     String(images.length),
   ]
   for (const img of images) campos.push(img.url, img.role)
@@ -288,30 +143,6 @@ export function scriptFingerprint(input: {
         String(t.n), num(t.duracionSeg), t.accionVisual, t.personaje, t.producto,
         t.locucion, t.tiempoOriginal,
       )
-      // Por toma y no una sola vez al final: los dos se emparejan por `tiempoOriginal`,
-      // así que lo que cambia el render es qué toma concreta queda narrada o a quién se
-      // le atribuye la línea — un total agregado no distinguiría mover el off de una
-      // toma a otra. Las sesiones sin ninguno de los dos campos pushean '' y '0', que es
-      // lo mismo que hashearían antes de que existieran… salvo por el bump de versión,
-      // que es lo que las invalida a propósito.
-      // ⚠️ LOS BEATS SE HASHEAN, y no alcanza con `accionVisual`. Desde el CANDADO DE
-      // MOVIMIENTO la prosa ya no se emite cuando hay timeline: la compila `compileAccion`
-      // desde estos mismos beats, y esa proyección DESCARTA los `micro` y —lo que importa
-      // acá— los TIEMPOS. Dos timelines que difieren solo en la ventana de cada tramo
-      // compilan a la misma prosa: misma huella, prompts distintos, y `isPaidResume`
-      // jurando que es el mismo contenido. Y la ventana de tiempo es justamente lo único
-      // que el candado agrega sobre la prosa.
-      const beats = t.beats ?? []
-      campos.push(String(beats.length))
-      for (const b of beats) {
-        campos.push(
-          num(b.startSec), num(b.endSec), num(b.referenceFrameMs), b.importance,
-          b.action, b.productStateBefore, b.productStateAfter,
-        )
-      }
-      campos.push((input.enOff?.has(t.tiempoOriginal) ? '1' : '0'))
-      const hablan = input.quien?.get(t.tiempoOriginal) ?? []
-      campos.push(String(hablan.length), ...hablan.map((p) => p.id))
     }
   }
   return createHash('sha256').update(campos.join(SEP)).digest('hex')

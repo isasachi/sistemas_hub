@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getVideoSession, updateVideoSession } from '@/lib/video-ads/db'
-import { isNiche, NICHE_DEFAULT } from '@/lib/video-ads/niches'
 import { uploadToStorage } from '@/lib/storage'
-import { callVideoAds } from '@/lib/video-ads/llm'
+import { callStructured } from '@/lib/gemini'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 import { ProductScanSchema } from '@/lib/video-ads/types'
-import { limpiarProductScan } from '@/lib/video-ads/product-scan'
 import { STEP } from '@/lib/video-ads/steps'
 import type { Part } from '@google/genai'
 
@@ -27,8 +25,8 @@ export async function POST(
   if (blocked) return blocked
   const userId = await readUserId()
 
-  const session = await getVideoSession(id, await readUserId())
-  if (!session) return NextResponse.json({ error: 'No se encontró la sesión' }, { status: 404 })
+  const session = await getVideoSession(id)
+  if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   // El disjunto `!session.character_url` es de los modos `character-ref`/`character-gen`
   // que este recableado eliminó (una sola línea de entrada: video de referencia
   // obligatorio). Dejarlo vivo abría un bypass del gate de costo: `POST .../inputs`
@@ -40,7 +38,7 @@ export async function POST(
 
   let formData: FormData
   try { formData = await req.formData() } catch {
-    return NextResponse.json({ error: 'Los datos del formulario no son válidos' }, { status: 400 })
+    return NextResponse.json({ error: 'Invalid form data' }, { status: 400 })
   }
 
   const productFile = formData.get('product') as File | null
@@ -59,14 +57,6 @@ export async function POST(
   // Gemini por dos campos de texto. Ahora se mandan y persisten acá también.
   const angle = (formData.get('angle') as string | null)?.trim()
   const problem = (formData.get('problem') as string | null)?.trim()
-  // Se ESCRIBE con `isNiche`, no con `toNiche`, y la diferencia importa mientras haya
-  // nichos bloqueados: la columna guarda lo que el usuario quiso (`ropa`), y quien
-  // RENDERIZA lo normaliza a suplementos vía `toNiche`. Normalizar acá borraría la
-  // intención para siempre y al desbloquear no habría cómo distinguir esas sesiones.
-  // Lo que no sea un nicho conocido sigue cayendo al default: el cliente no puede meter
-  // un valor raro en la fila.
-  const nicheRaw = formData.get('niche')
-  const niche = isNiche(nicheRaw) ? nicheRaw : NICHE_DEFAULT
   if (!productName || !whatItDoes || !targetAudience || !angle || !problem)
     return NextResponse.json({ error: 'Faltan datos del producto' }, { status: 400 })
 
@@ -81,63 +71,16 @@ export async function POST(
           `Product name: ${productName}`,
           `What it does: ${whatItDoes}`,
           `Target audience: ${targetAudience}`,
-          'Analyze the product image for a UGC video ad. Return ProductScan JSON with TWO',
-          'clearly different fields:',
-          '',
-          'productDescription = the physical object: shape, size in the hand, material,',
-          '  cap, proportions and colors, precisely enough for a video model to keep it',
-          '  identical across clips.',
-          // ⚠️ EL OBJETO, NO LA FOTOGRAFÍA. Medido sobre 35 scans guardados, 9 describían
-          // de paso la puesta en escena del catálogo ("El producto descansa sobre una
-          // superficie blanca plana y produce una sombra suave a la derecha", "No está
-          // flotando"). Ese texto se emite ÍNTEGRO en el prompt de CADA lote, así que es
-          // una instrucción de escena dentro de un clip donde la persona tiene el envase en
-          // la mano en una sala — la misma clase de contaminación que `SETTING AND
-          // LIGHTING`. En FASE 3 el modelo llegó a copiarla dentro de `accionVisual`, que es
-          // el campo de COREOGRAFÍA.
-          '  Describe ONLY the object itself, never the photograph: no surface it rests on,',
-          '  no shadow it casts, no lighting direction, no camera angle, no background, and',
-          '  never say whether it is floating. In the video it will be held in someone’s',
-          '  hand in a room, so the catalogue shot it came from is not part of it.',
-          '',
-          // ⚠️ ESTE CAMPO ES UNA TRANSCRIPCIÓN, NO UNA RESEÑA — y el prompt de video nunca
-          // lo decía. Medido contra el de anuncios, que sí lo pide: anuncios transcribe en
-          // 19 de 31 scans y video solo en 10 de 27, con 8 que devuelven una descripción
-          // del ESTILO gráfico ("minimalista, clínico y limpio, típico de productos
-          // dermatológicos"). Y eso es la causa raíz de los ingredientes inventados en el
-          // guión: FASE 3 tiene la orden de copiar el ingrediente de la etiqueta, y si la
-          // etiqueta nunca se transcribió, no hay de dónde copiar y el modelo completa de
-          // memoria. Caso real: la etiqueta capturada de un serum no nombraba un solo
-          // ingrediente y el guión salió con "hepéres", después "HEPES".
-          'brandingDescription = ONLY the words actually printed on the packaging, copied',
-          '  letter by letter: brand, product name, claims, ingredient list, dosage, volume.',
-          '  It is a TRANSCRIPTION, not a review — never describe the typography, the layout',
-          '  or how premium it looks. Keep the original capitalisation and units.',
-          '  Read every readable line, including the small print of the ingredient list: it',
-          '  is the ONLY source the script has for what this product actually contains.',
-          '  If the packaging carries no readable text at all, return null.',
-          '',
-          // ⚠️ LOS DOS CAMPOS TIENEN IDIOMAS DISTINTOS Y POR MOTIVOS DISTINTOS.
-          // `productDescription` es una instrucción de render: se emite íntegra en el
-          // prompt de CADA lote, que va en inglés. `brandingDescription` es la
-          // TRANSCRIPCIÓN de la etiqueta — la única fuente que el guion tiene de lo que el
-          // producto contiene — y traducirla reintroduce la clase entera del ingrediente
-          // inventado: FASE 3 tiene la orden de copiar el ingrediente de la etiqueta, y si
-          // lo que hay ahí es una traducción, ya no está copiando nada.
-          'LANGUAGE — the two fields are NOT in the same language:',
-          '  productDescription → ENGLISH. It is a render instruction and goes verbatim',
-          '    into the video prompt.',
-          '  brandingDescription → the packaging\'s OWN language, letter by letter. Never',
-          '    translate it, never normalise it, never tidy it up. It is the only record of',
-          '    what this product actually contains; a translation is no longer a transcription.',
-          '  Proper nouns are never translated in either field.',
+          'Analyze the product image for a UGC video ad: describe the physical object',
+          'precisely (shape, size in hand, label, colors, visible text) so a video model can',
+          'keep it identical. Return ProductScan JSON.',
         ].join('\n'),
       },
     ]
 
     const [productUrl, scan] = await Promise.all([
       uploadToStorage(id, bytes, mimeType, 'product'),
-      callVideoAds('product_scan', ProductScanSchema, parts),
+      callStructured('product_scan', ProductScanSchema, parts),
     ])
 
     // `step` NO es monotónico acá (a diferencia de `inputs/route.ts`, que hace
@@ -150,14 +93,11 @@ export async function POST(
     await updateVideoSession(id, {
       step: STEP.CHARACTER,
       product_url: productUrl,
-      // La lectura ya lo limpia (`getVideoSession`), pero persistirlo limpio evita que la
-      // frase quede guardada esperando a que alguien lea la columna por otro camino.
-      product_scan: limpiarProductScan(scan),
+      product_scan: scan,
       product_name: productName,
       what_it_does: whatItDoes,
       angle,
       problem,
-      niche,
       target_audience: targetAudience,
     })
     await recordGenQuota(id, 'video-product', userId)

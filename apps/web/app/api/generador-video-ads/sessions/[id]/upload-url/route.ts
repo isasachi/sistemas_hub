@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getVideoSession } from '@/lib/video-ads/db'
 import { createSignedUpload } from '@/lib/storage'
-import { readUserId } from '@/lib/product-hunter/session'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -25,12 +24,12 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
-  const session = await getVideoSession(id, await readUserId())
-  if (!session) return NextResponse.json({ error: 'No se encontró la sesión' }, { status: 404 })
+  const session = await getVideoSession(id)
+  if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   let body: unknown
   try { body = await req.json() } catch {
-    return NextResponse.json({ error: 'Petición inválida' }, { status: 400 })
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
   const parsed = BodySchema.safeParse(body)
   if (!parsed.success) return NextResponse.json({ error: 'Petición inválida' }, { status: 400 })

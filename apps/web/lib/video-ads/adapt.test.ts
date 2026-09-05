@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { TIMELINE_VACIO } from './motion'
-import { buildAdaptInstruction, AdaptedScriptSchema, applyScriptEdits, resyncTomaDurations, type AdaptedScript, buildCoherenceInstruction } from './adapt'
+import { buildAdaptInstruction, AdaptedScriptSchema, applyScriptEdits, resyncTomaDurations, type AdaptedScript } from './adapt'
 import { extractSlots } from './fill'
 import type { ScriptTemplate } from './template'
 import type { ForensicReport } from './forensic'
@@ -21,7 +20,7 @@ const TEMPLATE: ScriptTemplate = {
 const FORENSIC = {
   caracteresGuion: 58,
   guionOriginal: 'Si estás cansado de las marcas, necesitas probar este suero.',
-  cortes: [{ n: 1, tiempo: '00:00 - 00:06', duracionSeg: 6, accion: '', camara: '', dialogo: '', textoOverlay: '', transicion: '', objetoEnMano: null, micro: null, motion: TIMELINE_VACIO }],
+  cortes: [{ n: 1, tiempo: '00:00 - 00:06', duracionSeg: 6, accion: '', camara: '', dialogo: '', textoOverlay: '', transicion: '' }],
 } as ForensicReport
 
 const INPUTS: UserInputs = {
@@ -35,97 +34,17 @@ const INPUTS: UserInputs = {
 describe('buildAdaptInstruction', () => {
   const p = buildAdaptInstruction(TEMPLATE, FORENSIC, INPUTS, null, extractSlots(TEMPLATE))
 
-  // ⚠️ `accionVisual` VA LITERAL AL PROMPT DEL RENDER, que trabaja en inglés — mientras
-  // que `valores` y `locuciones` son lo que se PRONUNCIA y van en español. Las dos mitades
-  // se nombran en el mismo bloque a propósito: pedir solo "en inglés" en una fase cuyo
-  // otro output es habla española es la contradicción que este repo ya pagó seis veces.
-  it('parte el idioma: la acción en inglés, lo que se dice en español', () => {
-    expect(p).toMatch(/LA ACCIÓN SE ESCRIBE EN INGLÉS/)
-    expect(p).toMatch(/`valores` y `locuciones`[\s\S]{0,80}español/)
-  })
 
 
-
-  // EL CONTEXTO QUE EL SPEC TIENE GRATIS Y ESTA FASE NO TENÍA.
-  // Caso real reportado: el original decía "Tres razones para tomar Gomi Energy para
-  // ella" y salió "…para tomar gomitas de melatonina para adultos y jóvenes desde los 12
-  // años" — la categoría en vez del nombre comercial, y la nota del formulario pegada
-  // entera donde iba una palabra. Con solo la etiqueta del hueco delante, ambas son
-  // respuestas correctas; con el original delante, ninguna lo es.
-  describe('el guión original va en el prompt', () => {
-    const ORIGINAL = 'Tres razones para tomar Gomi Energy para ella.'
-    const forense = (dialogo: string) => ({
-      caracteresGuion: ORIGINAL.length, guionOriginal: ORIGINAL,
-      cortes: [{ n: 1, tiempo: '00:00 - 00:05', duracionSeg: 5, accion: '', camara: '', dialogo, textoOverlay: '', transicion: '', objetoEnMano: null, micro: null, motion: TIMELINE_VACIO }],
-    }) as ForensicReport
-    const plantilla = (locucion: string): ScriptTemplate =>
-      ({ ...TEMPLATE, tomas: [{ n: 1, accionVisual: 'Sostiene el frasco', locucion, duracionSeg: 5 }] })
-
-    const COPIADA = 'Tres razones para tomar [nombre del producto] para [público objetivo].'
-
-    it('manda el diálogo original de cada toma junto a su plantilla', () => {
-      const p = buildAdaptInstruction(plantilla(COPIADA), forense(ORIGINAL), INPUTS, null, extractSlots(plantilla(COPIADA)))
-      expect(p).toContain('EL ORIGINAL, TOMA POR TOMA')
-      expect(p).toContain(ORIGINAL)
-    })
-
-    it('dice qué decía el original EN CADA HUECO', () => {
-      const p = buildAdaptInstruction(plantilla(COPIADA), forense(ORIGINAL), INPUTS, null, extractSlots(plantilla(COPIADA)))
-      expect(p).toContain('el original decía: "Gomi Energy"')
-      expect(p).toContain('el original decía: "ella"')
-    })
-
-    // El per-hueco depende de `alignSlots`, que devuelve null si el modelo parafraseó —y
-    // justo las sesiones de una sola toma larga son las que más fallan la alineación. El
-    // diálogo completo NO puede depender de eso: es la mitad que sostiene la regla.
-    it('sin alineación se pierde el original por hueco, pero NO el de la toma', () => {
-      const parafraseada = 'Tres motivos para tomar [nombre del producto] para [público objetivo].'
-      const t = plantilla(parafraseada)
-      const p = buildAdaptInstruction(t, forense(ORIGINAL), INPUTS, null, extractSlots(t))
-      expect(p).not.toContain('el original decía:')
-      expect(p).toContain(ORIGINAL)
-    })
-
-    it('pide misma función y misma forma, y avisa que los inputs son notas', () => {
-      const p = buildAdaptInstruction(plantilla(COPIADA), forense(ORIGINAL), INPUTS, null, extractSlots(plantilla(COPIADA)))
-      expect(p).toMatch(/MISMA FUNCIÓN Y MISMA FORMA/)
-      expect(p).toMatch(/nombre comercial —no la categoría/)
-      expect(p).toMatch(/LOS INPUTS SON NOTAS DE UN FORMULARIO/)
-    })
-  })
-
-  // ⚠️ LA REGLA CAMBIÓ DE OBJETO (2026-08-24, decisión del dueño del repo). Antes era
-  // "no inventes NADA": lo que no estuviera literal en los inputs dejaba el hueco
-  // pendiente. Ahora lo intocable es la PLANTILLA —el texto que rodea a los corchetes,
-  // que es del anuncio original— y los huecos SÍ se autocompletan deduciendo del
-  // contexto y, si no alcanza, aproximando. Lo que sigue prohibido es lo que el usuario
-  // tendría que salir a demostrar.
-  it('declara intocable la plantilla y autocompletable el hueco', () => {
-    expect(p).toMatch(/LA PLANTILLA NO SE INVENTA/i)
-    expect(p).toMatch(/LO QUE VA DENTRO DE LOS CORCHETES SÍ SE COMPLETA/i)
-  })
-
-  it('sigue prohibiendo lo que el usuario tendría que demostrar', () => {
-    expect(p).toMatch(/premios, avales médicos, estudios clínicos/i)
-  })
-
-  // El hallazgo que corrigió el dueño del repo: la etiqueta es la fuente más autorizada
-  // que existe sobre el producto, y durante un tiempo se leía de la foto, se guardaba y
-  // no llegaba a esta fase — 11 huecos pendientes cuya respuesta estaba en la base.
-  it('pasa el texto de la etiqueta como fuente, y manda adaptarlo, no pegarlo', () => {
-    const conEtiqueta = buildAdaptInstruction(
-      TEMPLATE, FORENSIC, INPUTS,
-      { productDescription: 'Frasco púrpura con gotero', brandingDescription: 'NIACINAMIDA PURA, PHE-RESORCINOL' } as never,
-      extractSlots(TEMPLATE),
-    )
-    expect(conEtiqueta).toContain('TEXTO DE LA ETIQUETA')
-    expect(conEtiqueta).toContain('PHE-RESORCINOL')
-    expect(conEtiqueta).toMatch(/LA ETIQUETA DEL PRODUCTO SÍ CUENTA COMO FUENTE/)
-    expect(conEtiqueta).toMatch(/se ADAPTA, no se pega/)
-  })
-
-  it('sin etiqueta leída, no inventa la sección', () => {
-    expect(p).not.toContain('TEXTO DE LA ETIQUETA')
+  // Caso real: el usuario dio solo "Suero de niacinamida" y el guión salió afirmando
+  // que contiene PHE-resorcinol y agua termal de La Roche-Posay — la fórmula de otra
+  // marca, sacada de la memoria del modelo. Una declaración falsa de composición
+  // nombrando a un competidor, en un anuncio que se publica.
+  it('prohíbe inventar ingredientes y marcas, con el caso real como ejemplo', () => {
+    expect(p).toMatch(/no inventes/i)
+    expect(p).toContain('PHE-resorcinol')
+    expect(p).toMatch(/marca/i)
+    expect(p).toMatch(/conocimiento del mundo NO es una fuente/i)
   })
 
 
@@ -140,13 +59,9 @@ describe('buildAdaptInstruction', () => {
     expect(p).toMatch(/qué\s+mano,\s+cómo\s+agarra/i)
   })
 
-  // El encabezado decía "no reescribas el guion: no se usaría" — texto de cuando
-  // `locuciones` no existía, que contradecía a la sección que sí pide la reescritura.
-  // Lo que tiene que quedar prohibido es escribir OTRO anuncio, no redactar la frase.
-  it('le dice al modelo que adapte el guión, no que escriba uno nuevo', () => {
-    expect(p).toMatch(/TU TRABAJO NO ES ESCRIBIR UN GUION NUEVO/i)
-    expect(p).toMatch(/reordenas, no resumes/i)
-    expect(p).not.toMatch(/no se usar[íi]a/i)
+  it('le dice al modelo que NO escriba el guión', () => {
+    expect(p).toMatch(/TU TRABAJO NO ES ESCRIBIR UN GUION/i)
+    expect(p).toMatch(/se reconstruye copi[aá]ndolo con c[oó]digo/i)
   })
 
   it('lista los huecos con su id y su contexto', () => {
@@ -176,18 +91,9 @@ describe('buildAdaptInstruction', () => {
     expect(p).toContain('tipo de producto')
   })
 
-  // Al revés que antes: vaciar dejó de ser la salida por defecto. Un guión con agujeros
-  // no se puede renderizar y obliga al usuario a escribir a mano lo que el modelo ya
-  // puede deducir del resto de la sesión.
-  it('pide rellenar SIEMPRE, con la escalera de dónde sacar el valor', () => {
-    expect(p).toMatch(/RELLENA SIEMPRE/)
-    expect(p).toMatch(/Está literal en los INPUTS o en la etiqueta/i)
-    expect(p).toMatch(/se DEDUCE de lo que sí hay/i)
-    expect(p).toMatch(/lo más VEROSÍMIL para un producto de esta/i)
-  })
-
-  it('acota el hueco vacío al dato que compromete al usuario', () => {
-    expect(p).toMatch(/Deja `valor` VACÍO solo si/i)
+  it('pide dejar el valor VACÍO en vez de adivinar', () => {
+    expect(p).toMatch(/devuelve `valor` VAC[IÍ]O/i)
+    expect(p).toMatch(/hueco\s+vac[ií]o\s+es\s+un\s+resultado\s+correcto/i)
   })
 
   it('fija TEXTO EN PANTALLA: NINGUNO', () => {
@@ -341,42 +247,5 @@ describe('AdaptedScriptSchema', () => {
 
   it('rechaza un guión sin tomas', () => {
     expect(AdaptedScriptSchema.safeParse({ guionFinal: 'x', tomas: [] }).success).toBe(false)
-  })
-})
-
-/**
- * ⚠️ MEDIDO EN UN ANUNCIO REAL. El original decía "si te encuentras en la Galería Santa
- * Lucía"; FASE 2 dejó "en la [ubicación específica]" y el valor correcto era una ciudad,
- * así que el guión salió diciendo "si te encuentras en la Lima".
- *
- * `correcciones` no puede arreglarlo: el artículo es ANDAMIAJE, no valor, y ningún valor
- * de ubicación encaja detrás de "la". El único mecanismo que sirve es `ajustes` — la
- * excepción de la directiva 13 —, y su sección solo describía el caso del adjetivo que
- * no existe.
- */
-describe('buildCoherenceInstruction — desacuerdo de artículo', () => {
-  const instruccion = buildCoherenceInstruction(
-    [{ n: 1, locucion: 'Y si te encuentras en la Lima, tienes que venir a Bloom.' }],
-    [{ id: 'ubicación específica#1', valor: 'Lima', contexto: 'en la [ubicación específica]' }],
-    {
-      productName: 'Top', productDescription: 'x', angle: 'x', targetAudience: 'x',
-      problem: 'x', characterDesc: 'x', characterEthnicity: 'x', accent: 'x',
-      voice: '', constraints: '',
-    },
-    null,
-  )
-
-  it('nombra el desacuerdo de artículo como caso de `ajustes`, no de `correcciones`', () => {
-    expect(instruccion).toMatch(/ART[IÍ]CULO O LA PREPOSICI[OÓ]N/)
-    expect(instruccion).toMatch(/art[ií]culo es andamiaje, no valor/i)
-  })
-
-  it('trae el caso real con su arreglo, para que no lo resuelva cambiando la ciudad', () => {
-    expect(instruccion).toContain('en la Lima')
-    expect(instruccion).toMatch(/quitar el artículo, no cambiar la ciudad/)
-  })
-
-  it('conserva el caso del adjetivo que no existe', () => {
-    expect(instruccion).toMatch(/andas muy/)
   })
 })
