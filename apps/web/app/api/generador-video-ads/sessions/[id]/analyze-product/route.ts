@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getVideoSession, updateVideoSession } from '@/lib/video-ads/db'
 import { uploadToStorage } from '@/lib/storage'
-import { callStructured } from '@/lib/gemini'
+import { callVideoAds } from '@/lib/video-ads/llm'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 import { ProductScanSchema } from '@/lib/video-ads/types'
@@ -80,7 +80,7 @@ export async function POST(
 
     const [productUrl, scan] = await Promise.all([
       uploadToStorage(id, bytes, mimeType, 'product'),
-      callStructured('product_scan', ProductScanSchema, parts),
+      callVideoAds('product_scan', ProductScanSchema, parts),
     ])
 
     // `step` NO es monotónico acá (a diferencia de `inputs/route.ts`, que hace

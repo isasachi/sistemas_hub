@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getVideoSession, updateVideoSession } from '@/lib/video-ads/db'
-import { callStructured } from '@/lib/gemini'
+import { callVideoAds } from '@/lib/video-ads/llm'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 import { SlotValuesSchema, buildAdaptInstruction } from '@/lib/video-ads/adapt'
@@ -38,7 +38,7 @@ export async function POST(
   try {
     const slots = extractSlots(session.template)
 
-    const { valores, acciones } = await callStructured('slot_values', SlotValuesSchema, [
+    const { valores, acciones } = await callVideoAds('slot_values', SlotValuesSchema, [
       {
         text: buildAdaptInstruction(
           session.template,

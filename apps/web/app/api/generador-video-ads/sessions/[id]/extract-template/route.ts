@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getVideoSession, updateVideoSession } from '@/lib/video-ads/db'
-import { callStructured } from '@/lib/gemini'
+import { callVideoAds } from '@/lib/video-ads/llm'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 
@@ -68,7 +68,7 @@ export async function POST(
   }
 
   try {
-    const draft = await callStructured('template_draft', TemplateDraftSchema, [
+    const draft = await callVideoAds('template_draft', TemplateDraftSchema, [
       { text: buildTemplateInstruction(forensic) },
     ])
 
