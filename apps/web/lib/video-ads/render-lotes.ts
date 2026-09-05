@@ -3,6 +3,7 @@ import type { Lote, LoteImage } from './lotes'
 import type { MotionProfile, VoiceProfile } from './character'
 import type { Personaje } from './personajes'
 import { toNiche } from './niches'
+import { MOTOR } from './kie'
 
 /**
  * Lógica pura de orquestación del render por lotes (Task 6, fix rounds 1 a 4).
@@ -237,7 +238,17 @@ export function scriptFingerprint(input: {
     // el texto emitido.
     // v16 → v17: el bloque de video limpio pasa de quince sinónimos a una línea (313 → 183
     // caracteres). Mismo motivo de bump.
-    'v17',
+    // v17 → v18: CAMBIA EL MOTOR DE RENDER (`wan/3-0-video`), y con él el clip entero: Wan
+    // recibe además un TRAMO DEL VIDEO ORIGINAL como señal de movimiento y copia la
+    // coreografía, que es justo lo que grok no ejecutaba. Reanudar a través del cambio
+    // pegaría un clip de grok —persona quieta sosteniendo el frasco— a uno de Wan mientras
+    // `isPaidResume` jura que es el mismo contenido, y a 3,7× el precio por segundo.
+    'v18',
+    // ⚠️ Y EL MOTOR ENTRA EN LA HUELLA, no solo la versión: volver a grok es UNA LÍNEA
+    // (`MOTOR` en kie.ts), así que sin esto el ida y vuelta entre motores no se vería. Es la
+    // lección del bump manual automatizada para el único eje que se puede mover sin tocar
+    // la plantilla del prompt.
+    MOTOR,
     // Pasa por `toNiche`: un nicho BLOQUEADO se renderiza como suplementos, así que su
     // huella tiene que ser la de suplementos. Sin esto, una sesión guardada como 'ropa'
     // con lotes ya pagados reanudaría pegando un clip del camino de prenda a uno del

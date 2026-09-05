@@ -708,8 +708,19 @@ export function buildLotePrompt(args: {
   vozEnOff?: Set<string>
   /** `tiempoOriginal` → índice 1-based de su IMAGEN ANCLA dentro de `images`. */
   anclas?: Map<string, number>
+  /**
+   * Tope de caracteres contra el que degrada la escalera. Default: el del motor activo.
+   *
+   * ⚠️ Es parámetro SOLO para poder ejercitar la escalera con un test. Con Wan el tope es
+   * 20.000 y ningún lote real se acerca, así que la escalera queda INERTE — y sin este
+   * parámetro sus tests dejarían de medirla y pasarían por vacío, que es el modo de fallo
+   * peor: verde sin haber probado nada. La escalera no se borra porque es lo que sostiene
+   * a grok, y volver a grok es una línea (`MOTOR` en kie.ts).
+   */
+  promptMax?: number
 }): string {
   const { lote, consistencyBlock, productDesc, camara, voz, movimiento, images, cortes } = args
+  const promptMax = args.promptMax ?? KIE_PROMPT_MAX
 
   const quien = args.quien ?? new Map<string, Personaje[]>()
   const presentes: Personaje[] = []
@@ -840,7 +851,7 @@ export function buildLotePrompt(args: {
   // queda quieto. Ver los comentarios de cada NIVEL_*.
   for (const nivel of [NIVEL_COMPLETO, NIVEL_SIN_ESCENARIO, NIVEL_CAMARA_CORTA, NIVEL_PRODUCTO_FISICO, NIVEL_SIN_MOVIMIENTO]) {
     const prompt = render(nivel, null)
-    if (prompt.length <= KIE_PROMPT_MAX) return prompt
+    if (prompt.length <= promptMax) return prompt
   }
 
   // Piso: se busca el cap por acción más grande que entra (búsqueda binaria — el largo
@@ -851,13 +862,13 @@ export function buildLotePrompt(args: {
   while (lo <= hi) {
     const cap = Math.floor((lo + hi) / 2)
     const prompt = render(NIVEL_SIN_MOVIMIENTO, cap)
-    if (prompt.length <= KIE_PROMPT_MAX) { mejor = prompt; lo = cap + 1 } else { hi = cap - 1 }
+    if (prompt.length <= promptMax) { mejor = prompt; lo = cap + 1 } else { hi = cap - 1 }
   }
   if (mejor) return mejor
 
   const piso = render(NIVEL_SIN_MOVIMIENTO, 0)
   throw new Error(
-    `El prompt del Lote ${lote.n} no entra en el tope de KIE (${KIE_PROMPT_MAX} caracteres) ` +
+    `El prompt del Lote ${lote.n} no entra en el tope de KIE (${promptMax} caracteres) ` +
     `ni recortando cada acción al mínimo (${piso.length} caracteres resultantes). ` +
     'El bloque de consistencia o la descripción del producto son demasiado largos por sí ' +
     'solos y hay que acortarlos antes de reintentar — crear la tarea así fallaría y la ' +

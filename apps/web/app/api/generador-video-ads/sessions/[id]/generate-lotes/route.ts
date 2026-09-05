@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getVideoSession, updateVideoSession, claimFreshLotes } from '@/lib/video-ads/db'
-import { createVideoTask, resolveKey, clampDuration, KIE_PROMPT_MAX, SIN_KEY, type VideoImage } from '@/lib/video-ads/kie'
+import { createVideoTask, resolveKey, clampDuration, KIE_PROMPT_MAX, SIN_KEY, MOTOR, type VideoImage } from '@/lib/video-ads/kie'
+import { tramosDeLotes, cortarTramos } from '@/lib/video-ads/tramo'
 import { currentKieKey } from '@/lib/user-settings'
 import { anchorSpecs, generateAnchorImages } from '@/lib/video-ads/anchors'
 import { personajesDe, hablantesPorTiempo, vozEnOffPorTiempo } from '@/lib/video-ads/personajes'
@@ -414,6 +415,45 @@ export async function POST(
     return anclasPlanas.slice(desde, desde + specsPorLote[i].length)
   }
 
+  /**
+   * EL TRAMO DEL ORIGINAL QUE LE TOCA A CADA LOTE — la señal FÍSICA de movimiento.
+   *
+   * 🔴 Es la razón entera de haber cambiado de motor. El experimento de motores (AGENTS.md,
+   * 2026-09-04) aisló que la representación en TEXTO de la coreografía era el techo: grok no
+   * ejecutó la aplicación del producto en ~15 renders de esta rama, y los tres motores que
+   * reciben el video fuente sí la copian. Wan lee `reference_video_urls`.
+   *
+   * ⚠️ Se corta ANTES de crear la primera tarea y falla CERRADO (502, cero cobrado). Dejarlo
+   * pasar sin referencia sería cobrarle al usuario 3,7× por segundo un clip con exactamente
+   * la calidad de movimiento que veníamos a arreglar.
+   *
+   * ⚠️ SE DERIVA SOBRE **TODOS** LOS LOTES Y SE CORTA SOLO LOS PENDIENTES, y ese reparto de
+   * responsabilidades no es intercambiable: la proporción de `tramosDeLotes` necesita a los
+   * lotes ya pagados para construir el denominador de cada ventana compartida — sacarlos ahí
+   * correría el tramo de los que sobreviven. El filtro va DESPUÉS, en el corte.
+   *
+   * ponytail: se vuelve a derivar en cada reanudación en vez de persistir la URL en el lote.
+   * Cortar y subir cuesta CPU sobre los pendientes, no dinero. Si el tiempo de la ruta
+   * molesta, la mejora es guardar la URL.
+   */
+  let tramoUrls: (string | null)[] = seed.map(() => null)
+  if (MOTOR === 'wan' && session.reference_video_url) {
+    try {
+      const tramos = tramosDeLotes(seed, (l) =>
+        clampDuration(l.duracionSeg, l.tomas.reduce((n, t) => n + (t.locucion ?? '').length, 0), l.tomas.length))
+      // Un lote con `taskId` ya está pagado y no se vuelve a crear (ver el bucle de abajo),
+      // así que recortar su tramo es trabajo tirado.
+      const clips = await cortarTramos(
+        session.reference_video_url, tramos.map((t, i) => (seed[i].taskId ? null : t)))
+      tramoUrls = await Promise.all(clips.map((bytes, i) =>
+        bytes ? uploadToStorage(id, bytes, 'video/mp4', `tramo-lote-${seed[i].n}`) : Promise.resolve(null)))
+    } catch (err) {
+      console.error('[video-ads/generate-lotes] tramo:', err)
+      return NextResponse.json(
+        { error: 'No se pudo recortar el video de referencia para el render.' }, { status: 502 })
+    }
+  }
+
 
   /**
    * Las imágenes que recibe el lote `i`, en el orden en que el prompt las cita:
@@ -511,6 +551,7 @@ export async function POST(
 
       const taskId = await createVideoTask({
         images: imagenesDe(i), prompt, durationSec, locucionChars, tomas: lote.tomas.length,
+        referenceVideoUrl: tramoUrls[i],
       }, kieKey)
       creados++
       lotes.push({ ...lote, duracionSeg: durationSec, prompt, taskId, status: 'waiting', videoUrl: null, failMsg: null })
