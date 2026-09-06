@@ -97,12 +97,29 @@ function auth(apiKey: string): Record<string, string> {
   return { Authorization: `Bearer ${apiKey.trim()}` }
 }
 
+/**
+ * Tope duro por petición a KIE.
+ *
+ * En Node `fetch` NO tiene timeout propio: si KIE deja la conexión abierta sin
+ * responder, el `await` no vuelve nunca. Ya se pagó una vez en este repo —el bucle de
+ * polling de las imágenes se colgó con el proceso al 0 % de CPU y una conexión ESTAB a
+ * `api.kie.ai`, con su presupuesto de 240 s sin evaluarse ni una vez, porque se
+ * comprobaba DESPUÉS del await. En Vercel el síntoma es peor y más difícil de leer: la
+ * función muere en `maxDuration` con las tareas ya creadas y PAGADAS.
+ *
+ * Las dos peticiones son cortas por diseño —crear la tarea y sondearla, nunca esperar
+ * al video— así que 30 s es holgado para lo que hacen y corto frente al `maxDuration`
+ * de 300 de la ruta.
+ */
+const KIE_TIMEOUT_MS = 30_000
+
 /** Crea la tarea de render. Devuelve el taskId; NO espera al video. */
 export async function createVideoTask(input: VideoTaskInput, apiKey: string): Promise<string> {
   const res = await fetch(`${KIE_BASE}/createTask`, {
     method: 'POST',
     headers: { ...auth(apiKey), 'Content-Type': 'application/json' },
     body: JSON.stringify(buildTaskBody(input)),
+    signal: AbortSignal.timeout(KIE_TIMEOUT_MS),
   })
   const json = (await res.json().catch(() => null)) as
     | { code?: number; msg?: string; data?: { taskId?: string } }
@@ -148,6 +165,7 @@ export function parseTaskDetail(data: unknown): TaskDetail {
 export async function getTaskDetail(taskId: string, apiKey: string): Promise<TaskDetail> {
   const res = await fetch(`${KIE_BASE}/recordInfo?taskId=${encodeURIComponent(taskId)}`, {
     headers: auth(apiKey),
+    signal: AbortSignal.timeout(KIE_TIMEOUT_MS),
   })
   const json = (await res.json().catch(() => null)) as { data?: unknown; msg?: string } | null
   if (!res.ok) throw new Error(`KIE recordInfo falló (${res.status}): ${json?.msg ?? ''}`)

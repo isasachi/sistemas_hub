@@ -268,3 +268,32 @@ describe('isPaidResume', () => {
     expect(isPaidResume(true, [pagado(1), pagado(2), pendiente(3)], [lote(1), lote(2)], H)).toBe(false)
   })
 })
+
+// Un lote fallido tiene el taskId de la tarea MUERTA. Conservarlo lo dejaba fuera de
+// `pendientes` y "Reintentar" no recreaba nada — con los cinco en fail, el render quedaba
+// trabado para siempre. Medido en producción: KIE devolvió 524 y cobró 0 créditos.
+describe('resumeSeed · lotes fallidos', () => {
+  const base: Lote[] = [
+    { n: 1, tomas: [], duracionSeg: 10, prompt: 'p1', status: 'idle' },
+    { n: 2, tomas: [], duracionSeg: 6, prompt: 'p2', status: 'idle' },
+    { n: 3, tomas: [], duracionSeg: 8, prompt: 'p3', status: 'idle' },
+  ] as unknown as Lote[]
+
+  it('devuelve a base el lote que falló, para que se recree', () => {
+    const existentes = [
+      { ...base[0], taskId: 'muerta', status: 'fail', failMsg: 'generate task timeout.' },
+      { ...base[1], taskId: 'ok', status: 'success', videoUrl: 'https://x/1.mp4' },
+      { ...base[2], taskId: 'corriendo', status: 'generating' },
+    ] as unknown as Lote[]
+    const seed = resumeSeed(base, existentes)
+    expect(seed[0].taskId).toBeUndefined()          // se recrea
+    expect(seed[1].taskId).toBe('ok')               // ya pagado, se conserva
+    expect(seed[2].taskId).toBe('corriendo')        // puede terminar bien, se conserva
+    expect(seed.filter((l) => !l.taskId)).toHaveLength(1)
+  })
+
+  it('con TODOS fallidos, quedan todos por recrear', () => {
+    const todos = base.map((l, i) => ({ ...l, taskId: `t${i}`, status: 'fail' })) as unknown as Lote[]
+    expect(resumeSeed(base, todos).filter((l) => !l.taskId)).toHaveLength(3)
+  })
+})

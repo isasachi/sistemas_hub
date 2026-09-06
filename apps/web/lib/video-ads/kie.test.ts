@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildTaskBody, clampDuration, resolutionFor, parseTaskDetail } from './kie'
+import { buildTaskBody, clampDuration, resolutionFor, parseTaskDetail, createVideoTask, getTaskDetail } from './kie'
 
 // Sin API key no se puede probar el render en vivo, así que lo que se verifica acá es
 // el CONTRATO con KIE (modelo grok-imagine-video-1-5-preview): las reglas que, si se
@@ -72,5 +72,26 @@ describe('parseTaskDetail', () => {
 
   it('propaga el mensaje de error de una tarea fallida', () => {
     expect(parseTaskDetail({ state: 'fail', failMsg: 'content rejected' }).failMsg).toBe('content rejected')
+  })
+})
+
+// En Node `fetch` no tiene timeout propio: sin señal, una conexión que KIE deja abierta
+// cuelga el await para siempre. Este repo ya lo pagó una vez con el polling de imágenes.
+describe('toda petición a KIE lleva timeout', () => {
+  it('createTask y getTaskDetail mandan una señal de aborto', async () => {
+    const señales: (AbortSignal | undefined)[] = []
+    const orig = globalThis.fetch
+    globalThis.fetch = (async (_u: string, init: RequestInit) => {
+      señales.push(init?.signal ?? undefined)
+      return { ok: true, status: 200, json: async () => ({ code: 200, data: { taskId: 't1', state: 'success', resultJson: '{"resultUrls":["u"]}' } }) }
+    }) as unknown as typeof fetch
+    try {
+      await createVideoTask({ images: IMAGES, prompt: 'p', durationSec: 6 }, 'k')
+      await getTaskDetail('t1', 'k')
+    } finally {
+      globalThis.fetch = orig
+    }
+    expect(señales).toHaveLength(2)
+    for (const s of señales) expect(s).toBeInstanceOf(AbortSignal)
   })
 })

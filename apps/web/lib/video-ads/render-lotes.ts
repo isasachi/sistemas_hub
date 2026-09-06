@@ -55,9 +55,27 @@ export function renderDone(lotes: Lote[]): boolean {
  *
  * Esto es lo que hace que reanudar un render parcial no vuelva a cobrar por los
  * lotes que ya se pagaron la primera vez.
+ *
+ * ⚠️ UN LOTE `fail` VUELVE A `base`, y sin eso "Reintentar" no hacía NADA. Un lote que
+ * falló TIENE taskId —el de la tarea muerta—, así que conservarlo lo dejaba fuera de
+ * `pendientes` (`filter(l => !l.taskId)`) y la ruta salía por su early return de "nada
+ * por crear". El usuario podía apretar el botón para siempre sin que pasara nada, y con
+ * TODOS los lotes fallidos el render quedaba trabado de forma permanente.
+ *
+ * Medido en la sesión `c3dc2777`: los 5 lotes volvieron `state: fail`, `failCode 524`,
+ * `failMsg "generate task timeout"` y **`costCredits: 0`** — KIE no cobró nada, así que
+ * recrearlos no vuelve a pagar lo mismo. El fallo de KIE es transitorio (el mismo prompt
+ * reenviado sale bien), o sea reintentar es exactamente la respuesta correcta.
+ *
+ * `generating` / `waiting` SÍ se conservan: esa tarea todavía puede terminar bien, y
+ * recrearla sería pagar dos veces por el mismo clip.
  */
 export function resumeSeed(base: Lote[], existentes: Lote[]): Lote[] {
-  return base.map((lote, i) => (existentes[i]?.taskId ? existentes[i] : lote))
+  return base.map((lote, i) => {
+    const previo = existentes[i]
+    if (!previo?.taskId || previo.status === 'fail') return lote
+    return previo
+  })
 }
 
 /** Separador de campos del texto canónico de `scriptFingerprint`. Un carácter de
