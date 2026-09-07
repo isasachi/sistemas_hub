@@ -2,18 +2,15 @@
  * Puntúa una plantilla de FASE 2 contra el guion original de su sesión.
  * Lectura pura + aritmética: cero llamadas a modelos, cero cuota.
  *
- *   npx tsx scripts/probe-fase2-spans.ts <sesion> <archivo.json>...
+ *   npx tsx --env-file=.env.local scripts/probe-fase2-spans.ts <sesion> <archivo.json>...
  *
  * Por cada hueco reconstruye qué decía el original ahí (`alignSlots`) y pregunta lo
  * único que discrimina: ¿el dato del nicho quedó DENTRO del corchete, o colgando fuera?
  */
 import { createClient } from '@supabase/supabase-js'
-import { config } from 'dotenv'
 import { alignSlots } from '../lib/video-ads/fill'
 import type { ForensicReport } from '../lib/video-ads/types'
 import type { ScriptTemplate } from '../lib/video-ads/template'
-
-config({ path: '.env.local' })
 
 // Los datos que el ORIGINAL afirma de La Roche-Posay. Si alguno sobrevive FUERA de un
 // corchete, la plantilla le publica ese claim al producto del usuario.

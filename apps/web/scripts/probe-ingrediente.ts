@@ -1,8 +1,6 @@
 /** ¿El 3er ingrediente sale de la etiqueta o es una muletilla? Lectura pura. */
 import { createClient } from '@supabase/supabase-js'
-import { config } from 'dotenv'
 import { readFile } from 'node:fs/promises'
-config({ path: '.env.local' })
 const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
 async function main() {
   const [sesion, ...archivos] = process.argv.slice(2)

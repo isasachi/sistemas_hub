@@ -1,11 +1,8 @@
 /** ¿El scan transcribe la etiqueta o describe el estilo? Una llamada de visión, 0 escrituras. */
 import { createClient } from '@supabase/supabase-js'
-import { config } from 'dotenv'
 import type { Part } from '@google/genai'
 import { callVideoAds } from '../lib/video-ads/llm'
 import { ProductScanSchema } from '../lib/types'
-config({ path: '.env.local' })
-
 async function main() {
   const db = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
   const { data } = await db.from('video_sessions')

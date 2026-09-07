@@ -1,11 +1,8 @@
 /** ¿Los ids de `slotOriginals` casan con los de `extractSlots`? Lectura pura. */
 import { createClient } from '@supabase/supabase-js'
-import { config } from 'dotenv'
 import { readFile } from 'node:fs/promises'
 import { extractSlots, slotOriginals } from '../lib/video-ads/fill'
 import type { ForensicReport } from '../lib/video-ads/types'
-
-config({ path: '.env.local' })
 
 async function main() {
   const [sesion, archivo] = process.argv.slice(2)
