@@ -72,51 +72,19 @@ export const GEN_PER_STEP_LIMIT = Number(process.env.GEN_PER_STEP_LIMIT ?? 4) //
 // y cuente al backstop diario, pero un tope per-step propio solo podría dejar la sesión con
 // el análisis hecho y el movimiento a medias: la ruta ya está topada por `video-forensic`,
 // que es la puerta de entrada de esa misma llamada. Mismo criterio que `video-render`.
-export const IMAGE_KINDS = ['branding-identidad', 'branding-logo', 'branding-etiqueta', 'branding-mockup', 'anuncios-image', 'landing-section', 'video-character', 'video-generation', 'video-forensic']
+// ⚠️ `video-generation` TAMPOCO está acá (2026-09-07, decisión del dueño del repo): el render
+// del video no tiene tope de regeneraciones —ni por video ni por lote (`rerender-lote` nunca
+// lo tuvo)—. Lo paga el usuario con su propia key de KIE, así que el único freno que le
+// queda es el backstop diario global anti-abuso. Se sigue registrando para que el costo se
+// vea en el panel de consumo.
+export const IMAGE_KINDS = ['branding-identidad', 'branding-logo', 'branding-etiqueta', 'branding-mockup', 'anuncios-image', 'landing-section', 'video-character', 'video-forensic']
 export function isImageKind(kind: string): boolean {
   return IMAGE_KINDS.some((k) => kind === k || kind.startsWith(k + ':'))
 }
 
-// El render de video (Grok vía KIE) cuesta un orden de magnitud más que una imagen,
-// así que tiene su propio tope — pero por VIDEO, no por lote: 1 generación + 2
-// regens para TODO el video, sin importar en cuántas llamadas a KIE se reparta su
-// guión (`groupIntoLotes` puede partirlo en 1, 2, 3... lotes de hasta 15 s cada uno).
-//
-// ⚠️ NOTA DE DISEÑO (fix round 4 — corrige lo que decía el round 3, que ya era falso
-// cuando se escribió): mientras el CONTENIDO no cambie, las "+2 regens" de este tope
-// son inalcanzables dentro de una sesión. En cuanto la primera llamada crea aunque sea
-// una tarea, `session.lotes` deja de tener todo en `idle`: todo POST sin `resume`
-// recibe 409 (`existentes.some(taskId) && !resume`), y todo POST con `resume: true`
-// sobre el mismo contenido entra por `isPaidResume` → `reanuda: true` → nunca vuelve a
-// llamar `recordGenQuota(id, 'video-generation', …)`. Para ese usuario el tope de 3 se
-// comporta como un tope de 1.
-//
-// Lo que SÍ registra una segunda (y tercera) fila de `video-generation` para la misma
-// sesión: re-hacer el guión (`video-adapt`), el personaje o la voz y volver a llamar.
-// Ahí la huella de contenido guardada en los lotes deja de coincidir, `isPaidResume`
-// da `false` y la llamada se cobra como el video nuevo que es — que es precisamente
-// para lo que este tope existe, y por eso hay que dejarlo en 3 y no bajarlo a 1.
-// Cuando la Task 7 conecte un botón de "generar de nuevo desde cero" (regenerar el
-// MISMO contenido, que es el caso que hoy no tiene camino), ese botón va a necesitar
-// limpiar `video_sessions.lotes` de vuelta a `null` (NO a `[]`) SIN tocar las filas
-// ya insertadas en `ph_gen_usage` — son las que hacen que la 2ª y 3ª regeneración sí
-// choquen contra el tope cuando corresponda. Si en cambio se resetean o se borran
-// esas filas, esta cuota deja de significar nada. Tiene que ser `null` y no `[]`
-// por DOS motivos, no uno: (a) es la única condición que `claimFreshLotes` acepta
-// (`lotes IS NULL`) para volver a reclamar la fila atómicamente; (b) con `lotes:
-// null`, `existentes` vuelve a ser `[]` en la siguiente llamada — nada que abandonar,
-// ninguna ambigüedad de si un `resume` es real. Limpiar a `[]` en vez de `null`
-// dejaría la fila para siempre fuera del alcance de `claimFreshLotes` (esa condición
-// nunca volvería a cumplirse) sin ganar nada a cambio. Invariante nuevo que ese botón
-// también tiene que respetar (fix round 5/6): `render_done` (`video_sessions`,
-// `render-lotes.ts` `renderDone`) se escribe SIEMPRE en el mismo write que toca
-// `lotes` — el reset a `null` tiene que llevarse `render_done` de vuelta a `false` en
-// la misma escritura, o el dashboard se queda mostrando "listo" sobre una sesión que
-// ese botón acaba de vaciar para regenerar.
-export const VIDEO_GENERATION_LIMIT = Number(process.env.GEN_VIDEO_LIMIT ?? 3)
-function limitFor(kind: string): number {
-  return kind === 'video-generation' ? VIDEO_GENERATION_LIMIT : GEN_PER_STEP_LIMIT
-}
+// Nota histórica: existió `VIDEO_GENERATION_LIMIT` (1 gen + 2 regens POR VIDEO, env
+// `GEN_VIDEO_LIMIT`). Se quitó junto con `video-generation` de `IMAGE_KINDS`, ver arriba.
+const limitFor = (_kind: string) => GEN_PER_STEP_LIMIT
 
 // regens restantes DESPUÉS de la gen nº `count+1` para un step con `count` filas previas.
 export function regensLeftFor(count: number, kind = ''): number {

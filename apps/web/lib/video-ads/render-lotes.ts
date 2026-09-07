@@ -281,7 +281,7 @@ export function scriptFingerprint(input: {
  * - Editar el guión (o rehacer personaje/voz) durante un render a medias cuesta una
  *   generación nueva y ABANDONA los `taskId` ya pagados (la ruta los loguea con el id
  *   de sesión antes de seguir). No hay forma de que sea gratis: el lote viejo ya no
- *   pertenece a este video. El tope de `VIDEO_GENERATION_LIMIT` deja margen para eso.
+ *   pertenece a este video. No hay tope de generaciones por video (2026-09-07).
  * - Las dos ventanas de concurrencia de los rounds 1 y 2 siguen abiertas igual: dos
  *   `resume` simultáneos, y dos reintentos simultáneos sobre una sesión cuyo primer
  *   intento falló por completo. `isPaidResume` es una función pura sobre una lectura

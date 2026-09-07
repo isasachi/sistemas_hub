@@ -121,15 +121,11 @@ export async function POST(
     /* sin body o no-JSON */
   }
 
-  // ⚠️ Este guard es la razón por la que, MIENTRAS EL CONTENIDO NO CAMBIE, las "+2
-  // regens" de VIDEO_GENERATION_LIMIT son inalcanzables dentro de una sesión (nota de
-  // diseño completa en gen-quota.ts, junto a esa constante): en cuanto la primera
-  // llamada crea una tarea, todo POST sin `resume` cae acá (409) y todo `resume` de
-  // ese mismo contenido entra por `isPaidResume` sin volver a cobrar. El camino que SÍ
-  // registra una segunda `video-generation` es re-hacer el guión (o el personaje o la
-  // voz) y volver a llamar: ahí la huella deja de coincidir, no es reanudación, y se
-  // cobra como lo que es — un video nuevo. Ese camino está topado por el límite, que
-  // es exactamente para lo que existe.
+  // Sin `resume`, con tareas ya creadas, es 409: un POST repetido no puede duplicar
+  // lotes pagados. Con `resume` sobre el mismo contenido entra por `isPaidResume` sin
+  // cobrar; con contenido nuevo (guión, personaje o voz rehechos) se registra otra
+  // `video-generation` — que desde 2026-09-07 NO tiene tope (ver gen-quota.ts): el
+  // render lo paga el usuario con su key, y el único freno es el backstop global.
   const existentes = session.lotes ?? []
   if (existentes.some((l) => l.taskId) && !resume) {
     return NextResponse.json(
@@ -167,10 +163,9 @@ export async function POST(
   if (!kieKey) return NextResponse.json({ error: SIN_KEY }, { status: 400 })
 
   // El backstop global diario aplica SIEMPRE que se vaya a llamar a KIE — reanudar
-  // también gasta (crea tarea para los lotes que quedaron pendientes). El gate
-  // per-video (`video-generation`, la cuota real ahora) NO aplica al reanudar: esa
-  // generación ya se cobró la primera vez, y cobrarla de nuevo dejaría al usuario sin
-  // forma de terminar un video que ya pagó.
+  // también gasta (crea tarea para los lotes que quedaron pendientes). `checkGenQuota`
+  // con `video-generation` ya no tiene gate per-step (fuera de IMAGE_KINDS): es el
+  // mismo backstop más los créditos, que el video no gasta.
   if (reanuda) {
     const { blocked } = await checkGlobalBackstop()
     if (blocked) return blocked
