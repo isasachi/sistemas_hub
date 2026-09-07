@@ -282,11 +282,26 @@ function andamiar(tramos: string[], limites: number[], arrastre: (number | null)
     const hasta = tramos.slice(0, fin)
     const estadoFin = [...hasta].reverse().find(esEstadoDeManos)
     const ladoFin = estadoFin ? manoDe(estadoFin) : null
-    const cierre = ultimo ? [] : [
-      ...(aplicadorFuera(trozo) ? [`vuelve a poner ${pieza} en el envase y lo cierra`] : []),
-      ...(ladoFin ? [`termina con el envase en ${ladoFin === 'ambas' ? 'ambas manos' : `la mano ${ladoFin}`}${hasta.some(esApertura) ? ', cerrado' : ''}`] : []),
-    ]
-    const lineas = [...apertura, ...trozo, ...cierre]
+    const cierre = ultimo || !ladoFin ? [] : [`termina con el envase en ${ladoFin === 'ambas' ? 'ambas manos' : `la mano ${ladoFin}`}${hasta.some(esApertura) ? ', cerrado' : ''}`]
+    // El cierre sintético va JUSTO DESPUÉS del último hecho que dejó el aplicador fuera,
+    // no al final del fragmento: el lote 2 de `493a486d` emitía "aplica con el cuentagotas
+    // en la izquierda → masajea con los dedos de la izquierda → vuelve a poner el
+    // cuentagotas", o sea la misma mano masajeando con el gotero todavía en ella. En el
+    // original se cierra y recién entonces la mano libre trabaja sobre la cara.
+    const cuerpo = [...trozo]
+    if (!ultimo && aplicadorFuera(trozo)) {
+      const i = cuerpo.reduce((acc, t, k) => (esApertura(t) ? k : acc), -1)
+      cuerpo.splice(i + 1, 0, `vuelve a poner ${pieza} en el envase y lo cierra`)
+    }
+    // LA ACCIÓN VA PRIMERO Y EL ESTADO DESPUÉS. Está medido sobre grok que lo escrito al
+    // principio del prompt ocurre al principio del clip: el lote 3 de `493a486d` abría con
+    // cuatro líneas de estado antes de "masajea la mejilla" y el clip arrancó echándose
+    // suero en la mano (sin destapar: "el envase está cerrado" sí lo obedeció) y recién
+    // después masajeó. Un fragmento que arranca a mitad de una acción SOSTENIDA la emite
+    // primero y el contexto detrás. Si arranca con un evento (destapa, aplica), el estado
+    // se queda delante: describe lo que hay ANTES del evento.
+    const sostenida = cuerpo.length > 0 && !esApertura(cuerpo[0]) && !esCierre(cuerpo[0]) && !esTransferencia(cuerpo[0]) && !esEstadoDeManos(cuerpo[0])
+    const lineas = sostenida ? [cuerpo[0], ...apertura, ...cuerpo.slice(1), ...cierre] : [...apertura, ...cuerpo, ...cierre]
     return lineas.length ? lineas.join('. ') + '.' : ''
   })
 }
@@ -330,7 +345,9 @@ const esCierre = (t: string) =>
  */
 export function defectosDelForense(report: { cortes?: { n: number; tiempo: string; duracionSeg: number; dialogo?: string; hechos?: Hecho[] }[]; guionOriginal?: string }): string[] {
   const out: string[] = verificarDialogos(report)
-  for (const c of report.cortes ?? []) {
+  const cortes = report.cortes ?? []
+  const siguientes = new Map(cortes.map((c, i) => [c.n, cortes[i + 1] ? expandirHechos(cortes[i + 1].hechos ?? []).map((h) => h.texto) : undefined]))
+  for (const c of cortes) {
     const hechos = c.hechos ?? []
     if (!hechos.length) continue // análisis anterior a los hechos: no se juzga
     // El colapso se juzga DESPUÉS de expandir: un hecho con tres acciones separadas por
@@ -340,9 +357,28 @@ export function defectosDelForense(report: { cortes?: { n: number; tiempo: strin
     if (textos.some(esApertura) && textos.some(esCierre) && !textos.some(esTransferencia))
       out.push(`corte ${c.n}: el aplicador sale y vuelve al envase sin que el producto llegue al cuerpo`)
     for (const m of conflictosDeManos(textos)) out.push(`corte ${c.n}: ${m}`)
+    // La gota que cae sobre la piel se EXTIENDE, y ese hecho viene inmediatamente después
+    // (en este corte o abriendo el siguiente). El forense de `493a486d` escribió la gota en
+    // el corte 1 y en el corte 2 "sostiene el frasco frente al pecho con ambas manos": el
+    // original extiende con las yemas a los 3,3 s y el render no masajeó nunca. Un salto
+    // de la gota al gesto siguiente es un hecho que el modelo se saltó, no una elección.
+    // Cerrar el envase o declarar las manos entre la gota y el masaje es legítimo: se salta.
+    // Un estado con un gesto adentro ("sostiene el frasco… señalando la etiqueta") no.
+    const estadoPuro = (t: string) => esEstadoDeManos(t) && !/\b(señal|senal|gesticul|muestr|acerc|alej|gir|levant|toc|apunt)/i.test(t)
+    const i = textos.findIndex(esTransferenciaEnPiel)
+    if (i >= 0) {
+      const siguiente = [...textos.slice(i + 1), ...(siguientes.get(c.n) ?? [])].find((t) => !esCierre(t) && !estadoPuro(t))
+      if (siguiente !== undefined && !esExtension(siguiente)) out.push(`corte ${c.n}: el producto cae sobre la piel y el hecho siguiente no lo extiende ("${siguiente}")`)
+    }
   }
   return out
 }
+/** El producto llega a una zona de la PIEL (no a un vaso ni a una cuchara). */
+const esTransferenciaEnPiel = (t: string) => esTransferencia(t) && /\b(mejilla|frente|rostro|cara|piel|cuello|ment[oó]n|p[oó]mulo|nariz|p[aá]rpado)\b/i.test(t)
+/** La mano trabaja el producto sobre la piel. Vocabulario cerrado. */
+const esExtension = (t: string) =>
+  /\b(masajea|extiende|esparce|distribuye|reparte|difumina|frota|movimientos circulares|da (toques|golpecitos))\b/i.test(t)
+  || (/\b(presiona|toca(ndo)?)\b/i.test(t) && /\b(mejilla|frente|rostro|cara|piel|cuello|ment[oó]n|p[oó]mulo|nariz|p[aá]rpado)\b/i.test(t))
 /** Estado del aplicador al final de una secuencia de tramos: fuera (true) o en el envase. */
 function aplicadorFuera(seq: string[]): boolean {
   let fuera = false

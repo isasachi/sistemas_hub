@@ -211,7 +211,9 @@ export function scriptFingerprint(input: {
     // "toma continua" en ese caso y el micro-temblor solo va con cámara no fija.
     // v7 → v8: la cámara no lleva micro-temblor salvo que el forense diga "en mano", la
     // línea de cámara se omite sin dato, y el prompt prohíbe el relleno entre hechos.
-    'v8',
+    // v8 → v9: un fragmento que arranca a mitad de una acción sostenida la emite ANTES del
+    // estado heredado, y el cierre sintético va justo después de la apertura.
+    'v9',
     producto,
     voz.idioma, voz.varianteRegional, voz.acento, voz.pronunciacion, voz.ritmo,
     voz.velocidad, voz.entonacion, voz.energia, voz.pausas, voz.tono, voz.timbre,

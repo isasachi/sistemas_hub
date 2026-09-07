@@ -515,22 +515,45 @@ describe('el reparto no deja escenografía de foto ni carriles vacíos', () => {
       'vuelve a poner el cuentagotas en el envase y lo cierra',
       'termina con el envase en la mano derecha, cerrado',
     ])
-    // el siguiente arranca con el envase cerrado en la derecha, la izquierda libre y el suero ya puesto
+    // el siguiente arranca con la acción sostenida PRIMERO (lo escrito al principio ocurre al
+    // principio del clip) y detrás el estado: envase cerrado en la derecha, izquierda libre,
+    // suero ya puesto
     expect(partirEnTramos(b)).toEqual([
+      'extiende el suero con las yemas de los dedos sobre la mejilla, el mentón y el cuello con movimientos ascendentes',
       'Sujeta el frasco con la mano derecha',
       'el envase está cerrado, con el cuentagotas dentro',
       'la mano izquierda está libre',
       'el producto ya está sobre la piel desde el inicio',
-      'extiende el suero con las yemas de los dedos sobre la mejilla, el mentón y el cuello con movimientos ascendentes',
       'termina con el envase en la mano derecha, cerrado',
     ])
     expect(partirEnTramos(c)).toEqual([
+      'mira a la cámara y señala el resultado en su piel',
       'Sujeta el frasco con la mano derecha',
       'el envase está cerrado, con el cuentagotas dentro',
       'la mano izquierda está libre',
       'el producto ya está sobre la piel desde el inicio',
-      'mira a la cámara y señala el resultado en su piel',
     ])
+  })
+
+  // Lote 2 y 3 de `493a486d` (2026-09-07): el lote 2 emitía "aplica con el cuentagotas en la
+  // izquierda → masajea con los dedos de la izquierda → vuelve a poner el cuentagotas" (la
+  // misma mano masajeando con el gotero en ella), y el lote 3 abría con cuatro líneas de
+  // estado antes de "masajea": el clip arrancó echándose suero en la mano y masajeó después.
+  it('el cierre sintético va justo después de la apertura, y el fragmento que arranca a mitad de una acción sostenida la emite antes del estado', () => {
+    const corte4 = 'sostiene el frasco con la mano derecha; aplica producto en la mejilla con el cuentagotas sostenido en la mano izquierda; masajea la mejilla con los dedos de la mano izquierda, sosteniendo el frasco con la derecha; mira a cámara'
+    const [a, b] = repartirAccion(corte4, [15, 5])
+    expect(partirEnTramos(a)).toEqual([
+      'sostiene el frasco con la mano derecha',
+      'aplica producto en la mejilla con el cuentagotas sostenido en la mano izquierda',
+      'vuelve a poner el cuentagotas en el envase y lo cierra',
+      'masajea la mejilla con los dedos de la mano izquierda, sosteniendo el frasco con la derecha',
+      'termina con el envase en la mano derecha, cerrado',
+    ])
+    expect(partirEnTramos(b)[0]).toBe('mira a cámara')
+    // un fragmento que arranca con un EVENTO conserva el estado delante: describe lo de antes
+    const [, d] = repartirAccion('sostiene el frasco con la mano derecha; habla a cámara; destapa el frasco con la izquierda; aplica una gota en la mejilla con el cuentagotas; masajea la mejilla con la izquierda', [4, 6])
+    expect(partirEnTramos(d)[0]).toBe('sostiene el frasco con la mano derecha')
+    expect(partirEnTramos(d)).toContain('destapa el frasco con la izquierda')
   })
 
   it('si el corte cierra el envase más adelante, la frontera se corre hasta después del cierre', () => {
@@ -541,11 +564,10 @@ describe('el reparto no deja escenografía de foto ni carriles vacíos', () => {
     // el reparto proporcional cortaba en 3/3, con el gotero fuera: abrir, aplicar y cerrar van juntos
     expect(a).toContain('cierra el frasco')
     expect(a).not.toMatch(/vuelve a poner/)
-    expect(b).toMatch(/^Sujeta el frasco con la mano derecha\. el envase está cerrado/)
-    expect(b).toContain('masajea la mejilla con la izquierda')
+    expect(b).toMatch(/^masajea la mejilla con la izquierda\. Sujeta el frasco con la mano derecha\. el envase está cerrado/)
     // el estado que se hereda es el ÚLTIMO declarado antes del fragmento, no el primero del corte
     const [, c] = repartirAccion('Sujeta el frasco con la derecha; pasa el frasco a la izquierda; sostiene el frasco con la mano izquierda; masajea la mejilla; mira a cámara', [10, 5])
-    expect(c).toMatch(/^sostiene el frasco con la mano izquierda\. la mano derecha está libre/)
+    expect(c).toMatch(/^masajea la mejilla\. sostiene el frasco con la mano izquierda\. la mano derecha está libre/)
     // si el propio fragmento dispensa, no se le dice que ya está aplicado
     const [, d] = repartirAccion('Sujeta el frasco con la mano derecha; aplica una gota en la mejilla; aplica otra gota en la frente; extiende', [5, 5])
     expect(d).not.toMatch(/ya está sobre la piel/)
@@ -669,8 +691,9 @@ describe('corte por tiempo, en estado cerrado (hechos con ventana)', () => {
       'vuelve a poner el cuentagotas en el frasco y lo cierra',
       'termina con el envase en la mano derecha, cerrado',
     ])
-    // el segundo recibe SOLO los hechos de su ventana, y abre con el estado
-    expect(b.accionVisual).toMatch(/^sujeta el frasco con la mano derecha\. el envase está cerrado/)
+    // el segundo recibe SOLO los hechos de su ventana: la acción sostenida que arrastra va
+    // primero, y detrás el estado
+    expect(b.accionVisual).toMatch(/^extiende el suero con las yemas de la izquierda\. sujeta el frasco con la mano derecha\. el envase está cerrado/)
     expect(b.accionVisual).toContain('aplica otra gota en la frente')
     expect(b.accionVisual).not.toContain('aplica una gota en la mejilla')
     // sin cortes, el reparto viejo: proporcional por frases, que sí parte en 15 + 5
@@ -792,6 +815,22 @@ describe('defectosDelForense', () => {
     expect(defectosDelForense({ cortes: [C(2, 5, [h(0, 5, 'muestra el frasco')])] })).toEqual([])
     // un análisis anterior (sin hechos) no se juzga
     expect(defectosDelForense({ cortes: [C(1, 20, [])] })).toEqual([])
+  })
+  // El forense real de `493a486d`: la gota en el corte 1 y el corte 2 abriendo con el frasco
+  // frente al pecho. El original extiende con las yemas a los 3,3 s; el render no masajeó.
+  it('caza la gota sin extender: lo que cae sobre la piel se trabaja en el hecho siguiente, aunque sea del corte de al lado', () => {
+    const gota = h(0, 1.5, 'la mano derecha sostiene el cuentagotas fuera del frasco con una gota de producto, la mano izquierda sostiene el frasco')
+    const aplica = h(1.5, 3, 'aplica la gota sobre la mejilla derecha con el cuentagotas mientras mira a cámara')
+    expect(defectosDelForense({ cortes: [
+      C(1, 3, [gota, aplica]),
+      C(2, 7, [h(0, 3.5, 'sostiene el frasco frente al pecho con ambas manos, señalando la etiqueta con el dedo índice derecho'), h(3.5, 7, 'lo acerca a la mejilla, tocando la piel con la punta de los dedos izquierdos')]),
+    ] })).toEqual(['corte 1: el producto cae sobre la piel y el hecho siguiente no lo extiende ("sostiene el frasco frente al pecho con ambas manos, señalando la etiqueta con el dedo índice derecho")'])
+    // con el masaje en el corte siguiente, o en el mismo, no hay defecto — y cerrar el envase entre medio es legítimo
+    expect(defectosDelForense({ cortes: [C(1, 3, [gota, aplica]), C(2, 7, [h(0, 7, 'extiende la gota con las yemas de la mano derecha sobre la mejilla, sosteniendo el frasco con la izquierda')])] })).toEqual([])
+    expect(defectosDelForense({ cortes: [C(1, 6, [aplica, h(3, 4, 'vuelve a poner el cuentagotas en el frasco y lo cierra'), h(4, 6, 'masajea la mejilla con los dedos de la derecha')])] })).toEqual([])
+    // la última gota del video, sin nada detrás, no se juzga; y lo que cae en un vaso no es piel
+    expect(defectosDelForense({ cortes: [C(1, 3, [gota, aplica])] })).toEqual([])
+    expect(defectosDelForense({ cortes: [C(1, 4, [h(0, 2, 'vierte una cucharada del producto en el vaso'), h(2, 4, 'muestra el vaso a cámara')])] })).toEqual([])
   })
 
   // El cuarto sorteo real: dos frases en una ventana de 4 s y la línea de la marca en dos cortes.
