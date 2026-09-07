@@ -301,7 +301,7 @@ export function aplicadorFueraEn(hechos: Hecho[], t: number): boolean {
 // Vocabulario CERRADO del estado de los objetos, sobre la prosa del forense. Se amplía
 // agregando verbos acá —visible en el diff—, no aflojando los patrones.
 /** El producto llegó al cuerpo en este tramo. */
-const esTransferencia = (t: string) => /\b(aplica|deja caer|suelta|vierte|deposita|echa)\b/i.test(t) && /\b(gota|suero|serum|producto|crema|mejilla|frente|rostro|cara|piel|cuello|ment[oó]n|p[oó]mulo)\b/i.test(t)
+const esTransferencia = (t: string) => /\b(aplica|deja caer|suelta|vierte|deposita|echa|usa)\b/i.test(t) && /\b(gota|suero|serum|producto|crema|mejilla|frente|rostro|cara|piel|cuello|ment[oó]n|p[oó]mulo)\b/i.test(t)
 const PIEZAS = /\b(cuentagotas|gotero|pipeta|tapa|tapón|cuchara|aplicador)\b/i
 /** El aplicador sale del envase: se destapa, se saca, o se usa fuera (aplicar CON el gotero). */
 const esApertura = (t: string) =>
@@ -325,6 +325,8 @@ const esCierre = (t: string) =>
  *     introducirlo". Grok ejecuta lo que lee: destapa y tapa, y la gota nunca cae.
  *  3. El reparto del diálogo: repetido entre cortes, que no reconstruye el guion, o que
  *     no entra en su ventana (`verificarDialogos`).
+ *  4. Conflicto de manos: una mano ocupada que masajea o "ambas manos" sin haber soltado
+ *     (`conflictosDeManos`) — el frasco desaparece en el render.
  */
 export function defectosDelForense(report: { cortes?: { n: number; tiempo: string; duracionSeg: number; dialogo?: string; hechos?: Hecho[] }[]; guionOriginal?: string }): string[] {
   const out: string[] = verificarDialogos(report)
@@ -337,6 +339,7 @@ export function defectosDelForense(report: { cortes?: { n: number; tiempo: strin
     if (c.duracionSeg > 8 && textos.length < 2) out.push(`corte ${c.n}: ${c.duracionSeg.toFixed(1)} s con un solo hecho`)
     if (textos.some(esApertura) && textos.some(esCierre) && !textos.some(esTransferencia))
       out.push(`corte ${c.n}: el aplicador sale y vuelve al envase sin que el producto llegue al cuerpo`)
+    for (const m of conflictosDeManos(textos)) out.push(`corte ${c.n}: ${m}`)
   }
   return out
 }
@@ -352,8 +355,54 @@ function piezaDe(tramos: string[]): string {
 }
 function manoDe(estado: string): 'derecha' | 'izquierda' | 'ambas' | null {
   if (/ambas manos/i.test(estado)) return 'ambas'
-  const m = estado.match(/mano (derecha|izquierda)/i)
+  const m = estado.match(/(?:mano|con la|en la)\s+(derecha|izquierda)\b/i)
   return m ? (m[1].toLowerCase() as 'derecha' | 'izquierda') : null
+}
+
+/**
+ * CONFLICTO DE MANOS dentro de un corte: una mano que sostiene el envase o el aplicador y
+ * que, sin soltarlo, masajea, señala o gesticula — o "ambas manos" haciendo algo mientras
+ * una sigue ocupada. Grok resuelve la contradicción como puede: el frasco desaparece
+ * (lote 3 de `493a486d`: "sostiene el frasco con la derecha, cuentagotas con la izquierda"
+ * → "masajea con ambas manos") o le crece un brazo. Vocabulario cerrado; devuelve motivos.
+ */
+export function conflictosDeManos(textos: string[]): string[] {
+  const out: string[] = []
+  const ocupa: Record<'derecha' | 'izquierda', string | null> = { derecha: null, izquierda: null }
+  const suelta = (mano: 'derecha' | 'izquierda') => { ocupa[mano] = null }
+  for (const t of textos) {
+    const s = t.toLowerCase()
+    // qué sostiene cada mano, según el propio tramo
+    for (const m of s.matchAll(/(?:sostiene|sujeta|mantiene|tiene|sosteniendo|sujetando|manteniendo)\s+(?:el|la|un|una)?\s*(frasco|envase|botella|producto|cuentagotas|gotero|pipeta|tapa)\s+(?:[^,;]*?\s)?con\s+la\s+(?:mano\s+)?(derecha|izquierda)\b/g)) ocupa[m[2] as 'derecha' | 'izquierda'] = m[1]
+    for (const m of s.matchAll(/(?:la\s+)?(?:mano\s+)?(derecha|izquierda)\s+(?:sostiene|sujeta|mantiene)\s+(?:el|la|un|una)?\s*(frasco|envase|botella|producto|cuentagotas|gotero|pipeta|tapa)\b/g)) ocupa[m[1] as 'derecha' | 'izquierda'] = m[2]
+    for (const m of s.matchAll(/(cuentagotas|gotero|pipeta)\s+con\s+la\s+(?:mano\s+)?(derecha|izquierda)\b/g)) ocupa[m[2] as 'derecha' | 'izquierda'] = m[1]
+    if (/ambas manos/.test(s) && /(?:sostiene|sujeta)\s+(?:el|la)?\s*(frasco|envase|botella|producto)/.test(s)) { ocupa.derecha = 'frasco'; ocupa.izquierda = 'frasco' }
+    // lo que se suelta: cierre del aplicador, o dejar / apoyar / pasar el envase
+    if (esCierre(t)) for (const mano of ['derecha', 'izquierda'] as const) if (/cuentagotas|gotero|pipeta|tapa/.test(ocupa[mano] ?? '')) suelta(mano)
+    if (/\b(deja|suelta|apoya|coloca)\b[^;]*\b(frasco|envase|botella|producto)\b|\bfuera de cuadro\b/.test(s)) { suelta('derecha'); suelta('izquierda') }
+    // el conflicto: una acción corporal con "ambas manos" o con la mano ocupada
+    const accion = /\b(masajea|extiende|frota|toca|acaricia|se\s+toca|gesticula|señala|senala|aplica)\b/.test(s)
+    if (!accion) continue
+    if (/ambas manos/.test(s) && !/(?:sostiene|sujeta)\s+(?:el|la)?\s*(frasco|envase|botella|producto)/.test(s)) {
+      const libre = (['derecha', 'izquierda'] as const).filter((m) => ocupa[m]).map((m) => `${ocupa[m]} en la ${m}`)
+      if (libre.length) out.push(`"${t}" con ambas manos mientras sigue ${libre.join(' y ')}`)
+      continue
+    }
+    // la mano de la acción es la que va DESPUÉS del verbo: en "sostiene el frasco con la
+    // izquierda y se toca el mentón con la derecha" la izquierda sostiene, no toca.
+    const desde = s.search(/\b(masajea|extiende|frota|toca|acaricia|se\s+toca|gesticula|señala|senala|aplica)\b/)
+    // y solo dentro de SU cláusula: "masajea con las yemas, sosteniendo el frasco con la
+    // izquierda" — la izquierda sostiene, no masajea.
+    const clausula = s.slice(desde).split(/,|;|\bmientras\b|\bsosteniendo\b|\bsujetando\b/)[0]
+    const m = clausula.match(/\bcon\s+(?:las?\s+(?:yemas|dedos)\s+(?:de\s+)?(?:los\s+dedos\s+de\s+)?)?la\s+(?:mano\s+)?(derecha|izquierda)\b|\bcon\s+(?:los\s+dedos\s+de\s+)?la\s+(?:mano\s+)?(derecha|izquierda)\b/)
+    const lado = m?.[1] ?? m?.[2]
+    if (lado) {
+      const mano = lado as 'derecha' | 'izquierda'
+      // "aplica con el cuentagotas en la izquierda" es el uso del aplicador, no un conflicto
+      if (ocupa[mano] && !/cuentagotas|gotero|pipeta/.test(ocupa[mano]!)) out.push(`"${t}" con la ${mano} mientras sigue ${ocupa[mano]} en la ${mano}`)
+    }
+  }
+  return out
 }
 // En positivo y describiendo el ESTADO de arranque, no prohibiendo el gesto: la forma
 // negativa ("no vuelve a dispensar") se renderizó igual sacando el gotero y soltando una

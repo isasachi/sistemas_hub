@@ -8,6 +8,9 @@
  *   npx tsx --env-file=.env.local scripts/probe-forense-hechos.ts <sesion> [--write]
  */
 import { createClient } from '@supabase/supabase-js'
+import { readFile, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import type { Part } from '@google/genai'
 import { geminiCallStructured, geminiEsDirecto } from '@/lib/gemini'
 import { VIDEO_SYSTEM_PROMPT } from '@/lib/video-ads/llm'
@@ -34,13 +37,17 @@ async function main() {
   // más de 8 s con un solo hecho es la firma del colapso; no se persiste, se vuelve a tirar.
   // Se conserva el MEJOR de los intentos (menos defectos); `--force` lo escribe aunque no
   // salga limpio. Sin `--force`, con defectos no se escribe.
-  const escribir = flag === '--write' || flag === '--force'
+  const escribir = flag === '--write' || flag === '--force' || flag === '--desde'
+  // La mejor tirada se guarda en disco: un arreglo del guard no debe costar otra llamada.
+  //   --desde  vuelve a juzgar y escribir la última tirada guardada, sin llamar al modelo.
+  const guardado = join(tmpdir(), `forense-${sesion}.json`)
   let crudo!: ForensicReport
   let mejor = Infinity
-  for (let intento = 1; intento <= 3; intento++) {
+  for (let intento = 1; intento <= (flag === '--desde' ? 1 : 3); intento++) {
+    if (flag === '--desde') { crudo = JSON.parse(await readFile(guardado, 'utf8')); break }
     const tirada = await geminiCallStructured('forensic_report', ForensicReportSchema, parts, 3, VIDEO_SYSTEM_PROMPT)
     const defectos = defectosDelForense(tirada)
-    if (defectos.length < mejor) { crudo = tirada; mejor = defectos.length }
+    if (defectos.length < mejor) { crudo = tirada; mejor = defectos.length; await writeFile(guardado, JSON.stringify(tirada)) }
     if (!defectos.length || !escribir) break
     console.log(`intento ${intento}: defectos estructurales — se vuelve a tirar:\n  ${defectos.join('\n  ')}`)
   }
@@ -66,7 +73,7 @@ async function main() {
   if (!escribir) { console.log('\n(seco: sin --write no se escribe)'); return }
   if (sinHechos) throw new Error(`no se escribe: ${sinHechos} cortes sin hechos`)
   const restantes = defectosDelForense(crudo)
-  if (restantes.length && flag !== '--force') throw new Error(`no se escribe tras 3 intentos, defectos: ${restantes.join(' · ')} (usa --force para escribir el mejor igual)`)
+  if (restantes.length && flag !== '--force') throw new Error(`no se escribe, defectos: ${restantes.join(' · ')} (la mejor tirada quedó en ${guardado}: --desde la re-juzga sin llamar, --force la escribe igual)`)
   if (restantes.length) console.log(`⚠️ --force: se escribe el mejor sorteo CON defectos: ${restantes.join(' · ')}`)
   const { error: e2 } = await db.from('video_sessions').update({ forensic_analysis: report }).eq('id', sesion)
   if (e2) throw e2

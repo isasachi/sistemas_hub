@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { groupIntoLotes, LOTE_MAX_SEC, LOTE_MAX_CHARS, LoteSchema, expandirHechos, defectosDelForense, buildLotePrompt, camaraDeLote, sinEscenaDeFoto, partirEnTramos, repartirAccion } from './lotes'
+import { groupIntoLotes, LOTE_MAX_SEC, LOTE_MAX_CHARS, LoteSchema, expandirHechos, defectosDelForense, conflictosDeManos, buildLotePrompt, camaraDeLote, sinEscenaDeFoto, partirEnTramos, repartirAccion } from './lotes'
 import type { TomaFinal } from './adapt'
 import type { Hecho } from './forensic'
 import { KIE_PROMPT_MAX } from './kie'
@@ -808,6 +808,46 @@ describe('defectosDelForense', () => {
     expect(d).toContain('corte 3: repite el diálogo del corte 2')
     expect(d.some((x) => x.startsWith('corte 1:') && x.includes('car/s'))).toBe(true)
     expect(d.some((x) => x.startsWith('la suma de los diálogos'))).toBe(true)
+  })
+})
+
+describe('conflictosDeManos', () => {
+  // Lote 3 real de `493a486d`: el frasco desapareció al masajear "con ambas manos".
+  it('caza "ambas manos" mientras una sigue con el frasco o el cuentagotas', () => {
+    const c = conflictosDeManos([
+      'Sostiene el frasco con la derecha, cuentagotas con la izquierda',
+      'Aplica una gota en la mejilla',
+      'Masajea el producto sobre mejillas y cuello con ambas manos',
+      'Vuelve a poner el cuentagotas en el envase y lo cierra',
+    ])
+    expect(c).toHaveLength(1)
+    expect(c[0]).toMatch(/ambas manos mientras sigue frasco en la derecha y cuentagotas en la izquierda/)
+  })
+  it('caza la mano ocupada que masajea, y acepta la libre', () => {
+    expect(conflictosDeManos(['sostiene el frasco con la mano derecha', 'masajea la mejilla con la mano derecha'])).toHaveLength(1)
+    expect(conflictosDeManos(['sostiene el frasco con la mano derecha', 'masajea la mejilla con los dedos de la mano izquierda'])).toEqual([])
+    // aplicar CON el cuentagotas en esa mano es su uso, no un conflicto
+    expect(conflictosDeManos(['sostiene el frasco con la derecha, cuentagotas con la izquierda', 'aplica una gota en la mejilla con la izquierda'])).toEqual([])
+  })
+  // Falso positivo real de la primera versión: la primera "con la mano" del tramo era la que
+  // SOSTIENE, no la que toca.
+  it('la mano de la acción es la que va después del verbo', () => {
+    expect(conflictosDeManos(['sostiene el frasco con la mano izquierda y se toca el mentón con los dedos de la mano derecha'])).toEqual([])
+    expect(conflictosDeManos(['se masajea suavemente las mejillas con las yemas de los dedos, sosteniendo el frasco con la mano izquierda'])).toEqual([])
+    expect(conflictosDeManos(['sostiene el frasco con la mano izquierda y se toca el mentón con los dedos de la mano izquierda'])).toHaveLength(1)
+  })
+
+  it('soltar libera: cierra el aplicador, deja el frasco, fuera de cuadro', () => {
+    expect(conflictosDeManos(['sostiene el frasco con la mano derecha', 'deja el frasco fuera de cuadro', 'masajea con ambas manos'])).toEqual([])
+    expect(conflictosDeManos(['sujeta el cuentagotas con la izquierda', 'vuelve a poner el cuentagotas en el frasco', 'masajea la mejilla con la izquierda'])).toEqual([])
+    expect(conflictosDeManos(['sostiene el frasco con ambas manos', 'muestra el producto a cámara'])).toEqual([])
+  })
+  it('entra en defectosDelForense', () => {
+    const h = (desde: number, hasta: number, texto: string) => ({ desde, hasta, texto })
+    expect(defectosDelForense({ cortes: [{ n: 4, tiempo: '00:15 - 00:35', duracionSeg: 19.8, hechos: [
+      h(0, 2, 'Sostiene el frasco con la derecha, cuentagotas con la izquierda, aplica una gota en la mejilla.'),
+      h(2, 19.8, 'Masajea el producto sobre mejillas y cuello con ambas manos, mira a cámara.'),
+    ] }] }).some((d) => d.includes('ambas manos'))).toBe(true)
   })
 })
 

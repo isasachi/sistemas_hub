@@ -99,6 +99,14 @@ describe('normalizarHechos', () => {
     expect(c.accion).toBe('sujeta el frasco con la mano derecha; aplica una gota con el cuentagotas; sujeta el frasco con la mano derecha y habla a cámara; mira a cámara y señala.')
   })
 
+  it('un estado "con la derecha" sin la palabra mano también se hereda (relleno de huecos)', () => {
+    const { report } = normalizarHechos(informe(corte({ hechos: [
+      { desde: 0, hasta: 2, texto: 'sostiene el frasco con la derecha' },
+      { desde: 8, hasta: 20, texto: 'mira a cámara' },
+    ] })))
+    expect(report.cortes[0].hechos[1].texto).toBe('sostiene el frasco con la derecha y habla a cámara')
+  })
+
   it('corrige los tiempos contados desde el inicio del VIDEO en vez del corte', () => {
     const { report } = normalizarHechos(informe(corte({ hechos: [
       { desde: 15, hasta: 20, texto: 'sujeta el frasco con la mano derecha' },

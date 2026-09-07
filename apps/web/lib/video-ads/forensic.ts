@@ -214,7 +214,8 @@ const EVENTO = /\b(aplica|deja caer|suelta|vierte|deposita|echa|destapa|abre|des
  */
 export const esEstadoDeManos = (t: string) => {
   const s = sinTildes(t.trim())
-  return /^(sujeta|sostiene|mantiene|tiene)\b/.test(s) && /\bmano/.test(s) && !EVENTO.test(s)
+  // "con la derecha" sin la palabra "mano" también declara la mano (forma real del forense)
+  return /^(sujeta|sostiene|mantiene|tiene)\b/.test(s) && /\b(manos?|derecha|izquierda)\b/.test(s) && !EVENTO.test(s)
 }
 
 /** Umbral de hueco entre hechos que se considera "sin cubrir" (s). */
