@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { groupIntoLotes, LOTE_MAX_SEC, LoteSchema, buildLotePrompt, camaraDeLote, sinEscenaDeFoto } from './lotes'
+import { groupIntoLotes, LOTE_MAX_SEC, LoteSchema, buildLotePrompt, camaraDeLote, sinEscenaDeFoto, partirEnTramos, repartirAccion } from './lotes'
 import type { TomaFinal } from './adapt'
 import { KIE_PROMPT_MAX } from './kie'
 
@@ -370,5 +370,95 @@ describe('sinEscenaDeFoto', () => {
     expect(p).not.toContain('flotando')
     expect(p).not.toContain('3.301290322580645')
     expect(p).toContain('3.3 s')
+  })
+})
+
+describe('partirEnTramos', () => {
+  it('parte por punto y por punto y coma', () => {
+    expect(partirEnTramos('Suelta una gota; extiende con los dedos. Mira a cámara.'))
+      .toEqual(['Suelta una gota', 'extiende con los dedos', 'Mira a cámara'])
+  })
+
+  it('parte por coma SOLO cuando la cláusula abre con un verbo de la lista', () => {
+    // el caso real de la sesión que destapó el defecto: cuatro hechos separados por coma
+    expect(partirEnTramos(
+      'Sujeto se aplica producto en mejilla, extiende suavemente con dedos, realiza toques ascendentes, muestra el frasco a cámara.',
+    )).toHaveLength(4)
+  })
+
+  it('NO parte una coma que no abre un hecho — el falso positivo medido', () => {
+    // "a cámara" sin verbo: partirlo deja un fragmento sin acción
+    expect(partirEnTramos('Mira el producto, y luego a cámara')).toEqual([
+      'Mira el producto, y luego a cámara',
+    ])
+  })
+})
+
+describe('repartirAccion', () => {
+  it('reparte los hechos en ORDEN y proporcional a la duración', () => {
+    const [a, b] = repartirAccion('uno; dos; tres; cuatro', [3, 1])
+    expect(a).toBe('uno. dos. tres.')
+    expect(b).toBe('cuatro.')
+  })
+
+  it('da al menos un hecho a cada fragmento cuando alcanza', () => {
+    // 9:1 — el reparto puramente proporcional dejaría el segundo vacío teniendo material
+    expect(repartirAccion('uno; dos', [9, 1])).toEqual(['uno.', 'dos.'])
+  })
+
+  it('sin separador, TODO va al primero y el resto queda vacío (nunca duplicado)', () => {
+    expect(repartirAccion('un solo hecho sin cortes', [5, 5])).toEqual([
+      'un solo hecho sin cortes', '',
+    ])
+  })
+})
+
+describe('la toma partida NO duplica la coreografía', () => {
+  it('cada fragmento recibe su tramo, no la acción entera', () => {
+    const larga: TomaFinal = {
+      ...toma(1, 19.3, 'Primera frase. Segunda frase. Tercera frase. Cuarta frase.'),
+      accionVisual: 'Aplica el producto; extiende con los dedos; muestra el frasco a cámara.',
+    }
+    const frags = groupIntoLotes([larga]).flatMap((l) => l.tomas)
+    expect(frags.length).toBeGreaterThan(1)
+    const acciones = frags.map((f) => f.accionVisual).filter(Boolean)
+    expect(new Set(acciones).size).toBe(acciones.length)
+    expect(acciones.join(' ')).toContain('muestra el frasco a cámara')
+  })
+})
+
+describe('el reparto no deja escenografía de foto ni carriles vacíos', () => {
+  it('la escenografía de foto no puede ser el único hecho de un fragmento', () => {
+    // se limpia ANTES de partir: como oración entera sobrevivía al split y quedaba
+    // siendo la única instrucción de movimiento de un clip
+    expect(repartirAccion(
+      'Aplica el producto; extiende con los dedos. El producto no está flotando.',
+      [5, 5],
+    )).toEqual(['Aplica el producto.', 'extiende con los dedos.'])
+  })
+
+  it('un fragmento sin hecho propio DECLARA la quietud, no deja el encabezado suelto', () => {
+    const larga: TomaFinal = {
+      ...toma(1, 20, 'Primera frase. Segunda frase.'),
+      accionVisual: 'Alterna entre sostener el producto y hablar a cámara',
+    }
+    // los dos fragmentos de 10 s no caben en un lote, así que el vacío cae en el segundo
+    const p = groupIntoLotes([larga])
+      .map((lote) => buildLotePrompt({
+        lote, camara: 'Plano medio.', voz: VOZ,
+        images: [{ url: 'a', role: 'la persona' }],
+      }))
+      .join('\n')
+    expect(p).not.toMatch(/^Toma \d+ \([\d.]+ s\): *$/m)
+    expect(p).toContain('sin gesto nuevo')
+  })
+
+  it('la línea de cámara no dobla el punto', () => {
+    const p = buildLotePrompt({
+      lote: groupIntoLotes([toma(1, 5)])[0],
+      camara: 'Plano medio corto, estable.', voz: VOZ,
+      images: [{ url: 'a', role: 'la persona' }],
+    })
+    expect(p).toContain('CÁMARA: Plano medio corto, estable. Grabado')
   })
 })

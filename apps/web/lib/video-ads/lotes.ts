@@ -84,6 +84,111 @@ export function sinEscenaDeFoto(accion: string): string {
 }
 
 /**
+ * Verbos con los que abre un HECHO de coreografía. La lista es CERRADA a propósito, y
+ * es lo único que hace seguro partir por coma.
+ *
+ * AGENTS.md tiene medido el falso positivo de partir por coma a secas: "Mira producto y
+ * luego a cámara" son dos destinos de la MISMA mirada, y partirlo deja "a cámara" sin
+ * verbo. Lo que distingue ese caso de un hecho nuevo es exactamente esto — el fragmento
+ * huérfano no empieza con un verbo. Medido sobre las tomas partidas de la base, las
+ * cláusulas separadas por coma abren TODAS con uno de estos.
+ *
+ * Se amplía agregando verbos acá, no aflojando el criterio: un verbo nuevo es visible en
+ * el diff y un umbral flojo no. Sin coincidencia NO se parte, que es la dirección
+ * correcta del fallo — under-partir es preferible a producir fragmentos sin verbo.
+ *
+ * ponytail: solo español. Una `accion` en inglés se parte igual por punto y punto y
+ * coma; lo que pierde es el corte por coma. Fail-safe, y hoy son 2 tomas de la base.
+ */
+const VERBOS_TRAMO = new Set([
+  'aplica', 'sostiene', 'sujeta', 'masajea', 'muestra', 'presenta', 'extiende', 'esparce',
+  'realiza', 'toca', 'frota', 'desliza', 'mira', 'observa', 'gesticula', 'acerca', 'aleja',
+  'retira', 'abre', 'cierra', 'destapa', 'tapa', 'levanta', 'baja', 'senala', 'alterna',
+  'suelta', 'deposita', 'coloca', 'gira', 'inclina', 'saca', 'recoge', 'vuelve', 'pasa',
+  'habla', 'sonrie', 'termina', 'inicia', 'continua', 'agita', 'aprieta', 'guarda',
+])
+
+const sinTildes = (s: string) =>
+  s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+
+const abreHecho = (clausula: string) =>
+  VERBOS_TRAMO.has(sinTildes(clausula.trim()).split(/\s+/)[0] ?? '')
+
+/**
+ * Parte la coreografía en HECHOS. Punto y punto y coma siempre; la coma solo cuando lo
+ * que sigue abre con un verbo de `VERBOS_TRAMO`.
+ */
+export function partirEnTramos(accion: string): string[] {
+  return accion
+    .split(/(?<=[.;])\s+/)
+    .flatMap((frase) => {
+      const out: string[] = []
+      for (const parte of frase.split(/,\s+/)) {
+        if (out.length && !abreHecho(parte)) out[out.length - 1] += ', ' + parte
+        else out.push(parte)
+      }
+      return out
+    })
+    .map((s) => s.replace(/[\s.;,]+$/, '').trim())
+    .filter(Boolean)
+}
+
+/** Cuántos tramos le toca a cada fragmento: proporcional a su duración, por resto
+ *  mayor, y con al menos uno cada uno cuando alcanza — un fragmento sin ninguna línea
+ *  de movimiento se renderiza improvisando (AGENTS.md lo tiene medido: 18 % de un
+ *  anuncio salió así). Cuando NO alcanza, los últimos quedan vacíos: vacío es
+ *  recuperable, duplicado no. */
+function cuotas(nTramos: number, duraciones: number[]): number[] {
+  const total = duraciones.reduce((a, b) => a + b, 0) || 1
+  const ideal = duraciones.map((d) => (nTramos * d) / total)
+  const cuota = ideal.map((v) => Math.floor(v))
+  const orden = ideal
+    .map((v, i) => ({ resto: v - Math.floor(v), i }))
+    .sort((a, b) => b.resto - a.resto)
+  for (let k = 0, faltan = nTramos - cuota.reduce((a, b) => a + b, 0); faltan > 0; k++, faltan--) {
+    cuota[orden[k % orden.length].i]++
+  }
+  if (nTramos >= duraciones.length) {
+    for (let i = 0; i < cuota.length; i++) {
+      if (cuota[i] > 0) continue
+      const donante = cuota.indexOf(Math.max(...cuota))
+      cuota[donante]--
+      cuota[i]++
+    }
+  }
+  return cuota
+}
+
+/**
+ * Reparte la coreografía de una toma entre sus fragmentos, EN ORDEN.
+ *
+ * Sin esto `splitLongToma` copiaba `accionVisual` entera en cada fragmento: una toma de
+ * 19,3 s partida en dos le pedía al modelo los 19,3 s de coreografía dentro de un clip
+ * de 11 s, y otra vez dentro del de 8,3 — una instrucción imposible de la que el modelo
+ * ejecuta una fracción arbitraria, y dos clips seguidos intentando el mismo gesto.
+ * Medido sobre la base antes del arreglo: 71 de 253 fragmentos (28 %) y 462 s de 1655.
+ *
+ * Sin separador que aprovechar, TODO va al primer fragmento y los demás quedan sin
+ * línea — mismo fail-safe que el reparto de tramos.
+ */
+export function repartirAccion(accion: string, duraciones: number[]): string[] {
+  // Se limpia ANTES de partir, no solo al emitir: "El producto no está flotando." es
+  // una oración entera, así que sobrevive como tramo propio y puede quedar siendo la
+  // ÚNICA instrucción de movimiento de un fragmento — el defecto que `sinEscenaDeFoto`
+  // existe para evitar, reentrando por la puerta del reparto.
+  const tramos = partirEnTramos(sinEscenaDeFoto(accion))
+  if (tramos.length < 2) return duraciones.map((_, i) => (i === 0 ? accion : ''))
+
+  const cuota = cuotas(tramos.length, duraciones)
+  let desde = 0
+  return cuota.map((c) => {
+    const trozo = tramos.slice(desde, desde + c)
+    desde += c
+    return trozo.length ? trozo.join('. ') + '.' : ''
+  })
+}
+
+/**
  * Tolerancia SOLO para ruido de punto flotante (ej. 14.299999999999999), no para
  * exceso genuino. Redondear a 1 decimal antes de comparar (como hacía la v1) se traga
  * un exceso real: un guión con duraciones de 2 decimales que sume 15.02 pasaría el
@@ -152,6 +257,23 @@ function splitLongToma(t: TomaFinal): TomaFinal[] {
   )
 }
 
+/** Lo que se emite cuando a un fragmento no le tocó ningún hecho (su toma tenía uno
+ *  solo y se partió en varios). La quietud DECLARADA es un dato; un encabezado sin nada
+ *  detrás es un carril que la plantilla dibuja y el prompt no llena, y este repo ya tiene
+ *  medido que el modelo lo llena solo. No dice "sigue lo anterior": el clip se renderiza
+ *  sin memoria de nada que esté fuera de su propio prompt. */
+const SIN_HECHO_NUEVO = 'mantiene la postura, sin gesto nuevo.'
+
+/** `splitLongToma` reparte la duración y la locución; esto reparte la COREOGRAFÍA sobre
+ *  la lista de fragmentos ya cerrada — el reparto necesita verlos todos a la vez, y la
+ *  recursión de aquella devuelve de a uno. */
+function partirToma(t: TomaFinal): TomaFinal[] {
+  const frags = splitLongToma(t)
+  if (frags.length < 2) return frags
+  const acciones = repartirAccion(t.accionVisual, frags.map((f) => f.duracionSeg))
+  return frags.map((f, i) => ({ ...f, accionVisual: acciones[i] }))
+}
+
 /**
  * Presupuesto de COREOGRAFÍA por lote, en caracteres. El prompt del lote es hoy casi
  * solo movimiento (las imágenes cargan con lo visual), así que lo único que puede
@@ -177,7 +299,7 @@ export function groupIntoLotes(tomas: TomaFinal[]): Lote[] {
   // en el prompt de Task 5 — dos "Toma 1" en el mismo guión). Numerar secuencial y
   // global es la forma más simple de garantizar unicidad y orden sin inventar un
   // esquema paralelo (sufijos, decimales) que Task 5 tendría que aprender a leer.
-  const expandidas = tomas.flatMap(splitLongToma).map((t, i) => ({ ...t, n: i + 1 }))
+  const expandidas = tomas.flatMap(partirToma).map((t, i) => ({ ...t, n: i + 1 }))
   const lotes: Lote[] = []
   let actual: TomaFinal[] = []
   let acumulado = 0
@@ -302,7 +424,7 @@ export function buildLotePrompt(args: {
         ? `Toma ${t.n} (${r1(t.duracionSeg)} s): `
         : ''
       return [
-        `${cabecera}${sinEscenaDeFoto(t.accionVisual)}`,
+        `${cabecera}${sinEscenaDeFoto(t.accionVisual) || SIN_HECHO_NUEVO}`,
         // Esta línea es lo único que dice QUÉ FRASE va con QUÉ ACCIÓN y en cuántos
         // segundos: es la sincronización audio↔imagen. Se comprobó en una sesión real
         // que perderla en un lote y conservarla en otro produce "una habla muy rápido y
@@ -319,7 +441,7 @@ export function buildLotePrompt(args: {
     'MOVIMIENTO:',
     acciones,
     '',
-    `CÁMARA: ${camara}. Grabado con teléfono en mano, con micro-temblor natural.`,
+    `CÁMARA: ${camara.replace(/\s*\.\s*$/, '')}. Grabado con teléfono en mano, con micro-temblor natural.`,
     '',
     `VOZ: ${voz.tono}, timbre ${voz.timbre}, edad vocal ${voz.edadVocal}. Habla en ${voz.idioma} con acento ${voz.acento}, ${voz.ritmo.toLowerCase()}, energía ${voz.energia.toLowerCase()}. ${voz.entonacion}.`,
     'Dice exactamente lo que está entre comillas arriba: no resumas, no extiendas, no corrijas, no agregues frases ni inventes diálogo para rellenar.',
