@@ -182,12 +182,35 @@ export function repartirAccion(accion: string, duraciones: number[]): string[] {
 
   const cuota = cuotas(tramos.length, duraciones)
   let desde = 0
-  return cuota.map((c) => {
+  return cuota.map((c, i) => {
     const trozo = tramos.slice(desde, desde + c)
+    const previos = tramos.slice(0, desde)
     desde += c
-    return trozo.length ? trozo.join('. ') + '.' : ''
+    if (!trozo.length) return ''
+    if (i === 0) return trozo.join('. ') + '.'
+    // Un fragmento que no es el primero arranca A MITAD del corte, y el clip se renderiza
+    // sin memoria del anterior: lo que las manos tienen y lo que ya pasó hay que
+    // decírselo. Medido en el lote 3 de `00471f8a`: el corte decía "sujeta el frasco con
+    // la derecha; aplica una gota; extiende con las yemas; mira", el segundo fragmento
+    // recibió solo "extiende con las yemas; mira", y grok inventó el dispensado entero
+    // (saca el gotero, gota en la palma) para tener suero que extender, y después el
+    // frasco desapareció de las manos. Nada de esto inventa coreografía: el estado es el
+    // que el forense declaró, y la transferencia ya ocurrió en el fragmento anterior.
+    const estado = [...previos].reverse().find(esEstadoDeManos)
+    const yaAplicado = previos.some(esTransferencia) && !trozo.some(esTransferencia)
+    return [
+      ...(estado && !trozo.some((t) => t === estado) ? [estado] : []),
+      ...trozo,
+      ...(yaAplicado ? [YA_APLICADO] : []),
+    ].join('. ') + '.'
   })
 }
+
+/** Un tramo que declara qué tiene una mano, no un movimiento: se hereda entre fragmentos. */
+const esEstadoDeManos = (t: string) => /^(sujeta|sostiene|mantiene|tiene)\b/i.test(sinTildes(t)) && /\bmano/i.test(t)
+/** El producto llegó al cuerpo en este tramo. */
+const esTransferencia = (t: string) => /\b(aplica|deja caer|suelta|vierte|deposita|echa)\b/i.test(t) && /\b(gota|suero|serum|producto|crema)\b/i.test(t)
+const YA_APLICADO = 'el producto ya está en la piel desde antes: no vuelve a dispensar'
 
 /**
  * Tolerancia SOLO para ruido de punto flotante (ej. 14.299999999999999), no para
@@ -516,7 +539,11 @@ export function buildLotePrompt(args: {
     // —el que más hechos tiene que ordenar— abría sin nada que dijera que lo que sigue
     // es la coreografía: la lista de tomas quedaba pegada a la regla de piezas.
     'MOVIMIENTO:',
-    ...lote.tomas.map((t) => {
+    ...lote.tomas.map((t, i) => {
+      // Dos fragmentos del MISMO corte en el MISMO lote heredan el mismo estado de manos y
+      // la misma aclaración de "ya aplicado" (`repartirAccion`): dentro de un clip
+      // continuo decirlo dos veces es ruido. Entre lotes sí se repite, y debe.
+      const previos = new Set(i ? partirEnTramos(sinEscenaDeFoto(lote.tomas[i - 1].accionVisual)) : [])
       // UN HECHO POR LÍNEA, con los mismos cortes que usa el reparto (`partirEnTramos`).
       // El prompt del wizard que este repo verificó fotograma a fotograma escribe cada
       // hecho en su renglón (`Holding gotero in right hand.` / `Gently releasing one
@@ -524,6 +551,7 @@ export function buildLotePrompt(args: {
       // ahí el modelo los resuelve como UN gesto — de ahí la gota que "aparece" en la
       // mejilla sin que el gotero llegue nunca. El texto es el MISMO, cambia dónde corta.
       const hechos = partirEnTramos(sinEscenaDeFoto(t.accionVisual))
+        .filter((h) => !(previos.has(h) && (esEstadoDeManos(h) || h === YA_APLICADO)))
       // El plano se anuncia solo cuando CAMBIA respecto de la toma anterior: un shot
       // list se lee así, el plano vale hasta que se anuncia otro.
       const plano = multiPlano ? planoDe.get(t.tiempoOriginal) : undefined
