@@ -67,7 +67,7 @@ describe('buildAdaptInstruction', () => {
   it('manda copiar la acción observada del corte, con el gotero y el giro', () => {
     expect(p).toContain('CORTES REALES DE LA REFERENCIA')
     expect(p).toMatch(/no\s+se\s+inventa\s+ni\s+se\s+resume/i)
-    expect(p).toMatch(/qué\s+mano,\s+cómo\s+agarra/i)
+    expect(p).toMatch(/qué\s+sostiene\s+cada\s+mano.*cómo\s+agarra/is)
   })
 
   // La orden va arriba y no entre los bullets: medido, metida ahí abajo el modelo se
@@ -345,5 +345,30 @@ describe('reglas de valor que la política de rellenar todo destapó', () => {
   it('prohíbe la nota entre paréntesis como valor', () => {
     expect(p).toMatch(/nunca es una nota/)
     expect(p).toMatch(/EL VALOR SE DICE EN VOZ ALTA/)
+  })
+})
+
+
+// El swap del instrumento es el defecto que se midió en la sesión c3dc2777: el forense
+// había visto el cuentagotas en los cortes 1 y 4, y FASE 3 devolvió "frasco" en la mano
+// derecha y "tapón" en la izquierda. Lo causaba el propio prompt, que ofrecía como
+// ejemplo de equivalencia "un frasco se destapa" — con la forma exacta del artefacto que
+// el modelo tenía que producir, y con un producto que ES un frasco.
+describe('el instrumento sobrevive a la adaptación', () => {
+  const p = buildAdaptInstruction(TEMPLATE, FORENSIC, INPUTS, null, extractSlots(TEMPLATE), 'Español peruano de Lima', '')
+  const plano = p.replace(/\s+/g, ' ')
+
+  it('declara que el instrumento no es un dato del producto viejo', () => {
+    expect(plano).toContain('EL INSTRUMENTO SE COPIA TAL CUAL')
+    expect(plano).toMatch(/cuentagotas.*coreograf/i)
+  })
+
+  it('no ofrece un ejemplo de sustitución con la forma de la acción', () => {
+    expect(plano).not.toContain('un frasco se destapa')
+  })
+
+  it('pide el estado de cada mano y prohíbe la escenografía de foto', () => {
+    expect(plano).toContain('qué sostiene cada mano')
+    expect(plano).toMatch(/ni si flota/)
   })
 })

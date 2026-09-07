@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { groupIntoLotes, LOTE_MAX_SEC, LoteSchema, buildLotePrompt, camaraDeLote } from './lotes'
+import { groupIntoLotes, LOTE_MAX_SEC, LoteSchema, buildLotePrompt, camaraDeLote, sinEscenaDeFoto } from './lotes'
 import type { TomaFinal } from './adapt'
 import { KIE_PROMPT_MAX } from './kie'
 
@@ -334,5 +334,41 @@ describe('buildLotePrompt', () => {
   it('si aun así no entra, lanza un error explicando el exceso en vez de gastar la cuota', () => {
     const imposible = groupIntoLotes([{ ...toma(1, 5, 'Hola.'), accionVisual: 'x'.repeat(KIE_PROMPT_MAX * 2) }])[0]
     expect(() => buildLotePrompt({ lote: imposible, ...ARGS })).toThrow(new RegExp(String(KIE_PROMPT_MAX)))
+  })
+})
+
+
+describe('sinEscenaDeFoto', () => {
+  // El caso REAL: las 6 tomas de la sesión c3dc2777 terminaban así, y esa frase la puso
+  // el system prompt de anuncios estáticos, no ningún insumo de la sesión.
+  it('quita la escenografía de foto pegada al final de la coreografía', () => {
+    expect(sinEscenaDeFoto('Sujeto sostiene el frasco y aplica. El producto no está flotando.'))
+      .toBe('Sujeto sostiene el frasco y aplica.')
+    expect(sinEscenaDeFoto('Muestra el frasco; no está apoyado en ninguna superficie. Mira a cámara.'))
+      .toBe('Muestra el frasco. Mira a cámara.')
+  })
+
+  // El modo de fallo correcto es dejar pasar una frase de escenografía, nunca comerse
+  // coreografía: una acción que se queda en nada devuelve el original.
+  it('no toca la coreografía legítima y nunca vacía la acción', () => {
+    const real = 'Sujeto deja el frasco sobre la mesa, aplica con el cuentagotas y mira a cámara.'
+    expect(sinEscenaDeFoto(real)).toBe(real)
+    expect(sinEscenaDeFoto('La modelo no está mostrando el producto todavía.'))
+      .toBe('La modelo no está mostrando el producto todavía.')
+    expect(sinEscenaDeFoto('El producto no está flotando.')).toBe('El producto no está flotando.')
+  })
+
+  it('el prompt del lote no emite la frase ni la duración cruda', () => {
+    const lote = groupIntoLotes([
+      { ...toma(1, 3.301290322580645), accionVisual: 'Aplica una gota. El producto no está flotando.' },
+      toma(2, 4),
+    ])[0]
+    const p = buildLotePrompt({
+      lote, camara: 'Plano medio', images: [{ url: 'u', role: 'the person' }],
+      voz: VOZ,
+    })
+    expect(p).not.toContain('flotando')
+    expect(p).not.toContain('3.301290322580645')
+    expect(p).toContain('3.3 s')
   })
 })

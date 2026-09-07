@@ -234,3 +234,27 @@ describe('ForensicReportSchema', () => {
     expect(ForensicReportSchema.safeParse({ cortes: [] }).success).toBe(false)
   })
 })
+
+
+// Los dos defectos que el dueño del repo vio en los clips: una tercera mano, y un primer
+// clip que no arranca aplicando el serum con el gotero en la mejilla. Los dos se leen en
+// la `accion` del corte: nadie decía qué suelta cada mano, y el corte describía el viaje
+// del cuentagotas sin nombrar nunca la gota saliendo.
+describe('la accion encadena las manos y nombra la transferencia', () => {
+  const plano = buildForensicInstruction().replace(/\s+/g, ' ')
+
+  it('exige el estado de cada mano al empezar el corte', () => {
+    expect(plano).toMatch(/qué tiene cada mano ANTES del primer movimiento/)
+    expect(plano).toMatch(/tercera mano/)
+  })
+
+  it('exige la transferencia como cláusula propia, no la trayectoria', () => {
+    expect(plano).toMatch(/SI EL PRODUCTO TOCA EL CUERPO EN ESTE CORTE, ESE HECHO SE ESCRIBE PRIMERO/)
+    expect(plano).toMatch(/CONSECUENCIAS de ese hecho/)
+    expect(plano).toMatch(/sobre qué lado de qué zona/)
+  })
+
+  it('exige dónde termina la pieza que se separa del producto', () => {
+    expect(plano).toMatch(/cuentagotas o una tapa/)
+  })
+})

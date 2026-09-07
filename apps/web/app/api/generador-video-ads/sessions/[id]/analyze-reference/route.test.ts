@@ -122,4 +122,18 @@ describe('POST /api/generador-video-ads/sessions/[id]/analyze-reference — guar
     const parts = vi.mocked(geminiCallStructured).mock.calls[0][2]
     expect(parts[0]).toEqual({ inlineData: { data: 'YWJj', mimeType: 'video/mp4' } })
   })
+
+  // El default de `lib/gemini` es el motor de anuncios ESTÁTICOS, que manda declarar la
+  // posición física del producto "ending with the negative: No está flotando." — dentro
+  // del análisis de un VIDEO eso contamina los campos de coreografía.
+  it('analiza bajo el system prompt del video, no el de anuncios estáticos', async () => {
+    vi.mocked(getVideoSession).mockResolvedValue({ id: 's1' } as unknown as VideoSessionResponse)
+    vi.mocked(geminiCallStructured).mockResolvedValue({ guionOriginal: 'hola', caracteresGuion: 1 })
+
+    await POST(req({ videoUrl: 'https://x.supabase.co/reference-video.mp4' }), ctx())
+
+    const system = vi.mocked(geminiCallStructured).mock.calls[0][4] as string
+    expect(system).toContain('video ad replication engine')
+    expect(system).not.toContain('No está flotando')
+  })
 })

@@ -7,6 +7,7 @@ import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 import { ForensicReportSchema } from '@/lib/video-ads/types'
 import { buildForensicInstruction, repairCutTiming } from '@/lib/video-ads/forensic'
+import { VIDEO_SYSTEM_PROMPT } from '@/lib/video-ads/llm'
 import { MAX_VIDEO_MB } from '@/lib/video-ads/limits'
 import { STEP } from '@/lib/video-ads/steps'
 import type { Part } from '@google/genai'
@@ -60,7 +61,12 @@ export async function POST(
         : { fileData: { fileUri: parsed.data.videoUrl, mimeType } },
       { text: buildForensicInstruction() },
     ]
-    const analysis = await geminiCallStructured('forensic_report', ForensicReportSchema, parts)
+    // El system prompt es el del VIDEO, no el default de `lib/gemini` (el motor de
+    // anuncios ESTÁTICOS, que ordena declarar si el producto flota y describe una foto de
+    // catálogo). El forense mira un video: esa orden le contamina los campos de
+    // coreografía, y de ahí salían las seis `accionVisual` terminadas en "El producto no
+    // está flotando." aguas abajo.
+    const analysis = await geminiCallStructured('forensic_report', ForensicReportSchema, parts, 3, VIDEO_SYSTEM_PROMPT)
 
     // Mismo motivo que en adapt-script: el modelo estima mal el conteo (reportó 562
     // sobre un guión de 776) y ese número es la referencia contra la que se mide si el

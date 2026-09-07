@@ -62,6 +62,28 @@ export type Lote = z.infer<typeof LoteSchema>
 const r1 = (n: number) => Math.round(n * 10) / 10
 
 /**
+ * La coreografía describe un cuerpo, no una foto de catálogo.
+ *
+ * El system prompt del hub (`gemini-system.md`, el motor de anuncios ESTÁTICOS) ordena
+ * declarar la posición física del producto terminando en "No está flotando.", y la
+ * FASE 3 del video lo obedecía dentro de `accionVisual`: medido sobre una sesión real,
+ * las 6 tomas terminaban con esa frase y se emitía 6 veces en los prompts de render.
+ * El system prompt propio de la tool (`video-system.md`) cierra la puerta para los
+ * guiones NUEVOS; esto repara los ya GUARDADOS, que es donde vive el guion que el
+ * usuario ya pagó — mismo criterio que limpiar al leer en vez de re-correr un paso caro.
+ *
+ * El acote es angosto a propósito: solo la oración COMPLETA sobre flotar o apoyarse. El
+ * modo de fallo correcto es dejar pasar una frase de escenografía, nunca comerse
+ * coreografía; por eso, si al limpiar no queda nada, se devuelve el original.
+ */
+const ESCENA_DE_FOTO = /\s*(?:El producto |El envase |El frasco )?[Nn]o est[áa] (?:flotando|apoyad[oa] en ninguna superficie)\s*\.?/g
+
+export function sinEscenaDeFoto(accion: string): string {
+  const limpio = accion.replace(ESCENA_DE_FOTO, ' ').replace(/\s+/g, ' ').replace(/\s*[;,]\s*(?=[A-ZÁÉÍÓÚ]|$)/g, '. ').trim()
+  return limpio || accion
+}
+
+/**
  * Tolerancia SOLO para ruido de punto flotante (ej. 14.299999999999999), no para
  * exceso genuino. Redondear a 1 decimal antes de comparar (como hacía la v1) se traga
  * un exceso real: un guión con duraciones de 2 decimales que sume 15.02 pasaría el
@@ -277,10 +299,10 @@ export function buildLotePrompt(args: {
   const acciones = lote.tomas
     .map((t) => {
       const cabecera = lote.tomas.length > 1
-        ? `Toma ${t.n} (${t.duracionSeg} s): `
+        ? `Toma ${t.n} (${r1(t.duracionSeg)} s): `
         : ''
       return [
-        `${cabecera}${t.accionVisual}`,
+        `${cabecera}${sinEscenaDeFoto(t.accionVisual)}`,
         // Esta línea es lo único que dice QUÉ FRASE va con QUÉ ACCIÓN y en cuántos
         // segundos: es la sincronización audio↔imagen. Se comprobó en una sesión real
         // que perderla en un lote y conservarla en otro produce "una habla muy rápido y

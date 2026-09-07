@@ -1,6 +1,27 @@
+import fs from 'fs'
+import path from 'path'
 import type { Part } from '@google/genai'
 import type { z } from 'zod'
 import { callStructured } from '@/lib/gemini'
+
+/**
+ * EL SYSTEM PROMPT DE ESTA TOOL ES PROPIO, y hasta ahora no lo era.
+ *
+ * `callStructured` tiene por defecto `gemini-system.md`, que abre diciendo *"You are a
+ * static ad replication engine"* y ordena, entre sus reglas de oro, que TODA salida
+ * declare la posición física del producto *"ending with the negative: No está
+ * flotando."*. Esa orden es correcta para un anuncio estático —donde el producto es una
+ * foto de catálogo— y venenosa para un video, donde el producto está en la mano de
+ * alguien: medido sobre una sesión real, las SEIS `accionVisual` del guion adaptado
+ * terminaban con **"El producto no está flotando."**, o sea escenografía de foto dentro
+ * del único campo que le dice al render qué hace el cuerpo, emitida seis veces en los
+ * prompts de render. La frase no está en ningún insumo de la sesión: la puso el system
+ * prompt. Branding y landing ya tenían el suyo; el video se quedó con el de anuncios.
+ */
+export const VIDEO_SYSTEM_PROMPT = fs.readFileSync(
+  path.join(process.cwd(), 'lib/prompts/video-system.md'),
+  'utf-8',
+)
 
 /**
  * TODA llamada de texto/visión del generador de video sale por GEMINI.
@@ -29,8 +50,5 @@ export function callVideoAds<T>(
   parts: Part[],
   maxRetries = 3,
 ): Promise<T> {
-  // El system prompt queda en el default de `callStructured`: ningún call site de esta
-  // tool usa uno propio, y nombrarlo acá obligaría a todo test que mockea `@/lib/gemini`
-  // a exportarlo también.
-  return callStructured(schemaName, schema, parts, maxRetries, undefined as unknown as string, { preferGemini: true })
+  return callStructured(schemaName, schema, parts, maxRetries, VIDEO_SYSTEM_PROMPT, { preferGemini: true })
 }
