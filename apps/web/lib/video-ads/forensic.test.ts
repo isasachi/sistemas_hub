@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildForensicInstruction, ForensicReportSchema, repairCutTiming, CPS_MAX, MIN_VISIBLE_SEG, type ForensicReport } from './forensic'
+import { buildForensicInstruction, ForensicReportSchema, repairCutTiming, normalizarHechos, CPS_MAX, MIN_VISIBLE_SEG, type ForensicReport } from './forensic'
 
 // El prompt es el contrato con Gemini. Estos asserts fijan las reglas del spec que,
 // si se caen, producen el bug que ya vimos en producción: cortes inventados por
@@ -75,11 +75,51 @@ describe('buildForensicInstruction', () => {
 // La columna vertebral de todo el sistema: la duración de cada corte es la que termina
 // pidiéndosele a KIE. En la sesión real el TOTAL era creíble (776 car / 46 s = 16.9 cps)
 // pero el reparto no: el corte 2 traía 60 caracteres en 2 s = 30 cps, indecible.
+describe('normalizarHechos', () => {
+  const corte = (over: Record<string, unknown>) => ({
+    n: 1, tiempo: '00:15 - 00:35', duracionSeg: 20, accion: '', camara: 'fija', dialogo: 'habla',
+    textoOverlay: 'No aparece', transicion: 'corte directo', hechos: [] as { desde: number; hasta: number; texto: string }[], ...over,
+  })
+  const informe = (c: ReturnType<typeof corte>) => ({
+    duracionTotalSeg: 20, caracteresGuion: 5, guionOriginal: 'habla', sujeto: '', vestuario: '', producto: '', fondo: '',
+    elementosGraficos: '', cortes: [c], tomas: [], edicion: { sincronizacion: '', textoOverlay: '', escalaZoom: '', cortes: '', ritmo: '', corteFinal: '' },
+    resumenParaUsuario: '',
+  }) as unknown as ForensicReport
+
+  it('ordena, rellena los huecos con el último estado de manos y deriva `accion`', () => {
+    const { report, rellenos } = normalizarHechos(informe(corte({ hechos: [
+      { desde: 12, hasta: 20, texto: 'mira a cámara y señala' },
+      { desde: 0, hasta: 2, texto: 'sujeta el frasco con la mano derecha' },
+      { desde: 2, hasta: 6, texto: 'aplica una gota con el cuentagotas' },
+    ] })))
+    const c = report.cortes[0]
+    expect(c.hechos.map((h) => [h.desde, h.hasta])).toEqual([[0, 2], [2, 6], [6, 12], [12, 20]])
+    expect(c.hechos[2].texto).toBe('sujeta el frasco con la mano derecha y habla a cámara')
+    expect(rellenos).toHaveLength(1)
+    expect(c.accion).toBe('sujeta el frasco con la mano derecha; aplica una gota con el cuentagotas; sujeta el frasco con la mano derecha y habla a cámara; mira a cámara y señala.')
+  })
+
+  it('corrige los tiempos contados desde el inicio del VIDEO en vez del corte', () => {
+    const { report } = normalizarHechos(informe(corte({ hechos: [
+      { desde: 15, hasta: 20, texto: 'sujeta el frasco con la mano derecha' },
+      { desde: 20, hasta: 35, texto: 'extiende con las yemas' },
+    ] })))
+    expect(report.cortes[0].hechos.map((h) => [h.desde, h.hasta])).toEqual([[0, 5], [5, 20]])
+  })
+
+  it('un corte sin hechos (análisis anterior) no se toca, y un corte mudo rellena sin "habla"', () => {
+    const viejo = informe(corte({ accion: 'sujeta el frasco', hechos: [] }))
+    expect(normalizarHechos(viejo).report.cortes[0]).toBe(viejo.cortes[0])
+    const { report } = normalizarHechos(informe(corte({ dialogo: '', hechos: [{ desde: 0, hasta: 4, texto: 'muestra el frasco' }] })))
+    expect(report.cortes[0].hechos[1].texto).toBe('mantiene la postura, sin gesto nuevo')
+  })
+})
+
 describe('repairCutTiming', () => {
   const corte = (n: number, duracionSeg: number, dialogo: string) => ({
     n, duracionSeg, dialogo,
     tiempo: `00:${String(n).padStart(2, '0')} - 00:${String(n + 1).padStart(2, '0')}`,
-    accion: 'a', camara: 'c', textoOverlay: 'No aparece', transicion: 'corte directo',
+    accion: 'a', hechos: [], camara: 'c', textoOverlay: 'No aparece', transicion: 'corte directo',
   })
   const informe = (cortes: ReturnType<typeof corte>[]): ForensicReport => ({
     duracionTotalSeg: cortes.reduce((n, c) => n + c.duracionSeg, 0),
@@ -277,6 +317,15 @@ describe('la accion encadena las manos y nombra la transferencia', () => {
     expect(plano).toMatch(/SI EL PRODUCTO TOCA EL CUERPO EN ESTE CORTE, ESE HECHO SE ESCRIBE PRIMERO/)
     expect(plano).toMatch(/CONSECUENCIAS de ese hecho/)
     expect(plano).toMatch(/sobre qué lado de qué zona/)
+  })
+
+  it('la coreografía va en `hechos` con ventana y cobertura total, y la cámara empieza por el movimiento', () => {
+    expect(plano).toMatch(/LA COREOGRAFÍA VA EN `hechos`/)
+    expect(plano).toMatch(/`desde` y `hasta` en SEGUNDOS CONTADOS DESDE EL INICIO DEL CORTE/)
+    expect(plano).toMatch(/LOS HECHOS CUBREN EL CORTE ENTERO, SIN HUECOS/)
+    expect(plano).toMatch(/`camara` EMPIEZA POR EL MOVIMIENTO, SIEMPRE/)
+    // el schema exige la lista (en el required) y es infalible
+    expect(ForensicReportSchema.shape.cortes.element.shape.hechos.safeParse(undefined).success).toBe(true)
   })
 
   it('exige dónde termina la pieza que se separa del producto', () => {

@@ -2,7 +2,7 @@ import { z } from 'zod'
 import type { TomaFinal } from './adapt'
 import type { VoiceProfile } from './character'
 import { KIE_PROMPT_MAX } from './kie'
-import { CPS_MAX } from './forensic'
+import { CPS_MAX, esEstadoDeManos, type Hecho } from './forensic'
 
 /**
  * FASE 5 del prompt maestro — agrupación de tomas en lotes de generación.
@@ -125,8 +125,10 @@ export function partirEnTramos(accion: string): string[] {
     .flatMap((frase) => {
       const out: string[] = []
       for (const parte of frase.split(/,\s+/)) {
-        if (out.length && !abreHecho(parte)) out[out.length - 1] += ', ' + parte
-        else out.push(parte)
+        // ", luego guarda el gotero" es un hecho nuevo: el conector no tapa el verbo.
+        const sinConector = parte.replace(/^(y\s+)?(luego|despu[eé]s|entonces)\s+/i, '')
+        if (out.length && !abreHecho(sinConector)) out[out.length - 1] += ', ' + parte
+        else out.push(out.length ? sinConector : parte)
       }
       return out
     })
@@ -179,21 +181,61 @@ export function repartirAccion(accion: string, duraciones: number[]): string[] {
   // existe para evitar, reentrando por la puerta del reparto.
   const tramos = partirEnTramos(sinEscenaDeFoto(accion))
   if (tramos.length < 2) return duraciones.map((_, i) => (i === 0 ? accion : ''))
-
-  // Límites iniciales: reparto proporcional a la duración, por resto mayor.
+  // Límites iniciales: reparto proporcional a la duración, por resto mayor. Es el camino
+  // de un análisis SIN `hechos` con tiempo; con ellos, `repartirPorTiempo`.
   const cuota = cuotas(tramos.length, duraciones)
   const limites: number[] = []
   for (let k = 0, desde = 0; k < cuota.length; k++) { limites.push(desde); desde += cuota[k] }
+  return andamiar(tramos, limites)
+}
 
-  // LA FRONTERA ENTRE FRAGMENTOS ES UN ESTADO CERRADO. Los fragmentos caen en clips
-  // distintos y cada clip se renderiza sin memoria del anterior, así que una frontera
-  // con el cuentagotas FUERA del envase es un objeto que el clip siguiente no sabe que
-  // existe: desaparece de la mano o se dibuja de nuevo. Si en la frontera el aplicador
-  // está fuera y más adelante el corte lo cierra, la frontera se corre hasta después del
-  // cierre — abrir, aplicar y cerrar quedan en el mismo clip. Si el corte nunca lo
-  // cierra (el forense no lo dijo), se cierra al final del fragmento (abajo): es la
-  // única forma de que el siguiente arranque con el envase cerrado en la mano, que es
-  // lo que el original muestra cuando la otra mano trabaja sobre la cara.
+/**
+ * Reparto POR TIEMPO: cada hecho cae en el fragmento cuya ventana (fracción de la toma)
+ * contiene su punto medio. `tramos` son los hechos ya reescritos por FASE 3 (el producto
+ * renombrado) y `hechos` los del forense con su ventana: se emparejan por índice, así que
+ * SOLO se usa cuando cuentan lo mismo; si no, el caller cae a `repartirAccion`.
+ */
+export function repartirPorTiempo(tramos: string[], hechos: Hecho[], ventanas: [number, number][]): string[] {
+  const span = Math.max(...hechos.map((h) => h.hasta), 1e-9)
+  const limites = ventanas.map(([a]) => {
+    const i = hechos.findIndex((h) => (h.desde + h.hasta) / 2 / span >= a)
+    return i < 0 ? hechos.length : i
+  })
+  limites[0] = 0
+  for (let k = 1; k < limites.length; k++) limites[k] = Math.max(limites[k], limites[k - 1])
+  // Un hecho SOSTENIDO que cruza la frontera (masajea 18 s, sostiene y habla) sigue
+  // ocurriendo en el fragmento siguiente: se arrastra como su primer hecho. Un EVENTO
+  // (aplica, destapa, cierra) no: ocurre una vez, donde cae su punto medio.
+  const arrastre = ventanas.map(([a, b], k) => {
+    if (k === 0) return null
+    const i = limites[k] - 1
+    const h = hechos[i]
+    // "se aplica el serum con los dedos" es masaje sostenido, no un evento: lo que ocurre una
+    // vez es sacar el aplicador (apertura, que incluye aplicar CON el gotero) o cerrarlo.
+    if (!h || esApertura(h.texto) || esCierre(h.texto)) return null
+    const solape = Math.min(h.hasta / span, b) - Math.max(h.desde / span, a)
+    return solape * span >= 1 ? i : null
+  })
+  return andamiar(tramos, limites, arrastre)
+}
+
+/**
+ * LA FRONTERA ENTRE FRAGMENTOS ES UN ESTADO CERRADO, y cada fragmento abre y cierra
+ * declarándolo. Los fragmentos caen en clips distintos y cada clip se renderiza sin
+ * memoria del anterior, así que una frontera con el cuentagotas FUERA del envase es un
+ * objeto que el clip siguiente no sabe que existe: desaparece de la mano o se dibuja de
+ * nuevo. Si en la frontera el aplicador está fuera y más adelante el corte lo cierra, la
+ * frontera se corre hasta después del cierre — abrir, aplicar y cerrar quedan en el mismo
+ * clip. Si el corte nunca lo cierra (el forense no lo dijo), se cierra al final del
+ * fragmento que lo abrió: es la única forma de que el siguiente arranque con el envase
+ * cerrado en la mano, que es lo que el original muestra cuando la otra mano trabaja.
+ */
+function andamiar(tramos: string[], limites: number[], arrastre: (number | null)[] = []): string[] {
+  // Solo el camino CON tiempos (`repartirPorTiempo`) trae `arrastre`: ahí la ventana del
+  // hecho dice si se prolonga. En el reparto proporcional no se sabe, y un fragmento sin
+  // hecho declara quietud en vez de repetir (vacío es recuperable, duplicado no).
+  const conTiempo = arrastre.length > 0
+  const originales = [...limites]
   for (let k = 1; k < limites.length; k++) {
     if (!aplicadorFuera(tramos.slice(0, limites[k]))) continue
     const cierre = tramos.findIndex((t, i) => i >= limites[k] && esCierre(t))
@@ -205,8 +247,18 @@ export function repartirAccion(accion: string, duraciones: number[]): string[] {
   const pieza = piezaDe(tramos)
   return limites.map((ini, k) => {
     const fin = k + 1 < limites.length ? limites[k + 1] : tramos.length
-    const trozo = tramos.slice(ini, fin)
     const previos = tramos.slice(0, ini)
+    // Si la frontera se corrió hasta después de un cierre y este fragmento quedó sin
+    // hechos, CONTINÚA la última acción sostenida de antes del cierre (el masaje sigue
+    // mientras habla): repetir un hecho declarado no inventa nada; dejarlo vacío deja al
+    // generador rellenar 7 s a su gusto.
+    const movida = conTiempo && limites[k] !== originales[k]
+    const continua = !conTiempo ? null
+      : !movida ? arrastre[k] ?? null
+      : ini >= fin ? [...previos.keys()].reverse().find((i) => !esApertura(tramos[i]) && !esCierre(tramos[i]) && !esEstadoDeManos(tramos[i])) ?? null
+      : null
+    const arrastrado = continua != null ? [tramos[continua]] : []
+    const trozo = [...arrastrado, ...tramos.slice(ini, fin)]
     const ultimo = k === limites.length - 1
     if (k === 0 && ultimo) return trozo.join('. ') + '.'
 
@@ -225,14 +277,12 @@ export function repartirAccion(accion: string, duraciones: number[]): string[] {
       ...(previos.some(esTransferencia) && !trozo.some(esTransferencia) ? [YA_APLICADO] : []),
     ]
     // Y uno que no es el último CIERRA: el aplicador vuelve al envase si nadie lo dijo, y
-    // se declara con qué termina. Es el estado con el que abre el clip siguiente.
+    // se declara con qué termina. Es el estado con el que abre el clip siguiente. Solo
+    // los tramos PROPIOS: en la frontera anterior el aplicador ya quedó cerrado.
     const hasta = tramos.slice(0, fin)
     const estadoFin = [...hasta].reverse().find(esEstadoDeManos)
     const ladoFin = estadoFin ? manoDe(estadoFin) : null
     const cierre = ultimo ? [] : [
-      // Solo los tramos PROPIOS: en la frontera anterior el aplicador ya quedó cerrado
-      // (la frontera se corrió hasta un cierre real, o se cerró sintético), así que el
-      // estado al final de este fragmento es lo que él mismo abrió y no cerró.
       ...(aplicadorFuera(trozo) ? [`vuelve a poner ${pieza} en el envase y lo cierra`] : []),
       ...(ladoFin ? [`termina con el envase en ${ladoFin === 'ambas' ? 'ambas manos' : `la mano ${ladoFin}`}${hasta.some(esApertura) ? ', cerrado' : ''}`] : []),
     ]
@@ -241,10 +291,15 @@ export function repartirAccion(accion: string, duraciones: number[]): string[] {
   })
 }
 
+/** Estado del aplicador en el instante `t` (segundos dentro del corte), según `hechos`. */
+export function aplicadorFueraEn(hechos: Hecho[], t: number): boolean {
+  const antes = hechos.filter((h) => h.hasta <= t + 1e-9).map((h) => h.texto)
+  const encima = hechos.find((h) => h.desde < t && t < h.hasta)
+  return aplicadorFuera(antes) || (!!encima && esApertura(encima.texto))
+}
+
 // Vocabulario CERRADO del estado de los objetos, sobre la prosa del forense. Se amplía
 // agregando verbos acá —visible en el diff—, no aflojando los patrones.
-/** Un tramo que declara qué tiene una mano, no un movimiento: se hereda entre fragmentos. */
-const esEstadoDeManos = (t: string) => /^(sujeta|sostiene|mantiene|tiene)\b/i.test(sinTildes(t)) && /\bmano/i.test(t)
 /** El producto llegó al cuerpo en este tramo. */
 const esTransferencia = (t: string) => /\b(aplica|deja caer|suelta|vierte|deposita|echa)\b/i.test(t) && /\b(gota|suero|serum|producto|crema)\b/i.test(t)
 const PIEZAS = /\b(cuentagotas|gotero|pipeta|tapa|tapón|cuchara|aplicador)\b/i
@@ -321,12 +376,7 @@ function splitLongToma(t: TomaFinal): TomaFinal[] {
   const dur = sanearDuracion(t.duracionSeg)
   // SIN r1 acá (fix round 2): esta es la salida de la inmensa mayoría de las tomas —
   // las que no necesitan dividirse. Aplastar su duración a 1 decimal antes de que
-  // `groupIntoLotes` la sume anula el epsilon de `excedeTope`: dos tomas de 7.51 s
-  // (15.02 s reales) llegaban redondeadas a 7.5 y sumaban exactamente 15.0, así que el
-  // guard nunca disparaba. El resultado no se veía como lote inválido (el invariante
-  // publicado seguía en <=15) sino como MENOS lotes de los que tocaba — la API igual
-  // renderiza una duración entera, así que ese excedente sale como diálogo cortado.
-  // El redondeo se queda solo en `r1` sobre el `duracionSeg` de display del lote.
+  // `groupIntoLotes` la sume anula el epsilon de `excedeTope`.
   if (dur <= LOTE_MAX_SEC) return [{ ...t, duracionSeg: dur }]
 
   const partes = t.locucion.split(/(?<=[.!?])\s+/).filter((s) => s.trim())
@@ -358,10 +408,95 @@ function splitLongToma(t: TomaFinal): TomaFinal[] {
  *  sin memoria de nada que esté fuera de su propio prompt. */
 const SIN_HECHO_NUEVO = 'mantiene la postura, sin gesto nuevo.'
 
-/** `splitLongToma` reparte la duración y la locución; esto reparte la COREOGRAFÍA sobre
- *  la lista de fragmentos ya cerrada — el reparto necesita verlos todos a la vez, y la
- *  recursión de aquella devuelve de a uno. */
-function partirToma(t: TomaFinal): TomaFinal[] {
+/**
+ * CORTE POR TIEMPO, EN ESTADO CERRADO. Los puntos de corte legales son los finales de
+ * frase de la locución (un clip no puede partir una frase); cada uno cae en un instante
+ * de la toma proporcional a los caracteres. Se avanza tomando la frontera MÁS LEJANA que
+ * deja el trozo dentro de 15 s y cuyo instante es un estado cerrado (el aplicador dentro
+ * del envase, sin una transferencia a medias); si ninguna lo es, la más lejana que entra
+ * — y `andamiar` cierra el envase en esa frontera. Devuelve los trozos con su ventana
+ * como fracción de la toma, que es lo que `repartirPorTiempo` necesita.
+ */
+function trozosPorTiempo(t: TomaFinal, hechos: Hecho[]): { toma: TomaFinal; ventana: [number, number] }[] {
+  const dur = sanearDuracion(t.duracionSeg)
+  const partes = t.locucion.split(/(?<=[.!?])\s+/).filter((s) => s.trim())
+  if (dur <= LOTE_MAX_SEC || partes.length < 2) {
+    return splitLongToma(t).map((toma, i, arr) => {
+      const antes = arr.slice(0, i).reduce((n, x) => n + x.duracionSeg, 0)
+      return { toma, ventana: [antes / dur, (antes + toma.duracionSeg) / dur] as [number, number] }
+    })
+  }
+  const total = partes.reduce((n, p) => n + p.length, 0) || 1
+  const span = Math.max(...hechos.map((h) => h.hasta), dur)
+  // fin de cada frase, como fracción de la toma
+  const fines: number[] = []
+  for (let i = 0, acc = 0; i < partes.length; i++) { acc += partes[i].length; fines.push(acc / total) }
+
+  const out: { toma: TomaFinal; ventana: [number, number] }[] = []
+  let desde = 0 // índice de la primera frase del trozo actual
+  let a = 0     // fracción donde arranca el trozo actual
+  while (desde < partes.length) {
+    // candidatos: fines de frase j >= desde tales que el trozo [a, fin_j] entra en 15 s
+    const cabe = (j: number) => (fines[j] - a) * dur <= LOTE_MAX_SEC + EPS
+    let ultimoQueCabe = desde
+    for (let j = desde; j < partes.length && cabe(j); j++) ultimoQueCabe = j
+    let corte = ultimoQueCabe
+    if (ultimoQueCabe < partes.length - 1) {
+      // no es el último trozo: preferir la frontera más lejana en estado cerrado
+      for (let j = ultimoQueCabe; j >= desde; j--) {
+        if (!aplicadorFueraEn(hechos, fines[j] * span)) { corte = j; break }
+      }
+    }
+    const b = fines[corte]
+    const toma: TomaFinal = { ...t, duracionSeg: r1((b - a) * dur), locucion: partes.slice(desde, corte + 1).join(' ') }
+    // una frase sola que no entra en 15 s se parte como siempre (sin puntos → uniforme)
+    for (const sub of splitLongToma(toma)) {
+      const prev = out.length ? out[out.length - 1].ventana[1] : a
+      out.push({ toma: sub, ventana: [prev, Math.min(b, prev + sub.duracionSeg / dur)] })
+    }
+    out[out.length - 1].ventana[1] = b
+    desde = corte + 1
+    a = b
+  }
+  return out
+}
+
+/**
+ * Parte una toma larga y REPARTE su coreografía entre los fragmentos. Con `hechos` del
+ * forense (análisis nuevos) el corte es por tiempo y en estado cerrado; sin ellos, por
+ * frases y proporcional (análisis anteriores).
+ */
+/**
+ * Un hecho del forense que trae VARIAS cláusulas ("retira el gotero, deja caer una gota y
+ * vuelve a insertarlo", 0–3.4 s) se parte en una por cláusula, repartiendo su ventana en
+ * proporción a los caracteres. Es la firma del techo semántico del modelo (un corte largo
+ * vuelve con un solo hecho aunque el prompt pida uno por elemento), y sin esto el corte
+ * por tiempo se apagaba justo en los cortes que más lo necesitan. Es la MISMA suposición
+ * proporcional que hace el reparto sin tiempos, aplicada dentro del hecho.
+ */
+export function expandirHechos(hechos: Hecho[]): Hecho[] {
+  return hechos.flatMap((h) => {
+    const partes = partirEnTramos(h.texto)
+    if (partes.length < 2) return [h]
+    const total = partes.reduce((n, x) => n + x.length, 0) || 1
+    let t = h.desde
+    return partes.map((texto) => {
+      const desde = t
+      t = Math.min(h.hasta, desde + ((h.hasta - h.desde) * texto.length) / total)
+      return { desde, hasta: t, texto }
+    })
+  })
+}
+
+function partirToma(t: TomaFinal, hechosCrudos: Hecho[] = []): TomaFinal[] {
+  const tramos = partirEnTramos(sinEscenaDeFoto(t.accionVisual))
+  const hechos = expandirHechos(hechosCrudos)
+  if (hechos.length >= 2 && tramos.length === hechos.length) {
+    const trozos = trozosPorTiempo(t, hechos)
+    if (trozos.length < 2) return trozos.map((x) => x.toma)
+    const acciones = repartirPorTiempo(tramos, hechos, trozos.map((x) => x.ventana))
+    return trozos.map((x, i) => ({ ...x.toma, accionVisual: acciones[i] }))
+  }
   const frags = splitLongToma(t)
   if (frags.length < 2) return frags
   const acciones = repartirAccion(t.accionVisual, frags.map((f) => f.duracionSeg))
@@ -402,13 +537,16 @@ export const LOTE_MAX_COREO = 2450
  */
 export const LOTE_MAX_CHARS = LOTE_MAX_SEC * CPS_MAX
 
-export function groupIntoLotes(tomas: TomaFinal[]): Lote[] {
+export function groupIntoLotes(tomas: TomaFinal[], cortes: { tiempo: string; hechos?: Hecho[] }[] = []): Lote[] {
+  // Los `hechos` con tiempo del forense, por `tiempoOriginal` (nunca por `n`): son lo
+  // que permite cortar una toma larga por tiempo y en estado cerrado.
+  const hechosDe = new Map(cortes.map((c) => [c.tiempo, c.hechos ?? []]))
   // Renumeramos TODA la secuencia expandida en orden: si una toma se divide, sus
   // fragmentos no pueden compartir el `n` original (colisionarían al rotular "Toma N"
   // en el prompt de Task 5 — dos "Toma 1" en el mismo guión). Numerar secuencial y
   // global es la forma más simple de garantizar unicidad y orden sin inventar un
   // esquema paralelo (sufijos, decimales) que Task 5 tendría que aprender a leer.
-  const expandidas = tomas.flatMap(partirToma).map((t, i) => ({ ...t, n: i + 1 }))
+  const expandidas = tomas.flatMap((t) => partirToma(t, hechosDe.get(t.tiempoOriginal))).map((t, i) => ({ ...t, n: i + 1 }))
   const lotes: Lote[] = []
   let actual: TomaFinal[] = []
   let acumulado = 0
@@ -650,11 +788,11 @@ export function buildLotePrompt(args: {
   // los 155 lotes reales, un lote de una sesión se pasaba del tope al sumar el bloque —
   // sin el escalón, esa sesión dejaba de poder renderizarse. La invariante de piezas NO
   // se suelta: no la dice nadie más.
-  // Micro-temblor solo si la cámara del original no es fija: medido, el 74 % de los
-  // cortes dicen "fija/estática/estable", y pedir temblor en la misma línea eran dos
-  // órdenes opuestas — el modo de fallo que este repo tiene registrado seis veces.
-  const fija = /fij|est[aá]t|estab|tr[ií]pode/i.test(camara)
-  const temblor = fija ? '' : ' Grabado con teléfono en mano, con micro-temblor natural.'
+  // LA CÁMARA NUNCA SE SUPONE. El micro-temblor solo va si el forense dijo "en mano":
+  // agregarlo por defecto puso a moverse una cámara que en el original es fija (lote 3 de
+  // `00471f8a`), y con "fija" en la misma línea eran dos órdenes opuestas. Sin cámara
+  // (ningún corte empareja) la línea no se emite: la imagen decide el encuadre.
+  const temblor = /\ben mano\b|temblor|handheld/i.test(camara) ? ' Grabado con teléfono en mano, con micro-temblor natural.' : ''
   const armar = (desc: string, unaLinea = false) => [
     multiPlano
       ? `Video UGC vertical 9:16, ${lote.duracionSeg} segundos, ${lote.tomas.length} tomas con corte seco donde cambia el plano; sin fundidos ni transiciones, y nada cambia al otro lado del corte.`
@@ -668,9 +806,13 @@ export function buildLotePrompt(args: {
     '',
     acciones(unaLinea),
     '',
-    multiPlano
-      ? `CÁMARA: la de cada toma, anunciada arriba.${temblor}`
-      : `CÁMARA: ${camara.replace(/\s*\.\s*$/, '')}.${temblor}`,
+    // Entre hechos no se inventa nada: es lo único que el prompt permite entre uno y el
+    // siguiente. Con los hechos cubriendo el clip, la quietud ya viene declarada. En el
+    // escalón corrido (el piso del presupuesto) se suelta: ahí lo que manda es entrar.
+    ...(unaLinea ? [] : ['Entre hechos sostiene lo que tiene y sigue hablando; ningún gesto fuera de la lista.', '']),
+    ...(multiPlano
+      ? [`CÁMARA: la de cada toma, anunciada arriba.${temblor}`]
+      : camara.trim() ? [`CÁMARA: ${camara.replace(/\s*\.\s*$/, '')}.${temblor}`] : []),
     '',
     `VOZ: ${voz.tono}, timbre ${voz.timbre}, edad vocal ${voz.edadVocal}. Habla en ${voz.idioma} con acento ${voz.acento}, ${voz.ritmo.toLowerCase()}, energía ${voz.energia.toLowerCase()}. ${voz.entonacion}.`,
     'Dice exactamente lo que está entre comillas arriba: no resumas, no extiendas, no corrijas, no agregues frases ni inventes diálogo para rellenar.',

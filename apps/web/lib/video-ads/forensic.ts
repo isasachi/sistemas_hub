@@ -14,12 +14,29 @@ import { z } from 'zod'
  * a reproducir.
  */
 
+/**
+ * Un hecho de coreografía con su ventana de tiempo DENTRO del corte (segundos desde el
+ * inicio del corte). Los hechos de un corte lo cubren de punta a punta, incluida la
+ * quietud declarada: un segundo sin hecho es un segundo que el generador rellena con un
+ * gesto inventado (medido: mano con suero, frasco mostrado a cámara, cambio de mano con
+ * el frasco flotando — nada de eso estaba en el prompt).
+ */
+export const HechoSchema = z.object({
+  desde: z.number().catch(0),
+  hasta: z.number().catch(0),
+  texto: z.string().catch(''),
+})
+export type Hecho = z.infer<typeof HechoSchema>
+
 export const CorteSchema = z.object({
   n: z.number(),
   tiempo: z.string(),          // "00:00 - 00:03"
   duracionSeg: z.number(),
-  accion: z.string(),          // qué sucede, literal
-  camara: z.string(),          // plano, posición, movimiento, zoom
+  // `accion` se DERIVA de `hechos` (`normalizarHechos`): el modelo llena la lista. Un
+  // análisis anterior a los hechos trae solo `accion`, y todo río abajo la sigue leyendo.
+  accion: z.string().catch(''),
+  hechos: z.array(HechoSchema).catch([]),
+  camara: z.string(),          // MOVIMIENTO primero (fija / en mano / paneo / zoom), luego el encuadre
   dialogo: z.string(),         // texto hablado en este corte
   textoOverlay: z.string(),    // "No aparece" si no hay
   transicion: z.string(),      // jump cut / corte directo / continuidad / zoom digital
@@ -187,6 +204,72 @@ export function repairCutTiming(
   }
 }
 
+const sinTildes = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+/** Verbos que hacen de un tramo un EVENTO (algo cambia), no un estado. */
+const EVENTO = /\b(aplica|deja caer|suelta|vierte|deposita|echa|destapa|abre|desenrosca|saca|retira|extrae|cierra|tapa|enrosca|guarda|devuelve)\b/
+/**
+ * Un tramo que declara qué tiene una mano, no un movimiento: se hereda entre fragmentos.
+ * "Sostiene el frasco con la derecha y APLICA una gota con la izquierda" NO lo es: es un
+ * evento, y heredarlo como estado repetiría la aplicación en el clip siguiente.
+ */
+export const esEstadoDeManos = (t: string) => {
+  const s = sinTildes(t.trim())
+  return /^(sujeta|sostiene|mantiene|tiene)\b/.test(s) && /\bmano/.test(s) && !EVENTO.test(s)
+}
+
+/** Umbral de hueco entre hechos que se considera "sin cubrir" (s). */
+const HUECO_SEG = 0.75
+
+/**
+ * Deja los `hechos` de cada corte ordenados, dentro de la ventana del corte y SIN HUECOS,
+ * y deriva `accion` de ellos. Un hueco se rellena con el último estado de manos declarado
+ * más "y habla a cámara" (o "sin gesto nuevo" en un corte mudo): es la lectura más
+ * conservadora posible —no inventa un gesto— y se loguea para saber que el forense dejó
+ * un tramo sin describir. Un corte sin `hechos` (análisis anterior) no se toca.
+ */
+export function normalizarHechos(report: ForensicReport): { report: ForensicReport; rellenos: string[] } {
+  const rellenos: string[] = []
+  const cortes = (report.cortes ?? []).map((c) => {
+    if (!c.hechos?.length) return c
+    const dur = Number.isFinite(c.duracionSeg) && c.duracionSeg > 0 ? c.duracionSeg : 0
+    let hechos = c.hechos
+      .filter((h) => h.texto.trim())
+      .map((h) => ({ ...h, desde: Math.max(0, h.desde), hasta: Math.max(h.desde, h.hasta) }))
+    // El modelo a veces cuenta desde el inicio del VIDEO y no del corte: si el último
+    // `hasta` se pasa de largo y restando el inicio del corte entra, se corrige.
+    const inicio = inicioDe(c.tiempo)
+    if (dur && hechos.length && hechos[hechos.length - 1].hasta > dur * 1.2 && inicio > 0
+      && hechos.every((h) => h.desde >= inicio - HUECO_SEG) && hechos[hechos.length - 1].hasta - inicio <= dur * 1.2) {
+      hechos = hechos.map((h) => ({ ...h, desde: h.desde - inicio, hasta: h.hasta - inicio }))
+    }
+    hechos.sort((a, b) => a.desde - b.desde)
+    if (dur) hechos = hechos.map((h) => ({ ...h, desde: Math.min(h.desde, dur), hasta: Math.min(h.hasta, dur) }))
+
+    const relleno = (desde: number, hasta: number, previos: Hecho[]): Hecho => {
+      const estado = [...previos].reverse().map((h) => h.texto).find(esEstadoDeManos)
+      const texto = `${estado ?? 'mantiene la postura'}${c.dialogo?.trim() ? ' y habla a cámara' : ', sin gesto nuevo'}`
+      rellenos.push(`corte ${c.n}: ${desde.toFixed(1)}–${hasta.toFixed(1)} s sin hecho → "${texto}"`)
+      return { desde, hasta, texto }
+    }
+    const cubiertos: Hecho[] = []
+    let cursor = 0
+    for (const h of hechos) {
+      if (h.desde - cursor > HUECO_SEG) cubiertos.push(relleno(cursor, h.desde, cubiertos))
+      cubiertos.push(h)
+      cursor = Math.max(cursor, h.hasta)
+    }
+    if (dur && dur - cursor > HUECO_SEG) cubiertos.push(relleno(cursor, dur, cubiertos))
+    return { ...c, hechos: cubiertos, accion: cubiertos.map((h) => h.texto.replace(/[\s.;]+$/, '')).join('; ') + '.' }
+  })
+  return { report: { ...report, cortes }, rellenos }
+}
+
+/** Segundo de inicio de un `tiempo` "MM:SS - MM:SS"; 0 si no se puede leer. */
+function inicioDe(tiempo: string): number {
+  const m = tiempo?.match(/(\d{1,2}):(\d{2})/)
+  return m ? Number(m[1]) * 60 + Number(m[2]) : 0
+}
+
 export function buildForensicInstruction(): string {
   return [
     'Actúa como analista forense experto en videos de respuesta directa.',
@@ -205,7 +288,7 @@ export function buildForensicInstruction(): string {
     // tiene. Un campo que solapa con otro ya contestado vuelve vacío — este repo lo
     // pagó cinco veces.
     'DÓNDE VA CADA COSA DE ESA LISTA: los silencios, los gestos, los movimientos y la',
-    'manipulación del producto y de los objetos van en `accion`; los zooms, los cambios',
+    'manipulación del producto y de los objetos van en `hechos`; los zooms, los cambios',
     'de plano y los movimientos de cámara en `camara`; los cortes y jump cuts en',
     '`transicion`; los textos, overlays y subtítulos en `elementosGraficos` y en',
     '`textoOverlay`; las palabras en `dialogo` y en `guionOriginal`; los fondos en',
@@ -235,9 +318,9 @@ export function buildForensicInstruction(): string {
     '',
     'Los elementos gráficos se analizan ÚNICAMENTE para entender el original.',
     'NO deben reproducirse en el video generado. Por eso van en su propio campo y',
-    'nunca dentro de `accion` ni de `camara`.',
+    'nunca dentro de `hechos` ni de `camara`.',
     '',
-    'LA `accion` DE CADA CORTE ES COREOGRAFÍA, NO RESUMEN.',
+    'LOS `hechos` DE CADA CORTE SON COREOGRAFÍA, NO RESUMEN.',
     '',
     'ANTES QUE NADA: SI EL PRODUCTO TOCA EL CUERPO EN ESTE CORTE, ESE HECHO SE ESCRIBE',
     'PRIMERO Y COMPLETO — qué sale del envase, con qué, y sobre qué lado de qué zona:',
@@ -248,13 +331,19 @@ export function buildForensicInstruction(): string {
     'nada — es el defecto más caro de esta tool, porque el anuncio entero existe para',
     'mostrar que el producto se usa. Ante la duda de si hubo contacto, míralo otra vez.',
     '',
-    'UN HECHO POR CLÁUSULA, SEPARADOS POR PUNTO Y COMA. Un corte largo se parte en',
-    'varios clips y cada uno recibe SOLO los hechos que le tocan: sin el punto y coma no',
-    'hay dónde cortar, y los dos clips terminan pidiendo la coreografía entera — el',
-    'modelo ejecuta una fracción arbitraria y dos clips seguidos intentan el mismo gesto.',
-    '"abre la tapa con el pulgar; vierte una cucharada en el vaso; deja el envase sobre',
-    'la mesa" son TRES hechos. La coma queda para lo que pertenece a un mismo hecho',
-    '("mira el producto y luego a cámara").',
+    'LA COREOGRAFÍA VA EN `hechos`: una lista, UN HECHO POR ELEMENTO, cada uno con',
+    '`desde` y `hasta` en SEGUNDOS CONTADOS DESDE EL INICIO DEL CORTE (el primer hecho',
+    'empieza en 0) y `texto` con el hecho. "abre la tapa con el pulgar", "vierte una',
+    'cucharada en el vaso" y "deja el envase sobre la mesa" son TRES hechos, tres',
+    'elementos. La coma queda para lo que pertenece a un mismo hecho ("mira el producto y',
+    'luego a cámara"). `accion` se deja vacía: se deriva de la lista.',
+    'LOS HECHOS CUBREN EL CORTE ENTERO, SIN HUECOS: el `hasta` de uno es el `desde` del',
+    'siguiente y el último termina en la duración del corte. Si durante seis segundos la',
+    'persona solo sostiene el frasco y habla, ESO ES UN HECHO ("sostiene el frasco a la',
+    'altura del pecho con la mano derecha y habla a cámara", 4.0–10.0). La quietud',
+    'declarada es un dato; un segundo sin hecho es un segundo que el generador rellena',
+    'con un gesto inventado. Un corte largo se parte en varios clips por sus tiempos, y',
+    'cada clip recibe SOLO los hechos de su ventana.',
     '',
     'CADA CORTE ABRE DICIENDO QUÉ TIENE CADA MANO, NOMBRÁNDOLAS. El clip se renderiza sin',
     'memoria de lo que la toma anterior dejó en cada una, así que un gesto nuevo con una',
@@ -305,10 +394,17 @@ export function buildForensicInstruction(): string {
     '  el límite. La suma de las duraciones tiene que dar la duración total del video.',
     '',
     'CORTES (`cortes`): uno por corte real, en orden. Para cada uno:',
-    '  `tiempo` "MM:SS - MM:SS", `duracionSeg`, `accion` (descripción literal de lo',
-    '  que sucede), `camara` (plano, posición, movimiento, zoom), `dialogo` (texto',
-    '  hablado durante ese corte), `textoOverlay` (o "No aparece") y `transicion`',
-    '  (jump cut / corte directo / continuidad / zoom digital).',
+    '  `tiempo` "MM:SS - MM:SS", `duracionSeg`, `hechos` (la lista de arriba, con',
+    '  `desde`/`hasta`/`texto`; `accion` vacía), `camara`, `dialogo` (texto hablado',
+    '  durante ese corte), `textoOverlay` (o "No aparece") y `transicion` (jump cut /',
+    '  corte directo / continuidad / zoom digital).',
+    '',
+    '`camara` EMPIEZA POR EL MOVIMIENTO, SIEMPRE, y se mide, no se supone: "fija" si la',
+    'cámara no se mueve en todo el corte; "en mano" si tiembla; "paneo a la derecha",',
+    '"zoom in lento", "desplazamiento" si los hay. Después el encuadre por dónde corta',
+    'el cuadro ("corta a la altura del pecho", "primer plano del rostro") y la posición',
+    '(frontal, ángulo bajo). Un corte sin movimiento declarado se renderiza con la',
+    'cámara que el generador invente, y un UGC grabado con el teléfono apoyado es fijo.',
     '',
     'TOMAS (`tomas`): convierte cada corte real en una toma de grabación, con',
     '  `encuadre`, `posicion` del personaje, `accionFisica` exacta, `objeto` usado,',

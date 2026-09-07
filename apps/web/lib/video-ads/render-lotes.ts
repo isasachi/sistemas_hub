@@ -28,10 +28,10 @@ export function insumosDeRender(
   // Solo la parte física del envase: la etiqueta la muestra Image2 mejor que un párrafo.
   const producto = productoFisico(session.product_scan?.productDescription ?? '')
   const cortes = session.forensic_analysis?.cortes ?? []
-  const agrupados = groupIntoLotes(adapted.tomas)
-  // Sin corte que empareje NO se afirma ninguna escala: sin ella, el encuadre lo decide
-  // la imagen de referencia.
-  const camaras = agrupados.map((l) => camaraDeLote(l, cortes, 'cámara en mano'))
+  const agrupados = groupIntoLotes(adapted.tomas, cortes)
+  // Sin corte que empareje no se afirma NADA de la cámara: la línea no se emite y el
+  // encuadre lo decide la imagen de referencia.
+  const camaras = agrupados.map((l) => camaraDeLote(l, cortes, ''))
   const huella = scriptFingerprint({ lotes: agrupados, camaras, voz, images, producto })
   return { images, producto, cortes, agrupados, camaras, huella, voz }
 }
@@ -209,7 +209,9 @@ export function scriptFingerprint(input: {
     // v6 → v7: el lote cierra también por caracteres de locución (cambia el reparto), el
     // plano se anuncia por toma cuando el lote mezcla dos, la cabecera deja de pedir
     // "toma continua" en ese caso y el micro-temblor solo va con cámara no fija.
-    'v7',
+    // v7 → v8: la cámara no lleva micro-temblor salvo que el forense diga "en mano", la
+    // línea de cámara se omite sin dato, y el prompt prohíbe el relleno entre hechos.
+    'v8',
     producto,
     voz.idioma, voz.varianteRegional, voz.acento, voz.pronunciacion, voz.ritmo,
     voz.velocidad, voz.entonacion, voz.energia, voz.pausas, voz.tono, voz.timbre,

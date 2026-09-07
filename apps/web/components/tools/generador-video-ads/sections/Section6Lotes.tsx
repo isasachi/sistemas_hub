@@ -14,7 +14,7 @@ const LABEL: Record<string, string> = {
 }
 
 export default function Section6Lotes() {
-  const { sessionId, adapted, lotes, patch } = useVideoStore()
+  const { sessionId, adapted, lotes, forensicAnalysis, patch } = useVideoStore()
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [running, setRunning] = useState(!!lotes?.some(isInFlight))
@@ -36,7 +36,7 @@ export default function Section6Lotes() {
   const timer = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Preview local: cuántos renders va a costar, ANTES de gastarlos.
-  const preview = adapted ? groupIntoLotes(adapted.tomas) : []
+  const preview = adapted ? groupIntoLotes(adapted.tomas, forensicAnalysis?.cortes ?? []) : []
 
   useEffect(() => {
     if (!running || !sessionId) return

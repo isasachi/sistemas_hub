@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { groupIntoLotes, LOTE_MAX_SEC, LOTE_MAX_CHARS, LoteSchema, buildLotePrompt, camaraDeLote, sinEscenaDeFoto, partirEnTramos, repartirAccion } from './lotes'
+import { groupIntoLotes, LOTE_MAX_SEC, LOTE_MAX_CHARS, LoteSchema, expandirHechos, buildLotePrompt, camaraDeLote, sinEscenaDeFoto, partirEnTramos, repartirAccion } from './lotes'
 import type { TomaFinal } from './adapt'
+import type { Hecho } from './forensic'
 import { KIE_PROMPT_MAX } from './kie'
 
 const toma = (n: number, duracionSeg: number, locucion = `linea ${n}`): TomaFinal => ({
@@ -635,6 +636,124 @@ describe('el reparto no deja escenografía de foto ni carriles vacíos', () => {
     })
     expect(uno).toMatch(/una sola toma continua/)
     expect(uno).toContain('Toma 1 (5 s):')
+  })
+})
+
+describe('corte por tiempo, en estado cerrado (hechos con ventana)', () => {
+  const h = (desde: number, hasta: number, texto: string): Hecho => ({ desde, hasta, texto })
+  // el corte abre y cierra el envase DOS veces; la frontera "que entra" cae a mitad de la
+  // segunda aplicación, y una frase antes hay un estado cerrado
+  const hechos = [
+    h(0, 2, 'sujeta el frasco con la mano derecha'),
+    h(2, 4, 'aplica una gota en la mejilla con el cuentagotas'),
+    h(4, 5, 'vuelve a poner el cuentagotas en el frasco y lo cierra'),
+    h(5, 13, 'extiende el suero con las yemas de la izquierda'),
+    h(13, 18, 'aplica otra gota en la frente con el cuentagotas'),
+    h(18, 20, 'vuelve a poner el cuentagotas en el frasco y lo cierra'),
+  ]
+  // frases de 40 / 35 / 25 caracteres → fines en 0.4, 0.75 y 1.0 de la toma (8, 15 y 20 s)
+  const locucion = `${'a'.repeat(39)}. ${'b'.repeat(34)}. ${'c'.repeat(24)}.`
+  const larga: TomaFinal = { ...toma(1, 20, locucion), tiempoOriginal: '00:00 - 00:20', accionVisual: hechos.map((x) => x.texto).join('; ') }
+  const cortes = [{ tiempo: '00:00 - 00:20', hechos }]
+
+  it('prefiere la frontera más lejana que entra Y está en estado cerrado, no la más lejana a secas', () => {
+    const lotes = groupIntoLotes([larga], cortes)
+    // sin hechos partiría en 15 + 5 (la frontera más lejana que entra), a mitad de la
+    // segunda aplicación; con ellos retrocede al fin de frase con el envase cerrado
+    expect(lotes.map((l) => l.duracionSeg)).toEqual([8, 12])
+    const [a, b] = lotes.map((l) => l.tomas[0])
+    expect(a.locucion).toBe(`${'a'.repeat(39)}.`)
+    expect(partirEnTramos(a.accionVisual)).toEqual([
+      'sujeta el frasco con la mano derecha',
+      'aplica una gota en la mejilla con el cuentagotas',
+      'vuelve a poner el cuentagotas en el frasco y lo cierra',
+      'termina con el envase en la mano derecha, cerrado',
+    ])
+    // el segundo recibe SOLO los hechos de su ventana, y abre con el estado
+    expect(b.accionVisual).toMatch(/^sujeta el frasco con la mano derecha\. el envase está cerrado/)
+    expect(b.accionVisual).toContain('aplica otra gota en la frente')
+    expect(b.accionVisual).not.toContain('aplica una gota en la mejilla')
+    // sin cortes, el reparto viejo: proporcional por frases, que sí parte en 15 + 5
+    expect(groupIntoLotes([larga]).map((l) => l.duracionSeg)).toEqual([15, 5])
+  })
+
+  // El corte 4 real de `00471f8a`: dos hechos, el segundo de 18 s. Por punto medio el
+  // fragmento 2 quedaba VACÍO ("sin gesto nuevo") mientras en el original sigue masajeando.
+  it('un hecho sostenido que cruza la frontera sigue en el fragmento siguiente; un evento no', () => {
+    const dos = [
+      h(0, 2, 'sostiene el envase en la mano derecha y aplica producto con el gotero en la mejilla izquierda'),
+      h(2, 20, 'se aplica el serum con los dedos en mejillas y mentón, sosteniendo el frasco con la mano derecha'),
+    ]
+    const t = { ...larga, accionVisual: dos.map((x) => x.texto).join('; ') }
+    const [l1, l2] = groupIntoLotes([t], [{ tiempo: '00:00 - 00:20', hechos: dos }])
+    // sin frontera cerrada posible (el gotero nunca vuelve), se corta donde entra y se cierra ahí
+    expect(l1.tomas[0].accionVisual).toMatch(/vuelve a poner el gotero en el envase y lo cierra/)
+    // el masaje sigue en el segundo fragmento, y la aplicación NO se repite
+    expect(l2.tomas[0].accionVisual).toContain('se aplica el serum con los dedos')
+    expect(l2.tomas[0].accionVisual).not.toMatch(/aplica producto con el gotero/)
+    expect(l2.tomas[0].accionVisual).not.toMatch(/sin gesto nuevo/)
+    expect(l2.tomas[0].accionVisual).toMatch(/el envase está cerrado/)
+  })
+
+  // Segundo sorteo real del forense sobre `00471f8a`: UN hecho por corte con varias
+  // cláusulas adentro. Sin partirlo, el corte por tiempo se apagaba (1 hecho < 2).
+  it('un hecho con varias cláusulas se parte repartiendo su ventana en proporción', () => {
+    const [a, b, c] = expandirHechos([h(0, 3.4, 'sostiene el frasco con la mano izquierda; retira el gotero con la derecha; deja caer una gota sobre la mejilla')])
+    expect(a.desde).toBe(0)
+    expect(c.hasta).toBeCloseTo(3.4, 6)
+    expect(a.hasta).toBeCloseTo(b.desde, 6)
+    expect(b.hasta).toBeCloseTo(c.desde, 6)
+    expect(a.hasta).toBeGreaterThan(0.9) // ~37 % de los caracteres
+    expect(expandirHechos([h(0, 5, 'mira a cámara')])).toEqual([h(0, 5, 'mira a cámara')])
+    // y con eso el corte por tiempo sí corre: mismos 8 + 12 que con la lista ya partida
+    const unoSolo = [{ tiempo: '00:00 - 00:20', hechos: [h(0, 20, hechos.map((x) => x.texto).join('; '))] }]
+    expect(groupIntoLotes([larga], unoSolo).map((l) => l.duracionSeg)).toEqual([15, 5])
+  })
+
+  // El corte 4 del tercer sorteo real: la frontera se corre hasta después de "guarda el
+  // gotero" y se lleva el masaje; el segundo fragmento quedaba con solo el andamiaje.
+  it('si al correr la frontera tras el cierre el fragmento queda vacío, continúa la última acción sostenida', () => {
+    const cuatro = [
+      h(0, 10, 'la mano derecha aplica una gota del gotero sobre la mejilla, la izquierda sostiene el frasco'),
+      h(10, 13, 'extiende el producto con los dedos'),
+      h(13, 17, 'masajea las mejillas y el cuello'),
+      h(17, 20, 'guarda el gotero en el frasco'),
+    ]
+    const t = { ...larga, locucion: `${'a'.repeat(59)}. ${'b'.repeat(39)}.`, accionVisual: cuatro.map((x) => x.texto).join('; ') }
+    const [l1, l2] = groupIntoLotes([t], [{ tiempo: '00:00 - 00:20', hechos: cuatro }])
+    expect(l1.tomas[0].accionVisual).toContain('guarda el gotero en el frasco')
+    expect(l2.tomas[0].accionVisual).toContain('masajea las mejillas y el cuello')
+    expect(l2.tomas[0].accionVisual).not.toMatch(/gotero sobre la mejilla|guarda el gotero/)
+    expect(l2.tomas[0].accionVisual).toMatch(/el envase está cerrado/)
+  })
+
+  it('si los hechos y los tramos de FASE 3 no cuentan lo mismo, cae al reparto proporcional', () => {
+    const otra = { ...larga, accionVisual: 'sujeta el frasco con la mano derecha; extiende con las yemas' }
+    expect(groupIntoLotes([otra], cortes).map((l) => l.duracionSeg)).toEqual([15, 5])
+  })
+
+  it('la cámara nunca se supone: sin "en mano" no hay temblor, y sin dato no hay línea', () => {
+    const lote = groupIntoLotes([toma(1, 5)])[0]
+    const base = { lote, voz: VOZ, producto: '', images: [{ url: 'a', role: 'la persona' }] }
+    expect(buildLotePrompt({ ...base, camara: 'Plano medio, frontal.' })).not.toMatch(/temblor/)
+    expect(buildLotePrompt({ ...base, camara: 'En mano, plano medio.' })).toMatch(/micro-temblor/)
+    const sinDato = buildLotePrompt({ ...base, camara: '' })
+    expect(sinDato).not.toMatch(/^CÁMARA:/m)
+    expect(sinDato).not.toMatch(/temblor/)
+  })
+
+  it('prohíbe el relleno entre hechos, salvo en el escalón corrido', () => {
+    const lote = groupIntoLotes([toma(1, 5)])[0]
+    const p = buildLotePrompt({ lote, camara: 'Fija.', voz: VOZ, producto: '', images: [{ url: 'a', role: 'la persona' }] })
+    expect(p).toMatch(/ningún gesto fuera de la lista/)
+  })
+})
+
+describe('partirEnTramos y los conectores', () => {
+  it('", luego <verbo>" abre un hecho nuevo; ", y luego a cámara" no', () => {
+    expect(partirEnTramos('masajea las mejillas y el cuello, luego guarda el gotero en el frasco'))
+      .toEqual(['masajea las mejillas y el cuello', 'guarda el gotero en el frasco'])
+    expect(partirEnTramos('Mira el producto, y luego a cámara')).toEqual(['Mira el producto, y luego a cámara'])
   })
 })
 
