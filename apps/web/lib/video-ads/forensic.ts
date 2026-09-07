@@ -273,7 +273,7 @@ export function normalizarHechos(report: ForensicReport): { report: ForensicRepo
  * reconstruye `guionOriginal` (tolerancia del 10 %, el modelo mueve una coma); y diálogo
  * que no entra en su VENTANA (`tiempo`, nunca la duración ya reparada). Devuelve motivos.
  */
-export function verificarDialogos(report: { cortes?: { n: number; tiempo: string; dialogo?: string }[]; guionOriginal?: string }): string[] {
+export function verificarDialogos(report: { cortes?: { n: number; tiempo: string; dialogo?: string; duracionSeg?: number }[]; guionOriginal?: string }): string[] {
   const cortes = report.cortes ?? []
   const out: string[] = []
   const vistos = new Map<string, number>()
@@ -289,10 +289,19 @@ export function verificarDialogos(report: { cortes?: { n: number; tiempo: string
   if (guion && Math.abs(junto.length - guion.length) > guion.length * 0.1)
     out.push(`la suma de los diálogos no reconstruye el guion (${junto.length - guion.length > 0 ? '+' : ''}${junto.length - guion.length} caracteres)`)
   for (const c of cortes) {
+    // `tiempo` viene en segundos ENTEROS (el modelo cuantiza), así que una ventana de "6 s"
+    // puede medir 6,9. La estimación fina del propio corte (`duracionSeg`) vale, pero solo
+    // dentro de ese error de redondeo: más allá sería dejar que el modelo se apruebe solo.
+    // Medido: una tirada limpia de `493a486d` se rechazaba por 129 caracteres en "6 s"
+    // (21,5 car/s) cuando el corte decía 6,5 s (19,8).
     const ventana = segundosDeVentana(c.tiempo)
+    const seg = ventana ? Math.max(ventana, Math.min(c.duracionSeg ?? 0, ventana + 1)) : 0
+    // Y con la misma holgura del 10 % que la suma del guion: lo que se caza acá es el corte
+    // MAL PARTIDO (30, 41, 64 car/s medidos), no el que `repairCutTiming` arregla con
+    // décimas. Un 4 % sobre el techo (20,8 car/s en 6,2 s) es recronometrable, no un defecto.
     const largo = (c.dialogo ?? '').length
-    if (ventana && largo / ventana > CPS_MAX)
-      out.push(`corte ${c.n}: ${largo} caracteres en una ventana de ${ventana.toFixed(1)} s = ${(largo / ventana).toFixed(1)} car/s`)
+    if (seg && largo / seg > CPS_MAX * 1.1)
+      out.push(`corte ${c.n}: ${largo} caracteres en una ventana de ${seg.toFixed(1)} s = ${(largo / seg).toFixed(1)} car/s`)
   }
   return out
 }

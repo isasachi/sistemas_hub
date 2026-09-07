@@ -785,6 +785,13 @@ describe('partirEnTramos y los conectores', () => {
   })
 })
 
+describe('conflictosDeManos: la mano de la acción es la de SU cláusula', () => {
+  it('"aplica con el cuentagotas y sostiene el frasco con la derecha" no es la derecha aplicando', () => {
+    // tirada real de `493a486d`: la coordinada "y sostiene" no partía la cláusula
+    expect(conflictosDeManos(['sostiene el frasco con la mano derecha', 'aplica una gota en la mejilla con el cuentagotas y sostiene el frasco con la derecha'])).toEqual([])
+  })
+})
+
 describe('defectosDelForense', () => {
   const h = (desde: number, hasta: number, texto: string) => ({ desde, hasta, texto })
   // El tercer sorteo real de `00471f8a`: el render abrió destapando y tapando, sin gota.
@@ -831,6 +838,18 @@ describe('defectosDelForense', () => {
     // la última gota del video, sin nada detrás, no se juzga; y lo que cae en un vaso no es piel
     expect(defectosDelForense({ cortes: [C(1, 3, [gota, aplica])] })).toEqual([])
     expect(defectosDelForense({ cortes: [C(1, 4, [h(0, 2, 'vierte una cucharada del producto en el vaso'), h(2, 4, 'muestra el vaso a cámara')])] })).toEqual([])
+  })
+
+  it('la ventana entera tolera la estimación fina del corte, pero solo hasta el error de redondeo', () => {
+    const linea = 'x'.repeat(129)
+    const corte = (duracionSeg: number, dialogo = linea) => ({ cortes: [{ n: 2, tiempo: '00:04 - 00:10', duracionSeg, dialogo, hechos: [h(0, 1, 'sostiene el frasco con la mano derecha'), h(1, 6, 'habla a cámara')] }] })
+    // tirada real de `493a486d`: 129 caracteres en "6 s" con el corte midiendo 6,5
+    expect(defectosDelForense(corte(6.5))).toEqual([])
+    // y un 4 % sobre el techo es recronometrable, no un corte mal partido (6,2 s reales)
+    expect(defectosDelForense(corte(6.2))).toEqual([])
+    expect(defectosDelForense(corte(6, 'x'.repeat(135)))).toEqual(['corte 2: 135 caracteres en una ventana de 6.0 s = 22.5 car/s'])
+    // una estimación fuera del error de redondeo no compra más de un segundo
+    expect(defectosDelForense(corte(9, 'x'.repeat(160)))).toEqual(['corte 2: 160 caracteres en una ventana de 7.0 s = 22.9 car/s'])
   })
 
   // El cuarto sorteo real: dos frases en una ventana de 4 s y la línea de la marca en dos cortes.

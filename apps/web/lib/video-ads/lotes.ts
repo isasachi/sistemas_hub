@@ -429,7 +429,7 @@ export function conflictosDeManos(textos: string[]): string[] {
     const desde = s.search(/\b(masajea|extiende|frota|toca|acaricia|se\s+toca|gesticula|señala|senala|aplica)\b/)
     // y solo dentro de SU cláusula: "masajea con las yemas, sosteniendo el frasco con la
     // izquierda" — la izquierda sostiene, no masajea.
-    const clausula = s.slice(desde).split(/,|;|\bmientras\b|\bsosteniendo\b|\bsujetando\b/)[0]
+    const clausula = s.slice(desde).split(/,|;|\bmientras\b|\bsosteniendo\b|\bsujetando\b|\by\s+(?:sostiene|sujeta|mantiene)\b/)[0]
     const m = clausula.match(/\bcon\s+(?:las?\s+(?:yemas|dedos)\s+(?:de\s+)?(?:los\s+dedos\s+de\s+)?)?la\s+(?:mano\s+)?(derecha|izquierda)\b|\bcon\s+(?:los\s+dedos\s+de\s+)?la\s+(?:mano\s+)?(derecha|izquierda)\b/)
     const lado = m?.[1] ?? m?.[2]
     if (lado) {
