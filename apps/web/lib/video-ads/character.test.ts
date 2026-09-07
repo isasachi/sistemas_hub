@@ -43,6 +43,20 @@ describe('buildIdentityInstruction', () => {
     for (const perfil of PERFILES_VOCALES) expect(p).toContain(perfil)
   })
 
+  // "Equivalente" era la latitud por la que el avatar salió en una cocina blanca con
+  // camisa blanca sobre un original de suéter rosa y pared crema — y como es Image1 en
+  // todos los lotes, el ambiente del original no llegaba al clip por ninguna vía.
+  it('el vestuario y el escenario se COPIAN, con el encuadre de apertura del original', () => {
+    const f = { ...FORENSIC, cortes: [{ camara: 'Primer plano, cámara fija' }] } as ForensicReport
+    const p = buildIdentityInstruction(INPUTS, f)
+    expect(p).toMatch(/se COPIAN, no se reinterpretan/)
+    expect(p).not.toMatch(/equivalente/i)
+    expect(p).toContain('Primer plano, cámara fija')
+    expect(p).toMatch(/NO abras el plano/)
+    // sin cortes cae al valor de siempre
+    expect(buildIdentityInstruction(INPUTS, FORENSIC)).toContain('plano medio, ángulo levemente bajo')
+  })
+
   it('prohíbe overlays en la imagen del personaje', () => {
     const p = buildIdentityInstruction(INPUTS, FORENSIC)
     expect(p).toMatch(/sin texto|no text/i)

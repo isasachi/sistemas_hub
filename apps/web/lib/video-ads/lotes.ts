@@ -2,6 +2,7 @@ import { z } from 'zod'
 import type { TomaFinal } from './adapt'
 import type { VoiceProfile } from './character'
 import { KIE_PROMPT_MAX } from './kie'
+import { CPS_MAX } from './forensic'
 
 /**
  * FASE 5 del prompt maestro — agrupación de tomas en lotes de generación.
@@ -298,6 +299,16 @@ function partirToma(t: TomaFinal): TomaFinal[] {
  */
 export const LOTE_MAX_COREO = 2450
 
+/**
+ * Tercer cierre: por CARACTERES de locución, con la misma aritmética que los 15 s.
+ * Medido sobre grok (AGENTS.md, probe-cap-30): a 281 caracteres dice el 100 % y a 577
+ * deja de recitar y balbucea. `repairCutTiming` garantiza el ritmo sobre los cortes del
+ * FORENSE, pero FASE 3 reescribe la locución y el usuario la edita a mano — medido en
+ * esta base, 20 % de los lotes pasaban de 20 car/s. Una toma que SOLA se pasa no se
+ * arregla cerrando el lote: ahí manda el piso de habla de `generate-lotes`.
+ */
+export const LOTE_MAX_CHARS = LOTE_MAX_SEC * CPS_MAX
+
 export function groupIntoLotes(tomas: TomaFinal[]): Lote[] {
   // Renumeramos TODA la secuencia expandida en orden: si una toma se divide, sus
   // fragmentos no pueden compartir el `n` original (colisionarían al rotular "Toma N"
@@ -309,6 +320,7 @@ export function groupIntoLotes(tomas: TomaFinal[]): Lote[] {
   let actual: TomaFinal[] = []
   let acumulado = 0
   let coreografia = 0
+  let locucion = 0
 
   const cerrar = () => {
     if (!actual.length) return
@@ -331,6 +343,7 @@ export function groupIntoLotes(tomas: TomaFinal[]): Lote[] {
     actual = []
     acumulado = 0
     coreografia = 0
+    locucion = 0
   }
 
   for (const t of expandidas) {
@@ -342,10 +355,15 @@ export function groupIntoLotes(tomas: TomaFinal[]): Lote[] {
     // Igual que con los segundos: una toma SOLA siempre entra en su propio lote aunque
     // se pase (ahí no hay nada que cerrar y el guard de `buildLotePrompt` la caza), el
     // cierre solo protege la SUMA con lo ya acumulado.
-    if (actual.length && (excedeTope(acumulado + t.duracionSeg) || coreografia + t.accionVisual.length > LOTE_MAX_COREO)) cerrar()
+    if (actual.length && (
+      excedeTope(acumulado + t.duracionSeg)
+      || coreografia + t.accionVisual.length > LOTE_MAX_COREO
+      || locucion + t.locucion.length > LOTE_MAX_CHARS
+    )) cerrar()
     actual.push(t)
     acumulado += t.duracionSeg
     coreografia += t.accionVisual.length
+    locucion += t.locucion.length
   }
   cerrar()
 
@@ -469,8 +487,19 @@ export function buildLotePrompt(args: {
    * divergencia silenciosa entre lo que se renderiza y lo que la huella jura.
    */
   producto: string
+  /**
+   * Los cortes del forense (`tiempo` + `camara`). Con ellos, un lote cuyas tomas vienen
+   * de DOS planos distintos deja de pedir "una sola toma continua" con dos cámaras en la
+   * misma línea —está medido que grok renderiza una y descarta la otra— y anuncia el
+   * plano POR TOMA, con cortes secos entre ellas. Sin `cortes` se emite como siempre.
+   */
+  cortes?: { tiempo: string; camara: string }[]
 }): string {
   const { lote, camara, voz, images, producto } = args
+
+  const planoDe = new Map((args.cortes ?? []).map((c) => [c.tiempo, c.camara.trim().replace(/\s*\.\s*$/, '')]))
+  const planos = [...new Set(lote.tomas.map((t) => planoDe.get(t.tiempoOriginal)).filter(Boolean))]
+  const multiPlano = planos.length > 1
 
   // El orden ES el contrato: `Image1` es la primera del array. Reordenarlo le da a una
   // toma la imagen de otra.
@@ -495,8 +524,13 @@ export function buildLotePrompt(args: {
       // ahí el modelo los resuelve como UN gesto — de ahí la gota que "aparece" en la
       // mejilla sin que el gotero llegue nunca. El texto es el MISMO, cambia dónde corta.
       const hechos = partirEnTramos(sinEscenaDeFoto(t.accionVisual))
+      // El plano se anuncia solo cuando CAMBIA respecto de la toma anterior: un shot
+      // list se lee así, el plano vale hasta que se anuncia otro.
+      const plano = multiPlano ? planoDe.get(t.tiempoOriginal) : undefined
+      const anterior = multiPlano ? planoDe.get(lote.tomas[lote.tomas.indexOf(t) - 1]?.tiempoOriginal ?? '') : undefined
+      const rotuloPlano = plano && plano !== anterior ? ` — ${plano}` : ''
       return [
-        ...(lote.tomas.length > 1 ? [`Toma ${t.n} (${r1(t.duracionSeg)} s):`] : []),
+        ...(lote.tomas.length > 1 ? [`Toma ${t.n} (${r1(t.duracionSeg)} s)${rotuloPlano}:`] : []),
         ...(!hechos.length ? [SIN_HECHO_NUEVO]
           : unaLinea ? [`${hechos.join('. ')}.`]
           : hechos.map((h) => `  - ${h[0].toUpperCase()}${h.slice(1)}.`)),
@@ -514,8 +548,15 @@ export function buildLotePrompt(args: {
   // los 155 lotes reales, un lote de una sesión se pasaba del tope al sumar el bloque —
   // sin el escalón, esa sesión dejaba de poder renderizarse. La invariante de piezas NO
   // se suelta: no la dice nadie más.
+  // Micro-temblor solo si la cámara del original no es fija: medido, el 74 % de los
+  // cortes dicen "fija/estática/estable", y pedir temblor en la misma línea eran dos
+  // órdenes opuestas — el modo de fallo que este repo tiene registrado seis veces.
+  const fija = /fij|est[aá]t|estab|tr[ií]pode/i.test(camara)
+  const temblor = fija ? '' : ' Grabado con teléfono en mano, con micro-temblor natural.'
   const armar = (desc: string, unaLinea = false) => [
-    `Video UGC vertical 9:16, ${lote.duracionSeg} segundos, una sola toma continua.`,
+    multiPlano
+      ? `Video UGC vertical 9:16, ${lote.duracionSeg} segundos, ${lote.tomas.length} tomas con corte seco donde cambia el plano; sin fundidos ni transiciones, y nada cambia al otro lado del corte.`
+      : `Video UGC vertical 9:16, ${lote.duracionSeg} segundos, una sola toma continua.`,
     `Referencias: ${anclas}. Las imágenes definen cómo se ven la persona, el producto y el lugar: reprodúcelos idénticos.`,
     // La descripción NO compite con la imagen: la cita en la misma cláusula y dice lo
     // mismo que ella. Sin esto el prompt no nombraba el color ni las piezas del envase
@@ -525,7 +566,9 @@ export function buildLotePrompt(args: {
     '',
     acciones(unaLinea),
     '',
-    `CÁMARA: ${camara.replace(/\s*\.\s*$/, '')}. Grabado con teléfono en mano, con micro-temblor natural.`,
+    multiPlano
+      ? `CÁMARA: la de cada toma, anunciada arriba.${temblor}`
+      : `CÁMARA: ${camara.replace(/\s*\.\s*$/, '')}.${temblor}`,
     '',
     `VOZ: ${voz.tono}, timbre ${voz.timbre}, edad vocal ${voz.edadVocal}. Habla en ${voz.idioma} con acento ${voz.acento}, ${voz.ritmo.toLowerCase()}, energía ${voz.energia.toLowerCase()}. ${voz.entonacion}.`,
     'Dice exactamente lo que está entre comillas arriba: no resumas, no extiendas, no corrijas, no agregues frases ni inventes diálogo para rellenar.',

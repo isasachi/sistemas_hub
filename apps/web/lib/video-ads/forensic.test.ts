@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildForensicInstruction, ForensicReportSchema, repairCutTiming, CPS_MAX, type ForensicReport } from './forensic'
+import { buildForensicInstruction, ForensicReportSchema, repairCutTiming, CPS_MAX, MIN_VISIBLE_SEG, type ForensicReport } from './forensic'
 
 // El prompt es el contrato con Gemini. Estos asserts fijan las reglas del spec que,
 // si se caen, producen el bug que ya vimos en producción: cortes inventados por
@@ -179,6 +179,22 @@ describe('repairCutTiming', () => {
   it('un corte sin diálogo no exige nada y conserva su duración de acción', () => {
     const { report } = repairCutTiming(informe([corte(1, 2, 'z'.repeat(60)), corte(2, 10, '')]))
     expect(report.cortes[1].duracionSeg).toBeCloseTo(9, 6)
+  })
+
+  // Un corte mudo tiene mínimo de habla 0: para el reparto era holgura pura y lo
+  // vaciaba entero para financiar a los hablados (medido: 8 de 13 mudos de la base < 1 s).
+  it('con piso visible, el corte mudo no se vacía y el hablado sigue siendo decible', () => {
+    const sin = repairCutTiming(informe([corte(1, 1, 'z'.repeat(100)), corte(2, 4, '')]))
+    expect(sin.report.cortes[1].duracionSeg).toBeLessThan(1)
+    // el hablado necesita 5 s y tiene 2: el déficit de 3 sale ENTERO de la holgura del
+    // mudo (6 − 3 = 3), que aterriza justo en el piso en vez de en 1 s
+    const con = repairCutTiming(informe([corte(1, 2, 'z'.repeat(100)), corte(2, 6, '')]), MIN_VISIBLE_SEG)
+    expect(con.report.cortes[1].duracionSeg).toBeCloseTo(MIN_VISIBLE_SEG, 6)
+    expect(cps(con.report.cortes[0])).toBeLessThanOrEqual(CPS_MAX + 1e-9)
+    // el piso se acota a lo que el corte ya tiene: no infla un mudo de 1 s a 3
+    const corto = repairCutTiming(informe([corte(1, 5, 'z'.repeat(60)), corte(2, 1, '')]), MIN_VISIBLE_SEG)
+    expect(corto.report).toBe(corto.report) // no lanza
+    expect(corto.report.cortes[1].duracionSeg).toBeLessThanOrEqual(1 + 1e-9)
   })
 
   it('sin diálogo en ningún corte no hay nada que reparar', () => {

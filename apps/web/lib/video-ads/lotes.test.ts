@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { groupIntoLotes, LOTE_MAX_SEC, LoteSchema, buildLotePrompt, camaraDeLote, sinEscenaDeFoto, partirEnTramos, repartirAccion } from './lotes'
+import { groupIntoLotes, LOTE_MAX_SEC, LOTE_MAX_CHARS, LoteSchema, buildLotePrompt, camaraDeLote, sinEscenaDeFoto, partirEnTramos, repartirAccion } from './lotes'
 import type { TomaFinal } from './adapt'
 import { KIE_PROMPT_MAX } from './kie'
 
@@ -515,9 +515,66 @@ describe('el reparto no deja escenografía de foto ni carriles vacíos', () => {
   it('la línea de cámara no dobla el punto', () => {
     const p = buildLotePrompt({
       lote: groupIntoLotes([toma(1, 5)])[0],
+      camara: 'Plano medio corto, cámara en mano.', voz: VOZ, producto: '',
+      images: [{ url: 'a', role: 'la persona' }],
+    })
+    expect(p).toContain('CÁMARA: Plano medio corto, cámara en mano. Grabado')
+  })
+
+  // Dos órdenes opuestas en la misma línea: el 74 % de los cortes dicen "fija/estable" y
+  // la plantilla les pegaba "micro-temblor" al lado.
+  it('no pide micro-temblor cuando la cámara del original es fija', () => {
+    const p = buildLotePrompt({
+      lote: groupIntoLotes([toma(1, 5)])[0],
       camara: 'Plano medio corto, estable.', voz: VOZ, producto: '',
       images: [{ url: 'a', role: 'la persona' }],
     })
-    expect(p).toContain('CÁMARA: Plano medio corto, estable. Grabado')
+    expect(p).toContain('CÁMARA: Plano medio corto, estable.')
+    expect(p).not.toMatch(/temblor/)
+  })
+
+  // Un lote con tomas de DOS planos pedía "una sola toma continua" con las dos cámaras
+  // pegadas en una línea; grok renderiza una y descarta la otra.
+  it('con dos planos anuncia el plano por toma, con corte seco, y no "toma continua"', () => {
+    const t1 = { ...toma(1, 5), tiempoOriginal: '00:00 - 00:05' }
+    const t2 = { ...toma(2, 5), tiempoOriginal: '00:05 - 00:10' }
+    const t3 = { ...toma(3, 4), tiempoOriginal: '00:10 - 00:14' }
+    const cortes = [
+      { tiempo: '00:00 - 00:05', camara: 'Primer plano fijo.' },
+      { tiempo: '00:05 - 00:10', camara: 'Plano medio con zoom lento.' },
+      { tiempo: '00:10 - 00:14', camara: 'Plano medio con zoom lento.' },
+    ]
+    const lote = groupIntoLotes([t1, t2, t3])[0]
+    const p = buildLotePrompt({
+      lote, camara: 'Primer plano fijo. · Plano medio con zoom lento.', voz: VOZ, producto: '',
+      images: [{ url: 'a', role: 'la persona' }], cortes,
+    })
+    expect(p).not.toMatch(/toma continua/)
+    expect(p).toMatch(/corte seco/)
+    expect(p).toContain('Toma 1 (5 s) — Primer plano fijo:')
+    expect(p).toContain('Toma 2 (5 s) — Plano medio con zoom lento:')
+    // el plano vale hasta que se anuncia otro
+    expect(p).toContain('Toma 3 (4 s):')
+    expect(p).not.toContain('CÁMARA: Primer plano fijo. · Plano medio')
+    // con un solo plano, la forma de siempre
+    const uno = buildLotePrompt({
+      lote: groupIntoLotes([t1, t2])[0], camara: 'Primer plano fijo.', voz: VOZ, producto: '',
+      images: [{ url: 'a', role: 'la persona' }],
+      cortes: [{ tiempo: '00:00 - 00:05', camara: 'Primer plano fijo.' }, { tiempo: '00:05 - 00:10', camara: 'Primer plano fijo.' }],
+    })
+    expect(uno).toMatch(/una sola toma continua/)
+    expect(uno).toContain('Toma 1 (5 s):')
+  })
+})
+
+describe('LOTE_MAX_CHARS', () => {
+  it('cierra el lote por caracteres de locución aunque los segundos entren', () => {
+    const larga = (n: number) => toma(n, 5, 'x'.repeat(200))
+    // 10 s entran en 15, 400 caracteres no entran en 300
+    const l = groupIntoLotes([larga(1), larga(2)])
+    expect(LOTE_MAX_CHARS).toBe(300)
+    expect(l).toHaveLength(2)
+    // una toma que SOLA se pasa igual entra en su propio lote
+    expect(groupIntoLotes([toma(1, 5, 'y'.repeat(400))])).toHaveLength(1)
   })
 })

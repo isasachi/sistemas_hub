@@ -122,14 +122,25 @@ const EPS = 1e-9
  * Es idempotente por construcción: al salir, todo corte cumple `duración >= mínimo`, así
  * que una segunda pasada encuentra déficit cero y devuelve la entrada sin tocarla.
  */
+/**
+ * Piso VISIBLE de un corte mudo al recronometrar. Un corte sin diálogo tiene mínimo de
+ * habla 0, así que para el reparto es holgura pura y lo vaciaba entero para financiar a
+ * los hablados: medido en esta base, 8 de 13 cortes mudos quedaron por debajo de 1 s —
+ * un plano de producto de 3-8 s convertido en un clip de 1 s (una llamada pagada por
+ * una pose congelada). Se acota a la duración que el corte YA tiene: es un suelo contra
+ * el vaciado, no un empujón hacia arriba.
+ */
+export const MIN_VISIBLE_SEG = 3
+
 export function repairCutTiming(
   report: ForensicReport,
+  minVisibleSeg = 0,
 ): { report: ForensicReport; ajustes: AjusteTiempo[] } {
   const cortes = report.cortes ?? []
   if (!cortes.length) return { report, ajustes: [] }
 
   const dur = cortes.map((c) => (Number.isFinite(c.duracionSeg) && c.duracionSeg > 0 ? c.duracionSeg : 0))
-  const min = cortes.map((c) => (c.dialogo ?? '').length / CPS_MAX)
+  const min = cortes.map((c, i) => Math.max((c.dialogo ?? '').length / CPS_MAX, Math.min(minVisibleSeg, dur[i])))
 
   const deficit = cortes.reduce((n, _, i) => n + Math.max(0, min[i] - dur[i]), 0)
   if (deficit <= EPS) return { report, ajustes: [] }

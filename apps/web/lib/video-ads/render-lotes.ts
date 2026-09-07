@@ -155,7 +155,10 @@ export function scriptFingerprint(input: {
     // insumo nuevo, que por eso se hashea abajo.
     // v5 → v6: la coreografía se emite con UN HECHO POR LÍNEA. Mismo texto, otro corte
     // — invisible para una huella de insumos, y es justo lo que cambia cómo se ejecuta.
-    'v6',
+    // v6 → v7: el lote cierra también por caracteres de locución (cambia el reparto), el
+    // plano se anuncia por toma cuando el lote mezcla dos, la cabecera deja de pedir
+    // "toma continua" en ese caso y el micro-temblor solo va con cámara no fija.
+    'v7',
     producto,
     voz.idioma, voz.varianteRegional, voz.acento, voz.pronunciacion, voz.ritmo,
     voz.velocidad, voz.entonacion, voz.energia, voz.pausas, voz.tono, voz.timbre,

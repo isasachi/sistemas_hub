@@ -7,7 +7,7 @@ import { readUserId } from '@/lib/product-hunter/session'
 import { TemplateDraftSchema, buildTemplateInstruction } from '@/lib/video-ads/template'
 import { validateTemplate, assembleTemplate, normalizeSlots } from '@/lib/video-ads/fill'
 import { canProceed } from '@/lib/video-ads/validation'
-import { repairCutTiming } from '@/lib/video-ads/forensic'
+import { repairCutTiming, MIN_VISIBLE_SEG } from '@/lib/video-ads/forensic'
 import { resyncTomaDurations } from '@/lib/video-ads/adapt'
 import { STEP } from '@/lib/video-ads/steps'
 
@@ -51,7 +51,7 @@ export async function POST(
   // Es seguro justamente porque la reparación NO toca `tiempo`: `adapt-script` lo copia
   // a `tiempoOriginal` y `camaraDeLote` empareja por él, así que reparar acá no puede
   // desalinear el guión ya adaptado con los cortes.
-  const { report: forensic, ajustes } = repairCutTiming(session.forensic_analysis)
+  const { report: forensic, ajustes } = repairCutTiming(session.forensic_analysis, MIN_VISIBLE_SEG)
   if (ajustes.length) {
     console.warn(
       `[video-ads/extract-template] sesión ${id}: ${ajustes.length} cortes recronometrados sobre un análisis ya guardado:`,

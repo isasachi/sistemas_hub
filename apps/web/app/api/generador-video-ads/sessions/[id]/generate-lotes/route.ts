@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getVideoSession, updateVideoSession, claimFreshLotes } from '@/lib/video-ads/db'
 import { createVideoTask, clampDuration, KIE_PROMPT_MAX, SIN_KEY, type VideoImage } from '@/lib/video-ads/kie'
+import { CPS_MAX } from '@/lib/video-ads/forensic'
 import { currentKieKey } from '@/lib/user-settings'
 import { groupIntoLotes, buildLotePrompt, camaraDeLote, productoFisico, type Lote } from '@/lib/video-ads/lotes'
 import { totalDuration, resumeSeed, mergeRescue, isPaidResume, scriptFingerprint, renderDone } from '@/lib/video-ads/render-lotes'
@@ -113,7 +114,11 @@ export async function POST(
   const producto = productoFisico(session.product_scan?.productDescription ?? '')
 
   const cortes = session.forensic_analysis?.cortes ?? []
-  const camaraFallback = cortes[0]?.camara?.trim() || 'primer plano, cámara en mano'
+  // Sin corte que empareje NO se afirma ninguna escala: la línea CÁMARA declara el plano
+  // como un HECHO, y el del corte 1 mandado a un lote de producto era el bug que
+  // `camaraDeLote` existe para evitar, entrando por la puerta de atrás. Sin escala, el
+  // encuadre lo decide la imagen de referencia.
+  const camaraFallback = 'cámara en mano'
 
   const agrupados = groupIntoLotes(adapted.tomas)
   if (!agrupados.length) return NextResponse.json({ error: 'El guión no tiene tomas' }, { status: 409 })
@@ -288,7 +293,12 @@ export async function POST(
       // desincroniza lo que el prompt promete de lo que el modelo renderiza, y el
       // audio sale cortado a mitad de frase — justo lo que advierte la cabecera de
       // lotes.ts sobre "alguien río abajo lo clampea".
-      const durationSec = clampDuration(lote.duracionSeg)
+      // Piso de habla: el texto tiene que poder decirse (medido, grok balbucea por
+      // encima de ~20 car/s). Manda sobre la duración del reparto; el cap de 15 lo
+      // pone `clampDuration` y `LOTE_MAX_CHARS` evita llegar acá con más texto del que
+      // entra en 15 s salvo que UNA toma sola se pase.
+      const chars = lote.tomas.reduce((n, t) => n + t.locucion.length, 0)
+      const durationSec = clampDuration(Math.max(lote.duracionSeg, chars / CPS_MAX))
       const loteParaPrompt = durationSec === lote.duracionSeg ? lote : { ...lote, duracionSeg: durationSec }
 
       let prompt: string
@@ -299,6 +309,7 @@ export async function POST(
           voz: session.voice_profile,
           images,
           producto,
+          cortes,
         })
       } catch (err) {
         // `buildLotePrompt` lanza cuando el prompt no entra en KIE_PROMPT_MAX. Ese

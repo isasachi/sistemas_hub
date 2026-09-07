@@ -83,6 +83,11 @@ export function vozDe(identity: CharacterIdentity): VoiceProfile {
   return { ...VOZ_ESTANDAR[identity.perfilVocal], acento: identity.acento.trim() || 'Español latino neutro' }
 }
 
+/** El encuadre del primer corte, que es el fotograma con el que abre el anuncio. */
+function encuadreDeApertura(forensic: ForensicReport): string {
+  return forensic.cortes?.[0]?.camara?.trim() || 'plano medio, ángulo levemente bajo'
+}
+
 export function buildIdentityInstruction(
   inputs: UserInputs,
   forensic: ForensicReport,
@@ -95,10 +100,21 @@ export function buildIdentityInstruction(
     'aparente, tono de piel, cabello, complexión y rasgos salen de ahí, nunca de una',
     'descripción escrita ni del video original (su protagonista es otra persona).',
     '',
-    'CONTEXTO DEL VIDEO ORIGINAL (para vestuario y escenario equivalentes, no para la cara):',
+    // Lo que NO se copia es la CARA. El vestuario y el lugar no son identidad: son la
+    // escenografía del anuncio que se está replicando. "Equivalente" era la latitud por
+    // la que se coló una cocina blanca y una camisa blanca donde el original tiene una
+    // pared crema y un suéter rosa — y como esta imagen es Image1 en TODOS los lotes y
+    // el prompt del lote ya no describe el escenario, si no está en la imagen no está
+    // en ningún lado. Medido en píxeles (AGENTS.md, 2026-08-26).
+    'CONTEXTO DEL VIDEO ORIGINAL — el vestuario y el escenario se COPIAN, no se reinterpretan:',
     `  Sujeto observado: ${forensic.sujeto}`,
     `  Vestuario observado: ${forensic.vestuario}`,
-    `  Fondo observado: ${forensic.fondo}`,
+    `  Lugar observado: ${forensic.fondo}`,
+    'Reproduce los ELEMENTOS que ese texto nombra —prendas y colores, superficies, muebles,',
+    'tipo y temperatura de luz—, no un lugar ni una ropa "del mismo estilo". Si dice pared',
+    'crema y puerta de madera oscura, eso es lo que va detrás. El lugar va DETRÁS del',
+    'personaje y desenfocado: es contexto, no el tema de la foto. NO abras el plano para',
+    'mostrarlo.',
     '',
     'DATOS DEL PRODUCTO (contexto del anuncio):',
     `  Producto: ${inputs.productName}`,
@@ -117,9 +133,14 @@ export function buildIdentityInstruction(
     '',
     'El prompt debe incluir: edad aparente, sexo / presentación, rasgos faciales, forma',
     'del rostro, ojos, cejas, nariz, labios, piel, cabello (corte, color, textura),',
-    'complexión, proporciones observables, vestuario equivalente al del video original,',
-    'accesorios, postura y expresión neutras, iluminación natural, el escenario del',
-    'video original de fondo, encuadre de referencia, relación de aspecto vertical 9:16',
+    'complexión, proporciones observables, el vestuario del video original, accesorios,',
+    'postura y expresión neutras, la luz y el lugar del video original de fondo,',
+    // El encuadre sale del ORIGINAL, no de un valor fijo: esta imagen es Image1 en todos
+    // los lotes y la imagen le gana al texto, así que su encuadre se vuelve el del
+    // anuncio entero. Medido sobre un anuncio en primer plano: con "plano medio" fijo
+    // los cuatro clips salieron con la persona mucho más lejos que el original.
+    `el MISMO encuadre con el que abre el original — ${encuadreDeApertura(forensic)} — sin`,
+    'abrirlo ni cerrarlo, sin teléfonos ni trípodes a la vista, relación de aspecto vertical 9:16',
     'y realismo fotográfico estricto: piel con poros, vello fino, lunares, brillo',
     'natural y líneas de expresión. Nada de piel suavizada, acabado acartonado,',
     'ilustración, render 3D ni filtro de belleza.',

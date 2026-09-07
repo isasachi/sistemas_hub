@@ -6,7 +6,7 @@ import { geminiCallStructured, geminiEsDirecto } from '@/lib/gemini'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 import { ForensicReportSchema } from '@/lib/video-ads/types'
-import { buildForensicInstruction, repairCutTiming } from '@/lib/video-ads/forensic'
+import { buildForensicInstruction, repairCutTiming, MIN_VISIBLE_SEG } from '@/lib/video-ads/forensic'
 import { VIDEO_SYSTEM_PROMPT } from '@/lib/video-ads/llm'
 import { MAX_VIDEO_MB } from '@/lib/video-ads/limits'
 import { STEP } from '@/lib/video-ads/steps'
@@ -79,7 +79,7 @@ export async function POST(
     // piden a KIE). Un solo lugar que la corrija es la única forma de que las tres
     // etapas vean el mismo número. Nota: las sesiones YA analizadas conservan sus
     // duraciones viejas — hay que re-correr el análisis para repararlas.
-    const { report: reparado, ajustes } = repairCutTiming(analysis)
+    const { report: reparado, ajustes } = repairCutTiming(analysis, MIN_VISIBLE_SEG)
     if (ajustes.length)
       console.warn(
         `[video-ads/analyze-reference] sesión ${id}: ${ajustes.length} cortes con diálogo indecible en su duración, recronometrados:`,
