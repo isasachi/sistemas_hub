@@ -122,8 +122,10 @@ export function scriptFingerprint(input: {
   camaras: string[]
   voz: VoiceProfile
   images: LoteImage[]
+  /** La parte física del producto que emite el prompt (`productoFisico`, lotes.ts). */
+  producto: string
 }): string {
-  const { lotes, camaras, voz, images } = input
+  const { lotes, camaras, voz, images, producto } = input
   const campos: string[] = [
     // Versión del formato canónico: si algún día cambia qué entra en la huella, este
     // prefijo hace que las huellas viejas no coincidan (que es lo correcto: dejan de
@@ -147,7 +149,12 @@ export function scriptFingerprint(input: {
     // escenografía de foto se quita de `accionVisual` al emitir—. La huella hashea
     // insumos, así que sin el bump un resume pegaría un clip renderizado con el prompt
     // viejo a uno con el nuevo jurando que es el mismo contenido.
-    'v4',
+    // v4 → v5: el prompt volvió a llevar un bloque de PRODUCTO (color y piezas del
+    // envase, citando la imagen en la misma cláusula) más la invariante de piezas y
+    // manos. Cambia la plantilla —invisible para una huella de insumos— y entra un
+    // insumo nuevo, que por eso se hashea abajo.
+    'v5',
+    producto,
     voz.idioma, voz.varianteRegional, voz.acento, voz.pronunciacion, voz.ritmo,
     voz.velocidad, voz.entonacion, voz.energia, voz.pausas, voz.tono, voz.timbre,
     voz.edadVocal, voz.estilo,

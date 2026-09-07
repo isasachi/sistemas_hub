@@ -26,6 +26,7 @@ const fpInput = (over: Partial<Parameters<typeof scriptFingerprint>[0]> = {}) =>
   camaras: ['primer plano', 'plano medio'],
   voz: VOZ,
   images: [{ url: 'https://x/p.png', role: 'la persona' }, { url: 'https://x/prod.png', role: 'el producto' }],
+  producto: 'Frasco de vidrio púrpura con tapón cuentagotas blanco.',
   ...over,
 })
 

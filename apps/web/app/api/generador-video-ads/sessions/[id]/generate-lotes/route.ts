@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getVideoSession, updateVideoSession, claimFreshLotes } from '@/lib/video-ads/db'
 import { createVideoTask, clampDuration, KIE_PROMPT_MAX, SIN_KEY, type VideoImage } from '@/lib/video-ads/kie'
 import { currentKieKey } from '@/lib/user-settings'
-import { groupIntoLotes, buildLotePrompt, camaraDeLote, type Lote } from '@/lib/video-ads/lotes'
+import { groupIntoLotes, buildLotePrompt, camaraDeLote, productoFisico, type Lote } from '@/lib/video-ads/lotes'
 import { totalDuration, resumeSeed, mergeRescue, isPaidResume, scriptFingerprint, renderDone } from '@/lib/video-ads/render-lotes'
 import { AdaptedScriptSchema, type AdaptedScript } from '@/lib/video-ads/adapt'
 import { extractPending } from '@/lib/video-ads/pending'
@@ -107,6 +107,11 @@ export async function POST(
   // realmente se renderizó.
   // El producto y el escenario ya NO viajan como texto: las imágenes son las anclas
   // visuales y describirlas otra vez en palabras solo puede contradecirlas.
+  // El color del envase y sus piezas (tapa, cuentagotas) NO estaban en ningún lado del
+  // prompt: la imagen es la única fuente y el clip los derivaba. Solo la parte física —
+  // la etiqueta la muestra Image2 mejor que un párrafo.
+  const producto = productoFisico(session.product_scan?.productDescription ?? '')
+
   const cortes = session.forensic_analysis?.cortes ?? []
   const camaraFallback = cortes[0]?.camara?.trim() || 'primer plano, cámara en mano'
 
@@ -125,7 +130,7 @@ export async function POST(
   // llamada pueda comprobar, sin adivinar, si está reanudando el MISMO video o
   // empezando otro distinto (ver `isPaidResume`).
   const huella = scriptFingerprint({
-    lotes: agrupados, camaras, voz: session.voice_profile, images,
+    lotes: agrupados, camaras, voz: session.voice_profile, images, producto,
   })
   const base: Lote[] = agrupados.map((l) => ({ ...l, scriptHash: huella }))
 
@@ -293,6 +298,7 @@ export async function POST(
           camara: camaras[i],
           voz: session.voice_profile,
           images,
+          producto,
         })
       } catch (err) {
         // `buildLotePrompt` lanza cuando el prompt no entra en KIE_PROMPT_MAX. Ese

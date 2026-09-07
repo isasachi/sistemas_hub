@@ -243,9 +243,17 @@ describe('ForensicReportSchema', () => {
 describe('la accion encadena las manos y nombra la transferencia', () => {
   const plano = buildForensicInstruction().replace(/\s+/g, ' ')
 
-  it('exige el estado de cada mano al empezar el corte', () => {
-    expect(plano).toMatch(/qué tiene cada mano ANTES del primer movimiento/)
-    expect(plano).toMatch(/tercera mano/)
+  // La regla estaba escrita como un bullet entre ocho y NO se cumplió en la sesión que
+  // el dueño del repo reportó (la toma 2 señalaba con la izquierda sin decir que había
+  // soltado el cuentagotas). Se subió a TITULAR, que es la única palanca que este repo
+  // tiene medida para eso, y se recortó el bullet para no decir la misma orden dos
+  // veces dentro del mismo prompt.
+  it('exige el estado de cada mano al empezar el corte, y como TITULAR', () => {
+    expect(plano).toMatch(/CADA CORTE ABRE DICIENDO QUÉ TIENE CADA MANO/)
+    expect(plano).toMatch(/un brazo de más/)
+    // "la mano libre" es el residuo medido: una descripción que no nombra la mano deja
+    // sin decir qué sostiene, que es justo el dato que falta.
+    expect(plano).not.toMatch(/qué hace la mano libre/)
   })
 
   it('exige la transferencia como cláusula propia, no la trayectoria', () => {

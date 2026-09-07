@@ -263,8 +263,34 @@ describe('buildLotePrompt', () => {
   it('NO redescribe con texto lo que las imágenes ya muestran', () => {
     expect(p).not.toMatch(/ESCENARIO/i)
     expect(p).not.toMatch(/PERSONAJE \(descripción/i)
-    expect(p).not.toMatch(/PRODUCTO \(debe verse/i)
-    expect(p).toMatch(/no las redescribas/i)
+    expect(p).toMatch(/reprodúcelos idénticos/i)
+  })
+
+  // La excepción a la regla de arriba, y por qué existe: la imagen sostiene la etiqueta
+  // pero no el COLOR ni las piezas del envase — los renders salían con el frasco de otro
+  // color, sin tapa y con un segundo cuentagotas. La descripción se cita en la MISMA
+  // cláusula que la imagen para que no compitan.
+  it('el producto va con su color y sus piezas, citando la imagen en la misma cláusula', () => {
+    const conProd = buildLotePrompt({
+      lote, ...ARGS,
+      producto: 'Botella de vidrio púrpura con tapón cuentagotas blanco.',
+    })
+    expect(conProd).toContain('PRODUCTO — el de Image2')
+    expect(conProd).toContain('tapón cuentagotas blanco')
+    // La invariante de piezas y manos: NO es coreografía (no dice qué gesto hacer), es
+    // lo que impide el tercer brazo y el gotero duplicado. No depende del producto.
+    expect(p).toMatch(/Dos manos y nada más/)
+    expect(p).toMatch(/no hay una segunda copia/)
+  })
+
+  // El único escalón: lo primero que se suelta es lo que la imagen ya muestra. Sin él,
+  // un lote pesado dejaba de poder renderizarse por completo.
+  it('si el prompt no entra, suelta el bloque de producto antes que la coreografía', () => {
+    const largo = 'Cristal transparente con etiqueta blanca y tapa dorada. '.repeat(200)
+    const salida = buildLotePrompt({ lote, ...ARGS, producto: largo })
+    expect(salida).not.toContain('PRODUCTO — el de')
+    expect(salida).toMatch(/Dos manos y nada más/)
+    expect(salida.length).toBeLessThanOrEqual(KIE_PROMPT_MAX)
   })
 
   it('nunca usa referencias a lotes anteriores', () => {

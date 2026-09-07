@@ -288,10 +288,15 @@ function partirToma(t: TomaFinal): TomaFinal[] {
  * ⚠️ Un lote de más es una llamada pagada de más, así que el costo se midió antes de
  * cablearlo (lectura pura de las sesiones guardadas, cero LLM): de 36 sesiones con
  * guión, **3 ganan lotes** y el total pasa de 152 a 156 — +2,6 % de llamadas pagadas.
+ *
+ * ⚠️ 2600 → 2450: el andamiaje fijo creció ~180 caracteres (bloque de producto y la
+ * invariante de piezas), así que el techo de coreografía tiene que bajar lo mismo o el
+ * prompt se pasa. Re-medido sobre las 36 sesiones: 162 → 163 lotes, UNA llamada pagada
+ * de más en toda la base.
  * Solo se dispara en montajes muy picados (muchos cortes cortos dentro de 15 s); un
  * anuncio hablado normal no lo roza.
  */
-export const LOTE_MAX_COREO = 2600
+export const LOTE_MAX_COREO = 2450
 
 export function groupIntoLotes(tomas: TomaFinal[]): Lote[] {
   // Renumeramos TODA la secuencia expandida en orden: si una toma se divide, sus
@@ -406,17 +411,63 @@ export function camaraDeLote(
  * justamente con ese nivel de detalle (qué mano, cómo agarra, dónde toca, hacia dónde
  * mira), y acá se emite tal cual.
  */
+/**
+ * La parte FÍSICA de la descripción del producto: las dos primeras oraciones.
+ *
+ * `product_scan.productDescription` mezcla la forma del envase con la transcripción de
+ * la etiqueta, y la etiqueta la muestra Image2 mejor de lo que la cuenta un párrafo. Lo
+ * que la imagen NO puede sostener sola es el color y las piezas: medido, los renders
+ * salían con el frasco de otro color, sin tapa y con un segundo cuentagotas. Las dos
+ * primeras oraciones son justamente "es un frasco de vidrio púrpura con tapón
+ * cuentagotas blanco"; el resto es etiqueta. Mismo recorte que el `NIVEL_PRODUCTO_FISICO`
+ * que AGENTS.md midió en la época del presupuesto apretado, acá aplicado siempre.
+ *
+ * Se limpia la escenografía de la foto de catálogo por la misma puerta que la
+ * coreografía: en el video el producto está en la mano de alguien, así que la superficie
+ * y la sombra de la foto de la que salió no son parte del producto.
+ */
+export function productoFisico(desc: string): string {
+  const limpio = sinEscenaDeFoto((desc ?? '').trim())
+  return (limpio.match(/[^.]+\.?/g) ?? []).slice(0, 2).join('').trim()
+}
+
+/**
+ * Invariante FÍSICA, no coreografía: no dice qué gesto hacer, dice qué no puede pasar
+ * mientras se hace. Va en el prompt porque cada clip se renderiza sin memoria de los
+ * otros (REGLA DE CONTEXTO ABSOLUTO) y sin memoria de lo que la toma anterior dejó en
+ * cada mano — y ahí el modelo resuelve la ambigüedad dibujando una copia del
+ * cuentagotas, un frasco sin su tapa o un tercer brazo.
+ *
+ * Es la contraparte de render de la regla del forense sobre dónde termina cada pieza que
+ * se separa del envase, igual que la línea de "sin texto en pantalla" lo es de
+ * `elementosGraficos`.
+ *
+ * Va comprimida a una línea por el precedente medido del bloque de video limpio: la
+ * letanía de sinónimos no compraba nada y el presupuesto lo paga la coreografía.
+ */
+const reglaPiezas = (imagenProducto: string) =>
+  'Dos manos y nada más: para tomar algo, primero suelta lo que tenía. La tapa y el aplicador son los del envase ' +
+  `de ${imagenProducto}: no hay una segunda copia, y el envase no se queda sin la suya.`
+
 export function buildLotePrompt(args: {
   lote: Lote
   camara: string
   voz: VoiceProfile
   images: LoteImage[]
+  /** Parte física del producto (`productoFisico`). Vacío = se comporta como antes. */
+  producto?: string
 }): string {
-  const { lote, camara, voz, images } = args
+  const { lote, camara, voz, images, producto } = args
 
   // El orden ES el contrato: `Image1` es la primera del array. Reordenarlo le da a una
   // toma la imagen de otra.
   const anclas = images.map((img, i) => `Image${i + 1} = ${img.role}`).join(' · ')
+  // El rol se cita DENTRO de la cláusula que lo usa, no solo en la leyenda de arriba:
+  // AGENTS.md tiene medido (4 renders) que la leyenda sola deja derivar la etiqueta y el
+  // aplicador. Se deriva del array y no se escribe `Image2` a mano — el orden es el
+  // contrato, y hardcodear el índice acá lo rompería en silencio si cambia.
+  const iProd = images.findIndex((img) => img.role.includes('producto'))
+  const imagenProducto = iProd >= 0 ? `Image${iProd + 1}` : 'la imagen del producto'
 
   const acciones = lote.tomas
     .map((t) => {
@@ -434,9 +485,19 @@ export function buildLotePrompt(args: {
     })
     .join('\n')
 
-  const prompt = [
+  // Un solo escalón de degradación, y en la dirección que este repo ya tiene medida: lo
+  // primero que se suelta es lo que DUPLICA lo que la imagen ya muestra. Medido sobre
+  // los 155 lotes reales, un lote de una sesión se pasaba del tope al sumar el bloque —
+  // sin el escalón, esa sesión dejaba de poder renderizarse. La invariante de piezas NO
+  // se suelta: no la dice nadie más.
+  const armar = (desc: string) => [
     `Video UGC vertical 9:16, ${lote.duracionSeg} segundos, una sola toma continua.`,
-    `Referencias: ${anclas}. Las imágenes definen cómo se ven la persona, el producto y el lugar; no las redescribas ni las cambies.`,
+    `Referencias: ${anclas}. Las imágenes definen cómo se ven la persona, el producto y el lugar: reprodúcelos idénticos.`,
+    // La descripción NO compite con la imagen: la cita en la misma cláusula y dice lo
+    // mismo que ella. Sin esto el prompt no nombraba el color ni las piezas del envase
+    // en ninguna parte, y el clip los derivaba.
+    ...(desc ? [`PRODUCTO — el de ${imagenProducto}, y se ve así durante todo el clip: ${desc}`] : []),
+    reglaPiezas(imagenProducto),
     '',
     'MOVIMIENTO:',
     acciones,
@@ -449,7 +510,10 @@ export function buildLotePrompt(args: {
     'Sin texto en pantalla: ni subtítulos, ni overlays, ni watermarks, ni interfaz. Solo el texto impreso en el propio producto.',
   ].join('\n')
 
+  const prompt = armar(producto ?? '')
   if (prompt.length <= KIE_PROMPT_MAX) return prompt
+  const sinProducto = armar('')
+  if (sinProducto.length <= KIE_PROMPT_MAX) return sinProducto
   throw new Error(
     `El prompt del Lote ${lote.n} no entra en el tope de KIE (${prompt.length} de ${KIE_PROMPT_MAX} caracteres). ` +
     'Con este formato eso solo puede pasar si la coreografía de las tomas del lote es enorme: ' +
