@@ -11,7 +11,7 @@ import { btnPrimary, errorBox, warnBox, spinner } from './shared'
 // Paso 0: el VIDEO ORIGINAL. El spec lo exige siempre — es la fuente de verdad de
 // estructura, ritmo, cámara y orden. Sin él no hay pipeline.
 export default function Section0Reference() {
-  const { sessionId, ensureSession, patch, setLoading, isLoading } = useVideoStore()
+  const { sessionId, patch, setLoading, isLoading } = useVideoStore()
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -37,10 +37,7 @@ export default function Section0Reference() {
   }
 
   async function analyze() {
-    if (!file) return
-    // La fila de la sesión nace ACÁ, con el primer insumo real — no al montar el wizard.
-    const sessionId = await ensureSession()
-    if (!sessionId) return
+    if (!sessionId || !file) return
     setLoading(true); setError(null)
     try {
       const videoUrl = await uploadDirect(sessionId, 'reference-video', file)
@@ -71,7 +68,7 @@ export default function Section0Reference() {
         preview={null}
       />
       <p className="text-[12px] leading-relaxed text-[#8b8b8b]">
-        Tiene que ser <strong className="font-semibold text-[#c9b4ae]">vertical</strong> (9:16).
+        Tiene que ser <strong className="font-semibold text-[#cfcfcf]">vertical</strong> (9:16).
         De este video sale toda la estructura: cortes, ritmo, cámara y orden de las frases.
       </p>
       {notVertical && <div className={warnBox}>{notVertical}</div>}

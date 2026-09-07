@@ -1,173 +1,123 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getVideoSession, updateVideoSession } from '@/lib/video-ads/db'
 import { callVideoAds } from '@/lib/video-ads/llm'
-import { generateImage } from '@/lib/gemini'
+import { openaiGenerateImage } from '@/lib/llm-openai'
 import { uploadToStorage, fetchAsBase64 } from '@/lib/storage'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
-import { currentKieKey } from '@/lib/user-settings'
-import { SIN_KEY } from '@/lib/video-ads/kie'
-import { IdentidadesSchema, buildIdentityInstruction, buildCharacterParts, vozDe } from '@/lib/video-ads/character'
-import { personajesDe, resolvePersonaje } from '@/lib/video-ads/personajes'
-import { nicheSpec } from '@/lib/video-ads/niches'
+import { CharacterIdentitySchema, buildIdentityInstruction, buildCharacterParts, vozDe, promptDeAvatar } from '@/lib/video-ads/character'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 export const maxDuration = 300
 
-// FASE 4 + 4.5. La imagen la genera **Nano Banana Pro** (Gemini 3 Pro Image) en 9:16,
-// sin fallback. Reemplaza a gpt-image-2 por dos motivos medidos:
-//
-//  1. Conserva la identidad y la prenda desde una sola foto de referencia con una
-//     fidelidad muy superior (probado sobre el avatar real de la sesión de ropa).
-//  2. Hace 9:16 nativo, y eso pasa a ser obligatorio: con el modo de frames de Veo el
-//     avatar deja de ser "una referencia más" y se convierte en el primer fotograma
-//     del clip. El 2:3 de gpt-image-2 se justificaba con que el personaje nunca iba
-//     solo en el render — con frames, va solo y define el encuadre.
-//
-// ⚠️ CAMBIO DE COMPORTAMIENTO: la foto que sube el usuario ya NO se usa como personaje.
-// Es la fuente de verdad de la IDENTIDAD y el avatar se GENERA a partir de ella, que es
-// lo que pide la FASE 4 del spec ("genera un prompt autónomo para crear una imagen base
-// del personaje"). Antes, con foto, no se generaba nada — así que el render recibía una
-// foto de encuadre y luz arbitrarios como primer plano del anuncio. La foto queda en
-// `character_url` y el avatar generado en `avatar_url`.
+/**
+ * FASE 4 + 4.5 — identidad, avatar y perfil vocal.
+ *
+ * SE DISPARA AL SUBIR LA FOTO DEL PERSONAJE (paso 2), en segundo plano, y no en el
+ * paso del guión: la generación de imagen tarda ~40-55 s y el usuario los pasa
+ * avanzando por validación, plantilla y guión en vez de mirando un spinner.
+ *
+ * Por eso acepta `characterUrl` en el body: en ese momento la foto ya está en el
+ * bucket pero la fila todavía no la tiene (`uploadDirect` solo sube; `/inputs` la
+ * persiste recién al enviar el paso). Sin esto, el disparo en segundo plano vería
+ * `character_url: null` y generaría un avatar sin ninguna referencia, en silencio.
+ *
+ * EL AVATAR SIEMPRE SE GENERA, y es una persona NUEVA: la foto del usuario la pudo
+ * sacar de cualquier lado, así que reproducir esa cara sería publicar la imagen de
+ * alguien que no dio permiso. La foto queda en `character_url` (referencia) y el
+ * avatar en `avatar_url` (lo que se renderiza).
+ *
+ * La imagen la genera gpt-image-2 SIN fallback, en 9:16: el avatar es el ancla visual
+ * del personaje en cada lote, así que su encuadre es el del anuncio.
+ */
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
 
-  // ⚠️ El avatar ya NO se genera en KIE (pasó a gpt-image-2, que paga el hub), así que
-  // esta comprobación dejó de ser "sin key esta llamada falla" y pasa a ser un gate de
-  // COSTO DEL HUB: sin key de KIE el usuario no va a poder renderizar el video, y
-  // generarle igual el avatar sería gastar dinero nuestro en algo que no va a usar.
-  // Sigue yendo ANTES de `checkGenQuota` para no cobrarle una generación de su cuota por
-  // un paso que vamos a rechazar de todos modos.
-  const kieKey = await currentKieKey()
-  if (!kieKey) return NextResponse.json({ error: SIN_KEY }, { status: 400 })
-
-  const { blocked } = await checkGenQuota(id, 'video-character')
-  if (blocked) return blocked
   const userId = await readUserId()
-
-  const session = await getVideoSession(id, await readUserId())
-  if (!session) return NextResponse.json({ error: 'No se encontró la sesión' }, { status: 404 })
+  const session = await getVideoSession(id, userId)
+  if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (!session.forensic_analysis)
     return NextResponse.json({ error: 'Analiza el video de referencia primero' }, { status: 409 })
 
-  try {
-    // Si el usuario ya subió foto de personaje, ES la fuente de verdad — se manda
-    // como part de imagen ANTES del texto (mismo orden que analyze-reference y
-    // analyze-product) para que el modelo la observe en vez de fabricar el bloque
-    // de consistencia a ciegas. `fetchAsBase64` valida que el host sea el del
-    // bucket, que es lo que queremos acá porque la URL viene de la fila.
-    // Una foto por personaje, en el MISMO orden en que el prompt los lista. Los que no
-    // tienen foto simplemente no aportan imagen — el prompt ya distingue ese caso.
-    const gente = personajesDe(session)
-    const fotos = (await Promise.all(gente.map((p) => (p.fotoUrl ? fetchAsBase64(p.fotoUrl) : null))))
-      .filter((f): f is NonNullable<typeof f> => !!f)
+  const body = (await req.json().catch(() => ({}))) as { characterUrl?: string }
+  const characterUrl = body.characterUrl ?? session.character_url
+  if (!characterUrl)
+    return NextResponse.json({ error: 'Sube la foto del personaje primero' }, { status: 409 })
 
-    // En ropa/zapatos el producto se LLEVA PUESTO, así que la prenda tiene que estar
-    // delante del modelo dos veces: al describir la identidad (para que el bloque de
-    // consistencia detalle la prenda del usuario y no el vestuario del video original)
-    // y al generar el avatar (para que salga vistiéndola de verdad, no una parecida).
-    const spec = nicheSpec(session.niche)
-    const prenda = spec.wornProduct && session.product_url
-      ? await fetchAsBase64(session.product_url)
-      : null
+  // Ya está construido PARA ESTA FOTO: se devuelve tal cual. Va ANTES del gate de cuota
+  // a propósito — el disparo en segundo plano y el del paso del guión pueden coincidir
+  // sobre la misma sesión, y cobrarle una regeneración por un acierto de caché sería
+  // quemarle el tope.
+  //
+  // ⚠️ La comparación con `character_url` NO es de más: sin ella, cambiar la foto
+  // devolvía el avatar de la ANTERIOR. La fila termina con la foto nueva y el avatar
+  // viejo —o sea afirmando que ese avatar salió de esa foto— y el render usa el viejo,
+  // sin error, sin cuota gastada y sin nada en pantalla que lo diga.
+  //
+  // ponytail: dos llamadas simultáneas sobre una sesión virgen (el disparo de fondo
+  // todavía en vuelo cuando el paso del guión reintenta) generan dos avatares y gana
+  // la última escritura. Cuesta una imagen y una regeneración del tope de 1+3; si se
+  // mide que pasa seguido, el upgrade es un claim atómico como el de `generate-lotes`.
+  if (
+    session.avatar_url && session.consistency_block && session.voice_profile &&
+    session.character_url === characterUrl
+  ) {
+    return NextResponse.json({
+      avatarUrl: session.avatar_url,
+      consistencyBlock: session.consistency_block,
+      voiceProfile: session.voice_profile,
+    })
+  }
+
+  const { blocked } = await checkGenQuota(id, 'video-character')
+  if (blocked) return blocked
+
+  try {
+    // La foto va como part de imagen ANTES del texto (mismo orden que analyze-reference
+    // y analyze-product): es la única fuente de la apariencia del personaje.
+    // `fetchAsBase64` valida que el host sea el del bucket.
+    const image = await fetchAsBase64(characterUrl)
 
     const instruction = buildIdentityInstruction(
       {
         productName: session.product_name ?? '', productDescription: session.what_it_does ?? '',
         angle: session.angle ?? '', targetAudience: session.target_audience ?? '',
-        problem: session.problem ?? '', characterDesc: session.character_desc ?? '',
-        characterEthnicity: session.character_ethnicity ?? '', accent: session.accent ?? '',
-        voice: session.voice ?? '', constraints: session.constraints ?? '',
+        problem: session.problem ?? '', characterDesc: '',
+        characterEthnicity: '', accent: '', voice: '',
+        constraints: session.constraints ?? '',
       },
       session.forensic_analysis,
-      gente,
-      session.niche,
     )
 
-    const identidades = await callVideoAds(
+    const identity = await callVideoAds(
       'character_identity',
-      IdentidadesSchema,
-      buildCharacterParts(instruction, fotos, prenda),
+      CharacterIdentitySchema,
+      buildCharacterParts(instruction, image),
     )
 
-    // Referencias que el generador de imagen recibe POR URL (Nano Banana Pro las toma
-    // así, no en base64): la foto del usuario cuando existe —fuente de verdad de la
-    // identidad— y la prenda cuando el producto se lleva puesto, para que el avatar
-    // nazca vistiéndola de verdad en vez de una parecida descrita en palabras. Es lo
-    // mismo que sostiene que la ropa sea la misma en todos los lotes.
-    // Un avatar POR PERSONAJE, en paralelo. El modelo resolvió las identidades juntas
-    // (para que no se parezcan), pero cada imagen es independiente.
-    // Qué identidad devolvió el modelo para cada personaje. `resolvePersonaje` tolera
-    // que reescriba el id al citarlo (`p1`, `P1 (hijo)`, `hijo`); si aun así no resuelve
-    // se cae al orden, que es el mismo en que se le pidieron.
-    const conIdentidad = gente.map((p, i) => ({
-      personaje: p,
-      identidad:
-        identidades.personajes.find((x) => resolvePersonaje([p], x.id))
-        ?? identidades.personajes[i]
-        ?? identidades.personajes[0],
-    }))
+    // El acabado se pega en código: es lo único que llega al generador de imagen, y una
+    // regla que vive solo en la instrucción depende de que el LLM se acuerde de copiarla.
+    const promptImagen = promptDeAvatar(identity.promptCreacion)
+    const b64 = await openaiGenerateImage([{ text: promptImagen }], 2, { aspectRatio: '9:16' })
+    const avatarUrl = await uploadToStorage(id, Buffer.from(b64, 'base64'), 'image/png', 'avatar')
 
-    const avatares = await Promise.all(conIdentidad.map(async ({ personaje, identidad }) => {
-      const referencias = [personaje.fotoUrl, spec.wornProduct ? session.product_url : null]
-        .filter((u): u is string => !!u)
-      // ⚠️ GEMINI 3.1 FLASH IMAGE (en KIE, `nano-banana-2`), no gpt-image-2 — decisión del dueño
-      // del repo al migrar la imagen (2026-08-25). `preferGemini` lo pone de PRIMARIO y deja a
-      // gpt-image-2 de respaldo, que es el orden que conviene acá: está medido que gpt-image-2
-      // rechaza ~1 de cada 3 avatares por moderación con la MISMA foto y el MISMO prompt, así que
-      // de primario sería un peaje sistemático y de respaldo es una segunda oportunidad.
-      //
-      // ⚠️ Las referencias van como `fileData`, no bajadas a base64: ya viven en nuestro bucket y
-      // el transporte pasa esas URLs tal cual. Se ahorra bajarlas y volver a subirlas.
-      //
-      // ⚠️ CONSECUENCIA DE COSTO: esto lo paga el HUB, no el usuario. Lo del usuario es el render.
-      const b64 = await generateImage(
-        [
-          ...referencias.map((u) => ({ fileData: { fileUri: u, mimeType: 'image/jpeg' } })),
-          { text: identidad.promptCreacion },
-        ],
-        3,
-        { aspectRatio: '9:16', preferGemini: true },
-      )
-      return uploadToStorage(id, Buffer.from(b64, 'base64'), 'image/png', `avatar-${personaje.id}`)
-    }))
-
-    const personajes = conIdentidad.map(({ personaje, identidad }, i) => ({
-      ...personaje,
-      avatarUrl: avatares[i],
-      consistencyBlock: identidad.bloqueConsistencia,
-      // La voz sale del perfil fijo de su sexo (`VOZ_POR_DEFECTO`), no del modelo. Los dos
-      // campos que el modelo sí aporta solo entran cuando hay de quién diferenciarse: con
-      // un personaje son variación pura en un anuncio que se renderiza clip por clip.
-      voiceProfile: vozDe(identidad, conIdentidad.length > 1),
-      motionProfile: identidad.movimiento,
-    }))
-    const [principal] = personajes
-    const avatarUrl = principal.avatarUrl
-
+    const voiceProfile = vozDe(identity)
     await updateVideoSession(id, {
-      personajes,
-      // ⚠️ Las columnas singulares se siguen escribiendo con los datos del PROTAGONISTA.
-      // El render todavía las lee (eso cambia en el slice 4), así que dejar de escribirlas
-      // acá dejaría el video sin personaje entre un slice y el otro.
+      character_url: characterUrl,
       avatar_url: avatarUrl,
-      character_prompt: conIdentidad[0].identidad.promptCreacion,
-      consistency_block: principal.consistencyBlock,
-      voice_profile: principal.voiceProfile,
-      motion_profile: principal.motionProfile,
+      character_prompt: promptImagen,
+      consistency_block: identity.bloqueConsistencia,
+      voice_profile: voiceProfile,
     })
     await recordGenQuota(id, 'video-character', userId)
     return NextResponse.json({
-      characterUrl: avatarUrl,
-      personajes,
-      consistencyBlock: principal.consistencyBlock,
-      voiceProfile: principal.voiceProfile,
-      motionProfile: principal.motionProfile,
+      avatarUrl,
+      consistencyBlock: identity.bloqueConsistencia,
+      voiceProfile,
     })
   } catch (err) {
     console.error('[video-ads/character]', err)

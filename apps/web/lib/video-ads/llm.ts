@@ -1,44 +1,54 @@
-import type { z } from 'zod'
+import fs from 'fs'
+import path from 'path'
 import type { Part } from '@google/genai'
+import type { z } from 'zod'
 import { callStructured } from '@/lib/gemini'
 
 /**
- * Toda llamada de texto/visión del generador de video ads va a GEMINI.
- * ---------------------------------------------------------------------------
- * `callStructured` es OpenAI-primario (gpt-4o-mini) para el resto del hub, y para esta
- * tool eso era el techo real de calidad, no un detalle de configuración. Medido sobre la
- * sesión `6a1e6157`, con el guión original ya delante del modelo y el prompt corregido:
+ * EL SYSTEM PROMPT DE ESTA TOOL ES PROPIO, y hasta ahora no lo era.
  *
- *   gpt-4o-mini  →  "Tres razones para tomar gomitas de melatonina para adultos y
- *                    jóvenes desde los 12 años"   (3/3 corridas)
- *   gemini-2.5   →  "Tres razones para tomar Kukamonga para adultos y jóvenes"
- *                                                 (3/3 corridas)
+ * `callStructured` tiene por defecto `gemini-system.md`, que abre diciendo *"You are a
+ * static ad replication engine"* y ordena, entre sus reglas de oro, que TODA salida
+ * declare la posición física del producto *"ending with the negative: No está
+ * flotando."*. Esa orden es correcta para un anuncio estático —donde el producto es una
+ * foto de catálogo— y venenosa para un video, donde el producto está en la mano de
+ * alguien: medido sobre una sesión real, las SEIS `accionVisual` del guion adaptado
+ * terminaban con **"El producto no está flotando."**, o sea escenografía de foto dentro
+ * del único campo que le dice al render qué hace el cuerpo, emitida seis veces en los
+ * prompts de render. La frase no está en ningún insumo de la sesión: la puso el system
+ * prompt. Branding y landing ya tenían el suyo; el video se quedó con el de anuncios.
+ */
+export const VIDEO_SYSTEM_PROMPT = fs.readFileSync(
+  path.join(process.cwd(), 'lib/prompts/video-system.md'),
+  'utf-8',
+)
+
+/**
+ * TODA llamada de texto/visión del generador de video sale por GEMINI.
  *
- * El original decía "Tres razones para tomar Gomi Energy para Ella". El hueco lo bautizó
- * la FASE 2 como `[tipo de producto]`, así que "gomitas de melatonina" ES la respuesta
- * correcta a la etiqueta — y equivocada al anuncio. Distinguir las dos cosas con el
- * original delante es exactamente el "contextual awareness" que el PROMPT MAESTRO tiene
- * por venir de una sola pasada en un modelo grande; no se puede comprar con más reglas
- * de prompt sobre un modelo chico. Lo mismo con las notas del formulario pegadas crudas.
+ * El resto del hub es OpenAI-primario (gpt-4o-mini) y para ESTA tool ese modelo es el
+ * techo real de calidad, no un detalle de configuración. Medido sobre una sesión real,
+ * con el guion original delante y el prompt ya corregido: gpt-4o-mini responde la
+ * ETIQUETA del hueco en vez del anuncio —"para tomar gomitas de melatonina" donde el
+ * original decía el nombre comercial, 3 de 3— y gemini-2.5-flash responde el anuncio,
+ * también 3 de 3. Distinguir esas dos cosas con el original al lado es exactamente la
+ * conciencia de contexto que este pipeline necesita, y NO se compra con más reglas de
+ * prompt sobre un modelo chico: se intentaron tres rondas antes de mirar qué modelo era.
  *
- * NO cubre dos cosas, por decisión explícita del dueño del repo:
- *  - el RENDER (KIE / grok-imagine), que no es un LLM de texto;
- *  - la GENERACIÓN DEL AVATAR (`openaiGenerateImage`, gpt-image-2, sin fallback) en
- *    `character/route.ts`. El ANÁLISIS de identidad de esa misma ruta sí va por acá.
+ * Existe como envoltorio y no como un `{ preferGemini: true }` suelto en cada ruta
+ * porque la regla es de la TOOL entera: un call site nuevo que se olvide del flag vuelve
+ * a gpt-4o-mini en silencio, y el síntoma —valores que contestan la etiqueta— se lee
+ * como un problema de prompt. Ya pasó.
  *
- * El análisis forense (`analyze-reference`) ya llamaba a Gemini directo por otra razón
- * —gpt-4o-mini no acepta partes de video— y sigue igual.
- *
- * ⚠️ `preferGemini` es PREFERENCIA, no exclusividad: si Gemini falla, `callStructured`
- * cae a gpt-4o-mini — el modelo que produce justamente la salida medida arriba — y lo
- * único que queda es un `console.warn` que el usuario nunca ve. Es el comportamiento que
- * se quiere (mejor un guión flojo que un 500), pero si alguna vez vuelve a aparecer
- * "gomitas de melatonina" en producción, ese fallback es el primer sitio donde mirar.
+ * Excepciones deliberadas, las dos fuera de esta función: el análisis forense
+ * (`analyze-reference`, que llama a Gemini directo porque gpt-4o-mini no acepta partes
+ * de video) y el render (KIE, que no es un LLM de texto).
  */
 export function callVideoAds<T>(
   schemaName: string,
   schema: z.ZodSchema<T>,
   parts: Part[],
+  maxRetries = 3,
 ): Promise<T> {
-  return callStructured(schemaName, schema, parts, 3, undefined, { preferGemini: true })
+  return callStructured(schemaName, schema, parts, maxRetries, VIDEO_SYSTEM_PROMPT, { preferGemini: true })
 }

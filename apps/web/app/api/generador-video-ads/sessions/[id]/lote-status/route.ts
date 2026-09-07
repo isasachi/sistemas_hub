@@ -48,15 +48,16 @@ export async function GET(
 ) {
   const { id } = await params
   const session = await getVideoSession(id, await readUserId())
-  if (!session) return NextResponse.json({ error: 'No se encontró la sesión' }, { status: 404 })
+  if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (!session.lotes?.length) return NextResponse.json({ lotes: [], done: false })
+
+  // BYOK: en KIE una tarea solo la ve la cuenta que la creó, así que sin key no hay a
+  // quién preguntarle. Lo único que se salta es el SONDEO: el resto de la ruta sigue
+  // corriendo para recalcular `done` y reconciliar la columna cacheada `render_done`.
+  const kieKey = await currentKieKey()
 
   const lotes: Lote[] = []
   let changed = false
-
-  // La misma key con la que se crearon las tareas: en KIE una tarea solo la ve la
-  // cuenta que la creó. Se lee una vez para todo el bucle.
-  const kieKey = await currentKieKey()
 
   for (const l of session.lotes) {
     if (l.videoUrl && isMirrored(l.videoUrl)) { lotes.push(l); continue }
@@ -70,11 +71,6 @@ export async function GET(
       continue
     }
 
-    // Sin `taskId` no hay nada que consultar; sin key TAMPOCO, porque en KIE una tarea
-    // solo la ve la cuenta que la creó. Se salta el sondeo y se conserva el lote tal
-    // cual — pasa con los renders creados cuando existía la key global del hub. Ojo:
-    // solo se salta el SONDEO, no el resto de la ruta, que sigue recalculando `done` y
-    // corrigiendo la columna cacheada `render_done`.
     if (!l.taskId || !kieKey) { lotes.push(l); continue }
 
     try {

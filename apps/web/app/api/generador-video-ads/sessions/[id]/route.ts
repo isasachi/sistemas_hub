@@ -8,7 +8,7 @@ export async function GET(
 ) {
   const { id } = await params
   const session = await getVideoSession(id, await readUserId())
-  if (!session) return NextResponse.json({ error: 'No se encontró la sesión' }, { status: 404 })
+  if (!session) return NextResponse.json({ error: 'Session not found' }, { status: 404 })
   return NextResponse.json(session)
 }
 
@@ -19,9 +19,10 @@ export async function DELETE(
 ) {
   const { id } = await params
   try {
-    const borrado = await deleteVideoSession(id, await readUserId())
-    if (!borrado)
-      return NextResponse.json({ error: 'No se encontró la sesión' }, { status: 404 })
+    // Un DELETE que no matchea NO es error: sin mirar el count responderíamos
+    // `ok` sobre la sesión de otra cuenta, que sigue viva.
+    const borrada = await deleteVideoSession(id, await readUserId())
+    if (!borrada) return NextResponse.json({ error: 'Session not found' }, { status: 404 })
     return NextResponse.json({ ok: true })
   } catch {
     return NextResponse.json({ error: 'No se pudo eliminar' }, { status: 500 })

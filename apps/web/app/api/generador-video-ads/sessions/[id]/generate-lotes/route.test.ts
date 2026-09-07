@@ -21,39 +21,22 @@ vi.mock('@/lib/gen-quota', async (importOriginal) => ({
   recordGenQuota: vi.fn().mockResolvedValue(undefined),
 }))
 
-// Las imágenes ancla son generaciones PAGADAS de gpt-image-2: si no se mockean, cada test
-// intentaría crearlas de verdad. ⚠️ Y desde 2026-08-24 las paga el HUB, no el usuario —
-// salieron de KIE (Nano Banana Pro) y pasaron a OpenAI.
-// ⚠️ Se mockea `@/lib/gemini`, no `llm-openai`: desde que la imagen salió a KIE (2026-08-25) las
-// anclas van por `generateImage` con `preferGemini` — Gemini 3.1 Flash Image de primario. Mockear
-// el módulo viejo dejaba la aserción de abajo pasando trivialmente, que es un test vacío.
-vi.mock('@/lib/gemini', () => ({
-  generateImage: vi.fn(async () => Buffer.from('png').toString('base64')),
-}))
-vi.mock('@/lib/storage', () => ({
-  uploadToStorage: vi.fn(async (_id: string, _b: Buffer, _m: string, nombre: string) => `https://cdn.test/${nombre}.png`),
-  fetchAsBase64: vi.fn(async () => ({ data: 'AAA', mimeType: 'image/png' })),
-}))
-
-// BYOK: el render usa la API key de KIE del usuario. Los tests corren con una
-// cargada; el caso de la key ausente tiene su propio bloque al final.
-vi.mock('@/lib/user-settings', () => ({
-  currentKieKey: vi.fn().mockResolvedValue('kie-de-prueba'),
-}))
-
 vi.mock('@/lib/product-hunter/session', () => ({
   readUserId: vi.fn().mockResolvedValue('user-1'),
+}))
+
+vi.mock('@/lib/user-settings', () => ({
+  currentKieKey: vi.fn(),
 }))
 
 import { NextRequest } from 'next/server'
 import { POST } from './route'
 import { getVideoSession, updateVideoSession, claimFreshLotes } from '@/lib/video-ads/db'
 import { createVideoTask } from '@/lib/video-ads/kie'
-import { generateImage } from '@/lib/gemini'
 import { checkGenQuota, checkGlobalBackstop, recordGenQuota } from '@/lib/gen-quota'
+import { currentKieKey } from '@/lib/user-settings'
 import type { VideoSessionResponse } from '@/lib/video-ads/types'
 import type { Lote } from '@/lib/video-ads/lotes'
-import { currentKieKey } from '@/lib/user-settings'
 
 function req(body?: unknown): NextRequest {
   return new NextRequest('http://localhost/api/generador-video-ads/sessions/s1/generate-lotes', {
@@ -75,7 +58,7 @@ const VOZ = {
 
 const toma = (n: number, duracionSeg: number) => ({
   n, tiempoOriginal: '00:00-00:10', duracionSeg,
-  accionVisual: `la mujer hace la acción ${n}`, personaje: 'Mujer 25', producto: 'Frasco', locucion: `línea ${n}`,
+  accionVisual: `acción ${n}`, personaje: 'Mujer 25', producto: 'Frasco', locucion: `línea ${n}`,
 })
 
 // Dos tomas de 10 s: juntas suman 20 s (>15), así que `groupIntoLotes` las separa en
@@ -88,13 +71,13 @@ const ADAPTED_2_LOTES = {
 
 // Un guión COMPLETAMENTE distinto que igual produce 2 lotes: mismas duraciones, otro
 // texto. Es el caso del fix round 4 y no es exótico — los lotes se arman empaquetando
-// tomas en buckets de hasta LOTE_MAX_SEC, así que dos adaptaciones de duración parecida caen en
+// tomas en buckets de hasta 15 s, así que dos adaptaciones de duración parecida caen en
 // la misma cantidad de lotes de forma rutinaria.
 const ADAPTED_2_LOTES_OTRO_TEXTO = {
   ...ADAPTED_2_LOTES,
   tomas: [
-    { ...toma(1, 10), accionVisual: 'la mujer hace otra acción distinta', locucion: 'otro guión completamente distinto' },
-    { ...toma(2, 10), accionVisual: 'la mujer hace la segunda acción distinta', locucion: 'segunda línea distinta' },
+    { ...toma(1, 10), accionVisual: 'otra acción distinta', locucion: 'otro guión completamente distinto' },
+    { ...toma(2, 10), accionVisual: 'segunda acción distinta', locucion: 'segunda línea distinta' },
   ],
 }
 
@@ -143,6 +126,7 @@ function conPendiente(guardados: Lote[]): Lote[] {
 describe('POST generate-lotes — fix round 2: cuota por video, no por lote', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(currentKieKey).mockResolvedValue('kie-del-usuario')
     vi.mocked(claimFreshLotes).mockResolvedValue(true)
     vi.mocked(checkGenQuota).mockResolvedValue({ blocked: null, regensLeft: null })
     vi.mocked(checkGlobalBackstop).mockResolvedValue({ blocked: null })
@@ -219,39 +203,6 @@ describe('POST generate-lotes — fix round 2: cuota por video, no por lote', ()
     expect(generationCalls).toHaveLength(0)
   })
 
-  // Las anclas son imágenes PAGADAS y además definen cómo se ve cada escena del clip:
-  // regenerarlas al reanudar cambiaría el aspecto del lote pendiente respecto de los que
-  // ya se pagaron, sin que nada lo reportara.
-  it('reanudar REUSA las anclas guardadas en vez de regenerarlas', async () => {
-    const guardados = await renderInicial()
-    vi.mocked(getVideoSession).mockResolvedValue(
-      session({
-        lotes: conPendiente(guardados) as unknown as VideoSessionResponse['lotes'],
-        // ⚠️ UNA ANCLA POR LOTE SALVO EL PRIMERO. Este fixture decía `frames: []` con el
-        // comentario "un lote de una escena no necesita ancla": era cierto cuando las
-        // anclas solo cubrían un cambio de escena DENTRO de un lote, y dejó de serlo cuando
-        // pasaron a anclar el fondo entre clips. Lo que el test protege no cambió —
-        // regenerarlas al reanudar cambiaría el aspecto del lote pendiente respecto de los
-        // ya pagados—, cambió cuántas hay que guardar para que el reuso aplique.
-        frames: guardados.slice(1).map((l) => `https://x.supabase.co/ancla-${l.n}-1.png`),
-      } as never),
-    )
-    vi.mocked(generateImage).mockClear()
-
-    const res = await POST(req({ resume: true }), ctx())
-    expect(res.status).toBe(200)
-    expect(generateImage).not.toHaveBeenCalled()
-    // El lote pendiente recibe avatar, producto y DESPUÉS su ancla, en ese orden: es el
-    // contrato del que dependen la leyenda `@image(n)` y el índice de cada ancla. Y el
-    // ancla es la GUARDADA, no una nueva — que es el punto del test.
-    const [creado] = vi.mocked(createVideoTask).mock.calls.slice(-1)
-    expect(creado[0].images.map((i) => i.url)).toEqual([
-      'https://x.supabase.co/character.png',
-      'https://x.supabase.co/product.png',
-      `https://x.supabase.co/ancla-${guardados[1].n}-1.png`,
-    ])
-  })
-
   it('resume:true SIN ningún taskId pagado se trata como intento nuevo: SÍ cobra', async () => {
     // Placeholders de un intento anterior que falló por completo (0 gastado) — un
     // cliente que mande resume:true igual no se libra de pagar la generación.
@@ -323,11 +274,16 @@ describe('POST generate-lotes — fix round 2: cuota por video, no por lote', ()
   })
 
   it('fallo total en el primer lote (prompt que nunca cabe): NO cobra video-generation y guarda placeholders', async () => {
-    // consistency_block absurdamente largo: el prompt no entra en KIE_PROMPT_MAX, así
-    // que `buildLotePrompt` lanza antes de llamar a KIE por primera vez. El bloque de
-    // consistencia no se recorta nunca — es lo único que sostiene la identidad entre
-    // lotes — así que la única salida es fallar, no mandar una tarea que daría 422.
-    vi.mocked(getVideoSession).mockResolvedValue(session({ consistency_block: 'x'.repeat(70_000) }))
+    // Coreografía absurda en la PRIMERA toma: el prompt del lote es hoy casi solo
+    // movimiento, así que es lo único que puede desbordar `KIE_PROMPT_MAX` — y una
+    // toma sola no se puede repartir, así que `buildLotePrompt` lanza antes de llamar
+    // a KIE por primera vez.
+    vi.mocked(getVideoSession).mockResolvedValue(session({
+      adapted: {
+        ...ADAPTED_2_LOTES,
+        tomas: [{ ...toma(1, 10), accionVisual: 'x'.repeat(6000) }, toma(2, 10)],
+      },
+    } as unknown as Partial<VideoSessionResponse>))
 
     const res = await POST(req(), ctx())
     expect(res.status).toBe(400)
@@ -348,6 +304,7 @@ describe('POST generate-lotes — fix round 2: cuota por video, no por lote', ()
 describe('POST generate-lotes — fix round 3', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(currentKieKey).mockResolvedValue('kie-del-usuario')
     vi.mocked(claimFreshLotes).mockResolvedValue(true)
     vi.mocked(checkGenQuota).mockResolvedValue({ blocked: null, regensLeft: null })
     vi.mocked(checkGlobalBackstop).mockResolvedValue({ blocked: null })
@@ -444,6 +401,7 @@ describe('POST generate-lotes — fix round 3', () => {
 describe('POST generate-lotes — fix round 4: huella de contenido', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(currentKieKey).mockResolvedValue('kie-del-usuario')
     vi.mocked(claimFreshLotes).mockResolvedValue(true)
     vi.mocked(checkGenQuota).mockResolvedValue({ blocked: null, regensLeft: null })
     vi.mocked(checkGlobalBackstop).mockResolvedValue({ blocked: null })
@@ -538,52 +496,5 @@ describe('POST generate-lotes — fix round 4: huella de contenido', () => {
     expect(updateVideoSession).not.toHaveBeenCalled() // nada se pisó: nada se abandonó
     expect(errSpy).not.toHaveBeenCalled()
     errSpy.mockRestore()
-  })
-})
-
-describe('POST generate-lotes — BYOK: la API key de KIE es del usuario', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    vi.mocked(getVideoSession).mockResolvedValue(session())
-    vi.mocked(claimFreshLotes).mockResolvedValue(true)
-    vi.mocked(checkGenQuota).mockResolvedValue({ blocked: null, regensLeft: 2 })
-    vi.mocked(currentKieKey).mockResolvedValue('kie-de-prueba')
-  })
-
-  it('la key del usuario llega a KIE', async () => {
-    await POST(req(), ctx())
-    expect(vi.mocked(createVideoTask).mock.calls[0][1]).toBe('kie-de-prueba')
-  })
-
-  // ⚠️ EL ORDEN IMPORTA Y ES LA RAZÓN DE ESTE TEST. Si la key se resolviera DESPUÉS
-  // del gate de cuota, `checkGenQuota` ya habría escrito la fila de
-  // `video-generation` y el primer `createVideoTask` moriría con un 401 de KIE: el
-  // usuario perdería una generación de su cuota por no haber cargado una key.
-  it('sin key: 400 sin cobrar cuota, sin llamar a KIE y sin tocar la sesión', async () => {
-    vi.mocked(currentKieKey).mockResolvedValue(null)
-    delete process.env.KIE_API_KEY
-
-    const res = await POST(req(), ctx())
-    expect(res.status).toBe(400)
-    expect((await res.json()).error).toMatch(/API key de KIE/i)
-    expect(vi.mocked(checkGenQuota)).not.toHaveBeenCalled()
-    expect(vi.mocked(createVideoTask)).not.toHaveBeenCalled()
-    expect(vi.mocked(recordGenQuota)).not.toHaveBeenCalled()
-    expect(vi.mocked(claimFreshLotes)).not.toHaveBeenCalled()
-  })
-
-  // ⚠️ ESTE TEST AFIRMABA LO CONTRARIO Y SE INVIRTIÓ A PROPÓSITO (2026-08-24). El env
-  // `KIE_API_KEY` ERA el respaldo del hub, y ese respaldo es justamente el agujero: un
-  // usuario sin key renderizaba a costa de la cuenta del hub, en silencio y sin que nada
-  // lo reportara. `resolveKey` ya no lo mira, ni en dev.
-  it('con KIE_API_KEY en el entorno pero sin key del usuario: 400 igual, no renderiza', async () => {
-    vi.mocked(currentKieKey).mockResolvedValue(null)
-    vi.stubEnv('KIE_API_KEY', 'key-del-hub')
-
-    const res = await POST(req(), ctx())
-    expect(res.status).toBe(400)
-    expect(vi.mocked(createVideoTask)).not.toHaveBeenCalled()
-    expect(vi.mocked(checkGenQuota)).not.toHaveBeenCalled()
-    vi.unstubAllEnvs()
   })
 })

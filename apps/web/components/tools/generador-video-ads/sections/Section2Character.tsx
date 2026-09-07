@@ -2,23 +2,15 @@
 
 import { useRef, useState } from 'react'
 import { useVideoStore } from '@/store/video'
-import type { CampoTextoDeInputs, UserInputs } from '@/lib/video-ads/types'
 import { FileUpload } from '@/components/tools/ui/FileUpload'
 import { uploadDirect, measureAsset, isPortrait } from '@/lib/video-ads/upload-client'
 import { STEP } from '@/lib/video-ads/steps'
-import { btnPrimary, btnGhost, errorBox, warnBox, spinner } from './shared'
-import { MAX_PERSONAJES, nuevoId } from '@/lib/video-ads/personajes'
+import { btnPrimary, errorBox, warnBox, spinner } from './shared'
 
-/** Lo que el usuario define de cada personaje. Lo generado lo pone FASE 4. */
-type PersonajeInput = NonNullable<UserInputs['personajes']>[number]
-
-const vacio = (i: number): PersonajeInput => ({
-  id: nuevoId(i), rol: '', desc: '', etnia: '', acento: '', voz: '', fotoUrl: null,
-})
-
-// Paso 2: personaje. La ETNIA es un campo LIBRE y obligatorio: el spec
-// prohíbe inferirlos de la apariencia, así que no hay chips ni defaults — si el
-// usuario no los escribe, la FASE 0 los marca PENDIENTE y el flujo se detiene.
+// Paso 2: el personaje. UNA sola entrada, la foto, y es OBLIGATORIA: el personaje se
+// toma siempre de ella y nunca se infiere, así que no hay campo de descripción, ni de
+// etnia (se lee de la foto sin declararla), ni de acento (lo infiere la FASE 4 del
+// propio personaje), ni de voz (son cuatro perfiles fijos, VOZ_ESTANDAR).
 export default function Section2Character() {
   const { sessionId, inputs, characterUrl, patch, setLoading, isLoading } = useVideoStore()
   const [preview, setPreview] = useState<string | null>(characterUrl)
@@ -27,30 +19,7 @@ export default function Section2Character() {
   const [measuring, setMeasuring] = useState(false)
   const pickToken = useRef(0)
 
-  const set = (k: CampoTextoDeInputs, v: string) => patch({ inputs: { ...inputs, [k]: v } })
-
-  // La lista arranca con UN personaje armado desde los campos singulares, así que una
-  // sesión a medio llenar (o reanudada) no pierde lo que el usuario ya escribió.
-  const gente: PersonajeInput[] = inputs.personajes?.length
-    ? inputs.personajes
-    : [{ id: nuevoId(0), rol: '', desc: inputs.characterDesc, etnia: inputs.characterEthnicity,
-         acento: inputs.accent, voz: inputs.voice, fotoUrl: characterUrl }]
-
-  /**
-   * Escribe la lista y, de paso, sincroniza los campos singulares con el PROTAGONISTA.
-   * El camino legado —la FASE 0 de un solo personaje y el render de las sesiones viejas—
-   * los sigue leyendo, así que desincronizarlos dejaría la validación mirando datos
-   * viejos.
-   */
-  const setGente = (lista: PersonajeInput[]) => patch({
-    inputs: {
-      ...inputs, personajes: lista,
-      characterDesc: lista[0]?.desc ?? '', characterEthnicity: lista[0]?.etnia ?? '',
-      accent: lista[0]?.acento ?? '', voice: lista[0]?.voz ?? '',
-    },
-  })
-  const setCampo = (i: number, k: keyof PersonajeInput, v: string) =>
-    setGente(gente.map((p, j) => (j === i ? { ...p, [k]: v } : p)))
+  const set = (k: keyof typeof inputs, v: string) => patch({ inputs: { ...inputs, [k]: v } })
 
   async function pickCharacter(f: File) {
     setError(null); setNotVertical(null); setMeasuring(true)
@@ -68,20 +37,23 @@ export default function Section2Character() {
     setLoading(true)
     try {
       const url = await uploadDirect(sessionId, 'character', f)
-      // `uploadDirect` solo sube al bucket, no toca la sesión: el propio `submit`
-      // manda `characterUrl` junto con el resto de `inputs` a la ruta `/inputs`,
-      // que recién ahí lo persiste en `video_sessions.character_url`. Sin este
-      // segundo patch a `inputs`, la matriz de validación nunca confirmaba
-      // "Personaje" por imagen aunque la foto ya estuviera en el bucket.
-      //
       // OJO: se lee `useVideoStore.getState().inputs` (fresco), NO el `inputs` del
-      // closure de este render. `uploadDirect` cruza dos viajes de red (firmar +
-      // PUT); nada deshabilita los campos de texto durante esa ventana, así que si
-      // el usuario tipea en Personaje/Etnia/Acento/Voz/Restricciones mientras la
-      // foto sube, el `inputs` capturado en el closure queda desactualizado. Si se
-      // usa ese closure acá, este patch lo pisa y borra en silencio lo que el
-      // usuario acaba de escribir. No "simplificar" esto de vuelta a `...inputs`.
+      // closure de este render. `uploadDirect` cruza dos viajes de red (firmar + PUT) y
+      // nada bloquea los campos durante esa ventana, así que el closure puede quedar
+      // desactualizado y este patch pisaría lo que el usuario acaba de escribir.
       patch({ characterUrl: url, inputs: { ...useVideoStore.getState().inputs, characterUrl: url } })
+
+      // FASE 4 EN SEGUNDO PLANO. Generar el avatar tarda ~40-55 s y el usuario los pasa
+      // avanzando por validación, plantilla y guión: arrancarlo acá se los ahorra. Se
+      // le manda la URL en el body porque `uploadDirect` solo subió al bucket — la fila
+      // recibe `character_url` recién al enviar este paso, y sin la URL la ruta
+      // generaría un avatar sin referencia. Sin `await` y con el error solo logueado:
+      // si falla, el paso del guión lo reintenta y ahí sí se le muestra al usuario.
+      void fetch(`/api/generador-video-ads/sessions/${sessionId}/character`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ characterUrl: url }),
+      }).catch((e) => console.error('[video-ads] avatar en segundo plano', e))
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -108,85 +80,25 @@ export default function Section2Character() {
     }
   }
 
-  const field = (label: string, k: CampoTextoDeInputs, placeholder: string, hint?: string) => (
-    <div className="flex flex-col gap-1.5">
-      <label htmlFor={k} className="text-[13px] font-semibold text-[#efe7e0]">{label}</label>
-      {hint && <span className="text-[11.5px] leading-relaxed text-[#8b8b8b]">{hint}</span>}
-      <input id={k} value={inputs[k]} onChange={(e) => set(k, e.target.value)}
-        placeholder={placeholder} className="jr-field h-11 rounded-lg px-3 text-[13px]" />
-    </div>
-  )
-
   return (
     <div className="flex flex-col gap-5">
-      <FileUpload label="Foto del personaje (opcional)" accept="image/*" preview={preview} onFile={pickCharacter} />
-      {/* Decía "si no la subes, hoy no se genera ninguna foto" y es falso: la ruta
-          `character` genera el retrato con gpt-image-2 a partir de la descripción
-          cuando `character_url` viene vacío. */}
+      <FileUpload label="Foto del personaje" accept="image/*" preview={preview} onFile={pickCharacter} />
       <p className="text-[12px] leading-relaxed text-[#8b8b8b]">
-        Si la subes, es la fuente de verdad de la cara: edad, piel, cabello, facciones y
-        complexión salen de ahí. Debe ser vertical. Si no la subes, generamos el retrato
-        a partir de la descripción que escribas abajo.
+        Obligatoria y vertical. De ella salen edad, piel, cabello, facciones y complexión —
+        y también el acento y la voz del anuncio. La cara del video será una persona
+        nueva construida con ese mismo tipo físico, nunca la de la foto. Empezamos a
+        generarla apenas la subas, mientras avanzas por los siguientes pasos.
       </p>
       {notVertical && <div className={warnBox}>{notVertical}</div>}
 
-      {/* ⚠️ La etnia es un campo LIBRE y obligatorio POR PERSONAJE: el spec
-          prohíbe inferirla, y que un personaje la tenga no cubre al otro. El ACENTO y la
-          VOZ se eliminaron (2026-08-25): la voz sale de un perfil fijo en español según
-          el sexo del personaje (`VOZ_POR_DEFECTO`, character.ts). */}
-      {gente.map((p, i) => (
-        <div key={p.id} className="flex flex-col gap-3 rounded-xl border border-white/[0.08] p-3.5">
-          <div className="flex items-center justify-between">
-            <span className="text-[12px] font-semibold text-[#ededed]">
-              {i === 0 ? 'Protagonista' : `Personaje ${i + 1}`}
-            </span>
-            {gente.length > 1 && (
-              <button
-                onClick={() => setGente(gente.filter((_, j) => j !== i).map((x, j) => ({ ...x, id: nuevoId(j) })))}
-                className="text-[11.5px] text-[#8b8b8b] hover:text-[#ededed]"
-              >
-                Quitar
-              </button>
-            )}
-          </div>
-
-          {gente.length > 1 && (
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[13px] font-semibold text-[#ededed]">Rol en el anuncio</label>
-              <span className="text-[11.5px] text-[#8b8b8b]">Cómo lo nombra el guión: hijo, padre, vendedora.</span>
-              <input value={p.rol} onChange={(e) => setCampo(i, 'rol', e.target.value)}
-                placeholder="hijo" className="jr-field h-11 rounded-lg px-3 text-[13px]" />
-            </div>
-          )}
-
-          <div className="flex flex-col gap-1.5">
-            <label className="text-[13px] font-semibold text-[#ededed]">Personaje que aparecerá</label>
-            <span className="text-[11.5px] text-[#8b8b8b]">Edad aproximada, sexo, apariencia general.</span>
-            <input value={p.desc} onChange={(e) => setCampo(i, 'desc', e.target.value)}
-              placeholder="Mujer de 25, cabello negro recogido, piel clara"
-              className="jr-field h-11 rounded-lg px-3 text-[13px]" />
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <label className="text-[13px] font-semibold text-[#ededed]">Raza / etnia / origen cultural</label>
-            <span className="text-[11.5px] text-[#8b8b8b]">Obligatorio y solo tuyo: nunca lo deducimos de una foto ni del video de referencia.</span>
-            <input value={p.etnia} onChange={(e) => setCampo(i, 'etnia', e.target.value)}
-              placeholder="Latina peruana" className="jr-field h-11 rounded-lg px-3 text-[13px]" />
-          </div>
-
-        </div>
-      ))}
-
-      {gente.length < MAX_PERSONAJES && (
-        <button onClick={() => setGente([...gente, vacio(gente.length)])} className={btnGhost}>
-          + Agregar otro personaje
-        </button>
-      )}
-
-      {field('Restricciones (opcional)', 'constraints', 'No mencionar precios')}
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="constraints" className="text-[13px] font-semibold text-[#ededed]">Restricciones (opcional)</label>
+        <input id="constraints" value={inputs.constraints} onChange={(e) => set('constraints', e.target.value)}
+          placeholder="No mencionar precios" className="jr-field h-11 rounded-lg px-3 text-[13px]" />
+      </div>
 
       {error && <div className={errorBox}>{error}</div>}
-      <button onClick={submit} disabled={isLoading || measuring} className={btnPrimary}>
+      <button onClick={submit} disabled={isLoading || measuring || !characterUrl} className={btnPrimary}>
         {isLoading ? <><span className={spinner} />Guardando...</> : 'Validar datos →'}
       </button>
     </div>

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildAdaptInstruction, AdaptedScriptSchema, applyScriptEdits, resyncTomaDurations, type AdaptedScript, buildCoherenceInstruction } from './adapt'
+import { buildAdaptInstruction, AdaptedScriptSchema, applyScriptEdits, resyncTomaDurations, type AdaptedScript } from './adapt'
 import { extractSlots } from './fill'
 import type { ScriptTemplate } from './template'
 import type { ForensicReport } from './forensic'
@@ -20,7 +20,7 @@ const TEMPLATE: ScriptTemplate = {
 const FORENSIC = {
   caracteresGuion: 58,
   guionOriginal: 'Si estás cansado de las marcas, necesitas probar este suero.',
-  cortes: [{ n: 1, tiempo: '00:00 - 00:06', duracionSeg: 6, accion: '', camara: '', dialogo: '', textoOverlay: '', transicion: '', objetoEnMano: null, micro: null }],
+  cortes: [{ n: 1, tiempo: '00:00 - 00:06', duracionSeg: 6, accion: '', camara: '', dialogo: 'Si estás cansado de las marcas,', textoOverlay: '', transicion: '' }],
 } as ForensicReport
 
 const INPUTS: UserInputs = {
@@ -32,90 +32,30 @@ const INPUTS: UserInputs = {
 }
 
 describe('buildAdaptInstruction', () => {
-  const p = buildAdaptInstruction(TEMPLATE, FORENSIC, INPUTS, null, extractSlots(TEMPLATE))
+  const p = buildAdaptInstruction(TEMPLATE, FORENSIC, INPUTS, null, extractSlots(TEMPLATE), 'Español peruano de Lima', '')
 
 
 
-  // EL CONTEXTO QUE EL SPEC TIENE GRATIS Y ESTA FASE NO TENÍA.
-  // Caso real reportado: el original decía "Tres razones para tomar Gomi Energy para
-  // ella" y salió "…para tomar gomitas de melatonina para adultos y jóvenes desde los 12
-  // años" — la categoría en vez del nombre comercial, y la nota del formulario pegada
-  // entera donde iba una palabra. Con solo la etiqueta del hueco delante, ambas son
-  // respuestas correctas; con el original delante, ninguna lo es.
-  describe('el guión original va en el prompt', () => {
-    const ORIGINAL = 'Tres razones para tomar Gomi Energy para ella.'
-    const forense = (dialogo: string) => ({
-      caracteresGuion: ORIGINAL.length, guionOriginal: ORIGINAL,
-      cortes: [{ n: 1, tiempo: '00:00 - 00:05', duracionSeg: 5, accion: '', camara: '', dialogo, textoOverlay: '', transicion: '', objetoEnMano: null, micro: null }],
-    }) as ForensicReport
-    const plantilla = (locucion: string): ScriptTemplate =>
-      ({ ...TEMPLATE, tomas: [{ n: 1, accionVisual: 'Sostiene el frasco', locucion, duracionSeg: 5 }] })
-
-    const COPIADA = 'Tres razones para tomar [nombre del producto] para [público objetivo].'
-
-    it('manda el diálogo original de cada toma junto a su plantilla', () => {
-      const p = buildAdaptInstruction(plantilla(COPIADA), forense(ORIGINAL), INPUTS, null, extractSlots(plantilla(COPIADA)))
-      expect(p).toContain('EL ORIGINAL, TOMA POR TOMA')
-      expect(p).toContain(ORIGINAL)
-    })
-
-    it('dice qué decía el original EN CADA HUECO', () => {
-      const p = buildAdaptInstruction(plantilla(COPIADA), forense(ORIGINAL), INPUTS, null, extractSlots(plantilla(COPIADA)))
-      expect(p).toContain('el original decía: "Gomi Energy"')
-      expect(p).toContain('el original decía: "ella"')
-    })
-
-    // El per-hueco depende de `alignSlots`, que devuelve null si el modelo parafraseó —y
-    // justo las sesiones de una sola toma larga son las que más fallan la alineación. El
-    // diálogo completo NO puede depender de eso: es la mitad que sostiene la regla.
-    it('sin alineación se pierde el original por hueco, pero NO el de la toma', () => {
-      const parafraseada = 'Tres motivos para tomar [nombre del producto] para [público objetivo].'
-      const t = plantilla(parafraseada)
-      const p = buildAdaptInstruction(t, forense(ORIGINAL), INPUTS, null, extractSlots(t))
-      expect(p).not.toContain('el original decía:')
-      expect(p).toContain(ORIGINAL)
-    })
-
-    it('pide misma función y misma forma, y avisa que los inputs son notas', () => {
-      const p = buildAdaptInstruction(plantilla(COPIADA), forense(ORIGINAL), INPUTS, null, extractSlots(plantilla(COPIADA)))
-      expect(p).toMatch(/MISMA FUNCIÓN Y MISMA FORMA/)
-      expect(p).toMatch(/nombre comercial —no la categoría/)
-      expect(p).toMatch(/LOS INPUTS SON NOTAS DE UN FORMULARIO/)
-    })
+  // La política es rellenar, pero no a costa de firmar cosas en nombre del usuario:
+  // una marca que no escribió o un ingrediente que no está en la etiqueta son una
+  // declaración falsa de composición dentro de un anuncio que se publica.
+  // El candado sigue en pie —una marca, un ingrediente o una cifra que nadie escribió
+  // es firmar en nombre del usuario— pero ya no manda al hueco vacío: manda a decir algo
+  // cierto de ESTE producto sin nombrar ese dato.
+  it('acota lo que NUNCA se inventa: marcas, ingredientes y cifras', () => {
+    expect(p).toMatch(/LO QUE NO SE INVENTA NUNCA/)
+    expect(p).toMatch(/una MARCA que\s+el usuario no escribió/)
+    expect(p).toMatch(/el hueco NO va vacío/)
+    expect(p).not.toMatch(/si no está ahí, el hueco va vacío/i)
   })
 
-  // ⚠️ LA REGLA CAMBIÓ DE OBJETO (2026-08-24, decisión del dueño del repo). Antes era
-  // "no inventes NADA": lo que no estuviera literal en los inputs dejaba el hueco
-  // pendiente. Ahora lo intocable es la PLANTILLA —el texto que rodea a los corchetes,
-  // que es del anuncio original— y los huecos SÍ se autocompletan deduciendo del
-  // contexto y, si no alcanza, aproximando. Lo que sigue prohibido es lo que el usuario
-  // tendría que salir a demostrar.
-  it('declara intocable la plantilla y autocompletable el hueco', () => {
-    expect(p).toMatch(/LA PLANTILLA NO SE INVENTA/i)
-    expect(p).toMatch(/LO QUE VA DENTRO DE LOS CORCHETES SÍ SE COMPLETA/i)
-  })
-
-  it('sigue prohibiendo lo que el usuario tendría que demostrar', () => {
-    expect(p).toMatch(/premios, avales médicos, estudios clínicos/i)
-  })
-
-  // El hallazgo que corrigió el dueño del repo: la etiqueta es la fuente más autorizada
-  // que existe sobre el producto, y durante un tiempo se leía de la foto, se guardaba y
-  // no llegaba a esta fase — 11 huecos pendientes cuya respuesta estaba en la base.
-  it('pasa el texto de la etiqueta como fuente, y manda adaptarlo, no pegarlo', () => {
-    const conEtiqueta = buildAdaptInstruction(
-      TEMPLATE, FORENSIC, INPUTS,
-      { productDescription: 'Frasco púrpura con gotero', brandingDescription: 'NIACINAMIDA PURA, PHE-RESORCINOL' } as never,
-      extractSlots(TEMPLATE),
-    )
-    expect(conEtiqueta).toContain('TEXTO DE LA ETIQUETA')
-    expect(conEtiqueta).toContain('PHE-RESORCINOL')
-    expect(conEtiqueta).toMatch(/LA ETIQUETA DEL PRODUCTO SÍ CUENTA COMO FUENTE/)
-    expect(conEtiqueta).toMatch(/se ADAPTA, no se pega/)
-  })
-
-  it('sin etiqueta leída, no inventa la sección', () => {
-    expect(p).not.toContain('TEXTO DE LA ETIQUETA')
+  // El ejemplo del "incidente PHE-resorcinol" que este prompt citaba era doblemente
+  // malo: el incidente nunca ocurrió (la etiqueta de esa sesión SÍ decía
+  // PHE-RESORCINOL) y, sobre todo, era un anti-ejemplo con forma de valor — o sea una
+  // plantilla que rellenar. Que no vuelva.
+  it('no trae anti-ejemplos con forma de valor', () => {
+    expect(p).not.toContain('PHE-resorcinol')
+    expect(p).not.toContain('La Roche-Posay')
   })
 
 
@@ -127,16 +67,64 @@ describe('buildAdaptInstruction', () => {
   it('manda copiar la acción observada del corte, con el gotero y el giro', () => {
     expect(p).toContain('CORTES REALES DE LA REFERENCIA')
     expect(p).toMatch(/no\s+se\s+inventa\s+ni\s+se\s+resume/i)
-    expect(p).toMatch(/qué\s+mano,\s+cómo\s+agarra/i)
+    expect(p).toMatch(/qué\s+sostiene\s+cada\s+mano.*cómo\s+agarra/is)
   })
 
-  // El encabezado decía "no reescribas el guion: no se usaría" — texto de cuando
-  // `locuciones` no existía, que contradecía a la sección que sí pide la reescritura.
-  // Lo que tiene que quedar prohibido es escribir OTRO anuncio, no redactar la frase.
-  it('le dice al modelo que adapte el guión, no que escriba uno nuevo', () => {
-    expect(p).toMatch(/TU TRABAJO NO ES ESCRIBIR UN GUION NUEVO/i)
-    expect(p).toMatch(/reordenas, no resumes/i)
-    expect(p).not.toMatch(/no se usar[íi]a/i)
+  // La orden va arriba y no entre los bullets: medido, metida ahí abajo el modelo se
+  // queda con el tono conservador del encabezado y devuelve el doble de pendientes.
+  // ⚠️ Y su ALCANCE es lo que fija este test: se rellena desde los INPUTS, y lo que
+  // ninguno sostiene queda PENDIENTE. La escala vieja tenía un tercer escalón —"lo más
+  // verosímil para un producto de esa categoría"— que es exactamente la licencia para
+  // inventar que la regla nueva prohíbe.
+  // Está medido que esta orden solo se obedece desde la CABECERA: metida entre los
+  // bullets de "reglas de los valores", dos corridas de la misma sesión dieron 4 y 9
+  // pendientes. Y desde el 2026-09-05 no admite excepciones: el guion sale completo.
+  it('la orden de RELLENAR TODO va en la cabecera, sin escalón que la corte', () => {
+    const cabecera = p.slice(0, p.indexOf('── HUECOS ──'))
+    expect(cabecera).toMatch(/RELLENA TODOS LOS HUECOS/)
+    expect(cabecera).toMatch(/Todos, sin excepción/)
+    expect(cabecera).toMatch(/NO\s+ESCRIBAS\s+UN\s+GUION\s+NUEVO/)
+    expect(cabecera).not.toMatch(/NO LO INVENTES/)
+    expect(cabecera).not.toMatch(/NO es una fuente/i)
+  })
+
+  // Punto 12 de la spec: el modelo tiene que ver el guion original AL LADO de su
+  // andamiaje. Sin eso mide cada valor contra la etiqueta del hueco y no contra el
+  // anuncio, que es de dónde salen los valores correctos-para-la-etiqueta e ilegibles
+  // en su frase.
+  it('manda el guion ORIGINAL emparejado con el andamiaje, toma por toma', () => {
+    expect(p).toContain('GUION ORIGINAL Y ANDAMIAJE')
+    expect(p).toMatch(/ORIGINAL:\s+Si estás cansado de las marcas,/)
+    expect(p).toMatch(/ANDAMIAJE:\s+Si estás cansado de \[Problema\],/)
+  })
+
+  // El original es lo que le dice al modelo la FORMA que pide la oración, y lo que
+  // separa dos huecos que la lista cerrada obliga a llamar igual.
+  it('adjunta a cada hueco lo que decía el original ahí', () => {
+    expect(p).toMatch(/Problema#1[\s\S]{0,200}EL ORIGINAL DECÍA AQUÍ: "las marcas"/)
+    expect(p).toMatch(/EL NOMBRE DEL HUECO ES ORIENTATIVO; EL ORIGINAL MANDA/)
+  })
+
+  // Un corte mudo llega con el marcador de campo vacío de la FASE 1. Presentárselo como
+  // "lo que se dijo" le pide adaptar una frase que nadie pronunció.
+  it('una toma muda no se presenta como si hubiera dicho "No aparece"', () => {
+    const mudo = { ...FORENSIC, cortes: [{ ...FORENSIC.cortes[0], dialogo: 'No aparece.' }] } as ForensicReport
+    const q = buildAdaptInstruction(TEMPLATE, mudo, INPUTS, null, extractSlots(TEMPLATE), 'Español peruano de Lima', '')
+    expect(q).toContain('(sin diálogo: toma muda)')
+    expect(q).not.toMatch(/ORIGINAL:\s+No aparece/)
+  })
+
+  it('trae la REGLA DE ADAPTACIÓN LITERAL con su contraejemplo marcado como tal', () => {
+    expect(p).toContain('REGLA DE ADAPTACIÓN LITERAL')
+    expect(p).toMatch(/ADAPTACIÓN:\s+"Si estás cansado de \[nuevo problema\]/)
+    expect(p).toMatch(/CONTRAEJEMPLO: no la copies ni la imites/)
+  })
+
+  it('el andamiaje es la única regla inviolable, con la excepción gramatical', () => {
+    expect(p).toMatch(/ÚNICA REGLA INVIOLABLE ES EL ANDAMIAJE/)
+    expect(p).toMatch(/copia palabra por palabra/)
+    expect(p).toMatch(/concordancia gramatical/)
+    expect(p).toMatch(/Dentro de los corchetes tienes libertad; fuera, ninguna/)
   })
 
   it('lista los huecos con su id y su contexto', () => {
@@ -166,18 +154,19 @@ describe('buildAdaptInstruction', () => {
     expect(p).toContain('tipo de producto')
   })
 
-  // Al revés que antes: vaciar dejó de ser la salida por defecto. Un guión con agujeros
-  // no se puede renderizar y obliga al usuario a escribir a mano lo que el modelo ya
-  // puede deducir del resto de la sesión.
-  it('pide rellenar SIEMPRE, con la escalera de dónde sacar el valor', () => {
-    expect(p).toMatch(/RELLENA SIEMPRE/)
-    expect(p).toMatch(/Está literal en los INPUTS o en la etiqueta/i)
-    expect(p).toMatch(/se DEDUCE de lo que sí hay/i)
-    expect(p).toMatch(/lo más VEROSÍMIL para un producto de esta/i)
-  })
-
-  it('acota el hueco vacío al dato que compromete al usuario', () => {
-    expect(p).toMatch(/Deja `valor` VACÍO solo si/i)
+  // Se invierte a propósito la política anterior ("un hueco vacío es un resultado
+  // correcto"): el guion es un borrador que el usuario corrige línea por línea, y uno
+  // completo se corrige mientras que uno con agujeros hay que rellenarlo a mano. Lo
+  // único que sigue quedando vacío es lo que el usuario tendría que salir a demostrar.
+  // La excepción de los premios/avales/certificaciones la revocó el dueño del repo: el
+  // modelo llena TODO. Lo que no puede es firmar por el usuario, así que ese caso se
+  // resuelve diciendo algo cierto del producto, no dejando el corchete.
+  it('no deja ningún hueco vacío, ni el que compromete al usuario', () => {
+    expect(p).toMatch(/Ningún hueco se deja vacío/)
+    expect(p).toMatch(/aval médico|estudio clínico|certificación/)
+    expect(p).toMatch(/tampoco lo dejas vacío/)
+    expect(p).not.toMatch(/Un hueco se deja VACÍO solo si/)
+    expect(p).not.toMatch(/hueco\s+vac[ií]o\s+es\s+un\s+resultado\s+correcto/i)
   })
 
   it('fija TEXTO EN PANTALLA: NINGUNO', () => {
@@ -193,8 +182,10 @@ describe('buildAdaptInstruction', () => {
   })
 
 
-  it('incluye el acento regional en los INPUTS', () => {
-    expect(p).toContain('ACENTO REGIONAL: Español peruano de Lima')
+  // El acento ya no es un input del usuario: lo infiere la FASE 4 del personaje y
+  // llega por parámetro desde el perfil de voz.
+  it('incluye el acento inferido del personaje', () => {
+    expect(p).toContain('ACENTO DEL PERSONAJE: Español peruano de Lima')
     expect(p).toMatch(/variante\s+regional\s+del\s+español/i)
     expect(p).toMatch(/"tú"\s*\/\s*"vos"/)
   })
@@ -334,39 +325,50 @@ describe('AdaptedScriptSchema', () => {
   })
 })
 
-/**
- * ⚠️ MEDIDO EN UN ANUNCIO REAL. El original decía "si te encuentras en la Galería Santa
- * Lucía"; FASE 2 dejó "en la [ubicación específica]" y el valor correcto era una ciudad,
- * así que el guión salió diciendo "si te encuentras en la Lima".
- *
- * `correcciones` no puede arreglarlo: el artículo es ANDAMIAJE, no valor, y ningún valor
- * de ubicación encaja detrás de "la". El único mecanismo que sirve es `ajustes` — la
- * excepción de la directiva 13 —, y su sección solo describía el caso del adjetivo que
- * no existe.
- */
-describe('buildCoherenceInstruction — desacuerdo de artículo', () => {
-  const instruccion = buildCoherenceInstruction(
-    [{ n: 1, locucion: 'Y si te encuentras en la Lima, tienes que venir a Bloom.' }],
-    [{ id: 'ubicación específica#1', valor: 'Lima', contexto: 'en la [ubicación específica]' }],
-    {
-      productName: 'Top', productDescription: 'x', angle: 'x', targetAudience: 'x',
-      problem: 'x', characterDesc: 'x', characterEthnicity: 'x', accent: 'x',
-      voice: '', constraints: '',
-    },
-    null,
-  )
+// Los tres defectos que salieron al medir la política de rellenar TODO: un verbo en una
+// ranura de sustantivo ("aporta iluminar la piel"), el eco de la palabra pegada al hueco
+// ("un efecto efecto lifting") y una nota-meta dentro del anuncio del usuario
+// ("(sustancia adicional no mencionada)").
+describe('reglas de valor que la política de rellenar todo destapó', () => {
+  const p = buildAdaptInstruction(TEMPLATE, FORENSIC, INPUTS, null, extractSlots(TEMPLATE), 'Español peruano de Lima', '')
 
-  it('nombra el desacuerdo de artículo como caso de `ajustes`, no de `correcciones`', () => {
-    expect(instruccion).toMatch(/ART[IÍ]CULO O LA PREPOSICI[OÓ]N/)
-    expect(instruccion).toMatch(/art[ií]culo es andamiaje, no valor/i)
+  it('exige que el valor encaje en su ranura gramatical', () => {
+    expect(p).toMatch(/ENCAJAR EN SU RANURA/)
+    expect(p).toMatch(/pide un sustantivo/)
+    expect(p).toMatch(/pide un infinitivo/)
   })
 
-  it('trae el caso real con su arreglo, para que no lo resuelva cambiando la ciudad', () => {
-    expect(instruccion).toContain('en la Lima')
-    expect(instruccion).toMatch(/quitar el artículo, no cambiar la ciudad/)
+  it('prohíbe repetir la palabra pegada al hueco', () => {
+    expect(p).toMatch(/NO REPITAS LA PALABRA QUE YA ESTÁ PEGADA AL HUECO/)
   })
 
-  it('conserva el caso del adjetivo que no existe', () => {
-    expect(instruccion).toMatch(/andas muy/)
+  it('prohíbe la nota entre paréntesis como valor', () => {
+    expect(p).toMatch(/nunca es una nota/)
+    expect(p).toMatch(/EL VALOR SE DICE EN VOZ ALTA/)
+  })
+})
+
+
+// El swap del instrumento es el defecto que se midió en la sesión c3dc2777: el forense
+// había visto el cuentagotas en los cortes 1 y 4, y FASE 3 devolvió "frasco" en la mano
+// derecha y "tapón" en la izquierda. Lo causaba el propio prompt, que ofrecía como
+// ejemplo de equivalencia "un frasco se destapa" — con la forma exacta del artefacto que
+// el modelo tenía que producir, y con un producto que ES un frasco.
+describe('el instrumento sobrevive a la adaptación', () => {
+  const p = buildAdaptInstruction(TEMPLATE, FORENSIC, INPUTS, null, extractSlots(TEMPLATE), 'Español peruano de Lima', '')
+  const plano = p.replace(/\s+/g, ' ')
+
+  it('declara que el instrumento no es un dato del producto viejo', () => {
+    expect(plano).toContain('EL INSTRUMENTO SE COPIA TAL CUAL')
+    expect(plano).toMatch(/cuentagotas.*coreograf/i)
+  })
+
+  it('no ofrece un ejemplo de sustitución con la forma de la acción', () => {
+    expect(plano).not.toContain('un frasco se destapa')
+  })
+
+  it('pide el estado de cada mano y prohíbe la escenografía de foto', () => {
+    expect(plano).toContain('qué sostiene cada mano')
+    expect(plano).toMatch(/ni si flota/)
   })
 })

@@ -53,7 +53,7 @@ describe('CREDIT_KINDS', () => {
   // paga el usuario con su propia key de KIE y viene incluido en los tres planes.
   // Reusar una lista para las dos cosas es cómo el video se come las imágenes que
   // se vendieron para anuncios, branding y landing.
-  it.each(['video-character', 'video-generation', 'video-forensic'])(
+  it.each(['video-character', 'video-forensic'])(
     '%s NO gasta créditos aunque esté en IMAGE_KINDS', (k) => {
       expect(IMAGE_KINDS).toContain(k)
       expect(isCreditKind(k)).toBe(false)

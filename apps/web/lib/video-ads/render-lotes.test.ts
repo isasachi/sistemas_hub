@@ -23,12 +23,10 @@ const VOZ = {
 
 const fpInput = (over: Partial<Parameters<typeof scriptFingerprint>[0]> = {}) => ({
   lotes: [lote(1), lote(2)],
-  consistencyBlock: 'Mujer de 25, cabello negro',
-  productDesc: 'Frasco celeste',
-  escenario: 'cocina',
   camaras: ['primer plano', 'plano medio'],
   voz: VOZ,
   images: [{ url: 'https://x/p.png', role: 'la persona' }, { url: 'https://x/prod.png', role: 'el producto' }],
+  producto: 'Frasco de vidrio púrpura con tapón cuentagotas blanco.',
   ...over,
 })
 
@@ -134,41 +132,6 @@ describe('mergeRescue', () => {
 })
 
 describe('scriptFingerprint', () => {
-  // ── Voz en off y hablantes (v8) ─────────────────────────────────────────────
-  // Los dos entran al prompt del lote y deciden qué frames se generan, pero hasta el
-  // 2026-08-21 no entraban a la huella. Se derivan de `forensic_analysis.cortes`, y
-  // `analyze-reference` reescribe esa columna sin limpiar `adapted`: re-analizar una
-  // sesión ya renderizada podía cambiarlos conservando las tomas, y `isPaidResume`
-  // daba `true` sobre contenido distinto.
-
-  it('marcar una toma como voz en off cambia la huella', () => {
-    const off = new Set(['00:00'])
-    expect(scriptFingerprint(fpInput({ enOff: off }))).not.toBe(scriptFingerprint(fpInput()))
-  })
-
-  it('cambiar QUIÉN habla cambia la huella', () => {
-    const a = new Map([['00:00', [{ id: 'p1' }]]])
-    const b = new Map([['00:00', [{ id: 'p2' }]]])
-    expect(scriptFingerprint(fpInput({ quien: a }))).not.toBe(scriptFingerprint(fpInput({ quien: b })))
-  })
-
-  it('mover el off de una toma a otra cambia la huella', () => {
-    // Por eso se hashea POR TOMA y no como un total: un contador agregado daría lo
-    // mismo para "la toma 1 está en off" y "la toma 2 está en off".
-    const dos = [lote(1), lote(2)]
-    dos[1].tomas[0].tiempoOriginal = '00:05'
-    const uno = scriptFingerprint(fpInput({ lotes: dos, enOff: new Set(['00:00']) }))
-    const otro = scriptFingerprint(fpInput({ lotes: dos, enOff: new Set(['00:05']) }))
-    expect(uno).not.toBe(otro)
-  })
-
-  it('sin ninguno de los dos campos sigue siendo estable', () => {
-    // Las sesiones de un personaje sin voz en off no deben depender de que quien llama
-    // pase un Map vacío o no pase nada.
-    expect(scriptFingerprint(fpInput({ enOff: new Set(), quien: new Map() })))
-      .toBe(scriptFingerprint(fpInput()))
-  })
-
   it('es determinista: los mismos datos dan la misma huella', () => {
     expect(scriptFingerprint(fpInput())).toBe(scriptFingerprint(fpInput()))
   })
@@ -186,16 +149,15 @@ describe('scriptFingerprint', () => {
 
   // Ensanchamiento deliberado: rehacer la FASE 4/4.5 cambia la PERSONA y la VOZ, así
   // que reanudar a través de ese cambio pegaría dos personajes distintos en un video.
-  it('cambia si cambia el personaje, la voz o la imagen de referencia', () => {
+  // La identidad viaja ahora en la URL del AVATAR (el prompt ya no lleva el bloque de
+  // consistencia), así que es la imagen la que tiene que mover la huella.
+  it('cambia si cambia el avatar, la voz o la cámara', () => {
     const original = scriptFingerprint(fpInput())
-    expect(scriptFingerprint(fpInput({ consistencyBlock: 'Hombre de 40' }))).not.toBe(original)
     expect(scriptFingerprint(fpInput({ voz: { ...VOZ, acento: 'mexicano' } }))).not.toBe(original)
     expect(scriptFingerprint(fpInput({
       images: [{ url: 'https://x/OTRA.png', role: 'la persona' }, { url: 'https://x/prod.png', role: 'el producto' }],
     }))).not.toBe(original)
-    expect(scriptFingerprint(fpInput({ escenario: 'playa' }))).not.toBe(original)
     expect(scriptFingerprint(fpInput({ camaras: ['plano general', 'plano medio'] }))).not.toBe(original)
-    expect(scriptFingerprint(fpInput({ productDesc: 'Otro frasco' }))).not.toBe(original)
   })
 
   // La cámara pasó de un string único a una por lote: si el reparto de planos entre
@@ -270,7 +232,9 @@ describe('isPaidResume', () => {
   // tomas en buckets de hasta 15 s—, y sin este chequeo el resultado era un video que
   // mezclaba el lote ya renderizado (guión viejo) con los nuevos (guión actual).
   it('misma cantidad de lotes pero contenido distinto: NO es reanudación real', () => {
-    const otraHuella = scriptFingerprint(fpInput({ consistencyBlock: 'Hombre de 40' }))
+    const otraHuella = scriptFingerprint(fpInput({
+      images: [{ url: 'https://x/OTRO-AVATAR.png', role: 'la persona' }, { url: 'https://x/prod.png', role: 'el producto' }],
+    }))
     expect(isPaidResume(true, [pagado(1), pendiente(2)], [lote(1), lote(2)], otraHuella)).toBe(false)
   })
 
@@ -306,36 +270,31 @@ describe('isPaidResume', () => {
   })
 })
 
-/**
- * ⚠️ Veo falla de forma TRANSITORIA. Medido: "The Google model was unable to generate
- * audio for this request. Please try a different prompt." en 1 de 5 lotes, y el MISMO
- * prompt salió bien al reintentarlo. Reintentar es la respuesta correcta — pero antes de
- * esto no se podía, porque un lote fallido conservaba su `taskId` y por tanto quedaba
- * fuera de `pendientes`.
- */
-describe('resumeSeed — un lote fallido se vuelve a intentar', () => {
-  const lote = (n: number, over: Partial<Lote> = {}): Lote => ({
-    n, tomas: [], duracionSeg: 6, prompt: `p${n}`, taskId: null,
-    status: 'idle', videoUrl: null, failMsg: null, scriptHash: 'h', ...over,
-  })
+// Un lote fallido tiene el taskId de la tarea MUERTA. Conservarlo lo dejaba fuera de
+// `pendientes` y "Reintentar" no recreaba nada — con los cinco en fail, el render quedaba
+// trabado para siempre. Medido en producción: KIE devolvió 524 y cobró 0 créditos.
+describe('resumeSeed · lotes fallidos', () => {
+  const base: Lote[] = [
+    { n: 1, tomas: [], duracionSeg: 10, prompt: 'p1', status: 'idle' },
+    { n: 2, tomas: [], duracionSeg: 6, prompt: 'p2', status: 'idle' },
+    { n: 3, tomas: [], duracionSeg: 8, prompt: 'p3', status: 'idle' },
+  ] as unknown as Lote[]
 
-  it('conserva los lotes con video y RECREA el que falló', () => {
-    const base = [lote(1), lote(2), lote(3)]
+  it('devuelve a base el lote que falló, para que se recree', () => {
     const existentes = [
-      lote(1, { taskId: 't1', status: 'success', videoUrl: 'https://cdn/1.mp4' }),
-      lote(2, { taskId: 't2', status: 'fail', failMsg: 'unable to generate audio' }),
-      lote(3, { taskId: 't3', status: 'success', videoUrl: 'https://cdn/3.mp4' }),
-    ]
+      { ...base[0], taskId: 'muerta', status: 'fail', failMsg: 'generate task timeout.' },
+      { ...base[1], taskId: 'ok', status: 'success', videoUrl: 'https://x/1.mp4' },
+      { ...base[2], taskId: 'corriendo', status: 'generating' },
+    ] as unknown as Lote[]
     const seed = resumeSeed(base, existentes)
-    expect(seed[0].taskId).toBe('t1')
-    expect(seed[2].taskId).toBe('t3')
-    // El fallido vuelve a `base`: sin taskId, así que entra en `pendientes` y se recrea.
-    expect(seed[1].taskId).toBeNull()
-    expect(seed[1].status).toBe('idle')
+    expect(seed[0].taskId).toBeUndefined()          // se recrea
+    expect(seed[1].taskId).toBe('ok')               // ya pagado, se conserva
+    expect(seed[2].taskId).toBe('corriendo')        // puede terminar bien, se conserva
+    expect(seed.filter((l) => !l.taskId)).toHaveLength(1)
   })
 
-  it('un lote en curso NO se recrea — todavía puede terminar bien', () => {
-    const seed = resumeSeed([lote(1)], [lote(1, { taskId: 't1', status: 'generating' })])
-    expect(seed[0].taskId).toBe('t1')
+  it('con TODOS fallidos, quedan todos por recrear', () => {
+    const todos = base.map((l, i) => ({ ...l, taskId: `t${i}`, status: 'fail' })) as unknown as Lote[]
+    expect(resumeSeed(base, todos).filter((l) => !l.taskId)).toHaveLength(3)
   })
 })

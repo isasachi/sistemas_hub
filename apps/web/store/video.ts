@@ -56,12 +56,10 @@ interface VideoActions {
   patch: (p: Partial<VideoState>) => void
   hydrateFromSession: (s: VideoSessionResponse) => void
   startNewSession: () => Promise<void>
-  ensureSession: () => Promise<string | null>
-  resetSession: () => void
   setRegens: (m: Record<string, number>) => void
 }
 
-export const useVideoStore = create<VideoState & VideoActions>((set, get) => ({
+export const useVideoStore = create<VideoState & VideoActions>((set) => ({
   ...initialState,
 
   setStep: (step) => set({ step }),
@@ -95,26 +93,6 @@ export const useVideoStore = create<VideoState & VideoActions>((set, get) => ({
         // Section2Character lo toma del `characterUrl` de nivel superior (recién
         // subido puede ir más adelantado que lo que ya hidrató la sesión).
         characterUrl: s.character_url ?? undefined,
-        /**
-         * ⚠️ SIN ESTO SE PERDÍAN LOS PERSONAJES 2-4 AL VOLVER ATRÁS.
-         *
-         * `hydrateFromSession` armaba `inputs` campo por campo y omitía la lista, así
-         * que al reanudar una sesión `inputs.personajes` quedaba vacío y
-         * `Section2Character` caía a su fallback de UNO solo (armado con las columnas
-         * singulares). El riel deja volver a un paso ya alcanzado, así que bastaba
-         * entrar a "Personaje" y darle a Continuar: `POST /inputs` mapea sobre lo que
-         * le manda el wizard —correcto, porque ahí es donde se BORRA un personaje— y
-         * los que no viajaban desaparecían de la fila. Con ellos se iban sus avatares
-         * ya generados (dinero de Nano Banana Pro), la FASE 0 dejaba de bloquear por
-         * su etnia y acento, y el render salía con una persona.
-         *
-         * Se toma la columna cruda y no `personajesDe`: ese accesor SINTETIZA un
-         * personaje desde las columnas singulares cuando la lista es null, y meter ese
-         * sintético acá haría que una sesión de un personaje empezara a escribir la
-         * columna `personajes` solo por haberla abierto — justo lo que el camino
-         * legado evita. Null se mantiene null y el fallback de la sección decide.
-         */
-        personajes: s.personajes ?? undefined,
       },
       validation: s.validation,
       template: s.template,
@@ -141,36 +119,4 @@ export const useVideoStore = create<VideoState & VideoActions>((set, get) => ({
       set({ sessionError: true })
     }
   },
-
-  /**
-   * El id de la sesión, creándola si todavía no existe.
-   *
-   * ⚠️ ES LO QUE SACA LA CREACIÓN DE FILAS DEL MONTAJE DEL WIZARD. Abrir la tool y no
-   * hacer nada creaba una fila: medido sobre la base, 22 de 57 filas de `video_sessions`
-   * (y 103 de 144 de `sessions`) no tenían ni siquiera su primer insumo. El listado del
-   * dashboard las filtra al LEER, pero eso ocultaba el síntoma — se seguían creando.
-   *
-   * ⚠️ El bloqueo que este cambio esperó tanto era de una línea: `startNewSession` no
-   * devuelve el id, y el primer paso lo necesita para firmar la subida a `/upload-url`.
-   * Con esto la fila nace en el primer insumo real, que es donde tiene que nacer.
-   */
-  ensureSession: async () => {
-    const actual = get().sessionId
-    if (actual) return actual
-    await get().startNewSession()
-    return get().sessionId
-  },
-
-  /**
-   * Vacía el wizard SIN crear ninguna fila.
-   *
-   * ⚠️ EXISTE POR UNA REGRESIÓN MEDIDA. Cuando el montaje del wizard creaba la sesión, el
-   * botón "Empezar" de la intro (`ToolIntro.empezar`) solo tenía que borrar el id de
-   * `localStorage` y navegar: el wizard llegaba vacío y creaba una fila nueva. Al mover la
-   * creación al primer insumo, ese borrado dejó de alcanzar — **el store de zustand es un
-   * singleton de MÓDULO y sobrevive la navegación del cliente**, así que el wizard se
-   * remontaba con la sesión anterior todavía en memoria y el usuario aterrizaba en el
-   * último paso de su sesión anterior en vez de en uno nuevo.
-   */
-  resetSession: () => set({ ...initialState }),
 }))

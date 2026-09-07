@@ -43,7 +43,6 @@ vi.mock('../../lib/credits', () => ({ checkCredits: async () => ({ blocked: null
 
 import {
   checkGenQuota, checkGlobalBackstop, recordGenQuota, GEN_PER_STEP_LIMIT, GEN_GLOBAL_DAILY_LIMIT, isImageKind,
-  VIDEO_GENERATION_LIMIT,
 } from '../../lib/gen-quota'
 
 beforeEach(() => { rows.length = 0 })
@@ -117,16 +116,20 @@ describe('texto', () => {
 // quedarse sin regeneraciones, ni uno de 4 quedar imposible de completar, cuando el
 // tope real es cuántas veces se intentó generar EL video, no cuántas llamadas a KIE
 // hizo ese intento.
-describe('video-generation: cuota por VIDEO, no por lote', () => {
-  it('video-generation entra al cap per-step; video-render queda AFUERA (ya no topa)', () => {
-    expect(isImageKind('video-generation')).toBe(true)
+// 2026-09-07 (decisión del dueño del repo): el render de video no tiene tope de
+// regeneraciones, ni por video ni por lote. Lo paga el usuario con su key de KIE; el
+// único freno es el backstop diario global. Antes existía VIDEO_GENERATION_LIMIT = 3.
+describe('video-generation: sin tope per-step, igual que video-render', () => {
+  it('ninguno de los dos kinds del render entra al cap per-step', () => {
+    expect(isImageKind('video-generation')).toBe(false)
     expect(isImageKind('video-render')).toBe(false)
   })
 
-  it('permite VIDEO_GENERATION_LIMIT generaciones y bloquea la siguiente', async () => {
+  it('video-generation sigue escribiendo fila (backstop global y panel de consumo) pero nunca bloquea per-step', async () => {
     const out = []
-    for (let i = 0; i < VIDEO_GENERATION_LIMIT + 1; i++) out.push(await gen('s1', 'video-generation'))
-    expect(out.map((o) => o.blocked)).toEqual([...Array(VIDEO_GENERATION_LIMIT).fill(false), true])
+    for (let i = 0; i < 10; i++) out.push(await gen('s1', 'video-generation'))
+    expect(out.every((o) => !o.blocked)).toBe(true)
+    expect(rows.filter((r) => r.kind === 'video-generation').length).toBe(10)
   })
 
   it('video-render sigue escribiendo fila (backstop global) pero nunca bloquea per-step', async () => {

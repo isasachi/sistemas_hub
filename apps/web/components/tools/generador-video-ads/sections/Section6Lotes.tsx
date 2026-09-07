@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Download } from 'lucide-react'
 import { useVideoStore } from '@/store/video'
-import { groupIntoLotes, planoPorTiempoDe, LOTE_MAX_SEC, type Lote } from '@/lib/video-ads/lotes'
+import { groupIntoLotes, type Lote } from '@/lib/video-ads/lotes'
 import { isInFlight, isStuck } from '@/lib/video-ads/lote-ui'
 import BackToDashboard from '@/components/tools/ui/BackToDashboard'
 import { btnPrimary, btnGhost, errorBox, warnBox, spinner, seg } from './shared'
@@ -17,6 +17,7 @@ export default function Section6Lotes() {
   const { sessionId, adapted, lotes, forensicAnalysis, patch } = useVideoStore()
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [bajando, setBajando] = useState(false)
   const [running, setRunning] = useState(!!lotes?.some(isInFlight))
   // Fix round 1: un fetch que falla (red caída, tab dormido y despierto, DNS) NO
   // significa que el render terminó — el proveedor lo sigue procesando del otro
@@ -33,16 +34,10 @@ export default function Section6Lotes() {
   // si la caída fue transitoria, el próximo tick se recupera solo; si es persistente,
   // el aviso se queda visible hasta que se recupere o el usuario recargue.
   const [connectionLost, setConnectionLost] = useState(false)
-  const [bajando, setBajando] = useState(false)
   const timer = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Preview local: cuántos renders va a costar, ANTES de gastarlos.
-  // Con el MISMO reparto que el render: sin `planoPorTiempo` esta cuenta ignoraba la
-  // frontera de plano y prometía menos clips —o sea menos llamadas pagadas— de los que
-  // el servidor iba a crear un click después.
-  const preview = adapted
-    ? groupIntoLotes(adapted.tomas, planoPorTiempoDe(forensicAnalysis?.cortes))
-    : []
+  const preview = adapted ? groupIntoLotes(adapted.tomas, forensicAnalysis?.cortes ?? []) : []
 
   useEffect(() => {
     if (!running || !sessionId) return
@@ -109,16 +104,37 @@ export default function Section6Lotes() {
     }
   }
 
+  // Un clip suelto que salió mal: se re-renderiza SOLO ese lote con el mismo prompt
+  // (otro sorteo del modelo), sin pasar por "generar otra versión", que re-renderiza
+  // los N lotes. Lo paga la key de KIE del usuario, no la cuota del hub.
+  async function rerender(n: number) {
+    if (!sessionId || submitting) return
+    setSubmitting(true); setError(null)
+    try {
+      const res = await fetch(`/api/generador-video-ads/sessions/${sessionId}/rerender-lote`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ n }),
+      })
+      const data = (await res.json()) as { lotes?: Lote[]; error?: string }
+      if (data.lotes) patch({ lotes: data.lotes })
+      if (!res.ok) throw new Error(data.error ?? 'No se pudo re-renderizar el lote')
+      setRunning(true)
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   if (!lotes?.length) {
     return (
       <div className="flex flex-col gap-4">
-        <div className="rounded-2xl border border-white/[0.06] bg-[#2a0f1a] px-4 py-4">
+        <div className="rounded-2xl border border-white/[0.06] bg-[#121214] px-4 py-4">
           <div className="mb-2.5 text-[11px] font-semibold uppercase tracking-wide text-[#c9a227]">
-            {preview.length} {preview.length === 1 ? 'lote' : 'lotes'} de máximo {LOTE_MAX_SEC} s
+            {preview.length} {preview.length === 1 ? 'lote' : 'lotes'} de máximo 15 s
           </div>
           <ol className="flex flex-col gap-1.5">
             {preview.map((l) => (
-              <li key={l.n} className="text-[12.5px] text-[#c9b4ae]">
+              <li key={l.n} className="text-[12.5px] text-[#cfcfcf]">
                 <span className="mr-2 font-mono text-[11px] text-[#8b8b8b]">Lote {l.n}</span>
                 Tomas {l.tomas[0].n}–{l.tomas[l.tomas.length - 1].n} · {seg(l.duracionSeg)}
               </li>
@@ -130,21 +146,17 @@ export default function Section6Lotes() {
                 sigue siendo una sola generación. Decir "consume N generaciones" era
                 literalmente falso y le hacía creer al usuario que un guión de varios
                 lotes no le iba a alcanzar la cuota. */}
-            Esto produce <strong className="text-[#c9b4ae]">
+            Esto produce <strong className="text-[#cfcfcf]">
             {preview.length} {preview.length === 1 ? 'clip' : 'clips'}</strong> en{' '}
-            <strong className="text-[#c9b4ae]">
+            <strong className="text-[#cfcfcf]">
             {preview.length === 1 ? 'un render' : `${preview.length} renders`}</strong>, pero
-            consume <strong className="text-[#c9b4ae]">una sola generación</strong> de tu cuota:
+            consume <strong className="text-[#cfcfcf]">una sola generación</strong> de tu cuota:
             se cuenta por video, no por lote. Los clips se descargan por separado y los unes
             en tu editor.
           </p>
         </div>
         {error && <div className={errorBox}>{error}</div>}
-        {/* `running` además de `submitting`: el POST vuelve enseguida (crea las tareas
-            y responde), pero el render sigue corriendo minutos después. Sin esto, un
-            click de más encadena otra petición y agota los créditos de KIE del usuario.
-            El servidor ya responde 409 al duplicado — esto es para que no llegue. */}
-        <button onClick={() => submit(false)} disabled={submitting || running} className={btnPrimary}>
+        <button onClick={() => submit(false)} disabled={submitting} className={btnPrimary}>
           {submitting ? <><span className={spinner} />Iniciando el render...</> : `Generar los ${preview.length} lotes →`}
         </button>
       </div>
@@ -221,7 +233,7 @@ export default function Section6Lotes() {
         </div>
       )}
       {lotes.map((l) => (
-        <div key={l.n} className="rounded-2xl border border-white/[0.06] bg-[#2a0f1a] p-3">
+        <div key={l.n} className="rounded-2xl border border-white/[0.06] bg-[#121214] p-3">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-[11px] font-semibold uppercase tracking-wide text-[#c9a227]">
               Lote {l.n} · {seg(l.duracionSeg)}
@@ -247,6 +259,11 @@ export default function Section6Lotes() {
               </span>
             </div>
           )}
+          {!running && !!l.taskId && !isInFlight(l) && (
+            <button onClick={() => rerender(l.n)} disabled={submitting} className={`${btnGhost} mt-2`}>
+              {submitting ? <><span className={spinner} />Enviando...</> : `Renderizar de nuevo solo el lote ${l.n}`}
+            </button>
+          )}
         </div>
       ))}
       {/* Mientras sigue corriendo el polling, el error ya se explica arriba con el
@@ -254,11 +271,11 @@ export default function Section6Lotes() {
           confundiría "seguimos reintentando solos" con "algo requiere tu acción". */}
       {error && !running && <div className={errorBox}>{error}</div>}
       {stuck && (
-        <button onClick={() => submit(true)} disabled={submitting || running} className={btnPrimary}>
+        <button onClick={() => submit(true)} disabled={submitting} className={btnPrimary}>
           {submitting ? <><span className={spinner} />Reintentando...</> : 'Reintentar el render →'}
         </button>
       )}
-      {listos > 1 && (
+      {!running && listos > 1 && (
         <button onClick={descargarTodo} disabled={bajando} className={btnPrimary}>
           {bajando
             ? <><span className={spinner} />Armando el video...</>
@@ -272,11 +289,13 @@ export default function Section6Lotes() {
               (la huella de contenido deja de coincidir). Si nada cambió, el servidor
               devuelve los mismos lotes sin gastar cuota — silencioso, no un error. */}
           <p className="text-[11.5px] leading-relaxed text-[#8b8b8b]">
-            ¿No te convence? Vuelve al paso <strong className="text-[#c9b4ae]">Guión</strong> y
-            adáptalo otra vez antes de generar de nuevo — si no cambia nada, este botón
-            no crea una versión distinta.
+            ¿Salió mal un solo clip? Usa <strong className="text-[#cfcfcf]">Renderizar de nuevo
+            solo el lote</strong> en su tarjeta: repite ese lote con el mismo prompt y otro sorteo
+            del modelo, y lo paga tu cuenta de KIE. ¿No te convence el video entero? Vuelve al paso{' '}
+            <strong className="text-[#cfcfcf]">Guión</strong> y adáptalo otra vez antes de generar
+            de nuevo — si no cambia nada, este botón no crea una versión distinta.
           </p>
-          <button onClick={() => submit(true)} disabled={submitting || running} className={btnGhost}>
+          <button onClick={() => submit(true)} disabled={submitting} className={btnGhost}>
             {submitting ? <><span className={spinner} />Generando...</> : 'Generar otra versión →'}
           </button>
         </div>

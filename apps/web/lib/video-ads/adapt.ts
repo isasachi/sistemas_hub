@@ -35,60 +35,27 @@ export const SlotValuesSchema = z.object({
     accionVisual: z.string(),
   })),
   /**
-   * La locución de cada toma REESCRITA por el modelo, como la escribiría el spec: el
-   * guión original con los datos nuevos puestos y la gramática cosida a mano.
+   * LA ÚNICA EXCEPCIÓN A LA COPIA LITERAL DEL ANDAMIAJE, y existe porque el dueño del
+   * repo la nombró: "la única razón para cambiar una palabra en el andamiaje es aplicar
+   * un ajuste gramatical causado por el llenado de los blanks".
    *
-   * No sustituye a `valores` — se piden las dos cosas en la misma llamada. `valores`
-   * alimenta el relleno determinista, que es el PISO al que se cae cuando la reescritura
-   * deriva demasiado del andamiaje (`acceptRewrite`, fill.ts). Por eso el sistema nunca
-   * queda peor que con el relleno solo: como mucho, igual.
-   */
-  locuciones: z.array(z.object({
-    n: z.number(),
-    texto: z.string(),
-  })).default([]),
-})
-export type SlotValues = z.infer<typeof SlotValuesSchema>
-
-/**
- * Segunda pasada de la FASE 3: releer el guión YA ARMADO y corregir los valores que no
- * encajan en su frase.
- *
- * Existe porque la primera pasada juzga a ciegas. El modelo devuelve pares `id → valor`
- * y el guión lo ensambla `fillTemplate` con código, así que nunca lee el resultado: mide
- * cada valor contra la ETIQUETA del hueco, no contra la oración que queda. Con eso, en
- * dos pruebas reales, salieron valores que respondían bien a su etiqueta y mal a su
- * frase — un adjetivo pedido donde se volcó una oración entera, un ingrediente pedido
- * donde se puso un beneficio, una cantidad pedida donde se puso un momento del día.
- *
- * Devuelve SOLO correcciones de valores, nunca texto de locución. Si pudiera devolver la
- * frase, alguien terminaría usándola y se perdería en silencio la fidelidad del 100%
- * fuera de los corchetes, que es lo único que este diseño garantiza por construcción.
- */
-export const CoherenceSchema = z.object({
-  correcciones: z.array(z.object({
-    id: z.string(),
-    /** Valor nuevo. VACÍO = borrar el valor: el hueco queda pendiente y lo escribe el usuario. */
-    valor: z.string(),
-    motivo: z.string(),
-  })),
-  /**
-   * La ÚNICA excepción a la copia literal, y solo sobre el guión adaptado — la plantilla
-   * sigue siendo espejo del original. Es la licencia de la directiva 13 del spec
-   * ("naturalidad mínima indispensable"), para las frases donde NINGÚN valor cabe en el
-   * andamiaje congelado ("andas muy ___" con un producto que no tiene adjetivo que poner).
+   * El andamiaje lo copia CÓDIGO, así que sin esto el modelo no puede arreglar una
+   * concordancia que su propio valor rompió: medido 1 de 3, "Por sus fórmula
+   * concentrada" — el original decía "ingredientes naturales" (plural) y el valor nuevo
+   * es singular. Ningún valor arregla eso, porque lo que sobra es el "sus".
    *
-   * `idHueco` ata el cambio a su justificación: código verifica que ese hueco exista en
-   * esa toma. Sin eso, sería un permiso abierto para reescribir cualquier frase.
+   * Opcional: una sesión sin ajustes es el caso normal.
    */
   ajustes: z.array(z.object({
     n: z.number(),
+    /** El hueco cuyo valor rompió la concordancia. Ata el cambio a su justificación. */
     idHueco: z.string(),
+    /** La locución de esa toma con el ajuste aplicado, y NADA más cambiado. */
     locucion: z.string(),
     motivo: z.string(),
-  })).default([]),
+  })).optional(),
 })
-export type Coherence = z.infer<typeof CoherenceSchema>
+export type SlotValues = z.infer<typeof SlotValuesSchema>
 
 export const TomaFinalSchema = z.object({
   n: z.number(),
@@ -119,17 +86,18 @@ export const AdaptedScriptSchema = z.object({
   tomas: z.array(TomaFinalSchema).min(1),
   variablesPendientes: z.array(z.string()),
   /**
-   * Tomas cuyo andamiaje se ajustó, con el texto de ANTES. Se guarda el texto y no solo
-   * el número de toma porque la justificación entera de permitir el cambio es que sea
-   * auditable: un contador no le dice al usuario qué se movió.
+   * Los ajustes de andamiaje que se aplicaron, con el texto de ANTES. Es un registro
+   * auditable y no un contador, porque la justificación entera de permitir el cambio es
+   * poder verlo.
    *
-   * `.optional()` de verdad, no solo ausente en los fixtures: `generate-lotes` hace
-   * `AdaptedScriptSchema.parse` sobre el jsonb guardado, y sin esto cada sesión anterior
-   * a este cambio reventaría con un 500 al renderizar.
+   * `.optional()` DE VERDAD: `generate-lotes` hace `AdaptedScriptSchema.parse` sobre el
+   * jsonb ya persistido, así que sin esto toda sesión anterior reventaría con un 500 al
+   * renderizar.
    */
   ajustesAndamiaje: z.array(z.object({
     n: z.number(),
     antes: z.string(),
+    ahora: z.string(),
     motivo: z.string(),
   })).optional(),
 })
@@ -210,63 +178,94 @@ export function resyncTomaDurations(
   return { ...adapted, tomas: adapted.tomas.map((t, i) => ({ ...t, duracionSeg: cortes[i].duracionSeg })) }
 }
 
+/**
+ * El diálogo del corte tal como se le puede mostrar al modelo como "lo que decía el
+ * original". Un corte MUDO llega con `"No aparece"` —el marcador que el prompt de la
+ * FASE 1 pide para `textoOverlay` y que el modelo generaliza a `dialogo`— y mostrarlo
+ * como texto a espejar le pide adaptar una frase que nadie dijo.
+ *
+ * ponytail: se descarta solo la oración COMPLETA que es el marcador, así que "la mancha
+ * ya no aparece" sobrevive; el arreglo de raíz es limpiarlo en la FASE 1.
+ */
+const dichoEn = (d: string) => (/^\s*(no aparece\.?\s*)+$/i.test(d ?? '') ? '' : d)
+
 export function buildAdaptInstruction(
   template: ScriptTemplate,
   forensic: ForensicReport,
   inputs: UserInputs,
   scan: ProductScan | null,
   slots: Slot[],
+  acento: string,
+  /** Quién aparece en el video: el bloque de consistencia que produjo la FASE 4. */
+  personaje: string,
 ): string {
-  const porN = new Map(forensic.cortes.map((c) => [c.n, c.dialogo]))
+  // QUÉ DECÍA EL ORIGINAL EN CADA HUECO. Sale del `alignSlots` que ya se calculaba y
+  // se tiraba, y es la mitad que le faltaba a esta fase: la etiqueta del hueco no dice
+  // la FORMA que la oración pide (sustantivo o infinitivo, género, número) y el
+  // original sí. También es lo único que separa dos huecos que comparten nombre —
+  // inevitable con una lista cerrada de variables.
   const originales = slotOriginals(template, forensic.cortes)
+  const porN = new Map(forensic.cortes.map((c) => [c.n, c.dialogo]))
   return [
     'Actúa como estratega de marketing de respuesta directa.',
     '',
-    // ⚠️ Este encabezado decía "no reescribas el guion: no se usaría" — texto de cuando
-    // `locuciones` no existía. Quedó contradiciendo a la sección que SÍ le pide reescribir,
-    // y medido sobre la sesión real la reescritura salía tan pegada como el relleno
-    // automático ("andas muy no poder dormir", "ayuda a el funcionamiento"): el modelo
-    // hacía caso a la primera instrucción, que es la que le decía que no valía la pena.
-    'TU TRABAJO NO ES ESCRIBIR UN GUION NUEVO. El guion ya existe: es el del video de',
-    'referencia, que tienes abajo palabra por palabra. Lo que haces es ADAPTARLO: cambiar',
-    'los datos del producto viejo por los del nuevo y dejar la frase bien escrita. No',
-    'reordenas, no resumes, no mejoras el argumento, no agregas nada.',
+    // La orden de rellenar va en la SEGUNDA LÍNEA y no entre los bullets: metida ahí
+    // abajo, el modelo se queda con el tono conservador del encabezado y deja huecos.
+    'NO ESCRIBAS UN GUION NUEVO. El guion ya existe: es el del video de referencia, y lo',
+    'tienes abajo palabra por palabra junto a la plantilla con sus huecos. Tu trabajo es',
+    'sustituir las variables con los INPUTS del usuario, y nada más.',
     '',
-    // ⚠️ VA ACÁ ARRIBA Y NO SOLO EN LAS REGLAS DE ABAJO. Medido sobre una sesión real:
-    // con la orden metida entre los quince bullets de "reglas de los valores", dos
-    // corridas del mismo guión dejaron 4 y 9 huecos pendientes — el modelo se queda con
-    // el tono conservador del encabezado y vacía. Una instrucción que compite con otras
-    // quince gana poco; puesta como segunda línea del prompt, manda.
-    'EL GUION SALE COMPLETO. Ningún hueco se queda sin rellenar: los rellenas con lo que',
-    'el usuario entregó, con lo que se deduzca de ello y, cuando ni eso alcanza, con lo',
-    'más verosímil para un producto de esta categoría. El usuario lo va a leer y corregir',
-    'antes de renderizar, así que un borrador completo le sirve y uno con agujeros no: un',
-    'hueco sin rellenar se lee EN VOZ ALTA dentro del video. La única excepción está al',
-    'final de las reglas de los valores y es corta.',
+    'RELLENA TODOS LOS HUECOS. Todos, sin excepción: el guion tiene que salir completo y',
+    'listo para leerse en voz alta. Un corchete que sobrevive se pronuncia en el video.',
+    'Para cada hueco, en este orden: (1) lo que está literal en un INPUT o en la etiqueta',
+    'del envase; (2) lo que se deduzca de ellos — el ángulo, el problema, el público, la',
+    'categoría, lo que se ve en la foto del producto; (3) lo más razonable para un',
+    'producto de esa categoría, dicho sin comprometer a nadie.',
     '',
-    // El contexto que el spec tiene gratis por correr de una sola pasada: el guión
-    // original DELANTE. Sin esto, un hueco `[producto]` solo dice "acá va un producto" y
-    // la descripción de la categoría es una respuesta tan válida como el nombre
-    // comercial que había ahí. Es la mitad que sostiene todo lo demás — el `original`
-    // por hueco de más abajo se cae cuando `alignSlots` no alinea, esto no.
-    '── EL ORIGINAL, TOMA POR TOMA ──',
-    'A la izquierda lo que se DICE en el video de referencia; a la derecha la plantilla',
-    'que se sacó de él, que es ese mismo texto con los datos del nicho viejo vaciados. Tu',
-    'trabajo es volver a llenar esos huecos, con los datos del producto NUEVO.',
-    ...template.tomas.flatMap((t) => [
-      `  Toma ${t.n}`,
-      `    ORIGINAL:  ${JSON.stringify(porN.get(t.n) ?? '(no disponible)')}`,
-      `    PLANTILLA: ${JSON.stringify(t.locucion)}`,
-    ]),
+    '── AJUSTE GRAMATICAL DEL ANDAMIAJE (`ajustes`) ──',
+    'Hay frases donde ningún valor cabe porque el andamiaje concuerda con el dato VIEJO:',
+    'el original decía "Por sus ingredientes naturales" (plural) y tu valor es singular,',
+    'así que "Por sus fórmula concentrada" queda mal escrito y no hay valor que lo',
+    'arregle — lo que sobra es el "sus".',
+    'Para esos casos, y SOLO para esos, devuelve un `ajustes` con la toma, el id del',
+    'hueco que rompió la concordancia, la locución entera ya corregida y el motivo.',
+    'Se permite mover artículo, género, número, preposición y tiempo verbal. No se',
+    'permite reescribir la frase, cambiar su sentido, resolver otro hueco ni agregar',
+    'palabras que aporten información. Si la frase ya está bien escrita, NO mandes',
+    'ningún ajuste para ella.',
+    '',
+    'LA ÚNICA REGLA INVIOLABLE ES EL ANDAMIAJE: el texto que rodea a los corchetes es el',
+    'del anuncio original y se copia palabra por palabra. Lo reconstruye el código, así',
+    'que no lo reescribas — lo único que puede moverse ahí es la concordancia gramatical',
+    '(género, número, artículo, tiempo verbal) cuando el valor que pusiste la rompa.',
+    'Dentro de los corchetes tienes libertad; fuera, ninguna.',
     '',
     '── HUECOS ──',
-    'Devuelve un `valores` por cada `id` de esta lista, exactamente estos ids.',
-    'Donde aparece "el original decía", ese es el texto que ocupaba ese hueco en el video',
-    'de referencia: es lo que tienes que sustituir, no copiar.',
+    'Devuelve un `valores` por cada `id` de esta lista, exactamente estos ids:',
     ...slots.map((sl) => {
-      const o = originales[sl.id]
-      return `  ${sl.id}  ·  ${sl.contexto}${o ? `  ·  el original decía: ${JSON.stringify(o)}` : ''}`
+      const orig = originales[sl.id]
+      return `  ${sl.id}  ·  ${sl.contexto}` + (orig ? `\n      EL ORIGINAL DECÍA AQUÍ: "${orig}"` : '')
     }),
+    '',
+    // La regla va DENTRO del bloque de huecos, pegada a la lista: este repo tiene
+    // medido tres veces que una regla lejos de su campo es una sugerencia.
+    'EL NOMBRE DEL HUECO ES ORIENTATIVO; EL ORIGINAL MANDA. El nombre describe el ROL del',
+    'dato, no su forma, y dos huecos distintos se llaman igual a menudo. Lo que decía el',
+    'original te dice DOS cosas que el nombre no: cuál es cuál, y la forma exacta que la',
+    'oración pide ahí.',
+    '',
+    'ANTES DE ESCRIBIR CADA VALOR, MIRA QUÉ CLASE DE PALABRA ES SU ORIGINAL Y ESCRIBE UNA',
+    'DE LA MISMA CLASE. Si el original es un sustantivo ("luminosidad"), el tuyo también',
+    '—no "iluminar"—; si es un infinitivo ("hidratar"), el tuyo también; si va en',
+    'femenino plural, el tuyo también. Es la comprobación más barata que tienes y evita',
+    'el defecto más frecuente de este paso: un valor correcto para su rol e imposible en',
+    'su frase.',
+    '',
+    'HUECOS NUMERADOS = ENUMERACIÓN: cada uno lleva un dato DISTINTO de la misma fuente.',
+    'Si son tres ingredientes, busca los TRES en la etiqueta antes de decidir que no hay',
+    'un tercero — la etiqueta suele listar más de los que recuerdas. Nunca rellenes uno',
+    'con "ninguno", con un guion ni con una aclaración: eso se lee en voz alta.',
+    'Si dos huecos con el mismo nombre tenían originales distintos, sus valores también.',
     '',
     'Reglas de los valores:',
     '  - El valor sustituye SOLO lo que estaba entre corchetes; lo de alrededor ya está',
@@ -278,33 +277,6 @@ export function buildAdaptInstruction(
     '    llama", el NOMBRE COMERCIAL. Son tres datos distintos y rellenarlos igual deja',
     '    una frase que se muerde la cola. Lo mismo con dos huecos de zona del cuerpo en',
     '    la misma frase: uno es uno y el otro es el otro, nunca el mismo.',
-    // El caso que motivó esto: la FASE 2 bautizó `[tipo de producto]` un hueco donde el
-    // original decía "Gomi Energy" —un nombre comercial—, y el modelo respondía a la
-    // etiqueta ("gomitas de melatonina"), que para esa etiqueta es correcto. La etiqueta
-    // la escribió otro modelo; el original es un hecho del video.
-    '  - EL NOMBRE DEL HUECO ES ORIENTATIVO; EL ORIGINAL MANDA. La etiqueta entre',
-    '    corchetes la escribió otro paso y a veces nombra mal el dato: puede decir "tipo de',
-    '    producto" donde el original tenía un nombre comercial. Si las dos se contradicen,',
-    '    gana lo que decía el original.',
-    '  - MISMA FUNCIÓN Y MISMA FORMA QUE EL ORIGINAL. Tu valor es el equivalente, para el',
-    '    producto nuevo, de lo que había ahí: si el original era un nombre comercial, va',
-    '    un nombre comercial —no la categoría ni la descripción de qué es—; si era una',
-    '    forma corta de nombrar al público, va otra igual de corta —no la definición',
-    '    demográfica entera—. Mismo tipo de dato y aproximadamente el mismo número de',
-    '    palabras. Una frase del original que cumplía una función, adaptada, cumple esa',
-    '    misma función.',
-    // "Ella" → "adultos y jóvenes" pasaba la regla de arriba (es corto) y aun así perdía
-    // lo único que ese hueco decía: a quién le habla el personaje, en qué persona y en
-    // qué género. Nada conectaba el hueco con quién está en cámara.
-    '  - CONSERVA LA PERSONA Y EL GÉNERO DEL ORIGINAL. Si el original le hablaba a alguien',
-    '    en concreto ("para ella", "para ti"), el tuyo también: un hueco de público no se',
-    '    cambia por una franja demográfica solo porque quepa. Quien habla es el PERSONAJE',
-    '    de los INPUTS, así que el género y el tratamiento salen de ahí.',
-    '  - LOS INPUTS SON NOTAS DE UN FORMULARIO, no texto listo para pegar. Están escritos',
-    '    como apuntes sueltos ("adultos y jóvenes desde los 12 años", "no puedo dormir por',
-    '    las noches") y no como parte de una oración. Volcarlos tal cual dentro de una',
-    '    frase que pedía una o dos palabras deja el guión ilegible: hay que sacar el dato y',
-    '    darle la forma que la frase pide. El original te muestra cuál es esa forma.',
     '  - Encaja en género, número y en la forma que pide la oración. El contexto te',
     '    muestra las palabras vecinas justamente para eso.',
     '  - Forma CORTA. El hueco ocupa el lugar de una palabra o dos, y la locución va',
@@ -312,92 +284,82 @@ export function buildAdaptInstruction(
     '    producto donde iba "serum" alarga el audio y lo desincroniza de la imagen.',
     '  - NUNCA uses el nombre del hueco como valor: "tipo de producto" es la etiqueta del',
     '    agujero, no un valor.',
+    '  - EL VALOR TIENE QUE ENCAJAR EN SU RANURA, no solo responder a su etiqueta. Lee la',
+    '    frase entera con el valor puesto antes de darla por buena: si delante del hueco',
+    '    hay "aporta", la ranura pide un sustantivo y "iluminar la piel" la rompe;',
+    '    si hay "nos ayuda a", pide un infinitivo. El nombre del hueco describe el ROL',
+    '    del dato, no su forma gramatical: la forma la manda la frase.',
+    '  - NO REPITAS LA PALABRA QUE YA ESTÁ PEGADA AL HUECO. Si el andamiaje dice "nos da',
+    '    un efecto ⟦…⟧", el valor es "lifting", no "efecto lifting": la frase quedaría',
+    '    diciendo "un efecto efecto lifting".',
+    '  - EL VALOR SE DICE EN VOZ ALTA, así que nunca es una nota ni una aclaración entre',
+    '    paréntesis. "(sustancia adicional no mencionada)" no es un valor: es decirle al',
+    '    usuario que no sabías, dentro de su anuncio. Si no tienes el dato exacto, pon el',
+    '    que sí puedes sostener sobre este producto.',
     '  - NUNCA devuelvas la frase entera ya armada. El valor es SOLO lo que va dentro del',
     '    corchete: si el contexto es "es el ⟦Producto⟧ de la marca", el valor son una o',
     '    dos palabras, jamás algo que empiece por "es el" ni que incluya "de la marca".',
     '    Un valor que repite las palabras vecinas se descarta automáticamente y el hueco',
     '    queda sin rellenar.',
-    '  - RELLENA SIEMPRE. Ningún hueco se queda vacío: un guión con agujeros no se',
-    '    puede renderizar y obliga al usuario a escribir a mano lo que tú ya puedes',
-    '    deducir. El orden para elegir el valor es este, y solo se baja un escalón',
-    '    cuando el de arriba no da respuesta:',
-    '      1. Está literal en los INPUTS o en la etiqueta del envase → cópialo (con la',
-    '         forma que pida la frase; la etiqueta se traduce, no se pega).',
-    '      2. No está literal pero se DEDUCE de lo que sí hay: el ángulo, el problema,',
-    '         el público, la categoría del producto, lo que se ve en la foto.',
-    '      3. Ni siquiera se deduce → escribe lo más VEROSÍMIL para un producto de esta',
-    '         categoría. Que sea corriente y creíble, nunca espectacular: si te falta un',
-    '         plazo, "en pocas semanas" antes que "en 3 días"; si te falta una cifra, la',
-    '         que un producto así tendría de verdad. Es un borrador que el usuario va a',
-    '         leer y corregir, no una ficha técnica.',
-    '  - Deja `valor` VACÍO solo si rellenarlo exigiría afirmar algo que el usuario',
-    '    tendría que desmentir — un premio, un aval médico, un estudio clínico, una',
-    '    certificación o una garantía que nadie mencionó.',
-    // ⚠️ MEDIDO: un hueco de ingrediente volvió como "hepéres", que no es una palabra —
-    // el modelo intentó reproducir de memoria un componente de la etiqueta
-    // (PHE-RESORCINOL) y lo destrozó. Un ingrediente es una afirmación verificable sobre
-    // la fórmula: la escalera de deducción del punto 3 NO aplica.
-    '  - ⚠️ UN INGREDIENTE O COMPONENTE SE COPIA DE LA ETIQUETA, LETRA POR LETRA.',
-    '    No se deduce, no se aproxima y no se completa con lo que sabes de la categoría.',
-    '    Es una afirmación verificable sobre la fórmula: si el envase no lo dice, el',
-    '    producto no lo tiene.',
-    '    Antes de escribir un ingrediente, búscalo en el texto de la etiqueta que tienes',
-    '    arriba. ¿No está ahí, tal cual? Entonces NO va. Usa otro que sí esté, o deja el',
-    '    hueco vacío — un hueco es un minuto de trabajo para el usuario; un ingrediente',
-    '    falso es una devolución.',
-    // ⚠️ MEDIDO EN DOS CORRIDAS DE LA MISMA SESIÓN. Primero devolvió "hepéres", que no
-    // es una palabra. Con la regla puesta en una versión más suave, devolvió "HEPES" —
-    // un químico REAL que tampoco está en esa etiqueta. O sea el modelo no estaba
-    // inventando al azar: estaba completando de memoria, y prohibir "inventar" no lo
-    // detiene porque él no cree estar inventando. Por eso la regla ahora es de
-    // PROCEDIMIENTO (búscalo en la etiqueta) y no de intención (no inventes).
-    '    Un nombre que "suena" a ingrediente de esta categoría es la trampa: no importa si',
-    '    existe de verdad, importa si está en ESTA etiqueta.',
-    // ⚠️ MEDIDO: "[aspecto a mejorar]" con valor "las manchas de acné" produjo "este serum
-    // esta cambiando las manchas de acné" — el valor es correcto para su etiqueta y no
-    // cuadra con el verbo que lo precede.
-    '  - EL VALOR TIENE QUE FUNCIONAR EN SU FRASE, no solo responder a su etiqueta. Léela',
-    '    entera con el valor puesto antes de darla por buena: si el verbo o la preposición',
-    '    que lo rodean no admiten ese valor, elige otro que sí. "Este serum está cambiando',
-    '    [aspecto a mejorar]" pide algo que se pueda cambiar —la piel, la textura— no',
-    '    "las manchas de acné", que no se cambian sino que se atenúan.',
-    '',
-    '── EL GUION REESCRITO (`locuciones`) ──',
-    'Además de los valores, devuelve la locución COMPLETA de cada toma ya adaptada: el',
-    'ORIGINAL de esa toma —lo tienes arriba, palabra por palabra— con los datos nuevos',
-    'puestos en el sitio de los viejos. Escríbela como la',
-    'escribirías a mano, no como un pegado — si al poner el valor la frase pide un ajuste',
-    'de concordancia, de preposición o de conector, hazlo. Eso es lo único que puedes',
-    'tocar del texto que rodea al hueco.',
-    '',
-    'TODO LO DEMÁS SE COPIA PALABRA POR PALABRA del original. No reordenes, no resumas, no',
-    'mejores el argumento, no cambies el tono ni agregues frases. Si al leer tu locución',
-    'no se reconoce el guion de referencia, te fuiste: se descarta y se usa el pegado',
-    'automático en su lugar.',
-    '',
-    'Si aun así dejaste algún hueco VACÍO en `valores` (solo el caso del párrafo',
-    'anterior), en la locución va como `[PENDIENTE: nombre del hueco]`, con ese formato',
-    'exacto y el mismo nombre: es lo que bloquea el render para que nadie grabe un',
-    'corchete leído en voz alta. Lo normal es que no quede ninguno.',
+    '  - Ningún hueco se deja vacío. Si el hueco pide algo que el usuario tendría que',
+    '    salir a demostrar —un premio, un aval médico, un estudio clínico, una',
+    '    certificación, una garantía o un plazo—, tampoco lo dejas vacío: lo resuelves',
+    '    con lo que SÍ es cierto de este producto y no compromete a nadie. Donde el',
+    '    original decía "avalado por dermatólogos", va lo que el usuario sí puede',
+    '    sostener sobre su producto, no una certificación inventada ni un corchete.',
     '',
     '── ACCIONES ──',
     'Devuelve un `acciones` por cada toma, con su `n`. La acción de cada toma NO se',
-    'inventa ni se resume: se copia la `accion` del corte con el mismo índice, cambiando',
-    'solo lo que es específico del producto viejo.',
-    'Si el original dice "aplica unas gotas en la mejilla derecha con un gotero, luego',
-    'masajea y muestra el producto a cámara girándolo", tu acción conserva el gotero (o',
-    'su equivalente en el producto nuevo: una gomita se toma con los dedos, un frasco se',
-    'destapa), la mejilla, el masaje, el giro y el orden. Perder "con un gotero" o',
-    '"girándolo" convierte una coreografía en un gesto genérico y el video deja de',
-    'parecerse al original, que es lo único que se le pide.',
-    'Conserva SIEMPRE: qué mano, cómo agarra, dónde toca, hacia dónde mira, y en qué',
-    'momento el producto entra y sale del cuadro.',
+    'inventa ni se resume: se copia la `accion` del corte con el mismo índice, y lo',
+    'ÚNICO que se sustituye ahí es el NOMBRE del producto viejo por el del nuevo.',
+    '',
+    'EL INSTRUMENTO SE COPIA TAL CUAL, Y NO ES UN DATO DEL PRODUCTO VIEJO.',
+    'Un cuentagotas, una cuchara, un aplicador, una tapa: eso es coreografía. Si la',
+    'acción del corte dice que la mano derecha sostiene un cuentagotas y la izquierda el',
+    'frasco, tu acción dice exactamente eso, con esos dos objetos y en esas dos manos.',
+    'Renombrarlo, cambiarlo de mano o reemplazarlo por el envase deja al video sin con',
+    'qué aplicar el producto: el render entonces hace aparecer la gota sola, o le dibuja',
+    'a la persona una tercera mano para que le alcancen las manos que le quedan.',
+    'La única razón para cambiar un instrumento es que el producto nuevo no pueda',
+    'tenerlo, y eso lo decide su descripción física, no la costumbre.',
+    '',
+    'Conserva SIEMPRE: qué sostiene cada mano y en qué momento lo suelta, cómo agarra,',
+    'dónde toca, hacia dónde mira, y en qué momento el producto y sus piezas entran y',
+    'salen del cuadro.',
+    'La acción describe SOLO lo que hace el cuerpo con el producto. No describe la',
+    'superficie donde se apoya, ni su sombra, ni de dónde viene la luz, ni si flota: en',
+    'este video el producto está en una mano, en una habitación.',
+    '',
+    '── REGLA DE ADAPTACIÓN LITERAL ──',
+    'Se cambia el DATO y se conserva la FRASE. Así:',
+    '',
+    '    ORIGINAL:   "Si estás cansado de [problema original], necesitas probar',
+    '                 [producto original]."',
+    '    ADAPTACIÓN: "Si estás cansado de [nuevo problema], necesitas probar',
+    '                 [nuevo producto]."',
+    '',
+    'NO permitido: "¿Sabías que miles de personas están descubriendo una revolucionaria',
+    'solución…?" — dice lo mismo y cambió la estructura, que es lo único que esta tool',
+    'promete conservar. Esa frase es un CONTRAEJEMPLO: no la copies ni la imites.',
+    '',
+    // Sin el guion original delante, el modelo mide cada valor contra la ETIQUETA del
+    // hueco y no contra el anuncio: "gomitas de melatonina" es la respuesta correcta a
+    // `[Categoría del producto]` y la equivocada al anuncio, que decía el nombre
+    // comercial. Con el par ORIGINAL/ANDAMIAJE por toma, la diferencia se ve.
+    'GUION ORIGINAL Y ANDAMIAJE, toma por toma. Lo de la izquierda es lo que se dijo en',
+    'el video de referencia; lo de la derecha es esa misma frase con sus huecos, y es la',
+    'que hay que rellenar:',
+    ...template.tomas.map((t) => {
+      const dicho = dichoEn(porN.get(t.n) ?? '')
+      return [
+        `  Toma ${t.n}`,
+        dicho ? `    ORIGINAL:  ${dicho}` : '    ORIGINAL:  (sin diálogo: toma muda)',
+        `    ANDAMIAJE: ${t.locucion}`,
+      ].join('\n')
+    }),
     '',
     'CORTES REALES DE LA REFERENCIA (empareja por índice con las tomas):',
     JSON.stringify(forensic.cortes.map((c) => ({ n: c.n, tiempo: c.tiempo, accion: c.accion, camara: c.camara }))),
-    '',
-    'TOMAS DE LA PLANTILLA (para ver el contexto de cada hueco):',
-    JSON.stringify(template.tomas),
     '',
     '── INPUTS DEL USUARIO ── (jerarquía de sustitución, en este orden)',
     `  1. PRODUCTO: ${inputs.productName}`,
@@ -405,172 +367,29 @@ export function buildAdaptInstruction(
     `  3. ÁNGULO DEL VIDEO: ${inputs.angle}`,
     `  4. AVATAR / PÚBLICO OBJETIVO: ${inputs.targetAudience}`,
     `  5. PROBLEMA O DESEO PRINCIPAL: ${inputs.problem}`,
-    `  6. PERSONAJE: ${inputs.characterDesc}`,
-    `  7. ACENTO REGIONAL: ${inputs.accent}`,
-    scan?.productDescription ? `  7. IMAGEN DEL PRODUCTO (forma observada): ${scan.productDescription}` : '',
-    // El texto de la ETIQUETA es la fuente más autorizada que existe sobre el producto —
-    // ingredientes, dosis, beneficios impresos por el propio fabricante— y durante un
-    // tiempo se leía de la foto, se guardaba y NO se le pasaba a esta fase. Resultado
-    // medido: una sesión con 11 huecos pendientes cuya respuesta estaba en la etiqueta
-    // guardada. El spec ya lo dice ("La imagen proporcionada por el usuario es la fuente
-    // de verdad visual del producto"); omitirlo era la desviación, no incluirlo.
-    scan?.brandingDescription ? `  8. TEXTO DE LA ETIQUETA (leído de la foto del producto): ${scan.brandingDescription}` : '',
+    // El personaje ya no se escribe a mano: sale de la foto de referencia, y lo que la
+    // describe es el bloque de consistencia que produjo la FASE 4. Por ahí llega también
+    // la información de la IMAGEN DEL PERSONAJE de la jerarquía.
+    personaje ? `  6. PERSONAJE QUE APARECE EN EL VIDEO: ${personaje}` : '',
+    scan?.productDescription ? `  7. IMAGEN DEL PRODUCTO (observado): ${scan.productDescription}` : '',
+    scan?.brandingDescription ? `  8. ETIQUETA DEL ENVASE (transcrita): ${scan.brandingDescription}` : '',
     inputs.constraints ? `  9. INFORMACIÓN ADICIONAL: ${inputs.constraints}` : '',
     '',
-    'La locución se escribe en la variante regional del español del acento indicado:',
+    `ACENTO DEL PERSONAJE: ${acento}`,
+    'La locución se escribe en la variante regional del español de ese acento:',
     'vocabulario, giros y conjugación ("tú" / "vos" / "usted") tienen que coincidir.',
     '',
-    '⛔ LA REGLA QUE MANDA SOBRE TODAS LAS DEMÁS: LA PLANTILLA NO SE INVENTA.',
-    'El texto que rodea a los corchetes es del anuncio original y se copia palabra por',
-    'palabra: no reescribas la estructura, no cambies el orden de las frases, no agregues',
-    'ni quites ideas, no "mejores" el argumento. Eso es lo intocable.',
-    '',
-    'LO QUE VA DENTRO DE LOS CORCHETES SÍ SE COMPLETA, aunque no esté literal en los',
-    'datos. Primero lo que el usuario entregó; si no alcanza, lo que se deduzca de ello;',
-    'y si tampoco, lo más aproximado a la realidad de un producto de esta categoría. Es',
-    'un borrador que el usuario revisa línea por línea antes de renderizar: un guión',
-    'completo y corregible le sirve, uno lleno de agujeros no.',
-    '',
-    'Lo verosímil no es lo espectacular. Nada de superlativos, cifras redondas llamativas',
-    'ni plazos cortos que suenen a promesa. Y NUNCA inventes lo que un cliente podría',
-    'exigirle al usuario que demuestre: premios, avales médicos, estudios clínicos,',
-    'certificaciones, garantías ni testimonios de terceros. Eso se queda vacío.',
-    '',
-    'LA ETIQUETA DEL PRODUCTO SÍ CUENTA COMO FUENTE, y es la mejor que hay. Si dice',
-    '"NIACINAMIDA PURA, PHE-RESORCINOL" o "Melatonin 10mg Per Serving", esos son datos',
-    'del producto del usuario y puedes usarlos: los imprimió el fabricante en el envase.',
-    'Lo que no puedes es completar lo que la etiqueta NO dice con lo que tú sepas de esa',
-    'marca por otro lado.',
-    '',
-    '⚠️ La etiqueta se ADAPTA, no se pega. Suele venir en otro idioma y en mayúsculas de',
-    'packaging ("Fall Asleep Faster", "100% Drug-Free"): hay que traducirla y darle la',
-    'forma que pide la frase, igual que con cualquier otro input. Pegar el fragmento tal',
-    'cual deja un anuncio en español con retazos en inglés.',
-    '',
-    'Antes de escribir un ingrediente, una cifra, un plazo, una marca o una cantidad,',
-    'búscalo primero en los INPUTS y en la etiqueta: lo que esté ahí SIEMPRE le gana a lo',
-    'que tú puedas suponer, y suponer teniendo el dato delante es el error más caro.',
+    '⛔ LO QUE NO SE INVENTA NUNCA, ni siquiera bajo la escala de arriba: una MARCA que',
+    'el usuario no escribió, un ingrediente que no está en la etiqueta, y cualquier',
+    'cifra, plazo, estudio, certificación o garantía. Eso no es rellenar un hueco: es',
+    'firmar una declaración en nombre del usuario. El nombre comercial NO es la marca.',
+    'Antes de escribir un ingrediente o una cifra, búscalo palabra por palabra en los',
+    'INPUTS y en la etiqueta. Si no está ahí, el hueco NO va vacío: va con algo que sea',
+    'cierto de este producto sin nombrar esa marca, ese ingrediente ni esa cifra.',
     '',
     'TEXTO EN PANTALLA: NINGUNO. Ni captions, ni subtítulos, ni overlays, ni watermarks.',
     'Solo puede aparecer texto físicamente impreso en el producto o en objetos reales del',
     'escenario. No agregues ningún campo de texto en pantalla.',
-    '',
-    'Todo el output va en español.',
-  ].filter(Boolean).join('\n')
-}
-
-/**
- * Prompt de la segunda pasada. Recibe el guión ya armado por código y la tabla de qué
- * valor ocupó cada hueco.
- *
- * ⚠️ NO trae ejemplos con forma de frase rellenada. Los defectos se enuncian por
- * CATEGORÍA, no mostrando oraciones rotas. La razón está documentada en `fill.ts`: la
- * primera versión del prompt de esta fase incluía un "así salió mal" con forma de valor
- * y el modelo lo copió literal como valor. Acá el artefacto bajo revisión ES una frase
- * rellenada, así que un ejemplo con esa forma sería todavía más fácil de copiar.
- */
-export function buildCoherenceInstruction(
-  tomas: { n: number; locucion: string }[],
-  valores: { id: string; valor: string; contexto: string }[],
-  inputs: UserInputs,
-  scan: ProductScan | null,
-): string {
-  return [
-    'Eres un corrector de estilo. Abajo hay un guión publicitario en español al que ya se',
-    'le rellenaron los huecos, y la tabla de qué valor se puso en cada uno.',
-    '',
-    'TU ÚNICO TRABAJO: leerlo EN VOZ ALTA mentalmente, frase por frase, y devolver los',
-    'valores que NO encajan. Nada más. No reescribas el guión: el texto de alrededor de',
-    'cada hueco es intocable y se copia con código — si devuelves una frase, se descarta.',
-    '',
-    '── GUIÓN ARMADO, tal como se leería ──',
-    ...tomas.map((t) => `  Toma ${t.n}: ${t.locucion}`),
-    '',
-    '── QUÉ VALOR OCUPÓ CADA HUECO ──',
-    ...valores.map((v) => `  ${v.id} = "${v.valor}"     en: ${v.contexto}`),
-    '',
-    '── QUÉ CUENTA COMO "NO ENCAJA" ──',
-    'Cuatro categorías. Todas se detectan leyendo la frase completa, no la etiqueta:',
-    '',
-    '  1. LA FRASE SE ROMPE GRAMATICALMENTE. Concordancia de género o número, o un verbo',
-    '     que no rige lo que se le puso delante. Si al leerlo suena a traducción rota,',
-    '     está mal.',
-    '  2. EL VALOR NO ES DE LA CLASE QUE PIDE EL VERBO. "tiene ___" pide una cosa que el',
-    '     producto contiene, no un efecto que produce. "con solo tomar ___" pide una',
-    '     cantidad o una dosis, no un momento del día. "andas muy ___" pide un adjetivo,',
-    '     no una oración. Fíjate en qué exige el verbo que va antes del hueco.',
-    '  3. SE VOLCÓ UN INPUT CRUDO. Los datos del usuario están redactados como notas',
-    '     ("No puedo dormir por las noches"), no como parte de una frase. Meterlos tal',
-    '     cual donde la oración pedía una palabra deja el guión ilegible: hay que',
-    '     adaptarlos a la forma que la frase pide.',
-    '  4. EL VALOR REPITE PALABRAS QUE YA ESTÁN A SU LADO, o arrastra puntuación que',
-    '     duplica la de la frase.',
-    // ⚠️ NO LE PASES EL GUIÓN ORIGINAL A ESTE PROMPT. Se probó (una categoría "no cumple
-    // la función del original", con el texto original al lado de cada valor) y el
-    // corrector empezó a devolver EL PRODUCTO VIEJO como corrección: `ingrediente 1 →
-    // "maca roja"`, `situación personal → "cansada y sin energía para esos momentos"`.
-    // Es el mismo mecanismo que ya documenta `fill.ts`: cualquier texto con la forma del
-    // artefacto que el modelo tiene que producir se convierte en algo que copiar. La
-    // primera pasada SÍ lo lleva, y ahí es correcto — su trabajo es sustituirlo. El de
-    // este es juzgar lo ya escrito.
-    '',
-    '── CÓMO CORREGIR ──',
-    'Para cada hueco que falle, devuelve su `id`, el `valor` nuevo y el `motivo` (corto).',
-    'Los huecos que están bien NO se devuelven.',
-    '',
-    '⚠️ NO VACÍES EL HUECO PARA SALIR DEL PASO. Un valor que no encaja se REEMPLAZA por',
-    'uno que sí: mira primero los INPUTS y la etiqueta del envase (ahí suele estar la',
-    'respuesta al ingrediente, la dosis o el beneficio), después lo que se deduzca de',
-    'ellos, y si nada de eso da, escribe lo más verosímil para un producto de esta',
-    'categoría — el usuario lo revisa y lo corrige antes de renderizar.',
-    'La etiqueta se traduce y se adapta a la frase, no se pega tal cual.',
-    'Vacía solo si rellenar exigiría afirmar un premio, un aval médico, un estudio, una',
-    'certificación o una garantía que nadie mencionó.',
-    '',
-    'El valor corregido sigue siendo CORTO —una palabra o un sintagma— y sustituye solo lo',
-    'que estaba entre corchetes: las palabras vecinas ya están escritas.',
-    '',
-    '── SI NINGÚN VALOR CABE: `ajustes` ──',
-    'A veces la frase original no admite ningún valor correcto. Solo en ESE caso puedes',
-    'tocar las palabras de alrededor. Dos formas de que pase:',
-    '',
-    '  a) NO EXISTE EL VALOR. El guion dice "andas muy ___" y para este producto no hay',
-    '     adjetivo que vaya ahí: cualquier cosa que pongas deja la oración rota.',
-    '  b) EL ARTÍCULO O LA PREPOSICIÓN DE AL LADO NO CONCUERDAN CON EL VALOR CORRECTO.',
-    '     ⚠️ Este caso es el más frecuente y `correcciones` NO puede arreglarlo: el',
-    '     artículo es andamiaje, no valor. Medido en un anuncio real: el original decía',
-    '     "si te encuentras en la Galería Santa Lucía", el hueco quedó "en la [ubicación]"',
-    '     y el valor correcto era una ciudad, así que el guión salió diciendo "si te',
-    '     encuentras en la Lima". El arreglo es quitar el artículo, no cambiar la ciudad.',
-    '     Lo mismo con el género ("el/la"), el número ("este/estos") y las contracciones',
-    '     ("a el" → "al", "de el" → "del").',
-    '',
-    'Devuelve entonces un `ajustes` con: la toma `n`, el `idHueco` que no se puede',
-    'rellenar, la `locucion` COMPLETA de esa toma ya arreglada, y el `motivo`.',
-    '',
-    'Condiciones, todas obligatorias:',
-    '  - Es el ÚLTIMO recurso. Si existe un valor que encaje, usa `correcciones`, no esto.',
-    '  - El arreglo es MÍNIMO y local: se toca el conector o la concordancia que estorba,',
-    '    no se reescribe la frase ni se cambia lo que dice.',
-    '  - Todo lo demás de la toma se copia palabra por palabra: el resto del guion, los',
-    '    valores ya rellenados y los marcadores [PENDIENTE: …] siguen exactamente igual.',
-    '  - No es para mejorar el estilo de una frase que ya se entiende. Una toma sin',
-    '    problema no lleva ajuste.',
-    '',
-    '── LO ÚNICO QUE PUEDES USAR PARA RELLENAR ──',
-    'Ojo: esto son NOTAS que escribió el usuario en un formulario, no texto listo para',
-    'pegar. Están redactadas en primera persona y como oraciones completas. Pegarlas tal',
-    'cual dentro de una frase que pedía una palabra es el error más frecuente de esta',
-    'fase: hay que extraer el dato y darle la forma que la oración exige.',
-    `  PRODUCTO: ${inputs.productName}`,
-    `  DESCRIPCIÓN: ${inputs.productDescription}`,
-    `  ÁNGULO: ${inputs.angle}`,
-    `  PÚBLICO: ${inputs.targetAudience}`,
-    `  PROBLEMA: ${inputs.problem}`,
-    inputs.constraints ? `  ADICIONAL: ${inputs.constraints}` : '',
-    scan?.brandingDescription ? `  TEXTO DE LA ETIQUETA: ${scan.brandingDescription}` : '',
-    scan?.productDescription ? `  FORMA DEL PRODUCTO: ${scan.productDescription}` : '',
-    'Nada que no esté en esa lista. Tu conocimiento del producto real no cuenta.',
     '',
     'Todo el output va en español.',
   ].filter(Boolean).join('\n')

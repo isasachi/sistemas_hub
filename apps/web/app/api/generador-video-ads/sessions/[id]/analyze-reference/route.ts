@@ -6,9 +6,14 @@ import { geminiCallStructured, geminiEsDirecto } from '@/lib/gemini'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 import { ForensicReportSchema } from '@/lib/video-ads/types'
-import { buildForensicInstruction, repairCutTiming, reconciliarConVentana, coreografiaEscasa, MIN_TOMA_SEG, limpiarDialogos, verificarHablantes } from '@/lib/video-ads/forensic'
+import { buildForensicInstruction, repairCutTiming, normalizarHechos, MIN_VISIBLE_SEG } from '@/lib/video-ads/forensic'
+import { VIDEO_SYSTEM_PROMPT } from '@/lib/video-ads/llm'
 import { MAX_VIDEO_MB } from '@/lib/video-ads/limits'
 import { STEP } from '@/lib/video-ads/steps'
+import { defectosDelForense } from '@/lib/video-ads/lotes'
+
+/** Reintentos del forense ante un defecto estructural. Cada uno es una llamada de video pagada por el hub. */
+const FORENSE_REINTENTOS = 1
 import type { Part } from '@google/genai'
 
 export const dynamic = 'force-dynamic'
@@ -29,38 +34,55 @@ export async function POST(
   if (blocked) return blocked
   const userId = await readUserId()
 
-  const session = await getVideoSession(id, await readUserId())
-  if (!session) return NextResponse.json({ error: 'No se encontró la sesión' }, { status: 404 })
+  const session = await getVideoSession(id, userId)
+  if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   let body: unknown
   try { body = await req.json() } catch {
-    return NextResponse.json({ error: 'Petición inválida' }, { status: 400 })
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
   const parsed = BodySchema.safeParse(body)
   if (!parsed.success) return NextResponse.json({ error: 'Falta el video de referencia' }, { status: 400 })
 
   try {
-    // El tope de MAX_VIDEO_MB también se valida en el browser (Section0Reference), pero eso es
-    // UX: un request armado a mano se lo salta. Acá se comprueba con un HEAD —junto con el
-    // allowlist de host, que importa MÁS que antes porque la URL se la damos a KIE para que la
-    // busque él— sin bajar el archivo.
+    // El tope de MAX_VIDEO_MB también se valida en el browser (Section0Reference), pero
+    // eso es UX: un request armado a mano se lo salta. Acá se comprueba con un HEAD
+    // —junto con el allowlist de host, que importa MÁS que antes porque la URL se la
+    // damos a KIE para que la busque él— sin bajar el archivo.
     const { mimeType } = await headStorageFile(parsed.data.videoUrl, MAX_VIDEO_MB * 1024 * 1024)
 
-    // ⚠️ EL VIDEO VA POR URL, NO EN BASE64, Y NO ES UNA OPTIMIZACIÓN. Medido sobre el mismo video
-    // de 13,6 MB: 18,2 MB de base64 MÁS el schema del forense revientan a los ~69 s con un
-    // `400 "The server is currently being maintained"` de KIE que miente —3 de 3 intentos, 3,7 min
-    // y un 500 al usuario— y con la URL responde. El video ya vive en el bucket, así que además
-    // nos ahorramos bajarlo y volver a subirlo dentro del request.
+    // ⚠️ EL VIDEO VA POR URL, NO EN BASE64. El texto y la visión de Gemini salen hoy por
+    // KIE, y ahí un data URI de video es un 400 duro: "Inline data URL is too large.
+    // Upload the file and pass an HTTP(S) URL instead" — medido con este mismo video
+    // (18,1 MB de base64, 60 s de espera y un 500 al usuario). El video ya vive en el
+    // bucket, así que además nos ahorramos bajarlo y volver a subirlo dentro del request.
     //
-    // Bajo `GEMINI_VIA=direct` se manda inline: el SDK de Google solo acepta un `fileUri` de su
-    // propia Files API, no una URL de Supabase.
+    // Bajo `GEMINI_VIA=direct` se manda inline: el SDK de Google solo acepta un `fileUri`
+    // de su propia Files API, no una URL de Supabase.
     const parts: Part[] = [
       geminiEsDirecto()
         ? { inlineData: await fetchAsBase64(parsed.data.videoUrl, MAX_VIDEO_MB * 1024 * 1024) }
         : { fileData: { fileUri: parsed.data.videoUrl, mimeType } },
       { text: buildForensicInstruction() },
     ]
-    const analysis = await geminiCallStructured('forensic_report', ForensicReportSchema, parts)
+    // El system prompt es el del VIDEO, no el default de `lib/gemini` (el motor de
+    // anuncios ESTÁTICOS, que ordena declarar si el producto flota y describe una foto de
+    // catálogo). El forense mira un video: esa orden le contamina los campos de
+    // coreografía, y de ahí salían las seis `accionVisual` terminadas en "El producto no
+    // está flotando." aguas abajo.
+    // El forense es ESTOCÁSTICO y un sorteo con defecto estructural (un corte largo
+    // colapsado a un hecho, o el aplicador que sale y vuelve sin aplicar) cuesta un render
+    // entero con la key del usuario. Se vuelve a tirar UNA vez y se conserva el sorteo con
+    // menos defectos. ⚠️ Es una llamada de video pagada por el hub: `FORENSE_REINTENTOS`.
+    let analysis = await geminiCallStructured('forensic_report', ForensicReportSchema, parts, 3, VIDEO_SYSTEM_PROMPT)
+    let defectos = defectosDelForense(analysis)
+    for (let i = 0; i < FORENSE_REINTENTOS && defectos.length; i++) {
+      console.warn(`[video-ads/analyze-reference] sesión ${id}: forense con defectos estructurales, se vuelve a tirar:`, defectos)
+      const otro = await geminiCallStructured('forensic_report', ForensicReportSchema, parts, 3, VIDEO_SYSTEM_PROMPT)
+      const otros = defectosDelForense(otro)
+      if (otros.length < defectos.length) { analysis = otro; defectos = otros }
+    }
+    if (defectos.length) console.warn(`[video-ads/analyze-reference] sesión ${id}: se persiste con defectos:`, defectos)
 
     // Mismo motivo que en adapt-script: el modelo estima mal el conteo (reportó 562
     // sobre un guión de 776) y ese número es la referencia contra la que se mide si el
@@ -73,47 +95,15 @@ export async function POST(
     // piden a KIE). Un solo lugar que la corrija es la única forma de que las tres
     // etapas vean el mismo número. Nota: las sesiones YA analizadas conservan sus
     // duraciones viejas — hay que re-correr el análisis para repararlas.
-    // Antes de recronometrar: un marcador de campo vacío en `dialogo` cuenta caracteres
-    // que nadie va a decir, así que limpiarlo después daría duraciones calculadas sobre
-    // texto fantasma.
-    // Orden: limpiar → verificar atribución → recronometrar. La limpieza puede sacar un
-    // marcador de dentro de `hablantes`, así que verificar antes daría un falso negativo.
-    const { report: atribuido, descartados } = verificarHablantes(limpiarDialogos(analysis))
-    if (descartados.length) {
-      console.warn(`[video-ads/analyze-reference] sesión ${id}: el reparto por hablante no reproducía el diálogo en los cortes ${descartados.join(', ')} — se descartó su atribución`)
-    }
-    // ⚠️ RECONCILIAR ANTES DE REPARAR, y SOLO acá. El modelo declara la duración dos
-    // veces (la ventana `tiempo` y `duracionSeg`) y se contradice en el 15 % de los
-    // cortes, siempre contra el b-roll: 9 de los 12 cortes mudos de la base están por
-    // debajo de 3 s. Las ventanas sí forman una línea coherente, así que mandan. En
-    // `extract-template` NO se repite: allá las duraciones ya pasaron por la reparación.
-    const { report: conVentana, ajustes: reconciliados } = reconciliarConVentana(atribuido)
-    if (reconciliados.length)
-      console.warn(
-        `[video-ads/analyze-reference] sesión ${id}: ${reconciliados.length} cortes cuya duración no coincidía con su ventana, reconciliados:`,
-        reconciliados.map((a) => `corte ${a.n}: ${a.de.toFixed(1)}s → ${a.a.toFixed(1)}s`),
-      )
-    // ⚠️ Y CON PISO VISIBLE, o la reconciliación no sirve de nada. Un corte MUDO tiene
-    // mínimo de habla 0, así que para el reparto es holgura pura y lo puede vaciar entero
-    // para financiar a los hablados. Sin este piso, el b-roll que la línea de arriba acaba
-    // de levantar a su duración real se drena en la línea siguiente. El piso se acota a la
-    // duración que el corte YA tiene (ver `repairCutTiming`), así que no infla nada: solo
-    // impide el vaciado.
-    const { report: reparado, ajustes } = repairCutTiming(conVentana, MIN_TOMA_SEG)
+    // Los hechos con tiempo se ordenan, se ajustan a la ventana del corte y se cubren
+    // los huecos con el último estado declarado (`normalizarHechos`); `accion` se deriva.
+    const { report: normalizado, rellenos } = normalizarHechos(analysis)
+    if (rellenos.length) console.warn(`[video-ads/analyze-reference] sesión ${id}: el forense dejó tramos sin hecho, rellenados con el último estado:`, rellenos)
+    const { report: reparado, ajustes } = repairCutTiming(normalizado, MIN_VISIBLE_SEG)
     if (ajustes.length)
       console.warn(
         `[video-ads/analyze-reference] sesión ${id}: ${ajustes.length} cortes con diálogo indecible en su duración, recronometrados:`,
         ajustes.map((a) => `corte ${a.n}: ${a.de.toFixed(1)}s → ${a.a.toFixed(1)}s`),
-      )
-
-    // ⚠️ VISIBILIDAD, no corrección: el forense es el paso caro y no se re-llama por esto.
-    // El síntoma que llega al usuario es "el video no copia los movimientos", y su causa
-    // más común es que la coreografía de un corte largo se describió con dos frases.
-    const escasos = coreografiaEscasa(reparado)
-    if (escasos.length)
-      console.warn(
-        `[video-ads/analyze-reference] sesión ${id}: ${escasos.length} cortes con coreografía escasa para su duración —`,
-        escasos.map((e) => `corte ${e.n}: ${e.movimientos} movimientos en ${e.seg.toFixed(1)}s`),
       )
 
     await updateVideoSession(id, {

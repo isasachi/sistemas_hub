@@ -7,8 +7,7 @@ import { readUserId } from '@/lib/product-hunter/session'
 import { TemplateDraftSchema, buildTemplateInstruction } from '@/lib/video-ads/template'
 import { validateTemplate, assembleTemplate, normalizeSlots } from '@/lib/video-ads/fill'
 import { canProceed } from '@/lib/video-ads/validation'
-import { repairCutTiming, mergeMicroCortes, unirTomasContinuas, MIN_TOMA_SEG, limpiarDialogos, verificarHablantes } from '@/lib/video-ads/forensic'
-import { LOTE_MAX_SEC, LOTE_MAX_CHARS } from '@/lib/video-ads/lotes'
+import { repairCutTiming, MIN_VISIBLE_SEG } from '@/lib/video-ads/forensic'
 import { resyncTomaDurations } from '@/lib/video-ads/adapt'
 import { STEP } from '@/lib/video-ads/steps'
 
@@ -16,7 +15,7 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 export const maxDuration = 300
 
-// Acá sí pasa por un LLM de texto (`callVideoAds`, Gemini): la entrada ya
+// Acá sí se usa `callStructured` (OpenAI primario, Gemini fallback): la entrada ya
 // es texto — el informe forense —, así que no hace falta un modelo que coma video.
 export async function POST(
   _req: NextRequest,
@@ -28,8 +27,8 @@ export async function POST(
   if (blocked) return blocked
   const userId = await readUserId()
 
-  const session = await getVideoSession(id, await readUserId())
-  if (!session) return NextResponse.json({ error: 'No se encontró la sesión' }, { status: 404 })
+  const session = await getVideoSession(id, userId)
+  if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (!session.forensic_analysis)
     return NextResponse.json({ error: 'Analiza el video de referencia primero' }, { status: 409 })
   // Guard real de la FASE 0: el cliente deshabilita el botón mientras haya una
@@ -52,70 +51,12 @@ export async function POST(
   // Es seguro justamente porque la reparación NO toca `tiempo`: `adapt-script` lo copia
   // a `tiempoOriginal` y `camaraDeLote` empareja por él, así que reparar acá no puede
   // desalinear el guión ya adaptado con los cortes.
-  // FUSIÓN DE MICRO-CORTES, antes de recronometrar.
-  //
-  // Un corte de ~1 s no es una toma que el generador pueda producir con sentido, y con
-  // la frontera de plano cada corte abre su propio lote —o sea su propia llamada
-  // pagada—, así que un montaje muy granular multiplica el costo por la granularidad
-  // del original y no por su duración. Medido sobre un UGC de ropa de 29 cortes: 24
-  // lotes de 1 s → 7 lotes de 3-5 s, conservando UN encuadre por clip y el 92 % de la
-  // coreografía.
-  //
-  // ⚠️ SOLO SI LA SESIÓN NO TIENE GUIÓN ADAPTADO TODAVÍA. A diferencia de
-  // `repairCutTiming`, fusionar SÍ cambia `tiempo` (el tramo abarca los dos cortes), y
-  // `tiempo` es lo que `adapt-script` copió a `tiempoOriginal` y con lo que
-  // `camaraDeLote` empareja. Hacerlo sobre una sesión ya adaptada desalinearía el guión
-  // con los cortes en silencio — justo lo que la nota de abajo dice que la reparación
-  // evita por no tocar ese campo. Si ya hay guión, la lista de cortes está comprometida.
-  let base = session.forensic_analysis
-  if (!session.adapted) {
-    // El tope evita fabricar una toma que `splitLongToma` tenga que volver a partir.
-    const { report: fusionado, fusiones } = mergeMicroCortes(base, MIN_TOMA_SEG, LOTE_MAX_SEC)
-    if (fusiones.length) {
-      console.info(
-        `[video-ads/extract-template] sesión ${id}: ${base.cortes.length} cortes → ${fusionado.cortes.length} tras fusionar micro-cortes:`,
-        fusiones.map((f) => `${f.tiempo} (${f.deCortes} cortes, ${f.duracionSeg.toFixed(1)}s)`),
-      )
-      base = fusionado
-    }
-
-    // …y DESPUÉS une los cortes que ya eran la misma toma. El orden importa: fusionar
-    // micro-cortes primero deja tramos renderizables, y recién sobre esos tiene sentido
-    // preguntar si dos consecutivos son en realidad una toma continua. Al revés, un
-    // corte de 1 s podría absorber a su vecino largo por continuidad y dejar sin
-    // material a la fusión de micro-cortes.
-    //
-    // Esto NO sacrifica nada (mismo plano, misma clase, mismo objeto en la mano): lo que
-    // compra es presupuesto de prompt, que es lo que financia el detalle atómico.
-    const { report: continuo, fusiones: unidas } = unirTomasContinuas(base, LOTE_MAX_SEC, LOTE_MAX_CHARS)
-    if (unidas.length) {
-      console.info(
-        `[video-ads/extract-template] sesión ${id}: ${base.cortes.length} → ${continuo.cortes.length} cortes tras unir tomas continuas:`,
-        unidas.map((f) => `${f.tiempo} (${f.deCortes} cortes, ${f.duracionSeg.toFixed(1)}s)`),
-      )
-      base = continuo
-    }
-  }
-
-  // Fusionar une los diálogos con un espacio: suma un carácter sin sumar duración, así
-  // que un corte que estaba justo en el techo de cps queda apenas por encima. Recronometrar
-  // después lo devuelve al techo (medido: 20.6 → 20.0 cps).
-  // El piso de la fusión se le pasa a la reparación: un corte MUDO tiene mínimo de
-  // diálogo 0, o sea es holgura pura, y el reparto lo vaciaría para financiar a los que
-  // no entran — deshaciendo justo lo que la fusión acababa de garantizar. Medido en una
-  // sesión real de ropa: las dos tomas de cierre, las únicas mudas, quedaban en 0.91 s
-  // y 1.27 s después de fusionar a 3 s.
-  const { report: atribuido, descartados } = verificarHablantes(limpiarDialogos(base))
-  if (descartados.length) {
-    console.warn(`[video-ads/extract-template] sesión ${id}: atribución descartada en los cortes ${descartados.join(', ')}`)
-  }
-  const { report: forensic, ajustes } = repairCutTiming(atribuido, MIN_TOMA_SEG)
-  if (ajustes.length || base !== session.forensic_analysis) {
-    if (ajustes.length)
-      console.warn(
-        `[video-ads/extract-template] sesión ${id}: ${ajustes.length} cortes recronometrados sobre un análisis ya guardado:`,
-        ajustes.map((a) => `corte ${a.n}: ${a.de.toFixed(1)}s → ${a.a.toFixed(1)}s`),
-      )
+  const { report: forensic, ajustes } = repairCutTiming(session.forensic_analysis, MIN_VISIBLE_SEG)
+  if (ajustes.length) {
+    console.warn(
+      `[video-ads/extract-template] sesión ${id}: ${ajustes.length} cortes recronometrados sobre un análisis ya guardado:`,
+      ajustes.map((a) => `corte ${a.n}: ${a.de.toFixed(1)}s → ${a.a.toFixed(1)}s`),
+    )
     // Y se bajan las duraciones nuevas al guión YA adaptado, si lo hay. `generate-lotes`
     // agrupa sobre `adapted.tomas`, no sobre el forense: sin esto la reparación no
     // llegaría al render y el video seguiría saliendo con los tiempos rotos, en
@@ -140,11 +81,12 @@ export async function POST(
     // recorrido (`nombre#n`) — fusionar corre esa numeración, así que ningún id guardado
     // puede haberse calculado sobre la plantilla previa a la fusión.
     const { template, reporte } = normalizeSlots(armada, forensic.cortes)
-    if (reporte.antes !== reporte.despues || reporte.desalineadas.length || reporte.renombrados.length || reporte.numerados.length)
+    if (reporte.antes !== reporte.despues || reporte.desalineadas.length || reporte.renombrados.length)
       console.warn(
         `[video-ads/extract-template] sesión ${id}: huecos ${reporte.antes} → ${reporte.despues}` +
+        (reporte.desmarcados.length ? ` · desmarcados por universales: ${reporte.desmarcados.join(', ')}` : '') +
+        (reporte.fusionados ? ` · fusionados en enumeraciones: ${reporte.fusionados}` : '') +
         (reporte.renombrados.length ? ` · renombrados por rol: ${reporte.renombrados.join(', ')}` : '') +
-        (reporte.numerados.length ? ` · numerados por colisión: ${reporte.numerados.join(', ')}` : '') +
         (reporte.desalineadas.length ? ` · ⚠ tomas cuyo andamiaje NO copia su corte: ${reporte.desalineadas.join(', ')}` : ''),
       )
 
@@ -160,10 +102,7 @@ export async function POST(
 
     await updateVideoSession(id, { step: STEP.TEMPLATE, template })
     await recordGenQuota(id, 'video-template', userId)
-    // `desalineadas` viaja al cliente: es la señal de que la FASE 2 dejó de copiar el
-    // guión literal, y hasta ahora solo se veía en los logs del servidor. Quien puede
-    // hacer algo al respecto (re-extraer, o corregir a mano) es el usuario.
-    return NextResponse.json({ template, desalineadas: reporte.desalineadas })
+    return NextResponse.json({ template })
   } catch (err) {
     console.error('[video-ads/extract-template]', err)
     return NextResponse.json({ error: 'No se pudo extraer la plantilla.' }, { status: 500 })
