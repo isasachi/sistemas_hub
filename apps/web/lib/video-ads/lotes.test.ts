@@ -246,6 +246,7 @@ const ARGS = {
     { url: 'https://x/avatar.png', role: 'la persona' },
     { url: 'https://x/product.png', role: 'el producto' },
   ],
+  producto: '',
 }
 
 describe('buildLotePrompt', () => {
@@ -391,7 +392,7 @@ describe('sinEscenaDeFoto', () => {
     ])[0]
     const p = buildLotePrompt({
       lote, camara: 'Plano medio', images: [{ url: 'u', role: 'the person' }],
-      voz: VOZ,
+      voz: VOZ, producto: '',
     })
     expect(p).not.toContain('flotando')
     expect(p).not.toContain('3.301290322580645')
@@ -471,7 +472,7 @@ describe('el reparto no deja escenografía de foto ni carriles vacíos', () => {
     // los dos fragmentos de 10 s no caben en un lote, así que el vacío cae en el segundo
     const p = groupIntoLotes([larga])
       .map((lote) => buildLotePrompt({
-        lote, camara: 'Plano medio.', voz: VOZ,
+        lote, camara: 'Plano medio.', voz: VOZ, producto: '',
         images: [{ url: 'a', role: 'la persona' }],
       }))
       .join('\n')
@@ -482,7 +483,7 @@ describe('el reparto no deja escenografía de foto ni carriles vacíos', () => {
   it('la línea de cámara no dobla el punto', () => {
     const p = buildLotePrompt({
       lote: groupIntoLotes([toma(1, 5)])[0],
-      camara: 'Plano medio corto, estable.', voz: VOZ,
+      camara: 'Plano medio corto, estable.', voz: VOZ, producto: '',
       images: [{ url: 'a', role: 'la persona' }],
     })
     expect(p).toContain('CÁMARA: Plano medio corto, estable. Grabado')

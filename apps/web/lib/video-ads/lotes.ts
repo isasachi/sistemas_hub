@@ -412,14 +412,17 @@ export function camaraDeLote(
  * mira), y acá se emite tal cual.
  */
 /**
- * La parte FÍSICA de la descripción del producto: las dos primeras oraciones.
+ * La parte FÍSICA de la descripción del producto: sus tres primeras oraciones.
  *
  * `product_scan.productDescription` mezcla la forma del envase con la transcripción de
  * la etiqueta, y la etiqueta la muestra Image2 mejor de lo que la cuenta un párrafo. Lo
  * que la imagen NO puede sostener sola es el color y las piezas: medido, los renders
  * salían con el frasco de otro color, sin tapa y con un segundo cuentagotas. Las dos
  * primeras oraciones son justamente "es un frasco de vidrio púrpura con tapón
- * cuentagotas blanco"; el resto es etiqueta. Mismo recorte que el `NIVEL_PRODUCTO_FISICO`
+ * cuentagotas blanco"; el resto es etiqueta. Son TRES y no dos porque está medido: de
+ * las 24 descripciones que nombran una pieza (tapa, cuentagotas, aplicador), con dos
+ * oraciones sobreviven 21 y con tres, 23 — y el presupuesto no se mueve (MAX 3.965 de
+ * 4.096 en los dos casos, cero lotes sueltan el bloque). Mismo recorte que el `NIVEL_PRODUCTO_FISICO`
  * que AGENTS.md midió en la época del presupuesto apretado, acá aplicado siempre.
  *
  * Se limpia la escenografía de la foto de catálogo por la misma puerta que la
@@ -428,7 +431,11 @@ export function camaraDeLote(
  */
 export function productoFisico(desc: string): string {
   const limpio = sinEscenaDeFoto((desc ?? '').trim())
-  return (limpio.match(/[^.]+\.?/g) ?? []).slice(0, 2).join('').trim()
+  // Se parte con el MISMO lookbehind que `partirEnTramos` y no con `/[^.]+/`: un
+  // volumen de etiqueta ("30 ml / 1.01 fl oz") tiene un punto sin espacio detrás, así
+  // que la partición ingenua gasta las dos oraciones en una sola y se come justo la
+  // que nombra la tapa o el aplicador — la mitad que arregla el gotero duplicado.
+  return limpio.split(/(?<=[.;])\s+/).slice(0, 3).join(' ').trim()
 }
 
 /**
@@ -454,8 +461,14 @@ export function buildLotePrompt(args: {
   camara: string
   voz: VoiceProfile
   images: LoteImage[]
-  /** Parte física del producto (`productoFisico`). Vacío = se comporta como antes. */
-  producto?: string
+  /**
+   * Parte física del producto (`productoFisico`); vacío emite el prompt sin ese bloque.
+   * OBLIGATORIO aunque acepte la cadena vacía, y a propósito: `scriptFingerprint` lo
+   * exige, así que un caller que lo omitiera compilaría igual y produciría una huella
+   * que describe un producto que su prompt no lleva. Un campo opcional acá es una
+   * divergencia silenciosa entre lo que se renderiza y lo que la huella jura.
+   */
+  producto: string
 }): string {
   const { lote, camara, voz, images, producto } = args
 
@@ -510,7 +523,7 @@ export function buildLotePrompt(args: {
     'Sin texto en pantalla: ni subtítulos, ni overlays, ni watermarks, ni interfaz. Solo el texto impreso en el propio producto.',
   ].join('\n')
 
-  const prompt = armar(producto ?? '')
+  const prompt = armar(producto)
   if (prompt.length <= KIE_PROMPT_MAX) return prompt
   const sinProducto = armar('')
   if (sinProducto.length <= KIE_PROMPT_MAX) return sinProducto
