@@ -482,28 +482,39 @@ export function buildLotePrompt(args: {
   const iProd = images.findIndex((img) => img.role.includes('producto'))
   const imagenProducto = iProd >= 0 ? `Image${iProd + 1}` : 'la imagen del producto'
 
-  const acciones = lote.tomas
-    .map((t) => {
-      const cabecera = lote.tomas.length > 1
-        ? `Toma ${t.n} (${r1(t.duracionSeg)} s): `
-        : ''
+  const acciones = (unaLinea: boolean) => [
+    // El rótulo va SIEMPRE. Colgaba del caso de UNA toma, así que el lote con varias
+    // —el que más hechos tiene que ordenar— abría sin nada que dijera que lo que sigue
+    // es la coreografía: la lista de tomas quedaba pegada a la regla de piezas.
+    'MOVIMIENTO:',
+    ...lote.tomas.map((t) => {
+      // UN HECHO POR LÍNEA, con los mismos cortes que usa el reparto (`partirEnTramos`).
+      // El prompt del wizard que este repo verificó fotograma a fotograma escribe cada
+      // hecho en su renglón (`Holding gotero in right hand.` / `Gently releasing one
+      // clear drop onto her left cheek.`); el nuestro los metía todos en un renglón, y
+      // ahí el modelo los resuelve como UN gesto — de ahí la gota que "aparece" en la
+      // mejilla sin que el gotero llegue nunca. El texto es el MISMO, cambia dónde corta.
+      const hechos = partirEnTramos(sinEscenaDeFoto(t.accionVisual))
       return [
-        `${cabecera}${sinEscenaDeFoto(t.accionVisual) || SIN_HECHO_NUEVO}`,
+        ...(lote.tomas.length > 1 ? [`Toma ${t.n} (${r1(t.duracionSeg)} s):`] : []),
+        ...(!hechos.length ? [SIN_HECHO_NUEVO]
+          : unaLinea ? [`${hechos.join('. ')}.`]
+          : hechos.map((h) => `  - ${h[0].toUpperCase()}${h.slice(1)}.`)),
         // Esta línea es lo único que dice QUÉ FRASE va con QUÉ ACCIÓN y en cuántos
         // segundos: es la sincronización audio↔imagen. Se comprobó en una sesión real
         // que perderla en un lote y conservarla en otro produce "una habla muy rápido y
         // la otra muy lento".
         t.locucion ? `  Dice, literal: “${t.locucion}”` : '  No habla en esta toma.',
       ].join('\n')
-    })
-    .join('\n')
+    }),
+  ].join('\n')
 
   // Un solo escalón de degradación, y en la dirección que este repo ya tiene medida: lo
   // primero que se suelta es lo que DUPLICA lo que la imagen ya muestra. Medido sobre
   // los 155 lotes reales, un lote de una sesión se pasaba del tope al sumar el bloque —
   // sin el escalón, esa sesión dejaba de poder renderizarse. La invariante de piezas NO
   // se suelta: no la dice nadie más.
-  const armar = (desc: string) => [
+  const armar = (desc: string, unaLinea = false) => [
     `Video UGC vertical 9:16, ${lote.duracionSeg} segundos, una sola toma continua.`,
     `Referencias: ${anclas}. Las imágenes definen cómo se ven la persona, el producto y el lugar: reprodúcelos idénticos.`,
     // La descripción NO compite con la imagen: la cita en la misma cláusula y dice lo
@@ -512,8 +523,7 @@ export function buildLotePrompt(args: {
     ...(desc ? [`PRODUCTO — el de ${imagenProducto}, y se ve así durante todo el clip: ${desc}`] : []),
     reglaPiezas(imagenProducto),
     '',
-    'MOVIMIENTO:',
-    acciones,
+    acciones(unaLinea),
     '',
     `CÁMARA: ${camara.replace(/\s*\.\s*$/, '')}. Grabado con teléfono en mano, con micro-temblor natural.`,
     '',
@@ -527,6 +537,13 @@ export function buildLotePrompt(args: {
   if (prompt.length <= KIE_PROMPT_MAX) return prompt
   const sinProducto = armar('')
   if (sinProducto.length <= KIE_PROMPT_MAX) return sinProducto
+  // Segundo escalón: se suelta el FORMATO, no el contenido. Los mismos hechos vuelven a
+  // la línea corrida de siempre — se ejecutan peor, pero están todos. Recortar la
+  // coreografía sería perder lo único que dice qué hace el cuerpo. Ojo con cuánto compra:
+  // son ~4 caracteres por hecho, o sea una banda de ~130 sobre un tope de 4096. No es una
+  // red general; es lo justo para el lote más pesado de la base, que queda a 15 del tope.
+  const corrido = armar('', true)
+  if (corrido.length <= KIE_PROMPT_MAX) return corrido
   throw new Error(
     `El prompt del Lote ${lote.n} no entra en el tope de KIE (${prompt.length} de ${KIE_PROMPT_MAX} caracteres). ` +
     'Con este formato eso solo puede pasar si la coreografía de las tomas del lote es enorme: ' +

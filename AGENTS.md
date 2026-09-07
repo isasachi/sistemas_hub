@@ -1096,7 +1096,27 @@ Los 5 vacíos son el fail-safe funcionando: tomas cuya acción es UN solo hecho 
 
 ⚠️ **Lo que NO se midió:** ningún render. Que los clips dejen de repetir el gesto es una predicción hasta que se renderice — lo que está medido es que el prompt ya no pide la coreografía dos veces. Y el reparto es **solo español**: una `accion` en inglés se sigue partiendo por punto y punto y coma pero no por coma (2 tomas de la base), que es la dirección segura.
 
-⚠️ **Queda pendiente y es otra palanca:** la coreografía viaja como un run-on de varios hechos en UNA línea. AGENTS.md ya tiene medido que **un hecho por línea** se ejecuta mejor que un renglón con tres; eso cambia `buildLotePrompt` y es independiente de este reparto.
+✅ **Y LA PALANCA QUE ESTE DOCUMENTO DEJABA PENDIENTE YA ESTÁ CABLEADA: LA COREOGRAFÍA SE EMITE CON UN HECHO POR LÍNEA (2026-09-07).** Era la nota *"la coreografía viaja como un run-on de varios hechos en UNA línea"*, y es independiente del reparto: aquél decide **qué** hechos le tocan a cada fragmento, esto decide **cómo** se escriben. `buildLotePrompt` imprime ahora la cabecera de la toma en su renglón y cada hecho como su propio bullet, cortando con `partirEnTramos` — **los MISMOS cortes que usa el reparto**, así que no hay una segunda definición de qué es un hecho:
+
+```
+MOVIMIENTO:
+Toma 1 (3.4 s):
+  - Sujeto sostiene el frasco con la mano derecha.
+  - Saca el aplicador cuentagotas con la izquierda y suelta una gota sobre el pómulo izquierdo mientras mira a cámara.
+  Dice, literal: “Este suero me está cambiando la piel.”
+```
+
+**El texto es el mismo; cambia dónde corta.** El prompt del wizard que este repo verificó fotograma a fotograma escribe cada hecho en su renglón (`Holding gotero in right hand.` / `Gently releasing one clear drop onto her left cheek.`); el nuestro los metía todos en un renglón, y ahí el modelo los resuelve como UN gesto — de ahí la gota que "aparece" en la mejilla sin que el gotero llegue nunca.
+
+⚠️ **`MOVIMIENTO:` va SIEMPRE, y casi se pierde justo donde más falta hace.** El rótulo colgaba del caso de UNA toma (era la cabecera cuando no había `Toma N`), así que un lote con VARIAS —el que más hechos tiene que ordenar— abría con la lista de tomas pegada a la regla de piezas, sin nada que dijera que lo que sigue es la coreografía. Ahora es una línea propia y las tomas van debajo. Con test.
+
+✅ **Medido sobre los 156 lotes reales** (lectura pura de la base, cero LLM): **mediana 1.812 · p90 2.654 · MAX 4.081 de 4.096 · 0 lotes sin bloque de producto**, y **799 hechos sobre 239 tomas = 3,34 por toma**, que es la granularidad del shot list del spec. Un lote queda sobre 3.800 y tres sobre 3.500: el margen es de 15 caracteres en el peor caso, y por eso hace falta un escalón más.
+
+⚠️ **SEGUNDO ESCALÓN DE DEGRADACIÓN: SE SUELTA EL FORMATO, NO EL CONTENIDO.** Si ni siquiera sin el bloque de producto entra, los mismos hechos vuelven al renglón corrido — se ejecutan peor, están todos. Recortar la coreografía sería perder lo único que dice qué hace el cuerpo. **Ojo con cuánto compra, porque no es una red general:** son ~4 caracteres por hecho, o sea rescata una banda de ~130 caracteres sobre un tope de 4.096. Se descubrió dimensionando su test tres veces (40 hechos: el corrido también se pasa; 34: se pasa por 3; 33: entra). Existe por el lote más pesado de la base, no por precaución.
+
+⚠️ **`scriptFingerprint` v5 → v6.** La huella hashea INSUMOS, no el texto emitido: un cambio de corte es exactamente lo que no ve, y es justo lo que cambia cómo se ejecuta el clip. Sin el bump, reanudar pegaría un clip del renglón corrido a uno con un hecho por línea mientras `isPaidResume` jura que es el mismo contenido.
+
+⚠️ **Lo que NO se midió, y no hay que leerlo como medido: ningún render.** Que el gotero llegue a la cara es una PREDICCIÓN. Lo medido es que el prompt ahora separa los hechos, que ninguno de los 156 lotes se pasa del tope y que hay dos escalones antes de que un lote se quede sin prompt.
 
 🔴 **CUATRO DEFECTOS DE RENDER, UNA SOLA CAUSA: EL PROMPT NO NOMBRABA EL PRODUCTO EN NINGUNA PARTE (2026-09-07).** Reportados por el dueño del repo sobre los clips de esta sesión: *"terceras manos, goteros duplicados, frascos sin tapa, frascos de otro color"*. Leído el prompt REAL de un lote pagado (sesión `05f62534`), el diagnóstico se cae solo: el prompt es **apariencia-por-imagen-y-nada-más**. Ni una palabra sobre el envase, y la única referencia a `Image2` es una LEYENDA en la línea 2 que después no se vuelve a nombrar.
 

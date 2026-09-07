@@ -284,8 +284,40 @@ describe('buildLotePrompt', () => {
     expect(p).toMatch(/no hay una segunda copia/)
   })
 
-  // El único escalón: lo primero que se suelta es lo que la imagen ya muestra. Sin él,
-  // un lote pesado dejaba de poder renderizarse por completo.
+  it('emite UN HECHO POR LÍNEA, no un renglón con todos', () => {
+    const dos = groupIntoLotes([{ ...toma(1, 6, 'Hola.'),
+      accionVisual: 'Sostiene el frasco con la derecha; destapa con la izquierda; aplica una gota en la mejilla' }])[0]
+    const salida = buildLotePrompt({ lote: dos, ...ARGS })
+    expect(salida).toContain('  - Sostiene el frasco con la derecha.')
+    expect(salida).toContain('  - Destapa con la izquierda.')
+    expect(salida).toContain('  - Aplica una gota en la mejilla.')
+  })
+
+  // Con VARIAS tomas la lista abre igual con su rótulo: es el caso con más hechos que
+  // ordenar, y sin él la lista de tomas queda pegada a la regla de piezas.
+  it('anuncia la coreografía con MOVIMIENTO aunque el lote tenga varias tomas', () => {
+    expect(p).toMatch(/^MOVIMIENTO:$/m)
+    expect(p).toMatch(/MOVIMIENTO:\nToma 1 /)
+  })
+
+  // Los escalones, en orden: primero lo que la imagen ya muestra, después el FORMATO
+  // (los mismos hechos en línea corrida), y la coreografía nunca. Sin ellos, un lote
+  // pesado dejaba de poder renderizarse por completo.
+  // El escalón que hoy NO se dispara en ningún lote real, y NO es una red de seguridad
+  // general: el formato ahorra ~4 caracteres por hecho, o sea rescata una banda de unos
+  // 130 caracteres y nada más. Existe porque el lote más pesado de la base pasa a 15 del
+  // tope, y sin él ese lote se queda sin prompt. Los hechos vuelven al renglón corrido:
+  // se ejecutan peor, están todos.
+  it('y si aun así no entra, vuelve a la línea corrida sin perder un solo hecho', () => {
+    const hecho = (i: number) => `sostiene el envase numero ${i} con la mano derecha mientras observa la etiqueta con atencion`
+    const pesada = groupIntoLotes([{ ...toma(1, 14, 'Frase corta.'),
+      accionVisual: Array.from({ length: 33 }, (_, i) => hecho(i)).join('; ') }])[0]
+    const salida = buildLotePrompt({ lote: pesada, ...ARGS })
+    expect(salida).not.toMatch(/^ {2}- /m)          // se soltó el formato
+    expect(salida).toContain('envase numero 32')     // pero no el contenido
+    expect(salida.length).toBeLessThanOrEqual(KIE_PROMPT_MAX)
+  })
+
   it('si el prompt no entra, suelta el bloque de producto antes que la coreografía', () => {
     const largo = 'Cristal transparente con etiqueta blanca y tapa dorada. '.repeat(200)
     const salida = buildLotePrompt({ lote, ...ARGS, producto: largo })

@@ -153,7 +153,9 @@ export function scriptFingerprint(input: {
     // envase, citando la imagen en la misma cláusula) más la invariante de piezas y
     // manos. Cambia la plantilla —invisible para una huella de insumos— y entra un
     // insumo nuevo, que por eso se hashea abajo.
-    'v5',
+    // v5 → v6: la coreografía se emite con UN HECHO POR LÍNEA. Mismo texto, otro corte
+    // — invisible para una huella de insumos, y es justo lo que cambia cómo se ejecuta.
+    'v6',
     producto,
     voz.idioma, voz.varianteRegional, voz.acento, voz.pronunciacion, voz.ritmo,
     voz.velocidad, voz.entonacion, voz.energia, voz.pausas, voz.tono, voz.timbre,
