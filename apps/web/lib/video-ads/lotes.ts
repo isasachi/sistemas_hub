@@ -180,41 +180,107 @@ export function repartirAccion(accion: string, duraciones: number[]): string[] {
   const tramos = partirEnTramos(sinEscenaDeFoto(accion))
   if (tramos.length < 2) return duraciones.map((_, i) => (i === 0 ? accion : ''))
 
+  // Límites iniciales: reparto proporcional a la duración, por resto mayor.
   const cuota = cuotas(tramos.length, duraciones)
-  let desde = 0
-  return cuota.map((c, i) => {
-    const trozo = tramos.slice(desde, desde + c)
-    const previos = tramos.slice(0, desde)
-    desde += c
-    if (!trozo.length) return ''
-    if (i === 0) return trozo.join('. ') + '.'
-    // Un fragmento que no es el primero arranca A MITAD del corte, y el clip se renderiza
-    // sin memoria del anterior: lo que las manos tienen y lo que ya pasó hay que
-    // decírselo. Medido en el lote 3 de `00471f8a`: el corte decía "sujeta el frasco con
-    // la derecha; aplica una gota; extiende con las yemas; mira", el segundo fragmento
-    // recibió solo "extiende con las yemas; mira", y grok inventó el dispensado entero
-    // (saca el gotero, gota en la palma) para tener suero que extender, y después el
-    // frasco desapareció de las manos. Nada de esto inventa coreografía: el estado es el
-    // que el forense declaró, y la transferencia ya ocurrió en el fragmento anterior.
+  const limites: number[] = []
+  for (let k = 0, desde = 0; k < cuota.length; k++) { limites.push(desde); desde += cuota[k] }
+
+  // LA FRONTERA ENTRE FRAGMENTOS ES UN ESTADO CERRADO. Los fragmentos caen en clips
+  // distintos y cada clip se renderiza sin memoria del anterior, así que una frontera
+  // con el cuentagotas FUERA del envase es un objeto que el clip siguiente no sabe que
+  // existe: desaparece de la mano o se dibuja de nuevo. Si en la frontera el aplicador
+  // está fuera y más adelante el corte lo cierra, la frontera se corre hasta después del
+  // cierre — abrir, aplicar y cerrar quedan en el mismo clip. Si el corte nunca lo
+  // cierra (el forense no lo dijo), se cierra al final del fragmento (abajo): es la
+  // única forma de que el siguiente arranque con el envase cerrado en la mano, que es
+  // lo que el original muestra cuando la otra mano trabaja sobre la cara.
+  for (let k = 1; k < limites.length; k++) {
+    if (!aplicadorFuera(tramos.slice(0, limites[k]))) continue
+    const cierre = tramos.findIndex((t, i) => i >= limites[k] && esCierre(t))
+    if (cierre < 0) continue
+    limites[k] = cierre + 1
+    for (let j = k + 1; j < limites.length; j++) limites[j] = Math.max(limites[j], limites[k])
+  }
+
+  const pieza = piezaDe(tramos)
+  return limites.map((ini, k) => {
+    const fin = k + 1 < limites.length ? limites[k + 1] : tramos.length
+    const trozo = tramos.slice(ini, fin)
+    const previos = tramos.slice(0, ini)
+    const ultimo = k === limites.length - 1
+    if (k === 0 && ultimo) return trozo.join('. ') + '.'
+
+    // Un fragmento que no es el primero arranca A MITAD del corte: hay que decirle qué
+    // tiene cada mano, que el envase está cerrado y que el producto ya está en la piel.
+    // Nada de esto inventa coreografía: el estado es el que el forense declaró, y la
+    // transferencia ya ocurrió en un fragmento anterior. Medido en el lote 3 de
+    // `00471f8a`: sin esto, grok inventó el dispensado entero para tener suero que
+    // extender, y el frasco desapareció de las manos.
     const estado = [...previos].reverse().find(esEstadoDeManos)
-    const yaAplicado = previos.some(esTransferencia) && !trozo.some(esTransferencia)
-    return [
-      ...(estado && !trozo.some((t) => t === estado) ? [estado] : []),
-      ...trozo,
-      ...(yaAplicado ? [YA_APLICADO] : []),
-    ].join('. ') + '.'
+    const lado = estado ? manoDe(estado) : null
+    const apertura = k === 0 ? [] : [
+      ...(estado && !trozo.includes(estado) ? [estado] : []),
+      ...(previos.some(esApertura) ? [`el envase está cerrado, con ${pieza} dentro`] : []),
+      ...(lado === 'derecha' ? ['la mano izquierda está libre'] : lado === 'izquierda' ? ['la mano derecha está libre'] : []),
+      ...(previos.some(esTransferencia) && !trozo.some(esTransferencia) ? [YA_APLICADO] : []),
+    ]
+    // Y uno que no es el último CIERRA: el aplicador vuelve al envase si nadie lo dijo, y
+    // se declara con qué termina. Es el estado con el que abre el clip siguiente.
+    const hasta = tramos.slice(0, fin)
+    const estadoFin = [...hasta].reverse().find(esEstadoDeManos)
+    const ladoFin = estadoFin ? manoDe(estadoFin) : null
+    const cierre = ultimo ? [] : [
+      // Solo los tramos PROPIOS: en la frontera anterior el aplicador ya quedó cerrado
+      // (la frontera se corrió hasta un cierre real, o se cerró sintético), así que el
+      // estado al final de este fragmento es lo que él mismo abrió y no cerró.
+      ...(aplicadorFuera(trozo) ? [`vuelve a poner ${pieza} en el envase y lo cierra`] : []),
+      ...(ladoFin ? [`termina con el envase en ${ladoFin === 'ambas' ? 'ambas manos' : `la mano ${ladoFin}`}${hasta.some(esApertura) ? ', cerrado' : ''}`] : []),
+    ]
+    const lineas = [...apertura, ...trozo, ...cierre]
+    return lineas.length ? lineas.join('. ') + '.' : ''
   })
 }
 
+// Vocabulario CERRADO del estado de los objetos, sobre la prosa del forense. Se amplía
+// agregando verbos acá —visible en el diff—, no aflojando los patrones.
 /** Un tramo que declara qué tiene una mano, no un movimiento: se hereda entre fragmentos. */
 const esEstadoDeManos = (t: string) => /^(sujeta|sostiene|mantiene|tiene)\b/i.test(sinTildes(t)) && /\bmano/i.test(t)
 /** El producto llegó al cuerpo en este tramo. */
 const esTransferencia = (t: string) => /\b(aplica|deja caer|suelta|vierte|deposita|echa)\b/i.test(t) && /\b(gota|suero|serum|producto|crema)\b/i.test(t)
+const PIEZAS = /\b(cuentagotas|gotero|pipeta|tapa|tapón|cuchara|aplicador)\b/i
+/** El aplicador sale del envase: se destapa, se saca, o se usa fuera (aplicar CON el gotero). */
+const esApertura = (t: string) =>
+  /\b(destapa|abre|desenrosca)\b/i.test(t)
+  || (/\b(saca|retira|extrae|sostiene|sujeta|levanta)\b/i.test(t) && PIEZAS.test(t))
+  || (esTransferencia(t) && /\b(cuentagotas|gotero|pipeta|cuchara)\b/i.test(t))
+/** El aplicador vuelve al envase. */
+const esCierre = (t: string) =>
+  /\b(lo|la)\s+(tapa|cierra|enrosca)\b/i.test(t)
+  || /\b(tapa|cierra|enrosca)\s+(el|la)\s+(envase|frasco|botella|bote|tubo|tarro|producto)\b/i.test(t)
+  || (/\b(vuelve a (poner|colocar|meter)|coloca|guarda|devuelve|introduce|mete)\b/i.test(t) && PIEZAS.test(t))
+/** Estado del aplicador al final de una secuencia de tramos: fuera (true) o en el envase. */
+function aplicadorFuera(seq: string[]): boolean {
+  let fuera = false
+  for (const t of seq) { if (esCierre(t)) fuera = false; else if (esApertura(t)) fuera = true }
+  return fuera
+}
+function piezaDe(tramos: string[]): string {
+  const m = tramos.map((t) => t.match(PIEZAS)?.[1]?.toLowerCase()).find(Boolean)
+  return { cuentagotas: 'el cuentagotas', gotero: 'el gotero', pipeta: 'la pipeta', tapa: 'la tapa', 'tapón': 'el tapón', cuchara: 'la cuchara' }[m ?? ''] ?? 'el aplicador'
+}
+function manoDe(estado: string): 'derecha' | 'izquierda' | 'ambas' | null {
+  if (/ambas manos/i.test(estado)) return 'ambas'
+  const m = estado.match(/mano (derecha|izquierda)/i)
+  return m ? (m[1].toLowerCase() as 'derecha' | 'izquierda') : null
+}
 // En positivo y describiendo el ESTADO de arranque, no prohibiendo el gesto: la forma
 // negativa ("no vuelve a dispensar") se renderizó igual sacando el gotero y soltando una
 // gota antes de extender (lote 3 de `00471f8a`, 1 de 1). A un modelo de difusión una
 // prohibición le llega débil; un estado declarado es un dato.
-const YA_APLICADO = 'el suero ya está sobre la piel desde el inicio y el cuentagotas dentro del frasco, cerrado'
+const YA_APLICADO = 'el producto ya está sobre la piel desde el inicio'
+/** Las líneas que el reparto agrega en las fronteras: solo tienen sentido entre LOTES. */
+const esAndamioDeFrontera = (h: string) =>
+  h === YA_APLICADO || /^(el envase está cerrado|la mano (derecha|izquierda) está libre|termina con el envase)/i.test(h)
 
 /**
  * Tolerancia SOLO para ruido de punto flotante (ej. 14.299999999999999), no para
@@ -544,10 +610,13 @@ export function buildLotePrompt(args: {
     // es la coreografía: la lista de tomas quedaba pegada a la regla de piezas.
     'MOVIMIENTO:',
     ...lote.tomas.map((t, i) => {
-      // Dos fragmentos del MISMO corte en el MISMO lote heredan el mismo estado de manos y
-      // la misma aclaración de "ya aplicado" (`repartirAccion`): dentro de un clip
-      // continuo decirlo dos veces es ruido. Entre lotes sí se repite, y debe.
-      const previos = new Set(i ? partirEnTramos(sinEscenaDeFoto(lote.tomas[i - 1].accionVisual)) : [])
+      // Las líneas de FRONTERA que agrega `repartirAccion` (estado heredado, envase cerrado,
+      // mano libre, ya aplicado, "termina con") existen porque cada LOTE se renderiza sin
+      // memoria. Entre dos fragmentos del MISMO corte que caen en el MISMO lote el clip es
+      // continuo y esas líneas son ruido: se quitan.
+      const mismoCorteAntes = i > 0 && lote.tomas[i - 1].tiempoOriginal === t.tiempoOriginal
+      const mismoCorteDespues = i < lote.tomas.length - 1 && lote.tomas[i + 1].tiempoOriginal === t.tiempoOriginal
+      const previos = new Set(mismoCorteAntes ? partirEnTramos(sinEscenaDeFoto(lote.tomas[i - 1].accionVisual)) : [])
       // UN HECHO POR LÍNEA, con los mismos cortes que usa el reparto (`partirEnTramos`).
       // El prompt del wizard que este repo verificó fotograma a fotograma escribe cada
       // hecho en su renglón (`Holding gotero in right hand.` / `Gently releasing one
@@ -555,7 +624,8 @@ export function buildLotePrompt(args: {
       // ahí el modelo los resuelve como UN gesto — de ahí la gota que "aparece" en la
       // mejilla sin que el gotero llegue nunca. El texto es el MISMO, cambia dónde corta.
       const hechos = partirEnTramos(sinEscenaDeFoto(t.accionVisual))
-        .filter((h) => !(previos.has(h) && (esEstadoDeManos(h) || h === YA_APLICADO)))
+        .filter((h) => !(mismoCorteAntes && ((previos.has(h) && esEstadoDeManos(h)) || (esAndamioDeFrontera(h) && !/^termina/i.test(h)))))
+        .filter((h) => !(mismoCorteDespues && /^termina con el envase/i.test(h)))
       // El plano se anuncia solo cuando CAMBIA respecto de la toma anterior: un shot
       // list se lee así, el plano vale hasta que se anuncia otro.
       const plano = multiPlano ? planoDe.get(t.tiempoOriginal) : undefined

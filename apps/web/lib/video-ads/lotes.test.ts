@@ -495,7 +495,7 @@ describe('el reparto no deja escenografía de foto ni carriles vacíos', () => {
       [5, 5],
     )
     expect(a).toBe('Aplica el producto.')
-    expect(b).toMatch(/^extiende con los dedos\./)
+    expect(b).toContain('extiende con los dedos')
     expect(b).not.toMatch(/flotando/)
   })
 
@@ -504,32 +504,67 @@ describe('el reparto no deja escenografía de foto ni carriles vacíos', () => {
   // sacando el gotero, soltó una gota en la palma y las dos manos subieron a la cara
   // vacías — el frasco reapareció en el segundo 7. El original tiene el frasco en la
   // derecha todo el tramo y la gota ya aplicada.
-  it('un fragmento que arranca a mitad del corte hereda qué tiene cada mano y sabe que la gota ya cayó', () => {
+  it('la frontera entre fragmentos es un estado cerrado: abre con las manos declaradas y cierra el envase', () => {
     const corte3 = 'Sujeta el frasco con la mano derecha; aplica una gota sobre la mejilla con el cuentagotas en la izquierda; extiende el suero con las yemas de los dedos sobre la mejilla, el mentón y el cuello con movimientos ascendentes; mira a la cámara y señala el resultado en su piel.'
-    const [a, b] = repartirAccion(corte3, [12, 8])
-    expect(a).toBe('Sujeta el frasco con la mano derecha. aplica una gota sobre la mejilla con el cuentagotas en la izquierda.')
+    const [a, b, c] = repartirAccion(corte3, [12, 5.6, 2.4])
+    // el corte nunca dijo dónde terminó el cuentagotas: el fragmento que lo sacó lo devuelve
+    expect(partirEnTramos(a)).toEqual([
+      'Sujeta el frasco con la mano derecha',
+      'aplica una gota sobre la mejilla con el cuentagotas en la izquierda',
+      'vuelve a poner el cuentagotas en el envase y lo cierra',
+      'termina con el envase en la mano derecha, cerrado',
+    ])
+    // el siguiente arranca con el envase cerrado en la derecha, la izquierda libre y el suero ya puesto
     expect(partirEnTramos(b)).toEqual([
       'Sujeta el frasco con la mano derecha',
+      'el envase está cerrado, con el cuentagotas dentro',
+      'la mano izquierda está libre',
+      'el producto ya está sobre la piel desde el inicio',
       'extiende el suero con las yemas de los dedos sobre la mejilla, el mentón y el cuello con movimientos ascendentes',
-      'mira a la cámara y señala el resultado en su piel',
-      'el suero ya está sobre la piel desde el inicio y el cuentagotas dentro del frasco, cerrado',
+      'termina con el envase en la mano derecha, cerrado',
     ])
+    expect(partirEnTramos(c)).toEqual([
+      'Sujeta el frasco con la mano derecha',
+      'el envase está cerrado, con el cuentagotas dentro',
+      'la mano izquierda está libre',
+      'el producto ya está sobre la piel desde el inicio',
+      'mira a la cámara y señala el resultado en su piel',
+    ])
+  })
+
+  it('si el corte cierra el envase más adelante, la frontera se corre hasta después del cierre', () => {
+    const [a, b] = repartirAccion(
+      'Sujeta el frasco con la mano derecha; destapa el frasco con la izquierda; aplica una gota en la mejilla con el cuentagotas; cierra el frasco; masajea la mejilla con la izquierda; mira a cámara',
+      [5, 5],
+    )
+    // el reparto proporcional cortaba en 3/3, con el gotero fuera: abrir, aplicar y cerrar van juntos
+    expect(a).toContain('cierra el frasco')
+    expect(a).not.toMatch(/vuelve a poner/)
+    expect(b).toMatch(/^Sujeta el frasco con la mano derecha\. el envase está cerrado/)
+    expect(b).toContain('masajea la mejilla con la izquierda')
     // el estado que se hereda es el ÚLTIMO declarado antes del fragmento, no el primero del corte
     const [, c] = repartirAccion('Sujeta el frasco con la derecha; pasa el frasco a la izquierda; sostiene el frasco con la mano izquierda; masajea la mejilla; mira a cámara', [10, 5])
-    expect(c).toMatch(/^sostiene el frasco con la mano izquierda\./)
+    expect(c).toMatch(/^sostiene el frasco con la mano izquierda\. la mano derecha está libre/)
     // si el propio fragmento dispensa, no se le dice que ya está aplicado
     const [, d] = repartirAccion('Sujeta el frasco con la mano derecha; aplica una gota en la mejilla; aplica otra gota en la frente; extiende', [5, 5])
     expect(d).not.toMatch(/ya está sobre la piel/)
-    // dos fragmentos del mismo corte en el MISMO lote: el segundo no repite el estado ni la aclaración
+    // sin estado declarado, sin aplicador y sin transferencia, nada se agrega
+    expect(repartirAccion('uno; dos', [9, 1])).toEqual(['uno.', 'dos.'])
+  })
+
+  it('entre dos fragmentos del mismo corte en el MISMO lote no hay andamiaje de frontera', () => {
+    const corte3 = 'Sujeta el frasco con la mano derecha; aplica una gota sobre la mejilla con el cuentagotas en la izquierda; extiende el suero con las yemas; mira a la cámara y señala el resultado en su piel.'
     const corteLargo = { ...toma(1, 20, 'Una frase corta. Otra frase corta. Y una tercera.'), accionVisual: corte3, tiempoOriginal: '00:15 - 00:35' }
     const lotes = groupIntoLotes([corteLargo])
     const conDos = lotes.find((l) => l.tomas.length >= 2)!
-    const p = buildLotePrompt({ lote: conDos, camara: 'Plano medio.', voz: VOZ, producto: '', images: [{ url: 'a', role: 'la persona' }] })
     expect(conDos.tomas.length).toBeGreaterThanOrEqual(2)
-    expect((p.match(/Sujeta el frasco con la mano derecha/g) ?? []).length).toBe(1)
-    expect((p.match(/ya está sobre la piel/g) ?? []).length).toBeLessThanOrEqual(1)
-    // sin estado declarado ni transferencia previa, nada se agrega
-    expect(repartirAccion('uno; dos', [9, 1])).toEqual(['uno.', 'dos.'])
+    const p = buildLotePrompt({ lote: conDos, camara: 'Plano medio.', voz: VOZ, producto: '', images: [{ url: 'a', role: 'la persona' }] })
+    const bloque = p.split('MOVIMIENTO:')[1].split('\nCÁMARA')[0]
+    const tomasEmitidas = bloque.split(/\nToma \d/).length - 1
+    // dentro del clip no se "termina" ni se vuelve a abrir el estado entre tomas contiguas
+    expect((bloque.match(/termina con el envase/gi) ?? []).length).toBeLessThanOrEqual(tomasEmitidas ? 1 : 0)
+    expect((bloque.match(/está libre/gi) ?? []).length).toBeLessThanOrEqual(1)
+    expect((bloque.match(/Sujeta el frasco con la mano derecha/g) ?? []).length).toBe(1)
   })
 
   it('un fragmento sin hecho propio DECLARA la quietud, no deja el encabezado suelto', () => {

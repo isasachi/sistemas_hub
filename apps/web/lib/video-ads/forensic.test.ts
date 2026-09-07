@@ -266,6 +266,7 @@ describe('la accion encadena las manos y nombra la transferencia', () => {
   // veces dentro del mismo prompt.
   it('exige el estado de cada mano al empezar el corte, y como TITULAR', () => {
     expect(plano).toMatch(/CADA CORTE ABRE DICIENDO QUÉ TIENE CADA MANO/)
+    expect(plano).toMatch(/Y CIERRA DICIENDO DÓNDE QUEDÓ CADA PIEZA QUE SALIÓ DEL ENVASE/)
     expect(plano).toMatch(/un brazo de más/)
     // "la mano libre" es el residuo medido: una descripción que no nombra la mano deja
     // sin decir qué sostiene, que es justo el dato que falta.
