@@ -2,7 +2,7 @@ import { z } from 'zod'
 import type { TomaFinal } from './adapt'
 import type { VoiceProfile } from './character'
 import { KIE_PROMPT_MAX } from './kie'
-import { CPS_MAX, esEstadoDeManos, type Hecho } from './forensic'
+import { CPS_MAX, esEstadoDeManos, verificarDialogos, type Hecho } from './forensic'
 
 /**
  * FASE 5 del prompt maestro — agrupación de tomas en lotes de generación.
@@ -113,7 +113,7 @@ const sinTildes = (s: string) =>
   s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
 
 const abreHecho = (clausula: string) =>
-  VERBOS_TRAMO.has(sinTildes(clausula.trim()).split(/\s+/)[0] ?? '')
+  VERBOS_TRAMO.has(sinTildes(clausula.trim()).replace(/^se\s+/, '').split(/\s+/)[0] ?? '')
 
 /**
  * Parte la coreografía en HECHOS. Punto y punto y coma siempre; la coma solo cuando lo
@@ -126,7 +126,7 @@ export function partirEnTramos(accion: string): string[] {
       const out: string[] = []
       for (const parte of frase.split(/,\s+/)) {
         // ", luego guarda el gotero" es un hecho nuevo: el conector no tapa el verbo.
-        const sinConector = parte.replace(/^(y\s+)?(luego|despu[eé]s|entonces)\s+/i, '')
+        const sinConector = parte.replace(/^(y\s+)?(luego|despu[eé]s|entonces|posteriormente|finalmente|a continuaci[oó]n|seguidamente)\s+/i, '')
         if (out.length && !abreHecho(sinConector)) out[out.length - 1] += ', ' + parte
         else out.push(out.length ? sinConector : parte)
       }
@@ -301,7 +301,7 @@ export function aplicadorFueraEn(hechos: Hecho[], t: number): boolean {
 // Vocabulario CERRADO del estado de los objetos, sobre la prosa del forense. Se amplía
 // agregando verbos acá —visible en el diff—, no aflojando los patrones.
 /** El producto llegó al cuerpo en este tramo. */
-const esTransferencia = (t: string) => /\b(aplica|deja caer|suelta|vierte|deposita|echa)\b/i.test(t) && /\b(gota|suero|serum|producto|crema)\b/i.test(t)
+const esTransferencia = (t: string) => /\b(aplica|deja caer|suelta|vierte|deposita|echa)\b/i.test(t) && /\b(gota|suero|serum|producto|crema|mejilla|frente|rostro|cara|piel|cuello|ment[oó]n|p[oó]mulo)\b/i.test(t)
 const PIEZAS = /\b(cuentagotas|gotero|pipeta|tapa|tapón|cuchara|aplicador)\b/i
 /** El aplicador sale del envase: se destapa, se saca, o se usa fuera (aplicar CON el gotero). */
 const esApertura = (t: string) =>
@@ -311,8 +311,35 @@ const esApertura = (t: string) =>
 /** El aplicador vuelve al envase. */
 const esCierre = (t: string) =>
   /\b(lo|la)\s+(tapa|cierra|enrosca)\b/i.test(t)
-  || /\b(tapa|cierra|enrosca)\s+(el|la)\s+(envase|frasco|botella|bote|tubo|tarro|producto)\b/i.test(t)
-  || (/\b(vuelve a (poner|colocar|meter)|coloca|guarda|devuelve|introduce|mete)\b/i.test(t) && PIEZAS.test(t))
+  || /\b(tapa|cierra|enrosca)\s+(el|la)\s+(envase|frasco|botella|bote|tubo|tarro|producto|cuentagotas|gotero|pipeta|tapa|tapón|aplicador)\b/i.test(t)
+  || (/\b(vuelve a (poner|colocar|meter|introducir|insertar|enroscar)|coloca|guarda|devuelve|introduce|inserta|mete|enrosca)\b/i.test(t) && PIEZAS.test(t))
+
+/**
+ * DEFECTOS ESTRUCTURALES de un análisis forense: los que el pipeline puede detectar en
+ * código y que, persistidos, cuestan un render entero. El forense es ESTOCÁSTICO —el
+ * mismo video da tres sorteos distintos— y el prompt no es garantía, así que esto decide
+ * si un sorteo se acepta o se vuelve a tirar. Devuelve un motivo por corte defectuoso.
+ *  1. Colapso: un corte de más de 8 s con un solo hecho (varias acciones adentro).
+ *  2. Trayectoria sin evento: el aplicador sale y vuelve al envase sin que el producto
+ *     llegue al cuerpo — "sostiene el cuentagotas sobre la mejilla" → "vuelve a
+ *     introducirlo". Grok ejecuta lo que lee: destapa y tapa, y la gota nunca cae.
+ *  3. El reparto del diálogo: repetido entre cortes, que no reconstruye el guion, o que
+ *     no entra en su ventana (`verificarDialogos`).
+ */
+export function defectosDelForense(report: { cortes?: { n: number; tiempo: string; duracionSeg: number; dialogo?: string; hechos?: Hecho[] }[]; guionOriginal?: string }): string[] {
+  const out: string[] = verificarDialogos(report)
+  for (const c of report.cortes ?? []) {
+    const hechos = c.hechos ?? []
+    if (!hechos.length) continue // análisis anterior a los hechos: no se juzga
+    // El colapso se juzga DESPUÉS de expandir: un hecho con tres acciones separadas por
+    // "posteriormente" es tres hechos para el reparto, no uno.
+    const textos = expandirHechos(hechos).map((h) => h.texto)
+    if (c.duracionSeg > 8 && textos.length < 2) out.push(`corte ${c.n}: ${c.duracionSeg.toFixed(1)} s con un solo hecho`)
+    if (textos.some(esApertura) && textos.some(esCierre) && !textos.some(esTransferencia))
+      out.push(`corte ${c.n}: el aplicador sale y vuelve al envase sin que el producto llegue al cuerpo`)
+  }
+  return out
+}
 /** Estado del aplicador al final de una secuencia de tramos: fuera (true) o en el envase. */
 function aplicadorFuera(seq: string[]): boolean {
   let fuera = false

@@ -264,6 +264,46 @@ export function normalizarHechos(report: ForensicReport): { report: ForensicRepo
   return { report: { ...report, cortes }, rellenos }
 }
 
+/**
+ * El REPARTO DEL DIÁLOGO entre cortes, verificado en código. El forense es estocástico y
+ * un sorteo puede poner dos frases en una ventana de 4 s (indecible: `repairCutTiming` lo
+ * tapa inflando el corte) o repetir la línea de la marca en dos cortes. Tres chequeos,
+ * ninguno un juicio: diálogo repetido entre cortes; la suma de los diálogos que no
+ * reconstruye `guionOriginal` (tolerancia del 10 %, el modelo mueve una coma); y diálogo
+ * que no entra en su VENTANA (`tiempo`, nunca la duración ya reparada). Devuelve motivos.
+ */
+export function verificarDialogos(report: { cortes?: { n: number; tiempo: string; dialogo?: string }[]; guionOriginal?: string }): string[] {
+  const cortes = report.cortes ?? []
+  const out: string[] = []
+  const vistos = new Map<string, number>()
+  for (const c of cortes) {
+    const clave = soloPalabras(c.dialogo ?? '')
+    if (!clave) continue
+    const antes = vistos.get(clave)
+    if (antes !== undefined) out.push(`corte ${c.n}: repite el diálogo del corte ${antes}`)
+    else vistos.set(clave, c.n)
+  }
+  const junto = soloPalabras(cortes.map((c) => c.dialogo ?? '').join(' '))
+  const guion = soloPalabras(report.guionOriginal ?? '')
+  if (guion && Math.abs(junto.length - guion.length) > guion.length * 0.1)
+    out.push(`la suma de los diálogos no reconstruye el guion (${junto.length - guion.length > 0 ? '+' : ''}${junto.length - guion.length} caracteres)`)
+  for (const c of cortes) {
+    const ventana = segundosDeVentana(c.tiempo)
+    const largo = (c.dialogo ?? '').length
+    if (ventana && largo / ventana > CPS_MAX)
+      out.push(`corte ${c.n}: ${largo} caracteres en una ventana de ${ventana.toFixed(1)} s = ${(largo / ventana).toFixed(1)} car/s`)
+  }
+  return out
+}
+const soloPalabras = (s: string) => sinTildes(s).replace(/[^a-z0-9ñ]+/g, ' ').trim()
+/** Segundos que abarca una ventana `"00:04 - 00:10"`; 0 si no se puede leer. */
+function segundosDeVentana(tiempo: string): number {
+  const m = String(tiempo ?? '').match(/(\d+):(\d+)\s*-\s*(\d+):(\d+)/)
+  if (!m) return 0
+  const a = Number(m[1]) * 60 + Number(m[2]), b = Number(m[3]) * 60 + Number(m[4])
+  return b > a ? b - a : 0
+}
+
 /** Segundo de inicio de un `tiempo` "MM:SS - MM:SS"; 0 si no se puede leer. */
 function inicioDe(tiempo: string): number {
   const m = tiempo?.match(/(\d{1,2}):(\d{2})/)

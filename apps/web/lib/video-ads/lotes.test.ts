@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { groupIntoLotes, LOTE_MAX_SEC, LOTE_MAX_CHARS, LoteSchema, expandirHechos, buildLotePrompt, camaraDeLote, sinEscenaDeFoto, partirEnTramos, repartirAccion } from './lotes'
+import { groupIntoLotes, LOTE_MAX_SEC, LOTE_MAX_CHARS, LoteSchema, expandirHechos, defectosDelForense, buildLotePrompt, camaraDeLote, sinEscenaDeFoto, partirEnTramos, repartirAccion } from './lotes'
 import type { TomaFinal } from './adapt'
 import type { Hecho } from './forensic'
 import { KIE_PROMPT_MAX } from './kie'
@@ -754,6 +754,60 @@ describe('partirEnTramos y los conectores', () => {
     expect(partirEnTramos('masajea las mejillas y el cuello, luego guarda el gotero en el frasco'))
       .toEqual(['masajea las mejillas y el cuello', 'guarda el gotero en el frasco'])
     expect(partirEnTramos('Mira el producto, y luego a cámara')).toEqual(['Mira el producto, y luego a cámara'])
+    // el quinto sorteo real: un corte de 19 s con tres acciones en un solo hecho
+    expect(partirEnTramos('Sujeto aplica una gota en la mejilla, posteriormente realiza movimientos circulares con los dedos, finalmente muestra el producto a cámara'))
+      .toEqual(['Sujeto aplica una gota en la mejilla', 'realiza movimientos circulares con los dedos', 'muestra el producto a cámara'])
+    expect(partirEnTramos('sostiene el producto con la mano derecha, se toca la mejilla y el mentón'))
+      .toEqual(['sostiene el producto con la mano derecha', 'se toca la mejilla y el mentón'])
+  })
+})
+
+describe('defectosDelForense', () => {
+  const h = (desde: number, hasta: number, texto: string) => ({ desde, hasta, texto })
+  // El tercer sorteo real de `00471f8a`: el render abrió destapando y tapando, sin gota.
+  const C = (n: number, duracionSeg: number, hechos: ReturnType<typeof h>[], dialogo = '') => ({ n, tiempo: `00:00 - 00:${String(Math.round(duracionSeg)).padStart(2, '0')}`, duracionSeg, dialogo, hechos })
+  it('caza la trayectoria sin evento: el aplicador sale y vuelve sin que el producto llegue al cuerpo', () => {
+    // el cuarto sorteo real: "una gota suspendida" que nunca cae, y "cierra el cuentagotas"
+    expect(defectosDelForense({ cortes: [C(1, 4, [
+      h(0, 1.2, 'la mano derecha sostiene el tapón del cuentagotas con una gota suspendida, la mano izquierda sostiene el frasco'),
+      h(1.2, 4.1, 'cierra el cuentagotas en el frasco, deja el frasco con ambas manos frente al pecho y lo muestra'),
+    ])] })).toEqual(['corte 1: el aplicador sale y vuelve al envase sin que el producto llegue al cuerpo'])
+    const d = defectosDelForense({ cortes: [C(1, 3.4, [
+      h(0, 1.2, 'la mano derecha sostiene el cuentagotas sobre la mejilla, la izquierda sostiene el frasco'),
+      h(1.2, 3.4, 'la mano derecha vuelve a introducir el cuentagotas en el frasco y cierra la tapa'),
+    ])] })
+    expect(d).toEqual(['corte 1: el aplicador sale y vuelve al envase sin que el producto llegue al cuerpo'])
+    // "lo aplica en su mejilla" sin nombrar el producto también es la transferencia (quinto sorteo real)
+    expect(defectosDelForense({ cortes: [C(1, 3, [h(0, 3, 'sostiene el frasco con la mano derecha, saca el cuentagotas con la izquierda, lo aplica en su mejilla derecha y vuelve a poner el cuentagotas')])] })).toEqual([])
+    // con la gota escrita, no hay defecto
+    expect(defectosDelForense({ cortes: [C(1, 3.4, [
+      h(0, 1.2, 'la mano derecha suelta una gota con el cuentagotas sobre la mejilla, la izquierda sostiene el frasco'),
+      h(1.2, 3.4, 'vuelve a insertar el gotero en el frasco'),
+    ])] })).toEqual([])
+  })
+  it('caza el colapso: un corte largo con un solo hecho', () => {
+    expect(defectosDelForense({ cortes: [C(4, 20, [h(0, 20, 'aplica el suero y masajea')])] })).toEqual(['corte 4: 20.0 s con un solo hecho'])
+    // tres acciones en un hecho NO es colapso: se juzga después de expandir
+    expect(defectosDelForense({ cortes: [C(4, 19, [h(0, 19, 'aplica una gota en la mejilla con la izquierda, posteriormente realiza movimientos circulares con los dedos, mientras sostiene el frasco')])] })).toEqual([])
+    expect(defectosDelForense({ cortes: [C(2, 5, [h(0, 5, 'muestra el frasco')])] })).toEqual([])
+    // un análisis anterior (sin hechos) no se juzga
+    expect(defectosDelForense({ cortes: [C(1, 20, [])] })).toEqual([])
+  })
+
+  // El cuarto sorteo real: dos frases en una ventana de 4 s y la línea de la marca en dos cortes.
+  it('caza el reparto del diálogo: repetido, indecible en su ventana, o que no reconstruye el guion', () => {
+    const linea = 'Este es el serum antienvejecimiento de la marca Apivita y se llama Beevine Elixir.'
+    const d = defectosDelForense({
+      guionOriginal: `Este serum esta cambiando la piel. ${linea} Y me encanta.`,
+      cortes: [
+        { ...C(1, 4, [h(0, 4, 'muestra el frasco')], 'Este serum esta cambiando la piel. Si tu tambien estas casi a punto de entrar a los 30 como yo, es momento de empezar.'), tiempo: '00:00 - 00:04' },
+        { ...C(2, 6, [h(0, 6, 'muestra el frasco')], linea), tiempo: '00:04 - 00:10' },
+        { ...C(3, 5, [h(0, 5, 'muestra el frasco')], linea), tiempo: '00:10 - 00:15' },
+      ],
+    })
+    expect(d).toContain('corte 3: repite el diálogo del corte 2')
+    expect(d.some((x) => x.startsWith('corte 1:') && x.includes('car/s'))).toBe(true)
+    expect(d.some((x) => x.startsWith('la suma de los diálogos'))).toBe(true)
   })
 })
 

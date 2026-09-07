@@ -10,6 +10,10 @@ import { buildForensicInstruction, repairCutTiming, normalizarHechos, MIN_VISIBL
 import { VIDEO_SYSTEM_PROMPT } from '@/lib/video-ads/llm'
 import { MAX_VIDEO_MB } from '@/lib/video-ads/limits'
 import { STEP } from '@/lib/video-ads/steps'
+import { defectosDelForense } from '@/lib/video-ads/lotes'
+
+/** Reintentos del forense ante un defecto estructural. Cada uno es una llamada de video pagada por el hub. */
+const FORENSE_REINTENTOS = 1
 import type { Part } from '@google/genai'
 
 export const dynamic = 'force-dynamic'
@@ -66,7 +70,19 @@ export async function POST(
     // catálogo). El forense mira un video: esa orden le contamina los campos de
     // coreografía, y de ahí salían las seis `accionVisual` terminadas en "El producto no
     // está flotando." aguas abajo.
-    const analysis = await geminiCallStructured('forensic_report', ForensicReportSchema, parts, 3, VIDEO_SYSTEM_PROMPT)
+    // El forense es ESTOCÁSTICO y un sorteo con defecto estructural (un corte largo
+    // colapsado a un hecho, o el aplicador que sale y vuelve sin aplicar) cuesta un render
+    // entero con la key del usuario. Se vuelve a tirar UNA vez y se conserva el sorteo con
+    // menos defectos. ⚠️ Es una llamada de video pagada por el hub: `FORENSE_REINTENTOS`.
+    let analysis = await geminiCallStructured('forensic_report', ForensicReportSchema, parts, 3, VIDEO_SYSTEM_PROMPT)
+    let defectos = defectosDelForense(analysis)
+    for (let i = 0; i < FORENSE_REINTENTOS && defectos.length; i++) {
+      console.warn(`[video-ads/analyze-reference] sesión ${id}: forense con defectos estructurales, se vuelve a tirar:`, defectos)
+      const otro = await geminiCallStructured('forensic_report', ForensicReportSchema, parts, 3, VIDEO_SYSTEM_PROMPT)
+      const otros = defectosDelForense(otro)
+      if (otros.length < defectos.length) { analysis = otro; defectos = otros }
+    }
+    if (defectos.length) console.warn(`[video-ads/analyze-reference] sesión ${id}: se persiste con defectos:`, defectos)
 
     // Mismo motivo que en adapt-script: el modelo estima mal el conteo (reportó 562
     // sobre un guión de 776) y ese número es la referencia contra la que se mide si el

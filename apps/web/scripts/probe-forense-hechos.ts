@@ -15,6 +15,7 @@ import { buildForensicInstruction, normalizarHechos, repairCutTiming, MIN_VISIBL
 import { ForensicReportSchema } from '@/lib/video-ads/types'
 import { fetchAsBase64, headStorageFile } from '@/lib/storage'
 import { MAX_VIDEO_MB } from '@/lib/video-ads/limits'
+import { defectosDelForense } from '@/lib/video-ads/lotes'
 
 async function main() {
   const [sesion, flag] = process.argv.slice(2)
@@ -31,12 +32,17 @@ async function main() {
   // El forense es ESTOCÁSTICO: un sorteo vuelve con dos hechos por corte y el siguiente
   // con uno solo (varias cláusulas adentro) y sin decir dónde queda el frasco. Un corte de
   // más de 8 s con un solo hecho es la firma del colapso; no se persiste, se vuelve a tirar.
+  // Se conserva el MEJOR de los intentos (menos defectos); `--force` lo escribe aunque no
+  // salga limpio. Sin `--force`, con defectos no se escribe.
+  const escribir = flag === '--write' || flag === '--force'
   let crudo!: ForensicReport
+  let mejor = Infinity
   for (let intento = 1; intento <= 3; intento++) {
-    crudo = await geminiCallStructured('forensic_report', ForensicReportSchema, parts, 3, VIDEO_SYSTEM_PROMPT)
-    const colapsados = crudo.cortes.filter((c: ForensicReport['cortes'][number]) => c.duracionSeg > 8 && (c.hechos?.length ?? 0) < 2)
-    if (!colapsados.length || flag !== '--write') break
-    console.log(`intento ${intento}: ${colapsados.length} corte(s) largos con un solo hecho (${colapsados.map((c: ForensicReport['cortes'][number]) => c.n).join(', ')}) — se vuelve a tirar`)
+    const tirada = await geminiCallStructured('forensic_report', ForensicReportSchema, parts, 3, VIDEO_SYSTEM_PROMPT)
+    const defectos = defectosDelForense(tirada)
+    if (defectos.length < mejor) { crudo = tirada; mejor = defectos.length }
+    if (!defectos.length || !escribir) break
+    console.log(`intento ${intento}: defectos estructurales — se vuelve a tirar:\n  ${defectos.join('\n  ')}`)
   }
   crudo.caracteresGuion = crudo.guionOriginal.length
   const { report: normalizado, rellenos } = normalizarHechos(crudo)
@@ -57,8 +63,11 @@ async function main() {
   console.log(`rellenos por hueco: ${rellenos.length}${rellenos.length ? '\n  ' + rellenos.join('\n  ') : ''}`)
   console.log(`recronometrados: ${ajustes.length}`)
 
-  if (flag !== '--write') { console.log('\n(seco: sin --write no se escribe)'); return }
+  if (!escribir) { console.log('\n(seco: sin --write no se escribe)'); return }
   if (sinHechos) throw new Error(`no se escribe: ${sinHechos} cortes sin hechos`)
+  const restantes = defectosDelForense(crudo)
+  if (restantes.length && flag !== '--force') throw new Error(`no se escribe tras 3 intentos, defectos: ${restantes.join(' · ')} (usa --force para escribir el mejor igual)`)
+  if (restantes.length) console.log(`⚠️ --force: se escribe el mejor sorteo CON defectos: ${restantes.join(' · ')}`)
   const { error: e2 } = await db.from('video_sessions').update({ forensic_analysis: report }).eq('id', sesion)
   if (e2) throw e2
   console.log('\n✅ forensic_analysis escrito. Ahora: paso Plantilla → "Extraer otra vez" → re-adaptar el guion → render.')
