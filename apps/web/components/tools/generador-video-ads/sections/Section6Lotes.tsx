@@ -103,6 +103,27 @@ export default function Section6Lotes() {
     }
   }
 
+  // Un clip suelto que salió mal: se re-renderiza SOLO ese lote con el mismo prompt
+  // (otro sorteo del modelo), sin pasar por "generar otra versión", que re-renderiza
+  // los N lotes. Lo paga la key de KIE del usuario, no la cuota del hub.
+  async function rerender(n: number) {
+    if (!sessionId || submitting) return
+    setSubmitting(true); setError(null)
+    try {
+      const res = await fetch(`/api/generador-video-ads/sessions/${sessionId}/rerender-lote`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ n }),
+      })
+      const data = (await res.json()) as { lotes?: Lote[]; error?: string }
+      if (data.lotes) patch({ lotes: data.lotes })
+      if (!res.ok) throw new Error(data.error ?? 'No se pudo re-renderizar el lote')
+      setRunning(true)
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   if (!lotes?.length) {
     return (
       <div className="flex flex-col gap-4">
@@ -208,6 +229,11 @@ export default function Section6Lotes() {
               </span>
             </div>
           )}
+          {!running && !!l.taskId && !isInFlight(l) && (
+            <button onClick={() => rerender(l.n)} disabled={submitting} className={`${btnGhost} mt-2`}>
+              {submitting ? <><span className={spinner} />Enviando...</> : `Renderizar de nuevo solo el lote ${l.n}`}
+            </button>
+          )}
         </div>
       ))}
       {/* Mientras sigue corriendo el polling, el error ya se explica arriba con el
@@ -226,9 +252,11 @@ export default function Section6Lotes() {
               (la huella de contenido deja de coincidir). Si nada cambió, el servidor
               devuelve los mismos lotes sin gastar cuota — silencioso, no un error. */}
           <p className="text-[11.5px] leading-relaxed text-[#8b8b8b]">
-            ¿No te convence? Vuelve al paso <strong className="text-[#cfcfcf]">Guión</strong> y
-            adáptalo otra vez antes de generar de nuevo — si no cambia nada, este botón
-            no crea una versión distinta.
+            ¿Salió mal un solo clip? Usa <strong className="text-[#cfcfcf]">Renderizar de nuevo
+            solo el lote</strong> en su tarjeta: repite ese lote con el mismo prompt y otro sorteo
+            del modelo, y lo paga tu cuenta de KIE. ¿No te convence el video entero? Vuelve al paso{' '}
+            <strong className="text-[#cfcfcf]">Guión</strong> y adáptalo otra vez antes de generar
+            de nuevo — si no cambia nada, este botón no crea una versión distinta.
           </p>
           <button onClick={() => submit(true)} disabled={submitting} className={btnGhost}>
             {submitting ? <><span className={spinner} />Generando...</> : 'Generar otra versión →'}

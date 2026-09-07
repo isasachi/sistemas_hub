@@ -1,6 +1,57 @@
 import { createHash } from 'crypto'
-import type { Lote, LoteImage } from './lotes'
+import { groupIntoLotes, buildLotePrompt, camaraDeLote, productoFisico, type Lote, type LoteImage } from './lotes'
 import type { VoiceProfile } from './character'
+import type { AdaptedScript } from './adapt'
+import type { VideoSessionResponse } from './types'
+import { CPS_MAX } from './forensic'
+import { clampDuration } from './kie'
+
+/**
+ * Los insumos de un render, resueltos UNA vez: imágenes, producto físico, cortes,
+ * reparto, cámara por lote y huella. Los comparten `generate-lotes` (el render entero)
+ * y `rerender-lote` (un lote suelto): dos copias de esto es la forma más fácil de que un
+ * lote re-renderizado salga con otro prompt —o con otra huella— que sus hermanos.
+ */
+export function insumosDeRender(
+  session: Pick<VideoSessionResponse, 'avatar_url' | 'character_url' | 'product_url' | 'product_scan' | 'forensic_analysis'>,
+  adapted: AdaptedScript,
+  voz: VoiceProfile,
+) {
+  const persona = session.avatar_url ?? session.character_url
+  if (!persona || !session.product_url) throw new Error('Faltan las imágenes de personaje y producto')
+  // Orden = numeración Image1/Image2 del prompt. El avatar generado, no la foto que subió
+  // el usuario: es una persona nueva y es lo que ancla identidad, ropa y escenario.
+  const images: LoteImage[] = [
+    { url: persona, role: 'la persona' },
+    { url: session.product_url, role: 'el producto' },
+  ]
+  // Solo la parte física del envase: la etiqueta la muestra Image2 mejor que un párrafo.
+  const producto = productoFisico(session.product_scan?.productDescription ?? '')
+  const cortes = session.forensic_analysis?.cortes ?? []
+  const agrupados = groupIntoLotes(adapted.tomas)
+  // Sin corte que empareje NO se afirma ninguna escala: sin ella, el encuadre lo decide
+  // la imagen de referencia.
+  const camaras = agrupados.map((l) => camaraDeLote(l, cortes, 'cámara en mano'))
+  const huella = scriptFingerprint({ lotes: agrupados, camaras, voz, images, producto })
+  return { images, producto, cortes, agrupados, camaras, huella, voz }
+}
+
+/**
+ * Prompt y duración de UN lote. Una sola fuente para las dos cosas: el texto del prompt
+ * y el `durationSec` que se manda a KIE tienen que ser EXACTAMENTE el mismo valor
+ * clampeado, si no el audio sale cortado a mitad de frase. El piso de habla manda sobre
+ * la duración del reparto (grok balbucea por encima de ~20 car/s); el cap de 15 lo pone
+ * `clampDuration`. Lanza si el prompt no entra en KIE (mensaje ya en español).
+ */
+export function promptDeLote(lote: Lote, camara: string, ins: ReturnType<typeof insumosDeRender>): { prompt: string; durationSec: number } {
+  const chars = lote.tomas.reduce((n, t) => n + t.locucion.length, 0)
+  const durationSec = clampDuration(Math.max(lote.duracionSeg, chars / CPS_MAX))
+  const loteParaPrompt = durationSec === lote.duracionSeg ? lote : { ...lote, duracionSeg: durationSec }
+  const prompt = buildLotePrompt({
+    lote: loteParaPrompt, camara, voz: ins.voz, images: ins.images, producto: ins.producto, cortes: ins.cortes,
+  })
+  return { prompt, durationSec }
+}
 
 /**
  * Lógica pura de orquestación del render por lotes (Task 6, fix rounds 1 a 4).

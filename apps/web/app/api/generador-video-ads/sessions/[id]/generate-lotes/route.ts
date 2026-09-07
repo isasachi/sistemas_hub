@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getVideoSession, updateVideoSession, claimFreshLotes } from '@/lib/video-ads/db'
-import { createVideoTask, clampDuration, KIE_PROMPT_MAX, SIN_KEY, type VideoImage } from '@/lib/video-ads/kie'
-import { CPS_MAX } from '@/lib/video-ads/forensic'
+import { createVideoTask, KIE_PROMPT_MAX, SIN_KEY } from '@/lib/video-ads/kie'
 import { currentKieKey } from '@/lib/user-settings'
-import { groupIntoLotes, buildLotePrompt, camaraDeLote, productoFisico, type Lote } from '@/lib/video-ads/lotes'
-import { totalDuration, resumeSeed, mergeRescue, isPaidResume, scriptFingerprint, renderDone } from '@/lib/video-ads/render-lotes'
+import type { Lote } from '@/lib/video-ads/lotes'
+import { totalDuration, resumeSeed, mergeRescue, isPaidResume, renderDone, insumosDeRender, promptDeLote } from '@/lib/video-ads/render-lotes'
 import { AdaptedScriptSchema, type AdaptedScript } from '@/lib/video-ads/adapt'
 import { extractPending } from '@/lib/video-ads/pending'
 import { checkGenQuota, checkGlobalBackstop, recordGenQuota } from '@/lib/gen-quota'
@@ -92,51 +91,14 @@ export async function POST(
       { status: 409 },
     )
 
-  // Orden = numeración @image(n) del prompt. Siempre dos imágenes → modo multi-imagen,
-  // que es donde `aspect_ratio: 9:16` sí se respeta.
-  const images: VideoImage[] = [
-    // El avatar generado, no la foto que subió el usuario: es una persona nueva y es lo
-    // que ancla la identidad, la ropa y el escenario del clip. Una sesión anterior a
-    // `avatar_url` cae a `character_url` y se comporta como antes.
-    { url: session.avatar_url ?? session.character_url, role: 'la persona' },
-    { url: session.product_url, role: 'el producto' },
-  ]
-
-  // Se resuelven una sola vez, acá: son parte del prompt de CADA lote y también de la
-  // huella de contenido, así que calcularlos dos veces (una para hashear y otra para
-  // renderizar) sería la forma más fácil de que la huella deje de describir lo que
-  // realmente se renderizó.
-  // El producto y el escenario ya NO viajan como texto: las imágenes son las anclas
-  // visuales y describirlas otra vez en palabras solo puede contradecirlas.
-  // El color del envase y sus piezas (tapa, cuentagotas) NO estaban en ningún lado del
-  // prompt: la imagen es la única fuente y el clip los derivaba. Solo la parte física —
-  // la etiqueta la muestra Image2 mejor que un párrafo.
-  const producto = productoFisico(session.product_scan?.productDescription ?? '')
-
-  const cortes = session.forensic_analysis?.cortes ?? []
-  // Sin corte que empareje NO se afirma ninguna escala: la línea CÁMARA declara el plano
-  // como un HECHO, y el del corte 1 mandado a un lote de producto era el bug que
-  // `camaraDeLote` existe para evitar, entrando por la puerta de atrás. Sin escala, el
-  // encuadre lo decide la imagen de referencia.
-  const camaraFallback = 'cámara en mano'
-
-  const agrupados = groupIntoLotes(adapted.tomas)
+  // Imágenes, producto físico, cortes, reparto, cámara por lote y huella, resueltos UNA
+  // vez y compartidos con `rerender-lote` (`insumosDeRender`): son parte del prompt de
+  // CADA lote y de la huella, y calcularlos en dos sitios es la forma más fácil de que
+  // la huella deje de describir lo que se renderizó.
+  const insumos = insumosDeRender(session, adapted, session.voice_profile)
+  const { agrupados, camaras, huella } = insumos
   if (!agrupados.length) return NextResponse.json({ error: 'El guión no tiene tomas' }, { status: 409 })
 
-  // Una cámara por lote, con los planos de SUS cortes: el spec pide replicar el
-  // lenguaje visual del original y antes acá se mandaba el encuadre del corte 1 a
-  // todos los lotes. Índice a índice con `agrupados` — y por tanto con `base` y con
-  // `seed`, que son `agrupados` mapeado.
-  const camaras = agrupados.map((l) => camaraDeLote(l, cortes, camaraFallback))
-
-  // Huella del contenido de ESTE intento (guión + personaje + voz + producto +
-  // escenario + cámara + imágenes). Se estampa en todos los lotes que se persistan
-  // —incluidos los placeholders `idle` de un rescate parcial— para que la próxima
-  // llamada pueda comprobar, sin adivinar, si está reanudando el MISMO video o
-  // empezando otro distinto (ver `isPaidResume`).
-  const huella = scriptFingerprint({
-    lotes: agrupados, camaras, voz: session.voice_profile, images, producto,
-  })
   const base: Lote[] = agrupados.map((l) => ({ ...l, scriptHash: huella }))
 
   // Reanudar es explícito (`{ resume: true }` en el body), no automático — si no, un
@@ -287,30 +249,12 @@ export async function POST(
     for (const [i, lote] of seed.entries()) {
       if (lote.taskId) { lotes.push(lote); continue } // reanudado: ya pagado, no se recrea
 
-      // Una sola fuente para la duración: el texto del prompt ("Duración total del
-      // clip") y el `durationSec` que se manda a KIE tienen que ser EXACTAMENTE el
-      // mismo valor clampeado. Calcularlo dos veces (o clampear solo uno de los dos)
-      // desincroniza lo que el prompt promete de lo que el modelo renderiza, y el
-      // audio sale cortado a mitad de frase — justo lo que advierte la cabecera de
-      // lotes.ts sobre "alguien río abajo lo clampea".
-      // Piso de habla: el texto tiene que poder decirse (medido, grok balbucea por
-      // encima de ~20 car/s). Manda sobre la duración del reparto; el cap de 15 lo
-      // pone `clampDuration` y `LOTE_MAX_CHARS` evita llegar acá con más texto del que
-      // entra en 15 s salvo que UNA toma sola se pase.
-      const chars = lote.tomas.reduce((n, t) => n + t.locucion.length, 0)
-      const durationSec = clampDuration(Math.max(lote.duracionSeg, chars / CPS_MAX))
-      const loteParaPrompt = durationSec === lote.duracionSeg ? lote : { ...lote, duracionSeg: durationSec }
-
+      // Prompt y duración por una sola fuente (`promptDeLote`), la misma que usa
+      // `rerender-lote`: un lote re-renderizado suelto sale byte a byte igual.
       let prompt: string
+      let durationSec: number
       try {
-        prompt = buildLotePrompt({
-          lote: loteParaPrompt,
-          camara: camaras[i],
-          voz: session.voice_profile,
-          images,
-          producto,
-          cortes,
-        })
+        ({ prompt, durationSec } = promptDeLote(lote, camaras[i], insumos))
       } catch (err) {
         // `buildLotePrompt` lanza cuando el prompt no entra en KIE_PROMPT_MAX. Ese
         // mensaje ya es claro y está en español — se propaga tal cual en vez de
@@ -327,7 +271,7 @@ export async function POST(
         break
       }
 
-      const taskId = await createVideoTask({ images, prompt, durationSec }, kieKey)
+      const taskId = await createVideoTask({ images: insumos.images, prompt, durationSec }, kieKey)
       creados++
       lotes.push({ ...lote, duracionSeg: durationSec, prompt, taskId, status: 'waiting', videoUrl: null, failMsg: null })
       // Fila por lote: visibilidad del costo real y backstop global diario. Ya NO topa
