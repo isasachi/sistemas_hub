@@ -210,7 +210,11 @@ export function repartirAccion(accion: string, duraciones: number[]): string[] {
 const esEstadoDeManos = (t: string) => /^(sujeta|sostiene|mantiene|tiene)\b/i.test(sinTildes(t)) && /\bmano/i.test(t)
 /** El producto llegó al cuerpo en este tramo. */
 const esTransferencia = (t: string) => /\b(aplica|deja caer|suelta|vierte|deposita|echa)\b/i.test(t) && /\b(gota|suero|serum|producto|crema)\b/i.test(t)
-const YA_APLICADO = 'el producto ya está en la piel desde antes: no vuelve a dispensar'
+// En positivo y describiendo el ESTADO de arranque, no prohibiendo el gesto: la forma
+// negativa ("no vuelve a dispensar") se renderizó igual sacando el gotero y soltando una
+// gota antes de extender (lote 3 de `00471f8a`, 1 de 1). A un modelo de difusión una
+// prohibición le llega débil; un estado declarado es un dato.
+const YA_APLICADO = 'el suero ya está sobre la piel desde el inicio y el cuentagotas dentro del frasco, cerrado'
 
 /**
  * Tolerancia SOLO para ruido de punto flotante (ej. 14.299999999999999), no para

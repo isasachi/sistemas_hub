@@ -512,14 +512,14 @@ describe('el reparto no deja escenografía de foto ni carriles vacíos', () => {
       'Sujeta el frasco con la mano derecha',
       'extiende el suero con las yemas de los dedos sobre la mejilla, el mentón y el cuello con movimientos ascendentes',
       'mira a la cámara y señala el resultado en su piel',
-      'el producto ya está en la piel desde antes: no vuelve a dispensar',
+      'el suero ya está sobre la piel desde el inicio y el cuentagotas dentro del frasco, cerrado',
     ])
     // el estado que se hereda es el ÚLTIMO declarado antes del fragmento, no el primero del corte
     const [, c] = repartirAccion('Sujeta el frasco con la derecha; pasa el frasco a la izquierda; sostiene el frasco con la mano izquierda; masajea la mejilla; mira a cámara', [10, 5])
     expect(c).toMatch(/^sostiene el frasco con la mano izquierda\./)
     // si el propio fragmento dispensa, no se le dice que ya está aplicado
     const [, d] = repartirAccion('Sujeta el frasco con la mano derecha; aplica una gota en la mejilla; aplica otra gota en la frente; extiende', [5, 5])
-    expect(d).not.toMatch(/ya está en la piel/)
+    expect(d).not.toMatch(/ya está sobre la piel/)
     // dos fragmentos del mismo corte en el MISMO lote: el segundo no repite el estado ni la aclaración
     const corteLargo = { ...toma(1, 20, 'Una frase corta. Otra frase corta. Y una tercera.'), accionVisual: corte3, tiempoOriginal: '00:15 - 00:35' }
     const lotes = groupIntoLotes([corteLargo])
@@ -527,7 +527,7 @@ describe('el reparto no deja escenografía de foto ni carriles vacíos', () => {
     const p = buildLotePrompt({ lote: conDos, camara: 'Plano medio.', voz: VOZ, producto: '', images: [{ url: 'a', role: 'la persona' }] })
     expect(conDos.tomas.length).toBeGreaterThanOrEqual(2)
     expect((p.match(/Sujeta el frasco con la mano derecha/g) ?? []).length).toBe(1)
-    expect((p.match(/ya está en la piel/g) ?? []).length).toBeLessThanOrEqual(1)
+    expect((p.match(/ya está sobre la piel/g) ?? []).length).toBeLessThanOrEqual(1)
     // sin estado declarado ni transferencia previa, nada se agrega
     expect(repartirAccion('uno; dos', [9, 1])).toEqual(['uno.', 'dos.'])
   })
