@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   buildIdentityInstruction, buildCharacterParts, CharacterIdentitySchema,
-  VOZ_ESTANDAR, vozDe, PERFILES_VOCALES,
+  VOZ_ESTANDAR, vozDe, PERFILES_VOCALES, promptDeAvatar, REALISMO_AVATAR,
 } from './character'
 import type { UserInputs } from './types'
 import type { ForensicReport } from './forensic'
@@ -67,6 +67,35 @@ describe('buildIdentityInstruction', () => {
     const p = buildIdentityInstruction(INPUTS, FORENSIC)
     expect(p).toMatch(/9:16/)
     expect(p).not.toMatch(/2:3/)
+  })
+})
+
+// Lo ÚNICO que llega al generador de imagen es `promptCreacion`, que lo redacta un LLM.
+// Con la regla del acabado viviendo solo en la instrucción, el avatar salía acartonado
+// cada vez que el modelo no la copiaba — y su vocabulario por defecto, describiendo a
+// alguien para un anuncio, es el de la publicidad de belleza.
+describe('promptDeAvatar', () => {
+  it('pega el acabado aunque el LLM no lo haya escrito, y va al final', () => {
+    const p = promptDeAvatar('Mujer de 30 años, cabello oscuro, suéter rosa.')
+    expect(p).toContain('Mujer de 30 años')
+    expect(p.endsWith(REALISMO_AVATAR)).toBe(true)
+    expect(p).toMatch(/poros/i)
+    expect(p).toMatch(/NO ES SIMÉTRICA/)
+    expect(p).toMatch(/imagen de IA/i)
+  })
+
+  it('prohíbe el acabado de plástico y acota las imperfecciones a las de una cara real', () => {
+    for (const veto of [/piel alisada/i, /filtro de belleza/i, /render 3D/i, /simetría facial exacta/i])
+      expect(REALISMO_AVATAR).toMatch(veto)
+    // un avatar con lesiones contradice lo que el anuncio promete
+    expect(REALISMO_AVATAR).toMatch(/nada de heridas/i)
+  })
+
+  it('la instrucción no le pide el acabado al LLM y le prohíbe el vocabulario que lo rompe', () => {
+    const p = buildIdentityInstruction(INPUTS, FORENSIC)
+    expect(p).toMatch(/NO describas el acabado/)
+    expect(p).toMatch(/radiante/)
+    expect(p).toMatch(/sin poros/)
   })
 })
 

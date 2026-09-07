@@ -83,6 +83,50 @@ export function vozDe(identity: CharacterIdentity): VoiceProfile {
   return { ...VOZ_ESTANDAR[identity.perfilVocal], acento: identity.acento.trim() || 'Español latino neutro' }
 }
 
+/**
+ * Textura y luz del avatar, en CÓDIGO y no en la instrucción del LLM.
+ *
+ * Lo único que llega al generador de imagen es `promptCreacion`, que lo redacta un
+ * modelo de texto: una regla escrita solo en la instrucción es una que el LLM tiene
+ * que acordarse de copiar, y este repo ya pagó cinco veces esa apuesta. Peor acá,
+ * porque el LLM está describiendo a una persona para un anuncio y su vocabulario por
+ * defecto es el de la publicidad de belleza —"piel radiante, luminosa, perfecta"—, que
+ * es exactamente el acabado de plástico que este bloque viene a evitar.
+ *
+ * Va al FINAL del prompt: en un modelo de difusión la cola pesa, y así manda sobre
+ * cualquier adjetivo de belleza que se haya colado antes.
+ *
+ * ⚠️ Las imperfecciones son las de una cara real, no un problema dermatológico: el
+ * producto suele ser skincare y un avatar con lesiones contradice lo que el anuncio
+ * promete. La asimetría y la textura desigual son lo que rompe el look de IA; una
+ * herida es otra cosa.
+ */
+export const REALISMO_AVATAR = [
+  'ACABADO — foto real de cámara frontal de teléfono, NO una imagen generada:',
+  'PIEL con textura visible y desigual: poros abiertos en nariz y mejillas, vello facial',
+  'fino a contraluz, lunares y pecas repartidos de forma asimétrica, brillo graso en',
+  'frente y nariz conviviendo con zonas mates, líneas de expresión en ojos y boca, y la',
+  'rojez natural donde la piel la tiene (aletas de la nariz, párpados, pómulos).',
+  'LA CARA NO ES SIMÉTRICA: ceja, ojo y comisura de un lado difieren del otro.',
+  'LUZ natural y direccional, desigual, con sombras suaves reales — nunca luz plana de',
+  'estudio ni un halo uniforme.',
+  'CÁMARA: foco en los ojos con caída natural del resto, grano leve, ligera dominante',
+  'cálida, nitidez de teléfono y no de campaña publicitaria.',
+  'PROHIBIDO: piel alisada, cerosa o de muñeca; brillo uniforme tipo "glow"; aerógrafo;',
+  'filtro de belleza; retoque; simetría facial exacta; render 3D; CGI; ilustración; HDR;',
+  'sobresaturación; y el acabado lavado, liso y sin poros que delata a una imagen de IA.',
+  'Las imperfecciones son LEVES y corrientes en una cara real: nada de heridas,',
+  'erupciones, cicatrices ni lesiones.',
+].join('\n')
+
+/**
+ * Lo que se manda de verdad al generador de imagen. Se persiste tal cual en
+ * `character_prompt`: ese campo tiene que decir qué se renderizó, no qué escribió el LLM.
+ */
+export function promptDeAvatar(promptCreacion: string): string {
+  return `${promptCreacion.trim()}\n\n${REALISMO_AVATAR}`
+}
+
 /** El encuadre del primer corte, que es el fotograma con el que abre el anuncio. */
 function encuadreDeApertura(forensic: ForensicReport): string {
   return forensic.cortes?.[0]?.camara?.trim() || 'plano medio, ángulo levemente bajo'
@@ -140,10 +184,17 @@ export function buildIdentityInstruction(
     // anuncio entero. Medido sobre un anuncio en primer plano: con "plano medio" fijo
     // los cuatro clips salieron con la persona mucho más lejos que el original.
     `el MISMO encuadre con el que abre el original — ${encuadreDeApertura(forensic)} — sin`,
-    'abrirlo ni cerrarlo, sin teléfonos ni trípodes a la vista, relación de aspecto vertical 9:16',
-    'y realismo fotográfico estricto: piel con poros, vello fino, lunares, brillo',
-    'natural y líneas de expresión. Nada de piel suavizada, acabado acartonado,',
-    'ilustración, render 3D ni filtro de belleza.',
+    'abrirlo ni cerrarlo, sin teléfonos ni trípodes a la vista, relación de aspecto vertical 9:16.',
+    '',
+    // ⚠️ El acabado NO se le pide al LLM: se anexa en código (`REALISMO_AVATAR`). Lo que
+    // sí hace falta es que no lo contradiga — describiendo a una persona para un anuncio,
+    // su vocabulario por defecto es el de la publicidad de belleza, y "piel radiante y
+    // perfecta" dentro del prompt es justo el acabado de plástico que se quiere evitar.
+    'NO describas el acabado, la textura de la piel ni el estilo de la foto: eso lo fija',
+    'el sistema al final del prompt. Y no uses vocabulario de publicidad de belleza —nada',
+    'de piel "perfecta", "radiante", "luminosa", "impecable", "de porcelana", "sin poros"',
+    'ni "sin imperfecciones"—: describe la piel de esta persona como es (tono, si es grasa',
+    'o seca, marcas o pecas que se vean en la foto), no como la de un catálogo.',
     'El 9:16 es el del anuncio: esta foto es el ancla visual del personaje en cada lote,',
     'así que su encuadre es el del video.',
     'Sin texto, sin logos, sin watermarks y sin el producto en el encuadre.',

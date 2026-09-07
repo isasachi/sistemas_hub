@@ -5,7 +5,7 @@ import { openaiGenerateImage } from '@/lib/llm-openai'
 import { uploadToStorage, fetchAsBase64 } from '@/lib/storage'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
-import { CharacterIdentitySchema, buildIdentityInstruction, buildCharacterParts, vozDe } from '@/lib/video-ads/character'
+import { CharacterIdentitySchema, buildIdentityInstruction, buildCharacterParts, vozDe, promptDeAvatar } from '@/lib/video-ads/character'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -99,14 +99,17 @@ export async function POST(
       buildCharacterParts(instruction, image),
     )
 
-    const b64 = await openaiGenerateImage([{ text: identity.promptCreacion }], 2, { aspectRatio: '9:16' })
+    // El acabado se pega en código: es lo único que llega al generador de imagen, y una
+    // regla que vive solo en la instrucción depende de que el LLM se acuerde de copiarla.
+    const promptImagen = promptDeAvatar(identity.promptCreacion)
+    const b64 = await openaiGenerateImage([{ text: promptImagen }], 2, { aspectRatio: '9:16' })
     const avatarUrl = await uploadToStorage(id, Buffer.from(b64, 'base64'), 'image/png', 'avatar')
 
     const voiceProfile = vozDe(identity)
     await updateVideoSession(id, {
       character_url: characterUrl,
       avatar_url: avatarUrl,
-      character_prompt: identity.promptCreacion,
+      character_prompt: promptImagen,
       consistency_block: identity.bloqueConsistencia,
       voice_profile: voiceProfile,
     })
