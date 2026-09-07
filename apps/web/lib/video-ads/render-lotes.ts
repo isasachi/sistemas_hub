@@ -142,7 +142,12 @@ export function scriptFingerprint(input: {
     // bloque de consistencia, la descripción del producto y el escenario: hashear un
     // insumo que el prompt ya no lee es el espejo del bug que esta función evita. La
     // identidad ahora viaja en la URL del avatar, que sí se hashea con las imágenes.
-    'v3',
+    // v3 → v4: `buildLotePrompt` cambió el TEXTO que emite con los mismos insumos —la
+    // duración de la toma sale redondeada (`3.3 s` y no `3.301290322580645 s`) y la
+    // escenografía de foto se quita de `accionVisual` al emitir—. La huella hashea
+    // insumos, así que sin el bump un resume pegaría un clip renderizado con el prompt
+    // viejo a uno con el nuevo jurando que es el mismo contenido.
+    'v4',
     voz.idioma, voz.varianteRegional, voz.acento, voz.pronunciacion, voz.ritmo,
     voz.velocidad, voz.entonacion, voz.energia, voz.pausas, voz.tono, voz.timbre,
     voz.edadVocal, voz.estilo,
