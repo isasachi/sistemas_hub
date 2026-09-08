@@ -46,6 +46,14 @@ export async function listVideoSessions(userId: string): Promise<VideoListRow[]>
     .from('video_sessions')
     .select('id, created_at, step, product_name, video_url, character_url, product_url, render_done')
     .eq('user_id', userId)
+    // Se filtra al LEER, además de no crear la fila hasta el primer insumo: una sesión
+    // fantasma vieja sigue en la base y no se borra —sería una migración destructiva para
+    // arreglar un problema de presentación— pero no tiene por qué empujar el trabajo real
+    // hacia abajo del listado. Mismo criterio y mismo filtro que las otras tres tools
+    // (`listAdSessions` por `reference_url`, landing por `product_name`, branding por
+    // `brand_name`). ⚠️ El `step` NO sirve de discriminante: nace en 0 y una sesión real
+    // también pasa por 0.
+    .not('reference_video_url', 'is', null)
     .order('created_at', { ascending: false })
     .limit(24)
   if (error) return []

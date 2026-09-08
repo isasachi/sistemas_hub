@@ -11,7 +11,7 @@ import { btnPrimary, errorBox, warnBox, spinner } from './shared'
 // Paso 0: el VIDEO ORIGINAL. El spec lo exige siempre — es la fuente de verdad de
 // estructura, ritmo, cámara y orden. Sin él no hay pipeline.
 export default function Section0Reference() {
-  const { sessionId, patch, setLoading, isLoading } = useVideoStore()
+  const { ensureSession, patch, setLoading, isLoading } = useVideoStore()
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -37,11 +37,17 @@ export default function Section0Reference() {
   }
 
   async function analyze() {
-    if (!sessionId || !file) return
+    if (!file) return
     setLoading(true); setError(null)
     try {
-      const videoUrl = await uploadDirect(sessionId, 'reference-video', file)
-      const res = await fetch(`/api/generador-video-ads/sessions/${sessionId}/analyze-reference`, {
+      // ⚠️ ACÁ NACE LA FILA, no en el montaje del wizard: abrir la tool y no hacer nada
+      // dejaba una sesión fantasma. El video de referencia es el primer insumo real de
+      // esta tool, y `ensureSession` va AWAITEADO antes de subir porque `uploadDirect`
+      // firma la subida contra el id.
+      const id = await ensureSession()
+      if (!id) throw new Error('No se pudo crear la sesión. Recarga la página.')
+      const videoUrl = await uploadDirect(id, 'reference-video', file)
+      const res = await fetch(`/api/generador-video-ads/sessions/${id}/analyze-reference`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ videoUrl }),
