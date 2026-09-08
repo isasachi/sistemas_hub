@@ -309,6 +309,8 @@ Dos cosas, ninguna inventa coreografía: (1) el fragmento hereda **el ÚLTIMO es
 
 ⚠️ **La mitad del FORENSE se evaluó y se descartó, a propósito.** Pedirle que diga cuántos dedos levanta no aporta nada que la locución no tenga —*"número dos"* son dos, siempre— y como grok cuenta igual de lo que oye, su respuesta tampoco cambiaría la emisión; encima solo alcanzaría a análisis NUEVOS y sería otra regla en el bloque de `accion`, cuyo titular de la transferencia sí tiene medición detrás. Si algún día se quiere que el corpus REGISTRE si el original cuenta, ahí sí.
 
+⚠️ **QUEDA UNA CONTRADICCIÓN VIVA, Y ES DELIBERADA.** El acote de `sinManoFueraDeCuadro` es la forma CONTIGUA (*", la mano izquierda permanece fuera de cuadro"*), así que no alcanza a la otra forma real del forense: *"mientras la mano izquierda señala al frente … y luego vuelve a quedar fuera de cuadro"*. En esa toma el prompt emite las dos cosas —la mano que vuelve fuera de cuadro y el conteo—. Se deja así porque quitar esa cláusula entera se llevaría *"señala al frente"*, que es contenido forense real, y el conteo va ÚLTIMO y pegado a la locución: lo que compite es una cláusula subordinada a mitad de un hecho. Si un render muestra la mano bajando sin contar, la palanca es partir esa cláusula, no ensanchar el regex.
+
 ⚠️ **`scriptFingerprint` v9 → v10**: cambia el texto emitido con los mismos insumos, que es justo lo que una huella de insumos no ve. ⚠️ **Ningún render verificó esta ronda**: lo medido es el prompt.
 
 
