@@ -213,7 +213,8 @@ export function scriptFingerprint(input: {
     // línea de cámara se omite sin dato, y el prompt prohíbe el relleno entre hechos.
     // v8 → v9: un fragmento que arranca a mitad de una acción sostenida la emite ANTES del
     // estado heredado, y el cierre sintético va justo después de la apertura.
-    'v9',
+    // v9 → v10: una toma cuya locución ENUMERA emite cuántos dedos levanta la mano libre.
+    'v10',
     producto,
     voz.idioma, voz.varianteRegional, voz.acento, voz.pronunciacion, voz.ritmo,
     voz.velocidad, voz.entonacion, voz.energia, voz.pausas, voz.tono, voz.timbre,

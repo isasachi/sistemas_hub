@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { groupIntoLotes, LOTE_MAX_SEC, LOTE_MAX_CHARS, LoteSchema, expandirHechos, defectosDelForense, conflictosDeManos, buildLotePrompt, camaraDeLote, sinEscenaDeFoto, partirEnTramos, repartirAccion } from './lotes'
+import { groupIntoLotes, LOTE_MAX_SEC, LOTE_MAX_CHARS, LoteSchema, expandirHechos, defectosDelForense, conflictosDeManos, buildLotePrompt, camaraDeLote, sinEscenaDeFoto, partirEnTramos, repartirAccion, numeroEnunciado } from './lotes'
 import type { TomaFinal } from './adapt'
 import type { Hecho } from './forensic'
 import { KIE_PROMPT_MAX } from './kie'
@@ -918,5 +918,81 @@ describe('LOTE_MAX_CHARS', () => {
     expect(l).toHaveLength(2)
     // una toma que SOLA se pasa igual entra en su propio lote
     expect(groupIntoLotes([toma(1, 5, 'y'.repeat(400))])).toHaveLength(1)
+  })
+})
+
+// ── EL NÚMERO QUE SE DICE ES EL NÚMERO QUE SE VE ──────────────────────────────────────
+// Las SEIS locuciones son las reales de la sesión `c32d229a` (una listicle de "tres
+// razones" sobre creatina), y su valor está en que traen los dos falsos positivos con los
+// que un vocabulario más flojo se rompe: "TRES razones para tomar" anuncia la lista y no
+// es un ítem, y "tomar CINCO gramos al día" es un numeral que no cuenta nada. Si alguien
+// afloja `numeroEnunciado` a un numeral pelado, el CTA sale levantando cinco dedos.
+describe('numeroEnunciado', () => {
+  const LOCUCIONES: [string, number | undefined][] = [
+    ['Tres razones para tomar Platinum Creatine para mujeres, sobre todo si últimamente andas con los gains por los suelos.', undefined],
+    ['Número uno, contiene monohidrato de creatina, te ayuda a mejorar tu fuerza muscular.', 1],
+    ['Número dos, tiene una fórmula pura que también ayuda a potenciar el desarrollo de masa muscular.', 2],
+    ['Número tres, tiene creatina de grado farmacéutico, ingrediente de alta calidad.', 3],
+    ['Además, tiene una pureza del cien por ciento que refuerza todo esto en tu cuerpo.', undefined],
+    ['Y con solo tomar cinco gramos al día ya estás, tienes más potencia para entrenar.', undefined],
+  ]
+
+  it.each(LOCUCIONES)('%s → %s', (locucion, esperado) => {
+    expect(numeroEnunciado(locucion)).toBe(esperado)
+  })
+
+  it('lee el ordinal al arrancar una cláusula, y el ítem con otros sustantivos', () => {
+    expect(numeroEnunciado('Segundo, la textura es ligera.')).toBe(2)
+    expect(numeroEnunciado('Y tercero, no deja residuo.')).toBe(3)
+    expect(numeroEnunciado('Razón dos: rinde el doble.')).toBe(2)
+    expect(numeroEnunciado('Paso 3, masajea en círculos.')).toBe(3)
+  })
+
+  // Se cuenta con UNA mano, y un ordinal en medio de una frase no enumera nada.
+  it('no cuenta más allá de cinco ni un ordinal a mitad de frase', () => {
+    expect(numeroEnunciado('Número seis, no existe.')).toBeUndefined()
+    expect(numeroEnunciado('Lo que va primero es la limpieza.')).toBeUndefined()
+  })
+})
+
+describe('buildLotePrompt: conteo con la mano libre', () => {
+  // La toma 3 REAL de `c32d229a`: dice "número dos" y su propio prompt manda la izquierda
+  // fuera de cuadro. El render gesticuló con esa mano igual — el estado declarado perdió
+  // contra el número hablado. Así que el prompt dice cuántos dedos, y la orden opuesta
+  // sobre esa misma mano se va: las dos juntas son el modo de fallo de siempre.
+  const real = {
+    ...toma(3, 5.6, 'Número dos, tiene una fórmula pura que también ayuda a potenciar el desarrollo de masa muscular.'),
+    accionVisual: 'Sostiene el bote con la mano derecha, lo mueve ligeramente mientras explica el segundo punto, la mano izquierda permanece fuera de cuadro',
+  }
+  const salida = buildLotePrompt({ lote: groupIntoLotes([real])[0], ...ARGS })
+
+  it('nombra la cantidad y la mano, derivadas de la locución y del estado declarado', () => {
+    expect(salida).toContain('  - Levanta dos dedos con la mano izquierda.')
+  })
+
+  it('quita la orden opuesta sobre esa misma mano', () => {
+    expect(salida).not.toMatch(/mano izquierda permanece fuera de cuadro/i)
+    // y no se lleva puesto el resto del hecho
+    expect(salida).toMatch(/Sostiene el bote con la mano derecha/)
+  })
+
+  it('sin enumeración no agrega ningún conteo', () => {
+    const sin = buildLotePrompt({ lote: groupIntoLotes([{ ...real, locucion: 'Y con solo tomar cinco gramos al día ya estás.' }])[0], ...ARGS })
+    expect(sin).not.toMatch(/dedos/)
+    expect(sin).toMatch(/mano izquierda permanece fuera de cuadro/i)
+  })
+
+  // Sin mano libre que nombrar no se inventa una: "la mano libre" a secas no describe
+  // nada, y es justo el término que el forense tiene prohibido por nombre.
+  it('no emite conteo si las dos manos están ocupadas', () => {
+    const ambas = { ...real, accionVisual: 'Sostiene el bote con ambas manos frente al pecho' }
+    expect(buildLotePrompt({ lote: groupIntoLotes([ambas])[0], ...ARGS })).not.toMatch(/dedos/)
+  })
+
+  // Una mano libre con una PIEZA declarada ya tiene trabajo: contar con ella pediría una
+  // tercera mano, que es el defecto de al lado.
+  it('no emite conteo si la mano libre tiene el aplicador', () => {
+    const pieza = { ...real, accionVisual: 'Sostiene el bote con la mano derecha; saca el cuentagotas con la mano izquierda' }
+    expect(buildLotePrompt({ lote: groupIntoLotes([pieza])[0], ...ARGS })).not.toMatch(/dedos/)
   })
 })

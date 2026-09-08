@@ -395,6 +395,64 @@ function manoDe(estado: string): 'derecha' | 'izquierda' | 'ambas' | null {
   return m ? (m[1].toLowerCase() as 'derecha' | 'izquierda') : null
 }
 
+/** La otra mano. `ambas` o sin dato no dejan ninguna libre que nombrar. */
+const manoLibre = (ocupada: ReturnType<typeof manoDe>) =>
+  ocupada === 'derecha' ? ('izquierda' as const) : ocupada === 'izquierda' ? ('derecha' as const) : null
+
+const VALOR_NUMERO: Record<string, number> = {
+  uno: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5,
+  primero: 1, segundo: 2, tercero: 3, cuarto: 4, quinto: 5,
+  '1': 1, '2': 2, '3': 3, '4': 4, '5': 5,
+}
+/** Como lo escribiría una persona: "levanta UN dedo", no "levanta uno dedos". */
+const DEDOS = ['', 'un dedo', 'dos dedos', 'tres dedos', 'cuatro dedos', 'cinco dedos']
+
+// Un ÍTEM de lista nombra el sustantivo ANTES del número ("número dos", "razón tres"), o
+// es un ordinal al arrancar una cláusula ("Segundo, ..."). Nunca un numeral pelado: en la
+// sesión `c32d229a` "tomar CINCO gramos al día" y "TRES razones para tomar" (que anuncia
+// la lista, no un ítem) son los dos falsos positivos que esto tiene que rechazar.
+const ITEM_CON_SUSTANTIVO = /\b(numero|razon|punto|paso|tip|consejo|motivo|beneficio|clave)\s+(uno|dos|tres|cuatro|cinco|[1-5])\b/
+const ITEM_ORDINAL = /(?:^|[.;,:]\s*)(?:[ye]\s+)?(primero|segundo|tercero|cuarto|quinto)\b/
+
+/**
+ * El número que la locución enuncia COMO ÍTEM de una lista (1–5), o `undefined`.
+ *
+ * ⚠️ EXISTE PORQUE GROK CUENTA CON LOS DEDOS AUNQUE NADIE SE LO PIDA, Y CUENTA MAL.
+ * Reportado sobre la sesión `c32d229a` (una listicle de "tres razones"): el avatar dice un
+ * número y la mano libre hace otro. Verificado clip por clip, el gesto no tiene NINGUNA
+ * relación con el número dicho — y la toma 3 gesticulaba con la izquierda mientras su
+ * propio prompt decía que esa mano "permanece fuera de cuadro". O sea el estado declarado
+ * PERDIÓ contra el número hablado, que es la asimetría que AGENTS.md ya mide: a un modelo
+ * de difusión una prohibición le llega débil y una cantidad declarada es un dato.
+ *
+ * Por eso el único gate es la enumeración de la LOCUCIÓN, no lo que el forense dijo de la
+ * mano: la primera versión condicionaba a que hubiera un gesto vago declarado y hacía
+ * exactamente lo contrario de lo buscado — le agregaba el conteo a la toma que ya salía
+ * bien (la mano fuera de cuadro) y se lo saltaba a la que producía el defecto.
+ *
+ * El tope es 5 porque se cuenta con UNA mano.
+ */
+export function numeroEnunciado(locucion: string): number | undefined {
+  const s = sinTildes(locucion)
+  const m = ITEM_CON_SUSTANTIVO.exec(s) ?? ITEM_ORDINAL.exec(s)
+  if (!m) return undefined
+  const n = VALOR_NUMERO[m[m.length - 1]]
+  return n >= 1 && n <= 5 ? n : undefined
+}
+
+/**
+ * Quita del hecho la cláusula que manda la mano LIBRE fuera de cuadro. Solo se aplica en
+ * una toma que enumera, donde esa mano va a mostrar el número: dejar las dos órdenes en el
+ * mismo prompt es el modo de fallo que este repo ya registra seis veces. Acote angosto (la
+ * forma contigua, que es la que `partirEnTramos` deja como cláusula suelta) y fail-safe:
+ * si al limpiar no queda nada, se devuelve el hecho intacto.
+ */
+function sinManoFueraDeCuadro(hecho: string, libre: 'derecha' | 'izquierda'): string {
+  const re = new RegExp(`,?\\s*(?:y\\s+)?(?:la|su)\\s+mano\\s+${libre}\\s+(?:permanece|queda|se mantiene|sigue)[^,.;]*fuera de cuadro`, 'i')
+  const limpio = hecho.replace(re, '').replace(/\s{2,}/g, ' ').replace(/\s+([.,;])/g, '$1').replace(/^[,;\s]+/, '').trim()
+  return limpio || hecho
+}
+
 /**
  * CONFLICTO DE MANOS dentro de un corte: una mano que sostiene el envase o el aplicador y
  * que, sin soltarlo, masajea, señala o gesticula — o "ambas manos" haciendo algo mientras
@@ -876,6 +934,31 @@ export function buildLotePrompt(args: {
       const hechos = partirEnTramos(sinEscenaDeFoto(t.accionVisual))
         .filter((h) => !(mismoCorteAntes && ((previos.has(h) && esEstadoDeManos(h)) || (esAndamioDeFrontera(h) && !/^termina/i.test(h)))))
         .filter((h) => !(mismoCorteDespues && /^termina con el envase/i.test(h)))
+      // EL NÚMERO QUE SE DICE ES EL NÚMERO QUE SE VE. Una locución que enumera hace que
+      // grok cuente con la mano libre lo pida el prompt o no, y el conteo sale arbitrario:
+      // en `c32d229a` el avatar dice "número dos" y la mano abre la palma entera. La
+      // cantidad se DERIVA de las palabras que ya está diciendo (`numeroEnunciado`), así
+      // que no inventa un gesto nuevo — le pone el número correcto al que va a ocurrir.
+      // Va en la ÚLTIMA línea, pegada a la locución que contiene el número.
+      const enunciado = numeroEnunciado(t.locucion ?? '')
+      // ponytail: la mano ocupada sale de `esEstadoDeManos`, que está anclado al ARRANQUE
+      // del hecho. Medido sobre las 27 sesiones guardadas, de 15 tomas que enumeran se
+      // emiten 4: el resto nombra la mano a mitad de frase ("La mujer sostiene la botella
+      // con la izquierda", "inicia el video sosteniendo...") o no nombra ninguna. El
+      // fail-safe es el correcto —sin mano que nombrar no se inventa una—, y NO se afloja
+      // el detector compartido: lo leen también el reparto, el andamiaje de frontera y los
+      // dos guards del forense. Si hace falta subir la cobertura, el upgrade es una
+      // lectura propia (la mano que va después del verbo de sostener, dentro de SU
+      // cláusula, como ya hace `conflictosDeManos`) más un guard que no pise una mano
+      // libre con acción declarada — no ensanchar `esEstadoDeManos`.
+      const libre = manoLibre(manoDe(hechos.find(esEstadoDeManos) ?? ''))
+      // Una mano libre que ya tiene una PIEZA declarada tiene trabajo propio: ahí el
+      // conteo pediría una tercera mano. Sin mano libre que nombrar tampoco se emite —
+      // "la mano libre" a secas no describe nada, y es el término que el forense tiene
+      // prohibido por nombre.
+      const conPieza = libre !== null && hechos.some((h) => PIEZAS.test(h) && manoDe(h) === libre)
+      const conteo = enunciado && libre && !conPieza ? `levanta ${DEDOS[enunciado]} con la mano ${libre}` : null
+      const finales = conteo ? [...hechos.map((h) => sinManoFueraDeCuadro(h, libre!)), conteo] : hechos
       // El plano se anuncia solo cuando CAMBIA respecto de la toma anterior: un shot
       // list se lee así, el plano vale hasta que se anuncia otro.
       const plano = multiPlano ? planoDe.get(t.tiempoOriginal) : undefined
@@ -883,9 +966,9 @@ export function buildLotePrompt(args: {
       const rotuloPlano = plano && plano !== anterior ? ` — ${plano}` : ''
       return [
         ...(lote.tomas.length > 1 ? [`Toma ${t.n} (${r1(t.duracionSeg)} s)${rotuloPlano}:`] : []),
-        ...(!hechos.length ? [SIN_HECHO_NUEVO]
-          : unaLinea ? [`${hechos.join('. ')}.`]
-          : hechos.map((h) => `  - ${h[0].toUpperCase()}${h.slice(1)}.`)),
+        ...(!finales.length ? [SIN_HECHO_NUEVO]
+          : unaLinea ? [`${finales.join('. ')}.`]
+          : finales.map((h) => `  - ${h[0].toUpperCase()}${h.slice(1)}.`)),
         // Esta línea es lo único que dice QUÉ FRASE va con QUÉ ACCIÓN y en cuántos
         // segundos: es la sincronización audio↔imagen. Se comprobó en una sesión real
         // que perderla en un lote y conservarla en otro produce "una habla muy rápido y
