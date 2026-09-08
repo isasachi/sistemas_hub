@@ -321,6 +321,27 @@ describe('la accion encadena las manos y nombra la transferencia', () => {
     expect(plano).not.toMatch(/qué hace la mano libre/)
   })
 
+  // El forense leía este UGC como "Cámara fija" en 6 de 6 cortes sobre un original que
+  // la creadora graba con el teléfono EN LA MANO mientras camina, y en los mismos cortes
+  // le atribuía gestos a la mano que él mismo declaraba fuera de cuadro: el cuadro que se
+  // mueve se estaba leyendo como un gesto. El bloque de cámara nombraba SOLO el caso del
+  // teléfono apoyado, o sea le daba "fija" como el paradigma del formato.
+  it('nombra el caso del selfie y no da "fija" por descarte', () => {
+    expect(plano).toMatch(/UN UGC SE GRABA DE DOS MANERAS/)
+    expect(plano).toMatch(/SOSTENIDO por la propia persona que habla \(selfie\)/)
+    expect(plano).not.toMatch(/un UGC grabado con el teléfono apoyado es fijo/)
+  })
+
+  // La regla va donde se DECLARAN las manos, no en el bloque de cámara: este repo tiene
+  // medido cuatro veces que una regla lejos de su campo es una sugerencia.
+  it('la mano que sostiene el teléfono está ocupada todo el video y no gesticula', () => {
+    const manos = plano.slice(plano.indexOf('CADA CORTE ABRE DICIENDO QUÉ TIENE CADA MANO'))
+    expect(manos).toMatch(/SI LA PERSONA SE ESTÁ GRABANDO A SÍ MISMA, UNA DE SUS MANOS SOSTIENE EL TELÉFONO/)
+    expect(manos).toMatch(/está ocupada y fuera de cuadro TODO el video/)
+    expect(manos).toMatch(/no se describe gesticulando/)
+    expect(manos).toMatch(/eso es movimiento de CÁMARA/)
+  })
+
   it('exige la transferencia como cláusula propia, no la trayectoria', () => {
     expect(plano).toMatch(/SI EL PRODUCTO TOCA EL CUERPO EN ESTE CORTE, ESE HECHO SE ESCRIBE PRIMERO/)
     expect(plano).toMatch(/CONSECUENCIAS de ese hecho/)

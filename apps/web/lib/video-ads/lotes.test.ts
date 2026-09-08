@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { groupIntoLotes, LOTE_MAX_SEC, LOTE_MAX_CHARS, LoteSchema, expandirHechos, defectosDelForense, conflictosDeManos, buildLotePrompt, camaraDeLote, sinEscenaDeFoto, partirEnTramos, repartirAccion, numeroEnunciado } from './lotes'
+import { groupIntoLotes, LOTE_MAX_SEC, LOTE_MAX_CHARS, LoteSchema, expandirHechos, defectosDelForense, conflictosDeManos, buildLotePrompt, camaraDeLote, sinEscenaDeFoto, partirEnTramos, repartirAccion, numeroEnunciado, manosFueraDeCuadro } from './lotes'
 import type { TomaFinal } from './adapt'
 import type { Hecho } from './forensic'
 import { KIE_PROMPT_MAX } from './kie'
@@ -956,43 +956,92 @@ describe('numeroEnunciado', () => {
 })
 
 describe('buildLotePrompt: conteo con la mano libre', () => {
-  // La toma 3 REAL de `c32d229a`: dice "número dos" y su propio prompt manda la izquierda
-  // fuera de cuadro. El render gesticuló con esa mano igual — el estado declarado perdió
-  // contra el número hablado. Así que el prompt dice cuántos dedos, y la orden opuesta
-  // sobre esa misma mano se va: las dos juntas son el modo de fallo de siempre.
-  const real = {
+  // La toma 3 de `2b69d547`: enumera, la derecha sostiene el bote y la izquierda
+  // gesticula EN CUADRO. Ahí el conteo es lo que hay que emitir — grok va a contar con
+  // esa mano lo pida el prompt o no, así que se le pone el número correcto.
+  const libre = {
     ...toma(3, 5.6, 'Número dos, tiene una fórmula pura que también ayuda a potenciar el desarrollo de masa muscular.'),
-    accionVisual: 'Sostiene el bote con la mano derecha, lo mueve ligeramente mientras explica el segundo punto, la mano izquierda permanece fuera de cuadro',
+    accionVisual: 'Sostiene el bote con la mano derecha mientras habla; gesticula con la mano izquierda para enfatizar',
   }
-  const salida = buildLotePrompt({ lote: groupIntoLotes([real])[0], ...ARGS })
+  const salida = buildLotePrompt({ lote: groupIntoLotes([libre])[0], ...ARGS })
 
   it('nombra la cantidad y la mano, derivadas de la locución y del estado declarado', () => {
     expect(salida).toContain('  - Levanta dos dedos con la mano izquierda.')
   })
 
-  it('quita la orden opuesta sobre esa misma mano', () => {
-    expect(salida).not.toMatch(/mano izquierda permanece fuera de cuadro/i)
-    // y no se lleva puesto el resto del hecho
-    expect(salida).toMatch(/Sostiene el bote con la mano derecha/)
+  // La toma 3 REAL de `c32d229a`: dice "número dos" y su propio prompt manda la izquierda
+  // fuera de cuadro. En el original esa mano sostiene el teléfono con el que graba, así
+  // que no está libre — y la cláusula del forense es una observación CIERTA que se queda.
+  const fuera = { ...libre, accionVisual: 'Sostiene el bote con la mano derecha, lo mueve ligeramente mientras explica el segundo punto, la mano izquierda permanece fuera de cuadro' }
+
+  it('no cuenta con una mano que el propio lote declara fuera de cuadro, y conserva la cláusula', () => {
+    const salida = buildLotePrompt({ lote: groupIntoLotes([fuera])[0], ...ARGS })
+    expect(salida).not.toMatch(/dedos/)
+    expect(salida).toMatch(/mano izquierda permanece fuera de cuadro/i)
+  })
+
+  // El alcance es el VIDEO, no el corte: el forense se contradice entre cortes (el cuadro
+  // que se mueve se lee como gesto), así que basta que UN corte la declare fuera.
+  it('no cuenta con una mano que OTRO corte del video declaró fuera de cuadro', () => {
+    const conVideo = buildLotePrompt({ lote: groupIntoLotes([libre])[0], ...ARGS, sinLibre: ['izquierda'] })
+    expect(conVideo).not.toMatch(/dedos/)
+  })
+
+  // El andamiaje de frontera DERIVA "la mano izquierda está libre" de la mano que
+  // sostiene, con la misma premisa rota que el conteo: medido, 3 de las 6 veces que esa
+  // línea se emite en la base es sobre una mano que el video declara fuera de cuadro.
+  it('no afirma que está libre una mano que el video declara fuera de cuadro', () => {
+    const conAndamio = { ...libre, accionVisual: 'Sostiene el frasco con la mano derecha. la mano izquierda está libre. Masajea la mejilla' }
+    const salida = buildLotePrompt({ lote: groupIntoLotes([conAndamio])[0], ...ARGS, sinLibre: ['izquierda'] })
+    expect(salida).not.toMatch(/mano izquierda está libre/i)
+    expect(salida).toMatch(/Masajea la mejilla/)
+    // sin el dato del video la línea se queda: es el andamiaje que evita el brazo de más
+    expect(buildLotePrompt({ lote: groupIntoLotes([conAndamio])[0], ...ARGS })).toMatch(/mano izquierda está libre/i)
   })
 
   it('sin enumeración no agrega ningún conteo', () => {
-    const sin = buildLotePrompt({ lote: groupIntoLotes([{ ...real, locucion: 'Y con solo tomar cinco gramos al día ya estás.' }])[0], ...ARGS })
+    const sin = buildLotePrompt({ lote: groupIntoLotes([{ ...libre, locucion: 'Y con solo tomar cinco gramos al día ya estás.' }])[0], ...ARGS })
     expect(sin).not.toMatch(/dedos/)
-    expect(sin).toMatch(/mano izquierda permanece fuera de cuadro/i)
   })
 
   // Sin mano libre que nombrar no se inventa una: "la mano libre" a secas no describe
   // nada, y es justo el término que el forense tiene prohibido por nombre.
   it('no emite conteo si las dos manos están ocupadas', () => {
-    const ambas = { ...real, accionVisual: 'Sostiene el bote con ambas manos frente al pecho' }
+    const ambas = { ...libre, accionVisual: 'Sostiene el bote con ambas manos frente al pecho' }
     expect(buildLotePrompt({ lote: groupIntoLotes([ambas])[0], ...ARGS })).not.toMatch(/dedos/)
   })
 
   // Una mano libre con una PIEZA declarada ya tiene trabajo: contar con ella pediría una
   // tercera mano, que es el defecto de al lado.
   it('no emite conteo si la mano libre tiene el aplicador', () => {
-    const pieza = { ...real, accionVisual: 'Sostiene el bote con la mano derecha; saca el cuentagotas con la mano izquierda' }
+    const pieza = { ...libre, accionVisual: 'Sostiene el bote con la mano derecha; saca el cuentagotas con la mano izquierda' }
     expect(buildLotePrompt({ lote: groupIntoLotes([pieza])[0], ...ARGS })).not.toMatch(/dedos/)
+  })
+})
+
+// Los 23 hechos de la base que dicen "fuera de cuadro". La mitad no habla de una mano
+// —el frasco que baja, la mirada que se va— y ahí marcar de más apagaría el conteo en un
+// video que sí lo necesita.
+describe('manosFueraDeCuadro', () => {
+  const CASOS: [string, ('derecha' | 'izquierda')[]][] = [
+    ['Sostiene el bote con la mano derecha. La mano izquierda queda fuera de cuadro.', ['izquierda']],
+    ['Sostiene el bote con la mano derecha, mientras la mano izquierda señala al frente y luego vuelve a quedar fuera de cuadro.', ['izquierda']],
+    ['La mano izquierda permanece relajada a su costado, fuera de cuadro.', ['izquierda']],
+    ['El frasco está en la mano izquierda, fuera de cuadro.', ['izquierda']],
+    ['Sostiene frasco con mano derecha, lo levanta y muestra a cámara. Izquierda fuera de cuadro.', ['izquierda']],
+    // El OBJETO sale de cuadro, no la mano: la mano se nombra después, o el objeto se
+    // interpone. Marcar acá apagaría el conteo de un video con la mano realmente libre.
+    ['Entre 00:05 y 00:06, baja la botella completamente fuera de cuadro por un instante.', []],
+    ['La mujer baja la botella de gomitas momentáneamente fuera de cuadro con su mano derecha.', []],
+    ['Sostiene la botella con la mano derecha y baja la botella fuera de cuadro.', []],
+    ['La modelo gira su cuerpo 45 grados a la izquierda, mirando hacia la derecha fuera de cuadro.', []],
+    ['Sujeto muestra el producto a cámara y lo guarda fuera de cuadro.', []],
+  ]
+  it.each(CASOS)('%s', (texto, esperado) => {
+    expect(manosFueraDeCuadro([texto]).sort()).toEqual(esperado.sort())
+  })
+
+  it('es del VIDEO: junta lo que declara cualquier corte', () => {
+    expect(manosFueraDeCuadro(['Gesticula con la mano izquierda.', 'La mano izquierda está fuera de cuadro.'])).toEqual(['izquierda'])
   })
 })

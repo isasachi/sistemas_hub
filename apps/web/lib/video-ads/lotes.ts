@@ -440,17 +440,49 @@ export function numeroEnunciado(locucion: string): number | undefined {
   return n >= 1 && n <= 5 ? n : undefined
 }
 
+/** Los objetos que salen de cuadro por su cuenta: si uno aparece entre la mano y la
+ * frase, lo que se fue es el objeto ("baja la botella fuera de cuadro"), no la mano. */
+const OBJETO_FUERA = /\b(frasco|botella|envase|bote|producto|tubo|caja|cuentagotas|gotero|pipeta|cepillo|tapa|suero)\b/i
+
 /**
- * Quita del hecho la cláusula que manda la mano LIBRE fuera de cuadro. Solo se aplica en
- * una toma que enumera, donde esa mano va a mostrar el número: dejar las dos órdenes en el
- * mismo prompt es el modo de fallo que este repo ya registra seis veces. Acote angosto (la
- * forma contigua, que es la que `partirEnTramos` deja como cláusula suelta) y fail-safe:
- * si al limpiar no queda nada, se devuelve el hecho intacto.
+ * Las manos que el video declara FUERA DE CUADRO, en cualquier corte.
+ *
+ * ⚠️ UNA MANO FUERA DE CUADRO NO ESTÁ LIBRE, Y ES EL AGUJERO QUE DEJABA EL CONTEO.
+ * `manoLibre` deriva "la izquierda está libre" de que la derecha sostenga el producto,
+ * pero en un UGC grabado en selfie esa mano sostiene el TELÉFONO: está ocupada todo el
+ * video y el forense lo dice —"la mano izquierda permanece fuera de cuadro"—. Sin este
+ * gate el prompt le pedía contar con ella (medido: `c32d229a` 3 conteos y `ee48f801` 1,
+ * los 4 sobre una mano declarada fuera de cuadro).
+ *
+ * **El alcance es el VIDEO ENTERO, no el corte**, y eso lo decide el dato: en `c32d229a`
+ * la toma 3 dice "permanece fuera de cuadro" pero la 4 dice "gesticula con la izquierda"
+ * —el forense se contradice, porque el cuadro que se mueve (ella camina con el teléfono)
+ * se lee como gesto—. Por corte se mataría un conteo y se dejarían dos sobre la misma
+ * mano ocupada. La mano que sostiene la cámara no vuelve a estar libre a mitad del video.
+ *
+ * Lectura por ORACIÓN y hacia atrás: la mano nombrada más cerca ANTES de "fuera de
+ * cuadro", sin un objeto de por medio. Así "baja la botella fuera de cuadro con su mano
+ * derecha" (el objeto, y la mano nombrada después) y "mirando hacia la derecha fuera de
+ * cuadro" (una dirección, sin la palabra mano) no marcan nada. Verificado contra los 23
+ * hechos de la base que dicen "fuera de cuadro".
  */
-function sinManoFueraDeCuadro(hecho: string, libre: 'derecha' | 'izquierda'): string {
-  const re = new RegExp(`,?\\s*(?:y\\s+)?(?:la|su)\\s+mano\\s+${libre}\\s+(?:permanece|queda|se mantiene|sigue)[^,.;]*fuera de cuadro`, 'i')
-  const limpio = hecho.replace(re, '').replace(/\s{2,}/g, ' ').replace(/\s+([.,;])/g, '$1').replace(/^[,;\s]+/, '').trim()
-  return limpio || hecho
+export function manosFueraDeCuadro(textos: string[]): ('derecha' | 'izquierda')[] {
+  const out = new Set<'derecha' | 'izquierda'>()
+  for (const texto of textos) {
+    for (const oracion of texto.split(/[.;]/)) {
+      const i = oracion.search(/fuera de cuadro/i)
+      if (i < 0) continue
+      const antes = oracion.slice(0, i)
+      // "Izquierda fuera de cuadro." — el forense escribe telegrama y a veces omite "mano".
+      const sola = /(?:^|,)\s*(derecha|izquierda)\s*$/i.exec(antes)
+      const m = [...antes.matchAll(/mano\s+(derecha|izquierda)\b/gi)].pop()
+      const lado = sola?.[1] ?? m?.[1]
+      if (!lado) continue
+      if (m && !sola && OBJETO_FUERA.test(antes.slice(m.index + m[0].length))) continue
+      out.add(lado.toLowerCase() as 'derecha' | 'izquierda')
+    }
+  }
+  return [...out]
 }
 
 /**
@@ -895,6 +927,13 @@ export function buildLotePrompt(args: {
    * plano POR TOMA, con cortes secos entre ellas. Sin `cortes` se emite como siempre.
    */
   cortes?: { tiempo: string; camara: string }[]
+  /**
+   * Las manos que el VIDEO declara fuera de cuadro (`manosFueraDeCuadro`, sobre todos los
+   * lotes). Una mano así no está libre —en un UGC en selfie sostiene el teléfono— y por
+   * tanto no cuenta con los dedos. Va por parámetro y no se deriva acá porque el alcance
+   * es el video entero y este prompt solo ve UN lote.
+   */
+  sinLibre?: readonly ('derecha' | 'izquierda')[]
 }): string {
   const { lote, camara, voz, images, producto } = args
 
@@ -931,9 +970,20 @@ export function buildLotePrompt(args: {
       // clear drop onto her left cheek.`); el nuestro los metía todos en un renglón, y
       // ahí el modelo los resuelve como UN gesto — de ahí la gota que "aparece" en la
       // mejilla sin que el gotero llegue nunca. El texto es el MISMO, cambia dónde corta.
-      const hechos = partirEnTramos(sinEscenaDeFoto(t.accionVisual))
+      const bruto = partirEnTramos(sinEscenaDeFoto(t.accionVisual))
         .filter((h) => !(mismoCorteAntes && ((previos.has(h) && esEstadoDeManos(h)) || (esAndamioDeFrontera(h) && !/^termina/i.test(h)))))
         .filter((h) => !(mismoCorteDespues && /^termina con el envase/i.test(h)))
+      // UNA MANO FUERA DE CUADRO NO ESTÁ LIBRE (ver `manosFueraDeCuadro`): en un UGC en
+      // selfie sostiene el teléfono. Se une lo que declara el VIDEO con lo que declara
+      // este lote — sin la segunda mitad, un caller que omita `sinLibre` volvería a
+      // contar con una mano que su propio prompt manda fuera de cuadro.
+      const ocupadas = [...(args.sinLibre ?? []), ...manosFueraDeCuadro(bruto)]
+      // El andamiaje de frontera DERIVA "la mano X está libre" de la mano que sostiene
+      // (`andamiar`), con la misma premisa rota: medido, 3 de las 6 veces que esa línea
+      // se emite es sobre una mano que el propio video declara fuera de cuadro. Se quita
+      // acá y no en `andamiar` porque el alcance es el video y aquella corre por corte,
+      // dentro de `groupIntoLotes`, antes de que el video esté medido.
+      const hechos = bruto.filter((h) => !ocupadas.some((m) => new RegExp(`^la mano ${m} está libre\\.?$`, 'i').test(h.trim())))
       // EL NÚMERO QUE SE DICE ES EL NÚMERO QUE SE VE. Una locución que enumera hace que
       // grok cuente con la mano libre lo pida el prompt o no, y el conteo sale arbitrario:
       // en `c32d229a` el avatar dice "número dos" y la mano abre la palma entera. La
@@ -957,8 +1007,11 @@ export function buildLotePrompt(args: {
       // "la mano libre" a secas no describe nada, y es el término que el forense tiene
       // prohibido por nombre.
       const conPieza = libre !== null && hechos.some((h) => PIEZAS.test(h) && manoDe(h) === libre)
-      const conteo = enunciado && libre && !conPieza ? `levanta ${DEDOS[enunciado]} con la mano ${libre}` : null
-      const finales = conteo ? [...hechos.map((h) => sinManoFueraDeCuadro(h, libre!)), conteo] : hechos
+      // Y una mano que el video declara FUERA DE CUADRO tampoco está libre: en un UGC
+      // grabado en selfie es la que sostiene el teléfono. Ver `manosFueraDeCuadro`.
+      const fueraDeCuadro = libre !== null && ocupadas.includes(libre)
+      const conteo = enunciado && libre && !conPieza && !fueraDeCuadro ? `levanta ${DEDOS[enunciado]} con la mano ${libre}` : null
+      const finales = conteo ? [...hechos, conteo] : hechos
       // El plano se anuncia solo cuando CAMBIA respecto de la toma anterior: un shot
       // list se lee así, el plano vale hasta que se anuncia otro.
       const plano = multiPlano ? planoDe.get(t.tiempoOriginal) : undefined

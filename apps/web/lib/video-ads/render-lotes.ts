@@ -1,5 +1,5 @@
 import { createHash } from 'crypto'
-import { groupIntoLotes, buildLotePrompt, camaraDeLote, productoFisico, type Lote, type LoteImage } from './lotes'
+import { groupIntoLotes, buildLotePrompt, camaraDeLote, productoFisico, manosFueraDeCuadro, type Lote, type LoteImage } from './lotes'
 import type { VoiceProfile } from './character'
 import type { AdaptedScript } from './adapt'
 import type { VideoSessionResponse } from './types'
@@ -32,8 +32,11 @@ export function insumosDeRender(
   // Sin corte que empareje no se afirma NADA de la cámara: la línea no se emite y el
   // encuadre lo decide la imagen de referencia.
   const camaras = agrupados.map((l) => camaraDeLote(l, cortes, ''))
-  const huella = scriptFingerprint({ lotes: agrupados, camaras, voz, images, producto })
-  return { images, producto, cortes, agrupados, camaras, huella, voz }
+  // Se mide sobre TODOS los lotes: una mano fuera de cuadro lo está en todo el video (es
+  // la que sostiene el teléfono), y el prompt de un lote solo ve su propia coreografía.
+  const sinLibre = manosFueraDeCuadro(agrupados.flatMap((l) => l.tomas.map((t) => t.accionVisual)))
+  const huella = scriptFingerprint({ lotes: agrupados, camaras, voz, images, producto, sinLibre })
+  return { images, producto, cortes, agrupados, camaras, huella, voz, sinLibre }
 }
 
 /**
@@ -49,6 +52,7 @@ export function promptDeLote(lote: Lote, camara: string, ins: ReturnType<typeof 
   const loteParaPrompt = durationSec === lote.duracionSeg ? lote : { ...lote, duracionSeg: durationSec }
   const prompt = buildLotePrompt({
     lote: loteParaPrompt, camara, voz: ins.voz, images: ins.images, producto: ins.producto, cortes: ins.cortes,
+    sinLibre: ins.sinLibre,
   })
   return { prompt, durationSec }
 }
@@ -175,6 +179,8 @@ export function scriptFingerprint(input: {
   images: LoteImage[]
   /** La parte física del producto que emite el prompt (`productoFisico`, lotes.ts). */
   producto: string
+  /** Manos que el video declara fuera de cuadro (`manosFueraDeCuadro`). Ver arriba. */
+  sinLibre?: readonly ('derecha' | 'izquierda')[]
 }): string {
   const { lotes, camaras, voz, images, producto } = input
   const campos: string[] = [
@@ -214,6 +220,14 @@ export function scriptFingerprint(input: {
     // v8 → v9: un fragmento que arranca a mitad de una acción sostenida la emite ANTES del
     // estado heredado, y el cierre sintético va justo después de la apertura.
     // v9 → v10: una toma cuya locución ENUMERA emite cuántos dedos levanta la mano libre.
+    // Una mano declarada fuera de cuadro (la que sostiene el teléfono en un UGC en
+    // selfie) dejó de contar como libre: no se cuenta con ella y no se emite "la mano X
+    // está libre". Eso cambia el texto emitido, o sea lo que una huella de insumos no
+    // ve — pero SOLO en las sesiones que declaran una mano fuera de cuadro (9 de 28
+    // medidas), y las otras 19 salen byte-idénticas. Bumpear a v11 habría invalidado las
+    // 24 sesiones con lotes PAGADOS, así que en vez de eso entra `sinLibre` como insumo,
+    // y solo cuando existe: una lista vacía deja el texto canónico igual que antes.
+    // Mismo criterio que `repartirAccion`.
     'v10',
     producto,
     voz.idioma, voz.varianteRegional, voz.acento, voz.pronunciacion, voz.ritmo,
@@ -225,6 +239,9 @@ export function scriptFingerprint(input: {
   // Van con su largo delante, igual que las demás listas: la cámara ya no es un solo
   // string, y dos repartos distintos de los mismos planos entre lotes tienen que dar
   // huellas distintas.
+  // Solo si existe: sin esto, agregar el campo movería la huella de las 19 sesiones a
+  // las que este cambio no les toca un carácter del prompt.
+  if (input.sinLibre?.length) campos.push('sinLibre', ...[...input.sinLibre].sort())
   campos.push(String(camaras.length))
   for (const c of camaras) campos.push(c)
   campos.push(String(lotes.length))
