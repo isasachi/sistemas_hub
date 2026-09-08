@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import type { ScriptTemplate } from './template'
-import { slotOriginals, type Slot } from './fill'
+import { slotOriginals, quitarRotuloDeToma, type Slot } from './fill'
 import type { ForensicReport } from './forensic'
 import type { UserInputs } from './types'
 import type { ProductScan } from '@/lib/types'
@@ -139,7 +139,10 @@ export function applyScriptEdits(
 ): AdaptedScript {
   const tomas = adapted.tomas.map((t, i) => {
     const nueva = ediciones[i]
-    return nueva !== undefined ? { ...t, locucion: nueva.trim() } : t
+    // El mismo saneo del rótulo que en `adapt-script`: es el OTRO camino que persiste
+    // `locucion`, y la invariante no es de quién escribió el texto sino de qué se
+    // pronuncia — un rótulo al arranque de la línea nunca es diálogo.
+    return nueva !== undefined ? { ...t, locucion: quitarRotuloDeToma(nueva.trim()) } : t
   })
   const guionFinal = tomas.map((t) => t.locucion).join(' ')
   return {

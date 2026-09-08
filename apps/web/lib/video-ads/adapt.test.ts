@@ -219,6 +219,16 @@ describe('applyScriptEdits', () => {
     expect(r.tomas[1].locucion).toBe('Solo la segunda.')
   })
 
+  // El OTRO camino que persiste `locucion`. La invariante no es de quién escribió el
+  // texto sino de qué se pronuncia: un rótulo al arranque de la línea nunca es diálogo, y
+  // `guionFinal` —que es la concatenación— tampoco tiene que llevárselo.
+  it('sanea el rótulo de la toma, y sin tocar la dosis del producto', () => {
+    const r = applyScriptEdits(base, { 0: 'Toma 1: Este suero me cambió.', 1: 'Toma 2 al día y listo.' }, 50)
+    expect(r.tomas[0].locucion).toBe('Este suero me cambió.')
+    expect(r.tomas[1].locucion).toBe('Toma 2 al día y listo.')
+    expect(r.guionFinal).not.toMatch(/Toma 1:/)
+  })
+
   it('reescribe solo la toma editada y deja el resto intacto', () => {
     const r = applyScriptEdits(base, { 1: 'Da un efecto iluminador.' }, 50)
     expect(r.tomas[0].locucion).toBe('Este suero me cambió.')

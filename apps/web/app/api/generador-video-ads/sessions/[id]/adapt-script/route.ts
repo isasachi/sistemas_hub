@@ -5,7 +5,7 @@ import { callVideoAds } from '@/lib/video-ads/llm'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 import { SlotValuesSchema, buildAdaptInstruction } from '@/lib/video-ads/adapt'
-import { extractSlots, fillTemplate, rejectBadValues, acceptScaffoldFix, type Slot } from '@/lib/video-ads/fill'
+import { extractSlots, fillTemplate, rejectBadValues, acceptScaffoldFix, quitarRotuloDeToma, type Slot } from '@/lib/video-ads/fill'
 import { extractPending } from '@/lib/video-ads/pending'
 import { canProceed } from '@/lib/video-ads/validation'
 import { STEP } from '@/lib/video-ads/steps'
@@ -116,9 +116,17 @@ export async function POST(
       ajustados.push({ n: aj.n, antes: toma.locucion, ahora: aj.locucion.trim(), motivo: aj.motivo })
       toma.locucion = aj.locucion.trim()
     }
+    // ⚠️ EL RÓTULO DE LA TOMA SE SANEA ACÁ, EN EL PUNTO ÚNICO ANTES DE PERSISTIR, y no en
+    // cada camino que escribe `locucion`. Por acá pasan los DOS: el relleno de la plantilla
+    // (`fillTemplate`, donde el rótulo entraría por un valor) y el ajuste de andamiaje
+    // (que escribe `toma.locucion` por su cuenta, unas líneas arriba). AGENTS.md ya
+    // registra el intento de parchear a los escritores uno por uno: se olvidó el tercero
+    // y el rótulo llegó igual al guion guardado, o sea a pronunciarse en el clip.
+    for (const t of relleno.tomas) t.locucion = quitarRotuloDeToma(t.locucion)
+
     // `guionFinal` es la concatenación de las locuciones, así que se rearma después de
-    // los ajustes: sin esto el usuario leería el guion corregido y el render mandaría el
-    // texto anterior.
+    // los ajustes y del saneo: sin esto el usuario leería el guion corregido y el render
+    // mandaría el texto anterior.
     const guionFinal = relleno.tomas.map((t) => t.locucion).join(' ')
     if (ajustados.length)
       console.warn(`[video-ads/adapt-script] sesión ${id}: ${ajustados.length} andamiaje(s) ajustado(s)`)

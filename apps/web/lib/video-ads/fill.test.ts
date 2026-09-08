@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractSlots, fillTemplate, validateTemplate, assembleTemplate, rejectBadValues, alignSlots, normalizeSlots, slotOriginals, podarEco, acceptScaffoldFix } from './fill'
+import { extractSlots, fillTemplate, validateTemplate, assembleTemplate, rejectBadValues, alignSlots, normalizeSlots, slotOriginals, podarEco, acceptScaffoldFix, quitarRotuloDeToma} from './fill'
 import type { ScriptTemplate } from './template'
 
 // Plantilla recortada del caso real (serum Apivita → suero de niacinamida). Trae los
@@ -578,5 +578,54 @@ describe('acceptScaffoldFix', () => {
     const conHueco = 'Por sus [PENDIENTE: atributo] es para todo tipo de piel.'
     const r = acceptScaffoldFix(conHueco, 'Por su fórmula suave es para todo tipo de piel.', '', ['todo tipo de piel'])
     expect(r).toEqual({ ok: false, motivo: 'resuelve un pendiente por la puerta de atrás' })
+  })
+})
+
+// ── EL RÓTULO DE LA TOMA NO SE PRONUNCIA ──────────────────────────────────────────────
+// Todo lo que está en `locucion` se dice en voz alta, y el prompt de FASE 3 le presenta
+// cada toma como `Toma N`, así que el modelo puede copiar ese rótulo al texto hablado.
+// Lo que hay que cuidar acá NO es que limpie —eso es una línea— sino que NO se coma el
+// IMPERATIVO de "tomar", que en un nicho de suplementos aparece en cada dosis.
+describe('quitarRotuloDeToma', () => {
+  it('quita el rótulo al arranque de la línea, en sus formas reales', () => {
+    expect(quitarRotuloDeToma('Toma 1: Este suero me cambió la piel.')).toBe('Este suero me cambió la piel.')
+    expect(quitarRotuloDeToma('Toma 12 - Y listo.')).toBe('Y listo.')
+    expect(quitarRotuloDeToma('TOMA 3) Además tiene cúrcuma.')).toBe('Además tiene cúrcuma.')
+    expect(quitarRotuloDeToma('Toma 2. Número dos, la textura.')).toBe('Número dos, la textura.')
+  })
+
+  // ⚠️ EL CASO QUE IMPORTA. "Toma" es el imperativo de "tomar" y este nicho lo usa para la
+  // dosis: comerse "Toma 2 al día" es peor que dejar pasar un rótulo. La puntuación
+  // obligatoria del patrón es lo único que separa las dos cosas — si alguien la afloja,
+  // esto falla.
+  it('NO toca el imperativo de "tomar", que es la dosis del producto', () => {
+    for (const l of [
+      'Toma 2 al día y ya estás.',
+      'Toma dos al día y listo.',
+      'Toma 1 cápsula en la mañana.',
+      'Y con solo tomar cinco gramos al día ya estás, tienes más potencia.',
+      'Tres razones para tomar gomitas de melatonina.',
+    ]) expect(quitarRotuloDeToma(l)).toBe(l)
+  })
+
+  // Una toma vacía renderiza un textarea que se lee como "te faltó escribir esto", y el
+  // usuario lo rellenaría con diálogo que el original no tiene.
+  it('devuelve la línea intacta si el rótulo era todo lo que había', () => {
+    expect(quitarRotuloDeToma('Toma 1:')).toBe('Toma 1:')
+    expect(quitarRotuloDeToma('  ')).toBe('  ')
+  })
+
+  // El rótulo infla el largo y mete palabras que el piso no tiene, así que sin limpiarlo
+  // ANTES de medir, `acceptScaffoldFix` rechaza un ajuste que por lo demás está bien.
+  // ⚠️ La línea es CORTA a propósito, y hubo que dimensionarlo: sobre una locución larga
+  // el rótulo mueve el largo ~19 % y el chequeo lo deja pasar igual, así que la aserción
+  // era decoración — pasaba con el saneo revertido. Con la línea del caso documentado
+  // ("andas muy ___", 18 caracteres) los 8 del rótulo son el 44 % y sí tumban el ajuste.
+  // Verificado revirtiendo el saneo: sin él, este test falla.
+  it('se limpia antes de MEDIR en acceptScaffoldFix, si no hunde un ajuste bueno', () => {
+    const piso = 'Andas muy cansada.'
+    const propuesta = 'Andas muy cansado.'
+    expect(acceptScaffoldFix(piso, propuesta, 'cansado', ['cansado']).ok).toBe(true)
+    expect(acceptScaffoldFix(piso, `Toma 1: ${propuesta}`, 'cansado', ['cansado']).ok).toBe(true)
   })
 })
