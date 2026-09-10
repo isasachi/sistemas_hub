@@ -13,6 +13,7 @@ const SENAL_TEXTO: Record<string, string> = {
   ninguna: "ningún campo directo",
 };
 import ToolShell from "@/components/tools/ui/ToolShell";
+import FlujoDescubrimiento from "@/components/tools/buscador-productos/FlujoDescubrimiento";
 import {
   RAW_BUCKETS, RAW_BUCKET_LABEL, CATEGORIES, isRawBucket,
   PAISES, PAIS_LABEL, ANTIGUEDADES, ANTIGUEDAD_LABEL,
@@ -212,6 +213,10 @@ export default function BuscadorProductosPage() {
   // Filtros globales: aplican tanto al cambio de categoría como al de rango.
   const [pais, setPais] = useState<Pais | "">("");
   const [dias, setDias] = useState<Antiguedad>(0);
+  // Qué VISTA sirve el inventario. Las dos leen las mismas tablas (`ph_*`): la
+  // clásica es la lista de siempre y "Descubrimiento" es el flujo de un producto
+  // por vez, con cupo y reclamo. No son dos motores — es una interfaz nueva.
+  const [vista, setVista] = useState<"lista" | "flujo">("lista");
 
 
   // `cat` y `bucket` van por parámetro y no desde el estado: el chip busca en el
@@ -269,6 +274,13 @@ export default function BuscadorProductosPage() {
     search(null, null);
   }, [search]);
 
+  // Cambiar de vista cambia la HERRAMIENTA, no un filtro: al volver a la lista
+  // se re-busca, porque pudo quedar vieja mientras se usaba el flujo.
+  const elegirVista = useCallback((v: "lista" | "flujo") => {
+    setVista(v);
+    if (v === "lista") { setSel(null); search(null, null); }
+  }, [search]);
+
   // Carga inicial. `search` cambia de identidad con `loading`, así que la
   // dependencia sería un bucle: esto corre una sola vez, al montar.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -294,9 +306,23 @@ export default function BuscadorProductosPage() {
             Buscador de Productos
           </h1>
           <p className="text-[14px] text-[#c9b4ae] leading-[1.6]">
-            Elige una categoría y encuentra los productos que más están pautando.
+            {vista === "flujo"
+              ? "Te entregamos un producto por vez. El que abres se suma a tu lista y deja de estar disponible para los demás."
+              : "Elige una categoría y encuentra los productos que más están pautando."}
           </p>
         </div>
+
+        {/* ⚠️ ESTO CAMBIA LA HERRAMIENTA, NO EL FILTRO. La lista trae sus chips
+            de categoría, rango y filtros; el flujo trae su propia navegación y
+            su cupo. Por eso no comparten controles: dejar a la vista el filtro
+            de rango junto al flujo mostraría un control que el flujo no usa. */}
+        <div className="flex items-center gap-2 mb-5">
+          <span className="text-[12px] text-[#a98c88] mr-1">Vista</span>
+          <Chip label="Lista" active={vista === "lista"} busy={loading && vista === "lista"} disabled={loading} onClick={() => elegirVista("lista")} />
+          <Chip label="Descubrimiento (beta)" active={vista === "flujo"} disabled={loading} onClick={() => elegirVista("flujo")} />
+        </div>
+
+        {vista === "flujo" ? <FlujoDescubrimiento /> : (<>
 
         {/* Los chips SON la navegación: sin barra de búsqueda, esta lista es la
             única entrada a la herramienta. Son CATEGORÍAS (`@ph/shared`
@@ -462,6 +488,7 @@ export default function BuscadorProductosPage() {
             )}
           </section>
         )}
+        </>)}
       </main>
     </ToolShell>
   );
