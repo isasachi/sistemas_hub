@@ -1,7 +1,7 @@
 'use client'
 
 import { create } from 'zustand'
-import type { ReferenceAnalysis, ProductScan, CopyVersions, ConfirmedCopy, SessionResponse } from '@/lib/types'
+import type { ReferenceAnalysis, ProductScan, CopyVersions, ConfirmedCopy, SessionResponse, AdBatch } from '@/lib/types'
 
 export const SESSION_KEY = 'anuncios_session_id'
 
@@ -23,6 +23,12 @@ interface WizardState {
   confirmedCopy: ConfirmedCopy | null
   imageUrl: string | null
   regens: Record<string, number>
+  /**
+   * Flujo de PLANTILLA. `templateId` null = flujo clásico (el usuario subió su referencia).
+   * Los dos flujos comparten store y tabla: son la misma sesión con distinto punto de partida.
+   */
+  templateId: string | null
+  variants: AdBatch | null
 }
 
 interface WizardActions {
@@ -49,6 +55,10 @@ interface WizardActions {
   resetSession: () => void
   setRegens: (m: Record<string, number>) => void
   setRegen: (kind: string, n: number) => void
+  setTemplate: (templateId: string, referenceUrl: string, referenceAnalysis: ReferenceAnalysis) => void
+  setVariants: (variants: AdBatch, step?: number) => void
+  /** Reemplaza UNA variante por id — lo usa el stream del render, que llega de a una. */
+  patchVariant: (v: AdBatch[number]) => void
 }
 
 const initialState: WizardState = {
@@ -69,6 +79,8 @@ const initialState: WizardState = {
   confirmedCopy: null,
   imageUrl: null,
   regens: {},
+  templateId: null,
+  variants: null,
 }
 
 export const useWizardStore = create<WizardState & WizardActions>((set, get) => ({
@@ -130,8 +142,18 @@ export const useWizardStore = create<WizardState & WizardActions>((set, get) => 
       copyVersions: session.copy_versions,
       confirmedCopy: session.confirmed_copy,
       imageUrl: session.image_url,
+      templateId: session.template_id,
+      variants: session.variants,
     })
   },
+
+  setTemplate: (templateId, referenceUrl, referenceAnalysis) =>
+    set({ templateId, referenceUrl, referenceAnalysis, step: 1, variants: null }),
+
+  setVariants: (variants, step) => set(step === undefined ? { variants } : { variants, step }),
+
+  patchVariant: (v) =>
+    set((s) => ({ variants: (s.variants ?? []).map((x) => (x.id === v.id ? v : x)) })),
 
   setRegens: (regens) => set({ regens }),
   setRegen: (kind, n) => set((s) => ({ regens: { ...s.regens, [kind]: n } })),

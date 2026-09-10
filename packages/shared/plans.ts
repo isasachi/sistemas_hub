@@ -33,12 +33,53 @@ export interface Plan {
   porRango: number
   /** Imágenes por período de facturación (anuncios + branding + landing). */
   creditos: number
+  /**
+   * Cuántos anuncios puede pedir UNA sesión del flujo de plantilla (decisión del dueño del
+   * repo, 2026-09-04). El flujo clásico no tiene lote: es un anuncio por sesión.
+   *
+   * ⚠️ CADA ANUNCIO DEL LOTE GASTA UN CRÉDITO, así que este número no es solo un tope de
+   * producto: es la fracción del mes que un clic puede consumir. Con 3 sobre 30 créditos, un
+   * plan 1 gasta el 10 % de su mes por lote; con 10 sobre 180, un plan 3 gasta el 5,6 %. Ese
+   * equilibrio es el motivo de que el cap NO escale proporcional a los créditos.
+   *
+   * Lo recorta el SERVIDOR (`plan-lote` topa `n` acá antes de planificar) y lo pinta el
+   * selector. Escribirlo a mano en la UI es cómo el paywall termina ofreciendo un lote que el
+   * servidor no sirve.
+   */
+  anunciosPorLote: number
 }
 
 export const PLANS: Record<Tier, Plan> = {
-  1: { tier: 1, nombre: 'Legacy Start', precio: 29.9, buckets: ['0-50'], porRango: 10, creditos: 30 },
-  2: { tier: 2, nombre: 'Legacy Scale', precio: 69.9, buckets: ['0-50', '50-100'], porRango: 20, creditos: 100 },
-  3: { tier: 3, nombre: 'Legacy Empire', precio: 89.9, buckets: [...RAW_BUCKETS], porRango: 50, creditos: 180 },
+  1: { tier: 1, nombre: 'Legacy Start', precio: 29.9, buckets: ['0-50'], porRango: 10, creditos: 30, anunciosPorLote: 3 },
+  2: { tier: 2, nombre: 'Legacy Scale', precio: 69.9, buckets: ['0-50', '50-100'], porRango: 20, creditos: 100, anunciosPorLote: 5 },
+  3: { tier: 3, nombre: 'Legacy Empire', precio: 89.9, buckets: [...RAW_BUCKETS], porRango: 50, creditos: 180, anunciosPorLote: 10 },
+}
+
+/**
+ * Cuántos anuncios puede pedir de verdad este usuario AHORA: el cap de su plan, recortado por
+ * los créditos que le quedan.
+ *
+ * ⚠️ LOS DOS TOPES SON DISTINTOS Y HACEN FALTA LOS DOS. El cap del plan es lo que compró; los
+ * créditos son lo que le queda del mes. Sin recortar por créditos, un plan 3 con 4 créditos
+ * pide 10 anuncios, el servidor arranca y el lote muere a mitad con parte de los créditos ya
+ * gastados — el modo de fallo que este repo ya documenta para el render por lotes de video
+ * ("medio video renderizado es dinero gastado en algo inservible").
+ *
+ * Devuelve 0 cuando no queda ninguno: ahí lo correcto es no dejar disparar, no ofrecer 1.
+ */
+export function anunciosPosibles(tier: Tier, creditosRestantes: number): number {
+  return Math.max(0, Math.min(PLANS[tier].anunciosPorLote, creditosRestantes))
+}
+
+/**
+ * Las opciones que ofrece el selector (§30 del spec: `[1] [3] [5] [10]`), recortadas a lo que
+ * este usuario puede pedir. Siempre incluye el máximo alcanzable, aunque no sea un escalón
+ * redondo: con 4 créditos en un plan 3, las opciones son 1, 3 y 4.
+ */
+export function opcionesDeLote(maximo: number): number[] {
+  if (maximo <= 0) return []
+  const escalones = [1, 3, 5, 10].filter((n) => n < maximo)
+  return [...escalones, maximo]
 }
 
 /**
