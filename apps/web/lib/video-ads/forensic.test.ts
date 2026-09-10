@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { buildForensicInstruction, ForensicReportSchema, repairCutTiming, normalizarHechos, CPS_MAX, MIN_VISIBLE_SEG, type ForensicReport } from './forensic'
+import { z } from 'zod'
+import { buildForensicInstruction, camaraDeCorte, ForensicReportSchema, normalizarCamara, repairCutTiming, normalizarHechos, CPS_MAX, MIN_VISIBLE_SEG, type ForensicReport } from './forensic'
 
 // El prompt es el contrato con Gemini. Estos asserts fijan las reglas del spec que,
 // si se caen, producen el bug que ya vimos en producción: cortes inventados por
@@ -47,6 +48,27 @@ describe('buildForensicInstruction', () => {
     expect(p).toMatch(/No inventes campos fuera del esquema/)
   })
 
+  it('registra la mano de cámara por corte y deja el campo global solo como resumen legado', () => {
+    expect(p).toMatch(/`manoQueGraba`: resumen LEGADO/)
+    expect(p).toMatch(/`cortes\[\]\.manoQueGraba`/)
+    expect(p).toMatch(/durante TODO ESE CORTE/)
+    expect(p).toMatch(/no prolongues el estado selfie más allá del corte observado/i)
+  })
+
+  it('exige una matriz de cámara independiente por corte y prohíbe completar lo ausente', () => {
+    expect(p).toMatch(/SE MIDE DE NUEVO EN CADA CORTE, NUNCA SE HEREDA/)
+    for (const campo of ['soporteCamara', 'movimientoCamara', 'encuadreCamara', 'anguloCamara', 'evidenciaCamara']) {
+      expect(p).toContain(`\`${campo}\``)
+    }
+    expect(p).toMatch(/PROHIBIDO COPIAR O COMPLETAR CÁMARA/)
+    expect(p).toMatch(/Ante cualquier duda, `indeterminado`; inventar una cámara está prohibido/)
+    expect(p).toMatch(/que la persona camine dentro de un cuadro inmóvil NO es travelling/)
+    expect(p).toMatch(/que mire arriba NO vuelve contrapicado/)
+    expect(p).toMatch(/CRUCE FÍSICO OBLIGATORIO/)
+    expect(p).toMatch(/la mano que graba\s+no puede sostener a la vez el producto ni aparecer gesticulando/)
+    expect(p).toMatch(/"fija" exige cuadro inmóvil/)
+  })
+
   // El render reconstruye un video: "muestra el producto" hace que el generador invente
   // un gesto y el resultado deje de parecerse al original. Caso real: el forense capturó
   // el gotero y el giro del frasco, pero el nivel de detalle no estaba exigido.
@@ -69,6 +91,48 @@ describe('buildForensicInstruction', () => {
     expect(p).toMatch(/rejilla/i)
     expect(p).toMatch(/SE PUEDA DECIR/)
     expect(p).toContain(String(CPS_MAX))
+  })
+})
+
+describe('schema de cámara por corte', () => {
+  const legacy = {
+    duracionTotalSeg: 5, caracteresGuion: 4, guionOriginal: 'Hola',
+    sujeto: '', vestuario: '', producto: '', fondo: '', elementosGraficos: '',
+    cortes: [{ n: 1, tiempo: '00:00 - 00:05', duracionSeg: 5, accion: '', hechos: [], camara: 'Fija', dialogo: 'Hola', textoOverlay: 'No aparece', transicion: 'final' }],
+    tomas: [{ n: 1, encuadre: 'medio', posicion: 'frontal', accionFisica: 'habla', objeto: '', dialogo: 'Hola', duracionSeg: 5 }],
+    edicion: { sincronizacion: '', textoOverlay: '', escalaZoom: '', cortes: '', ritmo: '', corteFinal: '' },
+    resumenParaUsuario: '',
+  }
+
+  it('mantiene sesiones anteriores y obliga al modelo a emitir la matriz nueva', () => {
+    expect(ForensicReportSchema.parse(legacy).manoQueGraba).toBe('')
+    const schema = z.toJSONSchema(ForensicReportSchema) as { required?: string[]; properties?: { cortes?: { items?: { required?: string[] } } } }
+    expect(schema.required ?? []).toContain('manoQueGraba')
+    const requiredCorte = schema.properties?.cortes?.items?.required ?? []
+    for (const campo of ['soporteCamara', 'movimientoCamara', 'encuadreCamara', 'anguloCamara', 'manoQueGraba', 'evidenciaCamara']) {
+      expect(requiredCorte).toContain(campo)
+    }
+  })
+
+  it('deriva la descripción canónica sin rellenar dimensiones indeterminadas', () => {
+    const corte = {
+      camara: 'texto libre que no debe ganar', soporteCamara: 'selfie_en_mano' as const,
+      movimientoCamara: 'deriva suave a la derecha', encuadreCamara: 'plano medio corto',
+      anguloCamara: 'indeterminado', manoQueGraba: 'izquierda' as const,
+      evidenciaCamara: 'microtemblor solidario al brazo',
+    }
+    expect(camaraDeCorte(corte)).toBe('selfie sostenida por la persona, deriva suave a la derecha, plano medio corto')
+    const report = ForensicReportSchema.parse({ ...legacy, cortes: [{ ...legacy.cortes[0], ...corte }] })
+    expect(normalizarCamara(report).cortes[0].camara).toBe(camaraDeCorte(corte))
+    expect(camaraDeCorte({ camara: 'Cámara fija, primer plano' })).toBe('Cámara fija, primer plano')
+  })
+
+  it('la evidencia de movimiento gana sobre una etiqueta fija contradictoria', () => {
+    expect(camaraDeCorte({
+      soporteCamara: 'selfie_en_mano', movimientoCamara: 'fija',
+      encuadreCamara: 'plano medio corto', anguloCamara: 'nivel de ojos frontal',
+      evidenciaCamara: 'microtemblor solidario al brazo izquierdo',
+    })).toBe('selfie sostenida por la persona, movimiento observado: microtemblor solidario al brazo izquierdo, plano medio corto, nivel de ojos frontal')
   })
 })
 
@@ -133,6 +197,7 @@ describe('repairCutTiming', () => {
     duracionTotalSeg: cortes.reduce((n, c) => n + c.duracionSeg, 0),
     caracteresGuion: cortes.reduce((n, c) => n + c.dialogo.length, 0),
     guionOriginal: cortes.map((c) => c.dialogo).join(' '),
+    manoQueGraba: '',
     sujeto: '', vestuario: '', producto: '', fondo: '', elementosGraficos: '',
     cortes,
     tomas: cortes.map((c) => ({
@@ -321,17 +386,39 @@ describe('la accion encadena las manos y nombra la transferencia', () => {
     expect(plano).not.toMatch(/qué hace la mano libre/)
   })
 
+  // El forense leía este UGC como "Cámara fija" en 6 de 6 cortes sobre un original que
+  // la creadora graba con el teléfono EN LA MANO mientras camina, y en los mismos cortes
+  // le atribuía gestos a la mano que él mismo declaraba fuera de cuadro: el cuadro que se
+  // mueve se estaba leyendo como un gesto. El bloque de cámara nombraba SOLO el caso del
+  // teléfono apoyado, o sea le daba "fija" como el paradigma del formato.
+  it('distingue selfie, cámara operada y soporte fijo sin usar un default', () => {
+    expect(plano).toMatch(/`apoyada_o_tripode`/)
+    expect(plano).toMatch(/`selfie_en_mano`/)
+    expect(plano).toMatch(/`operador_en_mano`/)
+    expect(plano).toMatch(/no lo deduzcas por estética UGC/i)
+  })
+
+  // La regla va donde se DECLARAN las manos, no en el bloque de cámara: este repo tiene
+  // medido cuatro veces que una regla lejos de su campo es una sugerencia.
+  it('la mano que sostiene el teléfono está ocupada durante su corte y no gesticula', () => {
+    const manos = plano.slice(plano.indexOf('CADA CORTE ABRE DICIENDO QUÉ TIENE CADA MANO'))
+    expect(manos).toMatch(/SI LA PERSONA SE ESTÁ GRABANDO A SÍ MISMA EN ESTE CORTE, UNA DE SUS MANOS SOSTIENE EL TELÉFONO/)
+    expect(manos).toMatch(/está ocupada y fuera de cuadro durante TODO ESE CORTE/)
+    expect(manos).toMatch(/no se describe gesticulando/)
+    expect(manos).toMatch(/eso es movimiento de CÁMARA/)
+  })
+
   it('exige la transferencia como cláusula propia, no la trayectoria', () => {
     expect(plano).toMatch(/SI EL PRODUCTO TOCA EL CUERPO EN ESTE CORTE, ESE HECHO SE ESCRIBE PRIMERO/)
     expect(plano).toMatch(/CONSECUENCIAS de ese hecho/)
     expect(plano).toMatch(/sobre qué lado de qué zona/)
   })
 
-  it('la coreografía va en `hechos` con ventana y cobertura total, y la cámara empieza por el movimiento', () => {
+  it('la coreografía va en `hechos` con ventana y cobertura total, y la cámara va por corte', () => {
     expect(plano).toMatch(/LA COREOGRAFÍA VA EN `hechos`/)
     expect(plano).toMatch(/`desde` y `hasta` en SEGUNDOS CONTADOS DESDE EL INICIO DEL CORTE/)
     expect(plano).toMatch(/LOS HECHOS CUBREN EL CORTE ENTERO, SIN HUECOS/)
-    expect(plano).toMatch(/`camara` EMPIEZA POR EL MOVIMIENTO, SIEMPRE/)
+    expect(plano).toMatch(/MATRIZ DE CÁMARA — SE MIDE DE NUEVO EN CADA CORTE/)
     // el schema exige la lista (en el required) y es infalible
     expect(ForensicReportSchema.shape.cortes.element.shape.hechos.safeParse(undefined).success).toBe(true)
   })

@@ -6,11 +6,11 @@ import { geminiCallStructured, geminiEsDirecto } from '@/lib/gemini'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 import { ForensicReportSchema } from '@/lib/video-ads/types'
-import { buildForensicInstruction, repairCutTiming, normalizarHechos, MIN_VISIBLE_SEG } from '@/lib/video-ads/forensic'
+import { buildForensicInstruction, repairCutTiming, normalizarCamara, normalizarHechos, MIN_VISIBLE_SEG } from '@/lib/video-ads/forensic'
 import { VIDEO_SYSTEM_PROMPT } from '@/lib/video-ads/llm'
 import { MAX_VIDEO_MB } from '@/lib/video-ads/limits'
 import { STEP } from '@/lib/video-ads/steps'
-import { defectosDelForense } from '@/lib/video-ads/lotes'
+import { defectosDelForense, normalizarManosDeCamara } from '@/lib/video-ads/lotes'
 
 /** Reintentos del forense ante un defecto estructural. Cada uno es una llamada de video pagada por el hub. */
 const FORENSE_REINTENTOS = 1
@@ -74,15 +74,20 @@ export async function POST(
     // colapsado a un hecho, o el aplicador que sale y vuelve sin aplicar) cuesta un render
     // entero con la key del usuario. Se vuelve a tirar UNA vez y se conserva el sorteo con
     // menos defectos. ⚠️ Es una llamada de video pagada por el hub: `FORENSE_REINTENTOS`.
-    let analysis = await geminiCallStructured('forensic_report', ForensicReportSchema, parts, 3, VIDEO_SYSTEM_PROMPT)
+    let analysis = normalizarCamara(await geminiCallStructured('forensic_report', ForensicReportSchema, parts, 3, VIDEO_SYSTEM_PROMPT))
     let defectos = defectosDelForense(analysis)
     for (let i = 0; i < FORENSE_REINTENTOS && defectos.length; i++) {
       console.warn(`[video-ads/analyze-reference] sesión ${id}: forense con defectos estructurales, se vuelve a tirar:`, defectos)
-      const otro = await geminiCallStructured('forensic_report', ForensicReportSchema, parts, 3, VIDEO_SYSTEM_PROMPT)
+      const otro = normalizarCamara(await geminiCallStructured('forensic_report', ForensicReportSchema, parts, 3, VIDEO_SYSTEM_PROMPT))
       const otros = defectosDelForense(otro)
       if (otros.length < defectos.length) { analysis = otro; defectos = otros }
     }
     if (defectos.length) console.warn(`[video-ads/analyze-reference] sesión ${id}: se persiste con defectos:`, defectos)
+    // Los defectos se calculan sobre la respuesta CRUDA para que una mano contradictoria
+    // provoque el reintento. Si ambos sorteos fallan, no se persiste el absurdo: en cada
+    // selfie la evidencia física inequívoca (una mano sostiene el producto y la otra la
+    // cámara) corrige el rótulo, y el resumen global se deriva de los cortes corregidos.
+    analysis = normalizarManosDeCamara(analysis)
 
     // Mismo motivo que en adapt-script: el modelo estima mal el conteo (reportó 562
     // sobre un guión de 776) y ese número es la referencia contra la que se mide si el

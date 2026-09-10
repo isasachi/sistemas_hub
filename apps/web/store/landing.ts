@@ -177,7 +177,7 @@ export const useLandingStore = create<LandingState & LandingActions>((set, get) 
    *
    * ⚠️ ES LO QUE SACA LA CREACIÓN DE FILAS DEL MONTAJE DEL WIZARD: abrir la tool y no
    * hacer nada creaba una fila. El listado del dashboard las filtra al LEER, pero eso
-   * ocultaba el síntoma — se seguían creando. Ver `ensureSession` en `store/video.ts`.
+   * ocultaba el síntoma — se seguían creando. Lo mismo en `store/video.ts`.
    */
   ensureSession: async () => {
     const actual = get().sessionId

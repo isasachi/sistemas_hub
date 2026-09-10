@@ -531,13 +531,41 @@ export function assembleTemplate(
  * Se aplica SOLO sobre el guion adaptado, nunca sobre la plantilla: esa es la que tiene
  * que seguir espejando la referencia.
  */
+/**
+ * Quita el rótulo de la toma cuando se colo DENTRO de la locución.
+ *
+ * ⚠️ TODO LO QUE ESTÁ EN `locucion` SE PRONUNCIA. El prompt de FASE 3 le presenta cada
+ * toma como `Toma N` (`buildAdaptInstruction`) y el modelo a veces copia ese rótulo al
+ * texto hablado — mismo modo de fallo que `limpiarDialogo` con el marcador "No aparece".
+ * Es raro y catastrófico cuando pasa: medido, 0 de 229 tomas guardadas lo traen hoy, así
+ * que esto es un guard PREVENTIVO y no la reparación de algo visible. Un rótulo al
+ * ARRANQUE de la línea nunca es diálogo.
+ *
+ * ⚠️ LA PUNTUACIÓN ES OBLIGATORIA EN EL PATRÓN, y es lo único que separa el rótulo del
+ * IMPERATIVO de "tomar" — que en este nicho aparece todo el tiempo: *"Toma 2 al día"*,
+ * *"toma una cápsula"*. Sin exigir el `:` (o el guion, el paréntesis, el punto) este
+ * saneo se comería la dosis del producto, que es peor que dejar pasar un rótulo. Medido:
+ * 2 de las 229 tomas llevan esa forma. El modo de fallo del acote es no limpiar, no
+ * destruir texto.
+ */
+export function quitarRotuloDeToma(linea: string): string {
+  const limpio = linea.replace(/^\s*tomas?\s*\d{1,2}\s*[:.)\]|\-\u2013\u2014]+\s*/i, '').trim()
+  // Fail-safe: si el rótulo ERA la línea entera, se devuelve intacta — una toma vacía
+  // renderiza un textarea que se lee como "te faltó escribir esto".
+  return limpio || linea
+}
+
 export function acceptScaffoldFix(
   piso: string,
   propuesta: string,
   valorDelHueco: string,
   otrosValores: string[],
 ): { ok: true } | { ok: false; motivo: string } {
-  const p = propuesta.trim()
+  // ⚠️ Se limpia ANTES de medir, no para persistir: un `Toma 1: ` de 8 caracteres sobre
+  // una línea de 60 mueve el largo un 13 % y agrega palabras que el piso no tiene, así
+  // que tiraría al piso un ajuste correcto. Lo que se GUARDA lo sanea el punto único de
+  // `adapt-script` — acá el valor limpio no sale de la función a propósito.
+  const p = quitarRotuloDeToma(propuesta).trim()
   if (!p) return { ok: false, motivo: 'llega vacía' }
 
   const largo = Math.abs(p.length - piso.length) / Math.max(1, piso.length)

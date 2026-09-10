@@ -31,16 +31,39 @@ const VALIDATION_STEP = STEP.VALIDATION
 export default function VideoWizard() {
   const {
     step, sessionId, sessionError, validation,
-    startNewSession, hydrateFromSession, setStep, setRegens,
+    startNewSession, ensureSession, resetSession, hydrateFromSession, setStep, setRegens,
   } = useVideoStore()
 
+  // Reanudar: si hay un id guardado y la sesión existe, rehidratar. Si no, NADA — la fila
+  // nace con el primer insumo real (`ensureSession` en `Section0Reference`).
+  //
+  // ⚠️ UNA SOLA VEZ, PASE LO QUE PASE CON EL MONTAJE. El StrictMode de React monta dos
+  // veces en desarrollo, y mientras este efecto creaba la sesión eso dejaba DOS filas por
+  // visita — medido en la base, las fantasma aparecían en pareja con la real y con el
+  // mismo minuto de creación. El candado se queda aunque hoy el efecto ya no cree nada:
+  // sin él, un doble montaje dispara dos rehidrataciones en vuelo.
+  const arrancado = useRef(false)
+
   useEffect(() => {
+    if (arrancado.current) return
+    arrancado.current = true
     const saved = localStorage.getItem(SESSION_KEY)
-    if (!saved) { startNewSession(); return }
+    // ⚠️ SIN ID GUARDADO HAY QUE VACIAR EL STORE, no basta con no hacer nada: zustand es un
+    // singleton de MÓDULO y sobrevive la navegación del cliente, así que "Empezar" (que
+    // borra el id de `localStorage` y navega acá) remontaba el wizard con la sesión
+    // anterior todavía en memoria — y el usuario aterrizaba en su último paso.
+    if (!saved) { resetSession(); return }
     fetch(`/api/generador-video-ads/sessions/${saved}`)
       .then((r) => (r.ok ? (r.json() as Promise<VideoSessionResponse>) : Promise.reject()))
       .then((s) => hydrateFromSession(s))
-      .catch(() => startNewSession())
+      // ⚠️ Un id que ya no existe (sesión borrada del dashboard) o que es de otra cuenta NO
+      // crea una fila: se vacía el wizard y la sesión nace con el primer insumo, igual que
+      // en el camino sin id. Con `startNewSession` acá, un link viejo o ajeno dejaba una
+      // sesión fantasma en silencio. Y SE BORRA EL ID GUARDADO: antes lo pisaba el
+      // `startNewSession` de este mismo catch, así que sin eso un id muerto se queda en
+      // `localStorage` y el wizard vuelve a pedirle al servidor una sesión que no existe
+      // en cada visita.
+      .catch(() => { localStorage.removeItem(SESSION_KEY); resetSession() })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {

@@ -1,5 +1,5 @@
 import { createHash } from 'crypto'
-import { groupIntoLotes, buildLotePrompt, camaraDeLote, productoFisico, type Lote, type LoteImage } from './lotes'
+import { groupIntoLotes, buildLotePrompt, camaraDeLote, productoFisico, manoQueGrabaDe, manoQueGrabaEnCorte, type Lote, type LoteImage, type Mano } from './lotes'
 import type { VoiceProfile } from './character'
 import type { AdaptedScript } from './adapt'
 import type { VideoSessionResponse } from './types'
@@ -29,11 +29,27 @@ export function insumosDeRender(
   const producto = productoFisico(session.product_scan?.productDescription ?? '')
   const cortes = session.forensic_analysis?.cortes ?? []
   const agrupados = groupIntoLotes(adapted.tomas, cortes)
-  // Sin corte que empareje no se afirma NADA de la cámara: la línea no se emite y el
-  // encuadre lo decide la imagen de referencia.
+  // Sin corte que empareje no se afirma ninguna cámara; el prompt lo marca indeterminado
+  // y prohíbe que el render complete el hueco con paneos, zooms o ángulos probables.
   const camaras = agrupados.map((l) => camaraDeLote(l, cortes, ''))
-  const huella = scriptFingerprint({ lotes: agrupados, camaras, voz, images, producto })
-  return { images, producto, cortes, agrupados, camaras, huella, voz }
+  // Resumen global solo para sesiones anteriores a la matriz por corte. En análisis
+  // nuevos, `manoQueGrabaEnCorte` hace que `ninguna`/`indeterminado` bloqueen la herencia.
+  const manoCamara = manoQueGrabaDe(session.forensic_analysis ?? {})
+  const porTiempo = new Map(cortes.map((c) => [c.tiempo, c]))
+  const manosCamara = agrupados.map((lote) => {
+    const vistos = new Set<string>()
+    return lote.tomas.flatMap((t) => {
+      if (vistos.has(t.tiempoOriginal)) return []
+      vistos.add(t.tiempoOriginal)
+      const corte = porTiempo.get(t.tiempoOriginal)
+      return [corte ? (manoQueGrabaEnCorte(corte, manoCamara) ?? '') : (manoCamara ?? '')]
+    }).join(' · ')
+  })
+  // Las manos fuera de cuadro se resuelven dentro de cada toma. Propagarlas globalmente
+  // convertía en selfie los cortes estáticos de un video mixto.
+  const sinLibre: Mano[] = []
+  const huella = scriptFingerprint({ lotes: agrupados, camaras, manosCamara, voz, images, producto, manoCamara })
+  return { images, producto, cortes, agrupados, camaras, manosCamara, huella, voz, sinLibre, manoCamara }
 }
 
 /**
@@ -49,6 +65,7 @@ export function promptDeLote(lote: Lote, camara: string, ins: ReturnType<typeof 
   const loteParaPrompt = durationSec === lote.duracionSeg ? lote : { ...lote, duracionSeg: durationSec }
   const prompt = buildLotePrompt({
     lote: loteParaPrompt, camara, voz: ins.voz, images: ins.images, producto: ins.producto, cortes: ins.cortes,
+    sinLibre: ins.sinLibre, manoCamara: ins.manoCamara,
   })
   return { prompt, durationSec }
 }
@@ -171,10 +188,16 @@ export function scriptFingerprint(input: {
   lotes: Lote[]
   /** Una por lote, en el mismo orden que `lotes` (ver `camaraDeLote`, lotes.ts). */
   camaras: string[]
+  /** Manos de cámara de los cortes fuente, por lote y en el mismo orden. */
+  manosCamara?: string[]
   voz: VoiceProfile
   images: LoteImage[]
   /** La parte física del producto que emite el prompt (`productoFisico`, lotes.ts). */
   producto: string
+  /** Manos que el video declara fuera de cuadro (`manosFueraDeCuadro`). Ver arriba. */
+  sinLibre?: readonly ('derecha' | 'izquierda')[]
+  /** Resumen legado de la mano; en análisis nuevos manda la secuencia por corte. */
+  manoCamara?: Mano | null
 }): string {
   const { lotes, camaras, voz, images, producto } = input
   const campos: string[] = [
@@ -213,7 +236,25 @@ export function scriptFingerprint(input: {
     // línea de cámara se omite sin dato, y el prompt prohíbe el relleno entre hechos.
     // v8 → v9: un fragmento que arranca a mitad de una acción sostenida la emite ANTES del
     // estado heredado, y el cierre sintético va justo después de la apertura.
-    'v9',
+    // v9 → v10: una toma cuya locución ENUMERA emite cuántos dedos levanta la mano libre.
+    // Una mano declarada fuera de cuadro (la que sostiene el teléfono en un UGC en
+    // selfie) dejó de contar como libre: no se cuenta con ella y no se emite "la mano X
+    // está libre". Eso cambia el texto emitido, o sea lo que una huella de insumos no
+    // ve — pero SOLO en las sesiones que declaran una mano fuera de cuadro (9 de 28
+    // medidas), y las otras 19 salen byte-idénticas. En ESA ronda no se bumpeó: habría
+    // invalidado las 24 sesiones con lotes PAGADOS. En su lugar entró `sinLibre` como
+    // insumo solo cuando existe, para dejar las otras byte-idénticas.
+    // v10 → v11: el teléfono pasa a ser estado global y por toma; el vestuario, la
+    // etiqueta y la salida física del producto ganan candados. Los tres cambian el
+    // texto del prompt con los mismos insumos, así que una reanudación no puede mezclar
+    // clips de ambos contratos.
+    // v11 → v12: soporte, movimiento, encuadre, ángulo y mano pasan a ser datos por
+    // corte; cortes con la misma cámara ya no se fusionan y el render tiene prohibido
+    // completar una dimensión indeterminada. Cambia el prompt con los mismos insumos.
+    // v12 → v13: la evidencia física corrige una mano de cámara mal rotulada y elimina
+    // gestos imposibles cuando la otra mano ya sostiene el producto. El prompt cambia
+    // con los mismos insumos; un resume no puede mezclar clips de ambos contratos.
+    'v13',
     producto,
     voz.idioma, voz.varianteRegional, voz.acento, voz.pronunciacion, voz.ritmo,
     voz.velocidad, voz.entonacion, voz.energia, voz.pausas, voz.tono, voz.timbre,
@@ -224,8 +265,16 @@ export function scriptFingerprint(input: {
   // Van con su largo delante, igual que las demás listas: la cámara ya no es un solo
   // string, y dos repartos distintos de los mismos planos entre lotes tienen que dar
   // huellas distintas.
+  // Solo si existe: sin esto, agregar el campo movería la huella de las 19 sesiones a
+  // las que este cambio no les toca un carácter del prompt.
+  if (input.sinLibre?.length) campos.push('sinLibre', ...[...input.sinLibre].sort())
+  if (input.manoCamara) campos.push('manoCamara', input.manoCamara)
   campos.push(String(camaras.length))
   for (const c of camaras) campos.push(c)
+  if (input.manosCamara?.length) {
+    campos.push('manosCamara', String(input.manosCamara.length))
+    for (const mano of input.manosCamara) campos.push(mano)
+  }
   campos.push(String(lotes.length))
   for (const l of lotes) {
     campos.push(String(l.n), num(l.duracionSeg), String(l.tomas.length))

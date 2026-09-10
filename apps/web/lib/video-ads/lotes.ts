@@ -2,7 +2,7 @@ import { z } from 'zod'
 import type { TomaFinal } from './adapt'
 import type { VoiceProfile } from './character'
 import { KIE_PROMPT_MAX } from './kie'
-import { CPS_MAX, esEstadoDeManos, verificarDialogos, type Hecho } from './forensic'
+import { CPS_MAX, camaraDeCorte, esEstadoDeManos, verificarDialogos, type CorteConCamara, type Hecho } from './forensic'
 
 /**
  * FASE 5 del prompt maestro — agrupación de tomas en lotes de generación.
@@ -342,12 +342,35 @@ const esCierre = (t: string) =>
  *     no entra en su ventana (`verificarDialogos`).
  *  4. Conflicto de manos: una mano ocupada que masajea o "ambas manos" sin haber soltado
  *     (`conflictosDeManos`) — el frasco desaparece en el render.
+ *  5. Mano de cámara: una selfie manda gesticular a la mano que sostiene el teléfono.
+ *  6. Cámara sin sustento: clasifica soporte/movimiento/ángulo sin evidencia observable.
  */
-export function defectosDelForense(report: { cortes?: { n: number; tiempo: string; duracionSeg: number; dialogo?: string; hechos?: Hecho[] }[]; guionOriginal?: string }): string[] {
+export function defectosDelForense(report: {
+  manoQueGraba?: string
+  cortes?: ({ n: number; tiempo: string; duracionSeg: number; dialogo?: string; accion?: string; hechos?: Hecho[] } & CorteConCamara)[]
+  guionOriginal?: string
+}): string[] {
   const out: string[] = verificarDialogos(report)
   const cortes = report.cortes ?? []
   const siguientes = new Map(cortes.map((c, i) => [c.n, cortes[i + 1] ? expandirHechos(cortes[i + 1].hechos ?? []).map((h) => h.texto) : undefined]))
   for (const c of cortes) {
+    const tieneMatriz = ['soporteCamara', 'movimientoCamara', 'encuadreCamara', 'anguloCamara', 'evidenciaCamara']
+      .some((campo) => Object.prototype.hasOwnProperty.call(c, campo))
+    const clasificacion = [c.soporteCamara, c.movimientoCamara, c.encuadreCamara, c.anguloCamara]
+      .some((valor) => valor && !/^indeterminado$/i.test(valor))
+    if (tieneMatriz && clasificacion && !c.evidenciaCamara?.trim())
+      out.push(`corte ${c.n}: clasifica la cámara sin evidencia visual`)
+    const evidencia = sinTildes(c.evidenciaCamara ?? '')
+    const movimientoVisible = /\b(microtemblor|tiembla|deriva|reencuadr|traslaci|paralaje|desplaz)/.test(evidencia)
+      && !/\b(?:sin|ningun[oa]?|no hay)\s+(?:micro)?temblor/.test(evidencia)
+    if (/^fija\b/i.test(c.movimientoCamara ?? '') && movimientoVisible)
+      out.push(`corte ${c.n}: declara cámara fija pero su evidencia describe movimiento`)
+    const soporte = c.soporteCamara ?? ''
+    const manoLocal = c.manoQueGraba ?? ''
+    if (/^selfie_/.test(soporte) && manoLocal === 'ninguna')
+      out.push(`corte ${c.n}: clasifica selfie pero dice que ninguna mano sostiene la cámara`)
+    if (/^(?:apoyada_o_tripode|operador_)/.test(soporte) && /^(?:derecha|izquierda)$/.test(manoLocal))
+      out.push(`corte ${c.n}: atribuye a la persona una mano de cámara en un soporte no selfie`)
     const hechos = c.hechos ?? []
     if (!hechos.length) continue // análisis anterior a los hechos: no se juzga
     // El colapso se juzga DESPUÉS de expandir: un hecho con tres acciones separadas por
@@ -357,6 +380,16 @@ export function defectosDelForense(report: { cortes?: { n: number; tiempo: strin
     if (textos.some(esApertura) && textos.some(esCierre) && !textos.some(esTransferencia))
       out.push(`corte ${c.n}: el aplicador sale y vuelve al envase sin que el producto llegue al cuerpo`)
     for (const m of conflictosDeManos(textos)) out.push(`corte ${c.n}: ${m}`)
+    const manoCamara = manoQueGrabaEnCorte(c, manoQueGrabaDe(report))
+    const manoDeclarada = sinTildes(c.manoQueGraba ?? '').match(/\b(derecha|izquierda)\b/)?.[1] as Mano | undefined
+    if (manoCamara && manoDeclarada && manoCamara !== manoDeclarada) {
+      const motivo = manosQueSostienenObjeto(textos).includes(manoDeclarada)
+        ? `la ${manoDeclarada} sostiene el producto`
+        : `el estado visible de las manos corresponde a la ${manoCamara}`
+      out.push(`corte ${c.n}: declara que graba con la ${manoDeclarada}, pero ${motivo}; la cámara corresponde a la ${manoCamara}`)
+    }
+    if (manoCamara && textos.some((t) => conManoDeCamaraFija(t, manoCamara) !== t))
+      out.push(`corte ${c.n}: la mano ${manoCamara} sostiene el teléfono y también recibe un gesto`)
     // La gota que cae sobre la piel se EXTIENDE, y ese hecho viene inmediatamente después
     // (en este corte o abriendo el siguiente). El forense de `493a486d` escribió la gota en
     // el corte 1 y en el corte 2 "sostiene el frasco frente al pecho con ambas manos": el
@@ -393,6 +426,250 @@ function manoDe(estado: string): 'derecha' | 'izquierda' | 'ambas' | null {
   if (/ambas manos/i.test(estado)) return 'ambas'
   const m = estado.match(/(?:mano|con la|en la)\s+(derecha|izquierda)\b/i)
   return m ? (m[1].toLowerCase() as 'derecha' | 'izquierda') : null
+}
+
+/** La otra mano. `ambas` o sin dato no dejan ninguna libre que nombrar. */
+const manoLibre = (ocupada: ReturnType<typeof manoDe>) =>
+  ocupada === 'derecha' ? ('izquierda' as const) : ocupada === 'izquierda' ? ('derecha' as const) : null
+
+const VALOR_NUMERO: Record<string, number> = {
+  uno: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5,
+  primero: 1, segundo: 2, tercero: 3, cuarto: 4, quinto: 5,
+  '1': 1, '2': 2, '3': 3, '4': 4, '5': 5,
+}
+/** Como lo escribiría una persona: "levanta UN dedo", no "levanta uno dedos". */
+const DEDOS = ['', 'un dedo', 'dos dedos', 'tres dedos', 'cuatro dedos', 'cinco dedos']
+
+// Un ÍTEM de lista nombra el sustantivo ANTES del número ("número dos", "razón tres"), o
+// es un ordinal al arrancar una cláusula ("Segundo, ..."). Nunca un numeral pelado: en la
+// sesión `c32d229a` "tomar CINCO gramos al día" y "TRES razones para tomar" (que anuncia
+// la lista, no un ítem) son los dos falsos positivos que esto tiene que rechazar.
+const ITEM_CON_SUSTANTIVO = /\b(numero|razon|punto|paso|tip|consejo|motivo|beneficio|clave)\s+(uno|dos|tres|cuatro|cinco|[1-5])\b/
+const ITEM_ORDINAL = /(?:^|[.;,:]\s*)(?:[ye]\s+)?(primero|segundo|tercero|cuarto|quinto)\b/
+
+/**
+ * El número que la locución enuncia COMO ÍTEM de una lista (1–5), o `undefined`.
+ *
+ * ⚠️ EXISTE PORQUE GROK CUENTA CON LOS DEDOS AUNQUE NADIE SE LO PIDA, Y CUENTA MAL.
+ * Reportado sobre la sesión `c32d229a` (una listicle de "tres razones"): el avatar dice un
+ * número y la mano libre hace otro. Verificado clip por clip, el gesto no tiene NINGUNA
+ * relación con el número dicho — y la toma 3 gesticulaba con la izquierda mientras su
+ * propio prompt decía que esa mano "permanece fuera de cuadro". O sea el estado declarado
+ * PERDIÓ contra el número hablado, que es la asimetría que AGENTS.md ya mide: a un modelo
+ * de difusión una prohibición le llega débil y una cantidad declarada es un dato.
+ *
+ * Por eso el único gate es la enumeración de la LOCUCIÓN, no lo que el forense dijo de la
+ * mano: la primera versión condicionaba a que hubiera un gesto vago declarado y hacía
+ * exactamente lo contrario de lo buscado — le agregaba el conteo a la toma que ya salía
+ * bien (la mano fuera de cuadro) y se lo saltaba a la que producía el defecto.
+ *
+ * El tope es 5 porque se cuenta con UNA mano.
+ */
+export function numeroEnunciado(locucion: string): number | undefined {
+  const s = sinTildes(locucion)
+  const m = ITEM_CON_SUSTANTIVO.exec(s) ?? ITEM_ORDINAL.exec(s)
+  if (!m) return undefined
+  const n = VALOR_NUMERO[m[m.length - 1]]
+  return n >= 1 && n <= 5 ? n : undefined
+}
+
+/** Los objetos que salen de cuadro por su cuenta: si uno aparece entre la mano y la
+ * frase, lo que se fue es el objeto ("baja la botella fuera de cuadro"), no la mano. */
+const OBJETO_FUERA = /\b(frasco|botella|envase|bote|producto|tubo|caja|cuentagotas|gotero|pipeta|cepillo|tapa|suero)\b/i
+
+/**
+ * Las manos que el video declara FUERA DE CUADRO, en cualquier corte.
+ *
+ * ⚠️ UNA MANO FUERA DE CUADRO NO ESTÁ LIBRE, Y ES EL AGUJERO QUE DEJABA EL CONTEO.
+ * `manoLibre` deriva "la izquierda está libre" de que la derecha sostenga el producto,
+ * pero en un UGC grabado en selfie esa mano sostiene el TELÉFONO: está ocupada todo el
+ * video y el forense lo dice —"la mano izquierda permanece fuera de cuadro"—. Sin este
+ * gate el prompt le pedía contar con ella (medido: `c32d229a` 3 conteos y `ee48f801` 1,
+ * los 4 sobre una mano declarada fuera de cuadro).
+ *
+ * **El alcance es el VIDEO ENTERO, no el corte**, y eso lo decide el dato: en `c32d229a`
+ * la toma 3 dice "permanece fuera de cuadro" pero la 4 dice "gesticula con la izquierda"
+ * —el forense se contradice, porque el cuadro que se mueve (ella camina con el teléfono)
+ * se lee como gesto—. Por corte se mataría un conteo y se dejarían dos sobre la misma
+ * mano ocupada. La mano que sostiene la cámara no vuelve a estar libre a mitad del video.
+ *
+ * Lectura por ORACIÓN y hacia atrás: la mano nombrada más cerca ANTES de "fuera de
+ * cuadro", sin un objeto de por medio. Así "baja la botella fuera de cuadro con su mano
+ * derecha" (el objeto, y la mano nombrada después) y "mirando hacia la derecha fuera de
+ * cuadro" (una dirección, sin la palabra mano) no marcan nada. Verificado contra los 23
+ * hechos de la base que dicen "fuera de cuadro".
+ */
+export function manosFueraDeCuadro(textos: string[]): ('derecha' | 'izquierda')[] {
+  const out = new Set<'derecha' | 'izquierda'>()
+  for (const texto of textos) {
+    for (const oracion of texto.split(/[.;]/)) {
+      const i = oracion.search(/fuera de cuadro/i)
+      if (i < 0) continue
+      const antes = oracion.slice(0, i)
+      // "Izquierda fuera de cuadro." — el forense escribe telegrama y a veces omite "mano".
+      const sola = /(?:^|,)\s*(derecha|izquierda)\s*$/i.exec(antes)
+      const m = [...antes.matchAll(/mano\s+(derecha|izquierda)\b/gi)].pop()
+      const lado = sola?.[1] ?? m?.[1]
+      if (!lado) continue
+      if (m && !sola && OBJETO_FUERA.test(antes.slice(m.index + m[0].length))) continue
+      out.add(lado.toLowerCase() as 'derecha' | 'izquierda')
+    }
+  }
+  return [...out]
+}
+
+export type Mano = 'derecha' | 'izquierda'
+
+/** Manos que los hechos muestran sosteniendo una pieza física distinta del teléfono. */
+export function manosQueSostienenObjeto(textos: string[]): Mano[] {
+  const out = new Set<Mano>()
+  const objeto = '(?:frasco|envase|botella|bote|producto|tubo|caja|tarro|cuentagotas|gotero|pipeta|tapa|aplicador)'
+  for (const texto of textos.map(sinTildes)) {
+    for (const m of texto.matchAll(new RegExp(`(?:sostiene|sujeta|mantiene|agarra|tiene)\\s+(?:el|la|un|una)?\\s*${objeto}[^,;.]{0,55}?\\b(?:con|en)\\s+(?:la|su)\\s+(?:mano\\s+)?(derecha|izquierda)\\b`, 'g')))
+      out.add(m[1] as Mano)
+    for (const m of texto.matchAll(new RegExp(`(?:la\\s+)?(?:mano\\s+)?(derecha|izquierda)\\s+(?:sostiene|sujeta|mantiene|agarra|tiene)\\s+(?:el|la|un|una)?\\s*${objeto}\\b`, 'g')))
+      out.add(m[1] as Mano)
+    if (/ambas manos/.test(texto) && new RegExp(`(?:sostiene|sujeta|mantiene|agarra)\\s+(?:el|la)?\\s*${objeto}`).test(texto)) {
+      out.add('derecha')
+      out.add('izquierda')
+    }
+  }
+  return [...out]
+}
+
+/**
+ * Resumen legado de la mano que sostiene el dispositivo.
+ *
+ * Los análisis nuevos la traen en `manoQueGraba`; para los ya guardados se recupera
+ * de los hechos que dicen literalmente quién sostiene el teléfono. Solo como último
+ * recurso se usa "en mano/selfie" + una única mano fuera de cuadro. Así una mano que
+ * salió de cuadro por otra razón no se convierte en cámara por adivinanza.
+ */
+export function manoQueGrabaDe(report: {
+  manoQueGraba?: string
+  cortes?: { camara?: string; accion?: string; hechos?: Hecho[] }[]
+}): Mano | null {
+  const declarada = sinTildes(report.manoQueGraba ?? '').match(/\b(derecha|izquierda)\b/)?.[1] as Mano | undefined
+  if (declarada) return declarada
+  if (/\bninguna\b/i.test(report.manoQueGraba ?? '')) return null
+
+  const textos = (report.cortes ?? []).flatMap((c) => [
+    c.accion ?? '',
+    ...(c.hechos ?? []).map((h) => h.texto),
+  ])
+  const votos: Mano[] = []
+  for (const texto of textos.map(sinTildes)) {
+    for (const frase of texto.split(/[.;]/)) {
+      // La mano tiene que estar pegada al verbo. En "bote con la mano derecha, mano
+      // izquierda sostiene el teléfono", una búsqueda laxa tomaba la PRIMERA mano.
+      const manoPrimero = frase.match(/\b(?:la\s+)?mano\s+(derecha|izquierda)\s+(?:sostiene|sujeta|mantiene|agarra)\b[^.;]{0,30}\b(?:telefono|celular|camara)\b/)
+      if (manoPrimero) votos.push(manoPrimero[1] as Mano)
+      const dispositivoPrimero = frase.match(/\b(?:sostiene|sujeta|mantiene|agarra)\b[^.;]{0,45}\b(?:telefono|celular|camara)\b[^.;]{0,45}\b(?:con|en)\s+la\s+(?:mano\s+)?(derecha|izquierda)\b/)
+      if (dispositivoPrimero) votos.push(dispositivoPrimero[1] as Mano)
+    }
+  }
+  const lados = [...new Set(votos)]
+  if (lados.length === 1) return lados[0]
+
+  const esSelfie = (report.cortes ?? []).some((c) => /\b(?:en mano|selfie|handheld)\b/i.test(c.camara ?? ''))
+  const fuera = manosFueraDeCuadro(textos)
+  return esSelfie && fuera.length === 1 ? fuera[0] : null
+}
+
+/**
+ * Mano de cámara para UN corte. Un valor por corte, incluso `ninguna` o
+ * `indeterminado`, bloquea la herencia del resumen global; así un tramo en trípode no
+ * queda convertido en selfie porque otro tramo del mismo video sí lo era.
+ */
+export function manoQueGrabaEnCorte(
+  corte: { manoQueGraba?: string; soporteCamara?: string; camara?: string; accion?: string; hechos?: Hecho[] },
+  legado: Mano | null = null,
+): Mano | null {
+  const textos = [corte.accion ?? '', ...(corte.hechos ?? []).map((h) => h.texto)]
+  const selfie = /^selfie_/.test(corte.soporteCamara ?? '') || /\b(?:selfie|en mano|handheld)\b/i.test(corte.camara ?? '')
+  // Evidencia física gana al rótulo del modelo. En la sesión `4d2cc9b0` el forense puso
+  // `manoQueGraba=derecha` en siete cortes mientras esos mismos hechos muestran la
+  // derecha sosteniendo el bote. En selfie, esa mano no puede sostener a la vez cámara y
+  // producto: si solo una sostiene un objeto, la otra es la del teléfono.
+  if (selfie) {
+    const conObjeto = manosQueSostienenObjeto(textos)
+    if (conObjeto.length === 1) return conObjeto[0] === 'derecha' ? 'izquierda' : 'derecha'
+    const fuera = manosFueraDeCuadro(textos)
+    if (fuera.length === 1 && !conObjeto.includes(fuera[0])) return fuera[0]
+  }
+  const valor = sinTildes(corte.manoQueGraba ?? '')
+  const declarada = valor.match(/\b(derecha|izquierda)\b/)?.[1] as Mano | undefined
+  if (declarada) return declarada
+  if (/\bninguna\b/.test(valor)) return null
+  const literal = manoQueGrabaDe({ cortes: [corte] })
+  if (literal) return literal
+  return Object.prototype.hasOwnProperty.call(corte, 'manoQueGraba') ? null : legado
+}
+
+/**
+ * Deja persistida la mano físicamente posible después de usar el informe crudo para
+ * decidir si conviene reintentar el forense. El renderer conserva la misma resolución
+ * defensiva para sesiones históricas que ya guardaron la contradicción.
+ */
+export function normalizarManosDeCamara<T extends {
+  manoQueGraba?: string
+  cortes?: ({ manoQueGraba?: string; soporteCamara?: string; camara?: string; accion?: string; hechos?: Hecho[] } & Record<string, unknown>)[]
+}>(report: T): T {
+  const legado = manoQueGrabaDe(report)
+  const cortes = (report.cortes ?? []).map((corte) => {
+    const mano = manoQueGrabaEnCorte(corte, legado)
+    if (!/^selfie_/.test(corte.soporteCamara ?? '') || !mano) return corte
+    return { ...corte, manoQueGraba: mano }
+  })
+  const cortesSelfie = cortes.filter((corte) => /^selfie_/.test(corte.soporteCamara ?? ''))
+  const manosSelfie = [...new Set(cortesSelfie
+    .map((corte) => corte.manoQueGraba)
+    .filter((mano): mano is Mano => mano === 'derecha' || mano === 'izquierda'))]
+  // El resumen solo afirma un lado si TODOS los selfies pudieron resolverse y coinciden.
+  // Un corte indeterminado o un cambio real de mano debe seguir visible como tal.
+  const todosResueltos = cortesSelfie.every((corte) => corte.manoQueGraba === 'derecha' || corte.manoQueGraba === 'izquierda')
+  const manoQueGraba = cortesSelfie.length && todosResueltos && manosSelfie.length === 1
+    ? manosSelfie[0]
+    : cortesSelfie.length ? 'indeterminado' : report.manoQueGraba
+  return { ...report, manoQueGraba, cortes } as T
+}
+
+const otraMano = (mano: Mano): Mano => mano === 'derecha' ? 'izquierda' : 'derecha'
+const GESTO_MANUAL = /\b(gesticul\w*|gestos?|señal\w*|senal\w*|apunt\w*|salud\w*|levanta\w*\s+\w*\s*dedos?|movimientos?\s+gestuales?)\b/i
+
+/**
+ * Reconcilia una contradicción del forense con el estado selfie de un corte.
+ * Si el teléfono está en la izquierda, "gesticula con ambas" o "señala con la
+ * izquierda" es físicamente imposible. Si la otra mano está libre conserva el gesto
+ * allí; si sostiene el producto, elimina el gesto contradictorio.
+ */
+function conManoDeCamaraFija(hecho: string, manoCamara: Mano | null, otraOcupada = false): string {
+  if (!manoCamara || !GESTO_MANUAL.test(hecho)) return hecho
+  const otra = otraMano(manoCamara)
+  const lado = manoCamara === 'derecha' ? 'derecha' : 'izquierda'
+  const nombraCamara = new RegExp(`\\b(?:mano\\s+)?${lado}\\b`, 'i')
+  if (otraOcupada && (/\bambas manos\b/i.test(hecho) || nombraCamara.test(hecho))) {
+    return hecho
+      .split(/\s*[,;]\s*/)
+      .filter((clausula) => !(GESTO_MANUAL.test(clausula) && (/\bambas manos\b/i.test(clausula) || nombraCamara.test(clausula))))
+      .join(', ')
+      .trim()
+  }
+  let limpio = hecho.replace(/\bambas manos\b/gi, `la mano ${otra}`)
+  limpio = limpio
+    .replace(new RegExp(`(gesticul\\w*|gestos?|señal\\w*|senal\\w*|apunt\\w*|salud\\w*|movimientos?\\s+gestuales?)([^,.;]{0,55}?)\\bcon\\s+(?:(?:la|su)\\s+)?(?:mano\\s+)?${lado}(?:\\s+libre)?\\b`, 'gi'), `$1$2con la mano ${otra}`)
+    .replace(new RegExp(`\\b(?:la|su)\\s+mano\\s+${lado}(?:\\s+libre)?\\s+(gesticul\\w*|señal\\w*|senal\\w*|apunt\\w*|salud\\w*)`, 'gi'), `la mano ${otra} $1`)
+    .replace(new RegExp(`\\busa\\s+(?:la|su)\\s+mano\\s+${lado}\\s+para\\s+(gesticular|señalar|senalar|apuntar|saludar)`, 'gi'), `usa la mano ${otra} para $1`)
+  return limpio
+}
+
+/** Un producto que baja sale por desplazamiento físico, agarrado por la misma mano. */
+function conSalidaFisica(hecho: string): string {
+  const producto = /\b(frasco|botella|envase|bote|producto|tubo|caja)\b/i
+  const bajaNombrado = /\b(?:baja|desciende)\s+(?:el|la|un|una)?\s*(?:frasco|botella|envase|bote|producto|tubo|caja)\b[^.;]*\bfuera de cuadro\b/i
+  const bajaPronombre = /\blo\s+baja\b[^.;]*\bfuera de cuadro\b/i
+  if (!producto.test(hecho) || (!bajaNombrado.test(hecho) && !bajaPronombre.test(hecho))) return hecho
+  return `${hecho.replace(/[.\s]+$/, '')}; la mano que lo agarra baja con él y ambos salen juntos por el borde inferior, con el producto sólido y visible hasta salir`
 }
 
 /**
@@ -732,19 +1009,23 @@ export interface LoteImage {
  * plano. `tiempoOriginal` es la marca del análisis forense y sobrevive al split intacta
  * (los fragmentos la heredan), que es exactamente lo que hace falta acá.
  *
- * Se deduplica por texto: varios cortes seguidos con el mismo encuadre son lo normal y
- * repetirlo tres veces solo gasta presupuesto de prompt.
+ * Se deduplican únicamente fragmentos que conservan el mismo `tiempoOriginal`. Dos cortes
+ * reales con texto idéntico se mantienen separados: la igualdad de descripción no prueba
+ * continuidad ni autoriza a fusionar sus fronteras.
  */
 export function camaraDeLote(
   lote: Lote,
-  cortes: { tiempo: string; camara: string }[],
+  cortes: ({ tiempo: string } & CorteConCamara)[],
   fallback: string,
 ): string {
-  const porTiempo = new Map(cortes.map((c) => [c.tiempo, c.camara]))
+  const porTiempo = new Map(cortes.map((c) => [c.tiempo, camaraDeCorte(c)]))
   const vistas: string[] = []
+  const tiempos = new Set<string>()
   for (const t of lote.tomas) {
+    if (tiempos.has(t.tiempoOriginal)) continue
+    tiempos.add(t.tiempoOriginal)
     const c = porTiempo.get(t.tiempoOriginal)?.trim()
-    if (c && !vistas.includes(c)) vistas.push(c)
+    if (c) vistas.push(c)
   }
   return vistas.join(' · ') || fallback
 }
@@ -832,17 +1113,26 @@ export function buildLotePrompt(args: {
   producto: string
   /**
    * Los cortes del forense (`tiempo` + `camara`). Con ellos, un lote cuyas tomas vienen
-   * de DOS planos distintos deja de pedir "una sola toma continua" con dos cámaras en la
-   * misma línea —está medido que grok renderiza una y descarta la otra— y anuncia el
-   * plano POR TOMA, con cortes secos entre ellas. Sin `cortes` se emite como siempre.
+   * de DOS cortes deja de pedir "una sola toma continua" y anuncia la cámara POR CORTE.
+   * La identidad del corte sale de `tiempoOriginal`, aunque dos matrices sean iguales.
    */
-  cortes?: { tiempo: string; camara: string }[]
+  cortes?: ({ tiempo: string; transicion?: string } & CorteConCamara)[]
+  /**
+   * Compatibilidad para callers antiguos. La ruta nueva resuelve las manos fuera de cuadro
+   * dentro de cada toma, porque un video puede cambiar de soporte entre cortes.
+   */
+  sinLibre?: readonly ('derecha' | 'izquierda')[]
+  /** Resumen legado; `cortes[].manoQueGraba` manda cuando existe. */
+  manoCamara?: Mano | null
 }): string {
   const { lote, camara, voz, images, producto } = args
 
-  const planoDe = new Map((args.cortes ?? []).map((c) => [c.tiempo, c.camara.trim().replace(/\s*\.\s*$/, '')]))
-  const planos = [...new Set(lote.tomas.map((t) => planoDe.get(t.tiempoOriginal)).filter(Boolean))]
-  const multiPlano = planos.length > 1
+  const corteDe = new Map((args.cortes ?? []).map((c) => [c.tiempo, c]))
+  const planoDe = new Map((args.cortes ?? []).map((c) => [c.tiempo, camaraDeCorte(c).replace(/\s*\.\s*$/, '')]))
+  const tiemposFuente = [...new Set(lote.tomas.map((t) => t.tiempoOriginal).filter((tiempo) => corteDe.has(tiempo)))]
+  // Dos cortes con la MISMA cámara siguen siendo dos cortes. Comparar el texto de cámara
+  // los fusionaba en una toma continua e inventaba continuidad donde el original cortó.
+  const multiCorte = tiemposFuente.length > 1
 
   // El orden ES el contrato: `Image1` es la primera del array. Reordenarlo le da a una
   // toma la imagen de otra.
@@ -853,7 +1143,8 @@ export function buildLotePrompt(args: {
   // contrato, y hardcodear el índice acá lo rompería en silencio si cambia.
   const iProd = images.findIndex((img) => img.role.includes('producto'))
   const imagenProducto = iProd >= 0 ? `Image${iProd + 1}` : 'la imagen del producto'
-
+  const iPersona = images.findIndex((img) => img.role.includes('persona'))
+  const imagenPersona = iPersona >= 0 ? `Image${iPersona + 1}` : 'la imagen de la persona'
   const acciones = (unaLinea: boolean) => [
     // El rótulo va SIEMPRE. Colgaba del caso de UNA toma, así que el lote con varias
     // —el que más hechos tiene que ordenar— abría sin nada que dijera que lo que sigue
@@ -866,6 +1157,11 @@ export function buildLotePrompt(args: {
       // continuo y esas líneas son ruido: se quitan.
       const mismoCorteAntes = i > 0 && lote.tomas[i - 1].tiempoOriginal === t.tiempoOriginal
       const mismoCorteDespues = i < lote.tomas.length - 1 && lote.tomas[i + 1].tiempoOriginal === t.tiempoOriginal
+      const corte = corteDe.get(t.tiempoOriginal)
+      const manoCamaraToma = corte ? manoQueGrabaEnCorte(corte, args.manoCamara ?? null) : (args.manoCamara ?? null)
+      const estadoSelfie = manoCamaraToma
+        ? `Durante este corte, la mano ${manoCamaraToma} sostiene físicamente el teléfono fuera de cuadro; ese brazo permanece extendido hacia la cámara, no cambia de mano ni hace gestos`
+        : null
       const previos = new Set(mismoCorteAntes ? partirEnTramos(sinEscenaDeFoto(lote.tomas[i - 1].accionVisual)) : [])
       // UN HECHO POR LÍNEA, con los mismos cortes que usa el reparto (`partirEnTramos`).
       // El prompt del wizard que este repo verificó fotograma a fotograma escribe cada
@@ -873,19 +1169,67 @@ export function buildLotePrompt(args: {
       // clear drop onto her left cheek.`); el nuestro los metía todos en un renglón, y
       // ahí el modelo los resuelve como UN gesto — de ahí la gota que "aparece" en la
       // mejilla sin que el gotero llegue nunca. El texto es el MISMO, cambia dónde corta.
-      const hechos = partirEnTramos(sinEscenaDeFoto(t.accionVisual))
+      const base = partirEnTramos(sinEscenaDeFoto(t.accionVisual))
         .filter((h) => !(mismoCorteAntes && ((previos.has(h) && esEstadoDeManos(h)) || (esAndamioDeFrontera(h) && !/^termina/i.test(h)))))
         .filter((h) => !(mismoCorteDespues && /^termina con el envase/i.test(h)))
-      // El plano se anuncia solo cuando CAMBIA respecto de la toma anterior: un shot
-      // list se lee así, el plano vale hasta que se anuncia otro.
-      const plano = multiPlano ? planoDe.get(t.tiempoOriginal) : undefined
-      const anterior = multiPlano ? planoDe.get(lote.tomas[lote.tomas.indexOf(t) - 1]?.tiempoOriginal ?? '') : undefined
-      const rotuloPlano = plano && plano !== anterior ? ` — ${plano}` : ''
+      const otraOcupada = !!manoCamaraToma && manosQueSostienenObjeto(base).includes(otraMano(manoCamaraToma))
+      const bruto = base
+        .map((h) => conSalidaFisica(conManoDeCamaraFija(h, manoCamaraToma, otraOcupada)))
+        .filter(Boolean)
+      // UNA MANO FUERA DE CUADRO NO ESTÁ LIBRE (ver `manosFueraDeCuadro`): en un UGC en
+      // selfie sostiene el teléfono. Se une lo que declara el VIDEO con lo que declara
+      // este lote — sin la segunda mitad, un caller que omita `sinLibre` volvería a
+      // contar con una mano que su propio prompt manda fuera de cuadro.
+      const ocupadas = [...(args.sinLibre ?? []), ...manosFueraDeCuadro(bruto), ...(manoCamaraToma ? [manoCamaraToma] : [])]
+      // El andamiaje de frontera DERIVA "la mano X está libre" de la mano que sostiene
+      // (`andamiar`), con la misma premisa rota: medido, 3 de las 6 veces que esa línea
+      // se emite es sobre una mano que el propio video declara fuera de cuadro. Se quita
+      // acá y no en `andamiar` porque el alcance es el video y aquella corre por corte,
+      // dentro de `groupIntoLotes`, antes de que el video esté medido.
+      const hechos = bruto.filter((h) => !ocupadas.some((m) => new RegExp(`^la mano ${m} está libre\\.?$`, 'i').test(h.trim())))
+      // EL NÚMERO QUE SE DICE ES EL NÚMERO QUE SE VE. Una locución que enumera hace que
+      // grok cuente con la mano libre lo pida el prompt o no, y el conteo sale arbitrario:
+      // en `c32d229a` el avatar dice "número dos" y la mano abre la palma entera. La
+      // cantidad se DERIVA de las palabras que ya está diciendo (`numeroEnunciado`), así
+      // que no inventa un gesto nuevo — le pone el número correcto al que va a ocurrir.
+      // Va en la ÚLTIMA línea, pegada a la locución que contiene el número.
+      const enunciado = numeroEnunciado(t.locucion ?? '')
+      // ponytail: la mano ocupada sale de `esEstadoDeManos`, que está anclado al ARRANQUE
+      // del hecho. Medido sobre las 27 sesiones guardadas, de 15 tomas que enumeran se
+      // emiten 4: el resto nombra la mano a mitad de frase ("La mujer sostiene la botella
+      // con la izquierda", "inicia el video sosteniendo...") o no nombra ninguna. El
+      // fail-safe es el correcto —sin mano que nombrar no se inventa una—, y NO se afloja
+      // el detector compartido: lo leen también el reparto, el andamiaje de frontera y los
+      // dos guards del forense. Si hace falta subir la cobertura, el upgrade es una
+      // lectura propia (la mano que va después del verbo de sostener, dentro de SU
+      // cláusula, como ya hace `conflictosDeManos`) más un guard que no pise una mano
+      // libre con acción declarada — no ensanchar `esEstadoDeManos`.
+      const libre = manoLibre(manoDe(hechos.find(esEstadoDeManos) ?? ''))
+      // Una mano libre que ya tiene una PIEZA declarada tiene trabajo propio: ahí el
+      // conteo pediría una tercera mano. Sin mano libre que nombrar tampoco se emite —
+      // "la mano libre" a secas no describe nada, y es el término que el forense tiene
+      // prohibido por nombre.
+      const conPieza = libre !== null && hechos.some((h) => PIEZAS.test(h) && manoDe(h) === libre)
+      // Y una mano que el video declara FUERA DE CUADRO tampoco está libre: en un UGC
+      // grabado en selfie es la que sostiene el teléfono. Ver `manosFueraDeCuadro`.
+      const fueraDeCuadro = libre !== null && ocupadas.includes(libre)
+      const conteo = enunciado && libre && !conPieza && !fueraDeCuadro ? `levanta ${DEDOS[enunciado]} con la mano ${libre}` : null
+      // El teléfono es un ESTADO SOSTENIDO dentro de SU corte. Se repite al abrir cada
+      // fragmento porque el lote puede partir un corte largo, pero no se hereda al corte
+      // siguiente: ese puede estar apoyado, operado por otra persona o usar otra mano.
+      const conSelfie = estadoSelfie ? [estadoSelfie, ...hechos] : hechos
+      const finales = conteo ? [...conSelfie, conteo] : conSelfie
+      // Cada corte anuncia SU matriz aunque coincida con la anterior. Deducir continuidad
+      // por igualdad de texto borraba cortes reales y sus posibles cambios de soporte.
+      const plano = multiCorte && !mismoCorteAntes
+        ? (planoDe.get(t.tiempoOriginal) || 'indeterminada; no completar con otro soporte, movimiento, encuadre ni ángulo')
+        : undefined
+      const rotuloPlano = plano ? ` — CÁMARA ORIGINAL: ${plano}` : ''
       return [
         ...(lote.tomas.length > 1 ? [`Toma ${t.n} (${r1(t.duracionSeg)} s)${rotuloPlano}:`] : []),
-        ...(!hechos.length ? [SIN_HECHO_NUEVO]
-          : unaLinea ? [`${hechos.join('. ')}.`]
-          : hechos.map((h) => `  - ${h[0].toUpperCase()}${h.slice(1)}.`)),
+        ...(!finales.length ? [SIN_HECHO_NUEVO]
+          : unaLinea ? [`${finales.join('. ')}.`]
+          : finales.map((h) => `  - ${h[0].toUpperCase()}${h.slice(1)}.`)),
         // Esta línea es lo único que dice QUÉ FRASE va con QUÉ ACCIÓN y en cuántos
         // segundos: es la sincronización audio↔imagen. Se comprobó en una sesión real
         // que perderla en un lote y conservarla en otro produce "una habla muy rápido y
@@ -900,20 +1244,20 @@ export function buildLotePrompt(args: {
   // los 155 lotes reales, un lote de una sesión se pasaba del tope al sumar el bloque —
   // sin el escalón, esa sesión dejaba de poder renderizarse. La invariante de piezas NO
   // se suelta: no la dice nadie más.
-  // LA CÁMARA NUNCA SE SUPONE. El micro-temblor solo va si el forense dijo "en mano":
-  // agregarlo por defecto puso a moverse una cámara que en el original es fija (lote 3 de
-  // `00471f8a`), y con "fija" en la misma línea eran dos órdenes opuestas. Sin cámara
-  // (ningún corte empareja) la línea no se emite: la imagen decide el encuadre.
-  const temblor = /\ben mano\b|temblor|handheld/i.test(camara) ? ' Grabado con teléfono en mano, con micro-temblor natural.' : ''
-  const armar = (desc: string, unaLinea = false) => [
-    multiPlano
-      ? `Video UGC vertical 9:16, ${lote.duracionSeg} segundos, ${lote.tomas.length} tomas con corte seco donde cambia el plano; sin fundidos ni transiciones, y nada cambia al otro lado del corte.`
+  // LA CÁMARA NUNCA SE SUPONE. Ni siquiera "en mano" autoriza a agregar microtemblor:
+  // puede ser un corte estabilizado. Movimiento, soporte, encuadre y ángulo llegan del
+  // forense y el render recibe una prohibición explícita de completar dimensiones.
+  const armar = (desc: string, unaLinea = false, candadosVisuales = true) => [
+    multiCorte
+      ? `Video UGC vertical 9:16, ${lote.duracionSeg} segundos, ${tiemposFuente.length} cortes del video original en el orden indicado; conserva esas fronteras sin fusionarlas.`
       : `Video UGC vertical 9:16, ${lote.duracionSeg} segundos, una sola toma continua.`,
     `Referencias: ${anclas}. Las imágenes definen cómo se ven la persona, el producto y el lugar: reprodúcelos idénticos.`,
+    ...(candadosVisuales ? [`PERSONA Y VESTUARIO — copia continua de ${imagenPersona}: mismo rostro, cabello y prenda exacta en cada fotograma. El cuello, las dos mangas, el tejido y el color conservan su forma, también en el brazo que sostiene la cámara.`] : []),
     // La descripción NO compite con la imagen: la cita en la misma cláusula y dice lo
     // mismo que ella. Sin esto el prompt no nombraba el color ni las piezas del envase
     // en ninguna parte, y el clip los derivaba.
     ...(desc ? [`PRODUCTO — el de ${imagenProducto}, y se ve así durante todo el clip: ${desc}`] : []),
+    ...(candadosVisuales ? [`ETIQUETA — copia continua de ${imagenProducto}: el mismo logo o wordmark conserva exactamente su forma y color; también se conservan texto, tipografía y distribución. El envase permanece sólido y opaco en cada fotograma.`] : []),
     reglaPiezas(imagenProducto),
     '',
     acciones(unaLinea),
@@ -922,9 +1266,11 @@ export function buildLotePrompt(args: {
     // siguiente. Con los hechos cubriendo el clip, la quietud ya viene declarada. En el
     // escalón corrido (el piso del presupuesto) se suelta: ahí lo que manda es entrar.
     ...(unaLinea ? [] : ['Entre hechos sostiene lo que tiene y sigue hablando; ningún gesto fuera de la lista.', '']),
-    ...(multiPlano
-      ? [`CÁMARA: la de cada toma, anunciada arriba.${temblor}`]
-      : camara.trim() ? [`CÁMARA: ${camara.replace(/\s*\.\s*$/, '')}.${temblor}`] : []),
+    ...(multiCorte
+      ? ['CÁMARA: reproduce en cada corte únicamente la matriz anunciada arriba. No agregues, heredes ni intercambies soporte, movimiento, encuadre o ángulo entre cortes.']
+      : camara.trim()
+        ? [`CÁMARA: ${camara.replace(/\s*\.\s*$/, '')}. Es una medición del original: no agregues otro soporte, movimiento, encuadre ni ángulo.`]
+        : ['CÁMARA: dato forense indeterminado. No inventes paneo, zoom, desplazamiento, soporte ni ángulo.']),
     '',
     `VOZ: ${voz.tono}, timbre ${voz.timbre}, edad vocal ${voz.edadVocal}. Habla en ${voz.idioma} con acento ${voz.acento}, ${voz.ritmo.toLowerCase()}, energía ${voz.energia.toLowerCase()}. ${voz.entonacion}.`,
     'Dice exactamente lo que está entre comillas arriba: no resumas, no extiendas, no corrijas, no agregues frases ni inventes diálogo para rellenar.',
@@ -943,6 +1289,11 @@ export function buildLotePrompt(args: {
   // red general; es lo justo para el lote más pesado de la base, que queda a 15 del tope.
   const corrido = armar('', true)
   if (corrido.length <= KIE_PROMPT_MAX) return corrido
+  // Último piso para una toma atípica que ella sola trae decenas de hechos: se sueltan
+  // los dos candados que repiten Image1/Image2. La coreografía, la identidad base de las
+  // referencias, el teléfono y la integridad física de las piezas siguen presentes.
+  const minimo = armar('', true, false)
+  if (minimo.length <= KIE_PROMPT_MAX) return minimo
   throw new Error(
     `El prompt del Lote ${lote.n} no entra en el tope de KIE (${prompt.length} de ${KIE_PROMPT_MAX} caracteres). ` +
     'Con este formato eso solo puede pasar si la coreografía de las tomas del lote es enorme: ' +

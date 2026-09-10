@@ -9,13 +9,19 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // cadena tenga la forma correcta, sino que la condición sea específicamente sobre
 // la columna `lotes` y el valor `null` (fix round 3: un filtro sobre otra columna
 // pasaría igual con una aserción que solo mira la forma de la cadena).
-const { mockSelect, mockIs, mockEq, mockUpdate, mockFrom } = vi.hoisted(() => {
+const { mockSelect, mockIs, mockEq, mockUpdate, mockFrom, mockNot, mockListSelect } = vi.hoisted(() => {
   const mockSelect = vi.fn()
   const mockIs = vi.fn(() => ({ select: mockSelect }))
   const mockEq = vi.fn(() => ({ is: mockIs }))
   const mockUpdate = vi.fn(() => ({ eq: mockEq }))
-  const mockFrom = vi.fn(() => ({ update: mockUpdate }))
-  return { mockSelect, mockIs, mockEq, mockUpdate, mockFrom }
+  // Cadena de LECTURA (`listVideoSessions`): select → eq → not → order → limit.
+  const mockLimit = vi.fn(() => ({ data: [], error: null }))
+  const mockOrder = vi.fn(() => ({ limit: mockLimit }))
+  const mockNot = vi.fn(() => ({ order: mockOrder }))
+  const mockListEq = vi.fn(() => ({ not: mockNot }))
+  const mockListSelect = vi.fn((_columnas: string) => ({ eq: mockListEq }))
+  const mockFrom = vi.fn(() => ({ update: mockUpdate, select: mockListSelect }))
+  return { mockSelect, mockIs, mockEq, mockUpdate, mockFrom, mockNot, mockListSelect }
 })
 
 vi.mock('@supabase/supabase-js', () => ({
@@ -65,5 +71,25 @@ describe('claimFreshLotes', () => {
     expect(mockUpdate).toHaveBeenCalledWith(patch)
     expect(mockEq).toHaveBeenCalledWith('id', 's1')
     expect(mockIs).toHaveBeenCalledWith('lotes', null)
+  })
+})
+
+// El listado del dashboard, y por qué se prueba con los ARGUMENTOS y no con la forma de la
+// cadena: un `.not` sobre otra columna dejaría pasar un test que solo mira que exista.
+// La regresión real fue que este filtro DESAPARECIÓ con el reset del generador (`a3a25d6`)
+// mientras las otras tres tools lo conservaban — 23 de 71 filas de `video_sessions` no
+// tienen video de referencia, así que sin él las fantasma empujan el trabajo real hacia
+// abajo del listado.
+describe('listVideoSessions', () => {
+  it('descarta las sesiones sin el primer insumo de la tool', async () => {
+    const { listVideoSessions } = await import('./db')
+    await listVideoSessions('u1')
+    expect(mockNot).toHaveBeenCalledWith('reference_video_url', 'is', null)
+  })
+
+  it('no arrastra el jsonb de `lotes` a un listado de 24 filas', async () => {
+    const { listVideoSessions } = await import('./db')
+    await listVideoSessions('u1')
+    expect(mockListSelect.mock.calls[0][0]).not.toMatch(/lotes|adapted|forensic/)
   })
 })

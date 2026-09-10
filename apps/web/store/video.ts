@@ -56,10 +56,12 @@ interface VideoActions {
   patch: (p: Partial<VideoState>) => void
   hydrateFromSession: (s: VideoSessionResponse) => void
   startNewSession: () => Promise<void>
+  ensureSession: () => Promise<string | null>
+  resetSession: () => void
   setRegens: (m: Record<string, number>) => void
 }
 
-export const useVideoStore = create<VideoState & VideoActions>((set) => ({
+export const useVideoStore = create<VideoState & VideoActions>((set, get) => ({
   ...initialState,
 
   setStep: (step) => set({ step }),
@@ -119,4 +121,33 @@ export const useVideoStore = create<VideoState & VideoActions>((set) => ({
       set({ sessionError: true })
     }
   },
+
+  /**
+   * El id de la sesión, creándola si todavía no existe.
+   *
+   * ⚠️ ES LO QUE SACA LA CREACIÓN DE FILAS DEL MONTAJE DEL WIZARD: abrir la tool y no
+   * hacer nada creaba una fila. El listado del dashboard las filtra al LEER, pero eso
+   * oculta el síntoma en vez de arreglarlo — se siguen creando. Ahora la fila nace con el
+   * primer insumo real, que en video es el video de referencia (`Section0Reference`), y
+   * tiene que estar AWAITEADO antes de subir: `uploadDirect` firma la subida contra el id.
+   */
+  ensureSession: async () => {
+    const actual = get().sessionId
+    if (actual) return actual
+    await get().startNewSession()
+    return get().sessionId
+  },
+
+  /**
+   * Vacía el wizard SIN crear ninguna fila.
+   *
+   * ⚠️ EXISTE POR UNA REGRESIÓN MEDIDA, y es la mitad que se olvida. Mientras el montaje
+   * creaba la sesión, el botón "Empezar" de la intro (`ToolIntro.empezar`) solo tenía que
+   * borrar el id de `localStorage` y navegar: el wizard llegaba vacío y creaba una fila
+   * nueva. Al mover la creación al primer insumo ese borrado dejó de alcanzar — **el store
+   * de zustand es un singleton de MÓDULO y sobrevive la navegación del cliente**, así que
+   * el wizard se remonta con la sesión anterior todavía en memoria y el usuario aterriza
+   * en el último paso de su sesión anterior en vez de en una nueva.
+   */
+  resetSession: () => set({ ...initialState }),
 }))

@@ -5,6 +5,7 @@ import type { ForensicReport } from './forensic'
 const FORENSIC: ForensicReport = {
   duracionTotalSeg: 12, caracteresGuion: 90,
   guionOriginal: 'Si estás cansado de las marcas, necesitas probar este suero.',
+  manoQueGraba: '',
   sujeto: 'Mujer de 25', vestuario: 'Polo azul', producto: 'Frasco rojo',
   fondo: 'Dormitorio', elementosGraficos: 'Subtítulos quemados',
   cortes: [{ n: 1, tiempo: '00:00 - 00:06', duracionSeg: 6, accion: 'Sostiene el frasco', hechos: [], camara: 'Primer plano', dialogo: 'Si estás cansado de las marcas,', textoOverlay: 'Si estás cansado', transicion: 'corte directo' }],
