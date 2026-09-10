@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { groupIntoLotes, LOTE_MAX_SEC, LOTE_MAX_CHARS, LoteSchema, expandirHechos, defectosDelForense, conflictosDeManos, buildLotePrompt, camaraDeLote, sinEscenaDeFoto, partirEnTramos, repartirAccion, numeroEnunciado, manosFueraDeCuadro } from './lotes'
+import { groupIntoLotes, LOTE_MAX_SEC, LOTE_MAX_CHARS, LoteSchema, expandirHechos, defectosDelForense, conflictosDeManos, buildLotePrompt, camaraDeLote, sinEscenaDeFoto, partirEnTramos, repartirAccion, numeroEnunciado, manosFueraDeCuadro, manosQueSostienenObjeto, manoQueGrabaDe, manoQueGrabaEnCorte, normalizarManosDeCamara } from './lotes'
 import type { TomaFinal } from './adapt'
 import type { Hecho } from './forensic'
 import { KIE_PROMPT_MAX } from './kie'
@@ -204,10 +204,10 @@ describe('camaraDeLote', () => {
     expect(camaraDeLote(l2, CORTES, 'fallback')).toBe('Plano detalle del producto')
   })
 
-  it('no repite el mismo plano cuando varios cortes lo comparten', () => {
+  it('conserva dos cortes aunque compartan exactamente la misma cámara', () => {
     const cortes = [{ tiempo: 'a', camara: 'Primer plano' }, { tiempo: 'b', camara: 'Primer plano' }]
     const [l] = groupIntoLotes([conTiempo(1, 5, 'a'), conTiempo(2, 5, 'b')])
-    expect(camaraDeLote(l, cortes, 'fallback')).toBe('Primer plano')
+    expect(camaraDeLote(l, cortes, 'fallback')).toBe('Primer plano · Primer plano')
   })
 
   // `groupIntoLotes` renumera la secuencia entera tras `splitLongToma`, así que en cuanto
@@ -231,6 +231,28 @@ describe('camaraDeLote', () => {
   it('cae al fallback cuando ningún tiempo empareja', () => {
     const [l] = groupIntoLotes([conTiempo(1, 5, 'no existe en cortes')])
     expect(camaraDeLote(l, CORTES, 'primer plano, cámara en mano')).toBe('primer plano, cámara en mano')
+  })
+
+  it('propaga la matriz estructurada de cada corte sin rellenar ángulos', () => {
+    const cortes = [
+      {
+        tiempo: 'a', camara: '', soporteCamara: 'selfie_en_mano' as const,
+        movimientoCamara: 'deriva lateral leve', encuadreCamara: 'primer plano',
+        anguloCamara: 'indeterminado', manoQueGraba: 'izquierda' as const,
+        evidenciaCamara: 'el cuadro acompaña el brazo',
+      },
+      {
+        tiempo: 'b', camara: '', soporteCamara: 'apoyada_o_tripode' as const,
+        movimientoCamara: 'fija', encuadreCamara: 'plano medio',
+        anguloCamara: 'contrapicado leve', manoQueGraba: 'ninguna' as const,
+        evidenciaCamara: 'fondo y horizonte inmóviles',
+      },
+    ]
+    const [lote] = groupIntoLotes([conTiempo(1, 5, 'a'), conTiempo(2, 5, 'b')])
+    expect(camaraDeLote(lote, cortes, '')).toBe(
+      'selfie sostenida por la persona, deriva lateral leve, primer plano · cámara apoyada o en trípode, fija, plano medio, contrapicado leve',
+    )
+    expect(camaraDeLote(lote, cortes, '')).not.toContain('nivel de ojos')
   })
 })
 
@@ -283,6 +305,14 @@ describe('buildLotePrompt', () => {
     // lo que impide el tercer brazo y el gotero duplicado. No depende del producto.
     expect(p).toMatch(/Dos manos y nada más/)
     expect(p).toMatch(/no hay una segunda copia/)
+  })
+
+  it('bloquea el vestuario y la identidad gráfica del producto durante todo el clip', () => {
+    expect(p).toMatch(/PERSONA Y VESTUARIO — copia continua de Image1/)
+    expect(p).toMatch(/cuello, las dos mangas, el tejido y el color conservan su forma/)
+    expect(p).toMatch(/ETIQUETA — copia continua de Image2/)
+    expect(p).toMatch(/logo o wordmark conserva exactamente su forma y color/)
+    expect(p).toMatch(/envase permanece sólido y opaco/)
   })
 
   it('emite UN HECHO POR LÍNEA, no un renglón con todos', () => {
@@ -612,7 +642,8 @@ describe('el reparto no deja escenografía de foto ni carriles vacíos', () => {
       camara: 'Plano medio corto, cámara en mano.', voz: VOZ, producto: '',
       images: [{ url: 'a', role: 'la persona' }],
     })
-    expect(p).toContain('CÁMARA: Plano medio corto, cámara en mano. Grabado')
+    expect(p).toContain('CÁMARA: Plano medio corto, cámara en mano. Es una medición del original')
+    expect(p).not.toMatch(/micro-temblor/)
   })
 
   // Dos órdenes opuestas en la misma línea: el 74 % de los cortes dicen "fija/estable" y
@@ -627,9 +658,9 @@ describe('el reparto no deja escenografía de foto ni carriles vacíos', () => {
     expect(p).not.toMatch(/temblor/)
   })
 
-  // Un lote con tomas de DOS planos pedía "una sola toma continua" con las dos cámaras
-  // pegadas en una línea; grok renderiza una y descarta la otra.
-  it('con dos planos anuncia el plano por toma, con corte seco, y no "toma continua"', () => {
+  // Un lote con DOS cortes pedía "una sola toma continua" si la cámara textual coincidía.
+  // La frontera del original manda independientemente del nombre del plano.
+  it('anuncia la cámara exacta por corte y no fusiona cortes distintos', () => {
     const t1 = { ...toma(1, 5), tiempoOriginal: '00:00 - 00:05' }
     const t2 = { ...toma(2, 5), tiempoOriginal: '00:05 - 00:10' }
     const t3 = { ...toma(3, 4), tiempoOriginal: '00:10 - 00:14' }
@@ -644,20 +675,21 @@ describe('el reparto no deja escenografía de foto ni carriles vacíos', () => {
       images: [{ url: 'a', role: 'la persona' }], cortes,
     })
     expect(p).not.toMatch(/toma continua/)
-    expect(p).toMatch(/corte seco/)
-    expect(p).toContain('Toma 1 (5 s) — Primer plano fijo:')
-    expect(p).toContain('Toma 2 (5 s) — Plano medio con zoom lento:')
-    // el plano vale hasta que se anuncia otro
-    expect(p).toContain('Toma 3 (4 s):')
+    expect(p).toMatch(/3 cortes del video original/)
+    expect(p).toContain('Toma 1 (5 s) — CÁMARA ORIGINAL: Primer plano fijo:')
+    expect(p).toContain('Toma 2 (5 s) — CÁMARA ORIGINAL: Plano medio con zoom lento:')
+    expect(p).toContain('Toma 3 (4 s) — CÁMARA ORIGINAL: Plano medio con zoom lento:')
     expect(p).not.toContain('CÁMARA: Primer plano fijo. · Plano medio')
-    // con un solo plano, la forma de siempre
+    expect(p).toMatch(/No agregues, heredes ni intercambies soporte, movimiento, encuadre o ángulo entre cortes/)
+    // Misma cámara, dos cortes reales: tampoco se fusionan.
     const uno = buildLotePrompt({
-      lote: groupIntoLotes([t1, t2])[0], camara: 'Primer plano fijo.', voz: VOZ, producto: '',
+      lote: groupIntoLotes([t1, t2])[0], camara: 'Primer plano fijo. · Primer plano fijo.', voz: VOZ, producto: '',
       images: [{ url: 'a', role: 'la persona' }],
       cortes: [{ tiempo: '00:00 - 00:05', camara: 'Primer plano fijo.' }, { tiempo: '00:05 - 00:10', camara: 'Primer plano fijo.' }],
     })
-    expect(uno).toMatch(/una sola toma continua/)
-    expect(uno).toContain('Toma 1 (5 s):')
+    expect(uno).not.toMatch(/una sola toma continua/)
+    expect(uno).toMatch(/2 cortes del video original/)
+    expect(uno.match(/CÁMARA ORIGINAL: Primer plano fijo/g)).toHaveLength(2)
   })
 })
 
@@ -755,14 +787,14 @@ describe('corte por tiempo, en estado cerrado (hechos con ventana)', () => {
     expect(groupIntoLotes([otra], cortes).map((l) => l.duracionSeg)).toEqual([15, 5])
   })
 
-  it('la cámara nunca se supone: sin "en mano" no hay temblor, y sin dato no hay línea', () => {
+  it('la cámara nunca se completa: "en mano" no agrega temblor y sin dato lo prohíbe', () => {
     const lote = groupIntoLotes([toma(1, 5)])[0]
     const base = { lote, voz: VOZ, producto: '', images: [{ url: 'a', role: 'la persona' }] }
     expect(buildLotePrompt({ ...base, camara: 'Plano medio, frontal.' })).not.toMatch(/temblor/)
-    expect(buildLotePrompt({ ...base, camara: 'En mano, plano medio.' })).toMatch(/micro-temblor/)
+    expect(buildLotePrompt({ ...base, camara: 'En mano, plano medio.' })).not.toMatch(/micro-temblor/)
     const sinDato = buildLotePrompt({ ...base, camara: '' })
-    expect(sinDato).not.toMatch(/^CÁMARA:/m)
-    expect(sinDato).not.toMatch(/temblor/)
+    expect(sinDato).toMatch(/CÁMARA: dato forense indeterminado/)
+    expect(sinDato).toMatch(/No inventes paneo, zoom, desplazamiento, soporte ni ángulo/)
   })
 
   it('prohíbe el relleno entre hechos, salvo en el escalón corrido', () => {
@@ -822,6 +854,39 @@ describe('defectosDelForense', () => {
     expect(defectosDelForense({ cortes: [C(2, 5, [h(0, 5, 'muestra el frasco')])] })).toEqual([])
     // un análisis anterior (sin hechos) no se juzga
     expect(defectosDelForense({ cortes: [C(1, 20, [])] })).toEqual([])
+  })
+  it('la matriz de cámara exige evidencia y no acepta una mano incompatible con el soporte', () => {
+    const base = {
+      ...C(1, 4, []), movimientoCamara: 'fija', encuadreCamara: 'plano medio',
+      anguloCamara: 'frontal', evidenciaCamara: 'fondo inmóvil y horizonte estable',
+    }
+    expect(defectosDelForense({ cortes: [{
+      ...base, soporteCamara: 'selfie_en_mano', manoQueGraba: 'ninguna',
+    }] })).toContain('corte 1: clasifica selfie pero dice que ninguna mano sostiene la cámara')
+    expect(defectosDelForense({ cortes: [{
+      ...base, soporteCamara: 'apoyada_o_tripode', manoQueGraba: 'izquierda',
+    }] })).toContain('corte 1: atribuye a la persona una mano de cámara en un soporte no selfie')
+    expect(defectosDelForense({ cortes: [{
+      ...base, soporteCamara: 'selfie_en_mano', manoQueGraba: 'izquierda', evidenciaCamara: '',
+    }] })).toContain('corte 1: clasifica la cámara sin evidencia visual')
+    expect(defectosDelForense({ cortes: [{
+      ...C(1, 4, []), soporteCamara: 'indeterminado', movimientoCamara: 'indeterminado',
+      encuadreCamara: 'indeterminado', anguloCamara: 'indeterminado',
+      manoQueGraba: 'indeterminado', evidenciaCamara: '',
+    }] })).toEqual([])
+  })
+  it('caza una clasificación de cámara sin evidencia y no fuerza datos desconocidos', () => {
+    const base = C(1, 4, [])
+    expect(defectosDelForense({ cortes: [{
+      ...base, soporteCamara: 'selfie_en_mano', movimientoCamara: 'deriva leve',
+      encuadreCamara: 'primer plano', anguloCamara: 'frontal', manoQueGraba: 'izquierda',
+      evidenciaCamara: '',
+    }] })).toContain('corte 1: clasifica la cámara sin evidencia visual')
+    expect(defectosDelForense({ cortes: [{
+      ...base, soporteCamara: 'indeterminado', movimientoCamara: 'indeterminado',
+      encuadreCamara: 'indeterminado', anguloCamara: 'indeterminado', manoQueGraba: 'indeterminado',
+      evidenciaCamara: '',
+    }] })).toEqual([])
   })
   // El forense real de `493a486d`: la gota en el corte 1 y el corte 2 abriendo con el frasco
   // frente al pecho. El original extiende con las yemas a los 3,3 s; el render no masajeó.
@@ -1041,7 +1106,131 @@ describe('manosFueraDeCuadro', () => {
     expect(manosFueraDeCuadro([texto]).sort()).toEqual(esperado.sort())
   })
 
-  it('es del VIDEO: junta lo que declara cualquier corte', () => {
+  it('junta las manos declaradas en el conjunto de textos recibido', () => {
     expect(manosFueraDeCuadro(['Gesticula con la mano izquierda.', 'La mano izquierda está fuera de cuadro.'])).toEqual(['izquierda'])
+  })
+})
+
+describe('la mano de cámara respeta el alcance de cada corte', () => {
+  const hechos = [
+    { desde: 0, hasta: 2, texto: 'Muestra el bote con la mano derecha, mano izquierda sostiene el teléfono fuera de cuadro' },
+    { desde: 2, hasta: 5, texto: 'Gesticula con ambas manos mientras habla a cámara' },
+  ]
+
+  it('la deriva de sesiones guardadas y prefiere el campo explícito en análisis nuevos', () => {
+    expect(manoQueGrabaDe({ cortes: [{ camara: 'En mano, selfie', hechos }] })).toBe('izquierda')
+    expect(manoQueGrabaDe({ manoQueGraba: 'derecha', cortes: [{ camara: 'En mano, selfie', hechos }] })).toBe('derecha')
+    expect(manoQueGrabaDe({ manoQueGraba: 'ninguna', cortes: [{ camara: 'Fija', hechos: [] }] })).toBeNull()
+  })
+
+  it('la evidencia física corrige la mano mal rotulada en la última sesión', () => {
+    const corte = {
+      camara: 'selfie sostenida por la persona, fija, plano medio corto',
+      soporteCamara: 'selfie_en_mano' as const, manoQueGraba: 'derecha' as const,
+      movimientoCamara: 'fija', encuadreCamara: 'plano medio corto',
+      anguloCamara: 'nivel de ojos frontal', evidenciaCamara: 'microtemblor solidario al brazo',
+      accion: 'la mano derecha sostiene el frasco frente al pecho, hace gesto con la mano izquierda al hablar',
+      hechos: [{ desde: 0, hasta: 5.8, texto: 'la mano derecha sostiene el frasco frente al pecho, hace gesto con la mano izquierda al hablar' }],
+    }
+    expect(manosQueSostienenObjeto(corte.hechos.map((h) => h.texto))).toEqual(['derecha'])
+    expect(manoQueGrabaEnCorte(corte, 'derecha')).toBe('izquierda')
+
+    const lote = groupIntoLotes([{
+      ...toma(3, 5.8), tiempoOriginal: '00:10 - 00:16', accionVisual: corte.accion,
+    }])[0]
+    const salida = buildLotePrompt({
+      lote, camara: 'selfie sostenida por la persona, movimiento observado: microtemblor solidario al brazo',
+      voz: VOZ, producto: '', images: [{ url: 'a', role: 'la persona' }],
+      cortes: [{ ...corte, tiempo: '00:10 - 00:16' }], manoCamara: 'derecha',
+    })
+    expect(salida).toMatch(/mano izquierda sostiene físicamente el teléfono fuera de cuadro/)
+    expect(salida).toMatch(/mano derecha sostiene el frasco frente al pecho/i)
+    expect(salida).not.toMatch(/gesto con la mano izquierda|gesto con la mano derecha/i)
+
+    const defectos = defectosDelForense({
+      manoQueGraba: 'derecha', guionOriginal: '',
+      cortes: [{ ...corte, n: 3, tiempo: '00:10 - 00:16', duracionSeg: 5.8, dialogo: '' }],
+    })
+    expect(defectos).toContain('corte 3: declara cámara fija pero su evidencia describe movimiento')
+    expect(defectos).toContain('corte 3: declara que graba con la derecha, pero la derecha sostiene el producto; la cámara corresponde a la izquierda')
+    expect(defectos).toContain('corte 3: la mano izquierda sostiene el teléfono y también recibe un gesto')
+
+    const normalizado = normalizarManosDeCamara({ manoQueGraba: 'derecha', cortes: [corte] })
+    expect(normalizado.manoQueGraba).toBe('izquierda')
+    expect(normalizado.cortes?.[0].manoQueGraba).toBe('izquierda')
+
+    const conDuda = normalizarManosDeCamara({
+      manoQueGraba: 'derecha',
+      cortes: [corte, {
+        ...corte, soporteCamara: 'selfie_con_estabilizador', manoQueGraba: 'indeterminado',
+        accion: 'habla a cámara', hechos: [{ desde: 0, hasta: 2, texto: 'habla a cámara' }],
+      }],
+    })
+    expect(conDuda.manoQueGraba).toBe('indeterminado')
+    expect(conDuda.cortes?.[1].manoQueGraba).toBe('indeterminado')
+  })
+
+  it('en sesiones legadas repite el teléfono por toma y repara el gesto imposible', () => {
+    const tomas = [
+      { ...toma(1, 5, 'Número dos, tiene una fórmula pura.'), tiempoOriginal: 'a', accionVisual: hechos.map((h) => h.texto).join('; ') },
+      { ...toma(2, 5, 'Además, refuerza todo esto.'), tiempoOriginal: 'b', accionVisual: 'Mantiene ambas manos fuera de cuadro; realiza movimientos gestuales con la mano izquierda libre mientras habla' },
+    ]
+    const salida = buildLotePrompt({
+      lote: groupIntoLotes(tomas)[0], ...ARGS,
+      manoCamara: 'izquierda', sinLibre: ['izquierda'],
+    })
+    expect((salida.match(/Durante este corte, la mano izquierda sostiene físicamente el teléfono fuera de cuadro/g) ?? [])).toHaveLength(2)
+    expect(salida).toMatch(/Gesticula con la mano derecha mientras habla a cámara/)
+    expect(salida).toMatch(/movimientos gestuales con la mano derecha mientras habla/)
+    expect(salida).not.toMatch(/Gesticula con ambas manos|mano izquierda libre/i)
+    expect(salida).not.toMatch(/levanta dos dedos/i)
+  })
+
+  it('un corte estático no hereda la mano selfie de otro corte', () => {
+    const selfie = {
+      tiempo: 'a', camara: '', soporteCamara: 'selfie_en_mano' as const,
+      movimientoCamara: 'deriva leve', encuadreCamara: 'primer plano', anguloCamara: 'frontal',
+      manoQueGraba: 'izquierda' as const, evidenciaCamara: 'movimiento solidario al brazo',
+    }
+    const tripode = {
+      tiempo: 'b', camara: '', soporteCamara: 'apoyada_o_tripode' as const,
+      movimientoCamara: 'fija', encuadreCamara: 'plano medio', anguloCamara: 'frontal',
+      manoQueGraba: 'ninguna' as const, evidenciaCamara: 'fondo inmóvil',
+    }
+    expect(manoQueGrabaEnCorte(selfie, null)).toBe('izquierda')
+    expect(manoQueGrabaEnCorte(tripode, 'izquierda')).toBeNull()
+
+    const tomas = [
+      { ...toma(1, 5), tiempoOriginal: 'a', accionVisual: 'Sostiene el producto con la derecha y habla' },
+      { ...toma(2, 5), tiempoOriginal: 'b', accionVisual: 'Gesticula con la mano izquierda mientras habla' },
+    ]
+    const lote = groupIntoLotes(tomas)[0]
+    const salida = buildLotePrompt({
+      lote, camara: camaraDeLote(lote, [selfie, tripode], ''), voz: VOZ, producto: '',
+      images: [{ url: 'a', role: 'la persona' }], cortes: [selfie, tripode], manoCamara: 'izquierda',
+    })
+    expect((salida.match(/Durante este corte, la mano izquierda sostiene físicamente el teléfono/g) ?? [])).toHaveLength(1)
+    expect(salida).toMatch(/Gesticula con la mano izquierda mientras habla/)
+    expect(salida).toMatch(/CÁMARA ORIGINAL: selfie sostenida por la persona, deriva leve, primer plano, frontal/)
+    expect(salida).toMatch(/CÁMARA ORIGINAL: cámara apoyada o en trípode, fija, plano medio, frontal/)
+  })
+
+  it('explicita que el producto baja agarrado por la mano y no se desvanece', () => {
+    const baja = { ...toma(1, 5), accionVisual: 'Mueve el bote suavemente, lo baja fuera de cuadro y continúa hablando' }
+    const salida = buildLotePrompt({ lote: groupIntoLotes([baja])[0], ...ARGS })
+    expect(salida).toMatch(/la mano que lo agarra baja con él y ambos salen juntos por el borde inferior/i)
+    expect(salida).toMatch(/producto sólido y visible hasta salir/i)
+
+    const entra = { ...toma(1, 5), accionVisual: 'Lleva el bote al encuadre con la mano derecha, mano izquierda sostiene el teléfono fuera de cuadro' }
+    const sinFalsoPositivo = buildLotePrompt({ lote: groupIntoLotes([entra])[0], ...ARGS, manoCamara: 'izquierda' })
+    expect(sinFalsoPositivo).not.toMatch(/la mano que lo agarra baja con él/i)
+  })
+
+  it('el guard rechaza un forense que da un gesto a la mano que graba', () => {
+    const defectos = defectosDelForense({
+      manoQueGraba: 'izquierda',
+      cortes: [{ n: 5, tiempo: '00:22 - 00:26', duracionSeg: 4, dialogo: '', camara: 'En mano, selfie', hechos }],
+    })
+    expect(defectos).toContain('corte 5: la mano izquierda sostiene el teléfono y también recibe un gesto')
   })
 })

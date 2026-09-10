@@ -28,6 +28,74 @@ export const HechoSchema = z.object({
 })
 export type Hecho = z.infer<typeof HechoSchema>
 
+export const SoporteCamaraSchema = z.enum([
+  'apoyada_o_tripode',
+  'selfie_en_mano',
+  'selfie_con_estabilizador',
+  'operador_en_mano',
+  'operador_con_estabilizador',
+  'indeterminado',
+])
+
+export const ManoCamaraSchema = z.enum(['derecha', 'izquierda', 'ninguna', 'indeterminado'])
+
+/**
+ * La matriz de cámara vive en CADA corte porque un mismo anuncio puede alternar selfie,
+ * trípode y cámara operada. Los `.catch(...)` conservan los análisis viejos y mantienen
+ * las claves en `required` para los structured outputs nuevos.
+ */
+export const CamaraCorteSchema = z.object({
+  soporteCamara: SoporteCamaraSchema.catch('indeterminado'),
+  movimientoCamara: z.string().trim().min(1).catch('indeterminado'),
+  encuadreCamara: z.string().trim().min(1).catch('indeterminado'),
+  anguloCamara: z.string().trim().min(1).catch('indeterminado'),
+  manoQueGraba: ManoCamaraSchema.catch('indeterminado'),
+  evidenciaCamara: z.string().catch(''),
+})
+
+export type CamaraCorte = z.infer<typeof CamaraCorteSchema>
+
+export type CorteConCamara = Partial<CamaraCorte> & { camara?: string }
+
+const datoCamara = (valor: unknown): string => {
+  const limpio = String(valor ?? '').trim()
+  return limpio && !/^indeterminado$/i.test(limpio) ? limpio : ''
+}
+
+const SOPORTE_CAMARA: Record<string, string> = {
+  apoyada_o_tripode: 'cámara apoyada o en trípode',
+  selfie_en_mano: 'selfie sostenida por la persona',
+  selfie_con_estabilizador: 'selfie sostenida por la persona con estabilizador',
+  operador_en_mano: 'cámara en mano de un operador',
+  operador_con_estabilizador: 'cámara de operador sobre estabilizador',
+}
+
+/**
+ * Descripción canónica que llega al render. Solo usa observaciones estructuradas; si el
+ * informe es anterior a la matriz, conserva su `camara` histórica. Nunca completa una
+ * dimensión ausente con un valor probable.
+ */
+export function camaraDeCorte(corte: CorteConCamara): string {
+  const soporte = datoCamara(corte.soporteCamara)
+  const evidencia = datoCamara(corte.evidenciaCamara)
+  const evidenciaNormalizada = evidencia.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+  const evidenciaMueve = /\b(microtemblor|tiembla|deriva|reencuadr|traslaci|paralaje|desplaz)/.test(evidenciaNormalizada)
+    && !/\b(?:sin|ningun[oa]?|no hay)\s+(?:micro)?temblor/.test(evidenciaNormalizada)
+  const declarado = datoCamara(corte.movimientoCamara)
+  // Una etiqueta "fija" no puede ganar contra la evidencia del mismo corte. Se propaga
+  // la observación literal, sin escoger un movimiento que el informe no haya descrito.
+  const movimiento = /^fija\b/i.test(declarado) && evidenciaMueve
+    ? `movimiento observado: ${evidencia}`
+    : declarado
+  const partes = [
+    soporte ? (SOPORTE_CAMARA[soporte] ?? soporte) : '',
+    movimiento,
+    datoCamara(corte.encuadreCamara),
+    datoCamara(corte.anguloCamara),
+  ].filter(Boolean)
+  return partes.length ? partes.join(', ') : String(corte.camara ?? '').trim()
+}
+
 export const CorteSchema = z.object({
   n: z.number(),
   tiempo: z.string(),          // "00:00 - 00:03"
@@ -36,12 +104,18 @@ export const CorteSchema = z.object({
   // análisis anterior a los hechos trae solo `accion`, y todo río abajo la sigue leyendo.
   accion: z.string().catch(''),
   hechos: z.array(HechoSchema).catch([]),
-  camara: z.string(),          // MOVIMIENTO primero (fija / en mano / paneo / zoom), luego el encuadre
+  // Compatibilidad y descripción canónica derivada de la matriz de abajo. El modelo la
+  // deja vacía; `normalizarCamara` la construye sin inventar dimensiones ausentes.
+  camara: z.string().catch(''),
+  ...CamaraCorteSchema.shape,
   dialogo: z.string(),         // texto hablado en este corte
   textoOverlay: z.string(),    // "No aparece" si no hay
   transicion: z.string(),      // jump cut / corte directo / continuidad / zoom digital
 })
-export type Corte = z.infer<typeof CorteSchema>
+type CorteEstructurado = z.infer<typeof CorteSchema>
+// El modelo recibe las seis claves como obligatorias; el tipo de dominio las deja
+// opcionales porque el jsonb contiene sesiones anteriores a esta matriz.
+export type Corte = Omit<CorteEstructurado, keyof CamaraCorte> & Partial<CamaraCorte>
 
 export const TomaSchema = z.object({
   n: z.number(),
@@ -67,6 +141,9 @@ export const ForensicReportSchema = z.object({
   duracionTotalSeg: z.number(),
   caracteresGuion: z.number(),
   guionOriginal: z.string(),
+  // Resumen legado del dispositivo. La fuente nueva es `cortes[].manoQueGraba`;
+  // `.catch('')` conserva las sesiones anteriores y mantiene la clave en `required`.
+  manoQueGraba: z.string().catch(''),
   sujeto: z.string(),
   vestuario: z.string(),
   producto: z.string(),
@@ -77,7 +154,16 @@ export const ForensicReportSchema = z.object({
   edicion: EdicionSchema,
   resumenParaUsuario: z.string(),
 })
-export type ForensicReport = z.infer<typeof ForensicReportSchema>
+type ForensicReportEstructurado = z.infer<typeof ForensicReportSchema>
+export type ForensicReport = Omit<ForensicReportEstructurado, 'cortes'> & { cortes: Corte[] }
+
+/** Persiste la misma cámara canónica que leerán plantilla, avatar y render. */
+export function normalizarCamara(report: ForensicReport): ForensicReport {
+  return {
+    ...report,
+    cortes: (report.cortes ?? []).map((corte) => ({ ...corte, camara: camaraDeCorte(corte) })),
+  }
+}
 
 /**
  * Techo físico de velocidad de habla, en caracteres por segundo.
@@ -337,9 +423,9 @@ export function buildForensicInstruction(): string {
     // que ya existen, y decirlo evita que el modelo invente claves que el schema no
     // tiene. Un campo que solapa con otro ya contestado vuelve vacío — este repo lo
     // pagó cinco veces.
-    'DÓNDE VA CADA COSA DE ESA LISTA: los silencios, los gestos, los movimientos y la',
+    'DÓNDE VA CADA COSA DE ESA LISTA: los silencios, los gestos y los movimientos del CUERPO y la',
     'manipulación del producto y de los objetos van en `hechos`; los zooms, los cambios',
-    'de plano y los movimientos de cámara en `camara`; los cortes y jump cuts en',
+    'de plano y los movimientos de cámara en la matriz de cámara DE CADA CORTE; los cortes y jump cuts en',
     '`transicion`; los textos, overlays y subtítulos en `elementosGraficos` y en',
     '`textoOverlay`; las palabras en `dialogo` y en `guionOriginal`; los fondos en',
     '`fondo`. No inventes campos fuera del esquema.',
@@ -347,6 +433,9 @@ export function buildForensicInstruction(): string {
     'MÉTRICAS GLOBALES:',
     '  - `duracionTotalSeg`: duración total del video en segundos.',
     '  - `caracteresGuion`: número total de caracteres del texto hablado, con espacios.',
+    '  - `manoQueGraba`: resumen LEGADO. Usa `derecha` o `izquierda` solo si esa misma mano',
+    '    sostiene la cámara en todos los cortes selfie; `ninguna` si ninguno es selfie e',
+    '    `indeterminado` si cambia entre cortes. La fuente de verdad es cada corte.',
     '',
     'GUION ORIGINAL (`guionOriginal`): transcripción literal, palabra por palabra.',
     '  Conserva errores, repeticiones, muletillas, frases incompletas y la gramática',
@@ -406,11 +495,14 @@ export function buildForensicInstruction(): string {
     'que tenía: lo soltó, lo pasó a la otra mano o lo dejó fuera de cuadro. Sin eso el',
     'modelo necesita una mano libre que no existe y le dibuja a la persona un brazo de',
     'más. "La mano libre" no describe nada: di "la izquierda", y di qué tiene.',
-    'Y SI LA PERSONA SE ESTÁ GRABANDO A SÍ MISMA, UNA DE SUS MANOS SOSTIENE EL TELÉFONO:',
-    'está ocupada y fuera de cuadro TODO el video, no solo en el corte donde se nota.',
-    'Dilo en el primer corte y no la vuelvas a usar. **Una mano que está fuera de cuadro',
+    'Y SI LA PERSONA SE ESTÁ GRABANDO A SÍ MISMA EN ESTE CORTE, UNA DE SUS MANOS SOSTIENE',
+    'EL TELÉFONO: está ocupada y fuera de cuadro durante TODO ESE CORTE. Registra el lado',
+    'en `cortes[].manoQueGraba`, dilo al abrir sus hechos y no la vuelvas a usar hasta el',
+    'siguiente corte. Otro corte puede estar en trípode, operado por alguien más o usar',
+    'otra mano: no prolongues el estado selfie más allá del corte observado.',
+    '**Una mano que está fuera de cuadro',
     'no se describe gesticulando** —no se ve, así que no hay gesto que observar—: si lo',
-    'que se mueve es el ENCUADRE, eso es movimiento de CÁMARA y va en `camara`.',
+    'que se mueve es el ENCUADRE, eso es movimiento de CÁMARA y va en `movimientoCamara`.',
     'Y CIERRA DICIENDO DÓNDE QUEDÓ CADA PIEZA QUE SALIÓ DEL ENVASE —de vuelta en el',
     'frasco, en qué mano, o fuera de cuadro— y con qué termina cada mano. Un corte largo',
     'se parte en varios clips por una frontera que tiene que ser un estado cerrado: un',
@@ -455,21 +547,49 @@ export function buildForensicInstruction(): string {
     '',
     'CORTES (`cortes`): uno por corte real, en orden. Para cada uno:',
     '  `tiempo` "MM:SS - MM:SS", `duracionSeg`, `hechos` (la lista de arriba, con',
-    '  `desde`/`hasta`/`texto`; `accion` vacía), `camara`, `dialogo` (texto hablado',
+    '  `desde`/`hasta`/`texto`; `accion` vacía), la matriz de cámara, `dialogo` (texto hablado',
     '  durante ese corte), `textoOverlay` (o "No aparece") y `transicion` (jump cut /',
     '  corte directo / continuidad / zoom digital).',
     '',
-    '`camara` EMPIEZA POR EL MOVIMIENTO, SIEMPRE, y se mide, no se supone: "fija" si la',
-    'cámara no se mueve en todo el corte; "en mano" si tiembla; "paneo a la derecha",',
-    '"zoom in lento", "desplazamiento" si los hay. Después el encuadre por dónde corta',
-    'el cuadro ("corta a la altura del pecho", "primer plano del rostro") y la posición',
-    '(frontal, ángulo bajo). Un corte sin movimiento declarado se renderiza con la',
-    'cámara que el generador invente.',
-    'UN UGC SE GRABA DE DOS MANERAS Y HAY QUE DECIR CUÁL ES: con el teléfono APOYADO,',
-    'y entonces la cámara es fija; o SOSTENIDO por la propia persona que habla (selfie),',
-    'y entonces el cuadro se mueve con su cuerpo —tiembla, deriva, se reencuadra al',
-    'caminar— y eso es "en mano", nunca "fija". "Fija" es el default de un video hecho',
-    'con IA, así que no lo escribas por descarte: si el encuadre respira, se mueve.',
+    'MATRIZ DE CÁMARA — SE MIDE DE NUEVO EN CADA CORTE, NUNCA SE HEREDA:',
+    '  - `soporteCamara`: exactamente uno de `apoyada_o_tripode`, `selfie_en_mano`,',
+    '    `selfie_con_estabilizador`, `operador_en_mano`, `operador_con_estabilizador`',
+    '    o `indeterminado`.',
+    '  - `movimientoCamara`: movimiento observable y dirección: `fija`, `paneo a la',
+    '    derecha`, `travelling lateral a la izquierda`, `seguimiento`, `zoom digital in`;',
+    '    si no puedes distinguirlo, `indeterminado`.',
+    '  - `encuadreCamara`: cuánto cuerpo/objeto entra realmente en cuadro, con cambio',
+    '    inicio→final si lo hay; si no se distingue, `indeterminado`.',
+    '  - `anguloCamara`: posición del eje óptico observada (`nivel de ojos frontal`,',
+    '    `picado`, `contrapicado`, `lateral`, etc.); si no se distingue, `indeterminado`.',
+    '  - `manoQueGraba`: `derecha`, `izquierda`, `ninguna` o `indeterminado` PARA ESE CORTE.',
+    '    Usa un lado solo en los dos modos selfie; en trípode u operador usa `ninguna`.',
+    '  - `evidenciaCamara`: indicio visual breve que sostiene la clasificación: microtemblor',
+    '    solidario al brazo, fondo inmóvil, traslación de bordes, paralaje, horizonte o',
+    '    líneas de fuga. Para `manoQueGraba`, la evidencia NOMBRA EL LADO y qué lo prueba.',
+    '    Si no hay indicio suficiente, usa `indeterminado` en esa dimensión.',
+    '  - `camara`: déjala vacía; el sistema la deriva de los campos anteriores.',
+    '',
+    'SEPARA FENÓMENOS: que la persona camine dentro de un cuadro inmóvil NO es travelling;',
+    'que acerque la cara NO es zoom; que mire arriba NO vuelve contrapicado al eje óptico.',
+    'Distingue zoom digital de acercamiento físico por el cambio de perspectiva y el',
+    'paralaje. Distingue selfie de operador en mano solo si el movimiento solidario al',
+    'cuerpo, el brazo o el reflejo lo prueban; no lo deduzcas por estética UGC.',
+    '"fija" exige cuadro inmóvil: no puede coexistir con evidencia de microtemblor, deriva,',
+    'reencuadre o desplazamiento. Si la evidencia se mueve, describe ESE movimiento.',
+    '',
+    'CRUCE FÍSICO OBLIGATORIO ANTES DE RESPONDER: en un corte selfie, la mano que graba',
+    'no puede sostener a la vez el producto ni aparecer gesticulando en `hechos`. Si la',
+    'derecha sostiene visiblemente el producto y la izquierda queda fuera de cuadro, la',
+    'mano de cámara solo puede ser la izquierda. Si tus campos contradicen los hechos,',
+    'vuelve a mirar el corte y corrígelos; no entregues las dos órdenes incompatibles.',
+    '',
+    'PROHIBIDO COPIAR O COMPLETAR CÁMARA: analiza cada corte aislado y escribe únicamente',
+    'soporte, movimiento, encuadre y ángulo visibles en ESE intervalo. No heredes el dato',
+    'del corte anterior o siguiente, no uses un estilo global y no rellenes con `fija`,',
+    '`frontal`, `nivel de ojos`, `selfie` ni `cinematográfica` por probabilidad. Un video',
+    'puede alternar trípode, selfie, cámara operada, desplazamientos y ángulos entre',
+    'cortes. Ante cualquier duda, `indeterminado`; inventar una cámara está prohibido.',
     '',
     'TOMAS (`tomas`): convierte cada corte real en una toma de grabación, con',
     '  `encuadre`, `posicion` del personaje, `accionFisica` exacta, `objeto` usado,',

@@ -151,13 +151,15 @@ describe('scriptFingerprint', () => {
   // que reanudar a través de ese cambio pegaría dos personajes distintos en un video.
   // La identidad viaja ahora en la URL del AVATAR (el prompt ya no lleva el bloque de
   // consistencia), así que es la imagen la que tiene que mover la huella.
-  it('cambia si cambia el avatar, la voz o la cámara', () => {
+  it('cambia si cambia el avatar, la voz, la cámara o la mano que graba', () => {
     const original = scriptFingerprint(fpInput())
     expect(scriptFingerprint(fpInput({ voz: { ...VOZ, acento: 'mexicano' } }))).not.toBe(original)
     expect(scriptFingerprint(fpInput({
       images: [{ url: 'https://x/OTRA.png', role: 'la persona' }, { url: 'https://x/prod.png', role: 'el producto' }],
     }))).not.toBe(original)
     expect(scriptFingerprint(fpInput({ camaras: ['plano general', 'plano medio'] }))).not.toBe(original)
+    expect(scriptFingerprint(fpInput({ manoCamara: 'izquierda' }))).not.toBe(original)
+    expect(scriptFingerprint(fpInput({ manosCamara: ['izquierda', ''] }))).not.toBe(original)
   })
 
   // La cámara pasó de un string único a una por lote: si el reparto de planos entre
