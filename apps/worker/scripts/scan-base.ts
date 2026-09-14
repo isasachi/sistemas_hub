@@ -31,7 +31,6 @@
 // ⚠️ COSTO: 1 llamada Haiku por fila que pase el filtro de share (determinista).
 // Las que no lo pasan no cuestan LLM. Solo en el worker, nunca en Vercel.
 import './bootstrap'
-import Anthropic from '@anthropic-ai/sdk'
 import type { Page } from 'playwright'
 import {
   launchScraperContext, runPool, isPersistentlyBlocked, PersistentBlockError,
@@ -43,6 +42,7 @@ import {
   leerAnunciante, medicionDe, juzgarAnunciante, clustersDeAnunciante, esFalloDeApi,
   type Lectura,
 } from '../lib/product-hunter/scan-verify'
+import { juezDelEntorno, resumenOpenAI } from '../lib/product-hunter/nicho-verdict'
 import {
   getRawProductsByVolume, saveRawVerdict, countRawPending, seedKeywords,
   getAllNicheKeywords, upsertRawClusters, type RawProductRow,
@@ -167,7 +167,7 @@ async function main() {
   )
 
   const { browser, pages } = await launchScraperContext(CONCURRENCY)
-  const ai = sinLlm ? null : new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
+  const juez = juezDelEntorno(sinLlm)
   const tally = { monoproducto: 0, descartado: 0, sin_verificar: 0, inconcluso: 0, errores: 0 }
   let procesados = 0
   let motivoCorte: string | null = null
@@ -226,7 +226,7 @@ async function main() {
         const yaSabido = cacheNoFisico.get(row.page_id)
         const v = yaSabido
           ? { status: 'descartado' as const, kind: yaSabido.kind, nota: yaSabido.nota, productName: null, medicion: m }
-          : await juzgarAnunciante(ai, row.niche, row.name, m)
+          : await juzgarAnunciante(juez, row.niche, row.name, m)
         if (!yaSabido && v.status === 'descartado' && v.nota.startsWith('no es producto físico')) {
           cacheNoFisico.set(row.page_id, { kind: v.kind, nota: v.nota })
         }
@@ -239,7 +239,7 @@ async function main() {
         const clusters = yaSabido
           ? []   // anunciante ya descartado por la lista negra: no gasta modelo
           : await clustersDeAnunciante(
-            ai, { niche: row.niche, pageId: row.page_id, advertiser: row.name, country: row.country }, l, m,
+            juez, { niche: row.niche, pageId: row.page_id, advertiser: row.name, country: row.country }, l, m,
           )
 
         await saveRawVerdict({
@@ -299,6 +299,8 @@ async function main() {
     `${tally.descartado} descartados · ${tally.sin_verificar} sin verificar · ` +
     `${tally.inconcluso} inconclusos · ${tally.errores} errores ═══`,
   )
+  const gasto = resumenOpenAI()
+  if (gasto) console.log(gasto)
   // Centinela para el runner de shell: distingue "no queda nada por verificar"
   // de "me cortaron a mitad". Sin esto el loop no sabe cuándo parar.
   if (motivoCorte === 'cola vacía') console.log('PH_SCAN_QUEUE_EMPTY')

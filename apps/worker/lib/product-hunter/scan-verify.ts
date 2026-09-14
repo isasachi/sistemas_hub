@@ -2,12 +2,11 @@
 // aparte porque lo usan dos entradas distintas: `scan-nicho.ts` (descubre y
 // verifica un nicho) y `scan-base.ts` (verifica lo que ya está en la base,
 // ordenado por volumen). Dos copias de esta regla es como una se desincroniza.
-import type Anthropic from '@anthropic-ai/sdk'
 import type { Page } from 'playwright'
 import { readConnection, advertiserUrl, type SsrAd } from './ssr-fetch'
 import { isPersistentlyBlocked, PersistentBlockError, rateGateMs, rachaVacia } from './scraper'
 import { shareOf, senalNicho, productKey, clustersOf, type SenalNicho, type ClusterInfo } from './product-key'
-import { juzgarNicho } from './nicho-verdict'
+import type { Juez } from './nicho-verdict'
 import { textoDeCluster, fusionarPorEmbedding, embeddings } from './cluster-merge'
 import { nonPhysicalSignal, type RawClusterRow } from '@ph/shared'
 
@@ -31,6 +30,8 @@ export interface Veredicto {
   kind: string
   nota: string
   productName: string | null
+  /** La que redactó el modelo en la MISMA llamada. Ausente en los descartes. */
+  descripcion?: string | null
   medicion: Medicion
 }
 
@@ -165,11 +166,11 @@ export async function medirAnunciante(
  * Decide el estado final. El share se resuelve en código; solo si lo pasa se
  * gasta una llamada a Haiku, y solo para "¿es un producto físico DEL nicho?".
  *
- * `ai` en null = modo sin LLM: mide y marca 'sin_verificar' (esas filas SE
+ * `juez` en null = modo sin LLM: mide y marca 'sin_verificar' (esas filas SE
  * SIRVEN, pero sin sello).
  */
 export async function juzgarAnunciante(
-  ai: Anthropic | null, niche: string, advertiser: string | null, m: Medicion,
+  juez: Juez | null, niche: string, advertiser: string | null, m: Medicion,
 ): Promise<Veredicto> {
   if (m.share < SHARE_MIN) {
     return {
@@ -195,14 +196,14 @@ export async function juzgarAnunciante(
     }
   }
 
-  if (!ai) {
+  if (!juez) {
     return {
       status: 'sin_verificar', kind: 'indeterminado', productName: null, medicion: m,
       nota: 'medido sin verificación de nicho (--sin-llm)',
     }
   }
 
-  const v = await juzgarNicho(ai, { niche, advertiser, productPath: m.dominante, textos: m.textos })
+  const v = await juez({ niche, advertiser, productPath: m.dominante, textos: m.textos })
   const fisico = v.kind === 'fisico'
   const status = !fisico || !v.perteneceAlNicho ? 'descartado'
     // Sin cita textual que lo respalde el veredicto no se publica: va a revisión.
@@ -212,7 +213,10 @@ export async function juzgarAnunciante(
     : !v.perteneceAlNicho ? `fuera del nicho: ${v.motivo}`
     : !v.citaVerificada ? `sin cita textual que respalde el veredicto: ${v.motivo}`
     : v.motivo
-  return { status, kind: v.kind, nota, productName: v.productName || null, medicion: m }
+  return {
+    status, kind: v.kind, nota, productName: v.productName || null,
+    descripcion: v.descripcion || null, medicion: m,
+  }
 }
 
 /**
@@ -228,7 +232,7 @@ export async function juzgarAnunciante(
  * `juzgarAnunciante` NO se borra: `verify-products.ts` la sigue usando.
  */
 export async function juzgarCluster(
-  ai: Anthropic | null, niche: string, advertiser: string | null,
+  juez: Juez | null, niche: string, advertiser: string | null,
   m: Medicion, c: ClusterInfo,
 ): Promise<Veredicto> {
   if (!c.publicable) {
@@ -251,13 +255,13 @@ export async function juzgarCluster(
       nota: `no es producto físico (${negra.cluster}): "${negra.match}" en el anunciante`,
     }
   }
-  if (!ai) {
+  if (!juez) {
     return {
       status: 'sin_verificar', kind: 'indeterminado', productName: null, medicion: m,
       nota: 'medido sin verificación de nicho',
     }
   }
-  const v = await juzgarNicho(ai, {
+  const v = await juez({
     niche, advertiser, productPath: c.key,
     textos: [c.titulo, c.cuerpo].filter((t): t is string => !!t),
   })
@@ -269,7 +273,10 @@ export async function juzgarCluster(
     : !v.perteneceAlNicho ? `fuera del nicho: ${v.motivo}`
     : !v.citaVerificada ? `sin cita textual que respalde el veredicto: ${v.motivo}`
     : v.motivo
-  return { status, kind: v.kind, nota, productName: v.productName || null, medicion: m }
+  return {
+    status, kind: v.kind, nota, productName: v.productName || null,
+    descripcion: v.descripcion || null, medicion: m,
+  }
 }
 
 /**
@@ -307,7 +314,7 @@ async function fusionarClusters(cs: ClusterInfo[]): Promise<ClusterInfo[]> {
 }
 
 export async function clustersDeAnunciante(
-  ai: Anthropic | null,
+  juez: Juez | null,
   ctx: { niche: string; pageId: string; advertiser: string | null; country: string | null },
   l: Lectura,
   m: Medicion,
@@ -315,13 +322,13 @@ export async function clustersDeAnunciante(
   const filas: RawClusterRow[] = []
   for (const c of await fusionarClusters(clustersOf(l.todos, l.adCount))) {
     // Solo se le pregunta al modelo por lo que podría publicarse.
-    const v = await juzgarCluster(c.publicable ? ai : null, ctx.niche, ctx.advertiser, m, c)
+    const v = await juzgarCluster(c.publicable ? juez : null, ctx.niche, ctx.advertiser, m, c)
     filas.push({
       niche: ctx.niche, page_id: ctx.pageId, cluster_key: c.key,
       ad_count: c.estimado, muestra_n: c.n, muestra_tot: l.muestra,
       titulo: c.titulo, cuerpo: c.cuerpo, url: c.url,
       name: ctx.advertiser, country: ctx.country,
-      status: v.status, kind: v.kind, product_name: v.productName,
+      status: v.status, kind: v.kind, product_name: v.productName, descripcion: v.descripcion ?? null,
       verdict_note: v.nota, senal_nicho: m.senal,
       ad_start_date: m.masViejo, verified_at: new Date().toISOString(),
     })
@@ -334,4 +341,7 @@ export async function clustersDeAnunciante(
 // que nació de perder 309 productos por quedarse sin saldo a mitad de un lote.
 export function esFalloDeApi(msg: string): boolean {
   return /credit balance|rate_limit|overloaded|429|5\d\d \{|authentication_error|permission_error/i.test(msg)
+    // La forma de OpenAI: `openai 500: …`, `openai 429: …`. Su mensaje no
+    // trae la llave del SDK de Anthropic, así que el patrón de arriba no la ve.
+    || /openai (429|5\d\d):|insufficient_quota/i.test(msg)
 }

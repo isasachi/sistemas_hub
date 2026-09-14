@@ -11,7 +11,7 @@
 //   2. Descubrimiento — keywords × países por FETCH same-origin (ssr-fetch).
 //   3. Medición     — 1 fetch por anunciante: total de anuncios (rango) y share
 //                     del producto dominante (product-key). Sin LLM.
-//   4. Veredicto    — Haiku, y SOLO para "¿es un producto físico DEL nicho?".
+//   4. Veredicto    — un LLM, y SOLO para "¿es un producto físico DEL nicho?".
 //
 // El paso 4 es el único que no se puede escribir en código: medido sobre acné,
 // buscar el término del nicho en el copy sube el recall pero mete un curso de
@@ -25,10 +25,10 @@
 // mismos estados, así que los dos motores se pueden comparar con datos reales
 // antes de jubilar ninguno.
 //
-// ⚠️ COSTO: Anthropic solo acá (Haiku), 1 llamada por candidato medido. Vercel
-// solo lee. Ver AGENTS.md, reglas de costo.
+// ⚠️ COSTO: el LLM solo acá, 1 llamada por candidato medido. El motor lo elige
+// `juezDelEntorno` (PH_NICHO_MOTOR=openai → gpt-5.6-luna; default Haiku), nunca
+// este script. Vercel solo lee. Ver AGENTS.md, reglas de costo.
 import './bootstrap'
-import Anthropic from '@anthropic-ai/sdk'
 import type { Page } from 'playwright'
 import {
   launchScraperContext, runPool, searchUrl, noteNavResult, rateGateMs,
@@ -39,6 +39,7 @@ import {
   leerAnunciante, medicionDe, juzgarAnunciante, clustersDeAnunciante, esFalloDeApi,
   type Medicion, type Lectura,
 } from '../lib/product-hunter/scan-verify'
+import { juezDelEntorno, resumenOpenAI } from '../lib/product-hunter/nicho-verdict'
 import { isLikelyService } from '../lib/product-hunter/competitors'
 import {
   seedKeywords, getNicheStatus, upsertRawProducts, saveRawVerdict, upsertRawNiche,
@@ -153,8 +154,11 @@ async function main() {
   )
 
   const { browser, pages } = await launchScraperContext(CONCURRENCY)
-  const ai = sinLlm ? null : new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
+  const juez = juezDelEntorno(sinLlm)
   const tally = { monoproducto: 0, descartado: 0, sin_verificar: 0, pendiente: 0, inconcluso: 0, errores: 0 }
+  // Los clusters se cuentan aparte: son los PRODUCTOS, y es donde cae el sello.
+  const porProducto = { monoproducto: 0, descartado: 0, sin_verificar: 0 }
+  const sellados: string[] = []
   let apiCaida = false
 
   try {
@@ -190,11 +194,11 @@ async function main() {
       // El rango sale del conteo real y el monoproducto del share determinista;
       // solo lo que pasa ese filtro gasta una llamada a Haiku. La regla vive en
       // scan-verify.ts, compartida con scan-base.ts.
-      const v = await juzgarAnunciante(ai, niche, cand.pageName, m)
+      const v = await juzgarAnunciante(juez, niche, cand.pageName, m)
       // Y aparte, un veredicto por PRODUCTO. La fila del anunciante se sigue
       // escribiendo igual: es el denominador con el que se estima cada cluster.
       const clusters = await clustersDeAnunciante(
-        ai, { niche, pageId: cand.pageId, advertiser: cand.pageName, country: cand.country }, l, m,
+        juez, { niche, pageId: cand.pageId, advertiser: cand.pageName, country: cand.country }, l, m,
       )
       if (!dryRun) {
         await saveRawVerdict({
@@ -205,7 +209,7 @@ async function main() {
         })
         await upsertRawClusters(clusters)
       }
-      return { cand, m, estado: v.status, motivo: v.nota, clusters: clusters.length }
+      return { cand, m, estado: v.status, motivo: v.nota, clusters }
     })
 
     for (const s of settled) {
@@ -230,6 +234,12 @@ async function main() {
         `${String(r.m!.adCount).padStart(5)} ads · ${String(Math.round(r.m!.share * 100)).padStart(3)}% ` +
         `· ${r.m!.senal.padEnd(7)} · ${String(r.m!.dominante ?? '').slice(0, 40)}`,
       )
+      for (const c of r.clusters ?? []) {
+        porProducto[c.status as keyof typeof porProducto]++
+        if (c.status === 'monoproducto') {
+          sellados.push(`${c.product_name ?? c.cluster_key} — ${c.ad_count} ads (${c.muestra_n}/${c.muestra_tot})`)
+        }
+      }
     }
 
     if (!dryRun) await updateRawNicheAfterScrape(niche).catch(() => {})
@@ -241,6 +251,13 @@ async function main() {
     `\n═══ ${tally.monoproducto} aprobados · ${tally.descartado} descartados · ` +
     `${tally.sin_verificar} sin verificar · ${tally.inconcluso} inconclusos · ${tally.errores} errores ═══`,
   )
+  console.log(
+    `    productos: ${porProducto.monoproducto} monoproducto · ` +
+    `${porProducto.descartado} descartados · ${porProducto.sin_verificar} sin verificar`,
+  )
+  for (const s of sellados) console.log(`    ✓ ${s}`)
+  const gasto = resumenOpenAI()
+  if (gasto) console.log(gasto)
   if (apiCaida) process.exitCode = 2
   if (isPersistentlyBlocked()) {
     console.error('🛑 block persistente durante la corrida')

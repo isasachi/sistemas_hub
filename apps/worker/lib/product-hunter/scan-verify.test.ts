@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { juzgarCluster, leerAnunciante } from './scan-verify'
+import { juzgarCluster, leerAnunciante, esFalloDeApi } from './scan-verify'
 import type { ClusterInfo } from './product-key'
 import * as ssr from './ssr-fetch'
 import * as scraper from './scraper'
@@ -75,3 +75,28 @@ describe('leerAnunciante — un conteo sin anuncios es un BLOQUEO, no un vacío'
     expect(l!.adCount).toBe(0)
   })
 })
+
+// El barrido CORTA el lote cuando el proveedor se cayó y SIGUE cuando el fallo
+// es de una fila. Con OpenAI como motor esa decisión se toma sobre un mensaje
+// con otra forma que la del SDK de Anthropic (`5xx {`), así que hay que fijarla:
+// una caída no reconocida deja el barrido horas quemando navegaciones —la parte
+// cara— y marcando anunciantes como error.
+describe('esFalloDeApi — el motor OpenAI también tiene que cortar el lote', () => {
+  it('corta con 5xx y con 429, que son del proveedor', () => {
+    expect(esFalloDeApi('openai 500: The server had an error processing your request.')).toBe(true)
+    expect(esFalloDeApi('openai 429: Rate limit reached')).toBe(true)
+    expect(esFalloDeApi('openai 402: insufficient_quota')).toBe(true)
+  })
+
+  it('NO corta con 400, que es un request MAL ARMADO por nosotros', () => {
+    // El caso real: medio emoji en el texto. Abortar el barrido entero por una
+    // fila que nosotros rompimos es la reacción equivocada.
+    expect(esFalloDeApi('openai 400: Invalid body: failed to parse JSON value.')).toBe(false)
+  })
+
+  it('sigue reconociendo la forma de Anthropic', () => {
+    expect(esFalloDeApi('500 {"type":"error"}')).toBe(true)
+    expect(esFalloDeApi('credit balance is too low')).toBe(true)
+  })
+})
+

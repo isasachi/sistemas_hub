@@ -16,7 +16,7 @@
 // ⚠️ Corre en gpt-5.6-luna y no en Haiku: $0,20/$1,20 por millón contra
 // $1,00/$5,00. Es el MISMO prompt y el MISMO schema (`nicho-verdict.ts`).
 import './bootstrap'
-import { juzgarNichoOpenAI, MODELO_OPENAI, usoOpenAI } from '../lib/product-hunter/nicho-verdict'
+import { juzgarNichoOpenAI, MODELO_OPENAI, usoOpenAI, costoOpenAI } from '../lib/product-hunter/nicho-verdict'
 import { createClient } from '@supabase/supabase-js'
 
 const db = createClient(
@@ -106,8 +106,7 @@ async function main() {
   // Precio MEDIDO. Tarifa de gpt-5.6-luna: $0,20 / $1,20 por millón, y el input
   // cacheado a $0,02 — se descuenta aparte porque OpenAI ya lo informa.
   const u = usoOpenAI
-  const noCache = u.input - u.inputCacheado
-  const usd = (noCache * 0.20 + u.inputCacheado * 0.02 + u.output * 1.20) / 1e6
+  const usd = costoOpenAI(u)
   console.log(`\n${u.llamadas} llamadas · in ${u.input} (${u.inputCacheado} cacheado) · out ${u.output}`)
   console.log(`costo: $${usd.toFixed(4)}  →  $${(usd / Math.max(1, u.llamadas)).toFixed(6)} por fila`)
 }

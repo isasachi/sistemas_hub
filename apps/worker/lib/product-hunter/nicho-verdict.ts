@@ -95,9 +95,23 @@ export function citaRespaldada(cita: string, textos: string[]): boolean {
 // no duplicadas por el mismo motivo que el SYSTEM: dos preparaciones distintas
 // del mismo texto darían dos veredictos distintos sobre la misma fila.
 
-/** Quita las plantillas sin renderizar y se queda con lo que dice algo. */
+/**
+ * Quita las plantillas sin renderizar y se queda con lo que dice algo.
+ *
+ * ⚠️ `toWellFormed()` NO es cosmético: OpenAI rechaza el REQUEST ENTERO con
+ * `400 Invalid body: failed to parse JSON value` si el texto trae medio emoji
+ * (un surrogate sin su pareja), y ese medio emoji lo fabricamos NOSOTROS —
+ * `product-key.ts` corta el cuerpo del anuncio en 400 caracteres y el corte
+ * cae dentro del par. Reproducido contra la API: surrogate suelto → 400,
+ * emoji completo → 200. Medido en el barrido: 2 anunciantes perdidos en el
+ * nicho "enchufe inteligente", cuyo copy está lleno de 🔥.
+ *
+ * Va acá y no en el cliente de OpenAI porque el texto tiene que ser el MISMO
+ * que verifica `citaRespaldada`: limpiarlo después de armar el mensaje haría
+ * que la cita se compare contra un texto distinto del que vio el modelo.
+ */
 export function limpiarTextos(textos: string[]): string[] {
-  return textos.map((t) => t.replace(/\{\{[^}]*\}\}/g, ' ').replace(/\s+/g, ' ').trim())
+  return textos.map((t) => t.toWellFormed().replace(/\{\{[^}]*\}\}/g, ' ').replace(/\s+/g, ' ').trim())
     .filter((t) => t.length >= 12).slice(0, 12)
 }
 
@@ -214,9 +228,62 @@ export async function juzgarNichoOpenAI(input: VerdictInput): Promise<NichoVerdi
     usoOpenAI.inputCacheado += j.usage.prompt_tokens_details?.cached_tokens ?? 0
     usoOpenAI.output += j.usage.completion_tokens ?? 0
   }
-  if (j.error) throw new Error(`openai: ${j.error.message ?? 'error'}`)
+  // ⚠️ EL STATUS VA EN EL MENSAJE, y no es cosmético: `esFalloDeApi`
+  // (scan-verify.ts) decide con una regex si el barrido CORTA el lote o si
+  // marca la fila y sigue, y sus patrones —`5\d\d {`, `429`— están escritos
+  // para el formato del SDK de Anthropic. Sin el status acá, una caída de
+  // OpenAI no aborta: el barrido sigue horas quemando navegaciones (la parte
+  // cara) y marcando anunciantes como error. Es el fallo que esa función
+  // existe para evitar.
+  if (j.error) throw new Error(`openai ${res.status}: ${j.error.message ?? 'error'}`)
   const txt = j.choices?.[0]?.message?.content
   if (!txt) throw new Error('openai: respuesta sin contenido')
   const parsed = VerdictSchema.parse(JSON.parse(txt))
   return { ...parsed, citaVerificada: citaRespaldada(parsed.cita, textos) }
+}
+
+// ─── Qué motor juzga ──────────────────────────────────────────────────────────
+//
+// `scan-verify` no tiene por qué saber de proveedores: lo único que necesita es
+// "¿verifico, y con qué?". Ese era ya el significado real del parámetro `ai`
+// —null = no verificar— así que pasarlo a una función lo hace explícito en vez
+// de que el tipo del cliente decida el motor por accidente.
+//
+// ⚠️ SE ELIGE EN UN SOLO LUGAR a propósito. `scan-nicho` y `scan-base` aplican
+// la MISMA regla y construían cada uno su cliente; con dos construcciones, una
+// se queda en el motor viejo el día que el otro cambia — el mismo argumento por
+// el que la regla del veredicto vive en scan-verify y no en cada script.
+export type Juez = (input: VerdictInput) => Promise<NichoVerdict>
+
+/**
+ * El juez que pide el entorno, o `null` para medir sin verificar.
+ *
+ * `PH_NICHO_MOTOR=openai` usa gpt-5.6-luna; cualquier otro valor (y el default)
+ * usa Haiku. No se autodetecta por saldo: un fallback silencioso entre motores
+ * es lo que hace que "cambió el resultado" no se pueda atribuir a nada.
+ */
+export function juezDelEntorno(sinLlm = false): Juez | null {
+  if (sinLlm) return null
+  if ((process.env.PH_NICHO_MOTOR ?? '').toLowerCase() === 'openai') return juzgarNichoOpenAI
+  const ai = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
+  return (input) => juzgarNicho(ai, input)
+}
+
+/**
+ * El precio MEDIDO de lo que va del proceso. Tarifa de gpt-5.6-luna: $0,20 y
+ * $1,20 por millón (in/out), con el input cacheado a $0,02 — se descuenta
+ * aparte porque OpenAI ya lo informa.
+ *
+ * Vive junto al acumulador y no en cada script por lo de siempre: tres copias
+ * de una tarifa es como una se queda con el precio viejo.
+ */
+export function costoOpenAI(u = usoOpenAI): number {
+  return ((u.input - u.inputCacheado) * 0.20 + u.inputCacheado * 0.02 + u.output * 1.20) / 1e6
+}
+
+/** Una línea con las llamadas y el precio, o null si no se usó OpenAI. */
+export function resumenOpenAI(u = usoOpenAI): string | null {
+  if (!u.llamadas) return null
+  return `${MODELO_OPENAI}: ${u.llamadas} llamadas · in ${u.input} (${u.inputCacheado} cacheado) · ` +
+    `out ${u.output} · costo $${costoOpenAI(u).toFixed(4)}`
 }
