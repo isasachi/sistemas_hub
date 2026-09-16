@@ -1098,6 +1098,21 @@ const reglaPiezas = (imagenProducto: string) =>
   'Dos manos y nada más: para tomar algo, primero suelta lo que tenía. La tapa y el aplicador son los del envase ' +
   `de ${imagenProducto}: no hay una segunda copia, y el envase no se queda sin la suya.`
 
+/**
+ * PROMPT NEGATIVO, por decisión del dueño del repo (2026-09-16): la doctrina dice que a un
+ * modelo de difusión una prohibición le llega débil (`video-ads.md`, "no vuelve a
+ * dispensar", n=1), y el dueño tiene evidencia propia de que grok sí la respeta. Va al
+ * final y es lo último que suelta la escalera de degradación: cubre justo los defectos que más
+ * se repiten (tercera mano, objeto flotando o pasando por el aire, producto que aparece y
+ * desaparece, color o pieza que cambia). Duplica en parte a `reglaPiezas` y a los
+ * candados a propósito — acá en forma de lista de lo que no puede verse.
+ * ponytail: sin A/B todavía; medirlo con ≥2 renders por brazo antes de agrandar la lista.
+ */
+const negativo = (imagenProducto: string, imagenPersona: string) =>
+  'NEGATIVO — nunca: tercera mano o brazos de más; objetos suspendidos en el aire o pasando de mano a mano por el aire; producto que ' +
+  `desaparece y reaparece; tapa, pieza o color distinto a ${imagenProducto}; ropa de otro color que ${imagenPersona}; ` +
+  'objetos inexistentes en las referencias.'
+
 export function buildLotePrompt(args: {
   lote: Lote
   camara: string
@@ -1247,7 +1262,7 @@ export function buildLotePrompt(args: {
   // LA CÁMARA NUNCA SE SUPONE. Ni siquiera "en mano" autoriza a agregar microtemblor:
   // puede ser un corte estabilizado. Movimiento, soporte, encuadre y ángulo llegan del
   // forense y el render recibe una prohibición explícita de completar dimensiones.
-  const armar = (desc: string, unaLinea = false, candadosVisuales = true) => [
+  const armar = (desc: string, unaLinea = false, candadosVisuales = true, conNegativo = true) => [
     multiCorte
       ? `Video UGC vertical 9:16, ${lote.duracionSeg} segundos, ${tiemposFuente.length} cortes del video original en el orden indicado; conserva esas fronteras sin fusionarlas.`
       : `Video UGC vertical 9:16, ${lote.duracionSeg} segundos, una sola toma continua.`,
@@ -1276,10 +1291,15 @@ export function buildLotePrompt(args: {
     'Dice exactamente lo que está entre comillas arriba: no resumas, no extiendas, no corrijas, no agregues frases ni inventes diálogo para rellenar.',
     '',
     'Sin texto en pantalla: ni subtítulos, ni overlays, ni watermarks, ni interfaz. Solo el texto impreso en el propio producto.',
+    ...(conNegativo ? [negativo(imagenProducto, imagenPersona)] : []),
   ].join('\n')
 
   const prompt = armar(producto)
   if (prompt.length <= KIE_PROMPT_MAX) return prompt
+  // Con el negativo sumado, soltar el PRODUCTO primero lo perdía en 8 de 155 lotes (antes 5):
+  // se prueba antes la coreografía corrida CON producto, que es el que ancla el color.
+  const productoCorrido = armar(producto, true)
+  if (productoCorrido.length <= KIE_PROMPT_MAX) return productoCorrido
   const sinProducto = armar('')
   if (sinProducto.length <= KIE_PROMPT_MAX) return sinProducto
   // Segundo escalón: se suelta el FORMATO, no el contenido. Los mismos hechos vuelven a
@@ -1294,6 +1314,10 @@ export function buildLotePrompt(args: {
   // referencias, el teléfono y la integridad física de las piezas siguen presentes.
   const minimo = armar('', true, false)
   if (minimo.length <= KIE_PROMPT_MAX) return minimo
+  // El negativo es lo ÚLTIMO que se suelta: un lote que no entra no se renderiza, y eso es
+  // peor que un clip sin la lista.
+  const sinNegativo = armar('', true, false, false)
+  if (sinNegativo.length <= KIE_PROMPT_MAX) return sinNegativo
   throw new Error(
     `El prompt del Lote ${lote.n} no entra en el tope de KIE (${prompt.length} de ${KIE_PROMPT_MAX} caracteres). ` +
     'Con este formato eso solo puede pasar si la coreografía de las tomas del lote es enorme: ' +
