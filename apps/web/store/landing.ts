@@ -86,6 +86,20 @@ const initialState: LandingState = {
   regens: {},
 }
 
+/** Crea la fila y guarda su id; `null` si falló. */
+async function crearFila(): Promise<string | null> {
+  try {
+    const res = await fetch('/api/generador-landing/sessions', { method: 'POST' })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const { id } = (await res.json()) as { id: string }
+    if (!id) throw new Error('Sin id de sesión')
+    if (typeof window !== 'undefined') localStorage.setItem(SESSION_KEY, id)
+    return id
+  } catch {
+    return null
+  }
+}
+
 export const useLandingStore = create<LandingState & LandingActions>((set, get) => ({
   ...initialState,
 
@@ -160,16 +174,8 @@ export const useLandingStore = create<LandingState & LandingActions>((set, get) 
 
   startNewSession: async () => {
     set({ ...initialState })
-    try {
-      const res = await fetch('/api/generador-landing/sessions', { method: 'POST' })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const { id } = (await res.json()) as { id: string }
-      if (!id) throw new Error('Sin id de sesión')
-      if (typeof window !== 'undefined') localStorage.setItem(SESSION_KEY, id)
-      set({ sessionId: id })
-    } catch {
-      set({ sessionError: true })
-    }
+    const id = await crearFila()
+    set(id ? { sessionId: id } : { sessionError: true })
   },
 
   /**
@@ -182,8 +188,13 @@ export const useLandingStore = create<LandingState & LandingActions>((set, get) 
   ensureSession: async () => {
     const actual = get().sessionId
     if (actual) return actual
-    await get().startNewSession()
-    return get().sessionId
+    // ⚠️ NO pasa por `startNewSession`: su `set(initialState)` apagaba el `isLoading` que el
+    // paso acaba de prender, y el botón quedaba deshabilitado sin spinner. Tampoco prende
+    // `sessionError`: esa pantalla reemplaza el wizard entero y se llevaba lo que el
+    // usuario ya había cargado; el paso que llama ya muestra su propio error.
+    const id = await crearFila()
+    if (id) set({ sessionId: id })
+    return id
   },
 
   /**
