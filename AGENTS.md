@@ -128,11 +128,19 @@ decisión con su medición detrás. Y **no se cargan solas**: hay que leerlas.
 | `lib/whop.ts`, `packages/shared/plans.ts`, `lib/credits.ts`, `lib/gen-quota.ts`, `app/cuenta/**`, `app/admin/**`, `app/suscripcion/**` | `agents/suscripcion-whop.md` |
 | `lib/calculadora-costos/**`, `tools/calculadora-costos/**` | `agents/calculadora-costos.md` |
 
-⚠️ **`agents/video-ads.md` tiene 400 KB y su encabezado es un aviso de REINICIO** (commit
-`a3a25d6`): la sección `## V2 — el movimiento pasa a ser un artefacto estructurado (motion.ts)`
-describe módulos que **ya no existen en el árbol** (`motion.ts`, `MotionTimeline`, `anchors.ts`,
-`tramo.ts`, `concat.ts` sí volvió). Lo MEDIDO sobre grok en esas páginas sigue valiendo; el
-cableado que describen, no. Lee el titular en rojo del principio antes que nada.
+⚠️ **`agents/video-ads.md` tiene 356 KB y su encabezado es un aviso de REINICIO** (commit
+`a3a25d6`): el motor de este árbol es `grok-imagine-video-1-5-preview` y varias secciones describen
+cableado de otras ramas. Lee el titular en rojo del principio antes que nada — dice qué módulos
+**no existen acá**.
+
+⚠️ **Lo revertido vive en `agents/archivo/video-motores-revertidos.md`** (Veo 3.1, el experimento de
+4 motores, `wan/3-0-video`, el `MotionTimeline`/candado de movimiento y las anclas de pose).
+Verificado ausente del árbol. **Lo MEDIDO ahí sigue valiendo** —son ~20 renders pagados— y está
+resumido en la cabecera del archivo; el cableado que describe, no. No implementes contra él.
+
+⚠️ **Los headings de `video-ads.md` NO acotan su contenido**: es un diario cronológico y debajo de
+`## V2 — motion.ts` o de `### EL CANDADO DE MOVIMIENTO` cuelga doctrina VIVA. Partir por H2/H3
+archiva código que sigue corriendo — verificá contra el filesystem antes de mover nada.
 
 ## Leyes que valen en TODO el repo
 
