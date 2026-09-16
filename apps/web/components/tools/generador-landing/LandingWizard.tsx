@@ -75,7 +75,15 @@ export default function LandingWizard() {
   // riel sin reenviar nada. Se resetea al cambiar de sesión.
   const maxStep = useRef(0)
   const prevSession = useRef(sessionId)
-  if (prevSession.current !== sessionId) { prevSession.current = sessionId; maxStep.current = 0 }
+  // ⚠️ `null → id` NO remonta la sección: es la fila que NACE en el primer insumo
+  // (`ensureSession`), con el paso todavía a medias. Remontar ahí borraba lo que el usuario
+  // acababa de cargar y el error del paso en plena operación. Cambiar DE una sesión a otra
+  // sí remonta.
+  const sectionKey = useRef(sessionId ?? 'new')
+  if (prevSession.current !== sessionId) {
+    if (prevSession.current !== null) sectionKey.current = sessionId ?? 'new'
+    prevSession.current = sessionId; maxStep.current = 0
+  }
   maxStep.current = Math.max(maxStep.current, step)
 
   if (sessionError && !sessionId) {
@@ -136,7 +144,7 @@ export default function LandingWizard() {
     >
       {/* key por sesión: una sesión nueva remonta la sección → su useState local
           (sembrado del store) se reinicia y no arrastra datos de la anterior. */}
-      <div key={sessionId ?? 'new'} className={current === 5 ? 'mx-auto w-full max-w-[1160px] px-5 pb-16 md:px-8' : ''}>
+      <div key={sectionKey.current} className={current === 5 ? 'mx-auto w-full max-w-[1160px] px-5 pb-16 md:px-8' : ''}>
         <Section />
       </div>
     </StepWizard>
