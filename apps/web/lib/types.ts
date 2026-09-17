@@ -105,6 +105,40 @@ export const ConfirmedCopySchema = z.object({
 })
 export type ConfirmedCopy = z.infer<typeof ConfirmedCopySchema>
 
+// ─── Flujo de plantilla: el lote de variantes ────────────────────────────────
+
+/**
+ * UN anuncio del lote. La tríada del spec (§38) aterriza así: la PLANTILLA es
+ * `sessions.template_id` (cómo se ve), el CONCEPT es `concepto` (qué comunica) y la VARIANT es
+ * esta fila entera (cómo se implementa ese concepto en esa plantilla).
+ *
+ * ⚠️ EL ESTADO ES POR VARIANTE, y eso es lo que hace que el lote sea reanudable. `render-lote`
+ * persiste cada variante EN CUANTO termina, no al final: si el stream muere a los 4 minutos —o
+ * Vercel corta en `maxDuration`— lo que ya se pagó queda guardado y el reintento solo re-renderiza
+ * las pendientes. Es la misma lección que `resumeSeed` en el render por lotes de video.
+ */
+export const AdVariantSchema = z.object({
+  /** `v1`, `v2`… Es también el sufijo del kind de cuota (`anuncios-image:v1`). */
+  id: z.string(),
+  /** El mecanismo creativo que ESTA variante ejecuta ("errores", "mitos", "objeción"). */
+  concepto: z.string(),
+  /** Cómo entra: qué dolor, deseo u objeción ataca. Es lo que la distingue de sus hermanas. */
+  angulo: z.string(),
+  /**
+   * El copy por slot de la plantilla. Array y no `z.record` a propósito: este mismo schema viaja
+   * al modelo, y un objeto de claves dinámicas es justo donde los structured outputs se rompen.
+   */
+  slots: z.array(z.object({ slot: z.string(), texto: z.string() })),
+  estado: z.enum(['planificada', 'generando', 'lista', 'fallida']),
+  imageUrl: z.string().nullable().catch(null),
+  /** El motivo del fallo, para que la tarjeta pueda decir por qué y ofrecer reintentar. */
+  error: z.string().nullable().catch(null),
+})
+export type AdVariant = z.infer<typeof AdVariantSchema>
+
+export const AdBatchSchema = z.array(AdVariantSchema)
+export type AdBatch = z.infer<typeof AdBatchSchema>
+
 // ─── Session (API response shape) ────────────────────────────────────────────
 
 export interface SessionResponse {
@@ -125,4 +159,11 @@ export interface SessionResponse {
   confirmed_copy: ConfirmedCopy | null
   edit_instruction: string | null
   image_url: string | null
+  /**
+   * La plantilla elegida, o `null` en el flujo clásico. ⚠️ ES EL DISCRIMINADOR DE LOS DOS
+   * FLUJOS: no hay columna `flow` porque se deriva de acá, y una columna más sería una segunda
+   * fuente de verdad que se puede desincronizar con ésta.
+   */
+  template_id: string | null
+  variants: AdBatch | null
 }

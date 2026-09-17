@@ -6,6 +6,7 @@ import { aspectRatioOf } from '@/lib/aspect'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 import { ReferenceAnalysisSchema, ProductScanSchema, ConfirmedCopySchema } from '@/lib/types'
+import { contextoStep5 } from '@/lib/anuncios/step5-context'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -55,39 +56,21 @@ export async function POST(
 
         // Step 2: build prompt
         send({ status: 'building_prompt' })
-        const contextForReasoning = [
-          `=== REFERENCE ANALYSIS ===`,
-          `Format: ${aspectRatio ?? refAnalysis.format.ratio} — ${refAnalysis.format.platform}`,
-          `Physical position: ${refAnalysis.physicalPosition}`,
-          `Layout: ${refAnalysis.layoutDescription}`,
-          `Composition: ${refAnalysis.composition.join(' | ')}`,
-          `Style: ${refAnalysis.style}`,
-          `Colorimetry: ${refAnalysis.colorimetry}`,
-          `Typography: ${refAnalysis.typography}`,
-          `Creative concept: ${refAnalysis.creativeConcept ?? 'not identified'}`,
-          `Persuasive logic: ${refAnalysis.persuasiveLogic}`,
-          `Scene elements:`,
-          `  People: ${JSON.stringify(refAnalysis.sceneElements.people)}`,
-          `  Props: ${JSON.stringify(refAnalysis.sceneElements.props)}`,
-          `  Brand elements: ${JSON.stringify(refAnalysis.sceneElements.brandElements)}`,
-          `  Setting: ${refAnalysis.sceneElements.setting}`,
-          `Body zone the reference points at: ${refAnalysis.bodyFocus ?? 'none — the ad points at no body zone'}`,
-          `Attention markers: ${refAnalysis.attentionMarkers?.length ? refAnalysis.attentionMarkers.join(' | ') : 'none'}`,
-          ``,
-          `=== PRODUCT INFO ===`,
-          `Product name: ${session.product_name}`,
-          `What it is: ${session.what_it_is ?? 'not provided'}`,
-          `What it does: ${session.what_it_does}`,
-          `Target audience: ${session.target_audience}`,
-          `Product description: ${productScan.productDescription}`,
-          `Branding: ${productScan.brandingDescription ?? 'not provided'}`,
-          `Brand colors: ${productScan.brandColors?.length ? productScan.brandColors.join(', ') : 'not detected — keep the reference palette'}`,
-          `Logo provided: ${hasLogo ? 'YES — Image 3 is the brand logo' : 'NO'}`,
-          ``,
-          `=== APPROVED COPY ===`,
-          `Version ${confirmedCopy.version}:`,
-          ...confirmedCopy.breakdown.map((e) => `  ${e.element}: "${e.text}"`),
-        ].join('\n')
+        // El contexto se arma en `lib/anuncios/step5-context.ts`, compartido con `render-lote`
+        // (el flujo de plantilla): con una copia en cada ruta, un arreglo llegaría a un flujo y
+        // no al otro sin que nada lo dijera.
+        const contextForReasoning = contextoStep5({
+          aspectRatio,
+          ref: refAnalysis,
+          scan: productScan,
+          productName: session.product_name,
+          whatItIs: session.what_it_is,
+          whatItDoes: session.what_it_does,
+          targetAudience: session.target_audience,
+          hasLogo,
+          version: confirmedCopy.version,
+          copy: confirmedCopy.breakdown,
+        })
 
         let editInstruction = await callReasoning(STEP5_PROMPT, contextForReasoning, { preferGemini: true })
         if (precision) editInstruction += `\nAjuste solicitado por el usuario (priorízalo): ${precision}`

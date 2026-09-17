@@ -50,7 +50,13 @@ export default function AdWizard() {
     if (!saved) { resetSession(); return }
     fetch(`/api/generador-anuncios/sessions/${saved}`)
       .then((r) => (r.ok ? (r.json() as Promise<SessionResponse>) : Promise.reject()))
-      .then((s) => hydrateFromSession(s))
+      // ⚠️ Y AL REVÉS: una sesión del flujo de PLANTILLA no se reanuda acá. Los dos comparten
+      // `localStorage` y numeración de pasos, así que una de plantilla en el paso 3 caería en
+      // "Copy" con `copy_versions` en null. Ver el guard simétrico en `TemplateWizard`.
+      .then((s) => {
+        if (s.template_id) { localStorage.removeItem(SESSION_KEY); resetSession(); return }
+        hydrateFromSession(s)
+      })
       // ⚠️ Un id que ya no existe (sesión borrada del dashboard) o que es de otra cuenta
       // NO crea una fila: vacía el wizard y la sesión nace con el primer insumo, igual que
       // en el camino sin id. Con `startNewSession` acá, un link viejo o ajeno dejaba una
