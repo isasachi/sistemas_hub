@@ -174,15 +174,22 @@ describe('POST /api/buscador-productos/search — por categoría', () => {
     vi.mocked(getApprovedByCategory).mockRejectedValue(
       new Error('canceling statement due to statement timeout'),
     )
-    vi.spyOn(console, 'error').mockImplementation(() => {})
-    const res = await POST(req({ category: 'todos', bucket: '0-50' }))
+    // Se RESTAURA: `clearAllMocks` limpia las llamadas pero deja puesta la
+    // implementación, así que sin esto todos los tests de abajo correrían con
+    // `console.error` mudo y un error inesperado pasaría sin verse.
+    const mudo = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const res = await POST(req({ category: 'todos', bucket: '0-50' }))
 
-    expect(res.status).toBe(500)
-    const texto = await res.text()
-    expect(texto.length).toBeGreaterThan(0)
-    expect(JSON.parse(texto).error).toBeTruthy()
-    // El mensaje de Postgres no se le muestra al usuario.
-    expect(texto).not.toContain('statement timeout')
+      expect(res.status).toBe(500)
+      const texto = await res.text()
+      expect(texto.length).toBeGreaterThan(0)
+      expect(JSON.parse(texto).error).toBeTruthy()
+      // El mensaje de Postgres no se le muestra al usuario.
+      expect(texto).not.toContain('statement timeout')
+    } finally {
+      mudo.mockRestore()
+    }
   })
 
   it('"todos" NO manda lista de nichos (null) y ni pide el inventario', async () => {

@@ -253,9 +253,13 @@ export default function BuscadorProductosPage() {
       // mensaje de abajo inalcanzable: el usuario leía el error del parser en
       // vez de saber qué pasó. La ruta ya manda JSON siempre; esto cubre lo que
       // no la atraviesa (un 504 de la plataforma es HTML, no JSON).
+      // ⚠️ El `?? {}` no sobra: `JSON.parse("null")` devuelve `null`, no tira, y
+      // sin esto el `data.error` de abajo tiraría un TypeError que el catch
+      // convertiría en otro mensaje de parser — justo lo que este bloque vino a
+      // matar.
       const texto = await res.text();
       let data = {} as RawSearchResponse & { error?: string };
-      try { data = JSON.parse(texto); } catch { /* cuerpo vacío o HTML */ }
+      try { data = JSON.parse(texto) ?? {}; } catch { /* cuerpo vacío o HTML */ }
       if (!res.ok) throw new Error(data.error ?? `Error en la búsqueda (${res.status})`);
       setResult(data);
     } catch (e) {
