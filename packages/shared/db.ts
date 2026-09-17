@@ -924,10 +924,31 @@ function bucketQuery(niche: string, bucket: RawBucket, f?: RawFilters) {
 // obliga a otra lista de columnas, y mezclarlas en una sola función rompe el
 // tipado del cliente de Supabase.
 //
-// Medido 2026-08-12 contra el proyecto real: un `.in()` con los 528 nichos
-// (~6.9KB de querystring) responde en ~350ms sin que PostgREST se queje; la
-// categoría más grande arma ~2.4KB, así que hay margen de sobra.
-function categoriaQuery(niches: string[], bucket: RawBucket, f?: RawFilters) {
+// ⚠️ `niches = null` ES "TODOS", Y NO ES LO MISMO QUE PASAR LA LISTA ENTERA.
+// Medido 2026-08-12: un `.in()` con los 528 nichos (~6.9KB de querystring)
+// respondía en ~350ms. ESO YA NO VALE. Con 674 nichos y el rango `0-50` (79.316
+// filas servibles contra 11k y 5k de los otros dos), el `.in()` tumbaba la ruta
+// en producción: `57014 canceling statement due to statement timeout`, 38 veces
+// sobre 13 usuarios desde 2026-08-23, devueltas como un 500 con CUERPO VACÍO.
+//
+// El mecanismo está en el EXPLAIN, no en el reloj: el planner estima `rows=998`
+// para `niche = ANY(674)` y salen 79.316 —subestima 79×—, así que elige
+// `idx_ph_raw_products_servible` y hace ~79k heap fetches (`shared hit=78494`)
+// en vez del seq scan + top-N (10.5k buffers, 374ms). Medido por el camino real
+// (PostgREST, 3 tiros por brazo, las dos tablas de serving): CON `.in()` el tiro
+// en frío va 3,5-4,8s y llegó a 7,1/14,6/8,5s con timeout 3/3; SIN `.in()` se
+// queda en 0,6-0,9s. El presupuesto es 8s (`statement_timeout` de
+// `authenticator`; `service_role` no lo sobreescribe).
+//
+// ponytail: para "todos" el `.in()` es una TAUTOLOGÍA —`NO_SERVIBLES` es
+// `(inactivo,descartado)` y `getNichesWithInventory` (el RPC, `status <>
+// 'inactivo'`) devuelve todo nicho con una fila servible—, así que saltarlo no
+// cambia ni una fila. Techo: deja de serlo si los nichos activos pasan de 2000,
+// el límite del RPC (674 hoy, 3× de aire). Ahí hay que paginar el RPC, no
+// reponer el `.in()`.
+//
+// Una CATEGORÍA sigue mandando su lista: ahí el filtro no es tautológico.
+function categoriaQuery(niches: string[] | null, bucket: RawBucket, f?: RawFilters) {
   const { min, max } = bucketRange(bucket)
   // Las dos tablas no tienen las mismas columnas: el anunciante guarda el
   // anuncio representativo en `raw_data` (jsonb) y el producto lo tiene abierto
@@ -937,9 +958,9 @@ function categoriaQuery(niches: string[], bucket: RawBucket, f?: RawFilters) {
     : 'niche,page_id,name,product_name,country,ad_count,ad_start_date,raw_data,status,share,senal_nicho'
   let q = getDb().from(TABLA_SERVING)
     .select(cols)
-    .in('niche', niches)
     .not('status', 'in', NO_SERVIBLES)
     .gte('ad_count', min)
+  if (niches) q = q.in('niche', niches)
   if (max !== null) q = q.lt('ad_count', max)
   q = applyFilters(q, f)
   return q.order('ad_count', { ascending: false }).order('page_id')
@@ -981,12 +1002,13 @@ export async function getApprovedByBucket(
  * eliminó entera en 2026-08-13 y esto no la reintroduce.
  */
 export async function getApprovedByCategory(
-  niches: string[],
+  niches: string[] | null,
   bucket: RawBucket,
   limit = 10,
   filters?: RawFilters,
 ): Promise<RawProductRow[]> {
-  if (!niches.length) return []
+  // `null` = "todos" (sin filtro de nicho); una lista VACÍA sí es "ninguno".
+  if (niches && !niches.length) return []
   const [verificados, resto] = await Promise.all([
     categoriaQuery(niches, bucket, filters).eq('status', 'monoproducto').limit(limit * SOBRE_PEDIDO),
     categoriaQuery(niches, bucket, filters).not('status', 'in', '(inactivo,descartado,monoproducto)')
