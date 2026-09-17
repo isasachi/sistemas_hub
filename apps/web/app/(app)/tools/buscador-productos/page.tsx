@@ -247,8 +247,16 @@ export default function BuscadorProductosPage() {
           minDias: f?.dias ?? dias,
         }),
       });
-      const data = (await res.json()) as RawSearchResponse & { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Error en la búsqueda");
+      // ⚠️ El parseo va DEFENSIVO y el `res.ok` DESPUÉS. Con `await res.json()`
+      // directo, un 500 sin cuerpo —lo que devolvía esta ruta al morir por
+      // `statement_timeout`— tiraba "Unexpected end of JSON input" y dejaba el
+      // mensaje de abajo inalcanzable: el usuario leía el error del parser en
+      // vez de saber qué pasó. La ruta ya manda JSON siempre; esto cubre lo que
+      // no la atraviesa (un 504 de la plataforma es HTML, no JSON).
+      const texto = await res.text();
+      let data = {} as RawSearchResponse & { error?: string };
+      try { data = JSON.parse(texto); } catch { /* cuerpo vacío o HTML */ }
+      if (!res.ok) throw new Error(data.error ?? `Error en la búsqueda (${res.status})`);
       setResult(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error desconocido");

@@ -163,6 +163,37 @@ describe('POST /api/buscador-productos/search — por categoría', () => {
     expect(vi.mocked(getApprovedByBucket)).not.toHaveBeenCalled()
   })
 
+  // ⚠️ Este test es el candado del arreglo del `statement_timeout`: mandar la
+  // lista ENTERA de nichos (el filtro tautológico) hacía que el planner
+  // subestimara 79× el rango `0-50` y la consulta se pasara de los 8s, con un
+  // 500 de cuerpo vacío del otro lado. `null` = sin `.in()`.
+  // ⚠️ Un throw acá salía como 500 CON EL CUERPO VACÍO, y el `res.json()` del
+  // cliente moría con "Unexpected end of JSON input" — el error que veía el
+  // usuario en vez de uno que dijera algo. Pase lo que pase, sale JSON.
+  it('un fallo de la DB sale como JSON con `error`, no como un cuerpo vacío', async () => {
+    vi.mocked(getApprovedByCategory).mockRejectedValue(
+      new Error('canceling statement due to statement timeout'),
+    )
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const res = await POST(req({ category: 'todos', bucket: '0-50' }))
+
+    expect(res.status).toBe(500)
+    const texto = await res.text()
+    expect(texto.length).toBeGreaterThan(0)
+    expect(JSON.parse(texto).error).toBeTruthy()
+    // El mensaje de Postgres no se le muestra al usuario.
+    expect(texto).not.toContain('statement timeout')
+  })
+
+  it('"todos" NO manda lista de nichos (null) y ni pide el inventario', async () => {
+    conStockCat({ '100+': 2 })
+    const data = await (await POST(req({ category: 'todos' }))).json()
+
+    expect(data.status).toBe('ready')
+    expect(vi.mocked(getApprovedByCategory).mock.calls[0][0]).toBeNull()
+    expect(vi.mocked(getNichesWithInventory)).not.toHaveBeenCalled()
+  })
+
   it('sin bucket: autoelige el rango más alto con stock', async () => {
     conStockCat({ '0-50': 3 })
     const data = await (await POST(req({ category: 'salud' }))).json()

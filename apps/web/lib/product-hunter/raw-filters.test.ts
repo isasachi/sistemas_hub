@@ -93,5 +93,16 @@ describe('filtros globales → PostgREST', () => {
     expect(url).toContain('ad_start_date')
     expect(url).toContain('country=eq.CO')
     expect(url).toContain('ad_start_date.is.null')
+    expect(url).toContain('niche=in.')
+  })
+
+  // ⚠️ EL CANDADO DEL `statement_timeout`. Mandar los 674 nichos en "todos" es un
+  // filtro tautológico que el planner subestima 79× sobre el rango `0-50`: elige
+  // el índice por nicho, hace ~79k heap fetches y se come los 8s. Medido: CON
+  // `.in()` el tiro en frío va 3,5-4,8s y llegó a timeout 3/3; SIN, 0,6-0,9s.
+  it('"todos" (niches = null) NO manda el filtro de nicho', async () => {
+    const { getApprovedByCategory } = await import('@ph/shared')
+    expect(await urlDe(() => getApprovedByCategory(null, '0-50', 50)))
+      .not.toContain('niche=in.')
   })
 })

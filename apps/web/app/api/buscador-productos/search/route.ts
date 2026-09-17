@@ -49,7 +49,30 @@ async function tierDeLaRequest(): Promise<Tier> {
   return (await getAccess(user.id, user.email))?.tier ?? 1
 }
 
+/**
+ * ⚠️ UN THROW ACÁ LLEGABA AL NAVEGADOR COMO UN 500 CON EL CUERPO VACÍO, y el
+ * cliente hacía `res.json()` sobre esa nada: el usuario veía "Unexpected end of
+ * JSON input" en vez de un mensaje. Es lo que pasó 38 veces con el
+ * `statement_timeout` del rango `0-50`. El arreglo de la consulta está aguas
+ * abajo; esto es la red: pase lo que pase, sale JSON con `error`.
+ *
+ * El mensaje de Postgres no se le muestra al usuario —"canceling statement due
+ * to statement timeout" no le dice nada a nadie— pero sí se loguea, que es de
+ * donde salió el diagnóstico.
+ */
 export async function POST(req: NextRequest) {
+  try {
+    return await buscar(req)
+  } catch (err) {
+    console.error('[buscador-productos/search]', err)
+    return NextResponse.json(
+      { error: 'La búsqueda tardó demasiado. Prueba otro rango o vuelve a intentar.' },
+      { status: 500 },
+    )
+  }
+}
+
+async function buscar(req: NextRequest) {
   let body: {
     niche?: string; bucket?: string; category?: string
     country?: string; minDias?: number
@@ -106,8 +129,15 @@ export async function POST(req: NextRequest) {
   // del daemon entra solo) y se sirve el mismo rango sobre todos ellos.
   // Acá no hay cold start: los chips son categorías fijas, no consultas libres.
   if (category || todos) {
-    const inventario = await getNichesWithInventory()
-    const niches = todos ? inventario : inventario.filter((n) => categoryOf(n) === category)
+    // ⚠️ "Todos" NO manda la lista de nichos: manda `null`. Pasar los 674 hacía
+    // que el planner subestimara 79× las filas del rango `0-50` y la consulta
+    // se comiera el `statement_timeout` de 8s — el 500 con cuerpo vacío que la
+    // UI mostraba como "Unexpected end of JSON input". El detalle medido está
+    // sobre `categoriaQuery` en `@ph/shared`. Además se ahorra el RPC de nichos,
+    // que para "todos" solo servía para armar un filtro tautológico.
+    const niches = todos
+      ? null
+      : (await getNichesWithInventory()).filter((n) => categoryOf(n) === category)
     let servidoCat: RawBucket = aProbar[0]
     let productos: RawProductEntry[] = []
     for (const bucket of aProbar) {
