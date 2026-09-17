@@ -254,7 +254,9 @@ export function scriptFingerprint(input: {
     // v12 → v13: la evidencia física corrige una mano de cámara mal rotulada y elimina
     // gestos imposibles cuando la otra mano ya sostiene el producto. El prompt cambia
     // con los mismos insumos; un resume no puede mezclar clips de ambos contratos.
-    'v13',
+    // v13 → v14: el prompt cierra con una línea NEGATIVO fija (tercera mano, objetos flotando,
+    // producto que desaparece, color o pieza distinta). Cambia el texto con los mismos insumos.
+    'v14',
     producto,
     voz.idioma, voz.varianteRegional, voz.acento, voz.pronunciacion, voz.ritmo,
     voz.velocidad, voz.entonacion, voz.energia, voz.pausas, voz.tono, voz.timbre,

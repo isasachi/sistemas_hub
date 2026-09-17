@@ -418,7 +418,16 @@ describe('buildLotePrompt', () => {
     const normal = groupIntoLotes(Array.from({ length: 3 }, (_, i) =>
       ({ ...toma(i + 1, 5, `Frase ${i + 1} del guión.`), accionVisual: 'Sostiene el frasco a la altura del pecho con la mano derecha, lo gira para mostrar la etiqueta y mira a cámara.' })))
     expect(normal).toHaveLength(1)
-    expect(buildLotePrompt({ lote: normal[0], ...ARGS }).length).toBeLessThan(KIE_PROMPT_MAX / 2)
+    // Con la línea NEGATIVO el caso normal sube a ~2.100: sigue lejos del tope.
+    expect(buildLotePrompt({ lote: normal[0], ...ARGS }).length).toBeLessThan(KIE_PROMPT_MAX * 0.6)
+  })
+
+  it('cierra con la línea NEGATIVO citando las imágenes', () => {
+    const neg = p.split('\n').at(-1)!
+    expect(neg).toMatch(/^NEGATIVO — /)
+    expect(neg).toMatch(/tercera mano/)
+    expect(neg).toContain('distinto a Image2')
+    expect(neg).toContain('que Image1')
   })
 
   it('si aun así no entra, lanza un error explicando el exceso en vez de gastar la cuota', () => {

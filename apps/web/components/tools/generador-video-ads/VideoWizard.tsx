@@ -74,7 +74,14 @@ export default function VideoWizard() {
   // reenviar nada. Se resetea al cambiar de sesión (mismo patrón que AdWizard).
   const maxStep = useRef(0)
   const prevSession = useRef(sessionId)
-  if (prevSession.current !== sessionId) { prevSession.current = sessionId; maxStep.current = 0 }
+  // ⚠️ `null → id` NO remonta la sección: es la fila que NACE en el primer insumo
+  // (`ensureSession`), con el paso todavía a medias. Remontar ahí borraba el video elegido
+  // y el error del paso 0 en pleno análisis. Cambiar DE una sesión a otra sí remonta.
+  const sectionKey = useRef(sessionId ?? 'new')
+  if (prevSession.current !== sessionId) {
+    if (prevSession.current !== null) sectionKey.current = sessionId ?? 'new'
+    prevSession.current = sessionId; maxStep.current = 0
+  }
   maxStep.current = Math.max(maxStep.current, step)
 
   const gatedMaxReached = capMaxReached(maxStep.current, validation, VALIDATION_STEP)
@@ -143,7 +150,7 @@ export default function VideoWizard() {
       backHref="/tools/generador-video-ads"
       onReset={startNewSession}
     >
-      <div key={sessionId ?? 'new'}>
+      <div key={sectionKey.current}>
         <Section />
       </div>
     </StepWizard>
