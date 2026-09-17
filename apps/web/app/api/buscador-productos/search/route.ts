@@ -59,6 +59,11 @@ async function tierDeLaRequest(): Promise<Tier> {
  * El mensaje de Postgres no se le muestra al usuario —"canceling statement due
  * to statement timeout" no le dice nada a nadie— pero sí se loguea, que es de
  * donde salió el diagnóstico.
+ *
+ * ⚠️ El texto va NEUTRO a propósito. Acá no cae solo el timeout: también un
+ * fallo de Whop (`getAccess`), de la sesión o de cualquiera de los conteos. Un
+ * mensaje que culpe al rango sería mentirle al usuario sobre la causa en todos
+ * esos casos.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -66,7 +71,7 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     console.error('[buscador-productos/search]', err)
     return NextResponse.json(
-      { error: 'La búsqueda tardó demasiado. Prueba otro rango o vuelve a intentar.' },
+      { error: 'No pudimos completar la búsqueda. Vuelve a intentar en un momento.' },
       { status: 500 },
     )
   }
