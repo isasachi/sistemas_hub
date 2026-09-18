@@ -5,6 +5,7 @@ import { type Pais } from './filtros'
 import { prescore } from './prescore'
 import { sanitizeJsonDeep, cleanJsonText } from './json-clean'
 import { isServible } from './physical-filter'
+import { isBlocked } from './blocklist'
 
 // Cliente Supabase con service role (bypassa RLS), igual que lib/db.ts del hub.
 // Se usa tanto desde rutas Next como desde los scripts de GitHub Actions.
@@ -1099,8 +1100,13 @@ const textoDeFila = (r: RawProductRow | RawClusterRow) =>
     : [r.raw_data?.title, r.raw_data?.body]
   ).filter(Boolean).join(' — ')
 
+// ⚠️ El nicho bloqueado se filtra ACÁ y no solo en la ruta: el `isBlocked` de
+// `search/route.ts` corta la búsqueda POR NICHO, pero "Todos" y las categorías
+// no pasan por ahí y servían las filas de los nichos que `clean-niches` ya había
+// bloqueado (1.254 filas en 8 nichos sexuales, medido 2026-09-18). Es texto, no
+// columna — por eso va en JS, como la lista negra.
 const fisicos = (rows: RawProductRow[] | null) =>
-  (rows ?? []).filter((r) => isServible(textoDeFila(r), r.name))
+  (rows ?? []).filter((r) => !isBlocked(r.niche) && isServible(textoDeFila(r), r.name))
 
 /**
  * Chips de sugerencia de la portada: los nichos con más inventario servible.
@@ -1160,6 +1166,11 @@ export async function getProductsToRefresh(limit = 400): Promise<RawProductRow[]
     // serving muestra el inventario completo, filtrar por 'monoproducto' dejaba
     // la vigilancia sobre 122 de 28,730 productos. Los más viejos primero, así
     // la cobertura rota sola entre corridas.
+    // ⚠️ 'descartado' NO entra: no se sirve (20k navegaciones gastadas por
+    // vuelta) y `saveRefresh` lo des-descartaba solo — 0 anuncios → 'inactivo',
+    // y al volver a pautar → 'pendiente', o sea de vuelta al serving sin que
+    // nadie revirtiera el veredicto. 'inactivo' SÍ entra: de ahí sale el alta.
+    .neq('status', 'descartado')
     .order('checked_at', { ascending: true, nullsFirst: true })
     .limit(limit)
   if (error) throw new Error(error.message)
