@@ -28,16 +28,54 @@ interface AppShellProps {
  * terminar lo que el usuario está haciendo, así que vive al lado del avatar y no
  * escondido en el menú.
  *
- * ⚠️ Se pinta en el render del servidor de CADA página, o sea que se actualiza al
- * navegar, no en vivo. Generar una imagen sin cambiar de página deja el número
- * viejo hasta la siguiente navegación. Es aceptable: el valor real lo impone el
- * servidor en `checkGenQuota`, este contador solo informa. Si algún día molesta,
- * el upgrade es que las rutas de generación devuelvan `credits` (ya lo hacen) y un
- * client component lo refresque.
+ * ⚠️ El valor inicial lo pinta el servidor en el layout de `(app)` — y ese layout NO se
+ * vuelve a renderizar al navegar entre `/dashboard` y `/tools/*`: el App Router reusa los
+ * segmentos compartidos del árbol ya montado. O sea que sin relectura propia el número se
+ * congela en el del primer load y no se mueve aunque el usuario genere doce imágenes.
+ *
+ * ✅ **Medido, no deducido** (2026-09-18, Next 16.2.6): dos rutas de usar y tirar bajo un
+ * layout compartido, las tres con `force-dynamic`, y un `console.log` en cada una. Navegando
+ * de una a la otra con un `<Link>`, el servidor volvió a renderizar la PÁGINA y NO el layout
+ * — una sola línea de layout en todo el recorrido. Se reportó como "no se descuentan los
+ * créditos" con las 12 filas de `ph_gen_usage` bien escritas y `/cuenta` (que está FUERA de
+ * este layout, así que sí se re-renderiza) mostrando el saldo correcto: mentía la barra.
+ *
+ * Se relee de `/api/credits` al volver a la pestaña y cada minuto mientras está visible. No
+ * se hace por evento desde cada tool a propósito: son seis call sites hoy y la séptima tool
+ * se olvidaría de avisar. Una imagen tarda 15-90 s, así que un minuto llega a tiempo.
+ *
+ * Sigue siendo informativo: el valor que manda es el que impone `checkGenQuota` al generar.
  */
 export function CreditosPill({ restantes, limite }: { restantes: number; limite: number }) {
-  const bajo = creditosBajos(restantes, limite);
-  const sin = restantes <= 0;
+  const [saldo, setSaldo] = useState({ restantes, limite });
+  // El servidor gana cuando sí re-renderiza (login, recarga dura, volver de /cuenta).
+  useEffect(() => setSaldo({ restantes, limite }), [restantes, limite]);
+  useEffect(() => {
+    let vivo = true;
+    const leer = async () => {
+      if (document.visibilityState !== "visible") return;
+      try {
+        const r = await fetch("/api/credits", { cache: "no-store" });
+        const j = await r.json();
+        // Sin sesión la ruta devuelve `{}`: se conserva el último valor bueno.
+        if (vivo && typeof j?.restantes === "number" && typeof j?.limite === "number") {
+          setSaldo({ restantes: j.restantes, limite: j.limite });
+        }
+      } catch {
+        /* la barra solo informa: un fallo de red no tiene que romperla */
+      }
+    };
+    const id = setInterval(leer, 60_000);
+    document.addEventListener("visibilitychange", leer);
+    return () => {
+      vivo = false;
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", leer);
+    };
+  }, []);
+
+  const bajo = creditosBajos(saldo.restantes, saldo.limite);
+  const sin = saldo.restantes <= 0;
   const color = sin
     ? "border-[rgba(233,61,61,0.35)] bg-[rgba(233,61,61,0.12)] text-[#fca5a5]"
     : bajo
@@ -46,12 +84,12 @@ export function CreditosPill({ restantes, limite }: { restantes: number; limite:
   return (
     <Link
       href="/cuenta"
-      title={`Te quedan ${restantes} de ${limite} créditos en este período`}
-      aria-label={`Créditos: quedan ${restantes} de ${limite}`}
+      title={`Te quedan ${saldo.restantes} de ${saldo.limite} créditos en este período`}
+      aria-label={`Créditos: quedan ${saldo.restantes} de ${saldo.limite}`}
       className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-[Lato] text-[12px] font-bold no-underline transition-colors duration-200 ${color}`}
     >
       <Coins className="h-3.5 w-3.5" aria-hidden />
-      {restantes}
+      {saldo.restantes}
     </Link>
   );
 }
