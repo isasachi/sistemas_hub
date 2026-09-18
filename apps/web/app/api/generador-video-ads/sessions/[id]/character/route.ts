@@ -136,9 +136,14 @@ export async function POST(
  * prompt. Sin esta función, ese tercio se le devolvía al usuario como "no se pudo construir el
  * personaje", habiéndole cobrado la cuota.
  *
- * ⚠️ NO pasa por `generateImage` a propósito: ese choke point le agrega la regla de idioma de
- * textos visibles, y el avatar es una persona sobre fondo neutro — no lleva una sola letra. El
- * prompt del primario no cambia sin medirlo.
+ * ⚠️ NO pasa por `generateImage` a propósito: el PRIMARIO tiene que recibir exactamente el prompt
+ * que está medido, y `generateImage` le agrega la regla de idioma de textos visibles. El avatar es
+ * una persona sobre fondo neutro y no lleva una sola letra, así que esa regla no aporta nada.
+ *
+ * ⚠️ El RESPALDO sí la recibe: `geminiGenerateImage` la agrega por su cuenta, para que quien lo
+ * llame directo no tenga que acordarse. O sea los dos prompts NO son idénticos —el del respaldo
+ * trae una oración de más, inerte para esta pieza— y se deja así en vez de sacarla, porque sacarla
+ * significaría que la placa de zona (el otro call site directo) pierda la regla sin quererlo.
  */
 async function avatarConRespaldo(prompt: string): Promise<string> {
   try {

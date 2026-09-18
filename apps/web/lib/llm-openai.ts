@@ -19,6 +19,18 @@ import { correccionDeTope, stringsEnElTope } from './llm-clamp'
 const TEXT_MODEL = 'gpt-5.4-nano'
 const IMAGE_MODEL = 'gpt-image-2.5-sunburst'
 
+// ⚠️ EL TIMEOUT NO ES OPCIONAL, aunque el SDK no sea `fetch` pelado: su default son 10 MINUTOS,
+// más que el `maxDuration = 300` de las rutas de imagen. Sin esto, UNA llamada colgada se come el
+// presupuesto entero de la ruta, el request muere en 504 y `generateImage` NUNCA llega a pedirle
+// la imagen al respaldo — que es justo lo que el respaldo existe para cubrir. Es la misma ley que
+// el `AbortSignal.timeout` de `fetch` (ver AGENTS.md).
+//
+// El tope viaja por llamada y no en el cliente porque el texto y la imagen no se parecen en nada:
+// medido, el texto responde en 2-3s y la imagen en 13-15s. Cada uno lleva ~4x su peor caso
+// medido, que deja lugar a una respuesta lenta y no a un cuelgue.
+const TIMEOUT_TEXTO_MS = 30_000
+const TIMEOUT_IMAGEN_MS = 90_000
+
 let _client: OpenAI | null = null
 function client(): OpenAI {
   if (!_client) _client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
@@ -181,7 +193,7 @@ export async function openaiCallStructured<T>(
           { role: 'user', content: correccion ? [...toChatContent(parts), { type: 'text' as const, text: correccion }] : toChatContent(parts) },
         ],
         response_format,
-      })
+      }, { timeout: TIMEOUT_TEXTO_MS })
       const choice = res.choices[0]
       // Output truncado por límite de tokens → JSON incompleto; reintenta en vez de parsear a medias.
       if (choice?.finish_reason === 'length') { lastError = new Error(`openaiCallStructured(${schemaName}): respuesta truncada (length)`); continue }
@@ -214,7 +226,7 @@ export async function openaiCallReasoning(systemPrompt: string, userMessage: str
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userMessage },
     ],
-  })
+  }, { timeout: TIMEOUT_TEXTO_MS })
   return res.choices[0]?.message?.content ?? ''
 }
 
@@ -228,11 +240,11 @@ export async function openaiGenerateImage(parts: Part[], maxRetries: number, opt
     try {
       if (images.length) {
         const files = await Promise.all(images.map((im, j) => toFile(Buffer.from(im.data, 'base64'), `ref-${j}.png`, { type: im.mimeType })))
-        const res = await client().images.edit({ model: IMAGE_MODEL, image: files, prompt, size })
+        const res = await client().images.edit({ model: IMAGE_MODEL, image: files, prompt, size }, { timeout: TIMEOUT_IMAGEN_MS })
         const b64 = res.data?.[0]?.b64_json
         if (b64) return b64
       } else {
-        const res = await client().images.generate({ model: IMAGE_MODEL, prompt, size })
+        const res = await client().images.generate({ model: IMAGE_MODEL, prompt, size }, { timeout: TIMEOUT_IMAGEN_MS })
         const b64 = res.data?.[0]?.b64_json
         if (b64) return b64
       }

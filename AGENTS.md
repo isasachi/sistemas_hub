@@ -151,6 +151,33 @@ dentro de un hero. **El reordenamiento del par NO movió esa transformación de 
 ⚠️ **`gpt-5.4-nano` NO acepta `max_tokens`** (`400 unsupported_parameter`); el campo se llama
 `max_completion_tokens`. Hoy no se manda ninguno de los dos.
 
+⚠️ **NO REINTRODUZCAS EL CLAMP `imageResolution`.** Vivía en `kie-image.ts` y bajaba a `1K` los
+ratios `4:5`/`5:4`/`auto` porque *el marketplace de KIE* solo los ofrecía ahí. **Es una restricción
+de KIE, no de la API de Google**: medido el 2026-09-17 por el SDK nativo, `4:5` + `2K` responde en
+los DOS modelos (1856x2304, ratio 0.806). Importa porque `aspectFor('mockup')` devuelve `4:5` en
+todos los kits de branding: un clamp de más ahí sería inventar un límite que no existe.
+
+⚠️ **La clave de Google SÍ factura imagen.** El `429 prepayment credits are depleted` que este doc
+citaba (medido 2026-08-27) está muerto desde la recarga: verificado generando con
+`gemini-3.1-flash-image` (14 s) y con `gemini-3-pro-image` (22 s). Era el argumento por el que el
+respaldo de landing "no podía ser el SDK de Google" — ya no aplica, y la placa de zona depende de
+que siga así.
+
+✅ **El schema PLANO no le come casillas al copy de landing.** Es la duda razonable al invertir el
+par: `toStrictSchema` metía los 15 campos de `SectionCopy` en `required` y el plano exige 2. Medido
+con 6 draws reales (3 secciones × 2, `scripts/probe-copy-casillas.ts`): cada sección llena
+exactamente las casillas de SU plantilla y repite el mismo conjunto en los dos draws —`cta-final`
+→ subheadline/ctaHeadline/ctaSub/cta/accentWord, `beneficios` → subheadline/kicker/closingBold/
+closingSub/accentWord, `testimonios` → kicker/socialProof/accentWord— y los arrays vuelven con el
+conteo exacto (4, 5 y 3). Las casillas "ausentes" son las que esa sección no dibuja. **Los arrays
+siguen forzados por `sectionCopySchema`, y eso es lo que hay que cuidar**: son lo que sostiene la
+plantilla.
+
+⚠️ **Toda llamada a OpenAI lleva timeout explícito** (`TIMEOUT_TEXTO_MS` 30 s, `TIMEOUT_IMAGEN_MS`
+90 s). El SDK no es `fetch` pelado pero su default son **10 minutos**, más que el `maxDuration = 300`
+de las rutas de imagen: una llamada colgada se comía el presupuesto entero y el request moría en 504
+**sin llegar nunca al respaldo**.
+
 ⚠️ **El diseño de los schemas cuenta con esto:** lo que el modelo DEBE llenar se declara
 `.nullable()`, no `.nullish()` (ver las leyes de más abajo).
 
