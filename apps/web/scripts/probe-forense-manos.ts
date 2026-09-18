@@ -10,7 +10,7 @@
  */
 import { createClient } from '@supabase/supabase-js'
 import type { Part } from '@google/genai'
-import { geminiCallStructured, geminiEsDirecto } from '@/lib/gemini'
+import { geminiCallStructured } from '@/lib/gemini'
 import { VIDEO_SYSTEM_PROMPT } from '@/lib/video-ads/llm'
 import { buildForensicInstruction, ForensicReportSchema } from '@/lib/video-ads/forensic'
 import { fetchAsBase64, headStorageFile } from '@/lib/storage'
@@ -31,11 +31,10 @@ async function main() {
   const url = (data as any).reference_video_url as string
   if (!url) throw new Error('la sesión no tiene video de referencia')
 
-  const { mimeType } = await headStorageFile(url, MAX_VIDEO_MB * 1024 * 1024)
+  await headStorageFile(url, MAX_VIDEO_MB * 1024 * 1024)
+  // Inline, igual que la ruta real: el SDK de Google no acepta una URL de Supabase.
   const parts: Part[] = [
-    geminiEsDirecto()
-      ? { inlineData: await fetchAsBase64(url, MAX_VIDEO_MB * 1024 * 1024) }
-      : { fileData: { fileUri: url, mimeType } },
+    { inlineData: await fetchAsBase64(url, MAX_VIDEO_MB * 1024 * 1024) },
     { text: buildForensicInstruction() },
   ]
   const nuevo = await geminiCallStructured('forensic_report', ForensicReportSchema, parts, 3, VIDEO_SYSTEM_PROMPT)

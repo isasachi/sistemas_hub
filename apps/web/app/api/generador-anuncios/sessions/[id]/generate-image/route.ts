@@ -89,7 +89,7 @@ export async function POST(
           ...confirmedCopy.breakdown.map((e) => `  ${e.element}: "${e.text}"`),
         ].join('\n')
 
-        let editInstruction = await callReasoning(STEP5_PROMPT, contextForReasoning, { preferGemini: true })
+        let editInstruction = await callReasoning(STEP5_PROMPT, contextForReasoning)
         if (precision) editInstruction += `\nAjuste solicitado por el usuario (priorízalo): ${precision}`
 
         // Step 3: generate

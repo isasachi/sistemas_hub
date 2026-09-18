@@ -41,7 +41,7 @@ const CTX = [
  * referencia y lo único distinto, el color.
  */
 async function main() {
-  const out = await callReasoning(STEP5_PROMPT, CTX, { preferGemini: true })
+  const out = await callReasoning(STEP5_PROMPT, CTX)
 
   // Único check robusto a la redacción: que el recoloreo haya ocurrido con los hex de la MARCA.
   const marca = ['#1E0811', '#BD1347', '#F6F2EB'].filter((h) => out.toUpperCase().includes(h))

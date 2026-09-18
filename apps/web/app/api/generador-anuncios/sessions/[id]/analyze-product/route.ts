@@ -92,7 +92,7 @@ export async function POST(
 
   const [productUrl, scan] = await Promise.all([
     uploadToStorage(id, productBytes, productMime, 'product'),
-    callStructured('product_scan', ProductScanSchema, parts, 3, undefined, { preferGemini: true }),
+    callStructured('product_scan', ProductScanSchema, parts, 3),
   ])
 
   const logoUrl = logoBytes && logoMime

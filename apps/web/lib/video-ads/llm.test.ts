@@ -23,8 +23,12 @@ describe('callVideoAds', () => {
     expect(system).not.toContain('physicalPosition')
   })
 
-  it('sigue forzando Gemini', async () => {
+  // El orden de proveedores dejó de ser cosa de este envoltorio el 2026-09-17: Gemini es el
+  // primario de TODO el hub y `preferGemini` se borró. Lo que este wrapper sigue garantizando
+  // —y lo que se rompe si alguien llama a `callStructured` a pelo desde una ruta de video— es el
+  // system prompt, que es lo que fija el test de arriba.
+  it('no le pasa opciones al router: el par es el default del hub', async () => {
     await callVideoAds('x', z.object({ ok: z.boolean() }), [{ text: 'hola' }])
-    expect(callStructured.mock.calls[0][5]).toEqual({ preferGemini: true })
+    expect(callStructured.mock.calls[0][5]).toBeUndefined()
   })
 })

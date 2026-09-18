@@ -4,7 +4,13 @@ vi.mock('@/lib/video-ads/db', () => ({
   getVideoSession: vi.fn(),
   updateVideoSession: vi.fn(),
 }))
-vi.mock('@/lib/gemini', () => ({ callStructured: vi.fn() }))
+vi.mock('@/lib/gemini', () => ({
+  callStructured: vi.fn(),
+  // El respaldo del avatar. Sin stubearlo, el primer test que haga fallar al primario muere con
+  // "No 'geminiGenerateImage' export is defined on the mock" en vez de medir la rama.
+  geminiGenerateImage: vi.fn(),
+  NANO_BANANA_PRO: 'gemini-3-pro-image',
+}))
 vi.mock('@/lib/llm-openai', () => ({ openaiGenerateImage: vi.fn() }))
 vi.mock('@/lib/storage', () => ({
   uploadToStorage: vi.fn().mockResolvedValue('https://x.supabase.co/avatar-nuevo.png'),
@@ -19,7 +25,7 @@ vi.mock('@/lib/product-hunter/session', () => ({ readUserId: vi.fn().mockResolve
 import { NextRequest } from 'next/server'
 import { POST } from './route'
 import { getVideoSession, updateVideoSession } from '@/lib/video-ads/db'
-import { callStructured } from '@/lib/gemini'
+import { callStructured, geminiGenerateImage } from '@/lib/gemini'
 import { openaiGenerateImage } from '@/lib/llm-openai'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import type { VideoSessionResponse } from '@/lib/video-ads/types'
@@ -127,5 +133,42 @@ describe('POST character', () => {
     vi.mocked(getVideoSession).mockResolvedValue(session({ character_url: 'https://x/foto-A.png' }))
     await POST(req(), ctx())
     expect(openaiGenerateImage).toHaveBeenCalledWith(expect.anything(), 2, { aspectRatio: '9:16' })
+  })
+
+  // ⚠️ ESTA RAMA ES EL MOTIVO DEL ARREGLO, así que sin test no está hecha: está medido que el
+  // modelo de imagen de OpenAI rechaza por moderación ~1 de cada 3 avatares con la MISMA foto y
+  // el MISMO prompt, y hasta el 2026-09-17 ese tercio volvía como "no se pudo construir el
+  // personaje" con la cuota ya cobrada.
+  describe('respaldo del avatar', () => {
+    it('si el primario TIRA, el avatar lo hace nano-banana-pro con el mismo prompt y ratio', async () => {
+      vi.mocked(getVideoSession).mockResolvedValue(session({ character_url: 'https://x/foto-A.png' }))
+      vi.mocked(openaiGenerateImage).mockRejectedValueOnce(Object.assign(new Error('moderation_blocked'), { code: 'moderation_blocked' }))
+      vi.mocked(geminiGenerateImage).mockResolvedValue('B64_RESPALDO')
+
+      const res = await POST(req(), ctx())
+
+      expect(res.status).toBe(200)
+      const prompt = vi.mocked(openaiGenerateImage).mock.calls[0][0]
+      expect(geminiGenerateImage).toHaveBeenCalledWith('gemini-3-pro-image', prompt, 2, { aspectRatio: '9:16' })
+    })
+
+    // Vacío no tira, así que sin esta rama el avatar se subía como 0 bytes.
+    it('una respuesta VACÍA del primario también cae al respaldo', async () => {
+      vi.mocked(getVideoSession).mockResolvedValue(session({ character_url: 'https://x/foto-A.png' }))
+      vi.mocked(openaiGenerateImage).mockResolvedValueOnce('')
+      vi.mocked(geminiGenerateImage).mockResolvedValue('B64_RESPALDO')
+
+      await POST(req(), ctx())
+      expect(geminiGenerateImage).toHaveBeenCalled()
+    })
+
+    // Si los DOS fallan es un 500 de verdad: no hay avatar que subir.
+    it('si el respaldo también falla, responde 500', async () => {
+      vi.mocked(getVideoSession).mockResolvedValue(session({ character_url: 'https://x/foto-A.png' }))
+      vi.mocked(openaiGenerateImage).mockRejectedValue(new Error('moderación'))
+      vi.mocked(geminiGenerateImage).mockRejectedValue(new Error('también falló'))
+
+      expect((await POST(req(), ctx())).status).toBe(500)
+    })
   })
 })

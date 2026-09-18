@@ -1,9 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { NicheId, DemographicId, LandingDnaSchema, NicheClassification, SECTION_REF, SECTION_SPEC_KEY, SectionType, limpiarCopy, limpiarMarcado } from './types'
 
-import { z } from 'zod'
 import { SectionCopySchema, OfferGenSchema, aKind } from './types'
-import { schemaAceptado } from '../kie-gemini'
 
 describe('contrato landing (spec 2026-07-23)', () => {
   it('SectionCopySchema acepta los campos nuevos del motor de plantillas', () => {
@@ -80,13 +78,13 @@ describe('compat del renombre type → kind', () => {
     expect(SectionCopySchema.safeParse(aKind({ type: 'hero', headline: 'H' })).success).toBe(true)
   })
 
-  // El guard que hace falta para que esto no se rompa solo: ningún schema que viaje a Gemini
-  // puede volver a tener una propiedad llamada `type`.
-  it('los schemas que van al modelo no llevan una propiedad "type"', () => {
-    for (const [nombre, schema] of [['landing_copy', SectionCopySchema], ['landing_offer', OfferGenSchema]] as const) {
-      expect(schemaAceptado(z.toJSONSchema(schema)), nombre).toBe(true)
-    }
-  })
+  // ⚠️ ACÁ VIVÍA UN GUARD QUE SE BORRÓ CON SU MOTIVO (2026-09-17). Fijaba que ningún schema
+  // llevara una propiedad llamada `type`, porque el validador de KIE la confundía con la palabra
+  // reservada y devolvía `422 …properties.type must be string or array`. Con KIE fuera del hub,
+  // el SDK de Google no tiene esa restricción y el guard ya no fija nada real.
+  //
+  // El rename `type` → `kind` NO se revierte: las sesiones guardadas traen `type` y `aKind` las
+  // normaliza al leer (lo de arriba). Revertirlo sería churn sobre un jsonb que ya funciona.
 })
 
 describe('limpiarCopy', () => {

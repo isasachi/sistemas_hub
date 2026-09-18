@@ -1,10 +1,10 @@
 import { z } from 'zod'
-import { callStructured } from '@/lib/gemini'
+import { geminiCallStructured } from '@/lib/gemini'
 import type { Part } from '@google/genai'
 
 // Recorte del producto para el ANCLA. El ancla es el render de la 1ª sección (un diseño
 // completo con layout); pasar ese render entero a las demás secciones les hace clonar su
-// estructura. Aislamos el producto: bbox por visión (gemini-2.5-flash) + crop con sharp →
+// estructura. Aislamos el producto: bbox por visión (Gemini) + crop con sharp →
 // el ancla queda como un "swatch" del producto sin layout que imitar. Si el bbox falla o es
 // absurdo, el caller se cae al render completo (nunca peor que hoy). Todo Gemini, $0-rule OK.
 
@@ -39,9 +39,12 @@ export async function extractProductBox(base64: string, mimeType: string): Promi
       { inlineData: { mimeType, data: base64 } },
       { text: 'Detect the main physical product and return its box_2d as [ymin, xmin, ymax, xmax] in 0-1000.' },
     ]
-    // preferGemini: la detección de bbox es netamente mejor en Gemini (box_2d es su formato nativo);
-    // gpt-4o-mini devuelve cajas cortadas. Gemini primario aquí, OpenAI solo como fallback.
-    const { box_2d } = await callStructured('product_box', BoxSchema, parts, 2, SYSTEM, { preferGemini: true })
+    // ⚠️ SIN RESPALDO, y a propósito (decisión del dueño del repo, 2026-09-17): la detección de
+    // bbox es netamente mejor en Gemini —`box_2d [0-1000]` es el formato en el que está
+    // entrenado— y el modelo de respaldo devuelve cajas cortadas. Un recorte mal hecho es PEOR
+    // que no recortar: el caller ya sabe caerse al render completo cuando esto devuelve null,
+    // así que fallar es una salida mejor que entregar el producto amputado.
+    const { box_2d } = await geminiCallStructured('product_box', BoxSchema, parts, 2, SYSTEM)
     const [ymin, xmin, ymax, xmax] = box_2d.map((n) => n / 1000)
     const box: ProductBox = { x: xmin, y: ymin, w: xmax - xmin, h: ymax - ymin }
     const inRange = [box.x, box.y, box.w, box.h].every((n) => n >= 0 && n <= 1)

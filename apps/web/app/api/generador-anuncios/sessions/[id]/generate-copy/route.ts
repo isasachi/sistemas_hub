@@ -124,7 +124,7 @@ export async function POST(
     },
   ]
 
-  const copyVersions = await callStructured('copy_versions', CopyVersionsSchema, parts, 3, undefined, { preferGemini: true })
+  const copyVersions = await callStructured('copy_versions', CopyVersionsSchema, parts, 3)
 
   // El modelo redacta, el código verifica. Si el andamiaje de la plantilla no sobrevive en el texto
   // final, B no templó: redactó — y entonces las dos versiones son lo mismo con otro nombre.

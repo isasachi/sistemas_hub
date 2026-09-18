@@ -71,7 +71,7 @@ async function main() {
   ]
 
   for (const c of casos) {
-    const out = await callReasoning(STEP5_PROMPT, c.ctx, { preferGemini: true })
+    const out = await callReasoning(STEP5_PROMPT, c.ctx)
     const low = out.toLowerCase()
     const hits = (re: RegExp) => (out.match(re) ?? []).length
     console.log(`\n${'='.repeat(78)}\n${c.nombre}  (${out.length} car)\n${'='.repeat(78)}`)

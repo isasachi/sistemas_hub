@@ -3,3 +3,5 @@
 
 # mockups generados por scripts/gen-mockups-openai.ts (locales, no versionar)
 generated-mockups/
+scripts/.probe-out/
+scripts/_g.ts

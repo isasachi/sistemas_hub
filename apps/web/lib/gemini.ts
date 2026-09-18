@@ -3,11 +3,10 @@ import { z } from 'zod'
 import fs from 'fs'
 import path from 'path'
 import { openaiCallStructured, openaiCallReasoning, openaiGenerateImage } from './llm-openai'
-import { kieGeminiStructured, kieGeminiReasoning } from './kie-gemini'
-import { kieGenerateImage, type ModeloImagen } from './kie-image'
 import { clampTooBigStrings, correccionDeLargo, sliceToWord } from './llm-clamp'
+import { GEMINI_TEXTO, NANO_BANANA_2, NANO_BANANA_PRO, type RespaldoImagen } from './modelos'
 
-// Re-exportados desde el módulo hoja `llm-clamp.ts`: los necesita también `kie-gemini.ts`, y este
+// Re-exportados desde el módulo hoja `llm-clamp.ts`: los usan también los call sites, y este
 // archivo lo importa a él — dejarlos acá era un ciclo. Los importadores no cambiaron.
 export { clampTooBigStrings, sliceToWord }
 
@@ -15,65 +14,26 @@ function getAI() {
   return new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY! })
 }
 
-// ─── Motor de IA: OpenAI PRIMARIO, Gemini FALLBACK (2026-07-23) ──────────────
-// Antes Gemini era el motor y OpenAI un cableado alternativo tras un flag. Ahora se invierte: el
-// motor principal (texto, visión, imagen) es el SDK de OpenAI (gpt-4o-mini + gpt-image-2); si una
-// llamada de OpenAI falla (error, vacío o timeout), se cae a Gemini. Escape hatch: `LLM_PROVIDER=
-// gemini` fuerza Gemini-only (sin tocar OpenAI) — útil para costo o si OpenAI está caído.
-function geminiForced(): boolean {
-  return process.env.LLM_PROVIDER === 'gemini'
-}
-
-// ─── Recurso migrado a KIE: el texto/visión de Gemini (2026-08-25) ───────────
-// `gemini-2.5-flash` sale por `api.kie.ai` en vez del SDK de Google. Es UN recurso: gpt-4o-mini
-// sigue primario donde lo era, la IMAGEN de Gemini (`gemini-3.1-flash-image`) sigue en el SDK, y
-// el render de video y el worker no se tocan.
+// ─── Motor de IA: los DOS SDK directos, sin KIE (2026-09-17) ─────────────────
+// KIE queda reducido a UN recurso en todo el hub: el render de video con Grok
+// (`lib/video-ads/kie.ts`, y con la key del USUARIO). Todo lo demás —texto, visión e imagen—
+// sale por el SDK de Google o el de OpenAI.
 //
-// ⚠️ `GEMINI_VIA=direct` lo devuelve al SDK sin revertir código. Es lo que hace reversible el
-// slice: si KIE se cae PARA ESTE RECURSO, se cambia una variable y no hay que desplegar nada.
-export function geminiEsDirecto(): boolean {
-  return process.env.GEMINI_VIA === 'direct'
-}
-function viaDirecta(): boolean {
-  return geminiEsDirecto()
-}
-
-// ─── Recurso migrado a KIE: la IMAGEN (2026-08-25) ──────────────────────────
-// `gpt-image-2` y `gemini-3.1-flash-image` (en KIE, `nano-banana-2`) salen por el marketplace.
-// El par no cambia: gpt-image-2 primario, nano-banana-2 de respaldo, y `preferGemini` lo invierte.
+// El par de TEXTO es uno solo y vale para todo el hub: **Gemini primario, OpenAI de respaldo**.
+// Por eso `callStructured`/`callReasoning` ya no toman opciones: antes el orden se elegía por
+// call site con `preferGemini`, y con Gemini de primario en todos lados ese flag solo podía
+// significar "el orden de siempre". Los dos únicos sitios que NO quieren respaldo
+// —el forense de video y la caja del producto de landing— llaman a `geminiCallStructured`
+// directo, que es una función distinta y se lee como lo que es.
 //
-// ⚠️ `IMAGE_VIA=direct` devuelve el recurso a los SDK sin desplegar. Va aparte de `GEMINI_VIA`
-// porque son dos recursos distintos: se puede tener el texto en KIE y la imagen en los SDK, o al
-// revés, que es justo el punto de migrar de a uno.
-// ⚠️ Y se puede forzar POR LLAMADA (`opts.viaDirecta`), no solo por entorno. Existe porque el
-// caso real no es "migrar el hub entero", es "esta tool necesita el otro camino": medido el
-// 2026-08-27, **gpt-image-2 por KIE rechaza los prompts de landing 3 de 3** con "The current
-// content could not be processed" y `generateImage` cae al respaldo en silencio — el mismo
-// prompt, por el SDK directo, se acepta. La variable de entorno lo arreglaba para TODO el hub,
-// incluidos anuncios y branding, que hoy funcionan bien por KIE.
-function imagenDirecta(): boolean {
-  return process.env.IMAGE_VIA === 'direct'
-}
-
-// ⚠️ Latencia de imagen (constraint de despliegue, NO se resuelve solo con este cableado):
-// gpt-image-2 tarda ~60-90s por imagen (medido). Las rutas de imagen en Vercel Hobby tienen
-// maxDuration 60s → OpenAI como primario de imagen las 504-earía en PROD antes de poder caer a
-// Gemini (el timeout de Vercel mata el request). Default aquí = SIN timeout (0): en local/testing
-// OpenAI corre completo (honra "OpenAI primario de imagen"). Para PROD, setear `LLM_IMAGE_TIMEOUT_MS`
-// (p.ej. 45000) hace que un OpenAI lento se abandone y caiga a Gemini (~15s) dentro del presupuesto
-// — a costa de que la imagen la termine haciendo Gemini. Alternativa: `LLM_PROVIDER=gemini` (imagen
-// Gemini-primaria en prod) o subir maxDuration en un plan Vercel pago. Texto/visión (gpt-4o-mini)
-// responden en segundos y no tienen este problema.
-function imageTimeoutMs(): number {
-  const n = Number(process.env.LLM_IMAGE_TIMEOUT_MS)
-  return Number.isFinite(n) && n > 0 ? n : 0
-}
-function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
-  if (!ms || ms <= 0) return p
-  let t: ReturnType<typeof setTimeout>
-  const timeout = new Promise<never>((_, reject) => { t = setTimeout(() => reject(new Error(`timeout ${ms}ms`)), ms) })
-  return Promise.race([p.finally(() => clearTimeout(t)), timeout])
-}
+// ⚠️ NO HAY ESCAPES GLOBALES, y es a propósito (decisión del dueño del repo, 2026-09-17).
+// `LLM_PROVIDER`, `GEMINI_VIA`, `IMAGE_VIA` y `LLM_IMAGE_TIMEOUT_MS` se borraron: cada call site
+// declara su par, que es lo que se puede leer sin correr el programa. Si un modelo se cae, se
+// cambia la constante de acá y se despliega.
+// Los IDs viven en `lib/modelos.ts`, un módulo hoja: este archivo lee prompts del disco al
+// importarse, así que un `'use client'` que necesite un id no puede pasar por acá. Se re-exportan
+// para que un call site de servidor los pida donde le quede cómodo.
+export { GEMINI_TEXTO, NANO_BANANA_2, NANO_BANANA_PRO, type RespaldoImagen }
 
 export const SYSTEM_PROMPT = fs.readFileSync(
   path.join(process.cwd(), 'lib/prompts/gemini-system.md'),
@@ -90,10 +50,23 @@ export const BRANDING_SYSTEM_PROMPT = fs.readFileSync(
   'utf-8'
 )
 
-// Gemini structured (fallback). Contiene la lógica de recuperación de strings 'too_big'.
-// Exportada también como entrada directa para el análisis forense de video:
-// `callStructured` es OpenAI-primario y gpt-4o-mini no acepta partes de video, así que
-// ahí no sirven ni el fallback ni `preferGemini`.
+/**
+ * Gemini structured, SIN respaldo. Es el primario de `callStructured` y, además, la entrada que
+ * usan los dos sitios que no quieren caer a OpenAI:
+ *
+ *  - el análisis forense del video (`analyze-reference`): el modelo de respaldo no procesa video,
+ *    así que no hay a qué caer.
+ *  - la caja del producto de landing (`extractProductBox`): el formato `box_2d [0-1000]` es en el
+ *    que Gemini está entrenado y el respaldo devuelve cajas cortadas — un recorte mal hecho es
+ *    peor que no tener recorte (decisión del dueño del repo, 2026-09-17).
+ *
+ * ⚠️ EL SCHEMA VA PLANO (`z.toJSONSchema` tal cual), NUNCA por `toStrictSchema`. Esa
+ * transformación —todo en `required` + los opcionales nullable— es un requisito de los structured
+ * outputs de OpenAI y vive en `llm-openai.ts`. Aplicarla acá obliga al modelo a rellenar campos
+ * que el schema dice que puede omitir, y entonces los inventa: medido con `bulletsAfter`, un
+ * array opcional que volvió como un STRING dentro de un hero. Verificado el 2026-09-17 contra
+ * `gemini-3.6-flash`: con el schema plano, un opcional omitido vuelve ausente.
+ */
 export async function geminiCallStructured<T>(
   schemaName: string,
   schema: z.ZodSchema<T>,
@@ -101,26 +74,13 @@ export async function geminiCallStructured<T>(
   maxRetries = 3,
   systemInstruction: string = SYSTEM_PROMPT,
 ): Promise<T> {
-  return viaDirecta()
-    ? geminiDirectoStructured(schemaName, schema, parts, maxRetries, systemInstruction)
-    : kieGeminiStructured(schemaName, schema, parts, maxRetries, systemInstruction)
-}
-
-/** El camino de siempre por `@google/genai`. Solo se usa con `GEMINI_VIA=direct`. */
-async function geminiDirectoStructured<T>(
-  schemaName: string,
-  schema: z.ZodSchema<T>,
-  parts: Part[],
-  maxRetries: number,
-  systemInstruction: string,
-): Promise<T> {
   let lastError: unknown = new Error(`geminiCallStructured(${schemaName}): no attempts`)
   // El reintento NO puede mandar el mismo prompt: ver `correccionDeLargo`.
   let correccion: string | null = null
   for (let i = 0; i < maxRetries; i++) {
     try {
       const res = await getAI().models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: GEMINI_TEXTO,
         contents: [{ role: 'user', parts: correccion ? [...parts, { text: correccion }] : parts }],
         config: {
           systemInstruction,
@@ -152,76 +112,48 @@ async function geminiDirectoStructured<T>(
   throw lastError
 }
 
-// Texto+visión estructurado: OpenAI (gpt-4o-mini) primario, Gemini fallback en fallo.
-// `preferGemini`: invierte el orden para tareas donde Gemini es netamente mejor — la detección de
-// bounding box (`extractProductBox`) usa el formato box_2d [0-1000] en el que Gemini está entrenado;
-// gpt-4o-mini devuelve cajas imprecisas (recortes cortados). Gemini primario + OpenAI fallback ahí.
+/**
+ * Texto+visión estructurado: **Gemini primario, OpenAI de respaldo**. Es el par de TODO el hub
+ * —anuncios, video, branding y landing— y por eso no toma opciones.
+ *
+ * El respaldo es visión también: verificado el 2026-09-17 que `gpt-5.4-nano` acepta una imagen
+ * por `toChatContent` y responde con `response_format: json_schema strict`. Sin eso, el respaldo
+ * de `analyze-reference` y del scan de producto sería letra muerta.
+ */
 export async function callStructured<T>(
   schemaName: string,
   schema: z.ZodSchema<T>,
   parts: Part[],
   maxRetries = 3,
   systemInstruction: string = SYSTEM_PROMPT,
-  opts?: { preferGemini?: boolean }
 ): Promise<T> {
-  if (geminiForced()) return geminiCallStructured(schemaName, schema, parts, maxRetries, systemInstruction)
-  if (opts?.preferGemini) {
-    try {
-      return await geminiCallStructured(schemaName, schema, parts, maxRetries, systemInstruction)
-    } catch (e) {
-      console.warn(`[llm] Gemini structured (${schemaName}, preferGemini) falló → fallback a OpenAI`, e)
-      return openaiCallStructured(schemaName, schema, parts, maxRetries, systemInstruction)
-    }
-  }
   try {
-    return await openaiCallStructured(schemaName, schema, parts, maxRetries, systemInstruction)
+    return await geminiCallStructured(schemaName, schema, parts, maxRetries, systemInstruction)
   } catch (e) {
-    console.warn(`[llm] OpenAI structured (${schemaName}) falló → fallback a Gemini`, e)
-    return geminiCallStructured(schemaName, schema, parts, maxRetries, systemInstruction)
+    console.warn(`[llm] Gemini structured (${schemaName}) falló → respaldo OpenAI`, e)
+    return openaiCallStructured(schemaName, schema, parts, maxRetries, systemInstruction)
   }
 }
 
-// Texto libre (razonamiento): OpenAI primario, Gemini fallback.
+/** Texto libre por Gemini, sin respaldo. El primario de `callReasoning`. */
 async function geminiCallReasoning(systemPrompt: string, userMessage: string): Promise<string> {
-  return viaDirecta() ? geminiDirectoReasoning(systemPrompt, userMessage) : kieGeminiReasoning(systemPrompt, userMessage)
-}
-
-/** El camino de siempre por `@google/genai`. Solo se usa con `GEMINI_VIA=direct`. */
-async function geminiDirectoReasoning(systemPrompt: string, userMessage: string): Promise<string> {
   const res = await getAI().models.generateContent({
-    model: 'gemini-2.5-flash',
+    model: GEMINI_TEXTO,
     contents: [{ role: 'user', parts: [{ text: userMessage }] }],
     config: { systemInstruction: systemPrompt },
   })
   return res.text ?? ''
 }
 
-// `preferGemini`: mismo escape hatch que `callStructured`. Lo usa el generador de anuncios
-// (STEP5): armar el instructivo de imagen es una cadena de razonamiento contextual (§10:
-// identificar → evaluar contra el público → decidir) y gpt-4o-mini es el techo de calidad ahí,
-// igual que lo medido para video-ads (ver AGENTS.md). No se invierte globalmente: branding y
-// landing siguen con OpenAI primario.
-export async function callReasoning(
-  systemPrompt: string,
-  userMessage: string,
-  opts?: { preferGemini?: boolean }
-): Promise<string> {
-  if (geminiForced()) return geminiCallReasoning(systemPrompt, userMessage)
-  if (opts?.preferGemini) {
-    try {
-      const out = await geminiCallReasoning(systemPrompt, userMessage)
-      if (out.trim()) return out // vacío no tira: cae a OpenAI igual que un error
-    } catch (e) {
-      console.warn('[llm] Gemini reasoning (preferGemini) falló → fallback a OpenAI', e)
-    }
-    return openaiCallReasoning(systemPrompt, userMessage)
-  }
+/** Texto libre (razonamiento): mismo par que `callStructured` — Gemini primario, OpenAI respaldo. */
+export async function callReasoning(systemPrompt: string, userMessage: string): Promise<string> {
   try {
-    return await openaiCallReasoning(systemPrompt, userMessage)
+    const out = await geminiCallReasoning(systemPrompt, userMessage)
+    if (out.trim()) return out // vacío no tira: cae al respaldo igual que un error
   } catch (e) {
-    console.warn('[llm] OpenAI reasoning falló → fallback a Gemini', e)
-    return geminiCallReasoning(systemPrompt, userMessage)
+    console.warn('[llm] Gemini reasoning falló → respaldo OpenAI', e)
   }
+  return openaiCallReasoning(systemPrompt, userMessage)
 }
 
 // Generación de imagen genérica (texto→imagen o imágenes+texto). La usa el
@@ -238,17 +170,29 @@ export async function callReasoning(
 const SPANISH_RULE =
   'MANDATORY LANGUAGE RULE: every visible word rendered in the output image MUST be in neutral Latin-American Spanish (español neutro). If any reference image, template or input contains text in English or another language, TRANSLATE it into neutral Spanish — never copy, keep or render foreign-language words. This overrides any text seen in the inputs.'
 
-// Generación de imagen con Gemini (fallback). `allParts` ya trae la SPANISH_RULE.
-async function geminiGenerateImage(
-  allParts: Part[],
+/**
+ * Generación de imagen por el SDK de Google, con el modelo EXPLÍCITO.
+ *
+ * Es el respaldo de `generateImage` y, además, el camino único de la placa de zona de landing
+ * (ver `generateZonePlate`). Por eso es pública y pide el modelo: los dos de Google no son
+ * intercambiables — `nano-banana-2` es el barato y `nano-banana-pro` el que se paga donde la
+ * pieza es la cara de la marca.
+ *
+ * ⚠️ Agrega la SPANISH_RULE, igual que `generateImage`: quien llame acá directo no tiene que
+ * acordarse de ponerla.
+ */
+export async function geminiGenerateImage(
+  modelo: typeof NANO_BANANA_2 | typeof NANO_BANANA_PRO,
+  parts: Part[],
   maxRetries: number,
   opts?: { aspectRatio?: string; imageSize?: string }
 ): Promise<string> {
+  const allParts: Part[] = [...parts, { text: SPANISH_RULE }]
   let lastError: unknown = null
   for (let i = 0; i < maxRetries; i++) {
     try {
       const res = await getAI().models.generateContent({
-        model: 'gemini-3.1-flash-image',
+        model: modelo,
         contents: [{ role: 'user', parts: allParts }],
         config: {
           responseModalities: [Modality.IMAGE],
@@ -268,102 +212,41 @@ async function geminiGenerateImage(
   return ''
 }
 
+/**
+ * Generación de imagen del hub: **gpt-image-2.5-sunburst primario, `respaldo` de segunda**.
+ *
+ * El primario es el mismo en todas las piezas (decisión del dueño del repo, 2026-09-17); lo que
+ * cambia por pieza es el respaldo, y por eso `respaldo` es OBLIGATORIO y `opts` también: un call
+ * site nuevo que se lo olvide NO COMPILA. Un default acá sería un respaldo silencioso, que es
+ * justo el modo de fallo caro de este repo — "el diseño cambió" sin que nadie tocara el diseño.
+ *
+ * ⚠️ QUE EL RESPALDO EXISTA NO ES DECORACIÓN. Una imagen rechazada por MODERACIÓN cae por el
+ * mismo `catch` que un fallo de red, y ahí el respaldo es la respuesta correcta: está medido que
+ * el modelo de OpenAI rechaza ~1 de cada 3 imágenes sobre una foto de persona con el MISMO
+ * prompt y la MISMA foto. Reintentar con el que ya dijo que no es repetirle la pregunta —
+ * `isPermanentOpenAiError` trata `moderation_blocked` como permanente justo para no quemar los
+ * reintentos antes de llegar acá.
+ *
+ * ⚠️ La única pieza que NO pasa por acá es la placa de zona de landing: va derecho a
+ * `geminiGenerateImage(NANO_BANANA_2, …)` porque el primario la rechaza 4 de 4 (ver
+ * `generateZonePlate`).
+ */
 export async function generateImage(
   parts: Part[],
-  maxRetries = 3,
-  opts?: { aspectRatio?: string; imageSize?: string; preferGemini?: boolean; viaDirecta?: boolean }
+  maxRetries: number,
+  opts: { aspectRatio?: string; imageSize?: string; respaldo: RespaldoImagen }
 ): Promise<string> {
+  const { respaldo } = opts
   const allParts: Part[] = [...parts, { text: SPANISH_RULE }]
-
-  // Por KIE los dos modelos hablan el mismo protocolo, así que el par se arma acá y el orden es el
-  // de siempre: `preferGemini` pone a nano-banana-2 (gemini-3.1-flash-image) de primario. Lo usan
-  // la placa de zona de landing —donde gpt-image-2 modera el encuadre de cuerpo sin rostro en 4 de
-  // 4 corridas— y el avatar y las anclas del video.
-  // ⚠️ CABLEADO DE LANDING (`viaDirecta`, 2026-08-27): gpt-image-2 por el **SDK de OpenAI**, con
-  // respaldo **nano-banana-2 por KIE**. Es su propia rama y no reusa `IMAGE_VIA` a propósito:
-  //
-  //  - Por KIE, gpt-image-2 RECHAZA los prompts de landing 3 de 3 ("The current content could not
-  //    be processed") y el respaldo entra en silencio. Nano-banana-2 renderiza la barra y las
-  //    cards distinto en cada sección, y eso es lo que se reportó como "nada es estándar". Por el
-  //    SDK directo el MISMO prompt se acepta. La huella para saberlo es el tamaño: 864x1536 =
-  //    gpt-image-2, 1152x2048 = nano-banana-2.
-  //  - Y el respaldo NO puede ser `geminiGenerateImage`, que es lo que hacía la rama de
-  //    `IMAGE_VIA=direct`: ese camino usa el SDK de Google, y su clave devuelve `429 prepayment
-  //    credits are depleted` (medido 2026-08-27). Sería caer de un modelo que anda a uno muerto.
-  //
-  // ⚠️ `preferGemini` invierte el par también acá — lo usa la PLACA DE ZONA, donde gpt-image-2
-  // modera el encuadre de cuerpo sin rostro en 4 de 4 corridas. Ahí el primario es nano-banana-2
-  // POR KIE y gpt-image-2 queda de segunda oportunidad, no al revés.
-  if (opts?.viaDirecta && !geminiForced()) {
-    if (opts.preferGemini) {
-      try {
-        const out = await kieGenerateImage('nano-banana-2', allParts, maxRetries, opts)
-        if (out) return out
-        console.warn('[llm] nano-banana-2 (KIE) vacía → respaldo gpt-image-2 (SDK)')
-      } catch (e) {
-        console.warn('[llm] nano-banana-2 (KIE) falló → respaldo gpt-image-2 (SDK)', e)
-      }
-      return withTimeout(openaiGenerateImage(allParts, maxRetries, opts), imageTimeoutMs())
-    }
-    try {
-      const out = await withTimeout(openaiGenerateImage(allParts, maxRetries, opts), imageTimeoutMs())
-      if (out) return out
-      console.warn('[llm] gpt-image-2 (SDK) vacía → respaldo nano-banana-2 (KIE)')
-    } catch (e) {
-      console.warn('[llm] gpt-image-2 (SDK) falló → respaldo nano-banana-2 (KIE)', e)
-    }
-    return kieGenerateImage('nano-banana-2', allParts, maxRetries, opts)
-  }
-
-  if (!imagenDirecta() && !geminiForced()) {
-    const [primero, segundo]: ModeloImagen[] = opts?.preferGemini
-      ? ['nano-banana-2', 'gpt-image-2']
-      : ['gpt-image-2', 'nano-banana-2']
-    try {
-      const out = await kieGenerateImage(primero, allParts, maxRetries, opts)
-      if (out) return out
-      console.warn(`[llm] imagen ${primero} vacía → respaldo ${segundo}`)
-    } catch (e) {
-      // Una imagen rechazada por MODERACIÓN cae acá igual que un fallo de red, y el respaldo es la
-      // respuesta correcta: está medido que gpt-image-2 rechaza ~1 de cada 3 sobre una foto de
-      // persona, con la misma foto y el mismo prompt. Reintentar con el que ya dijo que no es
-      // repetirle la pregunta.
-      console.warn(`[llm] imagen ${primero} falló → respaldo ${segundo}`, e)
-    }
-    return kieGenerateImage(segundo, allParts, maxRetries, opts)
-  }
-
-  if (geminiForced()) return geminiGenerateImage(allParts, maxRetries, opts)
-  // `preferGemini` invierte el orden de proveedores para UNA llamada, igual que en callStructured.
-  // Existe porque hay imágenes que gpt-image-2 rechaza SIEMPRE por política de contenido — la placa
-  // de talento encuadrada en el tren inferior es el caso medido (`moderation_blocked`,
-  // `safety_violations=[sexual]`, 4/4 corridas). Para esas, OpenAI de primario es 19s de peaje
-  // garantizado antes de un fallback que igual iba a ocurrir.
-  //
-  // El fallback a OpenAI se conserva (misma forma que callStructured) y NO es contradictorio: cubre
-  // que Gemini caiga por algo transitorio —un 500, un pico de cuota— donde OpenAI sí respondería.
-  // Solo en la doble falla se pagan esos 19s, y ahí es preferible el último intento a devolver ''.
-  if (opts?.preferGemini) {
-    try {
-      const out = await geminiGenerateImage(allParts, maxRetries, opts)
-      if (out) return out
-      console.warn('[llm] Gemini image vacía (preferGemini) → fallback a OpenAI')
-    } catch (e) {
-      console.warn('[llm] Gemini image falló (preferGemini) → fallback a OpenAI', e)
-    }
-    return withTimeout(openaiGenerateImage(allParts, maxRetries, opts), imageTimeoutMs())
-  }
-  // OpenAI primario (gpt-image-2, edit multi-imagen si hay refs), acotado por timeout para caber en
-  // el presupuesto de Vercel; vacío/timeout/error → Gemini. gpt-image-2 no acepta aspectRatio libre,
-  // solo tamaños fijos (ver openaiGenerateImage/sizeFor); Gemini sí respeta opts.aspectRatio.
   try {
-    const out = await withTimeout(openaiGenerateImage(allParts, maxRetries, opts), imageTimeoutMs())
+    const out = await openaiGenerateImage(allParts, maxRetries, opts)
     if (out) return out
-    console.warn('[llm] OpenAI image vacía → fallback a Gemini')
+    console.warn(`[llm] gpt-image-2.5-sunburst vacía → respaldo ${respaldo}`)
   } catch (e) {
-    console.warn('[llm] OpenAI image falló/timeout → fallback a Gemini', e)
+    console.warn(`[llm] gpt-image-2.5-sunburst falló → respaldo ${respaldo}`, e)
   }
-  return geminiGenerateImage(allParts, maxRetries, opts)
+  // `parts` sin la SPANISH_RULE: `geminiGenerateImage` la pone por su cuenta.
+  return geminiGenerateImage(respaldo, parts, maxRetries, opts)
 }
 
 // Edición exclusiva sobre una imagen ya generada (regen con prompt en landing/branding):
@@ -373,7 +256,7 @@ export async function editWithPrompt(
   base64: string,
   mime: string,
   prompt: string,
-  opts?: { aspectRatio?: string; imageSize?: string }
+  opts: { aspectRatio?: string; imageSize?: string; respaldo: RespaldoImagen }
 ): Promise<string> {
   const parts: Part[] = [
     { inlineData: { mimeType: mime, data: base64 } },
@@ -415,10 +298,13 @@ export async function editImage(
     { text: instruction },
     { text: PRODUCT_RULE },
   ]
-  // Pasa por `generateImage` (gpt-image-2 primario, Gemini fallback) en vez de llamar a Gemini
-  // directo: comparados sobre el mismo anuncio y el mismo instructivo, gpt-image-2 rinde
-  // mejor en el detalle de la etiqueta y en el rostro. Hereda la SPANISH_RULE y el retry.
-  return generateImage(parts, 3, aspectRatio ? { aspectRatio } : undefined)
+  // Pasa por `generateImage` en vez de llamar a Gemini directo: comparados sobre el mismo anuncio
+  // y el mismo instructivo, el modelo de imagen de OpenAI rinde mejor en el detalle de la etiqueta
+  // y en el rostro. Hereda la SPANISH_RULE y el retry.
+  //
+  // Respaldo `nano-banana-2` y no el pro: acá lo que se replica es el LAYOUT de una referencia que
+  // ya existe, no una pieza de identidad de marca (decisión del dueño del repo, 2026-09-17).
+  return generateImage(parts, 3, { ...(aspectRatio ? { aspectRatio } : {}), respaldo: NANO_BANANA_2 })
 }
 
 // ⚠️ La gente sale de la imagen ACTUAL, nunca de la referencia. `generate-image` adapta el
@@ -502,5 +388,7 @@ export async function refineImage(
     { inlineData: { mimeType: resultMime, data: resultBase64 } },
     { text: refinePrompt(resultImageNumber, feedback) },
   ]
-  return generateImage(parts, 3, aspectRatio ? { aspectRatio } : undefined)
+  // El MISMO par que `editImage`: un refine que cayera a otro respaldo cambiaría de estética a
+  // mitad de sesión sin que nadie tocara el prompt.
+  return generateImage(parts, 3, { ...(aspectRatio ? { aspectRatio } : {}), respaldo: NANO_BANANA_2 })
 }

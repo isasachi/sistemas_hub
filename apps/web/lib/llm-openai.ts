@@ -4,14 +4,32 @@ import { z } from 'zod'
 import type { Part } from '@google/genai'
 import { correccionDeTope, stringsEnElTope } from './llm-clamp'
 
-// ─── Motor de IA PRIMARIO: OpenAI SDK ────────────────────────────────────────
-// Estas funciones son el motor principal (2026-07-23): `lib/gemini.ts` (callStructured/
-// callReasoning/generateImage) las llama PRIMERO y cae a Gemini solo si fallan. gpt-4o-mini para
-// texto+visión (structured), gpt-image-2 para imágenes. Requiere OPENAI_API_KEY. El escape hatch
-// `LLM_PROVIDER=gemini` (ver gemini.ts `geminiForced`) fuerza Gemini-only y saltea todo esto.
+// ─── El lado OpenAI del motor, por el SDK directo ────────────────────────────
+// Desde el recableado del 2026-09-17 los dos papeles son distintos y conviene no confundirlos:
+//
+//  - TEXTO/VISIÓN (`gpt-5.4-nano`): es el RESPALDO. `lib/gemini.ts` llama primero a Gemini y cae
+//    acá. Verificado contra la API que acepta `response_format: json_schema strict` y una imagen
+//    por `toChatContent`, así que el respaldo de visión no es letra muerta.
+//  - IMAGEN (`gpt-image-2.5-sunburst`): es el PRIMARIO de todas las piezas menos la placa de zona
+//    de landing.
+//
+// ⚠️ `gpt-5.4-nano` NO acepta `max_tokens` (400 `unsupported_parameter`; pide
+// `max_completion_tokens`). Hoy no se manda ninguno de los dos — si algún día hace falta topear
+// la salida, es ese el nombre del campo.
+const TEXT_MODEL = 'gpt-5.4-nano'
+const IMAGE_MODEL = 'gpt-image-2.5-sunburst'
 
-const TEXT_MODEL = 'gpt-4o-mini'
-const IMAGE_MODEL = 'gpt-image-2'
+// ⚠️ EL TIMEOUT NO ES OPCIONAL, aunque el SDK no sea `fetch` pelado: su default son 10 MINUTOS,
+// más que el `maxDuration = 300` de las rutas de imagen. Sin esto, UNA llamada colgada se come el
+// presupuesto entero de la ruta, el request muere en 504 y `generateImage` NUNCA llega a pedirle
+// la imagen al respaldo — que es justo lo que el respaldo existe para cubrir. Es la misma ley que
+// el `AbortSignal.timeout` de `fetch` (ver AGENTS.md).
+//
+// El tope viaja por llamada y no en el cliente porque el texto y la imagen no se parecen en nada:
+// medido, el texto responde en 2-3s y la imagen en 13-15s. Cada uno lleva ~4x su peor caso
+// medido, que deja lugar a una respuesta lenta y no a un cuelgue.
+const TIMEOUT_TEXTO_MS = 30_000
+const TIMEOUT_IMAGEN_MS = 90_000
 
 let _client: OpenAI | null = null
 function client(): OpenAI {
@@ -19,12 +37,18 @@ function client(): OpenAI {
   return _client
 }
 
-// ⚠️ gpt-image-2 NO está limitado a 1024x1024 | 1024x1536 | 1536x1024 — ese es el tipado
+// ⚠️ El modelo de imagen NO está limitado a 1024x1024 | 1024x1536 | 1536x1024 — ese es el tipado
 // (desactualizado) del SDK, no el contrato de la API. Verificado contra la API real: el único
 // requisito es que ancho y alto sean **múltiplos de 16** (`1080x1920` → 400 "Width and height
 // must both be divisible by 16"; `864x1536`, `1088x1920` y `2160x3840` → OK). Los tres buckets
 // viejos aplastaban TODO portrait a 1024x1536, que es 2:3: una referencia 9:16 (0.563) salía
 // 0.667 y el ad no calzaba en Reels ni TikTok. Ahora el tamaño se deriva del ratio.
+//
+// ⚠️ RE-MEDIDO contra `gpt-image-2.5-sunburst` el 2026-09-17, porque esto estaba medido contra
+// `gpt-image-2` y un modelo nuevo no hereda el contrato del viejo: pidiendo `864x1536` devuelve
+// `864x1536` exacto (0.563), por `images.generate` y por `images.edit`. De paso, sunburst tarda
+// 13-15s contra los 40-90s de gpt-image-2 — por eso ya no hace falta el timeout que abandonaba la
+// llamada para caber en el presupuesto de Vercel.
 //
 // Lado largo 1536 (mismo presupuesto de píxeles que antes → misma latencia y costo), lado
 // corto proporcional redondeado al múltiplo de 16 más cercano.
@@ -129,10 +153,10 @@ export function stripNulls(v: unknown): unknown {
 //
 // ⚠️ `moderation_blocked` es tan determinista como un 401, y se agregó DESPUÉS de medirlo: la placa
 // de talento encuadrada en el tren inferior (`body_focus = gluteos_piernas`) dispara el filtro de
-// contenido de gpt-image-2 (`safety_violations=[sexual]`, `moderation_stage: output`) en el 100% de
+// contenido del modelo de imagen (`safety_violations=[sexual]`, `moderation_stage: output`) en el 100% de
 // las corridas. Sin esta línea, `openaiGenerateImage` reintentaba tres veces un rechazo que no
 // puede cambiar: medido, 22s con maxRetries=1 contra 52s con maxRetries=3, todo tirado antes de
-// caer a Gemini — dentro de una ruta que además ya gastó 40-90s en la placa canónica.
+// caer al respaldo — dentro de una ruta que además ya gastó su tiempo en la placa canónica.
 export function isPermanentOpenAiError(e: unknown): boolean {
   const err = e as { status?: number; code?: string } | undefined
   return (
@@ -150,7 +174,7 @@ export async function openaiCallStructured<T>(
   maxRetries: number,
   systemInstruction: string,
 ): Promise<T> {
-  // strict:true OBLIGA al modelo a emitir TODOS los campos requeridos — sin esto gpt-4o-mini omite
+  // strict:true OBLIGA al modelo a emitir TODOS los campos requeridos — sin esto el modelo omite
   // headlines en secciones tardías y el zod parse falla. No se usa el helper zodResponseFormat
   // porque tira ante `.optional()` sin `.nullable()` (los schemas de landing usan `.optional()`).
   const response_format = {
@@ -169,7 +193,7 @@ export async function openaiCallStructured<T>(
           { role: 'user', content: correccion ? [...toChatContent(parts), { type: 'text' as const, text: correccion }] : toChatContent(parts) },
         ],
         response_format,
-      })
+      }, { timeout: TIMEOUT_TEXTO_MS })
       const choice = res.choices[0]
       // Output truncado por límite de tokens → JSON incompleto; reintenta en vez de parsear a medias.
       if (choice?.finish_reason === 'length') { lastError = new Error(`openaiCallStructured(${schemaName}): respuesta truncada (length)`); continue }
@@ -188,7 +212,7 @@ export async function openaiCallStructured<T>(
       }
       lastError = parsed.error
     } catch (e) {
-      if (isPermanentOpenAiError(e)) throw e // billing/cuota/auth → fail-fast → fallback a Gemini
+      if (isPermanentOpenAiError(e)) throw e // billing/cuota/auth → fail-fast → respaldo Gemini
       lastError = e
     }
   }
@@ -202,7 +226,7 @@ export async function openaiCallReasoning(systemPrompt: string, userMessage: str
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userMessage },
     ],
-  })
+  }, { timeout: TIMEOUT_TEXTO_MS })
   return res.choices[0]?.message?.content ?? ''
 }
 
@@ -216,16 +240,16 @@ export async function openaiGenerateImage(parts: Part[], maxRetries: number, opt
     try {
       if (images.length) {
         const files = await Promise.all(images.map((im, j) => toFile(Buffer.from(im.data, 'base64'), `ref-${j}.png`, { type: im.mimeType })))
-        const res = await client().images.edit({ model: IMAGE_MODEL, image: files, prompt, size })
+        const res = await client().images.edit({ model: IMAGE_MODEL, image: files, prompt, size }, { timeout: TIMEOUT_IMAGEN_MS })
         const b64 = res.data?.[0]?.b64_json
         if (b64) return b64
       } else {
-        const res = await client().images.generate({ model: IMAGE_MODEL, prompt, size })
+        const res = await client().images.generate({ model: IMAGE_MODEL, prompt, size }, { timeout: TIMEOUT_IMAGEN_MS })
         const b64 = res.data?.[0]?.b64_json
         if (b64) return b64
       }
     } catch (e) {
-      if (isPermanentOpenAiError(e)) throw e // billing/cuota/auth → fail-fast → fallback a Gemini
+      if (isPermanentOpenAiError(e)) throw e // billing/cuota/auth → fail-fast → respaldo Gemini
       lastError = e
     }
   }

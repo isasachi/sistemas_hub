@@ -12,7 +12,6 @@ vi.mock('@/lib/storage', () => {
 
 vi.mock('@/lib/gemini', () => ({
   geminiCallStructured: vi.fn(),
-  geminiEsDirecto: vi.fn().mockReturnValue(false),
 }))
 
 vi.mock('@/lib/gen-quota', () => ({
@@ -28,7 +27,7 @@ import { NextRequest } from 'next/server'
 import { POST } from './route'
 import { getVideoSession, updateVideoSession } from '@/lib/video-ads/db'
 import { fetchAsBase64, headStorageFile, PayloadTooLargeError } from '@/lib/storage'
-import { geminiCallStructured, geminiEsDirecto } from '@/lib/gemini'
+import { geminiCallStructured } from '@/lib/gemini'
 import type { VideoSessionResponse } from '@/lib/video-ads/types'
 
 // Hallazgo 4: el tope de MAX_VIDEO_MB solo se validaba en el browser
@@ -50,7 +49,6 @@ function ctx(id = 's1') {
 describe('POST /api/generador-video-ads/sessions/[id]/analyze-reference — guard de tamaño', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(geminiEsDirecto).mockReturnValue(false)
     vi.mocked(headStorageFile).mockResolvedValue({ mimeType: 'video/mp4' })
   })
 
@@ -92,33 +90,19 @@ describe('POST /api/generador-video-ads/sessions/[id]/analyze-reference — guar
     expect(res.status).toBe(500)
   })
 
-  // Falló en producción con este mismo video: el texto y la visión de Gemini salen hoy
-  // por KIE, y ahí un data URI de video es un 400 duro ("Inline data URL is too large.
-  // Upload the file and pass an HTTP(S) URL instead") tras 60 s de espera. El video ya
-  // vive en el bucket: se manda su URL y KIE se lo baja.
-  it('el video viaja como URL, NUNCA en base64', async () => {
+  // ⚠️ EL VIDEO VA INLINE, y el HEAD sigue corriendo ANTES de bajarlo. El SDK de Google solo
+  // acepta un `fileUri` de su propia Files API, así que una URL de Supabase no le sirve: los
+  // bytes viajan en el request. Esto se midió al revés en la etapa de KIE (un data URI de video
+  // era un 400 duro allá), y por eso el test nombra las dos mitades — el transporte cambió con
+  // el recableado del 2026-09-17 y el guard de tamaño es lo que impide que eso se vuelva un 500.
+  it('el video viaja inline, después de comprobar el tope con un HEAD', async () => {
     vi.mocked(getVideoSession).mockResolvedValue({ id: 's1' } as unknown as VideoSessionResponse)
-    vi.mocked(geminiCallStructured).mockResolvedValue({ guionOriginal: 'hola', caracteresGuion: 1 })
-
-    await POST(req({ videoUrl: 'https://x.supabase.co/reference-video.mp4' }), ctx())
-
-    expect(fetchAsBase64).not.toHaveBeenCalled()
-    const parts = vi.mocked(geminiCallStructured).mock.calls[0][2]
-    expect(parts[0]).toEqual({
-      fileData: { fileUri: 'https://x.supabase.co/reference-video.mp4', mimeType: 'video/mp4' },
-    })
-  })
-
-  // El escape `GEMINI_VIA=direct` devuelve el recurso al SDK de Google, que solo acepta
-  // un `fileUri` de su propia Files API — ahí sí hay que mandar los bytes.
-  it('con GEMINI_VIA=direct vuelve a mandarlo inline', async () => {
-    vi.mocked(getVideoSession).mockResolvedValue({ id: 's1' } as unknown as VideoSessionResponse)
-    vi.mocked(geminiEsDirecto).mockReturnValue(true)
     vi.mocked(fetchAsBase64).mockResolvedValue({ data: 'YWJj', mimeType: 'video/mp4' })
     vi.mocked(geminiCallStructured).mockResolvedValue({ guionOriginal: 'hola', caracteresGuion: 1 })
 
     await POST(req({ videoUrl: 'https://x.supabase.co/reference-video.mp4' }), ctx())
 
+    expect(headStorageFile).toHaveBeenCalled()
     const parts = vi.mocked(geminiCallStructured).mock.calls[0][2]
     expect(parts[0]).toEqual({ inlineData: { data: 'YWJj', mimeType: 'video/mp4' } })
   })

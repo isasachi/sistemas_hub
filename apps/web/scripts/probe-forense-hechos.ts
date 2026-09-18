@@ -12,7 +12,7 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Part } from '@google/genai'
-import { geminiCallStructured, geminiEsDirecto } from '@/lib/gemini'
+import { geminiCallStructured } from '@/lib/gemini'
 import { VIDEO_SYSTEM_PROMPT } from '@/lib/video-ads/llm'
 import { buildForensicInstruction, normalizarHechos, repairCutTiming, MIN_VISIBLE_SEG, type ForensicReport } from '@/lib/video-ads/forensic'
 import { ForensicReportSchema } from '@/lib/video-ads/types'
@@ -27,9 +27,10 @@ async function main() {
   if (error || !data?.reference_video_url) throw new Error(`sesión sin video: ${error?.message}`)
   const url = data.reference_video_url as string
 
-  const { mimeType } = await headStorageFile(url, MAX_VIDEO_MB * 1024 * 1024)
+  await headStorageFile(url, MAX_VIDEO_MB * 1024 * 1024)
   const parts: Part[] = [
-    geminiEsDirecto() ? { inlineData: await fetchAsBase64(url, MAX_VIDEO_MB * 1024 * 1024) } : { fileData: { fileUri: url, mimeType } },
+    // Inline, igual que la ruta real: el SDK de Google no acepta una URL de Supabase.
+    { inlineData: await fetchAsBase64(url, MAX_VIDEO_MB * 1024 * 1024) },
     { text: buildForensicInstruction() },
   ]
   // El forense es ESTOCÁSTICO: un sorteo vuelve con dos hechos por corte y el siguiente

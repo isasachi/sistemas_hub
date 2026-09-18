@@ -23,7 +23,7 @@ import { createClient } from '@supabase/supabase-js'
 import { writeFile } from 'node:fs/promises'
 import type { Part } from '@google/genai'
 import { fetchAsBase64, storagePublicUrl } from '../lib/storage'
-import { generateImage } from '../lib/gemini'
+import { generateImage, NANO_BANANA_PRO } from '../lib/gemini'
 import { buildDiffusionInstruction, MULTI_UNIT_SECTIONS, NO_TALENT_SECTIONS } from '../lib/landing/instructions'
 import { buildProductPack } from '../lib/landing/product-box'
 import { NO_TALENT_SUBSTITUTE, DEMOGRAPHIC_LABELS, zoneNeedsOwnPlate } from '../lib/landing/demographics'
@@ -96,7 +96,8 @@ async function main() {
     parts.push({ text: prompt })
 
     console.log(`· ${tipo}: prompt ${prompt.length} caracteres, ${parts.length - 1} imágenes`)
-    const b64 = await generateImage(parts, 3, { aspectRatio: '9:16' })
+    // El MISMO par que la ruta real: un probe que cablee otro respaldo mide otra cosa.
+    const b64 = await generateImage(parts, 3, { aspectRatio: '9:16', respaldo: NANO_BANANA_PRO })
     // Mismo post-proceso que la ruta: la barra se COMPONE, no la dibuja el modelo.
     let bytes = Buffer.from(b64, 'base64')
     if (s.trust_block && TRUST_BAND_SECTIONS.has(tipo)) {

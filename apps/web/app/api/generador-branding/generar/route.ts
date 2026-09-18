@@ -8,13 +8,14 @@ import { ensureUserId } from '@/lib/product-hunter/session'
 import { isFlagged } from '@/lib/branding/moderation'
 import { isComplete, type Brief, type PartialBrief } from '@/lib/branding/brief'
 import { briefFromRow } from '@/lib/branding/session-brief'
-import { buildPrompt, aspectFor, STAGE_SEQUENCE, type Stage } from '@/lib/branding/generation'
+import { buildPrompt, aspectFor, RESPALDO_POR_ETAPA, STAGE_SEQUENCE, type Stage } from '@/lib/branding/generation'
 import { extractBrandSystem } from '@/lib/branding/brand-system'
 import type { Part } from '@google/genai'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-// Identidad + 3 piezas derivadas, secuenciales con gpt-image-2 (~60-90s c/u). Fluid Compute da 300s.
+// Identidad + 3 piezas derivadas. Fluid Compute da 300s; las 3 derivadas corren en paralelo
+// detrás de la identidad (ver más abajo), que es lo que hace entrar el kit en ese presupuesto.
 export const maxDuration = 300
 
 /**
@@ -142,8 +143,11 @@ export async function POST(req: NextRequest) {
             }
             parts.push({ text: buildPrompt(stage, brief) })
 
-            // generateImage ya reintenta internamente (3 intentos, OpenAI→Gemini).
-            const b64 = await generateImage(parts, 3, { aspectRatio: aspectFor(stage) })
+            // generateImage ya reintenta internamente (3 intentos, OpenAI→respaldo de Google).
+            const b64 = await generateImage(parts, 3, {
+              aspectRatio: aspectFor(stage),
+              respaldo: RESPALDO_POR_ETAPA[stage],
+            })
             if (!b64) throw new Error('el motor devolvió una imagen vacía')
 
             const url = await uploadToStorage(sessionId, Buffer.from(b64, 'base64'), 'image/png', stage)

@@ -36,9 +36,10 @@ export async function POST(
 
   const [referenceUrl, analysis] = await Promise.all([
     uploadToStorage(id, bytes, mimeType, 'reference'),
-    // preferGemini: gpt-4o-mini leyó una referencia 335x597 (vertical) como "16:9" y devolvió
-    // style/typography de una línea ("moderno", "estilo moderno y limpio") — el análisis es la
-    // base de TODO lo que sigue, así que ahí es donde más cuesta el modelo chico.
+    // El análisis es la base de TODO lo que sigue, así que ahí es donde más cuesta un modelo
+    // chico: el de respaldo leyó una referencia 335x597 (vertical) como "16:9" y devolvió
+    // style/typography de una línea ("moderno", "estilo moderno y limpio"). Por eso el primario
+    // del hub es Gemini — lo que antes pedía `preferGemini` acá ahora es el orden por defecto.
     callStructured('reference_analysis', ReferenceAnalysisSchema, [
       { inlineData: { mimeType, data: base64 } },
       { text: [
@@ -71,7 +72,7 @@ export async function POST(
         'bodyFocus is null and attentionMarkers is null. Never guess a zone.',
         precision ? 'Ajuste pedido: ' + precision : '',
       ].filter(Boolean).join('\n') },
-    ], 3, undefined, { preferGemini: true }),
+    ], 3),
   ])
 
   await updateSession(id, { step: 1, reference_url: referenceUrl, reference_analysis: analysis })

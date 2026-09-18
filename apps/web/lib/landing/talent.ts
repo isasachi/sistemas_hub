@@ -1,5 +1,5 @@
 import type { Part } from '@google/genai'
-import { generateImage } from '@/lib/gemini'
+import { generateImage, geminiGenerateImage, NANO_BANANA_2, NANO_BANANA_PRO } from '@/lib/gemini'
 import { BODY_FOCUS_FRAMING } from './demographics'
 import type { BodyFocus, DemographicId, PaletteTokens } from './types'
 
@@ -38,10 +38,11 @@ export async function generateTalent(
   _palette: PaletteTokens,
 ): Promise<string | null> {
   if (!persona.trim()) return null
-  // ⚠️ `viaDirecta`: el retrato es parte de landing y sale por el MISMO camino que las secciones
-  // (gpt-image-2 por el SDK de OpenAI, respaldo nano-banana-2 por KIE). Por KIE, gpt-image-2
-  // rechaza los prompts de esta tool — ver el cableado en `generateImage`.
-  const b64 = await generateImage([{ text: buildTalentPrompt(persona) }], 3, { aspectRatio: '3:4', viaDirecta: true })
+  // El retrato sale por el MISMO par que las secciones, y eso no es cosmético: es la cara que se
+  // repite en las 8 secciones, así que si el respaldo entrara acá con otro modelo que en el resto
+  // de la landing, la persona cambiaría de sección a sección — el bug que esta placa existe para
+  // evitar. Respaldo `nano-banana-pro`: es una pieza de identidad, no una imagen de relleno.
+  const b64 = await generateImage([{ text: buildTalentPrompt(persona) }], 3, { aspectRatio: '3:4', respaldo: NANO_BANANA_PRO })
   return b64 || null
 }
 
@@ -72,9 +73,10 @@ function buildZonePrompt(persona: string, focus: BodyFocus): string {
     `Plain, smooth, evenly-lit NEUTRAL background (soft light grey/beige, no scenery, no props, no furniture). Soft, directional studio lighting.`,
     // Mismo acote que en la placa canónica: "NOT a fitness-model composite" negaba de plano el
     // físico que `model_persona` puede estar pidiendo. Si las placas de zona empiezan a volver
-    // null, mirá acá primero: `generateZonePlate` ya necesita `preferGemini` porque gpt-image-2
-    // modera los encuadres de cuerpo sin rostro, y la ruta de talento cae en silencio al retrato
-    // canónico — o sea devuelve la cara, que es justo el bug que la placa existe para evitar.
+    // null, mirá acá primero: `generateZonePlate` ya va derecho a nano-banana-2 porque el modelo
+    // de imagen de OpenAI modera los encuadres de cuerpo sin rostro, y la ruta de talento cae en
+    // silencio al retrato canónico — o sea devuelve la cara, que es justo el bug que la placa
+    // existe para evitar.
     `REAL, non-idealized body: visible skin texture and natural proportions appropriate to the age — NOT airbrushed, NOT an "AI stock" look. Render the build EXACTLY as the description states, neither slimmer nor more muscular than described.`,
     `This is a REFERENCE PLATE, not an ad: render ZERO text, letters, numbers, logos, watermarks, captions or graphics anywhere in the image. No product, no packaging.`,
   ].join('\n')
@@ -94,16 +96,17 @@ export async function generateZonePlate(
   ]
   // 3:4 como la canónica: es una placa de referencia, no una sección — el 9:16 lo pone el render.
   //
-  // ⚠️ `preferGemini` NO es una preferencia estética: gpt-image-2 RECHAZA esta imagen. Medido con
-  // el prompt y el retrato reales de una sesión de producción, 4/4 corridas → 400
-  // `moderation_blocked`, `safety_violations=[sexual]`, `moderation_stage: output`. Un encuadre de
-  // cuerpo sin rostro cae del lado prohibido de su filtro, y no hay forma de pedirlo que no lo haga.
-  // Con OpenAI de primario eran 19s de peaje garantizado antes de un fallback que igual ocurría.
-  // La placa canónica (retrato, con cara) NO tiene este problema y sigue por el camino normal.
-  // ⚠️ SIN `viaDirecta` A PROPÓSITO, y esto es cableado, no olvido: la placa de zona va por
-  // **nano-banana-2 por KIE** de primario. `preferGemini` invierte el par en las dos ramas, así
-  // que dejarla en la rama de KIE la deja exactamente donde tiene que estar. gpt-image-2 queda de
-  // segunda oportunidad — que es lo correcto para una imagen que rechaza 4 de 4.
-  const b64 = await generateImage(parts, 3, { aspectRatio: '3:4', preferGemini: true })
+  // ⚠️ ES LA ÚNICA PIEZA DEL HUB QUE NO PASA POR `generateImage`, y no es un olvido: va DERECHO a
+  // nano-banana-2, sin el primario de OpenAI y sin respaldo (decisión del dueño del repo,
+  // 2026-09-17). El modelo de imagen de OpenAI RECHAZA esta imagen — medido con el prompt y el
+  // retrato reales de una sesión de producción, 4/4 corridas → 400 `moderation_blocked`,
+  // `safety_violations=[sexual]`, `moderation_stage: output`. Un encuadre de cuerpo sin rostro cae
+  // del lado prohibido de su filtro y no hay forma de pedirlo que no lo haga, así que ponerlo de
+  // primario es peaje garantizado y ponerlo de respaldo es una segunda oportunidad que ya se sabe
+  // que no existe.
+  //
+  // ⚠️ NO LE AGREGUES UN RESPALDO "por las dudas": el único candidato es justo el que rechaza.
+  // La placa canónica (retrato, CON cara) no tiene este problema y sigue por el camino normal.
+  const b64 = await geminiGenerateImage(NANO_BANANA_2, parts, 3, { aspectRatio: '3:4' })
   return b64 || null
 }
