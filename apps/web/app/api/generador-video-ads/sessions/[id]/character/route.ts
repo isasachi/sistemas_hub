@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getVideoSession, updateVideoSession } from '@/lib/video-ads/db'
 import { callVideoAds } from '@/lib/video-ads/llm'
 import { openaiGenerateImage } from '@/lib/llm-openai'
+import { geminiGenerateImage, NANO_BANANA_PRO } from '@/lib/gemini'
 import { uploadToStorage, fetchAsBase64 } from '@/lib/storage'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
@@ -28,8 +29,9 @@ export const maxDuration = 300
  * alguien que no dio permiso. La foto queda en `character_url` (referencia) y el
  * avatar en `avatar_url` (lo que se renderiza).
  *
- * La imagen la genera gpt-image-2 SIN fallback, en 9:16: el avatar es el ancla visual
- * del personaje en cada lote, así que su encuadre es el del anuncio.
+ * La imagen la genera `gpt-image-2.5-sunburst` con respaldo `nano-banana-pro`, en 9:16: el
+ * avatar es el ancla visual del personaje en cada lote, así que su encuadre es el del anuncio
+ * (ver `avatarConRespaldo`).
  */
 export async function POST(
   req: NextRequest,
@@ -102,7 +104,7 @@ export async function POST(
     // El acabado se pega en código: es lo único que llega al generador de imagen, y una
     // regla que vive solo en la instrucción depende de que el LLM se acuerde de copiarla.
     const promptImagen = promptDeAvatar(identity.promptCreacion)
-    const b64 = await openaiGenerateImage([{ text: promptImagen }], 2, { aspectRatio: '9:16' })
+    const b64 = await avatarConRespaldo(promptImagen)
     const avatarUrl = await uploadToStorage(id, Buffer.from(b64, 'base64'), 'image/png', 'avatar')
 
     const voiceProfile = vozDe(identity)
@@ -123,4 +125,28 @@ export async function POST(
     console.error('[video-ads/character]', err)
     return NextResponse.json({ error: 'No se pudo construir el personaje.' }, { status: 500 })
   }
+}
+
+/**
+ * `gpt-image-2.5-sunburst` de primario y, si falla o vuelve vacío, `nano-banana-pro` con el MISMO
+ * prompt (decisión del dueño del repo, 2026-09-17).
+ *
+ * ⚠️ EL RESPALDO NO ES DECORATIVO, y su ausencia fue un bug real: está medido que el modelo de
+ * imagen de OpenAI rechaza por moderación ~1 de cada 3 avatares con la misma foto y el mismo
+ * prompt. Sin esta función, ese tercio se le devolvía al usuario como "no se pudo construir el
+ * personaje", habiéndole cobrado la cuota.
+ *
+ * ⚠️ NO pasa por `generateImage` a propósito: ese choke point le agrega la regla de idioma de
+ * textos visibles, y el avatar es una persona sobre fondo neutro — no lleva una sola letra. El
+ * prompt del primario no cambia sin medirlo.
+ */
+async function avatarConRespaldo(prompt: string): Promise<string> {
+  try {
+    const b64 = await openaiGenerateImage([{ text: prompt }], 2, { aspectRatio: '9:16' })
+    if (b64) return b64
+    console.warn('[video-ads/character] gpt-image-2.5-sunburst vacío → respaldo nano-banana-pro')
+  } catch (e) {
+    console.warn('[video-ads/character] gpt-image-2.5-sunburst falló → respaldo nano-banana-pro', e)
+  }
+  return geminiGenerateImage(NANO_BANANA_PRO, [{ text: prompt }], 2, { aspectRatio: '9:16' })
 }

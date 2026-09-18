@@ -149,7 +149,7 @@ export async function extractBrandSystem(identityUrl: string): Promise<BrandSyst
     { inlineData: { mimeType, data } },
     { text: `${PROMPT}\n\nCatálogo de fuentes (elegí SOLO de acá): ${BRAND_FONTS.join(', ')}` },
   ]
-  // preferGemini: es una tarea de visión sobre una imagen generada y Gemini flash la resuelve más
+  // Es una tarea de visión sobre una imagen generada y Gemini flash la resuelve más
   // barato que OpenAI. El fallback del helper cubre la caída.
-  return callStructured('brand_system_extract', BrandSystemExtractSchema, parts, 3, undefined, { preferGemini: true })
+  return callStructured('brand_system_extract', BrandSystemExtractSchema, parts, 3)
 }

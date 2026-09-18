@@ -35,14 +35,13 @@ export const VIDEO_SYSTEM_PROMPT = fs.readFileSync(
  * conciencia de contexto que este pipeline necesita, y NO se compra con más reglas de
  * prompt sobre un modelo chico: se intentaron tres rondas antes de mirar qué modelo era.
  *
- * Existe como envoltorio y no como un `{ preferGemini: true }` suelto en cada ruta
- * porque la regla es de la TOOL entera: un call site nuevo que se olvide del flag vuelve
- * a gpt-4o-mini en silencio, y el síntoma —valores que contestan la etiqueta— se lee
- * como un problema de prompt. Ya pasó.
+ * Sigue existiendo como envoltorio aunque el par ya sea Gemini-primario en todo el hub: lo que
+ * fija es el SYSTEM PROMPT de la tool, que es de la tool entera. (Antes fijaba además el orden de
+ * proveedores con `preferGemini`; eso se volvió el default el 2026-09-17 y el flag se borró.)
  *
  * Excepciones deliberadas, las dos fuera de esta función: el análisis forense
- * (`analyze-reference`, que llama a Gemini directo porque gpt-4o-mini no acepta partes
- * de video) y el render (KIE, que no es un LLM de texto).
+ * (`analyze-reference`, que llama a Gemini directo porque el modelo de respaldo no acepta partes
+ * de video) y el render (KIE/Grok, que no es un LLM de texto).
  */
 export function callVideoAds<T>(
   schemaName: string,
@@ -50,5 +49,5 @@ export function callVideoAds<T>(
   parts: Part[],
   maxRetries = 3,
 ): Promise<T> {
-  return callStructured(schemaName, schema, parts, maxRetries, VIDEO_SYSTEM_PROMPT, { preferGemini: true })
+  return callStructured(schemaName, schema, parts, maxRetries, VIDEO_SYSTEM_PROMPT)
 }

@@ -19,12 +19,14 @@
  *     las frases importa: la versión que abría con "PRIMARY CONTAINER" hizo que
  *     un cinturón saliera convertido en un bote. Ver la nota del mockup abajo.
  *
- * Motor: ráster PNG con gpt-image-2.
+ * Motor: ráster PNG con `gpt-image-2.5-sunburst`, con un respaldo por etapa
+ * (ver `RESPALDO_POR_ETAPA`).
  * ---------------------------------------------------------------------------
  */
 
 import type { Brief } from './brief'
 import { feelWords } from './brief'
+import { NANO_BANANA_2, NANO_BANANA_PRO, type RespaldoImagen } from '@/lib/gemini'
 
 /** La identidad primero; las tres piezas sueltas se derivan de ella. */
 export type Stage = 'identidad' | 'logo' | 'etiqueta' | 'mockup'
@@ -181,10 +183,32 @@ export function buildPrompt(stage: Stage, b: Brief): string {
 
 /**
  * La identidad y la etiqueta 360 son apaisadas, el logo cuadrado y el mockup
- * vertical. (`sizeFor` deriva el tamaño del ratio; gpt-image-2 no está limitado
- * a tres tamaños como decía esta nota — solo exige múltiplos de 16.)
+ * vertical. (`sizeFor` deriva el tamaño del ratio; el modelo de imagen no está
+ * limitado a tres tamaños como decía esta nota — solo exige múltiplos de 16.)
  */
 export function aspectFor(stage: Stage): string {
   if (stage === 'logo') return '1:1'
   return stage === 'mockup' ? '4:5' : '3:2'
+}
+
+/**
+ * El respaldo de imagen por etapa (decisión del dueño del repo, 2026-09-17). El PRIMARIO es el
+ * mismo en las cuatro; lo que cambia es a quién se cae.
+ *
+ * El corte es por cuánto pesa la pieza en la percepción de la marca, no por dificultad:
+ *
+ *  - `identidad` (el board de identidad) y `mockup` (el producto terminado) son las dos piezas
+ *    que el cliente mira como "así se ve mi marca" → `nano-banana-pro`.
+ *  - `logo` y `etiqueta` son insumos que después se rehacen y se editan → `nano-banana-2`, que
+ *    es el barato.
+ *
+ * Va acá y no en la ruta, al lado de `aspectFor`, porque las dos son la misma clase de dato: lo
+ * que la etapa necesita del motor. Una `Record<Stage, …>` y no un `if` para que agregar una etapa
+ * no compile hasta decidir su respaldo.
+ */
+export const RESPALDO_POR_ETAPA: Record<Stage, RespaldoImagen> = {
+  identidad: NANO_BANANA_PRO,
+  logo: NANO_BANANA_2,
+  etiqueta: NANO_BANANA_2,
+  mockup: NANO_BANANA_PRO,
 }

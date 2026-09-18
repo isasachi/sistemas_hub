@@ -49,12 +49,16 @@ describe('ensureSession', () => {
   })
 
   // Sin id no se puede subir nada: el paso 0 tiene que poder decirlo en vez de subir
-  // contra `undefined`.
-  it('devuelve null y marca el error si el servidor falla', async () => {
+  // contra `undefined`. Lo dice con el `null` de vuelta, NO con `sessionError`.
+  //
+  // ⚠️ `sessionError` se quedó adrede en false (897cc6d): esa bandera reemplaza el wizard
+  // entero por una pantalla de error y se llevaba puesto el video que el usuario acababa de
+  // elegir. El paso que llama muestra su propio error sin desmontar nada.
+  it('devuelve null SIN prender sessionError si el servidor falla', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 500, json: async () => ({}) })))
 
     expect(await useVideoStore.getState().ensureSession()).toBeNull()
-    expect(useVideoStore.getState().sessionError).toBe(true)
+    expect(useVideoStore.getState().sessionError).toBe(false)
   })
 })
 

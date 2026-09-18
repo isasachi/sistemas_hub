@@ -39,79 +39,141 @@ sistemas_hub/                (git root — package.json con "workspaces": ["apps
 - **Lógica:** en `apps/web/lib/` (web) o `apps/worker/lib/` (worker); la capa DB/tipos compartida en `packages/shared/` (`@ph/shared`).
 - **Prompts:** archivos `.md` en `apps/web/lib/prompts/` (Gemini) o `apps/worker/lib/prompts/` (worker), leídos con `fs.readFileSync(path.join(process.cwd(), 'lib/prompts/...'))`.
 - **DB:** Supabase con `SUPABASE_SERVICE_ROLE_KEY` (bypassa RLS). Cliente lazy singleton: `@ph/shared` (`db.ts`) para buscador-productos; `apps/web/lib/db.ts` para el resto del hub.
-- **LLM:** OpenAI primario (gpt-4o-mini + gpt-image-2) con Gemini de fallback; el **texto/visión de Gemini sale por KIE** (`lib/kie-gemini.ts`) — ver "Motor de modelos". Anthropic (`@anthropic-ai/sdk`) solo para `buscador-productos` (en `apps/worker`).
+- **LLM:** los DOS SDK directos — **texto/visión: Gemini primario con OpenAI de respaldo; imagen: OpenAI primario con un respaldo de Google por pieza** — ver "Motor de modelos". KIE quedó SOLO para el render de video con Grok. Anthropic (`@anthropic-ai/sdk`) solo para `buscador-productos` (en `apps/worker`).
 - **UI:** tema oscuro sobre el granate de la marca. **El sistema de diseño está en `BRANDBOOK.md` (raíz) y se implementa en `apps/web/app/globals.css` — léelo antes de tocar color o tipografía.** En corto: granate `#1E0811` de lienzo, carmesí `#BD1347` de acción (solo relleno; para texto va `#E8467A`), crema `#F6F2EB` de tinta y prestigio; Poppins de titulares (h1–h6 y `.lp-serif`), Lato de cuerpo/UI/cifras y Bodoni Moda **solo** para el logotipo. Cada tool tiene su `accentColor`. Iconos de `lucide-react`. Strings de usuario en español.
   ⚠️ **Las fuentes se piden con `<link>` en `apps/web/app/layout.tsx`, NO con `@import` en `globals.css`:** Turbopack elimina los `@import url(...)` externos al compilar la hoja y el sitio se servía sin un solo `@font-face`, cayendo entero a la serif por defecto del navegador (medido: las familias del chrome daban exactamente el mismo ancho que `serif`). **Poppins y Lato van en el PRIMER `<link>`**, el del chrome: son las dos fuentes de render crítico. El segundo `<link>` es el catálogo tipográfico del contenido que se genera para el cliente (`lib/landing/niches.ts`); borrarlo rompe esas previews, pero ya no se lleva puesta la tipografía del sitio.
 - **Tests:** Vitest por workspace (`npm test -w apps/web`, `npm test -w apps/worker`; `npm test` corre ambos).
 
-## Motor de modelos — migración a KIE, recurso por recurso
+## Motor de modelos — los DOS SDK directos (2026-09-17)
 
-⚠️ **La migración de TODO el hub a KIE de una vez se intentó y se revirtió (2026-08-25): produjo demasiados bugs encadenados.** Se rehace por partes, y cada parte se mide contra la API antes de cablearse. Lo que sigue es el estado real, no el plan.
+⚠️ **KIE quedó reducido a UN recurso: el render de video con Grok.** Todo lo demás —texto, visión
+e imagen— sale por el SDK de Google o el de OpenAI. El intento anterior (migrar el hub entero A
+KIE) se revirtió el 2026-08-25 por bugs encadenados, y la migración parcial que quedó se deshizo
+acá: era un intermediario más para mantener, con su propio dialecto y sus propios modos de fallo
+(ver "lo que costó KIE" al final de esta sección).
 
-| recurso | dónde vive hoy | estado |
+**El par de TEXTO es uno solo para todo el hub: `gemini-3.6-flash` primario, `gpt-5.4-nano` de
+respaldo.** Por eso `callStructured`/`callReasoning` **no toman opciones**: el viejo `preferGemini`
+ya no puede significar nada distinto del default. Los dos sitios que NO quieren respaldo llaman a
+`geminiCallStructured`, que es otra función y se lee como lo que es.
+
+**En IMAGEN el primario también es uno solo —`gpt-image-2.5-sunburst`— y lo que cambia por pieza
+es el RESPALDO**, que se declara en el call site (`generateImage(parts, n, { respaldo })`). No hay
+default: cuál corresponde es una decisión medida por pieza, y un default la escondería.
+
+| recurso | modelo | dónde |
 |---|---|---|
-| **Texto y visión de Gemini** (`gemini-2.5-flash`) | **KIE** — `lib/kie-gemini.ts` | ✅ migrado |
-| **Imagen** (`gpt-image-2` + `nano-banana-2`) | **KIE** — `lib/kie-image.ts` | ✅ migrado |
-| Texto y visión de OpenAI (`gpt-4o-mini`) | SDK de OpenAI | 🔒 **se queda ahí** — decisión del dueño del repo (2026-08-25) |
-| Render de video (`grok-imagine`) | KIE, key del USUARIO | ya estaba |
-| Worker (`claude-haiku-4-5`) | Anthropic directo | 🔒 **se queda ahí** — decisión del dueño del repo (2026-08-25) |
-| Moderación (`omni-moderation-latest`) | OpenAI directo | 🔒 **se queda ahí** — decisión del dueño del repo (2026-08-25) |
+| **Texto y visión, primario** | `gemini-3.6-flash` | SDK de Google (`@google/genai`) |
+| **Texto y visión, respaldo** | `gpt-5.4-nano` | SDK de OpenAI |
+| **Imagen, primario** | `gpt-image-2.5-sunburst` | SDK de OpenAI |
+| **Imagen, respaldo barato** | `gemini-3.1-flash-image` (*nano-banana-2*) | SDK de Google |
+| **Imagen, respaldo premium** | `gemini-3-pro-image` (*nano-banana-pro*) | SDK de Google |
+| Render de video | `grok-imagine-video-1-5-preview` | **KIE, key del USUARIO** |
+| Moderación | `omni-moderation-latest` | OpenAI directo 🔒 |
+| Worker (`buscador-productos`) | `claude-haiku-4-5` | Anthropic directo 🔒 |
 
-🔒 **TRES RECURSOS NO SE MIGRAN, y es el estado final buscado — no un pendiente.** Con esto la migración queda CERRADA: no hay nada más en la lista.
+🔒 **Moderación y worker no se tocan, y es el estado final buscado.** La moderación es gratis,
+fail-open y devuelve un veredicto binario que un modelo de chat no da. El worker corre **Batches
+(−50 %) + `cache_control` sobre un system prompt fijo grande**: es exactamente la forma donde
+perder el caché duele más. (El `gpt-5.6-luna` que vive en `nicho-verdict.ts` **no** es un respaldo
+sino un motor alternativo que se pide con `PH_NICHO_MOTOR=openai`, y no se autodetecta a propósito:
+un fallback silencioso entre motores es lo que hace que "cambió el resultado" no se pueda atribuir
+a nada.)
 
-1. **`gpt-4o-mini`** se queda en el SDK de OpenAI.
-2. **La moderación (`omni-moderation-latest`)** se queda en OpenAI. Es gratis, fail-open y KIE no tiene equivalente; meterla en un modelo de chat sería pagar por algo que hoy no cuesta y perder el veredicto binario.
-3. **El worker (`buscador-productos`, `claude-haiku-4-5`)** se queda en Anthropic directo. `anthropic.ts` corre **Batches (−50 %) + `cache_control` sobre un system prompt fijo grande (lecturas a 0,1×)** con mensajes de usuario chicos: es exactamente la forma donde perder el caché duele más, y KIE anuncia 30-50 % bajo lista **sin batching ni caché**. Con 66k filas pendientes en el barrido, moverlo sería plausiblemente un AUMENTO de costo. (Y su endpoint `/claude` devolvía 500 la última vez que se probó, pero ese no es el motivo: el motivo es el costo.)
+### El respaldo por pieza — qué modelo y por qué
 
-⚠️ **Consecuencia práctica de la 1 y la 2:** `openai` sigue siendo dependencia de `apps/web` y `llm-openai.ts` es código VIVO, no legado. Lo que este documento midió sobre `gpt-5-6-luna` como reemplazo de gpt-4o-mini queda archivado: no se va a usar.
+| pieza | primario | respaldo | por qué ESE respaldo |
+|---|---|---|---|
+| anuncios: ad y su refine | sunburst | nano-banana-2 | replica el LAYOUT de una referencia que ya existe, no es identidad de marca |
+| branding: logo, etiqueta 360 | sunburst | nano-banana-2 | insumos que después se rehacen y se editan |
+| branding: identidad, mockup | sunburst | **nano-banana-pro** | son el "así se ve mi marca" que el cliente mira |
+| landing: secciones y su regen | sunburst | **nano-banana-pro** | las ve el comprador final, y las 8 tienen que leerse como una sola pieza |
+| landing: placa canónica de talento | sunburst | **nano-banana-pro** | es la cara que se repite en las 8 secciones |
+| **landing: placa de ZONA** | **nano-banana-2** | **ninguno** | ver abajo |
+| video: avatar | sunburst | **nano-banana-pro** | es el ancla de identidad en cada lote |
 
-**Detalle de `gpt-4o-mini`:** El hub queda con dos proveedores de texto a propósito: OpenAI directo para su mitad y KIE para la de Gemini. `isPermanentOpenAiError` y el resto de `llm-openai.ts` siguen en uso; lo que ya NO se usa es `sizeFor`, que se jubiló con el ratio nativo de la imagen.
+⚠️ **La placa de zona es la ÚNICA pieza que no pasa por `generateImage`** — va derecho a
+`geminiGenerateImage(NANO_BANANA_2, …)`, sin primario de OpenAI y sin respaldo. Está medido que
+el modelo de imagen de OpenAI la rechaza **4 de 4** (`moderation_blocked`,
+`safety_violations=[sexual]`, `moderation_stage: output`): un encuadre de cuerpo sin rostro cae del
+lado prohibido de su filtro y no hay forma de pedirlo que no lo haga. **No le agregues un respaldo
+"por las dudas": el único candidato es justo el que rechaza.** La placa canónica (retrato, CON
+cara) no tiene ese problema y va por el camino normal.
 
-**Lo que NO cambió al migrar el recurso de Gemini:** el orden de proveedores. `callStructured`/`callReasoning` siguen siendo OpenAI-primario, con `preferGemini` invirtiéndolo en los sitios de siempre. Lo único que cambió es por dónde sale Gemini.
+⚠️ **El avatar del video SÍ tiene respaldo, y su ausencia fue un bug real.** Está medido que el
+modelo de imagen de OpenAI rechaza por moderación **~1 de cada 3 avatares** con la misma foto y el
+mismo prompt; hasta el 2026-09-17 ese tercio se le devolvía al usuario como "no se pudo construir
+el personaje", con la cuota ya cobrada. No pasa por `generateImage` a propósito: ese choke point
+agrega la regla de idioma de textos visibles y el avatar no lleva una sola letra.
 
-⚠️ **`GEMINI_VIA=direct` devuelve este recurso al SDK de Google sin desplegar nada.** Es lo que hace reversible un slice: si KIE se cae para este modelo, se cambia una variable. `LLM_PROVIDER=gemini` (Gemini-only) sigue existiendo y es ortogonal.
+### Los dos sitios de texto SIN respaldo
 
-**Lo medido contra la API, que es lo que hay que respetar al cablear el resto:**
+- **El forense del video** (`analyze-reference`): el modelo de respaldo no procesa video, así que
+  no hay a qué caer. ⚠️ **Y el video va INLINE, en base64**: el SDK de Google solo acepta un
+  `fileUri` de su propia Files API, no una URL de Supabase. Por eso `MAX_VIDEO_MB` no es un
+  capricho —el request se come el archivo en memoria y el base64 lo infla ~33 %— y se comprueba
+  con un **HEAD** antes de bajarlo.
+- **La caja del producto de landing** (`extractProductBox`): `box_2d [0-1000]` es el formato en el
+  que Gemini está entrenado y el respaldo devuelve cajas cortadas. Un recorte mal hecho es PEOR
+  que no recortar, y el caller ya sabe caerse al render completo cuando esto devuelve `null`.
 
-⚠️ **EL SCHEMA VA PLANO, SIN `toStrictSchema`.** Esa transformación —todo en `required` + los opcionales marcados nullable— es un requisito de los structured outputs de OpenAI, y el camino directo de Gemini NUNCA la usó: mandaba `z.toJSONSchema` tal cual. Aplicarla obliga al modelo a rellenar campos que el schema dice que puede omitir, y como la unión no se hace cumplir, inventa: medido, `bulletsAfter` —un array opcional que solo tiene sentido en la sección antes/después— volvió como el STRING *"Apto para todo tipo de pieles"* dentro de un hero. Verificado además que este endpoint acepta `strict: true` con un `required` incompleto, así que el truco de OpenAI no hace falta. El diseño de los schemas del repo ya cuenta con esto: lo que el modelo DEBE llenar se declara `.nullable()`, no `.nullish()`.
+### ⚠️ NO HAY ESCAPES GLOBALES
 
-⚠️ **`type: ["string","null"]` NO se acepta** — `400 "The 'type' property must be a single string, not an array"`, con `strict` en true y en false. Lo produce el `.nullable()` de zod. `toSingleTypes` lo convierte en `anyOf`, y **los hermanos del `type` van DENTRO de la rama**: `{type:['array','null'], items:X}` tiene que quedar como `{anyOf:[{type:'array', items:X},{type:'null'}]}` — dejando `items` afuera, el modelo lee "un array de cualquier cosa".
+`LLM_PROVIDER`, `GEMINI_VIA`, `IMAGE_VIA` y `LLM_IMAGE_TIMEOUT_MS` **se borraron** (decisión del
+dueño del repo, 2026-09-17). Cada call site declara su par, que es lo que se puede leer sin correr
+el programa. Si un modelo se cae, se cambia la constante en `lib/gemini.ts` y se despliega. No
+reintroduzcas un flag de entorno para "poder revertir rápido": lo que producía era que el mismo
+código se comportara distinto en dos entornos y que un respaldo entrara en silencio.
 
-⚠️ **UNA PROPIEDAD LLAMADA `type` ROMPE EL VALIDADOR.** Devuelve `422 …properties.type must be string or array`, confundiendo la clave con la palabra reservada. Por eso `SectionCopy.type` pasó a llamarse **`kind`** (y con él `OfferCopy`/`OfferGen`). Las sesiones guardadas traen `type`: se normalizan al LEER con `aKind`, en una sola puerta (`getLandingSession` y `resolveOffer`), así que **no hizo falta migrar el jsonb**. `LandingSection.type` NO se tocó: es almacenamiento nuestro y nunca viaja a un modelo. Hay un test que fija que ningún schema que va al modelo vuelva a tener esa propiedad.
+`LLM_IMAGE_TIMEOUT_MS` en particular existía porque el modelo de imagen viejo tardaba 40-90 s
+contra un cap de 60 s. Sunburst tarda **13-15 s medidos**, así que ya no tiene a quién proteger.
 
-⚠️ **`stream` e `include_thoughts` vienen en `true` por defecto** (lo dice la doc). Con el primero la respuesta llega como SSE y no como JSON; con el segundo el razonamiento viaja dentro del contenido y rompe el parse del structured output. Los dos se mandan en `false`.
+### Lo medido contra la API, que es lo que hay que respetar al tocar esto
 
-⚠️ **Sin `max_tokens` explícito la salida larga vuelve truncada, y `finish_reason` no lo dice.** Medido: el reporte forense volvió cortado a mitad de string en tres intentos; con el tope puesto vuelve completo.
+✅ **Verificado el 2026-09-17** (`scripts/probe-models-list.ts` y `scripts/probe-recableado.ts`):
 
-⚠️ **La base64 SÍ funciona, contra lo que dice la doc** ("solo URLs http"): verificado con imágenes y con video. Por eso el formato `Part[]` interno no cambió. ⚠️ **Pero un video grande MÁS un schema revienta:** medido sobre el mismo video de 13,6 MB, `schema + base64` falla a los ~69 s con un `400 "The server is currently being maintained"` que miente, y `schema + URL` responde. Por eso el análisis forense manda `fileData.fileUri` y KIE se baja el archivo; el allowlist de host y el tope de `MAX_VIDEO_MB` pasan a comprobarse con un **HEAD**.
+- `gpt-5.4-nano` responde por `chat.completions` con `response_format: json_schema strict` (2-3 s),
+  **acepta imágenes** por `toChatContent` (1,6-4,5 s) y acepta `temperature: 0`.
+- `gemini-3.6-flash` con el **schema PLANO** devuelve un opcional omitido como ausente.
+- `gpt-image-2.5-sunburst` devuelve **`864x1536` exacto** cuando se le pide (`images.generate` 13 s
+  y `images.edit` 15 s), así que `sizeFor` transfiere del modelo viejo.
+- `gemini-3-pro-image` respeta `imageConfig.aspectRatio` (pedido 3:4 → 1792x2400, 0.747; 22 s).
+- `gemini-3-pro-image` y `nano-banana-pro-preview` son el mismo modelo (mismos límites); se usa el
+  id sin `-preview`.
 
-⚠️ **KIE devuelve HTTP 200 con el error DENTRO del cuerpo** (`{code:400,…}`): mirar solo `res.ok` deja pasar el fallo como éxito. Y como en Node `fetch` no tiene timeout propio, toda petición lleva `AbortSignal.timeout`.
+⚠️ **EL SCHEMA DE GEMINI VA PLANO, SIN `toStrictSchema`.** Esa transformación —todo en `required` +
+los opcionales marcados nullable— es un requisito de los structured outputs de **OpenAI** y vive en
+`llm-openai.ts`. Aplicarla al camino de Gemini obliga al modelo a rellenar campos que el schema
+dice que puede omitir, y entonces los inventa: medido, `bulletsAfter` —un array opcional que solo
+tiene sentido en la sección antes/después— volvió como el STRING *"Apto para todo tipo de pieles"*
+dentro de un hero. **El reordenamiento del par NO movió esa transformación de lado.**
 
-⚠️ **El JSON vuelve a veces envuelto en ```` ```json ```` aunque se haya pedido `response_format`** — sin quitar la cerca, `JSON.parse` tira y se queman los reintentos por una respuesta correcta (`parseJsonLoose`).
+⚠️ **`gpt-5.4-nano` NO acepta `max_tokens`** (`400 unsupported_parameter`); el campo se llama
+`max_completion_tokens`. Hoy no se manda ninguno de los dos.
 
-✅ **Verificado contra la API por el camino real:** visión con campo opcional y razonamiento (5 s), el copy de la landing —el schema que antes daba 422— (4 s), el análisis forense con el video real por URL (15 s, 5 cortes) y el análisis de referencia de anuncios, cuyo `bodyFocus` nullable vuelve como `null` en vez de faltar (6 s).
+⚠️ **El diseño de los schemas cuenta con esto:** lo que el modelo DEBE llenar se declara
+`.nullable()`, no `.nullish()` (ver las leyes de más abajo).
 
+### Lo que costó KIE, para que no se reintente sin leerlo
 
-### La IMAGEN por KIE (`lib/kie-image.ts`)
+Se deja escrito porque el síntoma vuelve si alguien mete otro intermediario:
 
-`gpt-image-2` y `gemini-3.1-flash-image` —que en KIE se llama **`nano-banana-2`**— salen por el marketplace: `jobs/createTask` + polling de `recordInfo`. **El par no cambia**: gpt-image-2 primario, nano-banana-2 de respaldo, y `preferGemini` lo invierte. Quien orquesta el par sigue siendo `generateImage`; `kie-image.ts` es el transporte de UN modelo.
+- **Rechazaba los prompts de landing 3 de 3** con "The current content could not be processed", y
+  `generateImage` caía al respaldo **en silencio**: el respaldo dibujaba la barra y las cards
+  distinto en cada sección, y eso se reportó como "nada es estándar" y se persiguió tres rondas
+  como problema de prompt. El mismo prompt por el SDK directo se aceptaba.
+- **Devolvía HTTP 200 con el error DENTRO del cuerpo** (`{code:400,…}`): mirar `res.ok` dejaba
+  pasar el fallo como éxito.
+- **Una propiedad llamada `type` rompía su validador** (`422 …properties.type must be string or
+  array`). Por eso `SectionCopy.type` se llama **`kind`**; el rename NO se revierte —las sesiones
+  guardadas traen `type` y `aKind` las normaliza al leer— pero el guard que lo fijaba se borró con
+  su motivo.
+- **Cada modelo de imagen nombraba distinto el campo de referencias** y equivocarse no fallaba
+  ruidoso: creaba la tarea, la terminaba con `state: success` y devolvía un text-to-image
+  disfrazado de edición.
 
-⚠️ **`IMAGE_VIA=direct` devuelve el recurso a los SDK sin desplegar**, y va aparte de `GEMINI_VIA`: son dos recursos, y se puede tener uno en KIE y el otro no — que es el punto de migrar de a uno.
-
-⚠️ **EL AVATAR Y LAS ANCLAS DEL VIDEO SALEN POR GEMINI 3.1 FLASH IMAGE** (decisión del dueño del repo). Van con `preferGemini`, o sea nano-banana-2 de primario y gpt-image-2 de respaldo — y ese orden importa: está medido que **gpt-image-2 rechaza ~1 de cada 3 avatares por moderación** con la MISMA foto y el MISMO prompt, así que de primario sería un peaje sistemático y de respaldo es una segunda oportunidad. Lo sigue pagando el HUB; lo del usuario es el render del clip.
-
-⚠️ **CADA MODELO NOMBRA DISTINTO EL CAMPO DE REFERENCIAS Y EQUIVOCARSE NO FALLA RUIDOSO.** `gpt-image-2-image-to-image` usa `input_urls` (máx 16) y `nano-banana-2` usa `image_input` (máx 14, 30 MB c/u). Mandando el equivocado, KIE crea la tarea, la termina con `state: success` y entrega una imagen generada **solo desde el prompt** — un text-to-image disfrazado de edición. Hay test que fija el body de cada modelo.
-
-⚠️ **ACÁ LA BASE64 NO SIRVE, al revés que en el chat.** El campo pide *"File URL after upload, not file content"* y un data URI devuelve `500 File type not supported`. Las referencias inline se suben al bucket con el **hash del contenido** por nombre, así la misma foto en cinco pasos del wizard sube una vez. ⚠️ Una referencia que YA vive en un bucket público (`fileData.fileUri`) se pasa tal cual: el avatar y las anclas del video bajaban su propia imagen para volver a subirla. **El orden se conserva mezclando los dos tipos** — el prompt de las anclas cita `@image(n)`, así que reordenar le da a una toma la imagen de otra.
-
-⚠️ **`output_format: 'png'` explícito.** El default de `nano-banana-2` es **jpg**, y los call sites suben lo que vuelve como `image/png`: sin esto se guardarían bytes jpg con nombre `.png`.
-
-⚠️ **El ratio va NATIVO y por eso `sizeFor` se jubila.** Medido: pidiendo `9:16` devuelve **1152x2048 (0.563)** y pidiendo `4:5`, **1122x1402 (0.800)** — contra los tres buckets de múltiplos de 16 que aplastaban todo portrait. `auto` y los ratios 5:4/4:5 solo existen en 1K, y eso lo respeta `imageResolution`.
-
-⚠️ **EL STREAM DE BRANDING NO ENTRA EN SECUENCIA CON LA IMAGEN ASÍNCRONA.** Cada pieza pasa a ser `createTask` + polling (~45-65 s medidos) y las 4 seguidas dan **5,8 minutos** contra el `maxDuration = 300` de esa ruta: la función muere antes de terminar y el usuario se queda con el kit a medias y la cuota de cada etapa ya cobrada. Las tres piezas que derivan de la identidad son independientes ENTRE SÍ, así que corren en `Promise.all` detrás de ella: **5,8 min → 2,9 min medidos**. `correrEtapa` atrapa sus propios errores, así que una pieza caída no tumba a las otras dos.
-
-✅ **Verificado contra la API por el camino real (`scripts/probe-kie-image.ts`):** texto→imagen con gpt-image-2 (9:16 exacto, 53 s), referencia REMOTA con nano-banana-2 (46 s, sin volver a subir el archivo) y referencia INLINE con gpt-image-2 (4:5 exacto, 65 s incluyendo la subida). En el último se comprobó en píxeles que la referencia **se usó**: mismo frasco y misma etiqueta, con el texto traducido al español por la `SPANISH_RULE`.
-
+**La huella para saber QUÉ modelo respondió sigue siendo el tamaño:** `864x1536` = el de OpenAI,
+`1152x2048` o más = uno de Google.
 
 ## Doctrina por tool — LEE EL ARCHIVO ANTES DE TOCAR EL CÓDIGO
 
@@ -168,7 +230,7 @@ que respalda cada una está en el doc que se nombra.
 - **Un probe que arma el prompt a mano tiene que copiar también las OPCIONES del modelo**, no solo el texto. → `video-ads.md`
 - **Un probe se INVIERTE al adoptar su resultado** (el brazo de control reconstruye lo viejo), si no deja de ser re-corrible.
 - **`fetch` en Node no tiene timeout.** Toda petición lleva `AbortSignal.timeout`, y un bucle de polling comprueba su presupuesto ANTES del await.
-- **KIE devuelve HTTP 200 con el error DENTRO del cuerpo.** Mirar `res.ok` deja pasar el fallo como éxito.
+- **KIE devuelve HTTP 200 con el error DENTRO del cuerpo.** Mirar `res.ok` deja pasar el fallo como éxito. (Hoy solo lo toca el render de video, pero la ley vale para cualquier intermediario.)
 - **Antes de bumpear una huella (`scriptFingerprint`), contá a cuántas sesiones PAGADAS invalida.** Si el cambio ya entra por un insumo hasheado, el bump es over-invalidación gratuita.
 
 **Prohibiciones explícitas — están en el doc porque ya se intentaron y fallaron**

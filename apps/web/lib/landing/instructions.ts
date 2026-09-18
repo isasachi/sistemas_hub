@@ -530,7 +530,7 @@ function offerText(offer: Offer): string {
 // La sesión `fbe218f3` del 2026-08-22 salió con ESTE MISMO STRING y sus barras son iguales entre
 // sí y no cortan nada. Lo que había cambiado no era el prompt sino el MODELO: desde `0f51808`
 // (migración de la imagen a KIE) gpt-image-2 rechaza estos prompts y el respaldo nano-banana-2
-// renderiza la banda distinto en cada sección. Se arregla con `viaDirecta` en la ruta, no acá.
+// renderiza la banda distinto en cada sección. Se arregla con el MODELO en la ruta, no acá.
 //
 function trustText(trust: TrustBlock, money: MoneyRamp): string {
   const rows: string[] = []

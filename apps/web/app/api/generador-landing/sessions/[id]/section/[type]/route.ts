@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLandingSession, updateLandingSession, upsertLandingSection } from '@/lib/landing/db'
 import { fetchAsBase64, uploadToStorage, storagePublicUrl } from '@/lib/storage'
-import { generateImage, editWithPrompt } from '@/lib/gemini'
+import { generateImage, editWithPrompt, NANO_BANANA_PRO } from '@/lib/gemini'
 import { buildDiffusionInstruction, MULTI_UNIT_SECTIONS, NO_TALENT_SECTIONS, OFFER_SECTIONS } from '@/lib/landing/instructions'
 import { buildProductPack } from '@/lib/landing/product-box'
 import { NO_TALENT_SUBSTITUTE, DEMOGRAPHIC_LABELS, zoneNeedsOwnPlate } from '@/lib/landing/demographics'
@@ -13,11 +13,12 @@ import type { Part } from '@google/genai'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-// UNA imagen por request. Con OpenAI primario (gpt-image-2 ~60-90s) el viejo cap de 60s no
-// alcanzaba → 504. Fluid Compute (vercel.json fluid:true) sube el techo a 300s incluso en Hobby;
-// 300 cubre 1 imagen + los reintentos de generateImage. El cliente llama esta ruta una vez por
-// sección, secuencialmente. Sirve para generar Y regenerar. (Opcional prod: LLM_IMAGE_TIMEOUT_MS
-// hace caer a Gemini antes del cap si OpenAI se cuelga.)
+// UNA imagen por request. El cap viejo de 60s no alcanzaba y daba 504; Fluid Compute
+// (vercel.json fluid:true) sube el techo a 300s incluso en Hobby, y 300 cubre 1 imagen + los
+// reintentos de generateImage + el respaldo. Con `gpt-image-2.5-sunburst` (13-15s medidos, contra
+// los 40-90s del modelo anterior) sobra margen, pero el cap se deja donde está: lo que lo fijó no
+// fue el primario sino el peor caso primario+respaldo. El cliente llama esta ruta una vez por
+// sección, secuencialmente. Sirve para generar Y regenerar.
 export const maxDuration = 300
 
 // Motor de DIFUSIÓN, DNA-driven (spec 2026-07-23): reemplaza al motor viejo (paleta/typography
@@ -89,7 +90,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   let b64: string
   if (precision && existing?.imageUrl) {
     const prev = await fetchAsBase64(existing.imageUrl)
-    b64 = await editWithPrompt(prev.data, prev.mimeType, precision, { aspectRatio: '9:16' })
+    // El MISMO par que la generación de la sección: un regen que cayera a otro respaldo
+    // cambiaría la estética de UNA sección y rompería la consistencia entre las 8.
+    b64 = await editWithPrompt(prev.data, prev.mimeType, precision, { aspectRatio: '9:16', respaldo: NANO_BANANA_PRO })
   } else {
     // ─── Contrato de orden de parts[] (alineado con la nota de composición del prompt) ───
     // 1) producto canónico (o pack multi-unidad) — Imagen 1.
@@ -174,16 +177,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         demographicLabel: session.demographic_id && session.demographic_id !== 'no_talent' ? DEMOGRAPHIC_LABELS[session.demographic_id] : undefined,
       }),
     })
-    // ⚠️ `viaDirecta` ES SOLO PARA LANDING, y por un fallo medido: gpt-image-2 POR KIE rechaza
-    // estos prompts 3 de 3 ("The current content could not be processed") y `generateImage` cae al
-    // respaldo en silencio. Nano-banana-2 renderiza la barra y las cards distinto en cada sección,
-    // y eso es lo que se reportó como "nada es estándar" — el prompt nunca fue el problema. Por el
-    // SDK directo el MISMO prompt se acepta y vuelve la calidad de antes de la migración.
+    // ⚠️ El primario TIENE que ser el de OpenAI por el SDK, y está medido: por KIE rechazaba
+    // estos prompts 3 de 3 ("The current content could not be processed"), `generateImage` caía al
+    // respaldo en silencio, y el respaldo renderiza la barra y las cards distinto en cada sección
+    // — eso fue el "nada es estándar" que se reportó como problema de prompt. Con KIE fuera del
+    // hub (2026-09-17) esa rama ya no existe, pero el motivo se deja escrito: si alguien vuelve a
+    // mandar estas secciones por un intermediario, el síntoma es ese y no el prompt.
     //
-    // Va por LLAMADA y no por `IMAGE_VIA` de entorno a propósito: la variable lo cambiaría para
-    // todo el hub, y anuncios y branding hoy funcionan bien por KIE. La huella para saber qué
-    // modelo respondió es el tamaño: 864x1536 = gpt-image-2, 1152x2048 = nano-banana-2.
-    b64 = await generateImage(parts, 3, { aspectRatio: '9:16', viaDirecta: true })
+    // La huella para saber QUÉ modelo respondió sigue siendo el tamaño: 864x1536 = el de OpenAI,
+    // 1152x2048 o más = un modelo de Google.
+    b64 = await generateImage(parts, 3, { aspectRatio: '9:16', respaldo: NANO_BANANA_PRO })
   }
   if (!b64) return NextResponse.json({ error: 'No se pudo generar la sección', retryable: true }, { status: 502 })
 
@@ -201,8 +204,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // reserveLockup/BrandLockup siguen sin uso.)
   // ⚠️ EL COMPOSITE DE LA BARRA ESTÁ DESACTIVADO (2026-08-27, decisión del dueño del repo).
   // Se construyó porque el prompt no lograba una barra igual entre secciones — y ese diagnóstico
-  // resultó FALSO: lo que variaba era el modelo, no el prompt (ver `viaDirecta` arriba). Con
-  // gpt-image-2 de vuelta, la barra la dibuja el prompt como lo hacía antes de la migración.
+  // resultó FALSO: lo que variaba era el modelo, no el prompt (ver el comentario del primario,
+  // arriba). Con el modelo de OpenAI de primario, la barra la dibuja el prompt.
   //
   // `lib/landing/trust-bar.ts` NO se borró: sigue probado y es la única vía que GARANTIZA una
   // barra idéntica si el render vuelve a cambiar de modelo. Mismo criterio que `vertical.ts` en
