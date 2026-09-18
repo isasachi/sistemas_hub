@@ -1,5 +1,13 @@
 ## Tool: Generador de Anuncios (`generador-anuncios`)
 
+> 🟡 **EL CABLEADO DE MODELOS DE ESTE DOC QUEDÓ VIEJO EL 2026-09-17.** Todo el hub pasó a los DOS
+> SDK directos y KIE quedó SOLO para el render de video con Grok. Donde abajo diga `preferGemini`,
+> `viaDirecta`, `GEMINI_VIA`/`IMAGE_VIA`/`LLM_PROVIDER`, `gpt-4o-mini`, `gpt-image-2` o
+> "por KIE", **el cableado vigente está en la sección "Motor de modelos" de `AGENTS.md`** — en
+> corto: texto `gemini-3.6-flash` → `gpt-5.4-nano`; imagen `gpt-image-2.5-sunburst` con un respaldo
+> de Google declarado por pieza. **Lo MEDIDO acá sigue valiendo** (qué prompt rechaza qué modelo,
+> qué encuadre se modera, qué campo vuelve vacío): lo que cambió es por dónde sale cada llamada.
+
 Replica un anuncio estático de referencia con el producto, el logo y el copy del usuario. Wizard de 5 pasos (referencia → producto → comentarios → copy → imagen), rutas en `apps/web/app/api/generador-anuncios/sessions/[id]/*`, tabla `sessions`, el instructivo maestro de imagen en `lib/prompts/step5.md`.
 
 **Diagnóstico 2026-08-15 (sesión `4c8f6c8b`) — cuatro fallos, cuatro causas distintas.** El usuario reportó un ad 16:9 sobre una referencia vertical, copy vago, el logo flotando al medio y un avatar hombre para un público "Mujeres de 20-40". Los cuatro se reprodujeron sobre los assets guardados de esa sesión y se arreglaron por separado.

@@ -26,7 +26,9 @@
 
 import type { Brief } from './brief'
 import { feelWords } from './brief'
-import { NANO_BANANA_2, NANO_BANANA_PRO, type RespaldoImagen } from '@/lib/gemini'
+// ⚠️ De `lib/modelos` y NO de `lib/gemini`: dos páginas `'use client'` importan `STAGE_LABELS`
+// de este archivo, y `lib/gemini` lee prompts del disco al cargarse.
+import { NANO_BANANA_2, NANO_BANANA_PRO, type RespaldoImagen } from '@/lib/modelos'
 
 /** La identidad primero; las tres piezas sueltas se derivan de ella. */
 export type Stage = 'identidad' | 'logo' | 'etiqueta' | 'mockup'

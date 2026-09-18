@@ -1,5 +1,13 @@
 ## Tool: Generador de Landing (`generador-landing`)
 
+> 🟡 **EL CABLEADO DE MODELOS DE ESTE DOC QUEDÓ VIEJO EL 2026-09-17.** Todo el hub pasó a los DOS
+> SDK directos y KIE quedó SOLO para el render de video con Grok. Donde abajo diga `preferGemini`,
+> `viaDirecta`, `GEMINI_VIA`/`IMAGE_VIA`/`LLM_PROVIDER`, `gpt-4o-mini`, `gpt-image-2` o
+> "por KIE", **el cableado vigente está en la sección "Motor de modelos" de `AGENTS.md`** — en
+> corto: texto `gemini-3.6-flash` → `gpt-5.4-nano`; imagen `gpt-image-2.5-sunburst` con un respaldo
+> de Google declarado por pieza. **Lo MEDIDO acá sigue valiendo** (qué prompt rechaza qué modelo,
+> qué encuadre se modera, qué campo vuelve vacío): lo que cambió es por dónde sale cada llamada.
+
 ⚠️ **EL COPY SALÍA AMPUTADO Y LA PRIMERA EXPLICACIÓN ERA LA EQUIVOCADA — son DOS motores que fallan al revés, y el de PRODUCCIÓN no es el que se arregló primero.** Gemini IGNORA los `maxLength` y devuelve de más, así que zod tira `too_big` y hay algo que recortar o reintentar. **OpenAI los aplica al DECODIFICAR**, o sea no devuelve de más: devuelve el texto ya CORTADO, exactamente en el tope. Y como `.max(90)` acepta 90, **zod pasa, el recorte no corre, no hay reintento, y el muñón se guarda y se imprime dentro de la imagen**. Landing es OpenAI-primario: ése es el camino real, y era el que ningún guard miraba. Medido en la landing de snacks, ya con el recorte movido al último intento: `cta-final.headline` y `testimonios.headline` volvieron **los dos en 90/90 caracteres**, cortados a mitad de frase (*"…¡No te quedes a"*), con el system prompt pidiéndole explícitamente no llegar al tope.
 
 `stringsEnElTope` (llm-clamp.ts) compara cada string contra el `maxLength` del JSON Schema que ya se le manda al modelo: aterrizar EXACTO en el tope es la firma del decodificador, no una casualidad, así que alcanza con comparar longitudes. Se reintenta nombrando los campos; en el ÚLTIMO intento se devuelve lo que haya — un muñón se lee mal, un 500 no se lee.

@@ -4,6 +4,7 @@ import fs from 'fs'
 import path from 'path'
 import { openaiCallStructured, openaiCallReasoning, openaiGenerateImage } from './llm-openai'
 import { clampTooBigStrings, correccionDeLargo, sliceToWord } from './llm-clamp'
+import { GEMINI_TEXTO, NANO_BANANA_2, NANO_BANANA_PRO, type RespaldoImagen } from './modelos'
 
 // Re-exportados desde el módulo hoja `llm-clamp.ts`: los usan también los call sites, y este
 // archivo lo importa a él — dejarlos acá era un ciclo. Los importadores no cambiaron.
@@ -29,18 +30,10 @@ function getAI() {
 // `LLM_PROVIDER`, `GEMINI_VIA`, `IMAGE_VIA` y `LLM_IMAGE_TIMEOUT_MS` se borraron: cada call site
 // declara su par, que es lo que se puede leer sin correr el programa. Si un modelo se cae, se
 // cambia la constante de acá y se despliega.
-export const GEMINI_TEXTO = 'gemini-3.6-flash'
-
-// Los dos modelos de imagen de Google. `nano-banana-2` y `nano-banana-pro` son sus nombres de
-// marketing (y los que usaba KIE); acá van por su id de la API, que es lo que el SDK acepta.
-export const NANO_BANANA_2 = 'gemini-3.1-flash-image'
-export const NANO_BANANA_PRO = 'gemini-3-pro-image'
-
-/**
- * El respaldo de imagen, explícito en cada call site. No tiene default a propósito: cuál de los
- * dos corresponde es una decisión por pieza —medida, no estética— y un default la escondería.
- */
-export type RespaldoImagen = typeof NANO_BANANA_2 | typeof NANO_BANANA_PRO
+// Los IDs viven en `lib/modelos.ts`, un módulo hoja: este archivo lee prompts del disco al
+// importarse, así que un `'use client'` que necesite un id no puede pasar por acá. Se re-exportan
+// para que un call site de servidor los pida donde le quede cómodo.
+export { GEMINI_TEXTO, NANO_BANANA_2, NANO_BANANA_PRO, type RespaldoImagen }
 
 export const SYSTEM_PROMPT = fs.readFileSync(
   path.join(process.cwd(), 'lib/prompts/gemini-system.md'),
@@ -223,8 +216,9 @@ export async function geminiGenerateImage(
  * Generación de imagen del hub: **gpt-image-2.5-sunburst primario, `respaldo` de segunda**.
  *
  * El primario es el mismo en todas las piezas (decisión del dueño del repo, 2026-09-17); lo que
- * cambia por pieza es el respaldo, y por eso `respaldo` NO tiene default: se declara en el call
- * site, al lado del prompt que puede hacerlo falta.
+ * cambia por pieza es el respaldo, y por eso `respaldo` es OBLIGATORIO y `opts` también: un call
+ * site nuevo que se lo olvide NO COMPILA. Un default acá sería un respaldo silencioso, que es
+ * justo el modo de fallo caro de este repo — "el diseño cambió" sin que nadie tocara el diseño.
  *
  * ⚠️ QUE EL RESPALDO EXISTA NO ES DECORACIÓN. Una imagen rechazada por MODERACIÓN cae por el
  * mismo `catch` que un fallo de red, y ahí el respaldo es la respuesta correcta: está medido que
@@ -239,10 +233,10 @@ export async function geminiGenerateImage(
  */
 export async function generateImage(
   parts: Part[],
-  maxRetries = 3,
-  opts?: { aspectRatio?: string; imageSize?: string; respaldo?: RespaldoImagen }
+  maxRetries: number,
+  opts: { aspectRatio?: string; imageSize?: string; respaldo: RespaldoImagen }
 ): Promise<string> {
-  const respaldo = opts?.respaldo ?? NANO_BANANA_2
+  const { respaldo } = opts
   const allParts: Part[] = [...parts, { text: SPANISH_RULE }]
   try {
     const out = await openaiGenerateImage(allParts, maxRetries, opts)
@@ -262,7 +256,7 @@ export async function editWithPrompt(
   base64: string,
   mime: string,
   prompt: string,
-  opts?: { aspectRatio?: string; imageSize?: string; respaldo?: RespaldoImagen }
+  opts: { aspectRatio?: string; imageSize?: string; respaldo: RespaldoImagen }
 ): Promise<string> {
   const parts: Part[] = [
     { inlineData: { mimeType: mime, data: base64 } },
