@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { z } from 'zod'
-import { ReferenceAnalysisSchema, ProductScanSchema, CopyElementSchema } from './types'
+import { ReferenceAnalysisSchema, ProductScanSchema, CopyElementSchema, normalizeBrandColors } from './types'
 
 // Los tres campos nuevos (bodyFocus, attentionMarkers, brandColors) son `.nullable().catch(null)`
 // y NO `.nullish()`, que es la diferencia entera:
@@ -103,5 +103,34 @@ describe('concepto creativo y plantilla del copy', () => {
       template: '[problema común] que no se va',
     })
     expect(el.template).toBe('[problema común] que no se va')
+  })
+})
+
+// `brandColors` es lo que le cambia el COLOR al anuncio (§5 de STEP5 mapea el más prominente al
+// rol dominante de la referencia), y el modelo lo devuelve sucio cuando la etiqueta tiene texto
+// encima del color: 5 de las 82 entradas guardadas salieron así, todas del mismo producto.
+describe('normalizeBrandColors', () => {
+  it('rescata el hex de lo que salió medido en producción', () => {
+    // Los cinco casos reales: basura pegada detrás del hex y hex sin `#`.
+    expect(normalizeBrandColors(['#60216B me10'])).toEqual(['#60216B'])
+    expect(normalizeBrandColors(['#631B63 me', 'FFFFFF', '8C388B', '0096D6']))
+      .toEqual(['#631B63', '#FFFFFF', '#8C388B', '#0096D6'])
+  })
+
+  it('no inventa un color con una palabra suelta', () => {
+    // Descartar es la respuesta correcta: STEP5 lee `null` como "conservá la paleta de la
+    // referencia", y el fail-safe de este eje siempre es preservar.
+    expect(normalizeBrandColors(['violeta', 'blanco'])).toBeNull()
+    expect(normalizeBrandColors(['#ABCDEF', 'violeta'])).toEqual(['#ABCDEF'])
+  })
+
+  it('el orden manda, así que no reordena y deduplica conservando el primero', () => {
+    expect(normalizeBrandColors(['#aabbcc', '#AABBCC', '#112233'])).toEqual(['#AABBCC', '#112233'])
+  })
+
+  it('null y lista vacía viajan como null', () => {
+    expect(normalizeBrandColors(null)).toBeNull()
+    expect(normalizeBrandColors([])).toBeNull()
+    expect(normalizeBrandColors(['—'])).toBeNull()
   })
 })

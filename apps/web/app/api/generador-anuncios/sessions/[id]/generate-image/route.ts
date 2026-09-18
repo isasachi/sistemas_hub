@@ -5,7 +5,7 @@ import { editImage, callReasoning, STEP5_PROMPT } from '@/lib/gemini'
 import { aspectRatioOf } from '@/lib/aspect'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
-import { ReferenceAnalysisSchema, ProductScanSchema, ConfirmedCopySchema } from '@/lib/types'
+import { ReferenceAnalysisSchema, ProductScanSchema, ConfirmedCopySchema, normalizeBrandColors } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -39,6 +39,9 @@ export async function POST(
 
         const refAnalysis = ReferenceAnalysisSchema.parse(session.reference_analysis)
         const productScan = ProductScanSchema.parse(session.product_scan)
+        // Otra vez acá, y no solo al escribir: las sesiones guardadas ANTES de este arreglo
+        // traen la paleta sucia, y este es el único sitio del hub que la convierte en prompt.
+        productScan.brandColors = normalizeBrandColors(productScan.brandColors)
         const confirmedCopy = ConfirmedCopySchema.parse(session.confirmed_copy)
         const hasLogo = !!session.logo_url
 
