@@ -4,7 +4,7 @@ import { uploadToStorage } from '@/lib/storage'
 import { callStructured } from '@/lib/gemini'
 import { checkGenQuota, recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
-import { ProductScanSchema, ReferenceAnalysisSchema } from '@/lib/types'
+import { ProductScanSchema, ReferenceAnalysisSchema, normalizeBrandColors } from '@/lib/types'
 import type { Part } from '@google/genai'
 
 export async function POST(
@@ -94,6 +94,10 @@ export async function POST(
     uploadToStorage(id, productBytes, productMime, 'product'),
     callStructured('product_scan', ProductScanSchema, parts, 3),
   ])
+
+  // La paleta entra al sistema acá: se limpia en la frontera, para que lo guardado y lo que ve
+  // el usuario sean hex de verdad. Ver `normalizeBrandColors` — por qué no puede ir en el schema.
+  scan.brandColors = normalizeBrandColors(scan.brandColors)
 
   const logoUrl = logoBytes && logoMime
     ? await uploadToStorage(id, logoBytes, logoMime, 'logo')

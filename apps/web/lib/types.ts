@@ -56,6 +56,38 @@ export const ProductScanSchema = z.object({
 })
 export type ProductScan = z.infer<typeof ProductScanSchema>
 
+/**
+ * Deja `brandColors` en hex limpio. El modelo devuelve la paleta con basura pegada cuando la
+ * etiqueta tiene mucho texto encima del color: medido sobre las 82 entradas guardadas, 5 salieron
+ * malformadas —`"#60216B me10"`, `"#631B63 me"` (fragmentos del texto de la etiqueta arrastrados
+ * detrás del hex) y `"FFFFFF"`, `"8C388B"`, `"0096D6"` sin `#`— y las cinco son del mismo
+ * producto. Las otras 77 salieron limpias, así que no es un defecto general del paso: es lo que
+ * pasa cuando el envase le complica la lectura.
+ *
+ * Importa porque este campo **es lo que le cambia el color al anuncio**: §5 de STEP5 mapea el
+ * color más prominente de la marca al rol dominante de la referencia. Un hex con basura detrás lo
+ * deja adivinando justo en la decisión que no puede quedar al azar.
+ *
+ * ⚠️ NO es un `.transform` dentro del schema, y no por gusto: **`z.toJSONSchema` tira
+ * `"Transforms cannot be represented in JSON Schema"`** (verificado acá), y esa llamada es la que
+ * arma el schema que se le manda a los DOS modelos. Un transform acá rompería toda salida
+ * estructurada que use `ProductScan`, incluida la del generador de video.
+ *
+ * Se exige el hex al PRINCIPIO del string: así `"#631B63 me"` se rescata como `#631B63` y una
+ * palabra suelta (`"violeta"`) se descarta en vez de inventar un color. Si no sobrevive ninguno
+ * devuelve `null`, que es lo que STEP5 ya sabe leer como "conservá la paleta de la referencia" —
+ * el fail-safe de este eje siempre es preservar.
+ */
+export function normalizeBrandColors(colores: string[] | null | undefined): string[] | null {
+  if (!colores) return null
+  const limpios = colores
+    .map((c) => c.match(/^\s*#?([0-9a-fA-F]{6})\b/)?.[1])
+    .filter((h): h is string => !!h)
+    .map((h) => `#${h.toUpperCase()}`)
+  const unicos = [...new Set(limpios)]
+  return unicos.length ? unicos : null
+}
+
 // ─── Step 3: Copy ────────────────────────────────────────────────────────────
 
 export const CopyElementSchema = z.object({
