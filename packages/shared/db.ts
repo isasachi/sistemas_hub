@@ -609,6 +609,10 @@ export async function upsertRawProducts(
     ad_start_date?: number | null
     raw_data: Record<string, unknown>
   }>,
+  // `soloNuevas`: inserta y deja INTACTAS las filas que ya existen. Sin esto, un
+  // pre-guardado con `ad_count: 0` pisa el conteo medido (y el `raw_data` con
+  // su `descarte`) de todo anunciante ya conocido que la corrida no re-mide.
+  opts: { soloNuevas?: boolean } = {},
 ): Promise<void> {
   if (!rows.length) return
   const now = new Date().toISOString()
@@ -621,7 +625,7 @@ export async function upsertRawProducts(
   for (let i = 0; i < clean.length; i += 200) {
     const { error } = await getDb()
       .from('ph_raw_products')
-      .upsert(clean.slice(i, i + 200), { onConflict: 'niche,page_id' })
+      .upsert(clean.slice(i, i + 200), { onConflict: 'niche,page_id', ignoreDuplicates: !!opts.soloNuevas })
     if (error) throw new Error(error.message)
   }
 }

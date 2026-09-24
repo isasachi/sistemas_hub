@@ -183,7 +183,7 @@ async function main() {
         niche, page_id: c.pageId, ad_id: c.adId, name: c.pageName, ad_count: 0,
         country: c.country,
         raw_data: { title: c.title, body: c.body, keyword: c.keyword, categories: c.categories },
-      })))
+      })), { soloNuevas: true })
     }
 
     const settled = await runPool(orden, vivas, async (cand, page: Page) => {
