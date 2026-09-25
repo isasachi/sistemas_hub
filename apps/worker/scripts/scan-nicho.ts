@@ -232,7 +232,9 @@ async function main() {
       console.log(
         `${icon} ${String(r.cand.pageName ?? '').slice(0, 26).padEnd(27)} ` +
         `${String(r.m!.adCount).padStart(5)} ads · ${String(Math.round(r.m!.share * 100)).padStart(3)}% ` +
-        `· ${r.m!.senal.padEnd(7)} · ${String(r.m!.dominante ?? '').slice(0, 40)}`,
+        `· ${r.m!.senal.padEnd(7)} · ${String(r.m!.dominante ?? '').slice(0, 40)}` +
+        // Rango en el orden de medición (por presencia): mide qué rinde medir más hondo.
+        ` · #${orden.indexOf(r.cand) + 1} ${r.cand.pageId}`,
       )
       for (const c of r.clusters ?? []) {
         porProducto[c.status as keyof typeof porProducto]++
