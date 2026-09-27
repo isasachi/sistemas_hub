@@ -43,7 +43,7 @@ import { juezDelEntorno, resumenOpenAI } from '../lib/product-hunter/nicho-verdi
 import { isLikelyService } from '../lib/product-hunter/competitors'
 import {
   seedKeywords, getNicheStatus, upsertRawProducts, saveRawVerdict, upsertRawNiche,
-  updateRawNicheAfterScrape, upsertRawClusters,
+  updateRawNicheAfterScrape, upsertRawClusters, isBlocked,
 } from '@ph/shared'
 
 // Los 5 mercados del experimento. PE queda fuera a propósito: acá se busca lo
@@ -140,6 +140,10 @@ async function main() {
   const val = (flag: string) => { const i = args.indexOf(flag); return i !== -1 ? args[i + 1] : undefined }
   const niche = (val('--niche') ?? '').trim().toLowerCase()
   if (!niche) { console.error('Falta --niche <nombre>'); process.exit(1) }
+  // Un nicho bloqueado no se re-escanea: esta corrida lo re-activaría (`upsertRawNiche`)
+  // y `saveRawVerdict` pisaría el `descartado` de sus filas, devolviéndolas a la
+  // vitrina. Desbloquear es editar el status a mano, no volver a correrlo.
+  if (isBlocked(niche)) { console.error(`"${niche}" es un nicho bloqueado (blocklist.ts); no se escanea.`); process.exit(1) }
 
   const paises = (val('--paises') ?? PAISES_DEFAULT.join(',')).split(',').map((p) => p.trim().toUpperCase()).filter(Boolean)
   const medirLimit = Number(val('--limit') ?? MEDIR_LIMIT)
