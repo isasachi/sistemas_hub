@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import {
-  getApprovedByBucket, getApprovedByCategory, getNichesWithInventory,
+  getApprovedByBucket, getApprovedByCategory,
   countApproved, countRawPending,
   getRawNicheStatus, upsertRawNiche, isBlocked,
   RAW_BUCKETS, RAW_BUCKET_LABEL, isRawBucket, isCategoryId, categoryOf,
@@ -11,6 +11,7 @@ import {
 import { getUser } from '@/lib/supabase/server'
 import { getAccess } from '@/lib/whop'
 import { toEntry } from '@/lib/product-hunter/entry'
+import { nichosConInventario } from '@/lib/product-hunter/nichos-inventario'
 
 // ⚠️ Esta ruta SOLO lee de Supabase: ni Anthropic ni Playwright. El scraping
 // corre en el worker local.
@@ -140,9 +141,11 @@ async function buscar(req: NextRequest) {
     // UI mostraba como "Unexpected end of JSON input". El detalle medido está
     // sobre `categoriaQuery` en `@ph/shared`. Además se ahorra el RPC de nichos,
     // que para "todos" solo servía para armar un filtro tautológico.
+    // Una categoría sí pide la lista, pero CACHEADA: el RPC tarda 3-5 s y
+    // también se comió el timeout (ver `nichos-inventario.ts`).
     const niches = todos
       ? null
-      : (await getNichesWithInventory()).filter((n) => categoryOf(n) === category)
+      : (await nichosConInventario()).filter((n) => categoryOf(n) === category)
     let servidoCat: RawBucket = aProbar[0]
     let productos: RawProductEntry[] = []
     for (const bucket of aProbar) {
