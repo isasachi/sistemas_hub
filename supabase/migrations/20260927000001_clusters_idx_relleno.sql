@@ -16,9 +16,27 @@
 -- Salud+US 757, "todos"+PE 929, "todos" 762, categoría 100+ 290. Monoproducto
 -- sigue en su propio índice.
 --
+-- ⚠️ PostgREST manda los filtros como PARÁMETROS (`NOT status = ANY ($5)`), y
+-- con el plan GENÉRICO el planner no puede probar el predicado parcial: vuelve
+-- a `idx_ph_raw_clusters_bucket` (medido: 3,6 s con 10 nichos). Por eso va
+-- junto con `plan_cache_mode = force_custom_plan` en los roles de PostgREST
+-- (`20260927000002_postgrest_force_custom_plan.sql`). Lo mismo vale para
+-- `idx_ph_raw_clusters_monoproducto`.
+--
+-- ⚠️ El predicado tiene que coincidir con el `.not('status','in', ...)` del
+-- relleno en `getApprovedByCategory` (packages/shared/db.ts). Si esa lista
+-- cambia, el índice deja de usarse EN SILENCIO (los tests mockean la DB).
+--
 -- CONCURRENTLY: el worker escribe en esta tabla 24/7. No corre dentro de una
 -- transacción, así que se aplica suelto (SQL editor / psql), no con un runner
--- que envuelva el archivo en BEGIN/COMMIT. Aplicado en prod el 2026-09-27.
+-- que envuelva el archivo en BEGIN/COMMIT. Aplicado en prod el 2026-09-26
+-- (~22:45 hora de Lima, 03:45Z del 27).
+--
+-- ⚠️ Un CONCURRENTLY cortado a medias deja el índice INVÁLIDO con este nombre,
+-- y `if not exists` lo saltea en silencio al re-correr. Después de aplicarlo:
+--   select indisvalid from pg_index
+--    where indexrelid = 'public.idx_ph_raw_clusters_relleno'::regclass;
+-- Si da false: `drop index concurrently idx_ph_raw_clusters_relleno;` y de nuevo.
 create index concurrently if not exists idx_ph_raw_clusters_relleno
   on public.ph_raw_clusters (ad_count desc, page_id, niche, country)
   where status not in ('inactivo', 'descartado', 'monoproducto');
