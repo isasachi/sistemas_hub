@@ -948,9 +948,8 @@ function bucketQuery(niche: string, bucket: RawBucket, f?: RawFilters) {
 // ponytail: para "todos" el `.in()` es una TAUTOLOGÍA —`NO_SERVIBLES` es
 // `(inactivo,descartado)` y `getNichesWithInventory` (el RPC, `status <>
 // 'inactivo'`) devuelve todo nicho con una fila servible—, así que saltarlo no
-// cambia ni una fila. Techo: deja de serlo si los nichos activos pasan de 2000,
-// el límite del RPC (674 hoy, 3× de aire). Ahí hay que paginar el RPC, no
-// reponer el `.in()`.
+// cambia ni una fila. Desde 2026-09-27 ese RPC no tiene tope de filas (devuelve
+// un arreglo), así que el viejo techo de 2000 nichos ya no aplica.
 //
 // Una CATEGORÍA sigue mandando su lista: ahí el filtro no es tautológico.
 function categoriaQuery(niches: string[] | null, bucket: RawBucket, f?: RawFilters) {
@@ -1092,7 +1091,20 @@ const NICHOS_CATALOGO = 5
 
 // Todos los nichos que hoy tienen inventario servible — el buscador los agrupa
 // en categorías (`categories.ts`) para armar los chips y resolver la búsqueda.
-export const getNichesWithInventory = () => getTopNiches(2000)
+//
+// ⚠️ NO es `getTopNiches(2000)`, que era: ese RPC agrupa y cuenta TODA
+// `ph_raw_products` para ordenar por conteo (68k buffers, 4,8 s en caliente,
+// 2 de 7 llamadas reales con `57014` el 2026-09-27). Acá solo hace falta la
+// lista: `ph_raw_niches_con_inventario` salta de nicho en nicho por el índice
+// (4.958 buffers, mismos 674 nichos). Devuelve un `text[]` en una sola fila,
+// así el `max_rows` de PostgREST (1000) no la corta.
+// El abort va por encima del `statement_timeout` de 8 s (ver `getTopNiches`).
+export async function getNichesWithInventory(): Promise<string[]> {
+  const { data, error } = await getDb().rpc('ph_raw_niches_con_inventario')
+    .abortSignal(AbortSignal.timeout(10_000))
+  if (error) throw new Error(error.message)
+  return (data ?? []) as string[]
+}
 
 // La lista negra corre acá y no en la query porque es texto, no columna. Por eso
 // se piden SOBRE_PEDIDO× filas y se recortan después.

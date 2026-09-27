@@ -1,11 +1,14 @@
 /**
  * La lista de nichos con inventario, cacheada por instancia.
  *
- * ⚠️ `getNichesWithInventory` es un `GROUP BY niche` sobre TODA
+ * ⚠️ `getNichesWithInventory` ERA un `GROUP BY niche` sobre TODA
  * `ph_raw_products` (~190k filas) y se llamaba en CADA búsqueda por categoría.
  * Medido en prod 2026-09-27: 3,1 s y 5,5 s con todo en caché (68k buffers), y
  * con la instancia cargada se pasa del `statement_timeout` de 8 s — el 500 de
  * 01:04Z buscando "Fitness y deporte" murió acá, antes de tocar un producto.
+ * Desde el mismo día sale de `ph_raw_niches_con_inventario` (~5k buffers,
+ * 1,1 s en frío): esta caché no alcanzaba sola con tráfico bajo, porque las
+ * búsquedas llegan a instancias frías sin lista guardada. Las dos cosas suman.
  *
  * La lista es la misma para todos los usuarios y cambia lento (un nicho nuevo
  * del daemon), así que tarda como mucho `TTL_MS` en entrar a su chip. Un nicho
