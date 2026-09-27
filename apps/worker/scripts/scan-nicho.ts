@@ -175,15 +175,21 @@ async function main() {
     const orden = [...candidatos.values()].sort((a, b) => b.vistas - a.vistas).slice(0, medirLimit)
     console.log(`Midiendo ${orden.length} anunciantes (de ${candidatos.size})…\n`)
 
+    const filaDe = (c: Candidato, adCount = 0, adStartDate?: number | null) => ({
+      niche, page_id: c.pageId, ad_id: c.adId, name: c.pageName, ad_count: adCount,
+      country: c.country,
+      // Sin fecha medida no se manda la clave: un null borraría la que ya hubiera.
+      ...(adStartDate && adStartDate > 0 ? { ad_start_date: adStartDate } : {}),
+      raw_data: { title: c.title, body: c.body, keyword: c.keyword, categories: c.categories },
+    })
+
     // Se guarda el descubrimiento ANTES de verificar: si la corrida se corta, el
     // inventario ya está y la cola de verificación lo retoma como 'pendiente'.
+    // Solo filas nuevas: el `ad_count: 0` de relleno pisaría el conteo de las que
+    // ya existen. Las que se miden se refrescan enteras abajo, con su conteo real.
     if (!dryRun) {
       await upsertRawNiche(niche, 'active').catch(() => {})
-      await upsertRawProducts([...candidatos.values()].map((c) => ({
-        niche, page_id: c.pageId, ad_id: c.adId, name: c.pageName, ad_count: 0,
-        country: c.country,
-        raw_data: { title: c.title, body: c.body, keyword: c.keyword, categories: c.categories },
-      })), { soloNuevas: true })
+      await upsertRawProducts([...candidatos.values()].map((c) => filaDe(c)), { soloNuevas: true })
     }
 
     const settled = await runPool(orden, vivas, async (cand, page: Page) => {
@@ -201,6 +207,10 @@ async function main() {
         juez, { niche, pageId: cand.pageId, advertiser: cand.pageName, country: cand.country }, l, m,
       )
       if (!dryRun) {
+        // País, anuncio y copy de ESTA lectura: el conteo se midió en `cand.country`
+        // y no puede quedar junto al país de una corrida vieja. Un 0 no se escribe
+        // (mismo criterio que saveRawVerdict).
+        if (m.adCount > 0) await upsertRawProducts([filaDe(cand, m.adCount, m.masViejo)])
         await saveRawVerdict({
           niche, page_id: cand.pageId, ad_count: m.adCount, status: v.status,
           kind: v.kind, share: m.share, product_name: v.productName,
@@ -212,7 +222,9 @@ async function main() {
       return { cand, m, estado: v.status, motivo: v.nota, clusters }
     })
 
-    for (const s of settled) {
+    for (const [i, s] of settled.entries()) {
+      // El índice ES el rango: runPool devuelve en el orden de `orden` (por presencia).
+      const rango = ` · #${i + 1} ${orden[i].pageId}`
       if (s.status !== 'fulfilled') {
         const raw = s.reason instanceof Error ? s.reason.message : String(s.reason)
         if (esFalloDeApi(raw)) {
@@ -222,19 +234,17 @@ async function main() {
           break
         }
         tally.errores++
-        console.error(`✗ ${raw.split('\n')[0].slice(0, 120)}`)
+        console.error(`✗ ${raw.split('\n')[0].slice(0, 120)}${rango}`)
         continue
       }
       const r = s.value
-      if (r.estado === 'inconcluso') { tally.inconcluso++; console.log(`? ${String(r.cand.pageName).slice(0, 30)} — no se pudo leer`); continue }
+      if (r.estado === 'inconcluso') { tally.inconcluso++; console.log(`? ${String(r.cand.pageName).slice(0, 30)} — no se pudo leer${rango}`); continue }
       tally[r.estado as keyof typeof tally]++
       const icon = { monoproducto: '✓', descartado: '✗', sin_verificar: '?' }[r.estado as 'monoproducto' | 'descartado' | 'sin_verificar']
       console.log(
         `${icon} ${String(r.cand.pageName ?? '').slice(0, 26).padEnd(27)} ` +
         `${String(r.m!.adCount).padStart(5)} ads · ${String(Math.round(r.m!.share * 100)).padStart(3)}% ` +
-        `· ${r.m!.senal.padEnd(7)} · ${String(r.m!.dominante ?? '').slice(0, 40)}` +
-        // Rango en el orden de medición (por presencia): mide qué rinde medir más hondo.
-        ` · #${orden.indexOf(r.cand) + 1} ${r.cand.pageId}`,
+        `· ${r.m!.senal.padEnd(7)} · ${String(r.m!.dominante ?? '').slice(0, 40)}${rango}`,
       )
       for (const c of r.clusters ?? []) {
         porProducto[c.status as keyof typeof porProducto]++
