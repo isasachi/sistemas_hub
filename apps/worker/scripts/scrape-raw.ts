@@ -54,6 +54,7 @@ import {
   getRawNichesToRefresh,
   updateRawNicheAfterScrape,
   upsertRawProducts,
+  isBlocked,
 } from '@ph/shared'
 
 const NICHE_BATCH = Math.max(1, Number(process.env.PH_RAW_BATCH ?? 5))
@@ -214,8 +215,13 @@ async function main() {
   let niches: string[]
   if (idx !== -1 && args[idx + 1]) {
     niches = [args[idx + 1]]
+    // El merge de upsertRawProducts reemplaza `raw_data` entero: re-scrapear un nicho
+    // bloqueado borraría el `descarte`/`estado_previo` que lo saca de la vitrina.
+    if (isBlocked(niches[0])) { console.error(`"${niches[0]}" es un nicho bloqueado (blocklist.ts); no se scrapea.`); process.exit(1) }
   } else if (args.includes('--all')) {
-    niches = (await getRawNichesToRefresh()).slice(0, NICHE_BATCH)
+    // Se filtra ANTES del slice: un bloqueado que quedara en cola ocuparía un lugar
+    // del bloque en cada vuelta sin avanzar nunca.
+    niches = (await getRawNichesToRefresh()).filter((n) => !isBlocked(n)).slice(0, NICHE_BATCH)
     if (!niches.length) { console.log('PH_RAW_QUEUE_EMPTY'); return }
   } else {
     console.error('Uso: tsx scripts/scrape-raw.ts --niche <nombre> | --all')
