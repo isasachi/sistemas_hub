@@ -1014,6 +1014,12 @@ export async function getApprovedByCategory(
 ): Promise<RawProductRow[]> {
   // `null` = "todos" (sin filtro de nicho); una lista VACÍA sí es "ninguno".
   if (niches && !niches.length) return []
+  // ⚠️ Cada filtro de `status` de acá es el PREDICADO de un índice parcial:
+  // `eq monoproducto` → `idx_ph_raw_clusters_monoproducto`, y la lista del
+  // relleno → `idx_ph_raw_clusters_relleno` (`20260927000001_…`). Si la lista
+  // cambia, el planner ya no puede probar el predicado, vuelve al índice que
+  // incluye los 435k `descartado` y el 0-50 cae otra vez en `57014` — sin que
+  // ningún test lo note (mockean la DB). Cambiarla = recrear el índice.
   const [verificados, resto] = await Promise.all([
     categoriaQuery(niches, bucket, filters).eq('status', 'monoproducto').limit(limit * SOBRE_PEDIDO),
     categoriaQuery(niches, bucket, filters).not('status', 'in', '(inactivo,descartado,monoproducto)')
