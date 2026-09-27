@@ -1121,8 +1121,13 @@ const fisicos = (rows: RawProductRow[] | null) =>
  * El conteo NO pasa por el filtro de físico (`fisicos`, que es texto y corre en
  * JS), así que es aproximado. Por eso el número no se muestra: solo ordena.
  */
+// ⚠️ El abort va POR ENCIMA del `statement_timeout` de 8s: lo normal es que
+// Postgres corte primero y vuelva un 57014; esto solo corta un socket colgado,
+// que sin él esperaba para siempre (`fetch` en Node no tiene timeout) — y el
+// buscador comparte esta promesa entre búsquedas (`nichos-inventario.ts`).
 export async function getTopNiches(limit = 12): Promise<string[]> {
   const { data, error } = await getDb().rpc('ph_raw_top_niches', { p_limit: limit })
+    .abortSignal(AbortSignal.timeout(10_000))
   if (error) throw new Error(error.message)
   return ((data ?? []) as { niche: string }[]).map((r) => r.niche)
 }
