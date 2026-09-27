@@ -40,6 +40,10 @@ import { getAccess } from '@/lib/whop'
 import { getUser } from '@/lib/supabase/server'
 import { _resetNichosCache } from '@/lib/product-hunter/nichos-inventario'
 
+// La lista de nichos se cachea a nivel de módulo: sin esto cada test que busca
+// por categoría heredaría la del anterior y un mock distinto se ignoraría.
+beforeEach(() => _resetNichosCache())
+
 /** Corre el resto del test como si el usuario tuviera este plan. */
 function conPlan(tier: Tier) {
   vi.mocked(getAccess).mockResolvedValue({ tier, status: 'active', renewalPeriodEnd: null, grandfathered: false, bajaA: null })
@@ -142,9 +146,6 @@ describe('POST /api/buscador-productos/search — un rango a la vez', () => {
 describe('POST /api/buscador-productos/search — por categoría', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    // La lista de nichos se cachea a nivel de módulo: sin esto el primer test
-    // la llena y los demás no verían llamar al RPC.
-    _resetNichosCache()
     vi.mocked(getUser).mockResolvedValue({ id: 'u1', email: 'u@jrhub.pe' } as never)
     conPlan(3)
   })

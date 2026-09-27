@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import {
   getApprovedByBucket, getApprovedByCategory,
   countApproved, countRawPending,
@@ -145,7 +145,7 @@ async function buscar(req: NextRequest) {
     // también se comió el timeout (ver `nichos-inventario.ts`).
     const niches = todos
       ? null
-      : (await nichosConInventario()).filter((n) => categoryOf(n) === category)
+      : (await nichosConInventario(after)).filter((n) => categoryOf(n) === category)
     let servidoCat: RawBucket = aProbar[0]
     let productos: RawProductEntry[] = []
     for (const bucket of aProbar) {
