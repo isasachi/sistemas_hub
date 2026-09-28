@@ -18,7 +18,7 @@ vi.mock('@supabase/supabase-js', () => ({
   }),
 }))
 
-import { cancelPreviousMemberships, getAccess, hasAccess } from './whop'
+import { cancelPreviousMemberships, cancelSubscription, getAccess, hasAccess } from './whop'
 
 const fila = (
   status: string,
@@ -185,5 +185,56 @@ describe('cancelPreviousMemberships', () => {
     vi.stubGlobal('fetch', async () =>
       ({ ok: false, status: 500, text: async () => 'boom' }) as Response)
     await expect(cancelPreviousMemberships('u1', 'mem_nueva')).rejects.toThrow(/mem_vieja/)
+  })
+
+  // ⚠️ La cortesía del panel admin no existe en Whop: el cancel da 404, lanzaba y
+  // cortaba el bucle antes de llegar a la membership real.
+  it('salta las filas manual: y las que ya están cancelándose', async () => {
+    filas = [
+      { whop_membership_id: 'manual:u1', status: 'active' },
+      { whop_membership_id: 'mem_ya', status: 'canceling' },
+      { whop_membership_id: 'mem_vieja', status: 'active' },
+    ]
+    await cancelPreviousMemberships('u1', 'mem_nueva')
+    expect(llamadas.map((l) => l.url)).toEqual([expect.stringContaining('/memberships/mem_vieja/cancel')])
+  })
+})
+
+/** "Cancelar suscripción" de Mi cuenta. */
+describe('cancelSubscription', () => {
+  let urls: string[] = []
+
+  beforeEach(() => {
+    urls = []
+    vi.stubEnv('WHOP_API_KEY', 'k')
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      urls.push(url)
+      expect(JSON.parse(String(init.body))).toEqual({ cancellation_mode: 'at_period_end' })
+      return { ok: true, status: 200, text: async () => '' } as Response
+    })
+  })
+
+  // En plena bajada conviven dos memberships vivas: cancelar solo una dejaría la
+  // otra cobrando el mes siguiente.
+  it('cancela TODAS las vivas, al fin del período', async () => {
+    filas = [
+      { whop_membership_id: 'mem_a', status: 'active' },
+      { whop_membership_id: 'mem_b', status: 'trialing' },
+      { whop_membership_id: 'mem_muerta', status: 'expired' },
+    ]
+    expect(await cancelSubscription('u1')).toBe(2)
+    expect(urls).toEqual([
+      expect.stringContaining('/memberships/mem_a/cancel'),
+      expect.stringContaining('/memberships/mem_b/cancel'),
+    ])
+  })
+
+  it('devuelve 0 si solo hay cortesía o ya estaba cancelándose', async () => {
+    filas = [
+      { whop_membership_id: 'manual:u1', status: 'active' },
+      { whop_membership_id: 'mem_a', status: 'canceling' },
+    ]
+    expect(await cancelSubscription('u1')).toBe(0)
+    expect(urls).toEqual([])
   })
 })

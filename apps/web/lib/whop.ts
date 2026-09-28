@@ -216,15 +216,38 @@ export async function hasAccess(userId: string, email?: string | null): Promise<
  * ningún scope de lectura de members en la API key.
  */
 export async function cancelPreviousMemberships(userId: string, keepId: string): Promise<void> {
+  await cancelarVivas(userId, keepId)
+}
+
+/**
+ * "Cancelar mi suscripción" desde Mi cuenta: cancela TODAS las memberships vivas
+ * del usuario, `at_period_end` — conserva lo que ya pagó y Whop deja de cobrar.
+ * Devuelve cuántas canceló; 0 = no había nada cancelable en Whop (solo cortesía
+ * `manual:` o ya estaba todo cancelándose).
+ *
+ * ⚠️ NO escribe `user_entitlements`: el webhook sigue siendo su única escritura. El
+ * estado `canceling` llega con `membership.cancel_at_period_end_changed`.
+ */
+export async function cancelSubscription(userId: string): Promise<number> {
+  return cancelarVivas(userId, null)
+}
+
+async function cancelarVivas(userId: string, keepId: string | null): Promise<number> {
   const { data, error } = await getDb()
     .from('user_entitlements')
     .select('whop_membership_id,status')
     .eq('user_id', userId)
-  if (error) throw new Error(`buscando memberships previas: ${error.message}`)
+  if (error) throw new Error(`buscando memberships: ${error.message}`)
 
-  const previas = (data ?? []).filter(
-    (r) => r.whop_membership_id !== keepId && grantsAccess((r.status as string) ?? ''),
-  )
+  // ⚠️ Fuera las filas `manual:` (cortesía del panel admin, ver `esManual` en
+  // admin.ts — no se importa de ahí porque admin.ts importa de acá): no existen en
+  // Whop, el cancel da 404, se lanzaba y cortaba el bucle antes de llegar a las
+  // memberships reales. Y fuera las que ya están `canceling`: no hay nada que pedir.
+  const previas = (data ?? []).filter((r) => {
+    const id = String(r.whop_membership_id ?? '')
+    const status = String(r.status ?? '')
+    return id !== keepId && !id.startsWith('manual:') && status !== 'canceling' && grantsAccess(status)
+  })
 
   for (const r of previas) {
     const id = r.whop_membership_id as string
@@ -244,7 +267,8 @@ export async function cancelPreviousMemberships(userId: string, keepId: string):
     })
     // ⚠️ No se lanza si Whop dice que ya estaba cancelándose. La entrega del webhook
     // es at-least-once y nuestra fila sigue diciendo `active` hasta que llegue el
-    // `deactivated`, así que este cancel se REPITE en cada reintento del mismo evento.
+    // evento de cancelación, así que este cancel se REPITE (reintentos del webhook,
+    // o el usuario apretando dos veces antes de que llegue el evento).
     if (!res.ok) {
       const txt = await res.text()
       if (/alread(y|)|cancel/i.test(txt) && res.status < 500) {
@@ -253,8 +277,9 @@ export async function cancelPreviousMemberships(userId: string, keepId: string):
       }
       throw new Error(`cancelando ${id}: ${res.status} ${txt}`)
     }
-    console.log(`[whop] plan anterior ${id} cancelado al fin del período`)
+    console.log(`[whop] ${id} cancelado al fin del período`)
   }
+  return previas.length
 }
 
 export async function saveEntitlement(row: Entitlement): Promise<void> {
@@ -301,15 +326,36 @@ export type Entitlement = {
   renewal_period_end: string | null
 }
 
+const EVENTOS_DE_MEMBERSHIP = [
+  'membership.activated',
+  'membership.deactivated',
+  // Lo manda Whop al cancelar (o revertir la cancelación) `at_period_end`. Sin
+  // escucharlo, la fila quedaba `active` hasta el `deactivated` del fin del período
+  // y Mi cuenta seguía diciendo "Se renueva el…" a quien ya había cancelado.
+  'membership.cancel_at_period_end_changed',
+]
+
+/**
+ * La doc de Whop tiene el status `canceling` Y el booleano `cancel_at_period_end`, y
+ * no está verificado contra un evento real cuál de los dos refleja la cancelación.
+ * Se cubren los dos: `active`/`trialing` con el flag puesto es `canceling`. Revertir
+ * la cancelación (flag en false) cae solo en el status del payload.
+ */
+function conCancelacion(status: string, cancelAtPeriodEnd: unknown): string {
+  return cancelAtPeriodEnd === true && (status === 'active' || status === 'trialing')
+    ? 'canceling'
+    : status
+}
+
 /**
  * Traduce un evento de webhook a la fila que hay que guardar, o `null` si el evento
  * no nos toca. Puro a propósito: es la lógica que decide quién tiene acceso, y así se
  * testea sin red ni DB.
  *
  * Los eventos de membership que Whop expone son `activated`, `deactivated`,
- * `trial_ending_soon` y `cancel_at_period_end_changed`. Los dos primeros son los que
- * mueven el acceso; el estado real sale SIEMPRE del payload (`data.status`), nunca se
- * infiere del nombre del evento — así un `activated` de una membership que ya está
+ * `trial_ending_soon` y `cancel_at_period_end_changed`. Se escuchan todos menos
+ * `trial_ending_soon` (ver `EVENTOS_DE_MEMBERSHIP`); el estado real sale SIEMPRE del
+ * payload (`data.status`), nunca se infiere del nombre del evento — así un `activated` de una membership que ya está
  * `past_due` no otorga acceso por el solo hecho de llamarse "activated".
  *
  * Devuelve `null` (en vez de lanzar) para cualquier evento desconocido: el handler
@@ -318,7 +364,7 @@ export type Entitlement = {
  */
 export function entitlementFromEvent(evt: unknown): Entitlement | null {
   const e = evt as { type?: string; data?: Record<string, unknown> }
-  if (e?.type !== 'membership.activated' && e?.type !== 'membership.deactivated') return null
+  if (!EVENTOS_DE_MEMBERSHIP.includes(e?.type ?? '')) return null
 
   const d = e.data ?? {}
   const meta = d.metadata as Record<string, unknown> | undefined
@@ -334,7 +380,7 @@ export function entitlementFromEvent(evt: unknown): Entitlement | null {
   return {
     whop_membership_id: id,
     user_id: userId,
-    status,
+    status: conCancelacion(status, d.cancel_at_period_end),
     tier: tierFromEvent(d, meta),
     renewal_period_end: typeof end === 'string' ? end : null,
   }

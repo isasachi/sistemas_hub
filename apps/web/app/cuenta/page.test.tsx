@@ -24,6 +24,7 @@ vi.mock('./Formularios', () => ({
   PerfilForm: () => <div data-t="perfil" />,
   AvatarForm: () => <div data-t="avatar" />,
   KieKeyForm: () => <div data-t="kie" />,
+  CancelarForm: ({ plan }: { plan: string }) => <div data-t="cancelar">{plan}</div>,
 }))
 
 import CuentaPage from './page'
@@ -185,5 +186,36 @@ describe('/cuenta', () => {
     const html = await render()
     expect(html).not.toContain('estado_nuevo_de_whop')
     expect(html).toContain('Sin información')
+  })
+
+  describe('cancelar suscripción', () => {
+    it('se ofrece con una suscripción activa', async () => {
+      expect(await render()).toContain('data-t="cancelar"')
+    })
+
+    it('no se ofrece si ya está cancelándose', async () => {
+      vi.mocked(getAccess).mockResolvedValue({
+        tier: 2, status: 'canceling', renewalPeriodEnd: '2026-09-20T00:00:00Z', grandfathered: false, bajaA: null,
+      })
+      expect(await render()).not.toContain('data-t="cancelar"')
+    })
+
+    // En una bajada la fila que manda (el plan alto) queda `canceling`, pero la del
+    // plan nuevo se va a renovar: todavía hay algo que cancelar, y es ESE plan.
+    it('en plena bajada se ofrece, y nombra el plan nuevo', async () => {
+      vi.mocked(getAccess).mockResolvedValue({
+        tier: 3, status: 'canceling', renewalPeriodEnd: '2026-09-20T00:00:00Z', grandfathered: false, bajaA: 1,
+      })
+      expect(await render()).toMatch(/data-t="cancelar">Legacy Start</)
+    })
+
+    it('no se ofrece a un grandfathered ni sin plan', async () => {
+      vi.mocked(getAccess).mockResolvedValue({
+        tier: 3, status: null, renewalPeriodEnd: null, grandfathered: true, bajaA: null,
+      })
+      expect(await render()).not.toContain('data-t="cancelar"')
+      vi.mocked(getAccess).mockResolvedValue(null)
+      expect(await render()).not.toContain('data-t="cancelar"')
+    })
   })
 })

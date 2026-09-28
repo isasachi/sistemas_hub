@@ -14,6 +14,7 @@ import { revalidatePath } from 'next/cache'
 import { getUser } from '@/lib/supabase/server'
 import { saveProfile, setKieKey } from '@/lib/user-settings'
 import { uploadToStorage } from '@/lib/storage'
+import { cancelSubscription, isGrandfathered } from '@/lib/whop'
 
 export type FormState = { error?: string; ok?: string }
 
@@ -118,4 +119,32 @@ export async function quitarAvatar(): Promise<void> {
   await saveProfile(user.id, { avatarUrl: null })
   revalidatePath('/cuenta')
   revalidatePath('/', 'layout')
+}
+
+/**
+ * Cancela la suscripción: TODAS las memberships vivas del usuario en Whop,
+ * `at_period_end` — conserva lo que ya pagó y no se le vuelve a cobrar.
+ *
+ * ⚠️ No toca `user_entitlements`: el webhook es su única escritura, y una escritura
+ * acá la pisaría el próximo reintento de un `activated`. El "Termina el…" aparece
+ * cuando llega `membership.cancel_at_period_end_changed`, segundos después.
+ */
+export async function cancelarSuscripcion(_prev: FormState, _fd: FormData): Promise<FormState> {
+  const user = await getUser()
+  if (!user) return { error: 'Tu sesión expiró. Vuelve a iniciar sesión.' }
+  if (isGrandfathered(user.email)) return { error: 'Tu acceso es de por vida: no hay nada que cancelar.' }
+
+  let canceladas: number
+  try {
+    canceladas = await cancelSubscription(user.id)
+  } catch (err) {
+    console.error('[cuenta] cancelar:', err instanceof Error ? err.message : String(err))
+    return { error: 'No pudimos cancelar tu suscripción. Inténtalo de nuevo en unos minutos.' }
+  }
+  if (!canceladas) return { error: 'No encontramos una suscripción que cancelar. Si crees que es un error, escríbenos.' }
+
+  revalidatePath('/cuenta')
+  return {
+    ok: 'Listo, cancelaste tu suscripción. No se te volverá a cobrar y conservas el acceso hasta que termine el período que ya pagaste.',
+  }
 }

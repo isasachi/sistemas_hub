@@ -3,7 +3,7 @@
 import { useActionState, useRef, useState } from "react";
 import { Loader2, Upload, User } from "lucide-react";
 import {
-  guardarPerfil, guardarKieKey, subirAvatar, quitarAvatar,
+  guardarPerfil, guardarKieKey, subirAvatar, quitarAvatar, cancelarSuscripcion,
   type FormState,
 } from "./actions";
 
@@ -161,6 +161,41 @@ export function KieKeyForm({ guardada }: { guardada: string | null }) {
         />
         <Guardar pending={pending} />
       </div>
+      <Estado state={state} />
+    </form>
+  );
+}
+
+/**
+ * Cancelar la suscripción. Confirmación con `window.confirm`, el mismo idioma que
+ * `PlanCTA` usa para bajar de plan: las dos acciones que recortan lo que el usuario
+ * tiene avisan igual.
+ */
+export function CancelarForm({ plan, hasta }: { plan: string; hasta: string | null }) {
+  const [state, action, pending] = useActionState(cancelarSuscripcion, INICIAL);
+  if (state.ok) return <Estado state={state} />;
+  return (
+    <form
+      action={action}
+      onSubmit={(e) => {
+        const aviso = [
+          `¿Cancelar tu suscripción a ${plan}?`,
+          "",
+          "No se te volverá a cobrar.",
+          `Conservas el acceso ${hasta ? `hasta el ${hasta}` : "hasta que termine el período que ya pagaste"}; después las herramientas se bloquean.`,
+        ].join("\n");
+        if (!window.confirm(aviso)) e.preventDefault();
+      }}
+      className="flex flex-col gap-2"
+    >
+      <button
+        type="submit"
+        disabled={pending}
+        className="flex items-center gap-2 self-start rounded-xl border border-[rgba(233,61,61,0.3)] px-4 py-2 text-[13px] text-[#fca5a5] transition-colors hover:bg-[rgba(233,61,61,0.1)] disabled:opacity-40"
+      >
+        {pending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+        Cancelar suscripción
+      </button>
       <Estado state={state} />
     </form>
   );
