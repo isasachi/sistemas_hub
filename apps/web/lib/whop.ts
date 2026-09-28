@@ -271,7 +271,10 @@ async function cancelarVivas(userId: string, keepId: string | null): Promise<num
     // o el usuario apretando dos veces antes de que llegue el evento).
     if (!res.ok) {
       const txt = await res.text()
-      if (/alread(y|)|cancel/i.test(txt) && res.status < 500) {
+      // ⚠️ `already`, no `cancel`: casi todo error de un endpoint `/cancel` dice
+      // "cancel" ("cannot cancel…", un 403 de scope), y tratarlo como hecho le
+      // mostraba al usuario "no se te volverá a cobrar" mientras Whop seguía cobrando.
+      if (/already/i.test(txt) && res.status < 500) {
         console.warn(`[whop] ${id} ya estaba cancelándose: ${txt}`)
         continue
       }

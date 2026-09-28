@@ -237,4 +237,12 @@ describe('cancelSubscription', () => {
     expect(await cancelSubscription('u1')).toBe(0)
     expect(urls).toEqual([])
   })
+  // Un 4xx que NO es "ya estaba cancelándose" es un fallo: resolver con un conteo le
+  // prometería al usuario que no se le cobra más.
+  it('un 4xx cualquiera rechaza, aunque mencione "cancel"', async () => {
+    filas = [{ whop_membership_id: 'mem_a', status: 'active' }]
+    vi.stubGlobal('fetch', async () =>
+      ({ ok: false, status: 403, text: async () => 'Cannot cancel membership' }) as Response)
+    await expect(cancelSubscription('u1')).rejects.toThrow(/mem_a/)
+  })
 })
