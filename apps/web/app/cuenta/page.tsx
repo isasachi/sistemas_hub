@@ -267,11 +267,11 @@ export default async function CuentaPage() {
   const otrosPlanes = access && !access.grandfathered
     ? TIERS.filter((t) => t !== access.tier)
     : [];
-  // ⚠️ En una bajada, `access` es la fila del plan ALTO, que queda `canceling`,
-  // mientras la del plan nuevo sigue viva y SE VA A RENOVAR: ahí todavía hay algo
-  // que cancelar aunque el estado diga `canceling`.
-  const cancelable = !!access && !access.grandfathered &&
-    (access.status !== "canceling" || access.bajaA !== null);
+  // ⚠️ De `access.cancelable` (¿queda algo que Whop cobre?), NO de `access.status`:
+  // en una bajada la fila que manda es la del plan alto, ya `canceling`, mientras la
+  // del plan nuevo se va a renovar; y una cortesía `manual:` da acceso sin nada que
+  // cancelar en Whop.
+  const cancelable = !!access && !access.grandfathered && access.cancelable;
 
   return (
     <div className="min-h-screen bg-[#14050a] px-6 py-12">
@@ -332,7 +332,9 @@ export default async function CuentaPage() {
                     plan={PLANS[access.bajaA ?? access.tier].nombre}
                     // En una bajada esa fecha es la del plan ALTO, no la del nuevo que
                     // se está cancelando: ahí va el texto genérico.
-                    hasta={access.renewalPeriodEnd && !access.bajaA ? fecha.instante(access.renewalPeriodEnd) : null}
+                    hasta={access.renewalPeriodEnd && !access.bajaA && access.status !== "canceling"
+                      ? fecha.instante(access.renewalPeriodEnd)
+                      : null}
                   />
                 </div>
               )}

@@ -39,7 +39,7 @@ describe('getAccess', () => {
   it('devuelve el tier de la membership viva', async () => {
     filas = [fila('active', 2, '2026-09-20T00:00:00Z')]
     expect(await getAccess('u1')).toEqual({
-      tier: 2, status: 'active', renewalPeriodEnd: '2026-09-20T00:00:00Z', grandfathered: false, bajaA: null,
+      tier: 2, status: 'active', renewalPeriodEnd: '2026-09-20T00:00:00Z', grandfathered: false, bajaA: null, cancelable: true,
     })
   })
 
@@ -61,7 +61,7 @@ describe('getAccess', () => {
     // `status` null es la marca de que NO hay fila en la tabla: el grandfathering
     // sale del env, no de una membership de Whop.
     expect(await getAccess('u1', 'VIEJO@jrhub.pe')).toEqual({
-      tier: 3, status: null, renewalPeriodEnd: null, grandfathered: true, bajaA: null,
+      tier: 3, status: null, renewalPeriodEnd: null, grandfathered: true, bajaA: null, cancelable: false,
     })
   })
 
@@ -113,6 +113,38 @@ describe('getAccess · baja de plan en curso', () => {
   it('con una sola membership no hay baja', async () => {
     filas = [fila('active', 2, null, { updated_at: '2026-08-21T00:00:00Z' })]
     expect((await getAccess('u1'))?.bajaA).toBeNull()
+  })
+
+  // ⚠️ El evento de cancelación reescribe la fila VIEJA después de la nueva y le sube
+  // el `updated_at`. Con la regla vieja ("la más reciente es menor") una subida se
+  // leía como bajada, y una bajada real perdía el aviso y el botón de cancelar.
+  it('subida: el evento de cancelación de la vieja NO la vuelve baja', async () => {
+    filas = [
+      fila('active', 3, null, { updated_at: '2026-08-21T00:00:00Z' }),
+      fila('canceling', 1, null, { updated_at: '2026-08-22T00:00:00Z' }),
+    ]
+    expect((await getAccess('u1'))?.bajaA).toBeNull()
+  })
+
+  it('bajada: con la vieja ya cancelándose (y más reciente) sigue marcando la baja', async () => {
+    filas = [
+      fila('canceling', 3, null, { updated_at: '2026-08-22T00:00:00Z', whop_membership_id: 'mem_a' }),
+      fila('active', 1, null, { updated_at: '2026-08-21T00:00:00Z', whop_membership_id: 'mem_b' }),
+    ]
+    const a = await getAccess('u1')
+    expect(a?.bajaA).toBe(1)
+    // El plan nuevo se va a renovar: el botón tiene que seguir.
+    expect(a?.cancelable).toBe(true)
+  })
+
+  it('bajada con TODO cancelado: ni aviso de baja ni botón', async () => {
+    filas = [
+      fila('canceling', 3, null, { updated_at: '2026-08-21T00:00:00Z', whop_membership_id: 'mem_a' }),
+      fila('canceling', 1, null, { updated_at: '2026-08-22T00:00:00Z', whop_membership_id: 'mem_b' }),
+    ]
+    const a = await getAccess('u1')
+    expect(a?.bajaA).toBeNull()
+    expect(a?.cancelable).toBe(false)
   })
 
   // Una membership MUERTA no puede disparar el aviso: no es un cambio en curso.
@@ -244,5 +276,54 @@ describe('cancelSubscription', () => {
     vi.stubGlobal('fetch', async () =>
       ({ ok: false, status: 403, text: async () => 'Cannot cancel membership' }) as Response)
     await expect(cancelSubscription('u1')).rejects.toThrow(/mem_a/)
+  })
+
+  it('"set to cancel at period end" cuenta como ya cancelándose', async () => {
+    filas = [{ whop_membership_id: 'mem_a', status: 'active' }]
+    vi.stubGlobal('fetch', async () =>
+      ({ ok: false, status: 422, text: async () => 'Membership is set to cancel at period end' }) as Response)
+    expect(await cancelSubscription('u1')).toBe(1)
+  })
+
+  // Whop sigue reintentando el cobro de un past_due: saltarlo le prometía al usuario
+  // "no se te volverá a cobrar" y el reintento le cobraba igual.
+  it('cancela también un past_due', async () => {
+    filas = [{ whop_membership_id: 'mem_pd', status: 'past_due' }]
+    expect(await cancelSubscription('u1')).toBe(1)
+    expect(urls).toEqual([expect.stringContaining('/memberships/mem_pd/cancel')])
+  })
+
+  // Una que falla no deja a las demás sin intentar, y el error dice cuántas salieron.
+  it('si una falla, igual intenta las demás y lanza con el parcial', async () => {
+    filas = [
+      { whop_membership_id: 'mem_a', status: 'active' },
+      { whop_membership_id: 'mem_b', status: 'active' },
+    ]
+    const intentadas: string[] = []
+    vi.stubGlobal('fetch', async (url: string) => {
+      intentadas.push(url)
+      return url.includes('mem_a')
+        ? ({ ok: false, status: 500, text: async () => 'boom' }) as Response
+        : ({ ok: true, status: 200, text: async () => '' }) as Response
+    })
+    await expect(cancelSubscription('u1')).rejects.toThrow(/1 de 2.*mem_a/)
+    expect(intentadas).toHaveLength(2)
+  })
+})
+
+/** Cuándo hay algo que cancelar: decide el botón de Mi cuenta. */
+describe('getAccess · cancelable', () => {
+  it('una cortesía manual: sola no es cancelable', async () => {
+    filas = [fila('active', 2, null, { whop_membership_id: 'manual:u1' })]
+    expect((await getAccess('u1'))?.cancelable).toBe(false)
+  })
+
+  // Whop sigue reintentando el cobro de un past_due aunque no dé acceso.
+  it('un past_due al lado del plan vivo cuenta', async () => {
+    filas = [
+      fila('canceling', 2, null, { whop_membership_id: 'mem_a' }),
+      fila('past_due', 1, null, { whop_membership_id: 'mem_b' }),
+    ]
+    expect((await getAccess('u1'))?.cancelable).toBe(true)
   })
 })

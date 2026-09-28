@@ -10,7 +10,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { PLANS, toTier, type Tier } from '@ph/shared'
 import {
-  pickAccess, isGrandfathered, saveEntitlement,
+  pickAccess, isGrandfathered, saveEntitlement, esManual,
   type Access, type EntitlementRow,
 } from './whop'
 import { toRole, type Role } from './roles'
@@ -40,7 +40,7 @@ function getDb(): SupabaseClient {
  * `pickAccess` se queda con el tier más alto de las vivas.
  */
 export const manualMembershipId = (userId: string) => `manual:${userId}`
-export const esManual = (id: string) => id.startsWith('manual:')
+export { esManual }
 
 /**
  * Otorga (o cambia) la cortesía de un usuario. Upsert sobre la PK, así que repetirlo
@@ -152,7 +152,7 @@ export async function listUsuarios(): Promise<AdminUser[]> {
       // El grandfathered no tiene fila: su acceso depende del email (whop.ts).
       const grand = isGrandfathered(u.email)
       const access = grand
-        ? { tier: 3 as Tier, status: null, renewalPeriodEnd: null, grandfathered: true, bajaA: null }
+        ? { tier: 3 as Tier, status: null, renewalPeriodEnd: null, grandfathered: true, bajaA: null, cancelable: false }
         : pickAccess(filas as EntitlementRow[])
 
       // El más recién tocado, dé acceso o no: es lo que explica un `access` en null.

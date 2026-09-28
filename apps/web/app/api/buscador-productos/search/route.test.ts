@@ -27,7 +27,7 @@ vi.mock('@/lib/supabase/server', () => ({
   getUser: vi.fn().mockResolvedValue({ id: 'u1', email: 'u@jrhub.pe' }),
 }))
 vi.mock('@/lib/whop', () => ({
-  getAccess: vi.fn().mockResolvedValue({ tier: 3, status: 'active', renewalPeriodEnd: null, grandfathered: false, bajaA: null }),
+  getAccess: vi.fn().mockResolvedValue({ tier: 3, status: 'active', renewalPeriodEnd: null, grandfathered: false, bajaA: null, cancelable: false }),
 }))
 
 import { NextRequest } from 'next/server'
@@ -46,7 +46,7 @@ beforeEach(() => _resetNichosCache())
 
 /** Corre el resto del test como si el usuario tuviera este plan. */
 function conPlan(tier: Tier) {
-  vi.mocked(getAccess).mockResolvedValue({ tier, status: 'active', renewalPeriodEnd: null, grandfathered: false, bajaA: null })
+  vi.mocked(getAccess).mockResolvedValue({ tier, status: 'active', renewalPeriodEnd: null, grandfathered: false, bajaA: null, cancelable: false })
 }
 
 const req = (body: unknown) =>

@@ -69,7 +69,7 @@ describe('/suscripcion', () => {
   // personas que podían cambiar de plan.
   it('con un plan activo NO redirige: muestra la grilla y marca el plan actual', async () => {
     vi.mocked(getAccess).mockResolvedValue({
-      tier: 1, status: 'active', renewalPeriodEnd: null, grandfathered: false, bajaA: null,
+      tier: 1, status: 'active', renewalPeriodEnd: null, grandfathered: false, bajaA: null, cancelable: false,
     })
     const html = await render()
 
@@ -84,7 +84,7 @@ describe('/suscripcion', () => {
   // Sin salida, quien ya pagó queda encerrado en el paywall.
   it('con acceso ofrece volver al panel', async () => {
     vi.mocked(getAccess).mockResolvedValue({
-      tier: 2, status: 'active', renewalPeriodEnd: null, grandfathered: false, bajaA: null,
+      tier: 2, status: 'active', renewalPeriodEnd: null, grandfathered: false, bajaA: null, cancelable: false,
     })
     expect(await render()).toContain('href="/dashboard"')
   })
@@ -97,7 +97,7 @@ describe('/suscripcion', () => {
     expect(await render()).toContain('href="/cuenta"')
 
     vi.mocked(getAccess).mockResolvedValue({
-      tier: 1, status: 'active', renewalPeriodEnd: null, grandfathered: false, bajaA: null,
+      tier: 1, status: 'active', renewalPeriodEnd: null, grandfathered: false, bajaA: null, cancelable: false,
     })
     expect(await render()).toContain('href="/cuenta"')
   })
@@ -107,7 +107,7 @@ describe('/suscripcion', () => {
   // pantalla tiene que decir eso, no lo contrario.
   it('dice que el plan anterior se cancela solo, sin pedirle nada al usuario', async () => {
     vi.mocked(getAccess).mockResolvedValue({
-      tier: 1, status: 'active', renewalPeriodEnd: null, grandfathered: false, bajaA: null,
+      tier: 1, status: 'active', renewalPeriodEnd: null, grandfathered: false, bajaA: null, cancelable: false,
     })
     const html = await render()
     expect(html).toMatch(/cancelamos el anterior por ti/i)
@@ -116,7 +116,7 @@ describe('/suscripcion', () => {
 
   it('a un grandfathered no le ofrece comprar nada', async () => {
     vi.mocked(getAccess).mockResolvedValue({
-      tier: 3, status: 'active', renewalPeriodEnd: null, grandfathered: true, bajaA: null,
+      tier: 3, status: 'active', renewalPeriodEnd: null, grandfathered: true, bajaA: null, cancelable: false,
     })
     const html = await render()
     expect(html).not.toContain('/api/whop/checkout')
@@ -134,7 +134,7 @@ describe('/suscripcion', () => {
 
     it('con el webhook ya procesado, va al dashboard', async () => {
       vi.mocked(getAccess).mockResolvedValue({
-        tier: 3, status: 'active', renewalPeriodEnd: null, grandfathered: false, bajaA: null,
+        tier: 3, status: 'active', renewalPeriodEnd: null, grandfathered: false, bajaA: null, cancelable: false,
       })
       expect(await render({ pago: 'ok' })).toBe('REDIRECT:/dashboard')
     })

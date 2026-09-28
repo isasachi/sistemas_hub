@@ -51,7 +51,7 @@ beforeEach(() => {
   vi.mocked(getUser).mockResolvedValue({ id: 'u1', email: 'u@jrhub.pe' } as never)
   vi.mocked(getProfile).mockResolvedValue(PERFIL_VACIO)
   vi.mocked(getAccess).mockResolvedValue({
-    tier: 2, status: 'active', renewalPeriodEnd: '2026-09-20T15:00:00Z', grandfathered: false, bajaA: null,
+    tier: 2, status: 'active', renewalPeriodEnd: '2026-09-20T15:00:00Z', grandfathered: false, bajaA: null, cancelable: true,
   })
   vi.mocked(creditStatus).mockResolvedValue({
     tier: 2, limite: 100, usados: 40, restantes: 60, desde: '2026-08-20',
@@ -108,7 +108,7 @@ describe('/cuenta', () => {
   it('con una baja en curso dice a qué plan pasa y hasta cuándo conserva el actual', async () => {
     vi.mocked(getAccess).mockResolvedValue({
       tier: 3, status: 'active', renewalPeriodEnd: '2026-09-20T15:00:00Z',
-      grandfathered: false, bajaA: 1,
+      grandfathered: false, bajaA: 1, cancelable: false,
     })
     const html = await render()
     expect(html).toContain('Legacy Start')          // a dónde va
@@ -160,7 +160,7 @@ describe('/cuenta', () => {
 
   it('a un grandfathered no le ofrece cambiar de plan ni le habla de cobros', async () => {
     vi.mocked(getAccess).mockResolvedValue({
-      tier: 3, status: null, renewalPeriodEnd: null, grandfathered: true, bajaA: null,
+      tier: 3, status: null, renewalPeriodEnd: null, grandfathered: true, bajaA: null, cancelable: false,
     })
     const html = await render()
     expect(html).toContain('Acceso de por vida')
@@ -170,7 +170,7 @@ describe('/cuenta', () => {
 
   it('con la suscripción cancelada dice cuándo TERMINA, no cuándo se renueva', async () => {
     vi.mocked(getAccess).mockResolvedValue({
-      tier: 1, status: 'canceling', renewalPeriodEnd: '2026-09-20T00:00:00Z', grandfathered: false, bajaA: null,
+      tier: 1, status: 'canceling', renewalPeriodEnd: '2026-09-20T00:00:00Z', grandfathered: false, bajaA: null, cancelable: false,
     })
     const html = await render()
     expect(html).toContain('Termina el')
@@ -181,7 +181,7 @@ describe('/cuenta', () => {
   // del usuario.
   it('un estado desconocido no se imprime crudo', async () => {
     vi.mocked(getAccess).mockResolvedValue({
-      tier: 1, status: 'estado_nuevo_de_whop', renewalPeriodEnd: null, grandfathered: false, bajaA: null,
+      tier: 1, status: 'estado_nuevo_de_whop', renewalPeriodEnd: null, grandfathered: false, bajaA: null, cancelable: false,
     })
     const html = await render()
     expect(html).not.toContain('estado_nuevo_de_whop')
@@ -193,9 +193,9 @@ describe('/cuenta', () => {
       expect(await render()).toContain('data-t="cancelar"')
     })
 
-    it('no se ofrece si ya está cancelándose', async () => {
+    it('no se ofrece si no queda nada que Whop cobre (cancelándose o solo cortesía)', async () => {
       vi.mocked(getAccess).mockResolvedValue({
-        tier: 2, status: 'canceling', renewalPeriodEnd: '2026-09-20T00:00:00Z', grandfathered: false, bajaA: null,
+        tier: 2, status: 'canceling', renewalPeriodEnd: '2026-09-20T00:00:00Z', grandfathered: false, bajaA: null, cancelable: false,
       })
       expect(await render()).not.toContain('data-t="cancelar"')
     })
@@ -204,14 +204,14 @@ describe('/cuenta', () => {
     // plan nuevo se va a renovar: todavía hay algo que cancelar, y es ESE plan.
     it('en plena bajada se ofrece, y nombra el plan nuevo', async () => {
       vi.mocked(getAccess).mockResolvedValue({
-        tier: 3, status: 'canceling', renewalPeriodEnd: '2026-09-20T00:00:00Z', grandfathered: false, bajaA: 1,
+        tier: 3, status: 'canceling', renewalPeriodEnd: '2026-09-20T00:00:00Z', grandfathered: false, bajaA: 1, cancelable: true,
       })
       expect(await render()).toMatch(/data-t="cancelar">Legacy Start</)
     })
 
     it('no se ofrece a un grandfathered ni sin plan', async () => {
       vi.mocked(getAccess).mockResolvedValue({
-        tier: 3, status: null, renewalPeriodEnd: null, grandfathered: true, bajaA: null,
+        tier: 3, status: null, renewalPeriodEnd: null, grandfathered: true, bajaA: null, cancelable: false,
       })
       expect(await render()).not.toContain('data-t="cancelar"')
       vi.mocked(getAccess).mockResolvedValue(null)
