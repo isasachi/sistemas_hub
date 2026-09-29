@@ -125,6 +125,25 @@ describe('entitlementFromEvent', () => {
     expect(entitlementFromEvent(evento({ renewal_period_end: undefined }))?.renewal_period_end)
       .toBeNull()
   })
+
+  // Sin este evento la fila quedaba `active` tras cancelar y Mi cuenta decía
+  // "Se renueva el…" a quien ya había cancelado.
+  const cancelEvt = (data: Record<string, unknown>) =>
+    ({ ...evento(data), type: 'membership.cancel_at_period_end_changed' })
+
+  it('cancel_at_period_end_changed guarda el status del payload', () => {
+    expect(entitlementFromEvent(cancelEvt({ status: 'canceling' }))?.status).toBe('canceling')
+  })
+
+  it('active con cancel_at_period_end=true se guarda como canceling', () => {
+    expect(entitlementFromEvent(cancelEvt({ status: 'active', cancel_at_period_end: true }))?.status)
+      .toBe('canceling')
+  })
+
+  it('revertir la cancelación vuelve a active', () => {
+    expect(entitlementFromEvent(cancelEvt({ status: 'active', cancel_at_period_end: false }))?.status)
+      .toBe('active')
+  })
 })
 
 describe('POST /api/whop/webhook', () => {
@@ -188,6 +207,25 @@ describe('POST /api/whop/webhook', () => {
     }))
     const { POST } = await import('@/app/api/whop/webhook/route')
     await POST(firmado(JSON.stringify(evento({ status: 'expired' }))))
+
+    expect(cancelados).toEqual([])
+  })
+
+  // ⚠️ Cambio de plan: el webhook cancela A al activarse B, y después llega el
+  // `cancel_at_period_end_changed` de A en `canceling` (que DA acceso). Si ese evento
+  // disparara la cancelación de "los demás menos A", cancelaría B: el plan recién pagado.
+  it('el evento de cancelación NO cancela las demás memberships', async () => {
+    const cancelados: string[] = []
+    vi.doMock('@/lib/whop', async (orig) => ({
+      ...(await orig<typeof import('./whop')>()),
+      saveEntitlement: async () => {},
+      cancelPreviousMemberships: async (_u: string, keep: string) => void cancelados.push(keep),
+    }))
+    const { POST } = await import('@/app/api/whop/webhook/route')
+    for (const data of [{ status: 'canceling' }, { status: 'active', cancel_at_period_end: true }]) {
+      const body = JSON.stringify({ ...evento(data), type: 'membership.cancel_at_period_end_changed' })
+      expect((await POST(firmado(body))).status).toBe(200)
+    }
 
     expect(cancelados).toEqual([])
   })

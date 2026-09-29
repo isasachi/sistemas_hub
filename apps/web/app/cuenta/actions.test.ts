@@ -6,11 +6,16 @@ vi.mock('@/lib/user-settings', () => ({
   saveProfile: vi.fn().mockResolvedValue(undefined),
   setKieKey: vi.fn().mockResolvedValue(undefined),
 }))
+vi.mock('@/lib/whop', () => ({
+  cancelSubscription: vi.fn().mockResolvedValue(1),
+  isGrandfathered: (email: string | null | undefined) => email === 'viejo@jrhub.pe',
+}))
 vi.mock('@/lib/storage', () => ({
   uploadToStorage: vi.fn().mockResolvedValue('https://x.supabase.co/avatars/u1.png?v=1'),
 }))
 
-import { guardarPerfil, guardarKieKey, subirAvatar } from './actions'
+import { guardarPerfil, guardarKieKey, subirAvatar, cancelarSuscripcion } from './actions'
+import { cancelSubscription } from '@/lib/whop'
 import { getUser } from '@/lib/supabase/server'
 import { saveProfile, setKieKey } from '@/lib/user-settings'
 import { uploadToStorage } from '@/lib/storage'
@@ -36,6 +41,7 @@ describe('sin sesión no se escribe nada', () => {
     ['perfil', () => guardarPerfil({}, fd({ fullName: 'Ana' }))],
     ['key de KIE', () => guardarKieKey({}, fd({ key: 'k' }))],
     ['avatar', () => subirAvatar({}, fd({ avatar: imagen(10, 'image/png') }))],
+    ['cancelar suscripción', () => cancelarSuscripcion({}, fd({}))],
   ])('%s', async (_caso, correr) => {
     expect((await correr()).error).toMatch(/sesión/i)
     expect(saveProfile).not.toHaveBeenCalled()
@@ -115,4 +121,29 @@ it('cada formulario guarda solo SUS campos', async () => {
   vi.clearAllMocks()
   await subirAvatar({}, fd({ avatar: imagen(1024, 'image/png') }))
   expect(Object.keys(vi.mocked(saveProfile).mock.calls[0][1])).toEqual(['avatarUrl'])
+})
+
+describe('cancelarSuscripcion', () => {
+  // ⚠️ Un action es un endpoint público: el usuario sale de la SESIÓN, nunca del form.
+  it('cancela las memberships del usuario de la sesión, no de un id del formulario', async () => {
+    const r = await cancelarSuscripcion({}, fd({ userId: 'otro' }))
+    expect(cancelSubscription).toHaveBeenCalledWith('u1')
+    expect(r.ok).toMatch(/conservas el acceso/i)
+  })
+
+  it('a un grandfathered no le toca Whop', async () => {
+    vi.mocked(getUser).mockResolvedValue({ id: 'u1', email: 'viejo@jrhub.pe' } as never)
+    expect((await cancelarSuscripcion({}, fd({}))).error).toMatch(/de por vida/i)
+    expect(cancelSubscription).not.toHaveBeenCalled()
+  })
+
+  it('sin nada cancelable en Whop, lo dice en vez de celebrar', async () => {
+    vi.mocked(cancelSubscription).mockResolvedValueOnce(0)
+    expect((await cancelarSuscripcion({}, fd({}))).error).toMatch(/no encontramos/i)
+  })
+
+  it('si Whop falla, error entendible', async () => {
+    vi.mocked(cancelSubscription).mockRejectedValueOnce(new Error('whop 500'))
+    expect((await cancelarSuscripcion({}, fd({}))).error).toMatch(/no pudimos cancelar/i)
+  })
 })

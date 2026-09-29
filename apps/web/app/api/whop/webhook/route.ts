@@ -1,8 +1,8 @@
 import { Webhook } from 'standardwebhooks'
 import {
+  activaPlanNuevo,
   cancelPreviousMemberships,
   entitlementFromEvent,
-  grantsAccess,
   saveEntitlement,
   webhookKey,
 } from '@/lib/whop'
@@ -60,11 +60,14 @@ export async function POST(req: Request) {
   // pago esté confirmado dejaría al usuario sin ningún plan; y un `deactivated` no
   // puede arrastrarse al resto de sus memberships.
   //
+  // ⚠️ Solo con una membership NUEVA (`activaPlanNuevo`), nunca con el evento de
+  // cancelación de la vieja: ver el porqué en su doc.
+  //
   // ⚠️ Best-effort: un fallo se loguea y la respuesta sigue siendo 200. Devolver
   // 500 haría que Whop reintente ~3 días y vuelva a correr TODO el handler por algo
   // que ya quedó guardado, y el peor caso de no cancelar es un cobro de más que se
   // arregla a mano — bastante mejor que un endpoint desactivado.
-  if (grantsAccess(row.status)) {
+  if (activaPlanNuevo(evt, row)) {
     try {
       await cancelPreviousMemberships(row.user_id, row.whop_membership_id)
     } catch (err) {

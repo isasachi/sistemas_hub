@@ -6,7 +6,7 @@ import { getUser } from "@/lib/supabase/server";
 import { getAccess, type Access } from "@/lib/whop";
 import { creditStatus, type CreditStatus } from "@/lib/credits";
 import { getProfile, getKieKey, maskKey } from "@/lib/user-settings";
-import { PerfilForm, AvatarForm, KieKeyForm } from "./Formularios";
+import { PerfilForm, AvatarForm, KieKeyForm, CancelarForm } from "./Formularios";
 import { PlanCTA } from "@/components/planes/PlanCTA";
 
 /**
@@ -147,7 +147,10 @@ function PlanActual({ access }: { access: Access }) {
         </p>
       )}
 
-      {access.renewalPeriodEnd && (
+      {/* En una bajada la fila que manda (el plan alto) ya está `canceling`, así que
+          esta línea diría "Termina el…" justo debajo de "después pasas al plan
+          nuevo": el aviso de arriba ya da la fecha y dice qué pasa después. */}
+      {access.renewalPeriodEnd && !access.bajaA && (
         <p className="mt-4 border-t border-white/[0.08] pt-3 text-[12px] text-[#a98c88]">
           {access.status === "canceling" ? "Termina el " : "Se renueva el "}
           <span className="text-[#efe7e0]">{fecha.instante(access.renewalPeriodEnd)}</span>
@@ -267,6 +270,11 @@ export default async function CuentaPage() {
   const otrosPlanes = access && !access.grandfathered
     ? TIERS.filter((t) => t !== access.tier)
     : [];
+  // ⚠️ De `access.cancelable` (¿queda algo que Whop cobre?), NO de `access.status`:
+  // en una bajada la fila que manda es la del plan alto, ya `canceling`, mientras la
+  // del plan nuevo se va a renovar; y una cortesía `manual:` da acceso sin nada que
+  // cancelar en Whop.
+  const cancelable = !!access && !access.grandfathered && access.cancelable;
 
   return (
     <div className="min-h-screen bg-[#14050a] px-6 py-12">
@@ -318,6 +326,19 @@ export default async function CuentaPage() {
                     beneficios hasta que termine el período que ya pagaste. El cobro y los
                     comprobantes los gestiona Whop.
                   </p>
+                </div>
+              )}
+
+              {cancelable && (
+                <div className="mt-5 border-t border-white/[0.08] pt-4">
+                  <CancelarForm
+                    plan={PLANS[access.bajaA ?? access.tier].nombre}
+                    // En una bajada esa fecha es la del plan ALTO, no la del nuevo que
+                    // se está cancelando: ahí va el texto genérico.
+                    hasta={access.renewalPeriodEnd && !access.bajaA && access.status !== "canceling"
+                      ? fecha.instante(access.renewalPeriodEnd)
+                      : null}
+                  />
                 </div>
               )}
             </>
