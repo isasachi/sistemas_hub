@@ -147,7 +147,10 @@ function PlanActual({ access }: { access: Access }) {
         </p>
       )}
 
-      {access.renewalPeriodEnd && (
+      {/* En una bajada la fila que manda (el plan alto) ya está `canceling`, así que
+          esta línea diría "Termina el…" justo debajo de "después pasas al plan
+          nuevo": el aviso de arriba ya da la fecha y dice qué pasa después. */}
+      {access.renewalPeriodEnd && !access.bajaA && (
         <p className="mt-4 border-t border-white/[0.08] pt-3 text-[12px] text-[#a98c88]">
           {access.status === "canceling" ? "Termina el " : "Se renueva el "}
           <span className="text-[#efe7e0]">{fecha.instante(access.renewalPeriodEnd)}</span>

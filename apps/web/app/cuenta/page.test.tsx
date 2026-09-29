@@ -209,6 +209,17 @@ describe('/cuenta', () => {
       expect(await render()).toMatch(/data-t="cancelar">Legacy Start</)
     })
 
+    // La fila que manda ya está `canceling`: "Termina el…" debajo de "después pasas
+    // al plan nuevo" se leía como que se le terminaba todo.
+    it('en plena bajada no dice "Termina el"', async () => {
+      vi.mocked(getAccess).mockResolvedValue({
+        tier: 3, status: 'canceling', renewalPeriodEnd: '2026-09-20T00:00:00Z', grandfathered: false, bajaA: 1, cancelable: true,
+      })
+      const html = await render()
+      expect(html).toMatch(/pasas al plan nuevo/)
+      expect(html).not.toMatch(/Termina el/)
+    })
+
     it('no se ofrece a un grandfathered ni sin plan', async () => {
       vi.mocked(getAccess).mockResolvedValue({
         tier: 3, status: null, renewalPeriodEnd: null, grandfathered: true, bajaA: null, cancelable: false,
