@@ -183,6 +183,21 @@ const hostDe = (url: string) => {
   try { return new URL(url.includes('//') ? url : `https://${url}`).hostname.toLowerCase() } catch { return '' }
 }
 
+export function destinoNoFisico(url?: string | null): NonPhysicalHit | null {
+  const m = url ? hostDe(url).match(URL_NO_FISICO) : null
+  return m ? { cluster: 'app-url', match: m[0] } : null
+}
+
+/**
+ * Lo que NO entra a la base (2026-09-30): el destino del anuncio y la regla 1.
+ * Corre en el descubrimiento, antes de gastar una navegación en medir al
+ * anunciante. Sin marcas grandes ni spam: esos son productos físicos y su
+ * exclusión es cosa de la vitrina (`servingSignal`), no del inventario.
+ */
+export const descubrimientoSignal = (
+  text: string | null | undefined, advertiser?: string | null, url?: string | null,
+): NonPhysicalHit | null => destinoNoFisico(url) ?? nonPhysicalSignal(text, advertiser)
+
 /**
  * Todo lo que no debe llegar a la vitrina: lo no-físico, las marcas grandes y
  * la red de spam. Es lo que usa el serving.
@@ -194,8 +209,8 @@ export function servingSignal(
 ): NonPhysicalHit | null {
   // Primero y sin override de FISICO: un enlace a Google Play no se vuelve un
   // producto porque el anuncio diga "envío gratis".
-  const destino = url ? hostDe(url).match(URL_NO_FISICO) : null
-  if (destino) return { cluster: 'app-url', match: destino[0] }
+  const destino = destinoNoFisico(url)
+  if (destino) return destino
   const nombre = norm(advertiser ?? '')
   const spam = nombre.match(SPAM_BASE) ?? nombre.match(SPAM_FORMA)
   if (spam) return { cluster: 'spam', match: spam[0] }

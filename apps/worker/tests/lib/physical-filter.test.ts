@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { nonPhysicalSignal, isPhysicalEnough, servingSignal, isServible } from '@ph/shared'
+import { nonPhysicalSignal, isPhysicalEnough, servingSignal, isServible, descubrimientoSignal } from '@ph/shared'
 
 // Medido contra los 3,970 anuncios que el LLM ya etiquetó: bloquea el 37% de lo
 // no-físico perdiendo 1.8% de los físicos (y 30 de esas 43 pérdidas son
@@ -142,6 +142,14 @@ describe('dramas, novelas y juegos por el destino del anuncio', () => {
     expect(isServible('El alfa que juró…', 'Muchas novelas001')).toBe(false)
     expect(isServible('Katya, ¿quieres saber…', 'Club de Lectura Romántica-')).toBe(false)
     expect(isServible('Haz clic aquí para seguir leyendo', 'Linda Perez')).toBe(false)
+  })
+
+  it('el descubrimiento aplica el destino y la regla 1, pero no marcas grandes ni spam', () => {
+    expect(descubrimientoSignal('Envío gratis', 'Steven Miller', 'http://play.google.com/store/apps/details?id=x')?.cluster).toBe('app-url')
+    expect(descubrimientoSignal('Mira el final', 'DramaBox', null)?.cluster).toBe('drama')
+    // Físicos: la vitrina los saca, el inventario los guarda.
+    expect(descubrimientoSignal('Just Do It', 'Nike', 'https://nike.com')).toBeNull()
+    expect(descubrimientoSignal('Brochas', 'Emboadlie.xs01', null)).toBeNull()
   })
 
   it('⚠️ una tienda normal sigue pasando', () => {

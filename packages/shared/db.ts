@@ -4,7 +4,7 @@ import { bucketRange, type RawBucket } from './raw-buckets'
 import { type Pais } from './filtros'
 import { prescore } from './prescore'
 import { sanitizeJsonDeep, cleanJsonText } from './json-clean'
-import { isServible } from './physical-filter'
+import { isServible, destinoNoFisico } from './physical-filter'
 import { isBlocked } from './blocklist'
 
 // Cliente Supabase con service role (bypassa RLS), igual que lib/db.ts del hub.
@@ -643,7 +643,10 @@ export async function upsertRawProducts(
 export async function upsertRawClusters(rows: RawClusterRow[]): Promise<void> {
   if (!rows.length) return
   const now = new Date().toISOString()
-  const clean = rows.map((r) => ({
+  // Un producto que lleva a Google Play o a una granja de dramas no entra a la
+  // base (2026-09-30). Acá y no solo en el descubrimiento: cubre `scan-base` y
+  // al anunciante cuyo primer anuncio parecía normal.
+  const clean = rows.filter((r) => !destinoNoFisico(r.url)).map((r) => ({
     ...r,
     titulo: r.titulo ? cleanJsonText(r.titulo) : null,
     cuerpo: r.cuerpo ? cleanJsonText(r.cuerpo) : null,
