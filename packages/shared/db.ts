@@ -994,7 +994,8 @@ export async function getApprovedByBucket(
  * nicho:
  *
  *   1. los `monoproducto` (verificados: el anunciante dedica su página a ese
- *      producto) van primero, y el relleno excluye lo ya `descartado`;
+ *      producto) van primero pero con cupo del 30 % (`ordenCategoria`), y el
+ *      relleno excluye lo ya `descartado`;
  *   2. una página (`page_id`) aparece UNA vez aunque esté en cinco nichos;
  *   3. tope por nicho, para que un nicho enorme no se coma la categoría.
  *
@@ -1028,7 +1029,8 @@ export async function getApprovedByCategory(
   if (resto.error) throw new Error(resto.error.message)
 
   // Barajados por SEPARADO: los confirmados siguen entrando antes que el
-  // relleno (ver `barajar`), y lo que varía es cuáles de cada grupo.
+  // relleno, hasta su cupo (ver `ordenCategoria`), y lo que varía es cuáles de
+  // cada grupo.
   const confirmados = barajar(fisicos(verificados.data as unknown as RawProductRow[]))
   const relleno = barajar(fisicos(resto.data as unknown as RawProductRow[]))
 
@@ -1058,7 +1060,7 @@ export async function getApprovedByCategory(
   // de siempre. Lo que sigue mandando es el tope por nicho.
   const clave = (r: RawProductRow) =>
     'cluster_key' in r ? `${r.page_id}:${(r as { cluster_key: string }).cluster_key}` : r.page_id
-  for (const r of [...confirmados, ...relleno.filter((r) => !esCatalogo(r))]) {
+  for (const r of ordenCategoria(confirmados, relleno.filter((r) => !esCatalogo(r)), limit)) {
     if (vistos.has(clave(r))) continue
     vistos.add(clave(r))
     const n = porNicho.get(r.niche) ?? 0
@@ -1069,6 +1071,19 @@ export async function getApprovedByCategory(
 
   // El tope es para variar la categoría, no para dejarla corta.
   return [...elegidos, ...relegados].slice(0, limit)
+}
+
+// Cupo de verificados: el 30 % de la página (decisión del dueño, 2026-09-30).
+// Antes los `monoproducto` entraban TODOS primero, y como son pocos y viejos
+// (155/415/169 por rango, ninguno re-verificado desde el 14-sep) llenaban
+// "Todos" entero: medido contra prod, 0 de 50 productos del sprint de
+// scan-nicho (56k clusters `sin_verificar`) llegaban a la vitrina. Los
+// verificados que sobran van DETRÁS del relleno: solo entran si el relleno no
+// alcanza para llenar la página.
+const CUOTA_VERIFICADOS = 0.3
+export function ordenCategoria<T>(confirmados: T[], relleno: T[], limit: number): T[] {
+  const cupo = Math.round(limit * CUOTA_VERIFICADOS)
+  return [...confirmados.slice(0, cupo), ...relleno, ...confirmados.slice(cupo)]
 }
 
 // Máximo de productos del mismo nicho en una categoría. Escala con el pedido: el
