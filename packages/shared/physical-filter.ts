@@ -22,7 +22,7 @@ const norm = (s: string) =>
 // Las tres últimas alternativas son portugués: las mismas granjas de novelas
 // pautan en pt-BR y la regla en español no las tocaba. Salieron de paginar hasta
 // el final de una categoría, donde se concentran.
-const DRAMA = /\b(doblado|drama|dramas|novela|novelas|serie|series|episodio|episodios|capitulo|capitulos|short drama|shortmax|dramabox|pocket fm|webtoon|manhwa|toca para ver|sigue viendo|seguir viendo|ver el final|get the full story|tap to watch|watch (more|the full|wonderful)|descarga la aplicacion|descargar y mirar|mira gratis ahora|baixe para assistir|assista de graca|leia a versao completa)\b/
+const DRAMA = /\b(doblado|drama|dramas|novela|novelas|serie|series|episodio|episodios|capitulo|capitulos|short drama|shortmax|goodshort|dramabox|pocket fm|webtoon|manhwa|toca para ver|sigue viendo|seguir viendo|ver el final|get the full story|tap to watch|watch (more|the full|wonderful)|descarga la aplicacion|descargar y mirar|para seguir leyendo|mira gratis ahora|baixe para assistir|assista de graca|leia a versao completa)\b/
 
 // ── Cluster 2: clínicas, spas y consultorios ─────────────────────────────────
 // Ojo: acá los términos sueltos ("dermatólogo", "spa", "sucursal") NO sirven —
@@ -113,7 +113,10 @@ export function nonPhysicalSignal(
 
   // En el NOMBRE del anunciante "drama" va sin frontera: las granjas de novelas
   // se llaman MiniDramas, DramaBox, Drama Vibes…
-  const dramaNombre = nombre.match(/drama|short ?max|pocket ?fm|theater|teatro/)
+  // `novela`, `lectura romantica`, `traiciones`, `reelstv`… salieron de la
+  // vitrina de prod 2026-09-30: granjas con dominio propio que el filtro por URL
+  // de `servingSignal` no reconoce.
+  const dramaNombre = nombre.match(/drama|short ?max|pocket ?fm|theater|teatro|novela|lectura romantica|traiciones|reels ?tv|reel ?vibes|beeshort/)
   if (dramaNombre) return { cluster: 'drama', match: dramaNombre[0] }
 
   const enNombre = nombre.match(CLINICA_NOMBRE)
@@ -164,6 +167,22 @@ const SPAM_BASE = /^(emboadlie|benighty|beyonddraw|atmospherei|hardpointing|docu
 // (593 es el código de Ecuador). Todo eso está medido, no supuesto.
 const SPAM_FORMA = /^[a-z]{6,}[.\-&/·][a-z]{1,3}\d{2,3}$|^(ns|srsz)[-\d]/
 
+// Destino del anuncio que nunca es una caja: tiendas de apps, links de
+// instalación (adjust, appsflyer, onelink, branch) y las granjas de dramas y
+// novelas (`w2a.` = web-to-app). Medido 2026-09-30 sobre 4.313 filas servidas
+// en prod: ataja 589 (312 solo de Google Play: novelas por episodios, juegos,
+// VPN, limpiadores) y 0 `monoproducto`. El texto y el nombre no los veían:
+// la granja firma con nombres de persona ("Steven Miller") y el gancho es la
+// sinopsis de la historia. Temu entra acá porque también pauta con otros nombres.
+// ponytail: los dominios aleatorios del final (theryfhvntgb, huazxc…) son
+// granjas de novelas vistas una vez; rotan, así que esta lista va a tener que
+// crecer. Si se vuelve una persecución, el arreglo es el pase de veredicto.
+const URL_NO_FISICO = /(^|\.)(play\.google\.com|(itunes|apps)\.apple\.com|temu\.com|adjust\.(com|world)|appsflyer\.com|onelink\.me|sng\.link|app\.link|farsunpteltd\.com|blastshow\.com|theryfhvntgb\.com|jhgfuytrshop\.com|wgwtech\.com|huazxc\.com|wwwedb\.com|cotopnlt\.com|werarts\.com)$|^w2a\.|drama|novel(?!t)|noveltime|reelshort|joyreels|b25reel|storyreel|shorttv|lightreader|venusread/
+
+const hostDe = (url: string) => {
+  try { return new URL(url.includes('//') ? url : `https://${url}`).hostname.toLowerCase() } catch { return '' }
+}
+
 /**
  * Todo lo que no debe llegar a la vitrina: lo no-físico, las marcas grandes y
  * la red de spam. Es lo que usa el serving.
@@ -171,7 +190,12 @@ const SPAM_FORMA = /^[a-z]{6,}[.\-&/·][a-z]{1,3}\d{2,3}$|^(ns|srsz)[-\d]/
 export function servingSignal(
   text: string | null | undefined,
   advertiser?: string | null,
+  url?: string | null,
 ): NonPhysicalHit | null {
+  // Primero y sin override de FISICO: un enlace a Google Play no se vuelve un
+  // producto porque el anuncio diga "envío gratis".
+  const destino = url ? hostDe(url).match(URL_NO_FISICO) : null
+  if (destino) return { cluster: 'app-url', match: destino[0] }
   const nombre = norm(advertiser ?? '')
   const spam = nombre.match(SPAM_BASE) ?? nombre.match(SPAM_FORMA)
   if (spam) return { cluster: 'spam', match: spam[0] }
@@ -180,5 +204,5 @@ export function servingSignal(
   return nonPhysicalSignal(text, advertiser)
 }
 
-export const isServible = (text?: string | null, advertiser?: string | null) =>
-  servingSignal(text, advertiser) === null
+export const isServible = (text?: string | null, advertiser?: string | null, url?: string | null) =>
+  servingSignal(text, advertiser, url) === null

@@ -1143,7 +1143,9 @@ const textoDeFila = (r: RawProductRow | RawClusterRow) =>
 // bloqueado (1.254 filas en 8 nichos sexuales, medido 2026-09-18). Es texto, no
 // columna — por eso va en JS, como la lista negra.
 const fisicos = (rows: RawProductRow[] | null) =>
-  (rows ?? []).filter((r) => !isBlocked(r.niche) && isServible(textoDeFila(r), r.name))
+  (rows ?? []).filter((r) => !isBlocked(r.niche) &&
+    // Solo los clusters traen `url`; en `ph_raw_products` no existe.
+    isServible(textoDeFila(r), r.name, 'url' in r ? (r.url as string | null) : null))
 
 /**
  * Chips de sugerencia de la portada: los nichos con más inventario servible.

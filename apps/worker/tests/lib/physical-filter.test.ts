@@ -121,3 +121,33 @@ describe('lo que no merece un lugar en la vitrina', () => {
     }
   })
 })
+
+// Casos reales de la vitrina de prod, 2026-09-30.
+describe('dramas, novelas y juegos por el destino del anuncio', () => {
+  it('un enlace a una tienda de apps o a una granja de dramas no se sirve, diga lo que diga', () => {
+    for (const url of [
+      'http://play.google.com/store/apps/details?id=com.read.goodnovel',
+      'https://itunes.apple.com/app/id123',
+      'https://apps.apple.com/us/app/x/id1',
+      'https://drama.reelshort.com/es/episodes/x',
+      'https://w2a.blinkdrama.life/x',
+      'https://www.wrgnovel.com/x',
+      'https://livetranslatorgp.onelink.me/x',
+      'https://app.adjust.com/abc',
+      'https://www.temu.com/x',
+    ]) expect(servingSignal('Envío gratis, paga al recibir', 'Steven Miller', url)?.cluster, url).toBe('app-url')
+  })
+
+  it('las granjas con dominio propio caen por el nombre o el gancho', () => {
+    expect(isServible('El alfa que juró…', 'Muchas novelas001')).toBe(false)
+    expect(isServible('Katya, ¿quieres saber…', 'Club de Lectura Romántica-')).toBe(false)
+    expect(isServible('Haz clic aquí para seguir leyendo', 'Linda Perez')).toBe(false)
+  })
+
+  it('⚠️ una tienda normal sigue pasando', () => {
+    for (const url of [
+      'https://api.whatsapp.com/send?phone=51', 'https://cerebritos.com.ar/kit',
+      'https://novelty-gifts.com/x', 'https://retrolabconsoles.com/', null,
+    ]) expect(isServible('Kit para que tu hijo juegue y aprenda', 'Cerebritos', url), String(url)).toBe(true)
+  })
+})
