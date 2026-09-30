@@ -1014,6 +1014,7 @@ export async function getApprovedByCategory(
   bucket: RawBucket,
   limit = 10,
   filters?: RawFilters,
+  conTecho = true,
 ): Promise<RawProductRow[]> {
   // `null` = "todos" (sin filtro de nicho); una lista VACÍA sí es "ninguno".
   if (niches && !niches.length) return []
@@ -1023,17 +1024,28 @@ export async function getApprovedByCategory(
   // cambia, el planner ya no puede probar el predicado, vuelve al índice que
   // incluye los 435k `descartado` y el 0-50 cae otra vez en `57014` — sin que
   // ningún test lo note (mockean la DB). Cambiarla = recrear el índice.
+  // Cada consulta arranca en un techo de anuncios al azar (ver `techoAleatorio`)
+  // para que la vitrina rote por el rango entero y no solo por su tope. Si bajo
+  // el techo no alcanza —categorías chicas—, vuelve a la ventana de siempre:
+  // acá si faltan FILAS, y al final si faltan PRODUCTOS (800 filas bajo el
+  // techo pueden ser 18 productos: medido en mascotas 100+).
+  const ventana = async (armar: () => ReturnType<typeof categoriaQuery>, n: number) => {
+    if (!conTecho) return armar().limit(n)
+    const r = await armar().lte('ad_count', techoAleatorio(bucket)).limit(n)
+    if (r.error || (r.data?.length ?? 0) >= n) return r
+    return armar().limit(n)
+  }
   const [verificados, resto] = await Promise.all([
-    categoriaQuery(niches, bucket, filters).eq('status', 'monoproducto').limit(limit * SOBRE_PEDIDO),
-    categoriaQuery(niches, bucket, filters).not('status', 'in', '(inactivo,descartado,monoproducto)')
-      .limit(VENTANA_CAT),
+    ventana(() => categoriaQuery(niches, bucket, filters).eq('status', 'monoproducto'), limit * SOBRE_PEDIDO),
+    ventana(() => categoriaQuery(niches, bucket, filters).not('status', 'in', '(inactivo,descartado,monoproducto)'),
+      VENTANA_CAT),
   ])
   if (verificados.error) throw new Error(verificados.error.message)
   if (resto.error) throw new Error(resto.error.message)
 
-  // Barajados por SEPARADO: los confirmados siguen entrando antes que el
-  // relleno, hasta su cupo (ver `ordenCategoria`), y lo que varía es cuáles de
-  // cada grupo.
+  // Barajados por SEPARADO: los confirmados tienen su cupo reservado (ver
+  // `ordenCategoria`) y lo que varía es cuáles de cada grupo. El orden en
+  // pantalla lo decide `intercalar`, al final.
   const confirmados = barajar(fisicos(verificados.data as unknown as RawProductRow[]))
   const relleno = barajar(fisicos(resto.data as unknown as RawProductRow[]))
 
@@ -1072,8 +1084,39 @@ export async function getApprovedByCategory(
     elegidos.push(r)
   }
 
-  // El tope es para variar la categoría, no para dejarla corta.
-  return [...elegidos, ...relegados].slice(0, limit)
+  // El tope es para variar la categoría, no para dejarla corta. Y los
+  // verificados van ESPARCIDOS, no amontonados arriba (ver `intercalar`).
+  const vitrina = [...elegidos, ...relegados].slice(0, limit)
+  if (conTecho && vitrina.length < limit) return getApprovedByCategory(niches, bucket, limit, filters, false)
+  return intercalar(vitrina, (r) => r.status === 'monoproducto', Math.round(1 / CUOTA_VERIFICADOS))
+}
+
+// Uno de cada `paso` es verificado (con 30 %: posiciones 3, 6, 9…), así cada
+// página de 10 de la UI lleva los suyos. Si faltan verificados, el hueco lo
+// llena el relleno; si falta relleno, los verificados que sobran van al final.
+export function intercalar<T>(xs: T[], esVerificado: (x: T) => boolean, paso: number): T[] {
+  const v = xs.filter(esVerificado)
+  const u = xs.filter((x) => !esVerificado(x))
+  const out: T[] = []
+  while (u.length || v.length) {
+    const tocaV = (out.length + 1) % paso === 0
+    out.push((tocaV && v.length) || !u.length ? v.shift()! : u.shift()!)
+  }
+  return out
+}
+
+// Techo de anuncios al azar dentro del rango, para la rotación (2026-09-30).
+// La ventana ordenada por anuncios sin techo es siempre la misma: medido en
+// prod, sus 800 filas son 263 / 272 / 105 productos distintos (0-50 / 50-100 /
+// 100+) contra 40.156 / 1.244 / 782 en la base, y en 100+ con 50 productos
+// se repetían 33-37 de 50 entre búsquedas seguidas. El techo entra al índice
+// (`ad_count desc` es su primera columna), así que no cuesta nada.
+// En 100+ va log-uniforme de 150 a 5.000: sus cuartiles son 124/177/269/547
+// anuncios y la cola llega a decenas de miles; uniforme casi nunca bajaría.
+export function techoAleatorio(bucket: RawBucket, u = Math.random()): number {
+  if (bucket === '0-50') return Math.floor(35 + u * 15)
+  if (bucket === '50-100') return Math.floor(60 + u * 40)
+  return Math.floor(120 * Math.pow(1200 / 120, u))
 }
 
 // Cupo de verificados: el 30 % de la página (decisión del dueño, 2026-09-30).
