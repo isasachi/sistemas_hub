@@ -28,8 +28,8 @@ describe('techoAleatorio — la ventana arranca dentro del rango', () => {
       expect(techoAleatorio('0-50', u)).toBeLessThan(50)
       expect(techoAleatorio('50-100', u)).toBeGreaterThanOrEqual(60)
       expect(techoAleatorio('50-100', u)).toBeLessThan(100)
-      expect(techoAleatorio('100+', u)).toBeGreaterThanOrEqual(150)
-      expect(techoAleatorio('100+', u)).toBeLessThanOrEqual(5000)
+      expect(techoAleatorio('100+', u)).toBeGreaterThanOrEqual(120)
+      expect(techoAleatorio('100+', u)).toBeLessThanOrEqual(1200)
     }
   })
 })
