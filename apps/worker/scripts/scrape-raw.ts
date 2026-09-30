@@ -55,6 +55,7 @@ import {
   updateRawNicheAfterScrape,
   upsertRawProducts,
   isBlocked,
+  descubrimientoSignal,
 } from '@ph/shared'
 
 const NICHE_BATCH = Math.max(1, Number(process.env.PH_RAW_BATCH ?? 5))
@@ -102,6 +103,7 @@ async function scrapeRawNiche(niche: string): Promise<void> {
   let searches = 0
   let zeros = 0
   let services = 0
+  const noFisicos = new Set<string>()
 
   try {
     // ── Fase 1: descubrimiento ────────────────────────────────────────────────
@@ -123,6 +125,14 @@ async function scrapeRawNiche(niche: string): Promise<void> {
       for (const [pageId, group] of grouped) {
         const first = group[0]
         if (isLikelyService(first.pageName, first.pageCategories)) { services++; continue }
+        // Apps, juegos, dramas/novelas: no entran a la base ni gastan el conteo.
+        // Basta UN anuncio del grupo que lleve a Google Play o a una granja.
+        if (noFisicos.has(pageId)) continue
+        if (group.some((n) => descubrimientoSignal(`${n.title ?? ''} ${n.bodyText ?? ''}`, n.pageName, n.linkUrl))) {
+          noFisicos.add(pageId)
+          byPage.delete(pageId)
+          continue
+        }
         // Anuncio MÁS VIEJO del anunciante entre los que vimos: es la antigüedad
         // que el buscador filtra. El menor unix timestamp, ignorando los nulos
         // (un nodo sin fecha no es un anuncio de hoy, es un dato que falta).
@@ -199,7 +209,7 @@ async function scrapeRawNiche(niche: string): Promise<void> {
     const b3 = rows.filter((r) => r.ad_count >= 100).length
     console.log(
       `\n─── [${niche}] ${rows.length} anunciantes guardados ───\n` +
-        `  búsquedas: ${searches} (fallidas: ${failedSearches}) | vacías: ${zeros} | servicios descartados: ${services}\n` +
+        `  búsquedas: ${searches} (fallidas: ${failedSearches}) | vacías: ${zeros} | servicios descartados: ${services} | apps/dramas descartados: ${noFisicos.size}\n` +
         `  descubiertos: ${ranked.length} | con conteo: ${rows.length} | sin conteo/0 activos: ${sinConteo}\n` +
         `  grupos: 0-50=${b1} · 50-100=${b2} · 100+=${b3}`,
     )

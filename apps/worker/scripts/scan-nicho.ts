@@ -43,7 +43,7 @@ import { juezDelEntorno, resumenOpenAI } from '../lib/product-hunter/nicho-verdi
 import { isLikelyService } from '../lib/product-hunter/competitors'
 import {
   seedKeywords, getNicheStatus, upsertRawProducts, saveRawVerdict, upsertRawNiche,
-  updateRawNicheAfterScrape, upsertRawClusters, isBlocked,
+  updateRawNicheAfterScrape, upsertRawClusters, isBlocked, descubrimientoSignal,
 } from '@ph/shared'
 
 // Los 5 mercados del experimento. PE queda fuera a propósito: acá se busca lo
@@ -89,8 +89,11 @@ async function esperarTurno(): Promise<void> {
 // ── Fase 2: descubrimiento ───────────────────────────────────────────────────
 async function descubrir(
   pages: Page[], niche: string, keywords: string[], paises: string[],
-): Promise<{ candidatos: Map<string, Candidato>; busquedas: number; fallos: number; servicios: number }> {
+): Promise<{ candidatos: Map<string, Candidato>; busquedas: number; fallos: number; servicios: number; noFisicos: number }> {
   const byPage = new Map<string, Candidato>()
+  // Apps, juegos, dramas/novelas (`descubrimientoSignal`): no entran a la base
+  // ni gastan una medición. Basta UN anuncio así para sacar a la página.
+  const noFisicos = new Set<string>()
   let busquedas = 0, fallos = 0, servicios = 0
 
   const tareas = keywords.flatMap((keyword) => paises.map((country) => ({ keyword, country })))
@@ -104,6 +107,12 @@ async function descubrir(
 
     for (const ad of res.ads) {
       if (isLikelyService(ad.page_name ?? '', ad.page_categories ?? [])) { servicios++; continue }
+      if (noFisicos.has(ad.page_id)) continue
+      if (descubrimientoSignal(`${ad.title ?? ''} ${ad.body ?? ''}`, ad.page_name, ad.link_url)) {
+        noFisicos.add(ad.page_id)
+        byPage.delete(ad.page_id)
+        continue
+      }
       const prev = byPage.get(ad.page_id)
       if (prev) { prev.vistas++; continue }
       byPage.set(ad.page_id, {
@@ -113,7 +122,7 @@ async function descubrir(
       })
     }
   })
-  return { candidatos: byPage, busquedas, fallos, servicios }
+  return { candidatos: byPage, busquedas, fallos, servicios, noFisicos: noFisicos.size }
 }
 
 // ── Fase 3: medición (determinista) ──────────────────────────────────────────
@@ -169,10 +178,10 @@ async function main() {
     // Una sola navegación por página; el resto son fetches same-origin.
     const vivas = await abrirSesiones(pages, paises[0])
 
-    const { candidatos, busquedas, fallos, servicios } = await descubrir(vivas, niche, keywords, paises)
+    const { candidatos, busquedas, fallos, servicios, noFisicos } = await descubrir(vivas, niche, keywords, paises)
     console.log(
       `\nDescubrimiento: ${busquedas} búsquedas · ${fallos} inconclusas · ` +
-      `${servicios} servicios descartados · ${candidatos.size} anunciantes únicos`,
+      `${servicios} servicios descartados · ${noFisicos} apps/dramas descartados · ${candidatos.size} anunciantes únicos`,
     )
     if (!candidatos.size) { console.log('PH_SCAN_EMPTY'); return }
 
