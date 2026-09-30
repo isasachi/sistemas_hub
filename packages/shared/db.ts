@@ -1088,21 +1088,24 @@ export async function getApprovedByCategory(
   // verificados van ESPARCIDOS, no amontonados arriba (ver `intercalar`).
   const vitrina = [...elegidos, ...relegados].slice(0, limit)
   if (conTecho && vitrina.length < limit) return getApprovedByCategory(niches, bucket, limit, filters, false)
-  return intercalar(vitrina, (r) => r.status === 'monoproducto', Math.round(1 / CUOTA_VERIFICADOS))
+  return intercalar(vitrina, (r) => r.status === 'monoproducto')
 }
 
-// Uno de cada `paso` es verificado (con 30 %: posiciones 3, 6, 9…), así cada
-// página de 10 de la UI lleva los suyos. Si faltan verificados, el hueco lo
-// llena el relleno; si falta relleno, los verificados que sobran van al final.
-export function intercalar<T>(xs: T[], esVerificado: (x: T) => boolean, paso: number): T[] {
+// Los verificados van ESPARCIDOS e IRREGULARES (decisión del dueño, 2026-09-30:
+// uno cada tres exacto se veía mecánico). La lista se parte en tantos tramos
+// como verificados haya y cada uno cae en una posición al azar de SU tramo:
+// los saltos varían y a veces quedan dos juntos, pero siguen repartidos por
+// toda la lista, así cada página de 10 de la UI lleva los suyos.
+export function intercalar<T>(xs: T[], esVerificado: (x: T) => boolean, rand = Math.random): T[] {
   const v = xs.filter(esVerificado)
   const u = xs.filter((x) => !esVerificado(x))
-  const out: T[] = []
-  while (u.length || v.length) {
-    const tocaV = (out.length + 1) % paso === 0
-    out.push((tocaV && v.length) || !u.length ? v.shift()! : u.shift()!)
+  const n = xs.length, k = v.length
+  const posV = new Set<number>()
+  for (let i = 0; i < k; i++) {
+    const desde = Math.floor((i * n) / k), hasta = Math.floor(((i + 1) * n) / k)
+    posV.add(desde + Math.floor(rand() * (hasta - desde)))
   }
-  return out
+  return xs.map((_, i) => (posV.has(i) ? v.shift()! : u.shift()!))
 }
 
 // Techo de anuncios al azar dentro del rango, para la rotación (2026-09-30).

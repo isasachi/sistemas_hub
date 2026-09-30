@@ -2,22 +2,35 @@ import { describe, it, expect } from 'vitest'
 import { intercalar, techoAleatorio } from '@ph/shared'
 
 const esV = (x: string) => x.startsWith('v')
+const lista = (nv: number, nu: number) => [
+  ...Array.from({ length: nv }, (_, i) => `v${i}`), ...Array.from({ length: nu }, (_, i) => `u${i}`),
+]
+const posiciones = (xs: string[]) => xs.map((x, i) => (esV(x) ? i : -1)).filter((i) => i >= 0)
 
-describe('intercalar — verificados esparcidos, no amontonados arriba', () => {
-  it('uno de cada tres, en las posiciones 3, 6, 9…', () => {
-    const xs = ['v0', 'v1', 'v2', 'u0', 'u1', 'u2', 'u3', 'u4', 'u5', 'u6']
-    expect(intercalar(xs, esV, 3)).toEqual(['u0', 'u1', 'v0', 'u2', 'u3', 'v1', 'u4', 'u5', 'v2', 'u6'])
+describe('intercalar — verificados esparcidos e irregulares', () => {
+  it('cada verificado cae dentro de su tramo: el sorteo decide dónde', () => {
+    // 3 verificados en 10 → tramos [0,3) [3,6) [6,10)
+    expect(posiciones(intercalar(lista(3, 7), esV, () => 0))).toEqual([0, 3, 6])
+    expect(posiciones(intercalar(lista(3, 7), esV, () => 0.999))).toEqual([2, 5, 9])
   })
 
-  it('con 50 productos cada página de 10 lleva verificados', () => {
-    const xs = [...Array.from({ length: 15 }, (_, i) => `v${i}`), ...Array.from({ length: 35 }, (_, i) => `u${i}`)]
-    const out = intercalar(xs, esV, 3)
-    for (let p = 0; p < 5; p++) expect(out.slice(p * 10, p * 10 + 10).filter(esV).length).toBeGreaterThanOrEqual(2)
+  it('con 50 productos cada página de 10 lleva verificados, y los saltos no son constantes', () => {
+    let irregulares = 0
+    for (let tiro = 0; tiro < 20; tiro++) {
+      const out = intercalar(lista(15, 35), esV)
+      for (let p = 0; p < 5; p++) expect(out.slice(p * 10, p * 10 + 10).filter(esV).length).toBeGreaterThanOrEqual(2)
+      const pos = posiciones(out)
+      const saltos = new Set(pos.slice(1).map((x, i) => x - pos[i]))
+      if (saltos.size > 1) irregulares++
+    }
+    expect(irregulares).toBeGreaterThan(15)
   })
 
-  it('no pierde ni duplica cuando falta uno de los dos grupos', () => {
-    expect(intercalar(['v0', 'u0', 'v1', 'v2'], esV, 3)).toEqual(['u0', 'v0', 'v1', 'v2'])
-    expect(intercalar(['u0', 'u1', 'u2', 'u3'], esV, 3)).toEqual(['u0', 'u1', 'u2', 'u3'])
+  it('no pierde ni duplica, falte el grupo que falte', () => {
+    for (const [nv, nu] of [[3, 1], [0, 4], [4, 0], [15, 35]]) {
+      const xs = lista(nv, nu)
+      expect([...intercalar(xs, esV)].sort()).toEqual([...xs].sort())
+    }
   })
 })
 
