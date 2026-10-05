@@ -69,7 +69,7 @@ export async function analyzeProduct(session: LandingSession, ctx: Ctx): Promise
     schema: AnalysisOutSchema,
     system: LANDING_V2_SYSTEM_PROMPT,
     content: [
-      { type: 'image', image: Buffer.from(photo.data, 'base64'), mediaType: photo.mimeType },
+      { type: 'file', data: Buffer.from(photo.data, 'base64'), mediaType: photo.mimeType },
       { type: 'text', text: TASK },
       { type: 'text', text: [
         `PRODUCT NAME: ${inputs.productName}`,

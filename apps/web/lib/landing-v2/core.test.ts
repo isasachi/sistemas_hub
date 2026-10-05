@@ -71,6 +71,10 @@ describe('verificador de copy', () => {
     expect(unsupported('+10,000 clientes satisfechos • 4.8/5 estrellas', src)).toEqual(expect.arrayContaining(['10,000', '4.8', 'clientes satisfechos', 'estrellas']))
     expect(unsupported('Garantía de 15 días y envío gratis', src)).toEqual(expect.arrayContaining(['15', 'garantia', 'gratis', 'envio']))
     expect(unsupported('Clínicamente comprobado', src)).toEqual(expect.arrayContaining(['clinicamente', 'comprobado']))
+    // Fugas medidas en el probe del 2026-10-05 (urgencia y pago inventados).
+    expect(unsupported('Aprovecha nuestra oferta disponible antes de que finalice', src)).toEqual(expect.arrayContaining(['finali', 'antes de que']))
+    expect(unsupported('Aprovecha las promociones disponibles hoy', src)).toEqual(expect.arrayContaining(['promocion', 'hoy']))
+    expect(unsupported('Cancela en efectivo al recibir', src)).toEqual(['efectivo'])
   })
   it('si el reintento no alcanza, quita lo inventado y nunca deja el titular vacío', () => {
     const copy: SectionCopy = {

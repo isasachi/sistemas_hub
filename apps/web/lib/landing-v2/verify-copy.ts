@@ -17,9 +17,12 @@ export const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').to
 
 // Raíces normalizadas. Ampliar agregando términos, no aflojando el match.
 export const RISK_TERMS = [
-  'garantia', 'devolucion', 'reembolso', 'sin riesgo',
-  'gratis', 'envio', 'delivery', 'contra entrega', 'contraentrega',
-  'stock', 'ultimas unidades', 'agotar', 'tiempo limitado', 'solo hoy', 'por hoy', 'termina', 'oferta limitada',
+  'garantia', 'garantiz', 'devolucion', 'reembolso', 'sin riesgo',
+  'gratis', 'envio', 'delivery', 'contra entrega', 'contraentrega', 'efectivo',
+  // Urgencia. Medido en el probe del 2026-10-05: sin datos de urgencia, Gemini escribió "aprovecha
+  // nuestra oferta antes de que finalice" y "promociones disponibles… hoy" en 2 de 6 secciones.
+  'stock', 'ultimas unidades', 'agota', 'tiempo limitado', 'hoy', 'termina', 'finali', 'antes de que',
+  'oferta limitada', 'promocion', 'ultima oportunidad', 'ultimo dia',
   'certificad', 'aprobad', 'registro sanitario', 'digesa', 'fda', 'iso ',
   'clinicamente', 'dermatologicamente', 'cientificamente', 'comprobado', 'estudio',
   'medic', 'doctor', 'dermatolog', 'nutricionista', 'especialista', 'experto',

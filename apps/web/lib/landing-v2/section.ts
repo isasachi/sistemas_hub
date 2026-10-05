@@ -109,18 +109,26 @@ const COPY_TASK = (id: SectionId) => {
   ].filter(Boolean).join('\n')
 }
 
+/** El pedido de copy de una sección (system + contenido). Separado para que un probe use el mismo. */
+export function copyRequest(s: LandingSession, id: SectionId) {
+  const { inputs } = requireInputs(s)
+  return {
+    system: `${LANDING_V2_SYSTEM_PROMPT}\n\nCRO CHECKLIST:\n${CRO_CHECKLIST}`,
+    content: [
+      { type: 'file' as const, data: wireframeFor(id), mediaType: 'image/jpeg' },
+      { type: 'text' as const, text: COPY_TASK(id) },
+      { type: 'text' as const, text: [dataBlock(inputs, s), approvedSummary(s, id)].filter(Boolean).join('\n\n') },
+    ],
+  }
+}
+
 export async function generateSectionCopy(s: LandingSession, id: SectionId): Promise<SectionCopy> {
   const { inputs } = requireInputs(s)
   const source = sourceText(inputs, s.testimonials)
   const { output, model } = await structured({
     name: 'landing_v2_section_copy',
     schema: SectionCopyOutSchema,
-    system: `${LANDING_V2_SYSTEM_PROMPT}\n\nCRO CHECKLIST:\n${CRO_CHECKLIST}`,
-    content: [
-      { type: 'image', image: wireframeFor(id), mediaType: 'image/jpeg' },
-      { type: 'text', text: COPY_TASK(id) },
-      { type: 'text', text: [dataBlock(inputs, s), approvedSummary(s, id)].filter(Boolean).join('\n\n') },
-    ],
+    ...copyRequest(s, id),
     validate: (c) => { const v = verifyCopy(c, source); return v.length ? correctionFor(v) : null },
   })
   console.info(`[landing-v2] copy ${s.id}/${id} por ${model}`)
@@ -149,7 +157,7 @@ export async function buildRenderBrief(s: LandingSession, id: SectionId, copy: S
     schema: RenderBriefOutSchema,
     system: `${LANDING_V2_SYSTEM_PROMPT}\n\nCRO CHECKLIST:\n${CRO_CHECKLIST}`,
     content: [
-      { type: 'image', image: wireframeFor(id), mediaType: 'image/jpeg' },
+      { type: 'file', data: wireframeFor(id), mediaType: 'image/jpeg' },
       { type: 'text', text: [
         `TASK: translate this section's wireframe (attached) into a premium art-directed COMPOSITION BRIEF for an image model. Section ${spec.wf}/14 "${spec.en}".`,
         'Write in English. Describe layout, focal point, product placement/scale/angle, background/environment, typographic treatment and CTA treatment. Merge or reinterpret wireframe blocks editorially; never boxes, gray frames, arrows or labels.',
