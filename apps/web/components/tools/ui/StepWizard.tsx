@@ -39,6 +39,7 @@ export default function StepWizard({
   nextDisabled,
   children,
   full,
+  actions,
 }: {
   steps: WizardStep[]
   /** Índice 0-based del paso visible. */
@@ -57,6 +58,8 @@ export default function StepWizard({
   children: React.ReactNode
   /** Sin caja centrada: para pasos que usan el ancho completo (editores). */
   full?: boolean
+  /** Controles extra de la barra, antes de Reiniciar (p. ej. el selector de vista de landing v2). */
+  actions?: React.ReactNode
 }) {
   const reduce = useReducedMotion()
   const prev = useRef(current)
@@ -101,17 +104,18 @@ export default function StepWizard({
 
           <StepRail steps={steps} current={current} maxReached={maxReached} onNavigate={onNavigate} />
 
+          {actions && <div className="ml-auto shrink-0">{actions}</div>}
           {onReset ? (
             <button
               type="button"
               onClick={onReset}
-              className="ml-auto flex shrink-0 items-center gap-1.5 rounded-lg border-0 bg-transparent px-2 py-1 font-sans text-[12px] font-medium text-[#a98c88] transition-colors hover:bg-white/[0.05] hover:text-[#f6f2eb] cursor-pointer"
+              className={`${actions ? '' : 'ml-auto '}flex shrink-0 items-center gap-1.5 rounded-lg border-0 bg-transparent px-2 py-1 font-sans text-[12px] font-medium text-[#a98c88] transition-colors hover:bg-white/[0.05] hover:text-[#f6f2eb] cursor-pointer`}
             >
               <RotateCcw className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Reiniciar</span>
             </button>
           ) : (
-            <span className="ml-auto" />
+            !actions && <span className="ml-auto" />
           )}
         </div>
       </div>

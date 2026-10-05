@@ -22,7 +22,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   } catch (e) { return errorResponse(e) }
 
   const agent = createLandingAgent(row.session, row.ctx)
-  const messages = await validateUIMessages<LandingUIMessage>({ messages: [...row.messages, message], tools: agent.tools })
+  // Un "Reintentar" reenvía el último mensaje del usuario: no se duplica en el historial.
+  const history = row.messages.at(-1)?.id === message.id ? row.messages.slice(0, -1) : row.messages
+  const messages = await validateUIMessages<LandingUIMessage>({ messages: [...history, message], tools: agent.tools })
   await saveV2Messages(id, messages) // el mensaje del usuario no se pierde aunque el stream se corte
 
   return createAgentUIStreamResponse({
