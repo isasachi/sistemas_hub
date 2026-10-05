@@ -150,7 +150,7 @@ export function RenderStep({ session, setSession }: StepProps) {
               <div className="flex aspect-[9/16] w-full flex-col items-center justify-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.02] px-6 text-center" aria-live="polite">
                 <Spinner />
                 <p className="text-[14px] text-[#efe7e0]">{busy === 'revise' ? 'Aplicando tus cambios…' : `Diseñando «${SECTION_BY_ID[id].es}»…`}</p>
-                <p className="text-[12px] text-[#a98c88]">Suele tardar entre 30 segundos y un minuto.</p>
+                <p className="text-[12px] text-[#a98c88]">Suele tardar alrededor de un minuto.</p>
               </div>
             ) : version ? (
               <SectionImage id={id} url={version.imageUrl} />

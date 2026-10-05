@@ -166,7 +166,7 @@ function Conversation({ v2 }: { v2: ReturnType<typeof useV2Session> }) {
 }
 
 const RUNNING: Record<string, string> = {
-  'tool-generate_section': 'Diseñando la sección… suele tardar entre 30 segundos y un minuto.',
+  'tool-generate_section': 'Diseñando la sección… suele tardar alrededor de un minuto.',
   'tool-revise_section': 'Aplicando tus cambios…',
   'tool-analyze_product': 'Analizando tu producto y tu marca…',
   'tool-extract_research_document': 'Leyendo el documento…',

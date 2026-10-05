@@ -249,7 +249,8 @@ function styleAnchor(s: LandingSession, id: SectionId): string | null {
   return first ? latestVersion(s, first)?.imageUrl ?? null : null
 }
 
-export async function renderSection(s: LandingSession, id: SectionId, copy: SectionCopy, brief: RenderBrief): Promise<string> {
+/** `anchor: false` solo lo usa el QA de consistencia (brazo sin ancla); el producto siempre la lleva. */
+export async function renderSection(s: LandingSession, id: SectionId, copy: SectionCopy, brief: RenderBrief, opts: { anchor?: boolean } = {}): Promise<string> {
   const { inputs, vs } = requireInputs(s)
   const parts: Part[] = []
   const push = async (url: string) => {
@@ -261,7 +262,7 @@ export async function renderSection(s: LandingSession, id: SectionId, copy: Sect
   const talent = brief.usesPerson && vs.talentUrl ? await push(vs.talentUrl) : null
   const proof: number[] = []
   if (id === 'before_after') for (const u of inputs.proofImageUrls.slice(0, 2)) proof.push(await push(u))
-  const anchorUrl = styleAnchor(s, id)
+  const anchorUrl = opts.anchor === false ? null : styleAnchor(s, id)
   const style = anchorUrl ? await push(anchorUrl) : null
   parts.push({ text: buildImagePrompt({ id, copy, brief, vs, inputs, refs: { talent, proof, style } }) })
   const b64 = await generateImage(parts, 3, { aspectRatio: '9:16', respaldo: NANO_BANANA_PRO })
