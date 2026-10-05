@@ -1,0 +1,94 @@
+// Verificador DETERMINISTA del copy de landing v2: "el modelo redacta, el código verifica".
+//
+// Existe porque los wireframes traen ejemplos con forma de valor ("+10,000 clientes satisfechos •
+// 4.8/5 estrellas", "Garantía X días", "Envío gratis • Pago contra entrega", "Últimas unidades") y la
+// ley del repo —pagada 6 veces— es que el modelo los devuelve como contenido. La regla del system
+// prompt ("Use ONLY provided data") es la intención; esto es la garantía:
+//
+//  - toda CIFRA del copy tiene que aparecer en los datos del usuario;
+//  - todo término de RIESGO (garantía, envío, contra entrega, urgencia, certificaciones, aval médico,
+//    medios de pago, prueba social) tiene que aparecer en los datos del usuario.
+//
+// Se mide contra el texto normalizado (minúsculas, sin tildes). Falla CERRADO: ante la duda, el
+// término se marca y el caller reintenta o lo quita — nunca se publica un claim sin respaldo.
+import type { LandingInputs, SectionCopy, Testimonial } from './schemas'
+
+export const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+
+// Raíces normalizadas. Ampliar agregando términos, no aflojando el match.
+export const RISK_TERMS = [
+  'garantia', 'devolucion', 'reembolso', 'sin riesgo',
+  'gratis', 'envio', 'delivery', 'contra entrega', 'contraentrega',
+  'stock', 'ultimas unidades', 'agotar', 'tiempo limitado', 'solo hoy', 'por hoy', 'termina', 'oferta limitada',
+  'certificad', 'aprobad', 'registro sanitario', 'digesa', 'fda', 'iso ',
+  'clinicamente', 'dermatologicamente', 'cientificamente', 'comprobado', 'estudio',
+  'medic', 'doctor', 'dermatolog', 'nutricionista', 'especialista', 'experto',
+  'yape', 'plin', 'tarjeta', 'visa', 'mastercard', 'transferencia',
+  'clientes satisfechos', 'estrellas', 'resenas', 'miles de', '★',
+  '100%', 'natural', 'organico', 'sin quimicos', 'parabenos',
+]
+
+/** Todo lo que el usuario dio, como un solo texto normalizado: lo único que el copy puede afirmar. */
+export function sourceText(inputs: LandingInputs, testimonials: Testimonial[] = []): string {
+  const packs = inputs.pricing.packs.map((p) =>
+    [p.name, p.quantity, p.price, p.price.toFixed(2), p.compareAt ?? '', p.compareAt?.toFixed(2) ?? '',
+      p.compareAt ? Math.round((1 - p.price / p.compareAt) * 100) + '%' : '',
+      p.compareAt ? (p.compareAt - p.price).toFixed(2) : '', p.label ?? ''].join(' '))
+  return norm([
+    inputs.productName, inputs.marketResearch, inputs.pricing.notes, inputs.ctaText ?? '',
+    ...packs, ...testimonials.map((t) => `${t.name ?? ''} ${t.city ?? ''} ${t.text}`),
+  ].join('\n'))
+}
+
+const digits = (s: string) => s.replace(/[.,\s]/g, '')
+const NUM = /\d+(?:[.,]\d+)*/g
+
+export interface Violation { field: string; token: string }
+
+/** Cifras y términos de riesgo de `text` que NO aparecen en `source` (ya normalizado). */
+export function unsupported(text: string, source: string): string[] {
+  const t = norm(text)
+  const out: string[] = []
+  // Por TOKEN y no por substring: concatenadas, las cifras del usuario contienen casi cualquier número corto.
+  const srcNums = new Set([...source.matchAll(NUM)].map((m) => digits(m[0])))
+  for (const m of t.matchAll(NUM)) {
+    // "Paso 1/2/3" es numeración del wireframe, no una cifra que afirmar.
+    if (/paso\s*$/.test(t.slice(0, m.index)) && m[0].length === 1) continue
+    if (!srcNums.has(digits(m[0]))) out.push(m[0])
+  }
+  for (const term of RISK_TERMS) if (t.includes(term) && !source.includes(term)) out.push(term.trim())
+  return out
+}
+
+export function verifyCopy(copy: SectionCopy, source: string): Violation[] {
+  const v: Violation[] = []
+  const check = (field: string, s: string | null) => {
+    if (s) for (const token of unsupported(s, source)) v.push({ field, token })
+  }
+  check('headline', copy.headline)
+  check('subheadline', copy.subheadline)
+  copy.items.forEach((it, i) => { check(`items.${i}.title`, it.title); check(`items.${i}.text`, it.text); check(`items.${i}.group`, it.group) })
+  check('closingLine', copy.closingLine)
+  check('cta', copy.cta)
+  return v
+}
+
+/** Instrucción para el reintento: nombra lo que no tiene respaldo, sin dar valores de reemplazo. */
+export function correctionFor(v: Violation[]): string {
+  const tokens = [...new Set(v.map((x) => x.token))].join(', ')
+  return `CORRECTION: the previous copy contained claims or numbers NOT present in the user's data (${tokens}). Rewrite it using ONLY facts present in the provided data. If the data does not support a block, omit that block.`
+}
+
+/** Último recurso tras los reintentos: quita lo que no tiene respaldo. Nunca publica un claim inventado. */
+export function stripUnsupported(copy: SectionCopy, source: string, fallbackHeadline: string): SectionCopy {
+  const ok = (s: string | null) => !s || unsupported(s, source).length === 0
+  const sentences = (s: string) => s.split(/(?<=[.!?])\s+/).filter((x) => ok(x)).join(' ').trim()
+  const headline = sentences(copy.headline) || fallbackHeadline
+  return {
+    headline,
+    subheadline: copy.subheadline && ok(copy.subheadline) ? copy.subheadline : null,
+    items: copy.items.filter((it) => ok(it.title) && ok(it.text) && ok(it.group)),
+    closingLine: ok(copy.closingLine) ? copy.closingLine : null,
+    cta: ok(copy.cta) ? copy.cta : null,
+  }
+}

@@ -25,6 +25,8 @@ const nextConfig: NextConfig = {
     // `require` los menciona y el trazador los dejaría fuera de la función. El síntoma sería
     // texto sin fuente SOLO en producción — la misma clase de fallo que el binario de ffmpeg.
     "/api/generador-landing/sessions/[id]/section/[type]": ["./assets/fonts/*.ttf"],
+    // Wireframes y checklist de landing v2: se leen por RUTA (`lib/landing-v2/knowledge.ts`), mismo caso.
+    "/api/landing-v2/**": ["./lib/landing-v2/knowledge/*"],
   },
 };
 
