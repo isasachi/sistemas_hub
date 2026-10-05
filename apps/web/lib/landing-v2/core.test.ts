@@ -7,7 +7,7 @@ vi.mock('./models', () => ({ structured: vi.fn() }))
 vi.mock('./quota', () => ({ gate: vi.fn(), record: vi.fn(), sectionKind: (id: string) => id }))
 
 import { SECTION_IDS, SECTIONS, inSkeletonOrder } from './catalog'
-import { approveSection, getNextSection, sectionSupport } from './flow'
+import { approveSection, changesAnalysis, getNextSection, sectionSupport } from './flow'
 import { emptySession, missingInputs, type LandingInputs, type LandingSession, type SectionCopy } from './schemas'
 import { buildImagePrompt, modelFromSize, renderTexts, sinComillas } from './section'
 import { sourceText, stripUnsupported, unsupported, verifyCopy } from './verify-copy'
@@ -54,6 +54,11 @@ describe('flujo', () => {
     const aprobada = approveSection(conHero, 'hero')
     expect(aprobada.sections.hero?.approved).toBe(true)
     expect(aprobada.current).toBe('authority') // salta las dos sin datos
+  })
+  it('re-analiza solo si cambia el VALOR de lo que mira el análisis', () => {
+    expect(changesAnalysis(inputs, { ...inputs })).toBe(false) // el modelo reenvía lo que ya sabe
+    expect(changesAnalysis(inputs, { ...inputs, ctaText: 'Comprar' })).toBe(false)
+    expect(changesAnalysis(inputs, { ...inputs, productName: 'Otro' })).toBe(true)
   })
   it('no se aprueba una sección sin imagen', () => {
     expect(() => approveSection(session(), 'hero')).toThrow()

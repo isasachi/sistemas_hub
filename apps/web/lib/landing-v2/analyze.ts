@@ -95,7 +95,7 @@ export async function analyzeProduct(session: LandingSession, ctx: Ctx): Promise
 
   // Placa canónica del talento (decisión 3 del plan): sin paso de UI, solo si la dirección de arte
   // lleva persona. Es la cara que se repite entre secciones; sin ella cada sección inventa otra.
-  let talentUrl: string | null = session.visualSystem?.talentUrl ?? null
+  let talentUrl: string | null = session.talentUrl ?? session.visualSystem?.talentUrl ?? null
   const persona = a.usesPeople ? a.persona?.trim() || null : null
   if (persona && !talentUrl) {
     await gate(session.id, TALENT_KIND, ctx)
@@ -124,6 +124,7 @@ export async function analyzeProduct(session: LandingSession, ctx: Ctx): Promise
     ...session,
     productCanonicalUrl,
     visualSystem,
+    talentUrl,
     testimonials: verifiedTestimonials(a.testimonials, inputs.marketResearch),
   }
 }

@@ -16,12 +16,12 @@ export function ViewSwitch({ view, onChange }: { view: View; onChange: (v: View)
   return (
     <div role="radiogroup" aria-label="Vista" className="flex rounded-xl border border-white/[0.08] bg-white/[0.03] p-0.5">
       {opts.map(({ v, label, Icon }) => (
-        <button key={v} type="button" role="radio" aria-checked={view === v} onClick={() => view !== v && onChange(v)}
+        <button key={v} type="button" role="radio" aria-checked={view === v} aria-label={label} onClick={() => view !== v && onChange(v)}
                 className={[
                   'flex h-8 items-center gap-1.5 rounded-[10px] border-0 px-3 font-sans text-[12px] font-semibold cursor-pointer transition-colors',
                   view === v ? 'bg-[rgba(246,242,235,0.12)] text-[#f6f2eb]' : 'bg-transparent text-[#a98c88] hover:text-[#efe7e0]',
                 ].join(' ')}>
-          <Icon className="h-3.5 w-3.5" />{label}
+          <Icon className="h-3.5 w-3.5" /><span className="hidden sm:inline">{label}</span>
         </button>
       ))}
     </div>

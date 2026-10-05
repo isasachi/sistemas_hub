@@ -165,6 +165,9 @@ export const LandingSessionSchema = z.object({
   inputs: InputsDraftSchema,
   productCanonicalUrl: z.string().nullable(),
   visualSystem: VisualSystemSchema.nullable(),
+  /** Placa del talento, a nivel de sesión: sobrevive a un re-análisis. Generar otra persona a mitad
+   *  de la landing es justo la deriva de identidad que la placa existe para evitar. */
+  talentUrl: z.string().nullable().default(null),
   testimonials: z.array(TestimonialSchema),
   selected: z.array(SectionIdSchema),
   copies: z.partialRecord(SectionIdSchema, SectionCopyOutSchema),
@@ -175,7 +178,7 @@ export type LandingSession = z.infer<typeof LandingSessionSchema>
 
 export function emptySession(id: string, view: LandingSession['view']): LandingSession {
   return {
-    id, view, inputs: {}, productCanonicalUrl: null, visualSystem: null, testimonials: [],
+    id, view, inputs: {}, productCanonicalUrl: null, visualSystem: null, talentUrl: null, testimonials: [],
     selected: [...SECTION_IDS], copies: {}, sections: {}, current: null,
   }
 }

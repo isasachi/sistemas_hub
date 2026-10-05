@@ -22,8 +22,10 @@ export default function ChatV2({ switcher }: { switcher: React.ReactNode }) {
   // ahí cortaría el stream en curso.
   const [epoch, setEpoch] = useState(0)
   return (
-    <div className="flex h-dvh flex-col bg-[#0c0c0d]">
-      <header className="sticky top-0 z-20 border-b border-white/[0.06] bg-[#0c0c0d]/85 backdrop-blur-xl">
+    // Alto exacto bajo la barra del hub (64px + borde, ver AppShell): la conversación scrollea por
+    // dentro y el input queda fijo abajo sin que la página entera se mueva.
+    <div className="flex h-[calc(100dvh-65px)] flex-col bg-[#0c0c0d]">
+      <header className="shrink-0 border-b border-white/[0.06] bg-[#0c0c0d]">
         <div className="mx-auto flex h-[60px] w-full max-w-[1160px] items-center gap-3 px-5 md:px-8">
           <Link href="/tools/generador-landing" className="jr-btn-ghost h-9 shrink-0 rounded-xl px-3 text-[13px] no-underline">
             <ArrowLeft className="h-4 w-4" /><span className="hidden sm:inline">Atrás</span>
@@ -170,6 +172,10 @@ const RUNNING: Record<string, string> = {
   'tool-extract_research_document': 'Leyendo el documento…',
 }
 
+// El modelo responde con **negritas** de markdown (medido en el probe del agente). Solo eso se
+// interpreta: un renderer de markdown entero es una dependencia para un asterisco.
+const bold = (t: string) => t.split(/\*\*(.+?)\*\*/g).map((x, i) => (i % 2 ? <strong key={i} className="font-semibold text-[#f6f2eb]">{x}</strong> : x))
+
 function Message({ m }: { m: LandingUIMessage }) {
   if (m.role === 'user') {
     const text = m.parts.filter((p) => p.type === 'text').map((p) => p.text).join('\n')
@@ -192,7 +198,7 @@ function Message({ m }: { m: LandingUIMessage }) {
   return (
     <div className="flex flex-col gap-3">
       {m.parts.map((p, k) => {
-        if (p.type === 'text') return p.text.trim() ? <p key={k} className="whitespace-pre-wrap font-[Lato] text-[15px] leading-[1.65] text-[#efe7e0]">{p.text}</p> : null
+        if (p.type === 'text') return p.text.trim() ? <p key={k} className="whitespace-pre-wrap font-[Lato] text-[15px] leading-[1.65] text-[#efe7e0]">{bold(p.text)}</p> : null
         if (!p.type.startsWith('tool-') || !('state' in p)) return null
         if (p.state === 'input-streaming' || p.state === 'input-available') {
           return RUNNING[p.type] ? <p key={k} className="flex items-center gap-2 text-[13px] text-[#a98c88]" aria-live="polite"><Spinner />{RUNNING[p.type]}</p> : null

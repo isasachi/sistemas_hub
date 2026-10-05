@@ -43,7 +43,9 @@ export async function downscale(file: File, max = 2048): Promise<Blob> {
     if (k === 1 && file.size < 3.5 * 1024 * 1024) return file
     const canvas = new OffscreenCanvas(Math.round(bmp.width * k), Math.round(bmp.height * k))
     canvas.getContext('2d')!.drawImage(bmp, 0, 0, canvas.width, canvas.height)
-    return await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.9 })
+    // PNG/WebP siguen en PNG: un mockup con transparencia pasado a JPEG sale con el fondo negro.
+    const alpha = file.type === 'image/png' || file.type === 'image/webp'
+    return await canvas.convertToBlob(alpha ? { type: 'image/png' } : { type: 'image/jpeg', quality: 0.9 })
   } catch {
     return file
   }
@@ -52,7 +54,10 @@ export async function downscale(file: File, max = 2048): Promise<Blob> {
 export async function uploadFile(sessionId: string, file: File, kind: Uploaded['kind']): Promise<Uploaded> {
   const form = new FormData()
   form.append('kind', kind)
-  form.append('file', kind === 'image' ? new File([await downscale(file)], file.name, { type: 'image/jpeg' }) : file)
+  if (kind === 'image') {
+    const blob = await downscale(file)
+    form.append('file', new File([blob], file.name, { type: blob.type || file.type }))
+  } else form.append('file', file)
   return json<Uploaded>(await fetch(`${API}/${sessionId}/upload`, { method: 'POST', body: form }))
 }
 

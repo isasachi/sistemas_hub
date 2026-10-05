@@ -32,3 +32,12 @@ export function approveSection(s: LandingSession, id: SectionId): LandingSession
   const next: LandingSession = { ...s, sections: { ...s.sections, [id]: { ...st, approved: true } } }
   return { ...next, current: getNextSection(next) }
 }
+
+/**
+ * ¿Cambió algo de lo que mira el análisis? Se compara VALOR contra valor: el modelo reenvía campos
+ * que ya conoce, y re-analizar por la mera presencia de un campo re-corría el análisis en cada turno.
+ */
+export function changesAnalysis(prev: LandingSession['inputs'], next: LandingSession['inputs']): boolean {
+  return (['productName', 'marketResearch', 'niche', 'nicheOther', 'productImageUrl'] as const)
+    .some((k) => JSON.stringify(prev[k] ?? null) !== JSON.stringify(next[k] ?? null))
+}

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { saveV2Session } from '@/lib/landing-v2/db'
 import { InputsDraftSchema, SectionCopyOutSchema, SectionIdSchema } from '@/lib/landing-v2/schemas'
+import { changesAnalysis } from '@/lib/landing-v2/flow'
 import { errorResponse, load, notFound } from '../../_lib'
 
 export const dynamic = 'force-dynamic'
@@ -28,9 +29,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   try {
     const s = row.session
     const { inputs, selected, copies } = body.data
-    // Cambiar lo que el análisis mira invalida el sistema visual.
-    const reanalizar = !!inputs && (['productName', 'marketResearch', 'niche', 'nicheOther', 'productImageUrl'] as const)
-      .some((k) => k in inputs && JSON.stringify(inputs[k]) !== JSON.stringify(s.inputs[k]))
+    // Cambiar lo que el análisis mira invalida el sistema visual (la placa del talento se conserva).
+    const reanalizar = !!inputs && changesAnalysis(s.inputs, { ...s.inputs, ...inputs })
     const next = {
       ...s,
       ...(inputs && { inputs: { ...s.inputs, ...inputs } }),

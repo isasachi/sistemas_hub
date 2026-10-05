@@ -16,7 +16,7 @@ import { SECTION_BY_ID, SECTION_IDS, type SectionId } from './catalog'
 import { analyzeProduct } from './analyze'
 import { saveV2Session } from './db'
 import { DocumentError, extractResearchDocument, MAX_DOC_BYTES } from './document'
-import { approveSection, getNextSection, sectionSupport } from './flow'
+import { approveSection, changesAnalysis, getNextSection, sectionSupport } from './flow'
 import { chatModel } from './models'
 import { QuotaError, type Ctx } from './quota'
 import { INPUT_LABELS, latestVersion, missingInputs, NicheSchema, PackSchema, UserError, type LandingSession } from './schemas'
@@ -61,7 +61,11 @@ RUNTIME RULES (enforced by the server; follow them):
 - If a tool returns an error message, tell the user in plain Spanish what to do.
 - The image is already shown to the user by the interface: do not paste its URL.`
 
-export function createLandingAgent(initial: LandingSession, ctx: Ctx) {
+/** Lo que el agente hace con efectos (base, análisis, imagen). Inyectable para el probe de texto. */
+const DEPS = { save: saveV2Session, analyze: analyzeProduct, generate: generateSection, revise: reviseSection }
+export type AgentDeps = typeof DEPS
+
+export function createLandingAgent(initial: LandingSession, ctx: Ctx, deps: AgentDeps = DEPS) {
   const runtimeContext = { session: initial }
   let chain: Promise<unknown> = Promise.resolve()
   const serial = <T>(fn: () => Promise<T>): Promise<T> => {
@@ -69,7 +73,7 @@ export function createLandingAgent(initial: LandingSession, ctx: Ctx) {
     chain = p.catch(() => undefined)
     return p
   }
-  const commit = async (s: LandingSession) => { runtimeContext.session = s; await saveV2Session(s) }
+  const commit = async (s: LandingSession) => { runtimeContext.session = s; await deps.save(s) }
   const fail = (e: unknown) => {
     if (e instanceof SupportError) return { ok: false as const, error: e.message, suggest: e.suggest }
     if (e instanceof QuotaError || e instanceof UserError || e instanceof DocumentError) return { ok: false as const, error: e.message }
@@ -117,9 +121,7 @@ export function createLandingAgent(initial: LandingSession, ctx: Ctx) {
           ...(i.proofImageUrls !== undefined && { proofImageUrls: i.proofImageUrls }),
           ...(pricing && { pricing }),
         }
-        // Cambiar lo que el análisis mira invalida el sistema visual: se re-analiza antes de la próxima sección.
-        const reanalizar = i.productName !== undefined || i.marketResearch !== undefined || i.niche !== undefined || i.productImageUrl !== undefined
-        await commit({ ...s, inputs, visualSystem: reanalizar ? null : s.visualSystem })
+        await commit({ ...s, inputs, visualSystem: changesAnalysis(prev, inputs) ? null : s.visualSystem })
         return { ok: true, ...stateSummary(runtimeContext.session) }
       }),
     }),
@@ -145,7 +147,7 @@ export function createLandingAgent(initial: LandingSession, ctx: Ctx) {
       execute: () => serial(async () => {
         try {
           if (missingInputs(runtimeContext.session.inputs).length) return { ok: false, error: 'Faltan datos del producto.' }
-          await commit(await analyzeProduct(runtimeContext.session, ctx))
+          await commit(await deps.analyze(runtimeContext.session, ctx))
           const vs = runtimeContext.session.visualSystem!
           return { ok: true, niche: vs.niche, palette: vs.palette.map((c) => c.hex), typography: vs.typography, artDirection: vs.artDirection }
         } catch (e) { return fail(e) }
@@ -162,13 +164,13 @@ export function createLandingAgent(initial: LandingSession, ctx: Ctx) {
           if (missing.length) return { ok: false, error: `Faltan datos: ${missing.map((k) => INPUT_LABELS[k]).join(', ')}.` }
           const id: SectionId | null = section ?? getNextSection(s)
           if (!id) return { ok: true, done: true, message: 'Todas las secciones seleccionadas están aprobadas.' }
-          if (!s.visualSystem) { s = await analyzeProduct(s, ctx); await commit(s) }
+          if (!s.visualSystem) { s = await deps.analyze(s, ctx); await commit(s) }
           // Una sección ya generada que se vuelve a nombrar se regenera desde cero (copy nuevo).
           if (s.sections[id]?.versions.length) {
             const { [id]: _viejo, ...copies } = s.copies
             s = { ...s, copies }
           }
-          await commit(await generateSection(s, id, ctx))
+          await commit(await deps.generate(s, id, ctx))
           const v = latestVersion(runtimeContext.session, id)!
           return { ok: true, section: id, label: SECTION_BY_ID[id].es, imageUrl: v.imageUrl }
         } catch (e) { return fail(e) }
@@ -183,7 +185,7 @@ export function createLandingAgent(initial: LandingSession, ctx: Ctx) {
           const s = runtimeContext.session
           const id = section ?? s.current
           if (!id) return { ok: false, error: 'Todavía no hay una sección generada.' }
-          await commit(await reviseSection(s, id, feedback, ctx))
+          await commit(await deps.revise(s, id, feedback, ctx))
           const v = latestVersion(runtimeContext.session, id)!
           return { ok: true, section: id, label: SECTION_BY_ID[id].es, imageUrl: v.imageUrl }
         } catch (e) { return fail(e) }

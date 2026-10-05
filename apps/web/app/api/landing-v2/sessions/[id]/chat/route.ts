@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createAgentUIStreamResponse, validateUIMessages, type UIMessage } from 'ai'
+import { consumeStream, createAgentUIStreamResponse, validateUIMessages, type UIMessage } from 'ai'
 import { createLandingAgent, type LandingUIMessage } from '@/lib/landing-v2/agent'
 import { saveV2Messages } from '@/lib/landing-v2/db'
 import { CHAT_KIND, gate, record } from '@/lib/landing-v2/quota'
@@ -31,7 +31,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     agent,
     uiMessages: messages,
     originalMessages: messages,
-    abortSignal: req.signal,
+    // SIN `abortSignal: req.signal`, a propósito: recargar a mitad de un render (la parte lenta)
+    // mataba el turno, la sección quedaba a medias y el historial sin la imagen. `consumeStream`
+    // termina el turno del lado del servidor aunque el cliente se vaya, y `onFinish` lo guarda: al
+    // recargar, la conversación ya trae el resultado.
+    consumeSseStream: consumeStream,
     onFinish: async ({ messages: all }) => {
       await saveV2Messages(id, all)
       await record(id, CHAT_KIND, row.ctx)
