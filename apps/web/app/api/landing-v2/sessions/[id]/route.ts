@@ -29,7 +29,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   try {
     const s = row.session
     const { inputs, selected, copies } = body.data
-    // Cambiar lo que el análisis mira invalida el sistema visual (la placa del talento se conserva).
+    // Cambiar lo que el análisis mira invalida el sistema visual.
     const reanalizar = !!inputs && changesAnalysis(s.inputs, { ...s.inputs, ...inputs })
     const next = {
       ...s,

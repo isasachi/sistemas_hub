@@ -45,7 +45,7 @@ async function main() {
     const deps = {
       save: async (s: S) => { session = s },
       analyze: async (s: S) => ({
-        ...s, visualSystem: { niche: 'health' as const, productForm: 'frasco', palette: [], polarity: 'light' as const, typography: 't', photography: 'p', graphicResources: [], artDirection: 'a', usesPeople: false, persona: null, talentUrl: null },
+        ...s, visualSystem: { niche: 'health' as const, productForm: 'frasco', palette: [], typography: 't', photography: 'p', graphicResources: [], artDirection: 'a', usesPeople: false, peopleDirection: null },
       }),
       generate: async (s: S, id: S['current'] & string) => ({
         ...s, current: id,

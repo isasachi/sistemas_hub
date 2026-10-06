@@ -86,7 +86,6 @@ export function CopyStep({ session, setSession, next }: StepProps) {
                 </button>
               )}
               <input className={field} value={c.closingLine ?? ''} onChange={(e) => edit(id, { closingLine: e.target.value || null })} aria-label="Cierre" placeholder="Línea de cierre (opcional)" />
-              {SECTION_BY_ID[id].cta && <input className={field} value={c.cta ?? ''} onChange={(e) => edit(id, { cta: e.target.value || null })} aria-label="Botón" placeholder="Texto del botón" />}
             </div>
           </details>
         )

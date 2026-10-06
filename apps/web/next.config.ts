@@ -5,6 +5,9 @@ const nextConfig: NextConfig = {
   // transpilarlo igual que el código de la app, sino el build de Vercel falla
   // al ver .ts del workspace. Ver AGENTS.md (monorepo).
   transpilePackages: ["@ph/shared"],
+  // Solo `next dev`: deja abrir el server de desarrollo por un quick tunnel de Cloudflare (QA desde
+  // otra red). Sin esto Next 16 bloquea los assets de dev pedidos desde otro origen.
+  allowedDevOrigins: ["*.trycloudflare.com"],
   // sharp trae binario nativo; si Next lo bundlea, el require del .node falla en la
   // función de Vercel. Externalizarlo lo deja resolver desde node_modules en runtime.
   //

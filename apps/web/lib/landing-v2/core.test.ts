@@ -9,14 +9,14 @@ vi.mock('./quota', () => ({ gate: vi.fn(), record: vi.fn(), sectionKind: (id: st
 import { SECTION_IDS, SECTIONS, inSkeletonOrder } from './catalog'
 import { approveSection, changesAnalysis, getNextSection, sectionSupport } from './flow'
 import { emptySession, missingInputs, type LandingInputs, type LandingSession, type SectionCopy } from './schemas'
-import { buildImagePrompt, modelFromSize, renderTexts, sinComillas } from './section'
+import { buildImagePrompt, modelFromSize, renderTexts, sinComillas, sinConfianzaInventada } from './section'
 import { sourceText, stripUnsupported, unsupported, verifyCopy } from './verify-copy'
 
 const inputs: LandingInputs = {
   productName: 'Colágeno Vital',
   marketResearch: 'Mujeres de 30 a 50 años con dolor de rodillas. "Me ayudó a subir escaleras sin molestia" — Rosa, Arequipa.',
   pricing: { packs: [{ name: 'Pack x2', quantity: 2, price: 99.9, compareAt: 139.9, label: 'Más vendido' }], notes: 'Pago contra entrega en Lima.' },
-  niche: 'health', nicheOther: null, productImageUrl: 'https://x.supabase.co/a.png', proofImageUrls: [], ctaText: null,
+  niche: 'health', nicheOther: null, productImageUrl: 'https://x.supabase.co/a.png', proofImageUrls: [],
 }
 
 const session = (over: Partial<LandingSession> = {}): LandingSession => ({ ...emptySession('s1', 'chat'), inputs, ...over })
@@ -25,7 +25,6 @@ describe('catálogo', () => {
   it('14 secciones en el orden del esqueleto, una página de wireframe cada una', () => {
     expect(SECTIONS.map((s) => s.id)).toEqual([...SECTION_IDS])
     expect(SECTIONS.map((s) => s.wf)).toEqual(Array.from({ length: 14 }, (_, i) => i + 1))
-    expect(SECTIONS.filter((s) => s.cta).map((s) => s.id)).toEqual(['hero', 'offer_pricing', 'final_reoffer'])
   })
   it('la generación respeta el esqueleto aunque la selección venga desordenada', () => {
     expect(inSkeletonOrder(['final_reoffer', 'hero', 'mechanism'])).toEqual(['hero', 'mechanism', 'final_reoffer'])
@@ -57,7 +56,7 @@ describe('flujo', () => {
   })
   it('re-analiza solo si cambia el VALOR de lo que mira el análisis', () => {
     expect(changesAnalysis(inputs, { ...inputs })).toBe(false) // el modelo reenvía lo que ya sabe
-    expect(changesAnalysis(inputs, { ...inputs, ctaText: 'Comprar' })).toBe(false)
+    expect(changesAnalysis(inputs, { ...inputs, proofImageUrls: ['https://x/b.png'] })).toBe(false)
     expect(changesAnalysis(inputs, { ...inputs, productName: 'Otro' })).toBe(true)
   })
   it('no se aprueba una sección sin imagen', () => {
@@ -85,7 +84,7 @@ describe('verificador de copy', () => {
     const copy: SectionCopy = {
       headline: 'Garantía total.', subheadline: 'Envío gratis a todo el Perú',
       items: [{ group: null, title: null, text: 'Alivio para tus rodillas' }, { group: null, title: null, text: '+10,000 clientes' }],
-      closingLine: null, cta: 'Quiero mi descuento',
+      closingLine: null,
     }
     expect(verifyCopy(copy, src).length).toBeGreaterThan(0)
     const limpio = stripUnsupported(copy, src, inputs.productName)
@@ -97,7 +96,7 @@ describe('verificador de copy', () => {
 })
 
 describe('prompt de imagen', () => {
-  const copy: SectionCopy = { headline: 'Elige tu pack', subheadline: null, items: [], closingLine: null, cta: 'Elegir mi pack' }
+  const copy: SectionCopy = { headline: 'Elige tu pack', subheadline: null, items: [], closingLine: null }
   it('los precios los pone el código desde los datos del usuario', () => {
     const t = renderTexts('offer_pricing', copy, inputs).join('\n')
     expect(t).toContain('"S/ 99.90"')
@@ -108,16 +107,19 @@ describe('prompt de imagen', () => {
   it('el brief no puede colar texto entre comillas a la imagen', () => {
     expect(sinComillas('Big headline "Envío gratis hoy" at the top, product\'s label visible')).toBe("Big headline at the top, product's label visible")
   })
-  it('sin persona de referencia, la imagen no lleva personas; el wireframe nunca va', () => {
-    const p = buildImagePrompt({
-      id: 'hero', copy, inputs,
-      brief: { composition: 'c', focalPoint: 'f', productPlacement: 'p', usesPerson: false, background: 'b', typographyTreatment: 't', ctaTreatment: 'big' },
-      vs: { niche: 'health', productForm: 'frasco', palette: [], polarity: 'light', typography: 't', photography: 'p', graphicResources: [], artDirection: 'a', usesPeople: false, persona: null, talentUrl: null },
-      refs: { talent: null, proof: [], style: null },
-    })
+  it('sin botones y sin personas si la dirección de arte no las usa; el wireframe nunca va', () => {
+    const vs = { niche: 'health' as const, productForm: 'frasco', palette: [], typography: 't', photography: 'p', graphicResources: [], artDirection: 'a', usesPeople: false, peopleDirection: null }
+    const brief = { composition: 'c', focalPoint: 'f', productPlacement: 'p', usesPerson: true, background: 'b', typographyTreatment: 't' }
+    const p = buildImagePrompt({ id: 'hero', copy, inputs, brief, vs, refs: { proof: [], style: null } })
     expect(p).toContain('Do not show any person.')
-    expect(p).toContain('CTA BUTTON: "Elegir mi pack"')
-    expect(p).not.toMatch(/wireframe/i)
+    expect(p).toContain('NO BUTTONS')
+    expect(p).not.toMatch(/CTA BUTTON:|wireframe/i)
+    const conGente = buildImagePrompt({ id: 'hero', copy, inputs, brief, vs: { ...vs, usesPeople: true, peopleDirection: 'mujeres de 30-45' }, refs: { proof: [], style: null } })
+    expect(conGente).toContain('mujeres de 30-45')
+  })
+  it('el brief no puede planear elementos de confianza sin copy (el modelo de imagen los inventa)', () => {
+    const b = 'The structure begins with a subtle trust bar. Bold headline left. The bottom closes with sleek micro-trust icons without buttons.'
+    expect(sinConfianzaInventada(b)).toBe('Bold headline left.')
   })
   it('la huella del modelo sale del tamaño antes de reescalar', () => {
     expect(modelFromSize(864, 1536)).toBe('gpt-image-2.5-sunburst')

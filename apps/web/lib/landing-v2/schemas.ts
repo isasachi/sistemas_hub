@@ -5,7 +5,7 @@
 // `.nullable()`, nada de `.optional()`/`.nullish()` ni `.catch`/`.default`. Así el MISMO schema va
 // plano a Gemini y válido a OpenAI (que el AI SDK manda strict por defecto) sin `toStrictSchema`.
 // Un `.nullish()` acá saldría del `required` y el modelo lo omitiría en silencio (ley del repo).
-// Sin `maxLength`: OpenAI corta exactamente en el tope (landing.md); el largo lo pide el prompt.
+// Sin `maxLength`: OpenAI corta exactamente en el tope (medido en el hub); el largo lo pide el prompt.
 import { z } from 'zod'
 import { SECTION_IDS, type SectionId } from './catalog'
 
@@ -47,7 +47,6 @@ export const LandingInputsSchema = z.object({
   productImageUrl: z.string().url(),
   /** Fotos REALES de antes/después. Sin ellas `before_after` no se genera. */
   proofImageUrls: z.array(z.string().url()),
-  ctaText: z.string().trim().nullable(),
 })
 export type LandingInputs = z.infer<typeof LandingInputsSchema>
 
@@ -75,43 +74,33 @@ export function missingInputs(d: InputsDraft): (keyof typeof INPUT_LABELS)[] {
 }
 
 export function completeInputs(d: InputsDraft): LandingInputs | null {
-  const r = LandingInputsSchema.safeParse({ proofImageUrls: [], ctaText: null, nicheOther: null, ...d })
+  const r = LandingInputsSchema.safeParse({ proofImageUrls: [], nicheOther: null, ...d })
   return r.success ? r.data : null
 }
 
 // ─── Sistema visual ──────────────────────────────────────────────────────────
 
-/** Lo que el modelo OBSERVA. La paleta final la decide el código (`analyze.ts`), no el modelo. */
+/**
+ * El sistema visual: lo define el modelo de razonamiento con las reglas del system prompt v2
+ * ("never make user choose style/layout/palette/type"). El código solo descarta los hex inválidos.
+ * `peopleDirection`: si la dirección de arte usa personas, cómo son (sin una cara fija: cada sección
+ * las decide su art direction).
+ */
 export const AnalysisOutSchema = z.object({
   niche: NicheSchema,
   productForm: z.string(),
-  packageHex: z.string(),
-  brandHexes: z.array(z.string()),
+  palette: z.array(z.object({ hex: z.string(), role: z.string() })),
   typography: z.string(),
   photography: z.string(),
   graphicResources: z.array(z.string()),
   artDirection: z.string(),
   usesPeople: z.boolean(),
-  persona: z.string().nullable(),
+  peopleDirection: z.string().nullable(),
   testimonials: z.array(z.object({ name: z.string().nullable(), city: z.string().nullable(), text: z.string() })),
 })
 export type AnalysisOut = z.infer<typeof AnalysisOutSchema>
 
-export const PaletteRole = z.enum(['background', 'surface', 'headline', 'accent', 'brand'])
-export const VisualSystemSchema = z.object({
-  niche: NicheSchema,
-  productForm: z.string(),
-  palette: z.array(z.object({ hex: z.string(), role: PaletteRole })),
-  polarity: z.enum(['light', 'dark']),
-  typography: z.string(),
-  photography: z.string(),
-  graphicResources: z.array(z.string()),
-  artDirection: z.string(),
-  usesPeople: z.boolean(),
-  persona: z.string().nullable(),
-  /** Placa canónica del talento (retrato), si la dirección de arte lleva persona. */
-  talentUrl: z.string().nullable(),
-})
+export const VisualSystemSchema = AnalysisOutSchema.omit({ testimonials: true })
 export type VisualSystem = z.infer<typeof VisualSystemSchema>
 
 export const TestimonialSchema = z.object({ name: z.string().nullable(), city: z.string().nullable(), text: z.string() })
@@ -125,8 +114,6 @@ export const SectionCopyOutSchema = z.object({
   /** Bloques del wireframe. `group` = columna/grupo (comparativa, segmentación); null = lista única. */
   items: z.array(z.object({ group: z.string().nullable(), title: z.string().nullable(), text: z.string() })),
   closingLine: z.string().nullable(),
-  /** Solo en secciones con CTA; el código lo anula en las demás. */
-  cta: z.string().nullable(),
 })
 export type SectionCopy = z.infer<typeof SectionCopyOutSchema>
 
@@ -138,7 +125,6 @@ export const RenderBriefOutSchema = z.object({
   usesPerson: z.boolean(),
   background: z.string(),
   typographyTreatment: z.string(),
-  ctaTreatment: z.string().nullable(),
 })
 export type RenderBrief = z.infer<typeof RenderBriefOutSchema>
 
@@ -163,11 +149,7 @@ export const LandingSessionSchema = z.object({
   id: z.string(),
   view: z.enum(['wizard', 'chat']),
   inputs: InputsDraftSchema,
-  productCanonicalUrl: z.string().nullable(),
   visualSystem: VisualSystemSchema.nullable(),
-  /** Placa del talento, a nivel de sesión: sobrevive a un re-análisis. Generar otra persona a mitad
-   *  de la landing es justo la deriva de identidad que la placa existe para evitar. */
-  talentUrl: z.string().nullable().default(null),
   testimonials: z.array(TestimonialSchema),
   selected: z.array(SectionIdSchema),
   copies: z.partialRecord(SectionIdSchema, SectionCopyOutSchema),
@@ -178,7 +160,7 @@ export type LandingSession = z.infer<typeof LandingSessionSchema>
 
 export function emptySession(id: string, view: LandingSession['view']): LandingSession {
   return {
-    id, view, inputs: {}, productCanonicalUrl: null, visualSystem: null, talentUrl: null, testimonials: [],
+    id, view, inputs: {}, visualSystem: null, testimonials: [],
     selected: [...SECTION_IDS], copies: {}, sections: {}, current: null,
   }
 }

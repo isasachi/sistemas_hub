@@ -1,14 +1,15 @@
 // Servicios por sección de landing v2: copy → brief → render, y la revisión con feedback.
 //
-// Reglas heredadas de la doctrina de landing (agents/landing.md) que este archivo sostiene:
+// Todo sale de las reglas del system prompt v2 + wireframe + checklist. Lo que el código garantiza:
 //  - El wireframe gris va SOLO al modelo de razonamiento (copy y brief). Al de imagen nunca: copia
 //    cajas y bordes.
 //  - El texto que se dibuja es LISTA BLANCA y lo arma el código: las casillas de copy entre comillas.
-//    El brief del modelo se limpia de comillas antes de entrar al prompt, porque un brief es justo
-//    el vector por el que una instrucción termina impresa en la imagen (landing.md).
+//    El brief se limpia de comillas antes de entrar al prompt: un brief es justo el vector por el que
+//    una instrucción termina impresa en la imagen.
 //  - Precios, packs y testimonios los pone el CÓDIGO desde los datos del usuario, no el modelo.
-//  - Imagen por `generateImage(…, { respaldo: NANO_BANANA_PRO })`, el mismo par para render y
-//    revisión: un regen que cae a otro respaldo cambia la estética de una sola sección.
+//  - Sin botones en los renders (`rules.ctas` del system prompt).
+//  - Imagen por `generateImage(…, { respaldo: NANO_BANANA_PRO })` (motor del hub), el mismo par para
+//    render y revisión: un regen que cae a otro respaldo cambia la estética de una sola sección.
 import type { Part } from '@google/genai'
 import sharp from 'sharp'
 import { editWithPrompt, generateImage, NANO_BANANA_PRO } from '@/lib/gemini'
@@ -64,7 +65,6 @@ function dataBlock(inputs: LandingInputs, s: LandingSession): string {
     `NICHE: ${NICHE_LABELS[inputs.niche]}${inputs.nicheOther ? ` (${inputs.nicheOther})` : ''}`,
     `PACKS (prices in soles, set by the user):\n${inputs.pricing.packs.map((p) => `- ${packLines(p).join(' · ')} · cantidad ${p.quantity}`).join('\n')}`,
     `PURCHASE CONDITIONS GIVEN BY THE USER: ${inputs.pricing.notes.trim() || '(none — do not mention shipping, payment, guarantee or urgency)'}`,
-    inputs.ctaText ? `CTA TEXT GIVEN BY THE USER: ${inputs.ctaText}` : '',
     `REAL TESTIMONIALS FOUND IN THE RESEARCH: ${s.testimonials.length ? s.testimonials.map((t) => `"${t.text}" — ${[t.name, t.city].filter(Boolean).join(', ')}`).join(' | ') : '(none)'}`,
     `MARKET RESEARCH & CONSUMER PSYCHOLOGY:\n${inputs.marketResearch}`,
   ].filter(Boolean).join('\n\n')
@@ -72,12 +72,13 @@ function dataBlock(inputs: LandingInputs, s: LandingSession): string {
 
 function visualBlock(vs: VisualSystem): string {
   return [
-    `Palette: ${vs.palette.map((c) => `${c.role} ${c.hex}`).join(', ')} (${vs.polarity} background).`,
+    `Palette: ${vs.palette.map((c) => `${c.role} ${c.hex}`).join(', ')}.`,
     `Typography: ${vs.typography}`,
     `Photography & lighting: ${vs.photography}`,
     `Graphic resources allowed: ${vs.graphicResources.join('; ') || 'minimal'}`,
     `Art direction: ${vs.artDirection} Niche tone: ${NICHE_TONE[vs.niche] ?? ''}`,
     `Product: ${vs.productForm}`,
+    vs.usesPeople && vs.peopleDirection ? `People (when a section uses them): ${vs.peopleDirection}` : 'No people/models in this landing.',
   ].join('\n')
 }
 
@@ -97,9 +98,7 @@ const COPY_TASK = (id: SectionId) => {
     '- headline: the section title. subheadline: one supporting line or null.',
     '- items: the wireframe\'s blocks (benefits, steps, reasons, columns…), each with an optional short title and a short text. For two-column sections set `group` to the column name; otherwise null.',
     '- closingLine: a short transition line only if it improves flow, else null.',
-    spec.cta
-      ? '- cta: a short actionable button text derived from the offer (use the user\'s CTA text if given).'
-      : '- cta: null (this section has no button).',
+    'The wireframe\'s CTA blocks are NOT copy: renders have no buttons (rules.ctas). Never write button texts.',
     id === 'offer_pricing' || id === 'final_reoffer'
       ? 'The packs and prices are rendered by the system from the user data: do NOT write prices in items.'
       : '',
@@ -132,15 +131,21 @@ export async function generateSectionCopy(s: LandingSession, id: SectionId): Pro
     validate: (c) => { const v = verifyCopy(c, source); return v.length ? correctionFor(v) : null },
   })
   console.info(`[landing-v2] copy ${s.id}/${id} por ${model}`)
-  const spec = SECTION_BY_ID[id]
-  let copy = stripUnsupported(output, source, inputs.productName)
-  if (id === 'testimonials') {
-    copy = { ...copy, items: s.testimonials.map((t) => ({ group: null, title: [t.name, t.city].filter(Boolean).join(', ') || null, text: t.text })) }
-  }
-  // CTA: el del usuario manda; si no, el del modelo (ya verificado); si no, uno neutro. Sin CTA donde
-  // el wireframe no lo pone.
-  const cta = spec.cta ? (inputs.ctaText?.trim() || copy.cta?.trim() || 'Comprar ahora') : null
-  return { ...copy, cta }
+  const copy = stripUnsupported(output, source, inputs.productName)
+  return id === 'testimonials'
+    ? { ...copy, items: s.testimonials.map((t) => ({ group: null, title: [t.name, t.city].filter(Boolean).join(', ') || null, text: t.text })) }
+    : copy
+}
+
+/**
+ * Elementos de confianza que el brief no puede planear: no tienen copy, y el modelo de imagen los
+ * rellena inventando ("Envío Gratis", "Clínicamente Probado"). Medido 2026-10-05: los dos briefs del
+ * Hero planearon "trust bar" + "micro-trust icons" desde el wireframe, y las dos imágenes los
+ * llenaron con claims falsos. Se quita la ORACIÓN entera del brief.
+ */
+const TRUST_PLAN = /trust|badge|seal|certif|guarantee|logos?\b|payment icons?|shipping icons?/i
+export function sinConfianzaInventada(s: string): string {
+  return s.split(/(?<=\.)\s+/).filter((x) => !TRUST_PLAN.test(x)).join(' ').trim()
 }
 
 /** Saca todo lo entrecomillado del brief: el texto que se dibuja lo pone el código, no el brief. */
@@ -160,24 +165,24 @@ export async function buildRenderBrief(s: LandingSession, id: SectionId, copy: S
       { type: 'file', data: wireframeFor(id), mediaType: 'image/jpeg' },
       { type: 'text', text: [
         `TASK: translate this section's wireframe (attached) into a premium art-directed COMPOSITION BRIEF for an image model. Section ${spec.wf}/14 "${spec.en}".`,
-        'Write in English. Describe layout, focal point, product placement/scale/angle, background/environment, typographic treatment and CTA treatment. Merge or reinterpret wireframe blocks editorially; never boxes, gray frames, arrows or labels.',
-        'Refer to texts ONLY by role (headline, subheadline, items, closing line, CTA, prices). Do NOT write any text to render and do NOT use quotation marks.',
-        `usesPerson: true only if a person truly improves this section${vs.talentUrl ? ' (a fixed talent reference exists)' : ' (no person reference exists: answer false)'}. Never a faceless body crop.`,
-        spec.cta ? `CTA: ${spec.cta === 'main' ? 'the most eye-catching element of the section, micro-trust icons below only if the data supports them' : spec.cta === 'final' ? 'the largest button of the whole landing' : 'the offer button'}.` : 'ctaTreatment: null (no button in this section).',
+        'Write in English. Describe layout, focal point, product placement/scale/angle, background/environment and typographic treatment. Merge or reinterpret wireframe blocks editorially; never boxes, gray frames, arrows or labels. The wireframe\'s CTA blocks are dropped: NO buttons (rules.ctas).',
+        'Refer to texts ONLY by role (headline, subheadline, items, closing line, prices). Do NOT write any text to render and do NOT use quotation marks.',
+        'Plan ONLY blocks that have content in COPY BLOCKS (or the packs). Wireframe blocks with no copy — trust bar, micro-trust icons, seals, logos, badges — are omitted, never planned as placeholders.',
+        `usesPerson: true only if a person/model truly improves this section${vs.usesPeople ? '' : ' (this landing\'s art direction uses no people: answer false)'}.`,
       ].join('\n') },
       { type: 'text', text: `VISUAL SYSTEM (fixed for the whole landing):\n${visualBlock(vs)}\n\nCOPY BLOCKS:\n${JSON.stringify(copy)}\n\nPRODUCT: ${inputs.productName}` },
       { type: 'text', text: approvedSummary(s, id) },
     ],
   })
   console.info(`[landing-v2] brief ${s.id}/${id} por ${model}`)
+  const limpio = (t: string) => sinConfianzaInventada(sinComillas(t))
   return {
-    composition: sinComillas(output.composition),
-    focalPoint: sinComillas(output.focalPoint),
-    productPlacement: sinComillas(output.productPlacement),
-    usesPerson: output.usesPerson && !!vs.talentUrl,
-    background: sinComillas(output.background),
-    typographyTreatment: sinComillas(output.typographyTreatment),
-    ctaTreatment: spec.cta && output.ctaTreatment ? sinComillas(output.ctaTreatment) : null,
+    composition: limpio(output.composition),
+    focalPoint: limpio(output.focalPoint),
+    productPlacement: limpio(output.productPlacement),
+    usesPerson: output.usesPerson && vs.usesPeople,
+    background: limpio(output.background),
+    typographyTreatment: limpio(output.typographyTreatment),
   }
 }
 
@@ -195,25 +200,28 @@ export function renderTexts(id: SectionId, copy: SectionCopy, inputs: LandingInp
   if (id === 'offer_pricing' || id === 'final_reoffer') {
     inputs.pricing.packs.forEach((p, i) => lines.push(`PACK ${i + 1}: ${packLines(p).map((l) => `"${l}"`).join(' · ')}`))
   }
-  lines.push(...q('CLOSING LINE', copy.closingLine), ...q('CTA BUTTON', copy.cta))
+  lines.push(...q('CLOSING LINE', copy.closingLine))
   return lines
 }
 
 export function buildImagePrompt(o: {
   id: SectionId; copy: SectionCopy; brief: RenderBrief; vs: VisualSystem; inputs: LandingInputs
-  refs: { talent: number | null; proof: number[]; style: number | null }
+  refs: { proof: number[]; style: number | null }
 }): string {
   const spec = SECTION_BY_ID[o.id]
   return [
+    // De TITULAR y no entre las reglas de abajo: entre muchas órdenes, la que tiene que cumplirse va
+    // primero (ley del repo). Sin esto el respaldo de Google inventó barras de confianza y sellos.
+    'ABSOLUTE TEXT RULE: the ONLY words, numbers and labels allowed in the image are the ones in the TEXT list below (plus what is printed on the product label). Do NOT add a trust bar, badges, seals, certifications, guarantees, shipping/payment claims or icon captions that are not in that list.',
     `Design ONE finished, premium mobile landing-page section as a single portrait 9:16 image. Section: ${spec.en}. It must feel professionally art-directed — never an infographic, slide, dashboard, poster, info sheet or generic AI template. One dominant idea, clear focal point, generous margins and negative space, every text legible on a phone without zoom, nothing important near the edges, nothing cropped.`,
     `Image 1 is the REAL product (${o.vs.productForm}): reproduce it exactly — shape, proportions, colors and every detail of its label. Never redraw, restyle, duplicate or substitute it.`,
-    o.refs.talent ? `Image ${o.refs.talent} is the fixed person of this campaign: same face, skin tone, hair and build. Show the face; never a faceless body crop.` : 'Do not show any person.',
+    o.brief.usesPerson && o.vs.peopleDirection ? `Include people as the art direction defines: ${o.vs.peopleDirection}` : 'Do not show any person.',
     o.refs.proof.length ? `Images ${o.refs.proof.join(', ')} are the user's REAL before/after photos: place them as they are, without altering them.` : '',
     o.refs.style ? `Image ${o.refs.style} is an already approved section of THIS landing: match its typography, palette, lighting and graphic resources exactly. Do NOT copy its layout or composition.` : '',
     `VISUAL SYSTEM:\n${visualBlock(o.vs)}`,
-    `COMPOSITION: ${o.brief.composition}\nFocal point: ${o.brief.focalPoint}\nProduct: ${o.brief.productPlacement}\nBackground: ${o.brief.background}\nTypography: ${o.brief.typographyTreatment}${o.brief.ctaTreatment ? `\nCTA: ${o.brief.ctaTreatment}` : ''}`,
+    `COMPOSITION: ${o.brief.composition}\nFocal point: ${o.brief.focalPoint}\nProduct: ${o.brief.productPlacement}\nBackground: ${o.brief.background}\nTypography: ${o.brief.typographyTreatment}`,
     `TEXT — render EXACTLY these texts, verbatim and in Spanish, and NO other words, letters or numbers anywhere (except what is printed on the product's own label). Role names before the colon are NOT text to render:\n${renderTexts(o.id, o.copy, o.inputs).join('\n')}`,
-    spec.cta ? 'Exactly one CTA button. Price containers, tags, seals and labels must not compete with it.' : 'No buttons in this section.',
+    'NO BUTTONS: no CTA buttons, no button-like shapes, pills or tabs that read as clickable. Price containers, tags, seals and labels are allowed but never styled as buttons.',
   ].filter(Boolean).join('\n\n')
 }
 
@@ -258,13 +266,12 @@ export async function renderSection(s: LandingSession, id: SectionId, copy: Sect
     parts.push({ inlineData: { data, mimeType } })
     return parts.length
   }
-  await push(s.productCanonicalUrl ?? inputs.productImageUrl)
-  const talent = brief.usesPerson && vs.talentUrl ? await push(vs.talentUrl) : null
+  await push(inputs.productImageUrl)
   const proof: number[] = []
   if (id === 'before_after') for (const u of inputs.proofImageUrls.slice(0, 2)) proof.push(await push(u))
   const anchorUrl = opts.anchor === false ? null : styleAnchor(s, id)
   const style = anchorUrl ? await push(anchorUrl) : null
-  parts.push({ text: buildImagePrompt({ id, copy, brief, vs, inputs, refs: { talent, proof, style } }) })
+  parts.push({ text: buildImagePrompt({ id, copy, brief, vs, inputs, refs: { proof, style } }) })
   const b64 = await generateImage(parts, 3, { aspectRatio: '9:16', respaldo: NANO_BANANA_PRO })
   if (!b64) throw new UserError('No se pudo generar la imagen de la sección. Inténtalo de nuevo.')
   return b64

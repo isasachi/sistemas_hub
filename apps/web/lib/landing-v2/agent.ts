@@ -98,7 +98,6 @@ export function createLandingAgent(initial: LandingSession, ctx: Ctx, deps: Agen
         nicheOther: z.string().optional(),
         packs: z.array(PackSchema).optional().describe('Replaces all packs.'),
         purchaseNotes: z.string().optional().describe('Shipping/payment/guarantee/urgency conditions, only if the user wrote them.'),
-        ctaText: z.string().optional(),
         productImageUrl: z.string().optional(),
         proofImageUrls: z.array(z.string()).optional(),
       }),
@@ -116,7 +115,6 @@ export function createLandingAgent(initial: LandingSession, ctx: Ctx, deps: Agen
           ...(i.marketResearch !== undefined && { marketResearch: i.marketResearch }),
           ...(i.niche !== undefined && { niche: i.niche }),
           ...(i.nicheOther !== undefined && { nicheOther: i.nicheOther }),
-          ...(i.ctaText !== undefined && { ctaText: i.ctaText }),
           ...(i.productImageUrl !== undefined && { productImageUrl: i.productImageUrl }),
           ...(i.proofImageUrls !== undefined && { proofImageUrls: i.proofImageUrls }),
           ...(pricing && { pricing }),
@@ -147,7 +145,7 @@ export function createLandingAgent(initial: LandingSession, ctx: Ctx, deps: Agen
       execute: () => serial(async () => {
         try {
           if (missingInputs(runtimeContext.session.inputs).length) return { ok: false, error: 'Faltan datos del producto.' }
-          await commit(await deps.analyze(runtimeContext.session, ctx))
+          await commit(await deps.analyze(runtimeContext.session))
           const vs = runtimeContext.session.visualSystem!
           return { ok: true, niche: vs.niche, palette: vs.palette.map((c) => c.hex), typography: vs.typography, artDirection: vs.artDirection }
         } catch (e) { return fail(e) }
@@ -164,7 +162,7 @@ export function createLandingAgent(initial: LandingSession, ctx: Ctx, deps: Agen
           if (missing.length) return { ok: false, error: `Faltan datos: ${missing.map((k) => INPUT_LABELS[k]).join(', ')}.` }
           const id: SectionId | null = section ?? getNextSection(s)
           if (!id) return { ok: true, done: true, message: 'Todas las secciones seleccionadas están aprobadas.' }
-          if (!s.visualSystem) { s = await deps.analyze(s, ctx); await commit(s) }
+          if (!s.visualSystem) { s = await deps.analyze(s); await commit(s) }
           // Una sección ya generada que se vuelve a nombrar se regenera desde cero (copy nuevo).
           if (s.sections[id]?.versions.length) {
             const { [id]: _viejo, ...copies } = s.copies

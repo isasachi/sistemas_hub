@@ -38,7 +38,7 @@ export function sourceText(inputs: LandingInputs, testimonials: Testimonial[] = 
       p.compareAt ? Math.round((1 - p.price / p.compareAt) * 100) + '%' : '',
       p.compareAt ? (p.compareAt - p.price).toFixed(2) : '', p.label ?? ''].join(' '))
   return norm([
-    inputs.productName, inputs.marketResearch, inputs.pricing.notes, inputs.ctaText ?? '',
+    inputs.productName, inputs.marketResearch, inputs.pricing.notes,
     ...packs, ...testimonials.map((t) => `${t.name ?? ''} ${t.city ?? ''} ${t.text}`),
   ].join('\n'))
 }
@@ -72,7 +72,6 @@ export function verifyCopy(copy: SectionCopy, source: string): Violation[] {
   check('subheadline', copy.subheadline)
   copy.items.forEach((it, i) => { check(`items.${i}.title`, it.title); check(`items.${i}.text`, it.text); check(`items.${i}.group`, it.group) })
   check('closingLine', copy.closingLine)
-  check('cta', copy.cta)
   return v
 }
 
@@ -92,6 +91,5 @@ export function stripUnsupported(copy: SectionCopy, source: string, fallbackHead
     subheadline: copy.subheadline && ok(copy.subheadline) ? copy.subheadline : null,
     items: copy.items.filter((it) => ok(it.title) && ok(it.text) && ok(it.group)),
     closingLine: ok(copy.closingLine) ? copy.closingLine : null,
-    cta: ok(copy.cta) ? copy.cta : null,
   }
 }

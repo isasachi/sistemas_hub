@@ -10,7 +10,7 @@
  *     como referencia de estilo) y sin ancla. Así la única variable es la imagen de referencia.
  *     2 draws por brazo: `n = 1` no es una medición (ley del repo).
  *
- * Producto: el "Complejo Linfático" de una sesión real de v1 (foto del bucket). La investigación es
+ * Producto: el "Complejo Linfático" de una sesión real (foto del bucket). La investigación es
  * de prueba, escrita para el QA. Corre con AUTH_DISABLED (el gate de créditos no tiene usuario); las
  * generaciones quedan en `ph_gen_usage` con user_id `qa-landing-v2`.
  */
@@ -47,7 +47,7 @@ async function main() {
     ...s,
     inputs: {
       productName: 'Complejo Linfático Vitella',
-      niche: 'health', nicheOther: null, productImageUrl: PHOTO, proofImageUrls: [], ctaText: null,
+      niche: 'health', nicheOther: null, productImageUrl: PHOTO, proofImageUrls: [],
       marketResearch: [
         'Público: mujeres de 28 a 50 años en Lima y provincias que sienten las piernas pesadas e hinchadas al final del día y se notan "infladas" aunque coman bien.',
         'Dolor: retención de líquidos, sensación de pesadez, ropa que aprieta por la tarde, frustración porque las dietas no lo resuelven.',
@@ -68,10 +68,9 @@ async function main() {
   }
 
   const t0 = Date.now()
-  s = await analyzeProduct(s, ctx)
+  s = await analyzeProduct(s)
   await saveV2Session(s)
   console.log(`análisis (${((Date.now() - t0) / 1000).toFixed(0)}s): ${JSON.stringify({ ...s.visualSystem, palette: s.visualSystem!.palette.map((c) => `${c.role}:${c.hex}`) })}`)
-  if (s.talentUrl) await save('00-talento.png', s.talentUrl)
 
   // ── A. Corrida real: 3 secciones con aprobación ──────────────────────────────
   for (const [i, id] of (['hero', 'immediate_benefits', 'offer_pricing'] as const).entries()) {

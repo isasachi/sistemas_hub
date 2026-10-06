@@ -1,8 +1,7 @@
-// Cuota y créditos de landing v2: los MISMOS de v1 (`lib/gen-quota.ts` + `lib/credits.ts`).
+// Cuota y créditos de landing v2: los del hub (`lib/gen-quota.ts` + `lib/credits.ts`).
 //
 // - Render y revisión de sección: kind `landing-section:v2-<id>`. El prefijo `landing-section`
 //   cobra 1 crédito por imagen y aplica `GEN_PER_STEP_LIMIT` (1 gen + 3 cambios por sección).
-// - Placa de talento: `landing-talent`, como v1 (cuota diaria, sin crédito).
 // - Turno del chat: `landing-v2-chat` (cuota diaria, sin crédito). Sin esto el chat sería un
 //   endpoint gratis de LLM.
 //
@@ -18,7 +17,6 @@ export interface Ctx {
 }
 
 export const sectionKind = (id: SectionId) => `landing-section:v2-${id}`
-export const TALENT_KIND = 'landing-talent'
 export const CHAT_KIND = 'landing-v2-chat'
 
 export class QuotaError extends Error {

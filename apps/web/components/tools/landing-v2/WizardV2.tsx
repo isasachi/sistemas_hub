@@ -100,7 +100,6 @@ function BriefStep({ session, ensure, setSession, next }: StepProps) {
   const [nicheOther, setNicheOther] = useState(i?.nicheOther ?? '')
   const [packs, setPacks] = useState<Pack[]>(i?.pricing?.packs?.length ? i.pricing.packs : [emptyPack()])
   const [notes, setNotes] = useState(i?.pricing?.notes ?? '')
-  const [cta, setCta] = useState(i?.ctaText ?? '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -118,7 +117,6 @@ function BriefStep({ session, ensure, setSession, next }: StepProps) {
         inputs: {
           productName: name.trim(), niche, nicheOther: niche === 'other' ? nicheOther.trim() : null,
           pricing: { packs: validPacks.map((p) => ({ ...p, name: p.name.trim(), label: p.label?.trim() || null })), notes: notes.trim() },
-          ctaText: cta.trim() || null,
         },
       })
       setSession(out); next()
@@ -159,7 +157,6 @@ function BriefStep({ session, ensure, setSession, next }: StepProps) {
 
       <FieldGroup type="textarea" id="v2-notes" label="Condiciones de compra" helper="(opcional — envío, contra entrega, garantía, urgencia. Si no las escribes, no se mencionan)"
                   rows={3} value={notes} onChange={setNotes} />
-      <FieldGroup type="input" id="v2-cta" label="Texto del botón" helper="(opcional)" value={cta} onChange={setCta} />
 
       <ErrorBox msg={error} />
       <button type="button" onClick={submit} disabled={!ok || busy} className={btnPrimary}>{busy ? <><Spinner />Guardando…</> : 'Continuar'}</button>
@@ -305,7 +302,7 @@ function AnalysisStep({ session, setSession, next }: StepProps) {
       <div className="flex flex-col items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.02] px-6 py-14 text-center" aria-live="polite">
         <Spinner />
         <p className="text-[14px] text-[#efe7e0]">Analizando tu producto y tu marca…</p>
-        <p className="text-[12px] text-[#a98c88]">Puede tardar hasta un minuto si definimos también a la persona de la campaña.</p>
+        <p className="text-[12px] text-[#a98c88]">Suele tardar menos de un minuto.</p>
       </div>
     )
   }
@@ -326,13 +323,8 @@ function AnalysisStep({ session, setSession, next }: StepProps) {
             <dt className="font-semibold text-[#efe7e0]">Tipografía</dt><dd className="text-[#c9b4ae]">{vs.typography}</dd>
             <dt className="font-semibold text-[#efe7e0]">Fotografía</dt><dd className="text-[#c9b4ae]">{vs.photography}</dd>
             <dt className="font-semibold text-[#efe7e0]">Dirección de arte</dt><dd className="text-[#c9b4ae]">{vs.artDirection}</dd>
+            <dt className="font-semibold text-[#efe7e0]">Personas</dt><dd className="text-[#c9b4ae]">{vs.usesPeople && vs.peopleDirection ? vs.peopleDirection : 'Sin personas: el producto es el protagonista.'}</dd>
           </dl>
-          {vs.talentUrl && (
-            <div className="flex items-center gap-3">
-              <img src={vs.talentUrl} alt="Persona de la campaña" className="h-20 w-16 rounded-lg object-cover" />
-              <p className="text-[12px] text-[#a98c88]">La misma persona aparece en las secciones donde la dirección de arte la usa.</p>
-            </div>
-          )}
         </div>
       )}
       <ErrorBox msg={error} />

@@ -44,13 +44,13 @@ async function main() {
       ],
       notes: 'Pago contra entrega en Lima.',
     },
-    niche: 'health' as const, nicheOther: null, productImageUrl: 'https://x/y.png', proofImageUrls: [], ctaText: null,
+    niche: 'health' as const, nicheOther: null, productImageUrl: 'https://x/y.png', proofImageUrls: [],
   }
   const s = {
     ...emptySession('probe', 'wizard'), inputs,
     visualSystem: {
-      niche: 'health' as const, productForm: 'frasco de polvo', palette: [], polarity: 'light' as const,
-      typography: 't', photography: 'p', graphicResources: [], artDirection: 'a', usesPeople: false, persona: null, talentUrl: null,
+      niche: 'health' as const, productForm: 'frasco de polvo', palette: [],
+      typography: 't', photography: 'p', graphicResources: [], artDirection: 'a', usesPeople: false, peopleDirection: null,
     },
   }
   const src = sourceText(inputs)
@@ -69,7 +69,7 @@ async function main() {
             abortSignal: AbortSignal.timeout(60_000),
           })
           const v = verifyCopy(output, src)
-          console.log(`  ${id} draw ${i + 1} (${((Date.now() - t) / 1000).toFixed(1)}s): "${output.headline}" · items=${output.items.length} · cta=${JSON.stringify(output.cta)}`)
+          console.log(`  ${id} draw ${i + 1} (${((Date.now() - t) / 1000).toFixed(1)}s): "${output.headline}" · items=${output.items.length}`)
           console.log(`    sin respaldo en los datos: ${v.length ? v.map((x) => `${x.field}→${x.token}`).join(', ') : 'ninguno'}`)
         } catch (e) {
           console.log(`  ${id} draw ${i + 1}: FALLÓ — ${(e as Error).message.slice(0, 300)}`)
