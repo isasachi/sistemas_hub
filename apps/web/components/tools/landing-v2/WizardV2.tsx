@@ -29,6 +29,8 @@ export type StepProps = {
   ensure: () => Promise<LandingSession>
   setSession: (s: LandingSession) => void
   next: () => void
+  /** Empieza una landing nueva (lo mismo que "Empezar de nuevo" del shell). */
+  reset: () => void
 }
 
 const STEPS = [
@@ -66,7 +68,8 @@ export default function WizardV2({ switcher }: { switcher: React.ReactNode }) {
   }, [loading, session])
 
   const go = (i: number) => { setStep(i); setMaxReached((m) => Math.max(m, i)) }
-  const props: StepProps = { session, ensure, setSession, next: () => go(step + 1) }
+  const restart = () => { reset(); resumed.current = true; setStep(0); setMaxReached(0) }
+  const props: StepProps = { session, ensure, setSession, next: () => go(step + 1), reset: restart }
   const Body = [BriefStep, ResearchStep, ImageStep, AnalysisStep, SectionsStep, CopyStep, RenderStep][step]
 
   return (
@@ -76,7 +79,7 @@ export default function WizardV2({ switcher }: { switcher: React.ReactNode }) {
       maxReached={maxReached}
       onNavigate={go}
       backHref="/tools/generador-landing"
-      onReset={() => { reset(); resumed.current = true; setStep(0); setMaxReached(0) }}
+      onReset={restart}
       actions={switcher}
       full={step === 6}
     >

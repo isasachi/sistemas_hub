@@ -7,6 +7,7 @@ import { SECTION_BY_ID, inSkeletonOrder, type SectionId } from '@/lib/landing-v2
 import { getNextSection, sectionSupport } from '@/lib/landing-v2/flow'
 import { latestVersion, type LandingSession, type SectionCopy } from '@/lib/landing-v2/schemas'
 import { VALIDATION_PHRASE } from '@/lib/landing-v2/system-prompt'
+import BackToDashboard from '@/components/tools/ui/BackToDashboard'
 import { api } from './client'
 import { SectionImage, downloadAll } from './SectionImage'
 import { btnGhost, btnPrimary, ErrorBox, Spinner, type StepProps } from './WizardV2'
@@ -109,7 +110,7 @@ function workingSection(s: LandingSession): SectionId | null {
   return getNextSection(s)
 }
 
-export function RenderStep({ session, setSession }: StepProps) {
+export function RenderStep({ session, setSession, reset }: StepProps) {
   const [busy, setBusy] = useState<'gen' | 'revise' | 'approve' | 'zip' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [feedback, setFeedback] = useState('')
@@ -138,6 +139,10 @@ export function RenderStep({ session, setSession }: StepProps) {
   const approved = inSkeletonOrder(session.selected).filter((x) => session.sections[x]?.approved)
   const total = inSkeletonOrder(session.selected).filter((x) => sectionSupport(session, x).ok).length
   const approvedItems = approved.map((x) => ({ id: x, url: latestVersion(session, x)!.imageUrl }))
+  async function zip() {
+    setBusy('zip'); setError(null)
+    try { await downloadAll(approvedItems) } catch (e) { setError((e as Error).message) } finally { setBusy(null) }
+  }
 
   return (
     <div className="grid gap-8 lg:grid-cols-[minmax(0,420px)_1fr]">
@@ -181,6 +186,14 @@ export function RenderStep({ session, setSession }: StepProps) {
           <div className="flex flex-col gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.02] p-6">
             <p className="text-[16px] font-semibold text-[#f6f2eb]">¡Tu landing está lista!</p>
             <p className="text-[13px] text-[#c9b4ae]">Aprobaste {approved.length} secciones. Descárgalas y súbelas en este orden.</p>
+            {/* El cierre del wizard anterior. Sin "Regenerar todo": acá cada sección se aprueba de a una. */}
+            <button type="button" className={btnPrimary} disabled={busy === 'zip' || !approvedItems.length} onClick={zip}>
+              {busy === 'zip' ? <><Spinner />Descargando…</> : <><Download className="h-4 w-4" /> Descargar secciones</>}
+            </button>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" className={`${btnGhost} flex-1`} onClick={reset}><Plus className="h-4 w-4" /> Nueva landing</button>
+              <BackToDashboard className="flex flex-1 items-center justify-center gap-2" />
+            </div>
           </div>
         )}
       </div>
@@ -190,7 +203,7 @@ export function RenderStep({ session, setSession }: StepProps) {
           <p className="lp-label">Aprobadas</p>
           {approvedItems.length > 0 && (
             <button type="button" className={`${btnGhost} h-9`} disabled={busy === 'zip'}
-                    onClick={async () => { setBusy('zip'); try { await downloadAll(approvedItems) } catch (e) { setError((e as Error).message) } finally { setBusy(null) } }}>
+                    onClick={zip}>
               {busy === 'zip' ? <Spinner /> : <Download className="h-4 w-4" />} Descargar todas
             </button>
           )}
