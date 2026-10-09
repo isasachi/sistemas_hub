@@ -16,7 +16,7 @@ import { editWithPrompt, generateImage, NANO_BANANA_PRO } from '@/lib/gemini'
 import { fetchAsBase64, uploadToStorage } from '@/lib/storage'
 import { SECTION_BY_ID, SECTION_IDS, type SectionId } from './catalog'
 import { sectionSupport } from './flow'
-import { CRO_CHECKLIST, wireframeFor } from './knowledge'
+import { CRO_CHECKLIST, wireframeFor, wireframesPdf } from './knowledge'
 import { structured } from './models'
 import { gate, record, sectionKind, type Ctx } from './quota'
 import {
@@ -260,7 +260,7 @@ const DIRECTOR_TASK = (id: SectionId, hasAnchor: boolean) => {
     // 2026-10-09: sin esto el director describía un layout (fondo, titular, frasco, bullets) y no una
     // idea, y el texto cargaba con todo el mensaje.
     'The image must TELL the section\'s angle, not only illustrate it: the customer should SEE their pain, how the product works or the result. Then use only the text the section needs to be understood: whatever the image can say, the image says.',
-    `Image 1 is the real product. Image 2 is this section's page of the Knowledge PDF.${hasAnchor ? ' Image 3 is a section of THIS landing the user already approved: it establishes the visual system.' : ''}`,
+    `Image 1 is the real product. The attached PDF is the Knowledge wireframes PDF, one page per section in skeleton order: this section is page ${spec.wf}.${hasAnchor ? ' Image 2 is a section of THIS landing the user already approved: it establishes the visual system.' : ''}`,
     `CRO criteria for this section: ${spec.checklist}.`,
     '- visualConcept: the concrete visual idea of this image, in English: WHAT the customer sees — beyond the product, the person and the text — that shows this section\'s angle from the research. Name the visual elements and how they are rendered, specific to this product and niche; a mood or a feeling is not a visual concept.',
     '- composition: how the image executes the visualConcept, in English prose: layout and focal point, product placement/scale/angle, people if any, background and environment, color, typography treatment and hierarchy, spacing. Any icon depicts the specific idea of the text beside it. Refer to each text by its role; never write the texts here and never use quotation marks.',
@@ -286,7 +286,7 @@ export async function designRequest(s: LandingSession, id: SectionId) {
       system: `${LANDING_V2_GPT_PROMPT}\n\nKNOWLEDGE — CRO CHECKLIST PDF (text):\n${CRO_CHECKLIST}`,
       content: [
         { type: 'file' as const, data: Buffer.from(product.data, 'base64'), mediaType: product.mimeType },
-        { type: 'file' as const, data: wireframeFor(id), mediaType: 'image/jpeg' },
+        { type: 'file' as const, data: wireframesPdf(), mediaType: 'application/pdf', filename: 'wireframes.pdf' },
         ...(anchor ? [{ type: 'file' as const, data: Buffer.from(anchor.data, 'base64'), mediaType: anchor.mimeType }] : []),
         { type: 'text' as const, text: DIRECTOR_TASK(id, !!anchor) },
         { type: 'text' as const, text: [`VISUAL SYSTEM OF THIS LANDING:\n${directorVisual(vs)}`, dataBlock(inputs, s), approvedTexts(s, id)].filter(Boolean).join('\n\n') },

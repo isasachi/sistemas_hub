@@ -57,6 +57,9 @@ const txt = execFileSync('pdftotext', ['-layout', path.join(SRC, 'cro-checklist.
 // Limpieza mínima: los separadores de ancho cero del PDF y las líneas en blanco repetidas.
 const clean = txt.replace(/​/g, '').replace(/[ \t]+$/gm, '').replace(/\n{3,}/g, '\n\n').trim()
 fs.writeFileSync(path.join(OUT, 'cro-checklist.md'), clean + '\n')
+// El director de arte lee el PDF de wireframes COMPLETO y ORIGINAL (decisión del dueño, 2026-10-09):
+// copia byte a byte, sin tapar los "Ej:". Los wf-XX.jpg tapados quedan solo para el camino viejo.
+fs.copyFileSync(path.join(SRC, 'wireframes.pdf'), path.join(OUT, 'wireframes.pdf'))
 console.log(`ok: ${pages.length} wireframes (${tapadas} ejemplos "Ej:" tapados) + cro-checklist.md → ${OUT}`)
 
 /**
