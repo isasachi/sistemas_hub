@@ -199,15 +199,7 @@ export function RenderStep({ session, setSession, reset }: StepProps) {
       </div>
 
       <div className="flex flex-col gap-3">
-        <div className="flex items-center justify-between gap-3">
-          <p className="lp-label">Aprobadas</p>
-          {approvedItems.length > 0 && (
-            <button type="button" className={`${btnGhost} h-9`} disabled={busy === 'zip'}
-                    onClick={zip}>
-              {busy === 'zip' ? <Spinner /> : <Download className="h-4 w-4" />} Descargar todas
-            </button>
-          )}
-        </div>
+        <p className="lp-label">Aprobadas</p>
         {approvedItems.length ? (
           <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 xl:grid-cols-5">
             {approvedItems.map((it) => <SectionImage key={it.id} id={it.id} url={it.url} />)}
