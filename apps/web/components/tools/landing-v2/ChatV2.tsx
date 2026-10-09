@@ -73,10 +73,11 @@ function Conversation({ v2 }: { v2: ReturnType<typeof useV2Session> }) {
   const busy = status === 'submitted' || status === 'streaming'
   const uploading = pending.some((p) => 'uploading' in p)
 
-  async function attach(files: FileList) {
+  async function attach(files: File[]) {
     setUploadError(null)
-    const s = await v2.ensure()
-    for (const f of Array.from(files)) {
+    let s
+    try { s = await v2.ensure() } catch (e) { setUploadError((e as Error).message); return }
+    for (const f of files) {
       const kind = f.type.startsWith('image/') ? 'image' : 'document'
       setPending((p) => [...p, { uploading: f.name }])
       try {
@@ -116,7 +117,11 @@ function Conversation({ v2 }: { v2: ReturnType<typeof useV2Session> }) {
                 placeholder="Cuéntame tu producto: nombre, investigación, precios, nicho… y adjunta la imagen."
                 className="max-h-48 min-h-[52px] w-full resize-none border-0 bg-transparent px-2 py-1.5 font-[Lato] text-[15px] text-[#f6f2eb] outline-none placeholder:text-[#a98c88]" />
       <div className="flex items-center gap-2 px-1">
-        <input ref={fileRef} type="file" multiple accept={ACCEPT} className="hidden" onChange={(e) => { if (e.target.files?.length) attach(e.target.files); e.target.value = '' }} />
+        <input ref={fileRef} type="file" multiple accept={ACCEPT} className="hidden" onChange={(e) => {
+          // Copia ANTES de limpiar: la FileList es viva y `value = ''` la vacía antes de que `attach` la lea.
+          const files = Array.from(e.target.files ?? []); e.target.value = ''
+          if (files.length) attach(files)
+        }} />
         <button type="button" onClick={() => fileRef.current?.click()} aria-label="Adjuntar imagen, PDF o Word"
                 className="flex h-9 w-9 items-center justify-center rounded-lg border-0 bg-transparent text-[#c9b4ae] hover:bg-white/[0.06] cursor-pointer"><Paperclip className="h-4 w-4" /></button>
         {/* Slot reservado para opciones de la barra que se definirán más adelante. */}
