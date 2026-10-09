@@ -128,6 +128,18 @@ export const RenderBriefOutSchema = z.object({
 })
 export type RenderBrief = z.infer<typeof RenderBriefOutSchema>
 
+/**
+ * El diseño de UNA sección, decidido por el director de arte (system prompt del dueño + Knowledge +
+ * producto). Sin casillas fijas: `texts` es la lista de TODO lo que se lee en la imagen, con su rol
+ * en la jerarquía, y la cantidad y el largo los elige el modelo. `composition` es INTERNA.
+ */
+export const SectionDesignOutSchema = z.object({
+  composition: z.string(),
+  usesPerson: z.boolean(),
+  texts: z.array(z.object({ role: z.string(), text: z.string() })),
+})
+export type SectionDesign = z.infer<typeof SectionDesignOutSchema>
+
 // ─── Sesión ──────────────────────────────────────────────────────────────────
 
 export const SectionVersionSchema = z.object({
@@ -153,6 +165,8 @@ export const LandingSessionSchema = z.object({
   testimonials: z.array(TestimonialSchema),
   selected: z.array(SectionIdSchema),
   copies: z.partialRecord(SectionIdSchema, SectionCopyOutSchema),
+  /** El diseño con que se pintó cada sección (director de arte). Opcional: las sesiones viejas no lo traen. */
+  designs: z.partialRecord(SectionIdSchema, SectionDesignOutSchema).optional(),
   sections: z.partialRecord(SectionIdSchema, SectionStateSchema),
   current: SectionIdSchema.nullable(),
 })

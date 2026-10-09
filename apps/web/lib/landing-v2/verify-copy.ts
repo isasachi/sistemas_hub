@@ -11,7 +11,7 @@
 //
 // Se mide contra el texto normalizado (minúsculas, sin tildes). Falla CERRADO: ante la duda, el
 // término se marca y el caller reintenta o lo quita — nunca se publica un claim sin respaldo.
-import type { LandingInputs, SectionCopy, Testimonial } from './schemas'
+import type { LandingInputs, SectionCopy, SectionDesign, Testimonial } from './schemas'
 
 export const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
 
@@ -73,6 +73,15 @@ export function verifyCopy(copy: SectionCopy, source: string): Violation[] {
   copy.items.forEach((it, i) => { check(`items.${i}.title`, it.title); check(`items.${i}.text`, it.text); check(`items.${i}.group`, it.group) })
   check('closingLine', copy.closingLine)
   return v
+}
+
+export function verifyTexts(texts: SectionDesign['texts'], source: string): Violation[] {
+  return texts.flatMap((t, i) => unsupported(t.text, source).map((token) => ({ field: `texts.${i}`, token })))
+}
+
+/** Último recurso de `verifyTexts`: fuera las líneas sin respaldo. */
+export function stripUnsupportedTexts(texts: SectionDesign['texts'], source: string): SectionDesign['texts'] {
+  return texts.filter((t) => t.text.trim() && unsupported(t.text, source).length === 0)
 }
 
 /** Instrucción para el reintento: nombra lo que no tiene respaldo, sin dar valores de reemplazo. */

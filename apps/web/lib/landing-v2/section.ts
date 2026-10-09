@@ -20,11 +20,11 @@ import { CRO_CHECKLIST, wireframeFor } from './knowledge'
 import { structured } from './models'
 import { gate, record, sectionKind, type Ctx } from './quota'
 import {
-  completeInputs, latestVersion, NICHE_LABELS, RenderBriefOutSchema, SectionCopyOutSchema,
-  UserError, type LandingInputs, type LandingSession, type Pack, type RenderBrief, type SectionCopy, type VisualSystem,
+  completeInputs, latestVersion, NICHE_LABELS, RenderBriefOutSchema, SectionCopyOutSchema, SectionDesignOutSchema,
+  UserError, type LandingInputs, type LandingSession, type Pack, type RenderBrief, type SectionCopy, type SectionDesign, type VisualSystem,
 } from './schemas'
-import { LANDING_V2_SYSTEM_PROMPT } from './system-prompt'
-import { correctionFor, sourceText, stripUnsupported, verifyCopy } from './verify-copy'
+import { LANDING_V2_GPT_PROMPT, LANDING_V2_SYSTEM_PROMPT } from './system-prompt'
+import { correctionFor, sourceText, stripUnsupported, stripUnsupportedTexts, verifyCopy, verifyTexts } from './verify-copy'
 
 export const OUT_W = 1080
 export const OUT_H = 1920
@@ -223,6 +223,124 @@ export function buildImagePrompt(o: {
     `TEXT — render EXACTLY these texts, verbatim and in Spanish, and NO other words, letters or numbers anywhere (except what is printed on the product's own label). Role names before the colon are NOT text to render:\n${renderTexts(o.id, o.copy, o.inputs).join('\n')}`,
     'NO BUTTONS: no CTA buttons, no button-like shapes, pills or tabs that read as clickable. Price containers, tags, seals and labels are allowed but never styled as buttons.',
   ].filter(Boolean).join('\n\n')
+}
+
+// ─── Director de arte (camino sin casillas) ─────────────────────────────────────
+//
+// Reemplaza copy por casillas + brief: con casillas fijas (`items[{title,text}]`) el modelo de imagen
+// recibía SIEMPRE una lista de títulos+párrafos y la única forma de dibujarla era una columna de
+// tarjetas, en todo producto y nicho (medido 2026-10-09: Hero de Fluya y de Canesten, mismo esqueleto).
+// Acá un solo pedido hace lo que el GPT del dueño: con su system prompt, el Knowledge, el producto y
+// lo aprobado, DISEÑA la sección y decide qué textos lleva. El código sigue verificando los textos
+// y pone precios y testimonios desde los datos del usuario.
+
+/** Lo que el director sabe del sistema visual. Sin `graphicResources`: metía tarjetas y sellos en todo. */
+function directorVisual(vs: VisualSystem): string {
+  return [
+    `Palette: ${vs.palette.map((c) => `${c.role} ${c.hex}`).join(', ')}.`,
+    `Typography: ${vs.typography}`,
+    `Photography & lighting: ${vs.photography}`,
+    `Art direction: ${vs.artDirection}`,
+    `Product: ${vs.productForm}`,
+    vs.usesPeople && vs.peopleDirection ? `People (when a section uses them): ${vs.peopleDirection}` : 'No people/models in this landing.',
+  ].join('\n')
+}
+
+function approvedTexts(s: LandingSession, except: SectionId): string {
+  const lines = SECTION_IDS.filter((id) => id !== except && s.sections[id]?.approved && s.designs?.[id])
+    .map((id) => `- ${SECTION_BY_ID[id].en}: ${s.designs![id]!.texts.map((t) => t.text).join(' / ')}`)
+  return lines.length ? `TEXTS ALREADY USED IN APPROVED SECTIONS (do not repeat them):\n${lines.join('\n')}` : ''
+}
+
+const DIRECTOR_TASK = (id: SectionId, hasAnchor: boolean) => {
+  const spec = SECTION_BY_ID[id]
+  return [
+    `TASK: design section ${spec.wf}/14 "${spec.en}" of this landing as its Art Director, following your rules, and hand the design to the image model that will paint it.`,
+    `Image 1 is the real product. Image 2 is this section's page of the Knowledge PDF.${hasAnchor ? ' Image 3 is a section of THIS landing the user already approved: it establishes the visual system.' : ''}`,
+    `CRO criteria for this section: ${spec.checklist}.`,
+    '- composition: the complete art direction of this one image, in English prose: concept, layout and focal point, product placement/scale/angle, people if any, background and environment, color, typography treatment and hierarchy, spacing. Refer to each text by its role; never write the texts here and never use quotation marks.',
+    '- texts: EVERY text that will be readable in the image, in Spanish, each with its role in the hierarchy. You decide how many and how long, as your rules demand for a premium mobile section; nothing else will be written in the image.',
+    '- usesPerson: whether a person/model appears.',
+    id === 'offer_pricing' || id === 'final_reoffer' ? 'The packs and prices are added to the image by the system from the user data, exactly: plan where they go in composition, but do NOT write prices in texts.' : '',
+    id === 'testimonials' ? 'The real testimonials are added by the system verbatim: plan where they go in composition, and do NOT write testimonials in texts.' : '',
+  ].filter(Boolean).join('\n')
+}
+
+/** El diseño de UNA sección. Los textos se verifican contra los datos del usuario y se reintenta. */
+export async function directSection(s: LandingSession, id: SectionId): Promise<SectionDesign> {
+  const { inputs, vs } = requireInputs(s)
+  const source = sourceText(inputs, s.testimonials)
+  const anchorUrl = styleAnchor(s, id)
+  const product = await fetchAsBase64(inputs.productImageUrl)
+  const anchor = anchorUrl ? await fetchAsBase64(anchorUrl) : null
+  const { output, model } = await structured({
+    name: 'landing_v2_section_design',
+    schema: SectionDesignOutSchema,
+    system: `${LANDING_V2_GPT_PROMPT}\n\nKNOWLEDGE — CRO CHECKLIST PDF (text):\n${CRO_CHECKLIST}`,
+    content: [
+      { type: 'file', data: Buffer.from(product.data, 'base64'), mediaType: product.mimeType },
+      { type: 'file', data: wireframeFor(id), mediaType: 'image/jpeg' },
+      ...(anchor ? [{ type: 'file' as const, data: Buffer.from(anchor.data, 'base64'), mediaType: anchor.mimeType }] : []),
+      { type: 'text', text: DIRECTOR_TASK(id, !!anchor) },
+      { type: 'text', text: [`VISUAL SYSTEM OF THIS LANDING:\n${directorVisual(vs)}`, dataBlock(inputs, s), approvedTexts(s, id)].filter(Boolean).join('\n\n') },
+    ],
+    validate: (d) => {
+      if (!d.texts.some((t) => t.text.trim())) return 'CORRECTION: texts is empty. Every section needs at least its headline in texts.'
+      const v = verifyTexts(d.texts, source)
+      return v.length ? correctionFor(v) : null
+    },
+  })
+  console.info(`[landing-v2] diseño ${s.id}/${id} por ${model}`)
+  return {
+    composition: sinConfianzaInventada(sinComillas(output.composition)),
+    usesPerson: output.usesPerson,
+    texts: stripUnsupportedTexts(output.texts, source),
+  }
+}
+
+/** Las líneas EXACTAS que se pueden dibujar: las del director + precios y testimonios del CÓDIGO. */
+export function designTexts(id: SectionId, d: SectionDesign, s: LandingSession, inputs: LandingInputs): string[] {
+  const lines = d.texts.map((t) => `${t.role.toUpperCase()}: "${t.text.trim()}"`)
+  if (id === 'offer_pricing' || id === 'final_reoffer') {
+    inputs.pricing.packs.forEach((p, i) => lines.push(`PACK ${i + 1}: ${packLines(p).map((l) => `"${l}"`).join(' · ')}`))
+  }
+  if (id === 'testimonials') {
+    s.testimonials.forEach((t, i) => lines.push(`TESTIMONIAL ${i + 1}: "${t.text}"${t.name || t.city ? ` — "${[t.name, t.city].filter(Boolean).join(', ')}"` : ''}`))
+  }
+  return lines
+}
+
+export function buildDirectedPrompt(o: { id: SectionId; design: SectionDesign; s: LandingSession; inputs: LandingInputs; vs: VisualSystem; style: number | null; proof: number[] }): string {
+  return [
+    'ABSOLUTE TEXT RULE: the ONLY words, numbers and labels allowed in the image are the ones in the TEXT list below (plus what is printed on the product label). Do NOT add a trust bar, badges, seals, certifications, guarantees, shipping/payment claims or icon captions that are not in that list.',
+    'Paint ONE finished, premium mobile landing-page section as a single portrait 9:16 image, exactly as the Art Director designed it below. Every text legible on a phone without zoom; nothing important near the edges; nothing cropped.',
+    `Image 1 is the REAL product (${o.vs.productForm}): reproduce it exactly — shape, proportions, colors and every detail of its label. Never redraw, restyle, duplicate or substitute it.`,
+    o.proof.length ? `Images ${o.proof.join(', ')} are the user's REAL before/after photos: place them as they are, without altering them.` : '',
+    o.style ? `Image ${o.style} is an already approved section of THIS landing: match its typography, palette, lighting and graphic language. Do NOT copy its layout or composition.` : '',
+    o.design.usesPerson ? '' : 'Do not show any person.',
+    `ART DIRECTION:\n${o.design.composition}`,
+    `TEXT — render EXACTLY these texts, verbatim and in Spanish, and NO other words, letters or numbers anywhere (except what is printed on the product's own label). Role names before the colon are NOT text to render:\n${designTexts(o.id, o.design, o.s, o.inputs).join('\n')}`,
+    'NO BUTTONS: no CTA buttons, no button-like shapes, pills or tabs that read as clickable. Price containers, tags, seals and labels are allowed but never styled as buttons.',
+  ].filter(Boolean).join('\n\n')
+}
+
+export async function renderDirected(s: LandingSession, id: SectionId, design: SectionDesign): Promise<string> {
+  const { inputs, vs } = requireInputs(s)
+  const parts: Part[] = []
+  const push = async (url: string) => {
+    const { data, mimeType } = await fetchAsBase64(url)
+    parts.push({ inlineData: { data, mimeType } })
+    return parts.length
+  }
+  await push(inputs.productImageUrl)
+  const proof: number[] = []
+  if (id === 'before_after') for (const u of inputs.proofImageUrls.slice(0, 2)) proof.push(await push(u))
+  const anchorUrl = styleAnchor(s, id)
+  const style = anchorUrl ? await push(anchorUrl) : null
+  parts.push({ text: buildDirectedPrompt({ id, design, s, inputs, vs, style, proof }) })
+  const b64 = await generateImage(parts, 3, { aspectRatio: '9:16', respaldo: NANO_BANANA_PRO })
+  if (!b64) throw new UserError('No se pudo generar la imagen de la sección. Inténtalo de nuevo.')
+  return b64
 }
 
 /** Qué modelo produjo la imagen, por su tamaño (la huella del repo), ANTES de reescalar. */
