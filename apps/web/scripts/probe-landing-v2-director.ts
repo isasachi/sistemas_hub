@@ -31,7 +31,7 @@ async function main() {
   const got = await getV2Session(SESSION, OWNER)
   if (!got) throw new Error(`sesión ${SESSION} no existe`)
   // Sin aprobadas: la sección se pinta como en una landing nueva, sin ancla de estilo en ningún brazo.
-  let s = { ...got.session, sections: {}, designs: {} }
+  let s: import('../lib/landing-v2/schemas').LandingSession = { ...got.session, sections: {}, designs: {} }
   // Una sesión guardada con el sistema visual viejo llega sin él: se re-analiza, como en la app.
   if (!s.visualSystem) s = await (await import('../lib/landing-v2/analyze')).analyzeProduct(s)
   console.log(`sesión ${s.id} · ${s.inputs.productName} · sección ${SECTION}`)
@@ -49,6 +49,8 @@ async function main() {
     const design = await sec.directSection(s, SECTION)
     console.log(`director ${draw}: ${design.texts.length} textos (${((Date.now() - t) / 1000).toFixed(0)}s)`)
     await save(`director-${draw}`, await sec.renderDirected(s, SECTION, design), { design })
+    // PROBE_ARMS=director: solo el brazo nuevo (el control ya medido no cambia entre rondas).
+    if (process.env.PROBE_ARMS === 'director') continue
 
     t = Date.now()
     const copy = await sec.generateSectionCopy(s, SECTION)

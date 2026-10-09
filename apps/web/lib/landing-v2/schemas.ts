@@ -134,6 +134,8 @@ export type RenderBrief = z.infer<typeof RenderBriefOutSchema>
  * en la jerarquía, y la cantidad y el largo los elige el modelo. `composition` es INTERNA.
  */
 export const SectionDesignOutSchema = z.object({
+  /** PRIMERO en el schema: el modelo se compromete con la idea antes de describir el layout. */
+  visualConcept: z.string(),
   composition: z.string(),
   usesPerson: z.boolean(),
   texts: z.array(z.object({ role: z.string(), text: z.string() })),

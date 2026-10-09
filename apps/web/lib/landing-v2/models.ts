@@ -56,8 +56,12 @@ export async function structured<T>(opts: {
   content: Exclude<ModelMessage['content'], string>
   validate?: (out: T) => string | null
   intentos?: number
+  /** Opciones por proveedor (p. ej. el thinking de Gemini). Cada proveedor ignora las claves ajenas. */
+  providerOptions?: Parameters<typeof generateText>[0]['providerOptions']
+  /** Más tiempo para un pedido que piensa más; por defecto `TIMEOUT_TEXTO_MS`. */
+  timeoutMs?: number
 }): Promise<{ output: T; model: string }> {
-  const { schema, system, validate, intentos = 2 } = opts
+  const { schema, system, validate, intentos = 2, providerOptions, timeoutMs = TIMEOUT_TEXTO_MS } = opts
   let correccion: string | null = null
   let last: { output: T; model: string } | null = null
   let lastError: unknown = null
@@ -72,7 +76,8 @@ export async function structured<T>(opts: {
         const { output } = await generateText({
           model, system, messages,
           output: Output.object({ schema, name: opts.name }),
-          abortSignal: AbortSignal.timeout(TIMEOUT_TEXTO_MS),
+          providerOptions,
+          abortSignal: AbortSignal.timeout(timeoutMs),
         })
         got = { output: output as T, model: model.modelId }
         break

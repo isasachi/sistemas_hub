@@ -256,45 +256,65 @@ const DIRECTOR_TASK = (id: SectionId, hasAnchor: boolean) => {
   const spec = SECTION_BY_ID[id]
   return [
     `TASK: design section ${spec.wf}/14 "${spec.en}" of this landing as its Art Director, following your rules, and hand the design to the image model that will paint it.`,
+    // De TITULAR, antes de la lista: entre bullets una orden es una sugerencia (ley del repo). Medido
+    // 2026-10-09: sin esto el director describía un layout (fondo, titular, frasco, bullets) y no una
+    // idea, y el texto cargaba con todo el mensaje.
+    'The image must TELL the section\'s angle, not only illustrate it: the customer should SEE their pain, how the product works or the result. Then use only the text the section needs to be understood: whatever the image can say, the image says.',
     `Image 1 is the real product. Image 2 is this section's page of the Knowledge PDF.${hasAnchor ? ' Image 3 is a section of THIS landing the user already approved: it establishes the visual system.' : ''}`,
     `CRO criteria for this section: ${spec.checklist}.`,
-    '- composition: the complete art direction of this one image, in English prose: concept, layout and focal point, product placement/scale/angle, people if any, background and environment, color, typography treatment and hierarchy, spacing. Refer to each text by its role; never write the texts here and never use quotation marks.',
-    '- texts: EVERY text that will be readable in the image, in Spanish, each with its role in the hierarchy. You decide how many and how long, as your rules demand for a premium mobile section; nothing else will be written in the image.',
-    '- usesPerson: whether a person/model appears.',
+    '- visualConcept: the concrete visual idea of this image, in English: WHAT the customer sees — beyond the product, the person and the text — that shows this section\'s angle from the research. Name the visual elements and how they are rendered, specific to this product and niche; a mood or a feeling is not a visual concept.',
+    '- composition: how the image executes the visualConcept, in English prose: layout and focal point, product placement/scale/angle, people if any, background and environment, color, typography treatment and hierarchy, spacing. Any icon depicts the specific idea of the text beside it. Refer to each text by its role; never write the texts here and never use quotation marks.',
+    '- texts: EVERY text that will be readable in the image, in Spanish, each with its role in the hierarchy. You decide how many and how long; nothing else will be written in the image.',
+    '- usesPerson: whether a person/model appears. When the section\'s message is the customer\'s own experience or result (as the Hero usually is) and this landing\'s art direction uses people, show the person living it.',
     id === 'offer_pricing' || id === 'final_reoffer' ? 'The packs and prices are added to the image by the system from the user data, exactly: plan where they go in composition, but do NOT write prices in texts.' : '',
     id === 'testimonials' ? 'The real testimonials are added by the system verbatim: plan where they go in composition, and do NOT write testimonials in texts.' : '',
   ].filter(Boolean).join('\n')
 }
 
-/** El diseño de UNA sección. Los textos se verifican contra los datos del usuario y se reintenta. */
-export async function directSection(s: LandingSession, id: SectionId): Promise<SectionDesign> {
+/** El pedido del director (sin llamar). Separado para que un probe mande exactamente el mismo. */
+export async function designRequest(s: LandingSession, id: SectionId) {
   const { inputs, vs } = requireInputs(s)
   const source = sourceText(inputs, s.testimonials)
   const anchorUrl = styleAnchor(s, id)
   const product = await fetchAsBase64(inputs.productImageUrl)
   const anchor = anchorUrl ? await fetchAsBase64(anchorUrl) : null
-  const { output, model } = await structured({
-    name: 'landing_v2_section_design',
-    schema: SectionDesignOutSchema,
-    system: `${LANDING_V2_GPT_PROMPT}\n\nKNOWLEDGE — CRO CHECKLIST PDF (text):\n${CRO_CHECKLIST}`,
-    content: [
-      { type: 'file', data: Buffer.from(product.data, 'base64'), mediaType: product.mimeType },
-      { type: 'file', data: wireframeFor(id), mediaType: 'image/jpeg' },
-      ...(anchor ? [{ type: 'file' as const, data: Buffer.from(anchor.data, 'base64'), mediaType: anchor.mimeType }] : []),
-      { type: 'text', text: DIRECTOR_TASK(id, !!anchor) },
-      { type: 'text', text: [`VISUAL SYSTEM OF THIS LANDING:\n${directorVisual(vs)}`, dataBlock(inputs, s), approvedTexts(s, id)].filter(Boolean).join('\n\n') },
-    ],
-    validate: (d) => {
-      if (!d.texts.some((t) => t.text.trim())) return 'CORRECTION: texts is empty. Every section needs at least its headline in texts.'
-      const v = verifyTexts(d.texts, source)
-      return v.length ? correctionFor(v) : null
-    },
-  })
-  console.info(`[landing-v2] diseño ${s.id}/${id} por ${model}`)
   return {
-    composition: sinConfianzaInventada(sinComillas(output.composition)),
-    usesPerson: output.usesPerson,
-    texts: stripUnsupportedTexts(output.texts, source),
+    source,
+    request: {
+      name: 'landing_v2_section_design',
+      schema: SectionDesignOutSchema,
+      system: `${LANDING_V2_GPT_PROMPT}\n\nKNOWLEDGE — CRO CHECKLIST PDF (text):\n${CRO_CHECKLIST}`,
+      content: [
+        { type: 'file' as const, data: Buffer.from(product.data, 'base64'), mediaType: product.mimeType },
+        { type: 'file' as const, data: wireframeFor(id), mediaType: 'image/jpeg' },
+        ...(anchor ? [{ type: 'file' as const, data: Buffer.from(anchor.data, 'base64'), mediaType: anchor.mimeType }] : []),
+        { type: 'text' as const, text: DIRECTOR_TASK(id, !!anchor) },
+        { type: 'text' as const, text: [`VISUAL SYSTEM OF THIS LANDING:\n${directorVisual(vs)}`, dataBlock(inputs, s), approvedTexts(s, id)].filter(Boolean).join('\n\n') },
+      ],
+      validate: (d: SectionDesign) => {
+        if (!d.texts.some((t) => t.text.trim())) return 'CORRECTION: texts is empty. Every section needs at least its headline in texts.'
+        const v = verifyTexts(d.texts, source)
+        return v.length ? correctionFor(v) : null
+      },
+    },
+  }
+}
+
+/** El diseño de UNA sección. Los textos se verifican contra los datos del usuario y se reintenta. */
+export async function directSection(s: LandingSession, id: SectionId): Promise<SectionDesign> {
+  const { source, request } = await designRequest(s, id)
+  const { output, model } = await structured(request)
+  console.info(`[landing-v2] diseño ${s.id}/${id} por ${model}`)
+  return cleanDesign(output, source)
+}
+
+/** Lo que el código le quita al diseño antes de pintarlo: comillas, planes de confianza sin texto, textos sin respaldo. */
+export function cleanDesign(d: SectionDesign, source: string): SectionDesign {
+  return {
+    visualConcept: sinComillas(d.visualConcept),
+    composition: sinConfianzaInventada(sinComillas(d.composition)),
+    usesPerson: d.usesPerson,
+    texts: stripUnsupportedTexts(d.texts, source),
   }
 }
 
@@ -318,6 +338,7 @@ export function buildDirectedPrompt(o: { id: SectionId; design: SectionDesign; s
     o.proof.length ? `Images ${o.proof.join(', ')} are the user's REAL before/after photos: place them as they are, without altering them.` : '',
     o.style ? `Image ${o.style} is an already approved section of THIS landing: match its typography, palette, lighting and graphic language. Do NOT copy its layout or composition.` : '',
     o.design.usesPerson ? '' : 'Do not show any person.',
+    `VISUAL CONCEPT (the idea this image must make visible):\n${o.design.visualConcept}`,
     `ART DIRECTION:\n${o.design.composition}`,
     `TEXT — render EXACTLY these texts, verbatim and in Spanish, and NO other words, letters or numbers anywhere (except what is printed on the product's own label). Role names before the colon are NOT text to render:\n${designTexts(o.id, o.design, o.s, o.inputs).join('\n')}`,
     'NO BUTTONS: no CTA buttons, no button-like shapes, pills or tabs that read as clickable. Price containers, tags, seals and labels are allowed but never styled as buttons.',
