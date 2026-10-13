@@ -22,12 +22,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // cobran dentro del núcleo, igual que en el wizard.
   try { await gate(id, CHAT_KIND, row.ctx) } catch (e) { return errorResponse(e) }
 
-  // El texto de ESTE mensaje alimenta los candados deterministas del agente (qué adjuntó, qué eligió).
-  const userText = message.parts.flatMap((p) => (p.type === 'text' ? [p.text] : [])).join('\n')
-  const agent = createAnunciosAgent(row.session, row.ctx, userText)
   const previos = (row.session.messages ?? []) as UIMessage[]
   // Un "Reintentar" reenvía el último mensaje del usuario: no se duplica en el historial.
   const history = previos.at(-1)?.id === message.id ? previos.slice(0, -1) : previos
+  // El texto de ESTE mensaje y los de los anteriores alimentan los candados deterministas del
+  // agente (qué adjuntó, qué eligió, si el cambio pedido es de ahora).
+  const textOf = (m: UIMessage) => m.parts.flatMap((p) => (p.type === 'text' ? [p.text] : [])).join('\n')
+  const agent = createAnunciosAgent(row.session, row.ctx, {
+    userText: textOf(message),
+    previos: history.filter((m) => m.role === 'user').map(textOf),
+  })
   const messages = await validateUIMessages<AnunciosUIMessage>({ messages: [...history, message], tools: agent.tools })
   await updateSession(id, { messages }) // el mensaje del usuario no se pierde aunque el stream se corte
 

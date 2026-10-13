@@ -25,6 +25,15 @@ describe('pickedVersion — el usuario tiene que haber elegido', () => {
     ['prefiero la segunda', 'B'],
     ['La primera está mejor', 'A'],
     ['Me quedo con la versión B\n[Adjunto imagen: a.jpg — https://x/a.jpg]', 'B'],
+    // Las formas naturales de contestar: rechazarlas deja al usuario en un loop de "¿A o B?".
+    ['Me quedo con B', 'B'],
+    ['Elijo B', 'B'],
+    ['Prefiero B', 'B'],
+    ['B porfa', 'B'],
+    ['B!!', 'B'],
+    ['elijo b', 'B'],
+    ['me quedo con la a', 'A'],
+    ['A mí me gusta la B', 'B'],                 // la "A" inicial es la preposición
   ])('%s → %s', (texto, version) => expect(pickedVersion(texto)).toBe(version))
 
   it.each([
@@ -33,6 +42,8 @@ describe('pickedVersion — el usuario tiene que haber elegido', () => {
     'no sé si la A o la B',                      // nombra las dos
     'hazlas más cortas',
     'la abuela dice que sí',                     // "la a…" dentro de una palabra
+    'A ver, ¿cuál es mejor?',                    // preposición a principio de frase
+    'quiero algo más corto',
     '',
   ])('%s → null', (texto) => expect(pickedVersion(texto)).toBeNull())
 })
@@ -43,8 +54,14 @@ describe('userAskedFor — el cambio tiene que estar en el mensaje', () => {
     expect(userAskedFor('titular más grande', 'quiero el titular mas grande y el logo arriba')).toBe(true)
   })
 
-  it('rechaza un cambio que el mensaje no pide (el caso medido: repetir el ajuste anterior)', () => {
-    expect(userAskedFor('Ponle el fondo un poco más claro', 'Gracias, me encanta cómo quedó')).toBe(false)
+  // El candado rechaza el pedido VIEJO, no la paráfrasis: negarse a un cambio que el usuario sí
+  // pidió es el fallo de "dije que lo hacía y no lo hice" por otra puerta.
+  it('acepta una paráfrasis que no calza con el mensaje, si tampoco calza con uno anterior', () => {
+    expect(userAskedFor('Aumentar el tamaño del texto', 'el texto se ve muy chico', ['Ponle el fondo un poco más claro'])).toBe(true)
+  })
+
+  it('rechaza el pedido que calza con un mensaje ANTERIOR y no con el actual', () => {
+    expect(userAskedFor('Haz el fondo más claro', 'Gracias, me encanta cómo quedó', ['Ponle el fondo un poco más claro'])).toBe(false)
   })
 
   it('un regenerar sin texto vale solo si el mensaje pide otra versión', () => {

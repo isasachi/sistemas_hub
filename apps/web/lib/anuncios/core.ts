@@ -121,6 +121,38 @@ export interface ProductInput {
   precision?: string
 }
 
+/** El texto del scan del producto. Exportado para que el probe mida EXACTAMENTE lo que manda la ruta. */
+export function productScanPrompt(refAnalysis: ReferenceAnalysis, i: Omit<ProductInput, 'product' | 'logo'> & { logo: unknown }): string {
+  return [
+    `Reference ad style: ${refAnalysis.style}`,
+    `Reference composition: ${refAnalysis.composition.join(', ')}`,
+    `Product name: ${i.productName}`,
+    `What it is: ${i.whatItIs || 'not provided'}`,
+    `What it does: ${i.whatItDoes}`,
+    `Target audience: ${i.targetAudience}`,
+    // ⚠️ El logo entra como imagen 2 y el scan lo confundía con el producto: medido en la
+    // sesión 4c8f6c8b, `brandingDescription` salió "LUMINA - ciencia que ilumina tu piel",
+    // que es el lockup del LOGO, no la etiqueta del frasco. Ese string viaja a STEP5 como
+    // `Branding:` y ahí se convierte en algo a renderizar → el logo entero flotando al medio.
+    i.logo
+      ? 'Image 1 is the PRODUCT. Image 2 is the brand LOGO — a separate asset, not part of the product. Describe ONLY image 1: never fold the logo lockup, its tagline or its layout into productDescription or brandingDescription.'
+      : 'No logo provided.',
+    'brandingDescription = only the text and graphics actually printed on the product in image 1 (label, packaging). If the product carries no readable text, return null.',
+    // ÚNICA excepción a la regla de arriba: los COLORES sí se leen del logo. La regla existe
+    // para que el lockup y su tagline no se conviertan en texto a renderizar; una paleta no
+    // se renderiza como texto, y el logo es donde la marca elige sus colores.
+    'brandColors = the brand palette, as hex codes ordered by prominence: the dominant colors'
+      + (i.logo ? ' of the packaging in image 1 AND of the logo in image 2' : ' of the packaging in image 1')
+      + '. Read the colors off the artwork, never off the photo background, the surface it rests on or the lighting.'
+      + ' Return at most 4. If the product has no deliberate palette (plain white, unbranded, unreadable), return null — do not invent one.',
+    // Antes este campo era opcional en el schema de Gemini; ahora viaja en el `required` (un
+    // solo schema para los dos modelos), así que la salida legal se dice acá, junto al campo.
+    'styleCompatibilityNote = only if the product clashes with the reference style in a way the user should know. Otherwise return null.',
+    i.precision && `Ajuste pedido: ${i.precision}`,
+    'Analyze the product image. Return ProductScan JSON.',
+  ].filter((l) => l != null && l !== '').join('\n')
+}
+
 export async function analyzeProduct(s: SessionResponse, i: ProductInput, ctx: Ctx): Promise<{ scan: ProductScan; productUrl: string; logoUrl: string | null; research: MarketResearch | null }> {
   if (!s.reference_analysis) throw new AnunciosError('Completa el paso anterior primero', 409)
   if (!i.productName || !i.whatItDoes || !i.targetAudience) throw new AnunciosError('Faltan datos del producto')
@@ -133,34 +165,7 @@ export async function analyzeProduct(s: SessionResponse, i: ProductInput, ctx: C
     i.logo ? uploadToStorage(s.id, i.logo.bytes, i.logo.mimeType, 'logo') : null,
     structured({
       name: 'product_scan', schema: ProductScanOut, system: SYSTEM_PROMPT,
-      content: [file(i.product), ...(i.logo ? [file(i.logo)] : []), text([
-        `Reference ad style: ${refAnalysis.style}`,
-        `Reference composition: ${refAnalysis.composition.join(', ')}`,
-        `Product name: ${i.productName}`,
-        `What it is: ${i.whatItIs || 'not provided'}`,
-        `What it does: ${i.whatItDoes}`,
-        `Target audience: ${i.targetAudience}`,
-        // ⚠️ El logo entra como imagen 2 y el scan lo confundía con el producto: medido en la
-        // sesión 4c8f6c8b, `brandingDescription` salió "LUMINA - ciencia que ilumina tu piel",
-        // que es el lockup del LOGO, no la etiqueta del frasco. Ese string viaja a STEP5 como
-        // `Branding:` y ahí se convierte en algo a renderizar → el logo entero flotando al medio.
-        i.logo
-          ? 'Image 1 is the PRODUCT. Image 2 is the brand LOGO — a separate asset, not part of the product. Describe ONLY image 1: never fold the logo lockup, its tagline or its layout into productDescription or brandingDescription.'
-          : 'No logo provided.',
-        'brandingDescription = only the text and graphics actually printed on the product in image 1 (label, packaging). If the product carries no readable text, return null.',
-        // ÚNICA excepción a la regla de arriba: los COLORES sí se leen del logo. La regla existe
-        // para que el lockup y su tagline no se conviertan en texto a renderizar; una paleta no
-        // se renderiza como texto, y el logo es donde la marca elige sus colores.
-        'brandColors = the brand palette, as hex codes ordered by prominence: the dominant colors'
-          + (i.logo ? ' of the packaging in image 1 AND of the logo in image 2' : ' of the packaging in image 1')
-          + '. Read the colors off the artwork, never off the photo background, the surface it rests on or the lighting.'
-          + ' Return at most 4. If the product has no deliberate palette (plain white, unbranded, unreadable), return null — do not invent one.',
-        // Antes este campo era opcional en el schema de Gemini; ahora viaja en el `required` (un
-        // solo schema para los dos modelos), así que la salida legal se dice acá, junto al campo.
-        'styleCompatibilityNote = only if the product clashes with the reference style in a way the user should know. Otherwise return null.',
-        i.precision && `Ajuste pedido: ${i.precision}`,
-        'Analyze the product image. Return ProductScan JSON.',
-      ])],
+      content: [file(i.product), ...(i.logo ? [file(i.logo)] : []), { type: 'text', text: productScanPrompt(refAnalysis, i) }],
     }),
     // Corre junto al scan y nunca tira: ver `research.ts`.
     researchMarket(i),

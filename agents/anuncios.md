@@ -20,7 +20,7 @@ Replica un anuncio estático de referencia con el producto, el logo y el copy de
 
 ⚠️ **El `.refine(transcribeLaReferencia)` de `CopyVersionsSchema` ya no es lo que reintenta.** Dentro de `Output.object` un refine que falla es un error, no un reintento. La verificación pasó a `copyCorrection` (`validate` de `structured`, 3 intentos), que además le devuelve al modelo QUÉ slot calcó. El `.refine` sigue en `types.ts` y corta al final: si tras los reintentos B sigue calcando a la otra marca, la ruta falla **sin guardar y sin cobrar**.
 
-⚠️ **`styleCompatibilityNote` y `brandingDescription` antes eran opcionales para Gemini y ahora van en el `required`** (nullable). Es un cambio de contrato real, y por eso la salida legal (`null`) se dice en el prompt junto a cada campo. No medido con draws repetidos si Gemini rellena de más `styleCompatibilityNote`.
+⚠️ **`styleCompatibilityNote` y `brandingDescription` antes eran opcionales para Gemini y ahora van en el `required`** (nullable). Es un cambio de contrato real, y por eso la salida legal (`null`) se dice en el prompt junto a cada campo. 🔴 **No medido contra Gemini**: el brazo `scan` de `scripts/probe-anuncios-ai-sdk.ts` compara el camino nuevo contra el viejo (`callStructured` + schema plano), pero las 6 corridas cayeron al respaldo por la clave de Google sin crédito. Sobre `gpt-5.4-nano`: el camino viejo rellenó `styleCompatibilityNote` con relleno elogioso 3 de 3, el nuevo devolvió `null` 2 de 3, y `brandingDescription` transcribió la etiqueta real en los seis. Hay que re-correrlo con saldo.
 
 ✅ **Medido el 2026-10-13 con `scripts/probe-anuncios-ai-sdk.ts`** (solo texto y visión, cero imágenes): los cuatro schemas pasan por **OpenAI strict** con el par forzado al revés (`reference_analysis` 8,3 s, `product_scan` 2,7 s, `copy_versions` 3,0 s, `market_research` 2,0 s). Es el fallo que los tests no ven: solo aparece el día que Gemini se cae.
 
@@ -40,21 +40,31 @@ El paso de pegar comentarios se eliminó (decisión del dueño, 2026-10-13). Lo 
 
 ### El chat
 
-`lib/anuncios/agent.ts`: un `ToolLoopAgent` con siete tools (`get_state`, `set_reference`, `set_product`, `write_copy`, `choose_copy`, `generate_ad`, `adjust_ad`) que envuelven el núcleo. **Wizard y chat comparten la fila** (a diferencia de landing v2, que tiene una sesión por vista): el toggle de `AdTool` remonta la vista y relee la sesión. El historial vive en `sessions.messages`; el cliente manda solo el mensaje nuevo. El turno de chat registra `anuncios-chat` (no gasta crédito, cuenta al backstop diario).
+`lib/anuncios/agent.ts`: un `ToolLoopAgent` con siete tools (`get_state`, `set_reference`, `set_product`, `write_copy`, `choose_copy`, `generate_ad`, `adjust_ad`) que envuelven el núcleo, con `thinkingLevel: high` para Gemini. **Wizard y chat comparten la fila** (a diferencia de landing v2, que tiene una sesión por vista): el toggle de `AdTool` remonta la vista y relee la sesión. El historial vive en `sessions.messages`; el cliente manda solo el mensaje nuevo. El turno de chat registra `anuncios-chat` (no gasta crédito, cuenta al backstop diario).
 
-⚠️ **EL MODELO NO DECIDE CUÁNDO SE GASTA UN CRÉDITO: LO DECIDE EL CÓDIGO.** Todo lo de abajo salió de `scripts/probe-anuncios-agent.ts` (modelo real, efectos stubeados, 7 turnos con dos trampas), y **ninguno se arregló con prompt**:
+⚠️ **EL MODELO NO DECIDE CUÁNDO SE GASTA UN CRÉDITO: LO DECIDE EL CÓDIGO.** Todo lo de abajo salió de `scripts/probe-anuncios-agent.ts` (modelo real, efectos stubeados, 9 turnos con dos trampas y frases naturales), y **nada se arregló con prompt**. El diseño que quedó:
 
-| fallo medido | frecuencia | candado |
-|---|---|---|
-| termina el turno diciendo *"listo, ya apliqué el cambio"* **sin llamar a nada** | ~1 de 4 turnos de ajuste; subir la regla a titular del prompt no lo movió (2 de 4) | el paso 0 de cada turno va con `toolChoice: 'required'` (`get_state` es la salida inocua) **+ `thinkingLevel: 'high'`** — con `low`, que es el default del provider, seguía en 1 de 5 |
-| ante *"¿cuál me recomiendas?"* **elige por el usuario y genera** | 1 de 5 (apareció al subir el thinking) | `pickedVersion`: `choose_copy` exige que el mensaje del turno nombre la versión |
-| ante *"gracias, me encanta"* **repite el ajuste del turno anterior** | 2 de 5 | `userAskedFor`: la mitad de las palabras del cambio tienen que estar en el mensaje del turno |
-| re-analiza la referencia al recibir la foto del producto | 2 de 5 | `set_reference` solo acepta una imagen adjunta en ESTE mensaje |
-| — | — | tope duro: **un crédito de imagen por turno** |
+1. **El paso 0 de cada turno es SIEMPRE `get_state`**, y ahí el modelo declara como dato qué es el mensaje del usuario (`userIntent`, un enum). Es un paso de texto de 1-2 s.
+2. **Las tools que gastan o comprometen solo existen si la intención las habilita** (`GATED_BY_INTENT`): con un "gracias" o una pregunta, `adjust_ad`, `generate_ad` y `choose_copy` no están en la lista de ese turno.
+3. **Una intención de acción inequívoca deja OBLIGADA su tool en el paso siguiente** (`FORCED_BY_INTENT`: cambiar el anuncio → `adjust_ad`, elegir → `choose_copy`, otro copy → `write_copy`). Se exige una sola vez, para que un candado que la rechace no deje un loop. Dar la referencia o el producto NO obliga nada: pueden venir incompletos y forzar `set_product` ahí es pedirle al modelo que invente.
+4. **Candados por tool**, por si la intención se declaró mal: `pickedVersion` (el mensaje del turno tiene que nombrar la versión), `userAskedFor` (rechaza el cambio que calza con un mensaje ANTERIOR y no con el actual), `set_reference` solo con una imagen adjunta en ese mensaje, `generate_ad` no regenera un anuncio que ya existe, y **un crédito de imagen por turno** como tope duro.
 
-Con los cinco: **35 de 35 turnos en 5 draws**, y los créditos gastados coinciden con los esperados turno por turno. ⚠️ **No aflojes `pickedVersion` ni `userAskedFor` para tolerar más frases**: fallan del lado seguro (se niegan y el modelo vuelve a preguntar). Se amplían agregando casos al test, no relajando el patrón.
+Cómo se llegó, porque cada intento anterior falló de una forma distinta:
 
-⚠️ **El probe crea un agente POR TURNO, como la ruta.** Su primera versión reusaba uno solo y por eso no vio el fallo del "gracias": el estado de `SESSION STATE` en las instrucciones quedaba viejo. Y los checks son sobre créditos GASTADOS, no sobre tools pedidas: una tool que el servidor rechazó no gastó nada.
+| intento | qué pasó |
+|---|---|
+| solo prompt | terminaba el turno diciendo *"listo, ya apliqué el cambio"* **sin llamar a nada** (~1 de 4 turnos de ajuste); subir la regla a titular no lo movió (2 de 4) |
+| paso 0 obligado a "alguna tool" | `get_state` servía de escape: lo llamaba y terminaba igual sin hacer el cambio (1 de 5, 1 de 6). Y ante *"gracias, me encanta"* llamaba `adjust_ad` con el feedback *"el usuario agradece; no hacer cambios"* (2 de 6): un crédito para no cambiar nada |
+| + `thinkingLevel: 'high'` | ante *"¿cuál me recomiendas?"* eligió por el usuario y generó (1 de 5) |
+| `userAskedFor` exigiendo las palabras del cambio en el mensaje | rechazaba pedidos legítimos que el modelo parafrasea (*"el texto se ve muy chico"* → *"aumentar el tamaño del texto"*): el fallo de "dije que lo hacía y no lo hice" por otra puerta |
+| `pickedVersion` solo con "versión/la X" | rechazaba *"Me quedo con B"*, *"Elijo B"*, *"B porfa"* |
+| **ruteo por intención + candados** | **144 de 144 turnos** (16 draws × 9), créditos gastados = esperados turno por turno |
+
+🔴 **ESOS 144 TURNOS NO ESTÁN MEDIDOS CONTRA GEMINI, y las frecuencias de la tabla no se pueden atribuir a un modelo.** A mitad de la sesión la clave de Google se quedó sin crédito (`402 Your prepayment credits are depleted`) y el agente cayó a `gpt-5.4-nano` **en silencio**: el aviso es un `console.warn` y el probe lo filtraba. De los 144, **36 están confirmados por el respaldo** y el resto no se sabe. Es la ley de "un respaldo silencioso convierte un problema de infraestructura en una cacería de prompts", cumplida acá. El probe ahora imprime el modelo de cada turno y un total al final (`turnos por modelo`). **Con saldo en Google hay que re-correrlo y mirar esa línea antes de creerle**: el diseño es mayormente determinista y debería sostenerse, pero no está visto.
+
+⚠️ **No aflojes `pickedVersion` ni `userAskedFor` para tolerar más frases**: fallan del lado seguro (se niegan y el modelo vuelve a preguntar). Se amplían agregando casos al test (`agent.test.ts`), no relajando el patrón. Lo que `userAskedFor` NO caza es un cambio inventado desde cero; no apareció en el probe y lo acotan el tope por turno y las 3 regeneraciones por sesión de `gen-quota`.
+
+⚠️ **El probe crea un agente POR TURNO, como la ruta, con el texto del mensaje y los anteriores.** Su primera versión reusaba uno solo y por eso no vio el fallo del "gracias". Sus stubs se niegan igual que el núcleo (sin copy elegido no hay anuncio): uno que dejaba pasar eso midió un estado que en producción no existe. Y los checks son sobre créditos GASTADOS, no sobre tools pedidas.
 
 ⚠️ **El copy del chat lo dibuja la interfaz desde el resultado de `write_copy`**, no el modelo: lo que el usuario elige es exactamente lo que se guardó.
 

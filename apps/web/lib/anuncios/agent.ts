@@ -59,6 +59,32 @@ const TOOLS_BY_NEXT: Record<ReturnType<typeof stateSummary>['next'], readonly st
   done: ['get_state', 'set_reference', 'set_product', 'write_copy', 'choose_copy', 'generate_ad', 'adjust_ad'],
 }
 
+// Lo que puede ser el último mensaje del usuario. Solo las intenciones de acción INEQUÍVOCA obligan
+// una tool: dar la referencia o los datos del producto no, porque pueden venir incompletos y forzar
+// `set_product` ahí es pedirle al modelo que invente lo que falta.
+const INTENTS = ['greeting_or_question', 'undecided', 'gave_reference', 'gave_product_info', 'wants_copy_rewritten', 'picked_copy_version', 'wants_ad_changed', 'thanks_or_approval'] as const
+type ForcedTool = 'write_copy' | 'choose_copy' | 'adjust_ad'
+type Intent = (typeof INTENTS)[number]
+const FORCED_BY_INTENT: Partial<Record<Intent, ForcedTool>> = {
+  wants_copy_rewritten: 'write_copy',
+  picked_copy_version: 'choose_copy',
+  wants_ad_changed: 'adjust_ad',
+}
+/**
+ * Las tools que gastan un crédito o comprometen una elección SOLO existen en el turno si la
+ * intención declarada las habilita. Con "gracias" o una pregunta, `adjust_ad` ni siquiera está en
+ * la lista: no hay nada que el modelo pueda llamar para gastar.
+ *
+ * ⚠️ Medido: con el primer paso obligado a "alguna tool", ante "Gracias, me encanta cómo quedó" el
+ * modelo llamó `adjust_ad` con el feedback *"El usuario agradece; no hacer cambios"* (2 de 6 draws)
+ * — un crédito gastado para no cambiar nada.
+ */
+const GATED_BY_INTENT: Record<string, readonly Intent[]> = {
+  choose_copy: ['picked_copy_version'],
+  generate_ad: ['picked_copy_version', 'wants_ad_changed'],
+  adjust_ad: ['wants_ad_changed'],
+}
+
 const INSTRUCTIONS = `You are the assistant of an ad generator. You help the user replicate a static reference ad with their own product, step by step, by calling tools. The tools do the work; you only talk.
 
 YOU CANNOT DO ANYTHING YOURSELF. Reading an image, saving the product, writing copy, creating the ad and changing the ad happen ONLY through a tool call made in THIS turn. If you did not call the tool in this turn, it did not happen: never tell the user something is done, changed or ready unless the tool you just called returned ok. When the user asks for a change to the ad, the answer is always a call to adjust_ad — never a sentence saying you changed it.
@@ -73,7 +99,7 @@ THE FLOW, in order — never skip a step, never ask for something a later step n
 5. Changes to the finished ad → adjust_ad with the user's own words.
 
 RUNTIME RULES:
-- Every turn starts with a tool call. If the user is only chatting, asking a question or has not decided yet, that call is get_state — never one that changes or spends something.
+- Every turn starts with get_state, where you say what the user's last message is. Be literal: a question, a compliment or a thank-you is never a request for a change. If get_state answers with mustCallNow, call that tool: it is what the user asked for.
 - Reply ONLY in Spanish (Peruvian, tuteo), short and warm. Never show tool names, URLs, JSON or internal reasoning.
 - Attachments arrive as lines like "[Adjunto imagen: name — URL]". Pass that URL exactly as it is. If the user attaches several images at once, the reference ad is the one that already looks like a finished ad with text on it; a plain product photo is the product; a logo is a logo. If you cannot tell which is which, ask.
 - Never invent product data. Only what the user wrote goes into set_product.
@@ -99,9 +125,14 @@ export type AgentDeps = typeof DEPS
 export function pickedVersion(userText: string): 'A' | 'B' | null {
   const t = userText.split('\n').filter((l) => !l.startsWith('[Adjunto ')).join(' ').trim()
   const vistas = new Set<'A' | 'B'>()
-  for (const m of t.matchAll(/(?:versi[oó]n|opci[oó]n|\bla|\bel)\s+["'«]?([ab])(?![\p{L}\p{N}])/giu)) vistas.add(m[1].toUpperCase() as 'A' | 'B')
-  const solo = t.match(/^["'«]?([ab])["'»]?[.!]?$/i)
-  if (solo) vistas.add(solo[1].toUpperCase() as 'A' | 'B')
+  const ver = (m: RegExpMatchArray) => vistas.add(m[1].toUpperCase() as 'A' | 'B')
+  // "la B", "versión b", "elijo b", "me quedo con b", "prefiero la A".
+  for (const m of t.matchAll(/(?:versi[oó]n|opci[oó]n|\bla|\bel|\bcon|\belijo|\bprefiero|\bquiero|\bescojo|\bdame|\busa)\s+(?:la\s+)?["'«]?([ab])(?![\p{L}\p{N}])/giu)) ver(m)
+  // Una A o B MAYÚSCULA suelta: "Elijo B", "B porfa", "B!!". La "A" seguida de una palabra de
+  // función es la preposición a principio de frase ("A mí me gusta…", "A ver…"), no una versión.
+  for (const m of t.matchAll(/(?<![\p{L}\p{N}])([AB])(?![\p{L}\p{N}])(?!\s+(?:m[ií]|ver|la|el|los|las|lo|que|veces|es[oae]|todo|nadie)(?![\p{L}\p{N}]))/gu)) ver(m)
+  const solo = t.match(/^["'«¡]?([ab])["'»]?[\s.!]*$/i)
+  if (solo) ver(solo)
   if (/\bprimera\b/i.test(t)) vistas.add('A')
   if (/\bsegunda\b/i.test(t)) vistas.add('B')
   return vistas.size === 1 ? [...vistas][0] : null
@@ -114,28 +145,41 @@ const palabras = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ
  *
  * ⚠️ EL OTRO CANDADO DEL CRÉDITO. Medido: ante "Gracias, me encanta cómo quedó" el modelo repitió
  * el ajuste del turno anterior ("ponle el fondo más claro") en 2 de 5 draws — un crédito gastado en
- * algo que nadie pidió. La tool exige el cambio "en las palabras del usuario", así que se comprueba:
- * al menos la mitad de las palabras del pedido tienen que estar en el mensaje de ESTE turno.
+ * algo que nadie pidió.
+ *
+ * ⚠️ LO QUE SE RECHAZA ES EL PEDIDO VIEJO, no la paráfrasis. La primera versión exigía que la mitad
+ * de las palabras del cambio estuvieran en el mensaje del turno, y eso rechazaba pedidos legítimos:
+ * el usuario escribe "el texto se ve muy chico" y el modelo lo pasa como "aumentar el tamaño del
+ * texto" (1 palabra de 3). Negarse ahí es el fallo de "dije que lo hacía y no lo hice" por otra
+ * puerta. Ahora un cambio que no calza con el mensaje actual se rechaza SOLO si calza con uno
+ * ANTERIOR (o sea, es un pedido repetido); uno que no calza con ninguno es una paráfrasis y pasa.
  * Un "regenerar" sin texto vale solo si el mensaje pide otra versión.
  *
- * ponytail: solapamiento de palabras de 4+ letras. Falla del lado seguro (se niega y el modelo
- * vuelve a preguntar); si rechaza pedidos legítimos parafraseados, bajar el umbral antes que quitarlo.
+ * ponytail: solapamiento de palabras de 4+ letras. Un cambio INVENTADO desde cero no lo caza; ese
+ * caso no apareció en el probe y lo acotan el tope de un crédito por turno y las 3 regeneraciones
+ * por sesión de `gen-quota`.
  */
-export function userAskedFor(feedback: string, userText: string): boolean {
+export function userAskedFor(feedback: string, userText: string, previos: string[] = []): boolean {
   const pedido = palabras(feedback)
   if (!pedido.length) return /regener|otra|variaci|de nuevo|cambi|distint|diferent/.test(userText.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''))
-  const dichas = new Set(palabras(userText))
-  return pedido.filter((w) => dichas.has(w)).length / pedido.length >= 0.5
+  const calza = (texto: string) => { const dichas = new Set(palabras(texto)); return pedido.filter((w) => dichas.has(w)).length / pedido.length >= 0.5 }
+  return calza(userText) || !previos.some(calza)
 }
 
 /**
- * @param userText El texto del mensaje del usuario de ESTE turno (el agente se crea por request).
- *   Lo leen los candados deterministas: qué imagen adjuntó y qué versión eligió.
+ * @param turn El texto del mensaje del usuario de ESTE turno y los de los turnos anteriores (el
+ *   agente se crea por request). Los leen los candados deterministas: qué imagen adjuntó, qué
+ *   versión eligió y si el cambio que se quiere aplicar es de ahora o es uno viejo.
  */
-export function createAnunciosAgent(initial: SessionResponse, ctx: Ctx, userText: string, deps: AgentDeps = DEPS) {
+export function createAnunciosAgent(initial: SessionResponse, ctx: Ctx, turn: { userText: string; previos?: string[] }, deps: AgentDeps = DEPS) {
+  const { userText, previos = [] } = turn
   const state = { session: initial }
   // Cuántas tools con efecto terminaron bien en ESTE turno.
   let hechas = 0
+  // La tool que `get_state` dejó obligada para el paso siguiente (ver `get_state`).
+  let pendiente: ForcedTool | undefined
+  // Lo que el modelo declaró que es el mensaje del usuario, en el paso 0 de este turno.
+  let intent: Intent | undefined
   // Tope duro: UN crédito de imagen por turno, pida lo que pida el modelo.
   let imagenes = 0
   const unaImagen = () => {
@@ -168,16 +212,24 @@ export function createAnunciosAgent(initial: SessionResponse, ctx: Ctx, userText
 
   const tools = {
     get_state: tool({
-      description: 'Returns which step the session is at and what has been provided so far.',
-      inputSchema: z.object({}),
-      // El recordatorio va ACÁ, en el resultado, y no solo en el prompt: es el último texto que el
-      // modelo lee antes de contestar. Medido: con la regla solo en el prompt, un turno de "cámbiale
-      // el fondo" todavía terminaba en `get_state` + "listo, ya lo cambié".
-      execute: async () => ({
-        ...stateSummary(state.session),
-        actionsDoneThisTurn: hechas,
-        ...(hechas ? {} : { reminder: 'Nothing has been created or changed in this turn. If the user just asked for a change to the ad, call adjust_ad now. If they just picked a version, call choose_copy and then generate_ad. Never say something is done without that call.' }),
+      description: 'Returns which step the session is at. You MUST say what the user\'s last message is: the server uses it to decide the next action.',
+      // ⚠️ EL MODELO DECLARA LA INTENCIÓN COMO DATO Y EL SERVIDOR ACTÚA SOBRE ELLA. `get_state` era
+      // la salida inocua del primer paso obligado, y por eso mismo era un escape: medido, ante
+      // "ponle el fondo más claro" el modelo llamaba `get_state` y terminaba el turno sin hacer el
+      // cambio (1 de 6 draws, con la regla en el prompt Y un recordatorio en este resultado). Ahora
+      // un `userIntent` de acción deja OBLIGADA la tool correspondiente en el paso siguiente.
+      inputSchema: z.object({
+        userIntent: z.enum(INTENTS).describe('What the user\'s LAST message is. Pick the one that fits; a question or a compliment is never a request for a change.'),
       }),
+      execute: async ({ userIntent }) => {
+        // La intención se fija UNA vez por turno: volver a llamar no puede escalar un "gracias" a
+        // un pedido de cambio.
+        if (intent) return { ...stateSummary(state.session), actionsDoneThisTurn: hechas }
+        intent = userIntent
+        const obligada = FORCED_BY_INTENT[userIntent]
+        if (obligada) pendiente = obligada
+        return { ...stateSummary(state.session), actionsDoneThisTurn: hechas, ...(obligada ? { mustCallNow: obligada } : {}) }
+      },
     }),
 
     set_reference: tool({
@@ -259,7 +311,7 @@ export function createAnunciosAgent(initial: SessionResponse, ctx: Ctx, userText
       description: 'Regenerate the existing ad applying the user\'s requested change. SPENDS ONE IMAGE CREDIT.',
       inputSchema: z.object({ feedback: z.string().describe('The change the user asked for, in their words. Empty for a plain variation.') }),
       execute: ({ feedback }) => run((s) => {
-        if (!userAskedFor(feedback, userText))
+        if (!userAskedFor(feedback, userText, previos))
           throw new AnunciosError('The user did not ask for that change in their last message. Do not regenerate the ad; just reply to what they said.')
         unaImagen()
         return deps.refineAd(s, feedback.slice(0, 1000), ctx)
@@ -274,15 +326,26 @@ export function createAnunciosAgent(initial: SessionResponse, ctx: Ctx, userText
     providerOptions: { google: { thinkingConfig: { thinkingLevel: 'high' } } },
     // Tope por turno: producto + copy + responder son 3-4 pasos; más es un loop.
     stopWhen: isStepCount(8),
-    // ⚠️ EL PRIMER PASO DE CADA TURNO ESTÁ OBLIGADO A LLAMAR UNA TOOL. Medido con
-    // `scripts/probe-anuncios-agent.ts`: sin esto, ~1 de cada 4 veces el modelo terminaba el turno
-    // en el paso 0 diciendo "listo, ya apliqué el cambio" SIN haber llamado a nada — y subir la
-    // regla a titular del prompt no lo movió (2 de 4 draws seguían fallando). `get_state` es la
-    // salida inocua para un turno que solo conversa.
-    prepareStep: async ({ stepNumber }) => ({
-      activeTools: [...TOOLS_BY_NEXT[stateSummary(state.session).next]] as (keyof typeof tools)[],
-      toolChoice: stepNumber === 0 ? 'required' as const : 'auto' as const,
-    }),
+    // ⚠️ EL TURNO SE RUTEA EN CÓDIGO, NO EN EL PROMPT. Medido con `scripts/probe-anuncios-agent.ts`:
+    // librado a sí mismo, ~1 de cada 4 veces el modelo terminaba el turno en el paso 0 diciendo
+    // "listo, ya apliqué el cambio" SIN haber llamado a nada, y subir la regla a titular del prompt
+    // no lo movió (2 de 4 draws). Obligarlo a llamar "alguna tool" tampoco: gastaba un crédito ante
+    // un "gracias". Lo que quedó: paso 0 = `get_state` con la intención declarada; de ahí salen
+    // las tools que existen en el turno (`GATED_BY_INTENT`) y la que queda obligada.
+    prepareStep: async ({ stepNumber }) => {
+      // Paso 0: SIEMPRE `get_state`, que es donde el modelo declara qué quiere el usuario. Es un
+      // paso de texto corto (1-2 s) y es lo que vuelve determinista todo lo que sigue.
+      if (stepNumber === 0 || !intent) return { activeTools: ['get_state' as const], toolChoice: { type: 'tool' as const, toolName: 'get_state' as const } }
+      const declarada = intent
+      const activeTools = ([...TOOLS_BY_NEXT[stateSummary(state.session).next]] as (keyof typeof tools)[])
+        .filter((t) => !GATED_BY_INTENT[t] || GATED_BY_INTENT[t].includes(declarada))
+      // La tool obligada se exige UNA vez: si un candado la rechaza, el modelo tiene que poder
+      // contestarle al usuario en vez de quedar en un loop.
+      const obligada = pendiente
+      pendiente = undefined
+      if (obligada && activeTools.includes(obligada)) return { activeTools, toolChoice: { type: 'tool' as const, toolName: obligada } }
+      return { activeTools, toolChoice: 'auto' as const }
+    },
   })
 }
 

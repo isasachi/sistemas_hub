@@ -2,7 +2,7 @@
  * El agente del chat de anuncios: ¿llama las tools correctas, en el orden correcto, y gasta un
  * crédito de imagen SOLO cuando el usuario ya eligió el copy?
  *
- *   npx tsx scripts/probe-anuncios-agent.ts        # 2 draws × 7 turnos
+ *   npx tsx scripts/probe-anuncios-agent.ts        # 2 draws × 9 turnos
  *   npx tsx scripts/probe-anuncios-agent.ts 3      # N draws
  *
  * El MODELO del chat es el real (el par del hub). Todo lo demás va stubeado por `deps`: no toca la
@@ -24,17 +24,24 @@ const BUCKET = `${process.env.SUPABASE_URL}/storage/v1/object/public/ad-uploads/
 
 // `creditos`: cuántos créditos de imagen DEBE gastar el turno. Es el check que importa: una tool
 // pedida que el servidor rechazó no gastó nada, y una que no se pidió tampoco hizo lo que dijo.
-const TURNOS: { user: string; debe: string[]; noDebe: string[]; creditos: number }[] = [
+//
+// ⚠️ Las frases del usuario son NATURALES a propósito, y la de elegir rota por draw. Con "Me quedo con
+// la versión B" (el texto del botón) y un ajuste que el modelo devuelve casi literal, los candados
+// pasaban por construcción: se medía que no gastaran de más, nunca que no rechazaran de más.
+const ELEGIR = ['Me quedo con la versión B', 'Elijo B', 'la b porfa', 'Prefiero la segunda', 'B', 'Me quedo con B']
+const TURNOS = (n: number): { user: string; debe: string[]; noDebe: string[]; creditos: number }[] => [
   { user: 'Hola, quiero hacer un anuncio para mi producto', debe: [], noDebe: ['set_reference', 'set_product', 'write_copy'], creditos: 0 },
   { user: `Este es el anuncio que me gusta\n[Adjunto imagen: ref.jpg — ${BUCKET}/ref.jpg]`, debe: ['set_reference'], noDebe: [], creditos: 0 },
   { user: `Se llama Lumina, es un sérum facial que aclara las manchas, para mujeres de 25 a 40\n[Adjunto imagen: producto.jpg — ${BUCKET}/producto.jpg]`, debe: ['set_product', 'write_copy'], noDebe: ['choose_copy'], creditos: 0 },
-  // Trampa: una pregunta no es una elección. Con el primer paso obligado a llamar una tool, la
-  // salida correcta es `get_state`, no elegir por el usuario y gastarle un crédito.
+  // Trampa: una pregunta no es una elección.
   { user: '¿Cuál de las dos me recomiendas?', debe: [], noDebe: ['write_copy'], creditos: 0 },
-  { user: 'Me quedo con la versión B', debe: ['choose_copy', 'generate_ad'], noDebe: [], creditos: 1 },
+  { user: ELEGIR[(n - 1) % ELEGIR.length], debe: ['choose_copy', 'generate_ad'], noDebe: [], creditos: 1 },
   { user: 'Ponle el fondo un poco más claro', debe: ['adjust_ad'], noDebe: ['set_reference', 'set_product'], creditos: 1 },
-  // Trampa: un agradecimiento no es un pedido de cambio.
+  // Trampa: un agradecimiento no es un pedido de cambio (el modelo repetía el ajuste anterior).
   { user: 'Gracias, me encanta cómo quedó', debe: [], noDebe: ['set_reference', 'set_product', 'write_copy'], creditos: 0 },
+  // Pedidos que el modelo PARAFRASEA al pasarlos: tienen que gastar su crédito igual.
+  { user: 'el texto se ve muy chico', debe: ['adjust_ad'], noDebe: [], creditos: 1 },
+  { user: 'no me gusta el color del fondo, hazlo más llamativo', debe: ['adjust_ad'], noDebe: [], creditos: 1 },
 ]
 
 const analysis = {
@@ -50,8 +57,11 @@ const copy = {
   versionB: [{ element: 'headline', text: 'Manchas que no se van', template: '[problema] que no se van', source: 'Grasa que no se va' }],
 }
 
+const porModelo: Record<string, number> = {}
+
 async function draw(n: number) {
   const { createAnunciosAgent } = await import('../lib/anuncios/agent')
+  const { AnunciosError } = await import('../lib/anuncios/core')
   let s: SessionResponse = {
     id: 'probe', created_at: '', step: 0, reference_url: null, reference_analysis: null, product_url: null, logo_url: null,
     product_scan: null, product_name: null, what_it_is: null, what_it_does: null, target_audience: null, market_research: null,
@@ -59,7 +69,7 @@ async function draw(n: number) {
   }
   let creditos = 0
   // Un agente POR TURNO, igual que la ruta: nace con el estado de la sesión y el texto del mensaje.
-  const nuevoAgente = (userText: string) => createAnunciosAgent(s, { userId: 'probe', owner: null }, userText, {
+  const nuevoAgente = (userText: string, previos: string[]) => createAnunciosAgent(s, { userId: 'probe', owner: null }, { userText, previos }, {
     reload: async () => s,
     fetchImage: async () => ({ data: 'eA==', mimeType: 'image/jpeg' }),
     analyzeReference: async () => { s = { ...s, step: 1, reference_url: `${BUCKET}/ref.jpg`, reference_analysis: analysis, copy_versions: null, confirmed_copy: null }; return { analysis, referenceUrl: s.reference_url! } },
@@ -70,18 +80,21 @@ async function draw(n: number) {
     },
     generateCopy: async () => { s = { ...s, step: 3, copy_versions: copy, confirmed_copy: null }; return { copyVersions: copy, research } },
     confirmCopy: async (_s, version) => { const c = { version, breakdown: version === 'A' ? copy.versionA : copy.versionB }; s = { ...s, step: 4, confirmed_copy: c }; return c },
-    generateAd: async () => { creditos++; s = { ...s, step: 5, image_url: `${BUCKET}/result.png` }; return { imageUrl: s.image_url!, regensLeft: 3 } },
-    refineAd: async () => { creditos++; s = { ...s, image_url: `${BUCKET}/result-2.png` }; return { imageUrl: s.image_url!, regensLeft: 2 } },
+    // Fieles al núcleo: sin copy elegido o sin anuncio, se niegan (409). Un stub que deja pasar eso
+    // mide un estado que en producción no existe.
+    generateAd: async () => { if (!s.confirmed_copy) throw new AnunciosError('Falta elegir el copy antes de generar el anuncio', 409); creditos++; s = { ...s, step: 5, image_url: `${BUCKET}/result.png` }; return { imageUrl: s.image_url!, regensLeft: 3 } },
+    refineAd: async () => { if (!s.image_url) throw new AnunciosError('Todavía no hay una imagen que ajustar', 409); creditos++; s = { ...s, image_url: `${BUCKET}/result-2.png` }; return { imageUrl: s.image_url!, regensLeft: 2 } },
   })
 
   const messages: ModelMessage[] = []
   let fallos = 0
   console.log(`\n━━ draw ${n} ━━`)
-  for (const [k, t] of TURNOS.entries()) {
+  const turnos = TURNOS(n)
+  for (const [k, t] of turnos.entries()) {
     messages.push({ role: 'user', content: t.user })
     const t0 = Date.now()
     const antes = creditos
-    const agent = nuevoAgente(t.user)
+    const agent = nuevoAgente(t.user, turnos.slice(0, k).map((x) => x.user))
     const res = await agent.generate({ messages })
     messages.push(...res.response.messages)
     const calls = res.steps.flatMap((st) => st.toolCalls.map((c) => c.toolName))
@@ -90,7 +103,13 @@ async function draw(n: number) {
     const gastados = creditos - antes
     const ok = !faltan.length && !sobran.length && gastados === t.creditos
     if (!ok) fallos++
-    console.log(`  ${ok ? '✅' : '❌'} turno ${k + 1} (${Date.now() - t0} ms) tools: [${calls.join(', ')}] créditos: ${gastados}/${t.creditos}${faltan.length ? ` · FALTA ${faltan}` : ''}${sobran.length ? ` · SOBRA ${sobran}` : ''}`)
+    // ⚠️ QUÉ MODELO RESPONDIÓ va en cada línea. La primera tanda de mediciones de este probe no se
+    // pudo atribuir: la clave de Google se quedó sin crédito a mitad de la sesión, el agente cayó al
+    // respaldo en silencio (el aviso es un `console.warn` que el grep de turno filtraba) y no hay
+    // forma de saber qué draws fueron de Gemini y cuáles de `gpt-5.4-nano`.
+    const modelos = [...new Set(res.steps.map((st) => st.response.modelId))]
+    for (const m of modelos) porModelo[m] = (porModelo[m] ?? 0) + 1
+    console.log(`  ${ok ? '✅' : '❌'} turno ${k + 1} (${Date.now() - t0} ms, ${modelos.join('+')}) tools: [${calls.join(', ')}] créditos: ${gastados}/${t.creditos}${faltan.length ? ` · FALTA ${faltan}` : ''}${sobran.length ? ` · SOBRA ${sobran}` : ''}`)
     console.log(`      → ${res.text.replace(/\n+/g, ' ⏎ ').slice(0, 260)}`)
     // Un turno que falla se imprime entero: qué pidió cada paso y qué le devolvió la tool.
     if (!ok) for (const [j, st] of res.steps.entries())
@@ -104,6 +123,8 @@ async function main() {
   let fallos = 0
   for (let n = 1; n <= draws; n++) fallos += await draw(n)
   console.log(`\n${fallos ? `❌ ${fallos} check(s) fallaron` : '✅ todos los checks pasaron'} en ${draws} draws`)
+  // Si acá aparece más de un modelo, o el que no esperabas, el resultado no mide lo que creés.
+  console.log(`turnos por modelo: ${JSON.stringify(porModelo)}`)
 }
 
 main().catch((e) => { console.error(e); process.exit(1) })

@@ -2,7 +2,7 @@
  * Anuncios por el AI SDK: lo que los tests no pueden ver.
  *
  *   npx tsx scripts/probe-anuncios-ai-sdk.ts            # los tres brazos
- *   npx tsx scripts/probe-anuncios-ai-sdk.ts research   # solo uno: research | respaldo | copy
+ *   npx tsx scripts/probe-anuncios-ai-sdk.ts research   # solo uno: research | respaldo | copy | scan (este último solo a pedido)
  *
  * Solo TEXTO y visión: cero imágenes generadas, cero cuota, no toca la base.
  *
@@ -59,6 +59,30 @@ async function main() {
     }
     ms.sort((a, b) => a - b)
     console.log(`\nms: min ${ms[0]} · mediana ${ms[Math.floor(ms.length / 2)]} · max ${ms.at(-1)}`)
+  }
+
+  // 4. `scan` — ¿el scan del producto CAMBIÓ al pasar `brandingDescription` y `styleCompatibilityNote`
+  //    de opcionales a obligatorios-con-null? Es el patrón que AGENTS.md documenta como causa de que
+  //    el modelo invente (`bulletsAfter`). Control = el camino viejo tal cual: `callStructured` con
+  //    `ProductScanSchema` plano y el prompt SIN la línea nueva de `styleCompatibilityNote`.
+  if (solo === 'scan') {
+    const { callStructured } = await import('../lib/gemini')
+    const { productScanPrompt } = await import('../lib/anuncios/core')
+    const product = await bajar('product.jpg')
+    const ref = await bajar('reference.jpg')
+    const analisis = ReferenceAnalysisSchema.parse((await structured({ name: 'reference_analysis', schema: ReferenceAnalysisOut, system: SYSTEM_PROMPT, content: [ref, { type: 'text', text: 'Analyze this reference ad. Return the complete structured analysis including all sceneElements.' }] })).output)
+    const nuevo = productScanPrompt(analisis, { ...PRODUCTOS[0], logo: null })
+    const viejo = nuevo.split('\n').filter((l) => !l.startsWith('styleCompatibilityNote =')).join('\n')
+    console.log('\n━━ 4. SCAN DEL PRODUCTO: AI SDK (required+null) vs. control (callStructured, schema plano) ━━')
+    const ver = (o: { brandingDescription?: string | null; styleCompatibilityNote?: string | null; brandColors?: string[] | null }) =>
+      `\n    branding: ${JSON.stringify(o.brandingDescription)}\n    nota: ${JSON.stringify(o.styleCompatibilityNote)}\n    colores: ${JSON.stringify(o.brandColors)}`
+    for (let i = 0; i < 3; i++) {
+      const c = await callStructured('product_scan', ProductScanSchema, [{ inlineData: { mimeType: product.mediaType, data: product.data.toString('base64') } }, { text: viejo }], 3)
+      console.log(`[control #${i + 1}]${ver(c)}`)
+      const { output, model } = await structured({ name: 'product_scan', schema: ProductScanOut, system: SYSTEM_PROMPT, content: [product, { type: 'text', text: nuevo }] })
+      console.log(`[ai-sdk  #${i + 1}] (${model})${ver(output)}`)
+    }
+    return
   }
 
   if (!solo || solo === 'respaldo' || solo === 'copy') {
