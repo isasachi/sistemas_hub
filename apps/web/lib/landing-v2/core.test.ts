@@ -146,6 +146,19 @@ describe('generateSection', () => {
   })
 })
 
+describe('ancla de estilo apagada', () => {
+  it('con una sección aprobada, su imagen no viaja ni al director ni al modelo de imagen', async () => {
+    const { fetchAsBase64 } = await import('@/lib/storage')
+    vi.mocked(fetchAsBase64).mockClear()
+    const conHero = session({
+      visualSystem: vs,
+      sections: { hero: { approved: true, versions: [{ imageUrl: 'https://x/hero-aprobado.jpg', model: 'm', feedback: null, createdAt: '' }] } },
+    })
+    await generateSection(conHero, 'immediate_benefits', { userId: 'u', owner: null })
+    expect(vi.mocked(fetchAsBase64).mock.calls.map((c) => c[0])).not.toContain('https://x/hero-aprobado.jpg')
+  })
+})
+
 describe('sesiones guardadas antes del director', () => {
   it('se leen: `copies` y `graphicResources` se descartan y `designs` arranca vacío', () => {
     const vieja = {

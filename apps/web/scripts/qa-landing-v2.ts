@@ -5,7 +5,7 @@
  *
  *  A. Corrida real de 3 secciones con el flujo del producto: análisis → Hero → aprobar →
  *     Beneficios inmediatos → aprobar → Oferta y precios (11 renders en total con la parte B).
- *  B. Consistencia con y sin ancla: con el Hero aprobado, `mechanism` y `expanded_benefits` se
+ *  B. Consistencia con y sin ancla (producción va SIN ancla desde 2026-10-13; "con" es el control): con el Hero aprobado, `mechanism` y `expanded_benefits` se
  *     renderizan 2 veces cada una; en cada draw el MISMO diseño del director va con ancla (el Hero
  *     como referencia de estilo) y sin ancla. Así la única variable es la imagen de referencia.
  *     2 draws por brazo: `n = 1` no es una medición (ley del repo).

@@ -108,7 +108,7 @@ function approvedTexts(s: LandingSession, except: SectionId): string {
   return lines.length ? `TEXTS ALREADY USED IN APPROVED SECTIONS (do not repeat them):\n${lines.join('\n')}` : ''
 }
 
-const DIRECTOR_TASK = (id: SectionId, hasAnchor: boolean) => {
+const DIRECTOR_TASK = (id: SectionId) => {
   const spec = SECTION_BY_ID[id]
   return [
     `TASK: design section ${spec.wf}/14 "${spec.en}" of this landing as its Art Director, following your rules, and hand the design to the image model that will paint it.`,
@@ -116,7 +116,7 @@ const DIRECTOR_TASK = (id: SectionId, hasAnchor: boolean) => {
     // 2026-10-09: sin esto el director describía un layout (fondo, titular, frasco, bullets) y no una
     // idea, y el texto cargaba con todo el mensaje.
     'The image must TELL the section\'s angle, not only illustrate it: the customer should SEE their pain, how the product works or the result. Then use only the text the section needs to be understood: whatever the image can say, the image says.',
-    `Image 1 is the real product. The attached PDF is the Knowledge wireframes PDF, one page per section in skeleton order: this section is page ${spec.wf}.${hasAnchor ? ' Image 2 is a section of THIS landing the user already approved: it establishes the visual system.' : ''}`,
+    `Image 1 is the real product. The attached PDF is the Knowledge wireframes PDF, one page per section in skeleton order: this section is page ${spec.wf}.`,
     `CRO criteria for this section: ${spec.checklist}.`,
     '- visualConcept: the concrete visual idea of this image, in English: WHAT the customer sees — beyond the product, the person and the text — that shows this section\'s angle from the research. Name the visual elements and how they are rendered, specific to this product and niche; a mood or a feeling is not a visual concept.',
     '- composition: how the image executes the visualConcept, in English prose: layout and focal point, product placement/scale/angle, people if any, background and environment, color, typography treatment and hierarchy, spacing. Any icon depicts the specific idea of the text beside it. Refer to each text by its role; never write the texts here and never use quotation marks.',
@@ -131,9 +131,9 @@ const DIRECTOR_TASK = (id: SectionId, hasAnchor: boolean) => {
 export async function designRequest(s: LandingSession, id: SectionId) {
   const { inputs, vs } = requireInputs(s)
   const source = sourceText(inputs, s.testimonials)
-  const anchorUrl = styleAnchor(s, id)
+  // Sin la sección aprobada como imagen (ancla de estilo apagada, 2026-10-13): la consistencia sale
+  // del sistema visual fijo de abajo y de los textos ya usados.
   const product = await fetchAsBase64(inputs.productImageUrl)
-  const anchor = anchorUrl ? await fetchAsBase64(anchorUrl) : null
   return {
     source,
     request: {
@@ -143,8 +143,7 @@ export async function designRequest(s: LandingSession, id: SectionId) {
       content: [
         { type: 'file' as const, data: Buffer.from(product.data, 'base64'), mediaType: product.mimeType },
         { type: 'file' as const, data: wireframesPdf(), mediaType: 'application/pdf', filename: 'wireframes.pdf' },
-        ...(anchor ? [{ type: 'file' as const, data: Buffer.from(anchor.data, 'base64'), mediaType: anchor.mimeType }] : []),
-        { type: 'text' as const, text: DIRECTOR_TASK(id, !!anchor) },
+        { type: 'text' as const, text: DIRECTOR_TASK(id) },
         { type: 'text' as const, text: [`VISUAL SYSTEM OF THIS LANDING:\n${directorVisual(vs)}`, dataBlock(inputs, s), approvedTexts(s, id)].filter(Boolean).join('\n\n') },
       ],
       validate: (d: SectionDesign) => {
@@ -201,7 +200,12 @@ export function buildDirectedPrompt(o: { id: SectionId; design: SectionDesign; s
   ].filter(Boolean).join('\n\n')
 }
 
-/** `anchor: false` solo lo usa el QA de consistencia (brazo sin ancla); el producto siempre la lleva. */
+/**
+ * El ancla de estilo (la primera sección aprobada como referencia) está APAGADA (decisión del dueño,
+ * 2026-10-13). Medido: QA del 2026-10-05, sin ancla la consistencia fue igual y con ancla 1 de 4 clonó
+ * el layout del Hero; E2E del 2026-10-13, Beneficios repitió casi la escena del Hero. `anchor: true`
+ * solo lo usa el QA de consistencia como brazo de control: no lo prendas en el producto sin medirlo.
+ */
 export async function renderDirected(s: LandingSession, id: SectionId, design: SectionDesign, opts: { anchor?: boolean } = {}): Promise<string> {
   const { inputs, vs } = requireInputs(s)
   const parts: Part[] = []
@@ -213,7 +217,7 @@ export async function renderDirected(s: LandingSession, id: SectionId, design: S
   await push(inputs.productImageUrl)
   const proof: number[] = []
   if (id === 'before_after') for (const u of inputs.proofImageUrls.slice(0, 2)) proof.push(await push(u))
-  const anchorUrl = opts.anchor === false ? null : styleAnchor(s, id)
+  const anchorUrl = opts.anchor ? styleAnchor(s, id) : null
   const style = anchorUrl ? await push(anchorUrl) : null
   parts.push({ text: buildDirectedPrompt({ id, design, s, inputs, vs, style, proof }) })
   const b64 = await generateImage(parts, 3, { aspectRatio: '9:16', respaldo: NANO_BANANA_PRO })
@@ -247,7 +251,7 @@ async function finalize(s: LandingSession, id: SectionId, b64: string, feedback:
   }
 }
 
-/** La primera sección aprobada en el orden del esqueleto: fija el sistema visual de las siguientes. */
+/** La primera sección aprobada en el orden del esqueleto (solo para el brazo con ancla del QA). */
 function styleAnchor(s: LandingSession, id: SectionId): string | null {
   const first = SECTION_IDS.find((x) => x !== id && s.sections[x]?.approved)
   return first ? latestVersion(s, first)?.imageUrl ?? null : null
