@@ -8,7 +8,57 @@
 > de Google declarado por pieza. **Lo MEDIDO acá sigue valiendo** (qué prompt rechaza qué modelo,
 > qué encuadre se modera, qué campo vuelve vacío): lo que cambió es por dónde sale cada llamada.
 
-Replica un anuncio estático de referencia con el producto, el logo y el copy del usuario. Wizard de 5 pasos (referencia → producto → comentarios → copy → imagen), rutas en `apps/web/app/api/generador-anuncios/sessions/[id]/*`, tabla `sessions`, el instructivo maestro de imagen en `lib/prompts/step5.md`.
+Replica un anuncio estático de referencia con el producto, el logo y el copy del usuario. Wizard de 5 pasos (referencia → producto → mercado → copy → imagen) **o chat**, los dos sobre el mismo núcleo (`lib/anuncios/core.ts`) y la misma fila de `sessions`. Rutas en `apps/web/app/api/generador-anuncios/sessions/[id]/*`, el instructivo maestro de imagen en `lib/prompts/step5.md`.
+
+## Arquitectura: núcleo + AI SDK + chat (2026-10-13)
+
+**El TEXTO de anuncios sale por el AI SDK** (`lib/ai-sdk.ts`: `structured` y `reasoning`, el par del hub —`gemini-3.6-flash` → `gpt-5.4-nano`—, providers directos, sin Gateway). Es la parte genérica de `lib/landing-v2/models.ts` copiada tal cual; cuando landing v2 esté en main, importa de ahí y conserva solo su `DIRECTOR`. **La IMAGEN no se tocó**: `editImage`/`refineImage` → `generateImage` con su respaldo por pieza, la `SPANISH_RULE` y los tres candados del refine.
+
+**Toda la lógica vive en `lib/anuncios/core.ts`, una función por paso** (`analyzeReference`, `analyzeProduct`, `generateCopy`, `confirmCopy`, `generateAd`, `refineAd`). Las rutas son envoltorios delgados (`_lib.ts`: `load` + `errorResponse`) y las tools del chat llaman a las MISMAS funciones. **La cuota y los créditos se cobran DENTRO del núcleo** (`gate` antes, `record` después): si vivieran en las rutas, el chat generaría sin cobrar. La única excepción es la ruta SSE de `generate-image`, que hace el `gate` antes de abrir el stream —para que un 429 sea un 429 y no un evento dentro de un 200— y se lo pasa al núcleo como `gated`.
+
+⚠️ **LOS SCHEMAS QUE VIAJAN AL MODELO NO SON LOS DE `lib/types.ts`, y no se pueden unificar.** El AI SDK convierte zod con **`io: 'input'`** (verificado en `@ai-sdk/provider-utils`): un `.catch`, `.nullish()` u `.optional()` **saca el campo del `required`**, que es exactamente la ley de "lo que no se exige se omite en silencio". Los de `lib/types.ts` llevan `.nullable().catch(null)` porque re-parsean jsonb viejo, y eso con `z.toJSONSchema` a secas (modo output) dejaba el campo en `required`; por el AI SDK no. Por eso existe `lib/anuncios/schemas.ts` (`ReferenceAnalysisOut`, `ProductScanOut`, `CopyVersionsOut`): todo en `required`, lo opcional `.nullable()`, sin `.min`/`.refine`. El mismo schema va plano a Gemini y strict a OpenAI. La salida se re-parsea después con el schema de `types.ts`. Fijado en `core.test.ts` ("todo campo va en required").
+
+⚠️ **El `.refine(transcribeLaReferencia)` de `CopyVersionsSchema` ya no es lo que reintenta.** Dentro de `Output.object` un refine que falla es un error, no un reintento. La verificación pasó a `copyCorrection` (`validate` de `structured`, 3 intentos), que además le devuelve al modelo QUÉ slot calcó. El `.refine` sigue en `types.ts` y corta al final: si tras los reintentos B sigue calcando a la otra marca, la ruta falla **sin guardar y sin cobrar**.
+
+⚠️ **`styleCompatibilityNote` y `brandingDescription` antes eran opcionales para Gemini y ahora van en el `required`** (nullable). Es un cambio de contrato real, y por eso la salida legal (`null`) se dice en el prompt junto a cada campo. No medido con draws repetidos si Gemini rellena de más `styleCompatibilityNote`.
+
+✅ **Medido el 2026-10-13 con `scripts/probe-anuncios-ai-sdk.ts`** (solo texto y visión, cero imágenes): los cuatro schemas pasan por **OpenAI strict** con el par forzado al revés (`reference_analysis` 8,3 s, `product_scan` 2,7 s, `copy_versions` 3,0 s, `market_research` 2,0 s). Es el fallo que los tests no ven: solo aparece el día que Gemini se cae.
+
+**Ahora queda escrito QUÉ modelo respondió** (`structured` lo devuelve y el núcleo lo loguea por sesión): era la deuda del diagnóstico de tipografía de más abajo.
+
+### La investigación de mercado reemplazó a los comentarios de TikTok
+
+El paso de pegar comentarios se eliminó (decisión del dueño, 2026-10-13). Lo reemplaza `researchMarket` (`lib/anuncios/research.ts`): el mismo modelo de texto escribe el nicho, las keywords con las que ese mercado busca, cómo nombra su problema y qué espera (`MarketResearchSchema`). **Su único consumidor es el prompt de copy**, igual que lo eran los comentarios.
+
+⚠️ **TIENE QUE SER RÁPIDA, y está armada para eso**: corre en `Promise.all` con el scan del producto dentro de `analyzeProduct`, solo con los campos de texto del formulario, con el thinking de Gemini en `minimal` y 6 s de timeout por intento. **Medido: 2,5–3,8 s (mediana 3,0 s, 6 draws, 2 productos) contra 7–10 s del scan**, o sea no agrega espera a ningún paso. Sin búsqueda web a propósito: el grounding suma segundos. **Nunca bloquea**: si falla devuelve `null`, se loguea, y el copy se escribe sin ella (el prompt omite el bloque entero — con test de que no queda ninguna referencia colgando). Una sesión anterior a la investigación la calcula en `generate-copy`.
+
+⚠️ **Ocupa el MISMO índice del wizard que tenían los comentarios** (`Section3Market`), así que `SECTIONS` sigue con 5 entradas y **ningún `step` guardado cambia de significado**. `sessions.step` es un entero posicional que escriben y leen el servidor y el store: renumerar habría mandado cada sesión guardada a otra pantalla.
+
+**`tiktok_comments` sigue en la tabla** y dejó de leerse y de escribirse. Columnas nuevas, con guard: `market_research` y `messages` (`20261013000001_anuncios_market_research_chat.sql`). ⚠️ **La migración va ANTES del deploy**: `analyze-product` escribe `market_research` en cada análisis.
+
+🟡 **El efecto sobre el copy es un indicio, no una medición**: 2 draws por brazo sobre una referencia. Con investigación el copy tiró a *"marcas de tus granitos"*, *"tono parejo"*; el control sin ella a *"hiperpigmentación"*, *"piel radiante"*. No hay corrida comparando contra comentarios reales.
+
+### El chat
+
+`lib/anuncios/agent.ts`: un `ToolLoopAgent` con siete tools (`get_state`, `set_reference`, `set_product`, `write_copy`, `choose_copy`, `generate_ad`, `adjust_ad`) que envuelven el núcleo. **Wizard y chat comparten la fila** (a diferencia de landing v2, que tiene una sesión por vista): el toggle de `AdTool` remonta la vista y relee la sesión. El historial vive en `sessions.messages`; el cliente manda solo el mensaje nuevo. El turno de chat registra `anuncios-chat` (no gasta crédito, cuenta al backstop diario).
+
+⚠️ **EL MODELO NO DECIDE CUÁNDO SE GASTA UN CRÉDITO: LO DECIDE EL CÓDIGO.** Todo lo de abajo salió de `scripts/probe-anuncios-agent.ts` (modelo real, efectos stubeados, 7 turnos con dos trampas), y **ninguno se arregló con prompt**:
+
+| fallo medido | frecuencia | candado |
+|---|---|---|
+| termina el turno diciendo *"listo, ya apliqué el cambio"* **sin llamar a nada** | ~1 de 4 turnos de ajuste; subir la regla a titular del prompt no lo movió (2 de 4) | el paso 0 de cada turno va con `toolChoice: 'required'` (`get_state` es la salida inocua) **+ `thinkingLevel: 'high'`** — con `low`, que es el default del provider, seguía en 1 de 5 |
+| ante *"¿cuál me recomiendas?"* **elige por el usuario y genera** | 1 de 5 (apareció al subir el thinking) | `pickedVersion`: `choose_copy` exige que el mensaje del turno nombre la versión |
+| ante *"gracias, me encanta"* **repite el ajuste del turno anterior** | 2 de 5 | `userAskedFor`: la mitad de las palabras del cambio tienen que estar en el mensaje del turno |
+| re-analiza la referencia al recibir la foto del producto | 2 de 5 | `set_reference` solo acepta una imagen adjunta en ESTE mensaje |
+| — | — | tope duro: **un crédito de imagen por turno** |
+
+Con los cinco: **35 de 35 turnos en 5 draws**, y los créditos gastados coinciden con los esperados turno por turno. ⚠️ **No aflojes `pickedVersion` ni `userAskedFor` para tolerar más frases**: fallan del lado seguro (se niegan y el modelo vuelve a preguntar). Se amplían agregando casos al test, no relajando el patrón.
+
+⚠️ **El probe crea un agente POR TURNO, como la ruta.** Su primera versión reusaba uno solo y por eso no vio el fallo del "gracias": el estado de `SESSION STATE` en las instrucciones quedaba viejo. Y los checks son sobre créditos GASTADOS, no sobre tools pedidas: una tool que el servidor rechazó no gastó nada.
+
+⚠️ **El copy del chat lo dibuja la interfaz desde el resultado de `write_copy`**, no el modelo: lo que el usuario elige es exactamente lo que se guardó.
+
+🔴 **Sin verificar:** ni el chat ni el wizard nuevo corrieron end-to-end en el navegador (falta aplicar la migración), y no hay ninguna imagen generada por este camino. Lo medido es texto y conducción.
 
 **Diagnóstico 2026-08-15 (sesión `4c8f6c8b`) — cuatro fallos, cuatro causas distintas.** El usuario reportó un ad 16:9 sobre una referencia vertical, copy vago, el logo flotando al medio y un avatar hombre para un público "Mujeres de 20-40". Los cuatro se reprodujeron sobre los assets guardados de esa sesión y se arreglaron por separado.
 
@@ -73,12 +123,12 @@ Replica un anuncio estático de referencia con el producto, el logo y el copy de
 
 ⚠️ **A y B DEJARON DE SER LA MISMA COSA CON DOS NIVELES DE LIBERTAD.** Hasta este cambio A era "adaptación narrativa" y B era A con 2–5 palabras sustituidas por una frase de los comentarios — o sea B no era una versión distinta sino un parche sobre A, y por eso salían byte-idénticas cada vez que ningún comentario mapeaba. Ahora son dos productos distintos y cada uno tiene su regla:
 
-| | qué es | los comentarios de TikTok |
+| | qué es | la investigación de mercado (antes: los comentarios de TikTok) |
 |---|---|---|
 | **A** | copy **nuevo** inspirado en la referencia: conserva el concepto creativo, el número de slots, su orden y el rol persuasivo y registro de cada uno; la estructura de la frase puede cambiar | **insumo** de la redacción (qué duele, cómo lo nombran, qué esperan) |
 | **B** ★ | fill in the blank en tres etapas por slot: transcribir el texto literal de la referencia → marcar entre corchetes SOLO el dato específico (`"Grasa rebelde que no se va"` → `"[problema común] que no se va"`) → rellenar con este producto (`"Flacidez que no se va"`) | **contenido de los huecos**, redactado con concordancia gramatical, nunca pegado crudo |
 
-⚠️ **La regla del acento aplica a las DOS versiones, por caminos distintos.** En B es una excepción acotada al andamiaje (abajo); en **A**, que se escribe desde cero, es una regla de registro a secas: español peruano neutro, tuteo, sin que sobreviva el acento de la referencia. Sin ella la versión con MÁS libertad es la que puede devolver el voseo que la regla existe para evitar. Y los comentarios son un **segundo conducto**: un comentario escrito en otra variedad mete regionalismos por la puerta de la voz de audiencia, así que el prompt pide la idea y no las palabras.
+⚠️ **La regla del acento aplica a las DOS versiones, por caminos distintos.** En B es una excepción acotada al andamiaje (abajo); en **A**, que se escribe desde cero, es una regla de registro a secas: español peruano neutro, tuteo, sin que sobreviva el acento de la referencia. Sin ella la versión con MÁS libertad es la que puede devolver el voseo que la regla existe para evitar. Los comentarios eran un **segundo conducto** de regionalismos; la investigación que los reemplazó se le pide al modelo ya en peruano neutro (`research.ts`), así que ese conducto se cierra en el origen y no en el prompt de copy.
 
 ⚠️ **El andamiaje de B se copia LITERAL, con una sola excepción: el regionalismo.** Lo de fuera de los corchetes es lo que hace que B espeje la referencia, así que se transcribe tal cual — salvo que traiga voseo o expresiones que no son del español peruano (*sos, vos, tenés, querés, che, güey, parcero, chévere, vosotros*), que se reescriben a peruano neutro y nada más. No es una licencia de estilo: la referencia de la que salió esta regla es un anuncio argentino, y calcar su voseo publica un anuncio que no suena a la marca del usuario. Un andamiaje ya neutro no cambia ni una coma.
 
@@ -86,7 +136,7 @@ Replica un anuncio estático de referencia con el producto, el logo y el copy de
 
 ⚠️ **`scaffoldFidelity` NO puede cazarlo, y no por un descuido: mide la mitad contraria.** Vigila qué fracción del ANDAMIAJE sobrevive, y el template de esa sesión era `"[PROBLEMAS DE FORMA FÍSICA]"` — el slot entero entre corchetes. Devuelve `null` ("no medible") justo donde el modelo falla, porque un slot que es 100 % dato no tiene andamiaje que preservar. Hacen falta las dos mitades: aquella exige que la ESTRUCTURA no cambie, ésta que los DATOS sí.
 
-`CopyElementSchema.source` guarda la **transcripción literal** de la referencia (la etapa 1 del prompt), por el mismo motivo que existe `template`: exigirla obliga al modelo a hacer el paso en vez de afirmar que lo hizo, y de paso le da al código con qué comparar. `transcribeLaReferencia` marca el slot cuyo texto final es igual a su `source`. Va como **`.refine` y no como log**: `callStructured` lo valida post-hoc, así que se REINTENTA la generación en vez de ofrecer una versión que anuncia a otra marca.
+`CopyElementSchema.source` guarda la **transcripción literal** de la referencia (la etapa 1 del prompt), por el mismo motivo que existe `template`: exigirla obliga al modelo a hacer el paso en vez de afirmar que lo hizo, y de paso le da al código con qué comparar. `transcribeLaReferencia` marca el slot cuyo texto final es igual a su `source`. Se **reintenta, no se loguea**: hoy por `copyCorrection` (el `validate` de `structured`), y el `.refine` del schema queda como corte final — ver "Arquitectura" arriba.
 
 ⚠️ **La excepción se define por el TEMPLATE, no por los corchetes.** Un slot sin dato del producto —un CTA pelado como "COMPRAR AHORA"— *es* su propio template y copiarlo igual es correcto. La primera versión de este guard preguntaba *"¿el template tiene corchetes?"*, y eso deja un hueco medido: el modelo a veces devuelve como template una DESCRIPCIÓN (*"Listado de síntomas negativos contra beneficios positivos"*) en vez de una plantilla, y sin corchetes el guard se callaba aunque el texto fuera el de la otra marca. La pregunta correcta es si el modelo DECLARÓ que ese slot se copia tal cual.
 

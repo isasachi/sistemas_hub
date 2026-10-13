@@ -34,6 +34,7 @@ export default function StepWizard({
   backHref,
   onBack,
   onReset,
+  actions,
   onNext,
   nextLabel = 'Continuar',
   nextDisabled,
@@ -50,6 +51,8 @@ export default function StepWizard({
   backHref?: string
   onBack?: () => void
   onReset?: () => void
+  /** Controles extra a la derecha de la barra, antes de Reiniciar (p. ej. el selector Wizard/Chat). */
+  actions?: React.ReactNode
   /** Acción del shell. Omitir cuando cada paso trae la suya. */
   onNext?: () => void
   nextLabel?: string
@@ -101,17 +104,19 @@ export default function StepWizard({
 
           <StepRail steps={steps} current={current} maxReached={maxReached} onNavigate={onNavigate} />
 
+          {actions && <div className="ml-auto flex shrink-0 items-center">{actions}</div>}
+
           {onReset ? (
             <button
               type="button"
               onClick={onReset}
-              className="ml-auto flex shrink-0 items-center gap-1.5 rounded-lg border-0 bg-transparent px-2 py-1 font-sans text-[12px] font-medium text-[#a98c88] transition-colors hover:bg-white/[0.05] hover:text-[#f6f2eb] cursor-pointer"
+              className={`${actions ? '' : 'ml-auto '}flex shrink-0 items-center gap-1.5 rounded-lg border-0 bg-transparent px-2 py-1 font-sans text-[12px] font-medium text-[#a98c88] transition-colors hover:bg-white/[0.05] hover:text-[#f6f2eb] cursor-pointer`}
             >
               <RotateCcw className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Reiniciar</span>
             </button>
           ) : (
-            <span className="ml-auto" />
+            !actions && <span className="ml-auto" />
           )}
         </div>
       </div>

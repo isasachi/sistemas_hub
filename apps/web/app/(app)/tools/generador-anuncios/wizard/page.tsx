@@ -1,9 +1,9 @@
 "use client";
 
-import AdWizard from "@/components/tools/generador-anuncios/AdWizard";
+import AdTool from "@/components/tools/generador-anuncios/AdTool";
 
-// El chrome (volver, riel de pasos, reiniciar) lo trae StepWizard desde adentro:
-// una sola barra, sin breadcrumb encima.
+// Wizard o Chat sobre la misma sesión. El chrome (volver, riel de pasos, selector de vista,
+// reiniciar) lo trae cada vista desde adentro: una sola barra, sin breadcrumb encima.
 export default function GeneradorAnunciosWizard() {
-  return <AdWizard />;
+  return <AdTool />;
 }

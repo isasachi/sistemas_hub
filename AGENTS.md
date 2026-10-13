@@ -57,6 +57,8 @@ respaldo.** Por eso `callStructured`/`callReasoning` **no toman opciones**: el v
 ya no puede significar nada distinto del default. Los dos sitios que NO quieren respaldo llaman a
 `geminiCallStructured`, que es otra función y se lee como lo que es.
 
+**Dos tools ya piden ese par por el AI SDK y no por `callStructured`:** landing v2 (`lib/landing-v2/models.ts`) y anuncios (`lib/ai-sdk.ts` — `structured`/`reasoning`/`chatModel`), con providers directos, las mismas keys y **sin Gateway**. Mismo par, misma regla de timeout y respaldo logueado. ⚠️ **Lo que cambia es el contrato del schema:** el AI SDK convierte zod con `io: 'input'`, así que un `.catch`/`.nullish()`/`.optional()` saca el campo del `required`. Los schemas que viajan por ahí van aparte, todo en `required` y lo opcional `.nullable()` (ver `agents/anuncios.md`, "Arquitectura").
+
 **En IMAGEN el primario también es uno solo —`gpt-image-2.5-sunburst`— y lo que cambia por pieza
 es el RESPALDO**, que se declara en el call site (`generateImage(parts, n, { respaldo })`). No hay
 default: cuál corresponde es una decisión medida por pieza, y un default la escondería.

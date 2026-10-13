@@ -17,7 +17,7 @@ import Section5Generate from './sections/Section5Generate'
 // la llamada al modelo cada vez que navegaras.
 const SECTIONS = [Section1Reference, Section2Product, Section3Market, Section4Copy, Section5Generate]
 
-export default function AdWizard() {
+export default function AdWizard({ switcher }: { switcher?: React.ReactNode }) {
   const {
     step, imageUrl, sessionId, sessionError,
     startNewSession, hydrateFromSession, setStep, setRegens,
@@ -130,6 +130,7 @@ export default function AdWizard() {
       onNavigate={setStep}
       backHref="/tools/generador-anuncios"
       onReset={startNewSession}
+      actions={switcher}
     >
       {/* key por sesión: una sesión nueva remonta la sección → su useState local
           (sembrado del store) se reinicia y no arrastra datos de la anterior. */}
