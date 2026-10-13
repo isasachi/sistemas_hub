@@ -26,10 +26,11 @@ export async function getV2Session(id: string, userId: string | null): Promise<{
   const { data, error } = await getDb().from(T).select('session, messages').eq('id', id).eq('user_id', userId).maybeSingle()
   if (error) throw new Error(error.message)
   if (!data) return null
-  // Una sesión guardada con un sistema visual de otra forma (cambió el schema) no se rompe: se
-  // descarta ese sistema y se re-analiza antes de la próxima sección.
+  // Una sesión guardada con un sistema visual o diseños de otra forma (cambió el schema) no se rompe: se
+  // descartan (el sistema se re-analiza antes de la próxima sección; los diseños solo alimentan la regla
+  // de no repetir textos).
   const ok = LandingSessionSchema.safeParse(data.session)
-  const session = ok.success ? ok.data : LandingSessionSchema.parse({ ...data.session, visualSystem: null })
+  const session = ok.success ? ok.data : LandingSessionSchema.parse({ ...data.session, visualSystem: null, designs: {} })
   return { session, messages: (data.messages ?? []) as UIMessage[] }
 }
 

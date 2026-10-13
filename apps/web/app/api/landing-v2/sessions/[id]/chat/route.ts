@@ -7,7 +7,8 @@ import { errorResponse, load, notFound } from '../../../_lib'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-// Un turno puede aprobar + generar una sección (copy + brief + imagen con respaldo).
+// Un turno puede aprobar + generar una sección (análisis si falta + diseño del director + imagen):
+// el director va con 90 s por intento para que el peor caso quepa acá (ver `DIRECTOR_TIMEOUT_MS`).
 export const maxDuration = 300
 
 // El cliente manda SOLO el mensaje nuevo; el historial sale de la base (no se le cree al cliente).

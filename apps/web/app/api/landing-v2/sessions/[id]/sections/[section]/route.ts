@@ -8,7 +8,7 @@ import { errorResponse, load, notFound } from '../../../../_lib'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-// UNA imagen por request: copy (si falta) + brief + render 9:16 + reescalado, con respaldo.
+// UNA imagen por request: diseño del director (90 s por intento) + render 9:16 + reescalado, con respaldo.
 export const maxDuration = 300
 
 const Body = z.discriminatedUnion('action', [

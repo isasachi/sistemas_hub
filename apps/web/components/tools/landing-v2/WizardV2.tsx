@@ -13,7 +13,7 @@ import { SECTIONS, SECTION_BY_ID } from '@/lib/landing-v2/catalog'
 import { sectionSupport } from '@/lib/landing-v2/flow'
 import { NICHES, NICHE_LABELS, type LandingSession, type Niche, type Pack } from '@/lib/landing-v2/schemas'
 import { api, importImageUrl, uploadFile, useV2Session } from './client'
-import { CopyStep, RenderStep } from './WizardV2Render'
+import { RenderStep } from './WizardV2Render'
 
 export const btnPrimary =
   'rounded-xl jr-cta text-[13px] font-bold disabled:opacity-40 transition-all duration-200 cursor-pointer border-0 font-sans flex items-center justify-center gap-2 h-11 w-full'
@@ -39,14 +39,12 @@ const STEPS = [
   { label: 'Imagen', title: 'La imagen de tu producto', hint: 'Es la referencia real: el producto sale igual en cada sección.' },
   { label: 'Sistema visual', title: 'El sistema visual de tu landing', hint: 'Lo definimos a partir de tu producto y tu marca. Si no te convence, lo volvemos a analizar.' },
   { label: 'Secciones', title: 'Las secciones de tu landing', hint: 'Siguen el esqueleto CRO en este orden. Desmarca las que no quieras.' },
-  { label: 'Copy', title: 'El copy de cada sección', hint: 'Revísalo y edítalo antes de generar las imágenes.' },
   { label: 'Landing', title: 'Tu landing, sección por sección', hint: 'Aprueba cada sección o pide cambios. Al aprobar, pasamos a la siguiente.' },
 ]
 
 /** El paso donde retomar una sesión guardada, deducido de lo que ya tiene. */
 function resumeStep(s: LandingSession): number {
-  if (Object.values(s.sections).some((x) => x?.versions.length)) return 6
-  if (Object.keys(s.copies).length) return 5
+  if (Object.values(s.sections).some((x) => x?.versions.length)) return 5
   if (s.visualSystem) return 4
   if (s.inputs.productImageUrl) return 3
   if (s.inputs.marketResearch) return 2
@@ -70,7 +68,7 @@ export default function WizardV2({ switcher }: { switcher: React.ReactNode }) {
   const go = (i: number) => { setStep(i); setMaxReached((m) => Math.max(m, i)) }
   const restart = () => { reset(); resumed.current = true; setStep(0); setMaxReached(0) }
   const props: StepProps = { session, ensure, setSession, next: () => go(step + 1), reset: restart }
-  const Body = [BriefStep, ResearchStep, ImageStep, AnalysisStep, SectionsStep, CopyStep, RenderStep][step]
+  const Body = [BriefStep, ResearchStep, ImageStep, AnalysisStep, SectionsStep, RenderStep][step]
 
   return (
     <StepWizard
@@ -81,10 +79,10 @@ export default function WizardV2({ switcher }: { switcher: React.ReactNode }) {
       backHref="/tools/generador-landing"
       onReset={restart}
       actions={switcher}
-      full={step === 6}
+      full={step === 5}
     >
       {loading ? <div className="flex justify-center py-16"><Spinner /></div> : (
-        <div key={session?.id ?? 'new'} className={step === 6 ? 'mx-auto w-full max-w-[1160px] px-5 pb-16 md:px-8' : ''}>
+        <div key={session?.id ?? 'new'} className={step === 5 ? 'mx-auto w-full max-w-[1160px] px-5 pb-16 md:px-8' : ''}>
           <Body {...props} />
         </div>
       )}

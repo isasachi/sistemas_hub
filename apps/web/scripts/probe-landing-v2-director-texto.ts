@@ -6,7 +6,8 @@
  * ¿La `composition` arranca de un CONCEPTO visual o describe un layout? Se imprime CRUDA, antes de
  * `sinComillas`/`sinConfianzaInventada` (que borran oraciones enteras). El sistema visual se analiza
  * UNA vez y se congela en `vsCache.json`: si no, cada corrida usa uno distinto y no hay control.
- * Variantes: `base` (sin providerOptions) y `high` (thinkingLevel high de Gemini).
+ * Variantes: `director` (el par de producción: gpt-5.5 → gemini, lo que corre la app), `base` (el par de
+ * texto del hub, gemini-3.6-flash: el director antes del 2026-10-13) y `high` (thinkingLevel high de Gemini).
  */
 import fs from 'fs'
 import path from 'path'
@@ -16,7 +17,7 @@ for (const line of fs.readFileSync(path.join(process.cwd(), '.env.local'), 'utf-
   if (m && !process.env[m[1]]) process.env[m[1]] = m[2].trim()
 }
 
-const [CACHE, VARIANTES = 'base,high', DRAWS = '2', SESSION = 'a26e3d81-eb68-4581-9694-d1e1a45bdeff', SECTION = 'hero'] = process.argv.slice(2)
+const [CACHE, VARIANTES = 'director,base', DRAWS = '2', SESSION = 'a26e3d81-eb68-4581-9694-d1e1a45bdeff', SECTION = 'hero'] = process.argv.slice(2)
 const OWNER = process.env.PROBE_OWNER ?? '2d3eb545-e1d8-4d42-afe2-768c589b2161'
 
 type Opts = Pick<Parameters<typeof import('../lib/landing-v2/models').structured>[0], 'providerOptions' | 'timeoutMs'>
@@ -37,7 +38,7 @@ async function main() {
   const { getV2Session } = await import('../lib/landing-v2/db')
   const { analyzeProduct } = await import('../lib/landing-v2/analyze')
   const { designRequest } = await import('../lib/landing-v2/section')
-  const { structured } = await import('../lib/landing-v2/models')
+  const { structured, DIRECTOR, DIRECTOR_TIMEOUT_MS } = await import('../lib/landing-v2/models')
   type S = import('../lib/landing-v2/schemas').LandingSession
   const got = await getV2Session(SESSION, OWNER)
   if (!got) throw new Error(`sesión ${SESSION} no existe`)
@@ -52,7 +53,9 @@ async function main() {
     for (let d = 1; d <= Number(DRAWS); d++) {
       const { request, source } = await designRequest(s, id)
       const t = Date.now()
-      const { output, model } = MODELOS[v] ? await otroModelo(MODELOS[v], request) : await structured({ ...request, ...OPCIONES[v] })
+      const { output, model } = MODELOS[v] ? await otroModelo(MODELOS[v], request)
+        : v === 'director' ? await structured({ ...request, models: DIRECTOR, timeoutMs: DIRECTOR_TIMEOUT_MS })
+          : await structured({ ...request, ...OPCIONES[v] })
       console.log(`\n===== ${v} #${d} · ${model} · ${((Date.now() - t) / 1000).toFixed(0)}s · persona=${output.usesPerson}`)
       console.log(`CONCEPT: ${output.visualConcept}`)
       console.log(`COMPOSITION: ${output.composition}`)

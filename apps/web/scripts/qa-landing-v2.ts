@@ -6,7 +6,7 @@
  *  A. Corrida real de 3 secciones con el flujo del producto: análisis → Hero → aprobar →
  *     Beneficios inmediatos → aprobar → Oferta y precios (11 renders en total con la parte B).
  *  B. Consistencia con y sin ancla: con el Hero aprobado, `mechanism` y `expanded_benefits` se
- *     renderizan 2 veces cada una; en cada draw el MISMO copy y el MISMO brief van con ancla (el Hero
+ *     renderizan 2 veces cada una; en cada draw el MISMO diseño del director va con ancla (el Hero
  *     como referencia de estilo) y sin ancla. Así la única variable es la imagen de referencia.
  *     2 draws por brazo: `n = 1` no es una medición (ley del repo).
  *
@@ -31,7 +31,7 @@ async function main() {
   const { createV2Session, saveV2Session } = await import('../lib/landing-v2/db')
   const { analyzeProduct } = await import('../lib/landing-v2/analyze')
   const { approveSection } = await import('../lib/landing-v2/flow')
-  const { generateSection, generateSectionCopy, buildRenderBrief, renderSection, modelFromSize } = await import('../lib/landing-v2/section')
+  const { generateSection, directSection, renderDirected, modelFromSize } = await import('../lib/landing-v2/section')
   const { latestVersion } = await import('../lib/landing-v2/schemas')
   const sharp = (await import('sharp')).default
   const ctx = { userId: 'qa-landing-v2', owner: null }
@@ -79,19 +79,17 @@ async function main() {
     await saveV2Session(s)
     const v = latestVersion(s, id)!
     await save(`A${i + 1}-${id}.jpg`, v.imageUrl)
-    console.log(`A ${id} (${((Date.now() - t) / 1000).toFixed(0)}s) por ${v.model}: ${JSON.stringify(s.copies[id])}`)
+    console.log(`A ${id} (${((Date.now() - t) / 1000).toFixed(0)}s) por ${v.model}: ${JSON.stringify(s.designs[id])}`)
     if (id !== 'offer_pricing') { s = approveSection(s, id); await saveV2Session(s) }
   }
 
   // ── B. Consistencia con y sin ancla (el Hero aprobado) ──────────────────────
   for (const id of ['mechanism', 'expanded_benefits'] as const) {
-    const copy = await generateSectionCopy(s, id)
-    const withCopy = { ...s, copies: { ...s.copies, [id]: copy } }
     for (let d = 1; d <= 2; d++) {
-      const brief = await buildRenderBrief(withCopy, id, copy)
+      const design = await directSection(s, id)
       for (const anchor of [true, false]) {
         const t = Date.now()
-        const b64 = await renderSection(withCopy, id, copy, brief, { anchor })
+        const b64 = await renderDirected(s, id, design, { anchor })
         const raw = Buffer.from(b64, 'base64')
         const meta = await sharp(raw).metadata()
         const name = `B-${id}-d${d}-${anchor ? 'con' : 'sin'}-ancla.jpg`

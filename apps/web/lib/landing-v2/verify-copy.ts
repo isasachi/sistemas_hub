@@ -11,7 +11,7 @@
 //
 // Se mide contra el texto normalizado (minúsculas, sin tildes). Falla CERRADO: ante la duda, el
 // término se marca y el caller reintenta o lo quita — nunca se publica un claim sin respaldo.
-import type { LandingInputs, SectionCopy, SectionDesign, Testimonial } from './schemas'
+import type { LandingInputs, SectionDesign, Testimonial } from './schemas'
 
 export const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
 
@@ -63,18 +63,6 @@ export function unsupported(text: string, source: string): string[] {
   return out
 }
 
-export function verifyCopy(copy: SectionCopy, source: string): Violation[] {
-  const v: Violation[] = []
-  const check = (field: string, s: string | null) => {
-    if (s) for (const token of unsupported(s, source)) v.push({ field, token })
-  }
-  check('headline', copy.headline)
-  check('subheadline', copy.subheadline)
-  copy.items.forEach((it, i) => { check(`items.${i}.title`, it.title); check(`items.${i}.text`, it.text); check(`items.${i}.group`, it.group) })
-  check('closingLine', copy.closingLine)
-  return v
-}
-
 export function verifyTexts(texts: SectionDesign['texts'], source: string): Violation[] {
   return texts.flatMap((t, i) => unsupported(t.text, source).map((token) => ({ field: `texts.${i}`, token })))
 }
@@ -87,18 +75,5 @@ export function stripUnsupportedTexts(texts: SectionDesign['texts'], source: str
 /** Instrucción para el reintento: nombra lo que no tiene respaldo, sin dar valores de reemplazo. */
 export function correctionFor(v: Violation[]): string {
   const tokens = [...new Set(v.map((x) => x.token))].join(', ')
-  return `CORRECTION: the previous copy contained claims or numbers NOT present in the user's data (${tokens}). Rewrite it using ONLY facts present in the provided data. If the data does not support a block, omit that block.`
-}
-
-/** Último recurso tras los reintentos: quita lo que no tiene respaldo. Nunca publica un claim inventado. */
-export function stripUnsupported(copy: SectionCopy, source: string, fallbackHeadline: string): SectionCopy {
-  const ok = (s: string | null) => !s || unsupported(s, source).length === 0
-  const sentences = (s: string) => s.split(/(?<=[.!?])\s+/).filter((x) => ok(x)).join(' ').trim()
-  const headline = sentences(copy.headline) || fallbackHeadline
-  return {
-    headline,
-    subheadline: copy.subheadline && ok(copy.subheadline) ? copy.subheadline : null,
-    items: copy.items.filter((it) => ok(it.title) && ok(it.text) && ok(it.group)),
-    closingLine: ok(copy.closingLine) ? copy.closingLine : null,
-  }
+  return `CORRECTION: the previous texts contained claims or numbers NOT present in the user's data (${tokens}). Rewrite them using ONLY facts present in the provided data. If the data does not support a text, omit that text.`
 }

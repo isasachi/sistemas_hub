@@ -3,14 +3,14 @@ import { describe, expect, it, vi } from 'vitest'
 // `section.ts` arrastra los SDK y la lectura de los recursos; acá solo se prueban sus funciones puras.
 vi.mock('@/lib/gemini', () => ({ generateImage: vi.fn(), editWithPrompt: vi.fn(), NANO_BANANA_PRO: 'x' }))
 vi.mock('@/lib/storage', () => ({ fetchAsBase64: vi.fn(), uploadToStorage: vi.fn() }))
-vi.mock('./models', () => ({ structured: vi.fn() }))
+vi.mock('./models', () => ({ structured: vi.fn(), DIRECTOR: ['director', 'respaldo'], DIRECTOR_TIMEOUT_MS: 1 }))
 vi.mock('./quota', () => ({ gate: vi.fn(), record: vi.fn(), sectionKind: (id: string) => id }))
 
 import { SECTION_IDS, SECTIONS, inSkeletonOrder } from './catalog'
 import { approveSection, changesAnalysis, getNextSection, sectionSupport } from './flow'
-import { emptySession, missingInputs, type LandingInputs, type LandingSession, type SectionCopy } from './schemas'
-import { buildImagePrompt, modelFromSize, renderTexts, sinComillas, sinConfianzaInventada } from './section'
-import { sourceText, stripUnsupported, unsupported, verifyCopy } from './verify-copy'
+import { emptySession, LandingSessionSchema, missingInputs, type LandingInputs, type LandingSession, type SectionDesign } from './schemas'
+import { buildDirectedPrompt, designTexts, generateSection, modelFromSize, sinComillas, sinConfianzaInventada } from './section'
+import { sourceText, stripUnsupportedTexts, unsupported, verifyTexts } from './verify-copy'
 
 const inputs: LandingInputs = {
   productName: 'Colágeno Vital',
@@ -64,7 +64,7 @@ describe('flujo', () => {
   })
 })
 
-describe('verificador de copy', () => {
+describe('verificador de textos', () => {
   const src = sourceText(inputs)
   it('deja pasar lo que está en los datos', () => {
     expect(unsupported('Pack x2 a S/ 99.90, antes S/ 139.90', src)).toEqual([])
@@ -80,44 +80,41 @@ describe('verificador de copy', () => {
     expect(unsupported('Aprovecha las promociones disponibles hoy', src)).toEqual(expect.arrayContaining(['promocion', 'hoy']))
     expect(unsupported('Cancela en efectivo al recibir', src)).toEqual(['efectivo'])
   })
-  it('si el reintento no alcanza, quita lo inventado y nunca deja el titular vacío', () => {
-    const copy: SectionCopy = {
-      headline: 'Garantía total.', subheadline: 'Envío gratis a todo el Perú',
-      items: [{ group: null, title: null, text: 'Alivio para tus rodillas' }, { group: null, title: null, text: '+10,000 clientes' }],
-      closingLine: null,
-    }
-    expect(verifyCopy(copy, src).length).toBeGreaterThan(0)
-    const limpio = stripUnsupported(copy, src, inputs.productName)
-    expect(limpio.headline).toBe('Colágeno Vital')
-    expect(limpio.subheadline).toBeNull()
-    expect(limpio.items).toHaveLength(1)
-    expect(verifyCopy(limpio, src)).toEqual([])
+  it('si el reintento no alcanza, quita las líneas inventadas', () => {
+    const texts = [{ role: 'headline', text: 'Alivio para tus rodillas' }, { role: 'badge', text: 'Garantía total' }, { role: 'proof', text: '+10,000 clientes' }]
+    expect(verifyTexts(texts, src).map((v) => v.field)).toEqual(expect.arrayContaining(['texts.1', 'texts.2']))
+    expect(stripUnsupportedTexts(texts, src)).toEqual([texts[0]])
   })
 })
 
-describe('prompt de imagen', () => {
-  const copy: SectionCopy = { headline: 'Elige tu pack', subheadline: null, items: [], closingLine: null }
-  it('los precios los pone el código desde los datos del usuario', () => {
-    const t = renderTexts('offer_pricing', copy, inputs).join('\n')
+const vs = { niche: 'health' as const, productForm: 'frasco', palette: [], typography: 't', photography: 'p', artDirection: 'a', usesPeople: true, peopleDirection: 'mujeres de 30-45' }
+
+describe('prompt de imagen del director', () => {
+  const design: SectionDesign = { visualConcept: 'concept', composition: 'comp', usesPerson: false, texts: [{ role: 'headline', text: 'Elige tu pack' }] }
+  const s = session({ visualSystem: vs })
+  it('los precios los pone el código desde los datos del usuario, solo en las secciones de oferta', () => {
+    const t = designTexts('offer_pricing', design, s, inputs).join('\n')
     expect(t).toContain('"S/ 99.90"')
     expect(t).toContain('"Antes S/ 139.90"')
     expect(t).toContain('"Ahorras S/ 40.00"')
-    expect(renderTexts('hero', copy, inputs).join('\n')).not.toContain('S/')
+    expect(designTexts('hero', design, s, inputs).join('\n')).not.toContain('S/')
   })
-  it('el brief no puede colar texto entre comillas a la imagen', () => {
+  it('los testimonios van literales desde la investigación', () => {
+    const conT = session({ testimonials: [{ name: 'Rosa', city: 'Arequipa', text: 'Me ayudó a subir escaleras sin molestia' }] })
+    expect(designTexts('testimonials', design, conT, inputs).join('\n')).toContain('"Me ayudó a subir escaleras sin molestia" — "Rosa, Arequipa"')
+  })
+  it('la composición no puede colar texto entre comillas a la imagen', () => {
     expect(sinComillas('Big headline "Envío gratis hoy" at the top, product\'s label visible')).toBe("Big headline at the top, product's label visible")
   })
-  it('sin botones y sin personas si la dirección de arte no las usa; el wireframe nunca va', () => {
-    const vs = { niche: 'health' as const, productForm: 'frasco', palette: [], typography: 't', photography: 'p', graphicResources: [], artDirection: 'a', usesPeople: false, peopleDirection: null }
-    const brief = { composition: 'c', focalPoint: 'f', productPlacement: 'p', usesPerson: true, background: 'b', typographyTreatment: 't' }
-    const p = buildImagePrompt({ id: 'hero', copy, inputs, brief, vs, refs: { proof: [], style: null } })
+  it('sin botones, sin persona si el diseño no la usa, y el wireframe nunca va', () => {
+    const p = buildDirectedPrompt({ id: 'hero', design, s, inputs, vs, style: null, proof: [] })
     expect(p).toContain('Do not show any person.')
     expect(p).toContain('NO BUTTONS')
-    expect(p).not.toMatch(/CTA BUTTON:|wireframe/i)
-    const conGente = buildImagePrompt({ id: 'hero', copy, inputs, brief, vs: { ...vs, usesPeople: true, peopleDirection: 'mujeres de 30-45' }, refs: { proof: [], style: null } })
-    expect(conGente).toContain('mujeres de 30-45')
+    expect(p).toContain('VISUAL CONCEPT')
+    expect(p).not.toMatch(/wireframe/i)
+    expect(buildDirectedPrompt({ id: 'hero', design: { ...design, usesPerson: true }, s, inputs, vs, style: null, proof: [] })).not.toContain('Do not show any person.')
   })
-  it('el brief no puede planear elementos de confianza sin copy (el modelo de imagen los inventa)', () => {
+  it('la composición no puede planear elementos de confianza sin texto (el modelo de imagen los inventa)', () => {
     const b = 'The structure begins with a subtle trust bar. Bold headline left. The bottom closes with sleek micro-trust icons without buttons.'
     expect(sinConfianzaInventada(b)).toBe('Bold headline left.')
   })
@@ -126,3 +123,40 @@ describe('prompt de imagen', () => {
     expect(modelFromSize(1152, 2048)).toMatch(/^google/)
   })
 })
+
+describe('generateSection', () => {
+  it('diseña con el par del director, pinta y GUARDA el diseño limpio (de él salen los textos a no repetir)', async () => {
+    const { structured } = await import('./models')
+    const { generateImage } = await import('@/lib/gemini')
+    const { fetchAsBase64, uploadToStorage } = await import('@/lib/storage')
+    const sharp = (await import('sharp')).default
+    const design: SectionDesign = { visualConcept: 'c', composition: 'Bold "Hola" headline.', usesPerson: true, texts: [{ role: 'headline', text: 'Alivio para tus rodillas' }, { role: 'badge', text: 'Envío gratis' }] }
+    vi.mocked(structured).mockResolvedValue({ output: design, model: 'gpt-5.5' })
+    vi.mocked(fetchAsBase64).mockResolvedValue({ data: 'aGk=', mimeType: 'image/png' })
+    const png = await sharp({ create: { width: 864, height: 1536, channels: 3, background: '#fff' } }).png().toBuffer()
+    vi.mocked(generateImage).mockResolvedValue(png.toString('base64'))
+    vi.mocked(uploadToStorage).mockResolvedValue('https://x/hero.jpg')
+
+    const out = await generateSection(session({ visualSystem: vs }), 'hero', { userId: 'u', owner: null })
+
+    expect(vi.mocked(structured).mock.calls[0][0]).toMatchObject({ models: ['director', 'respaldo'], name: 'landing_v2_section_design' })
+    expect(out.designs.hero).toEqual({ visualConcept: 'c', composition: 'Bold headline.', usesPerson: true, texts: [design.texts[0]] })
+    expect(out.sections.hero?.versions[0]).toMatchObject({ imageUrl: 'https://x/hero.jpg', model: 'gpt-image-2.5-sunburst' })
+    expect(out.current).toBe('hero')
+  })
+})
+
+describe('sesiones guardadas antes del director', () => {
+  it('se leen: `copies` y `graphicResources` se descartan y `designs` arranca vacío', () => {
+    const vieja = {
+      ...emptySession('s1', 'wizard'), designs: undefined,
+      copies: { hero: { headline: 'h', subheadline: null, items: [], closingLine: null } },
+      visualSystem: { ...vs, graphicResources: ['x'] },
+    }
+    const s = LandingSessionSchema.parse(vieja)
+    expect(s.designs).toEqual({})
+    expect(s).not.toHaveProperty('copies')
+    expect(s.visualSystem).not.toHaveProperty('graphicResources')
+  })
+})
+

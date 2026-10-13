@@ -2,6 +2,7 @@
 // este camino). El par es el MISMO del hub —`gemini-3.6-flash` primario, `gpt-5.4-nano` respaldo—,
 // con las MISMAS keys (`GOOGLE_API_KEY`, `OPENAI_API_KEY`) y sin Gateway: no se mete otro
 // intermediario. La IMAGEN no pasa por acá: sigue en `generateImage` (respaldo por pieza).
+// ÚNICA excepción: el director de arte de cada sección va con `DIRECTOR` (gpt-5.5 → gemini), ver abajo.
 import { createGoogle } from '@ai-sdk/google'
 import { createOpenAI } from '@ai-sdk/openai'
 import { generateText, Output, type LanguageModel, type ModelMessage } from 'ai'
@@ -44,6 +45,20 @@ export function conRespaldo(a: LanguageModelV4, b: LanguageModelV4): LanguageMod
 export const chatModel: LanguageModel = conRespaldo(primario, respaldo)
 
 /**
+ * El DIRECTOR DE ARTE de cada sección: `gpt-5.5` primario, `gemini-3.6-flash` respaldo. Es la única
+ * excepción al par de texto del hub, y es decisión del dueño (2026-10-13). Medido el 2026-10-09 con el
+ * mismo pedido (prompt literal del GPT, checklist, PDF de wireframes completo y producto): Gemini
+ * flash, pro y 3.1-pro describían un layout (fondo, titular, frasco, bullets) en 0 de 8 draws;
+ * `gpt-5.5` propuso un concepto visual que cuenta el ángulo en todos los draws, en 4 productos y 3 nichos.
+ * Va por `.chat()`, sin temperatura ni opciones de proveedor: es exactamente lo que se midió.
+ */
+export const DIRECTOR: readonly [LanguageModelV4, LanguageModelV4] = [openai.chat('gpt-5.5'), primario]
+// Medido con el PDF de 25 MB: gpt-5.5 tarda 36 s y Gemini 53 s. Con 90 s por intento, el peor caso
+// (gpt-5.5 agota el tiempo y responde el respaldo) son 180 s, y el render de imagen cabe dentro de
+// los 300 s de la ruta.
+export const DIRECTOR_TIMEOUT_MS = 90_000
+
+/**
  * Salida estructurada con el par del hub. Devuelve también QUÉ modelo respondió.
  * `validate` es el verificador post-hoc del caller: si devuelve una corrección, se reintenta con
  * ella agregada (el reintento no manda el mismo prompt). Tras `intentos`, devuelve lo último válido
@@ -60,8 +75,10 @@ export async function structured<T>(opts: {
   providerOptions?: Parameters<typeof generateText>[0]['providerOptions']
   /** Más tiempo para un pedido que piensa más; por defecto `TIMEOUT_TEXTO_MS`. */
   timeoutMs?: number
+  /** El par [primario, respaldo]; por defecto el del hub. */
+  models?: readonly [LanguageModelV4, LanguageModelV4]
 }): Promise<{ output: T; model: string }> {
-  const { schema, system, validate, intentos = 2, providerOptions, timeoutMs = TIMEOUT_TEXTO_MS } = opts
+  const { schema, system, validate, intentos = 2, providerOptions, timeoutMs = TIMEOUT_TEXTO_MS, models = [primario, respaldo] } = opts
   let correccion: string | null = null
   let last: { output: T; model: string } | null = null
   let lastError: unknown = null
@@ -71,7 +88,11 @@ export async function structured<T>(opts: {
       content: correccion ? [...opts.content, { type: 'text', text: correccion }] : opts.content,
     } as ModelMessage]
     let got: { output: T; model: string } | null = null
-    for (const model of [primario, respaldo]) {
+    // El reintento de corrección va SOLO al modelo que ya respondió: caer al respaldo dos veces
+    // duplicaría el peor caso de tiempo (el pedido del director pesa 25 MB) y no cabría en la ruta.
+    const answered = last?.model
+    const turno: readonly LanguageModelV4[] = answered ? models.filter((m) => m.modelId === answered) : models
+    for (const model of turno) {
       try {
         const { output } = await generateText({
           model, system, messages,
@@ -83,7 +104,7 @@ export async function structured<T>(opts: {
         break
       } catch (e) {
         lastError = e
-        if (model === primario) console.warn(`[landing-v2] ${opts.name}: ${primario.modelId} falló → respaldo ${respaldo.modelId}`, e)
+        if (model === models[0] && !last) console.warn(`[landing-v2] ${opts.name}: ${models[0].modelId} falló → respaldo ${models[1].modelId}`, e)
       }
     }
     // Un reintento de corrección que falla entero devuelve lo último válido; el caller verifica.

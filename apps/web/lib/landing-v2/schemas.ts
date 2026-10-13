@@ -1,6 +1,6 @@
 // Esquemas de landing v2. Módulo hoja, sin `fs` ni SDKs: lo importa la UI también.
 //
-// ⚠️ LOS SCHEMAS QUE VIAJAN A UN MODELO (`AnalysisOut`, `SectionCopyOut`, `RenderBriefOut`) SE
+// ⚠️ LOS SCHEMAS QUE VIAJAN A UN MODELO (`AnalysisOut`, `SectionDesignOut`) SE
 // DISEÑAN COMPATIBLES CON OPENAI STRICT DESDE EL ORIGEN: todo campo en `required`, lo opcional como
 // `.nullable()`, nada de `.optional()`/`.nullish()` ni `.catch`/`.default`. Así el MISMO schema va
 // plano a Gemini y válido a OpenAI (que el AI SDK manda strict por defecto) sin `toStrictSchema`.
@@ -92,7 +92,6 @@ export const AnalysisOutSchema = z.object({
   palette: z.array(z.object({ hex: z.string(), role: z.string() })),
   typography: z.string(),
   photography: z.string(),
-  graphicResources: z.array(z.string()),
   artDirection: z.string(),
   usesPeople: z.boolean(),
   peopleDirection: z.string().nullable(),
@@ -106,28 +105,7 @@ export type VisualSystem = z.infer<typeof VisualSystemSchema>
 export const TestimonialSchema = z.object({ name: z.string().nullable(), city: z.string().nullable(), text: z.string() })
 export type Testimonial = z.infer<typeof TestimonialSchema>
 
-// ─── Copy y brief por sección ─────────────────────────────────────────────────
-
-export const SectionCopyOutSchema = z.object({
-  headline: z.string(),
-  subheadline: z.string().nullable(),
-  /** Bloques del wireframe. `group` = columna/grupo (comparativa, segmentación); null = lista única. */
-  items: z.array(z.object({ group: z.string().nullable(), title: z.string().nullable(), text: z.string() })),
-  closingLine: z.string().nullable(),
-})
-export type SectionCopy = z.infer<typeof SectionCopyOutSchema>
-
-/** Brief de composición para el modelo de imagen. INTERNO: nunca se muestra al usuario. */
-export const RenderBriefOutSchema = z.object({
-  composition: z.string(),
-  focalPoint: z.string(),
-  productPlacement: z.string(),
-  usesPerson: z.boolean(),
-  background: z.string(),
-  typographyTreatment: z.string(),
-})
-export type RenderBrief = z.infer<typeof RenderBriefOutSchema>
-
+// ─── Diseño por sección ──────────────────────────────────────────────────────
 /**
  * El diseño de UNA sección, decidido por el director de arte (system prompt del dueño + Knowledge +
  * producto). Sin casillas fijas: `texts` es la lista de TODO lo que se lee en la imagen, con su rol
@@ -166,9 +144,11 @@ export const LandingSessionSchema = z.object({
   visualSystem: VisualSystemSchema.nullable(),
   testimonials: z.array(TestimonialSchema),
   selected: z.array(SectionIdSchema),
-  copies: z.partialRecord(SectionIdSchema, SectionCopyOutSchema),
-  /** El diseño con que se pintó cada sección (director de arte). Opcional: las sesiones viejas no lo traen. */
-  designs: z.partialRecord(SectionIdSchema, SectionDesignOutSchema).optional(),
+  /**
+   * El diseño con que se pintó cada sección (director de arte). `.default({})`: las sesiones guardadas
+   * antes del director no lo traen (traen `copies`, que el parse descarta). No viaja a ningún modelo.
+   */
+  designs: z.partialRecord(SectionIdSchema, SectionDesignOutSchema).default({}),
   sections: z.partialRecord(SectionIdSchema, SectionStateSchema),
   current: SectionIdSchema.nullable(),
 })
@@ -177,7 +157,7 @@ export type LandingSession = z.infer<typeof LandingSessionSchema>
 export function emptySession(id: string, view: LandingSession['view']): LandingSession {
   return {
     id, view, inputs: {}, visualSystem: null, testimonials: [],
-    selected: [...SECTION_IDS], copies: {}, sections: {}, current: null,
+    selected: [...SECTION_IDS], designs: {}, sections: {}, current: null,
   }
 }
 

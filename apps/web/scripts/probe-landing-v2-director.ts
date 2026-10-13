@@ -1,12 +1,14 @@
 /**
- * Probe PAGADO (4 renders): ¿el director de arte saca a las secciones de la plantilla de casillas?
+ * Probe PAGADO (4 renders): ¿el director de arte de producción (`gpt-5.5`) sigue ganándole a Gemini?
  *
  *   npx tsx scripts/probe-landing-v2-director.ts [sessionId] [section] [outDir]
  *
- * Sobre una sesión real (default: la de Fluya), la MISMA sección se pinta 2 veces por camino:
- *  - "director": `directSection` → `renderDirected` (system prompt del dueño, textos libres).
- *  - "casillas" (control): `generateSectionCopy` → `buildRenderBrief` → `renderSection`, el camino
- *    que había hasta 2026-10-09. 2 draws por brazo: `n = 1` no es una medición (ley del repo).
+ * Sobre una sesión real (default: la de Fluya), la MISMA sección se pinta 2 veces por brazo:
+ *  - "director": `directSection` → `renderDirected`, exactamente lo que corre la app.
+ *  - "flash" (control): el MISMO pedido (`designRequest`) con el par de texto del hub
+ *    (`gemini-3.6-flash`), que era el director antes de adoptar `gpt-5.5` el 2026-10-13. El camino
+ *    de casillas que este probe comparaba al principio se borró: su medición está en el historial
+ *    (commit b798074). 2 draws por brazo: `n = 1` no es una medición (ley del repo).
  * No guarda nada en la sesión ni cobra créditos: escribe imágenes y diseños en `outDir`.
  */
 import fs from 'fs'
@@ -49,14 +51,15 @@ async function main() {
     const design = await sec.directSection(s, SECTION)
     console.log(`director ${draw}: ${design.texts.length} textos (${((Date.now() - t) / 1000).toFixed(0)}s)`)
     await save(`director-${draw}`, await sec.renderDirected(s, SECTION, design), { design })
-    // PROBE_ARMS=director: solo el brazo nuevo (el control ya medido no cambia entre rondas).
+    // PROBE_ARMS=director: solo el brazo de producción (el control ya medido no cambia entre rondas).
     if (process.env.PROBE_ARMS === 'director') continue
 
     t = Date.now()
-    const copy = await sec.generateSectionCopy(s, SECTION)
-    const brief = await sec.buildRenderBrief({ ...s, copies: { ...s.copies, [SECTION]: copy } }, SECTION, copy)
-    console.log(`casillas ${draw}: ${copy.items.length} items (${((Date.now() - t) / 1000).toFixed(0)}s)`)
-    await save(`casillas-${draw}`, await sec.renderSection(s, SECTION, copy, brief), { copy, brief })
+    const { request, source } = await sec.designRequest(s, SECTION)
+    const { output } = await (await import('../lib/landing-v2/models')).structured({ ...request, timeoutMs: 90_000 })
+    const flash = sec.cleanDesign(output, source)
+    console.log(`flash ${draw}: ${flash.texts.length} textos (${((Date.now() - t) / 1000).toFixed(0)}s)`)
+    await save(`flash-${draw}`, await sec.renderDirected(s, SECTION, flash), { design: flash })
   }
 }
 

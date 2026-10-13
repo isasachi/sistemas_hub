@@ -57,6 +57,16 @@ respaldo.** Por eso `callStructured`/`callReasoning` **no toman opciones**: el v
 ya no puede significar nada distinto del default. Los dos sitios que NO quieren respaldo llaman a
 `geminiCallStructured`, que es otra función y se lee como lo que es.
 
+⚠️ **La ÚNICA excepción es el director de arte de landing v2** (`DIRECTOR` en
+`apps/web/lib/landing-v2/models.ts`): **`gpt-5.5` primario, `gemini-3.6-flash` de respaldo**,
+decisión del dueño del 2026-10-13. Con el mismo pedido —su system prompt literal, el checklist y el
+PDF de wireframes completo—, Gemini flash, pro y 3.1-pro describieron un layout en vez de una idea
+visual en 0 de 8 draws, y `gpt-5.5` propuso un concepto que cuenta el ángulo en todos los draws, en 4
+productos y 3 nichos. Lleva 90 s por intento (el PDF pesa 25 MB) y el reintento de corrección va solo
+al modelo que ya respondió, para que el peor caso quepa en los 300 s de la ruta. **No lo devuelvas al
+par del hub "por consistencia"**: el probe `scripts/probe-landing-v2-director-texto.ts` compara los
+dos (`director,base`).
+
 **En IMAGEN el primario también es uno solo —`gpt-image-2.5-sunburst`— y lo que cambia por pieza
 es el RESPALDO**, que se declara en el call site (`generateImage(parts, n, { respaldo })`). No hay
 default: cuál corresponde es una decisión medida por pieza, y un default la escondería.

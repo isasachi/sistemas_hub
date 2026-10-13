@@ -21,7 +21,7 @@ import { chatModel } from './models'
 import { QuotaError, type Ctx } from './quota'
 import { INPUT_LABELS, latestVersion, missingInputs, NicheSchema, PackSchema, UserError, type LandingSession } from './schemas'
 import { generateSection, reviseSection, SupportError } from './section'
-import { LANDING_V2_SYSTEM_PROMPT, VALIDATION_PHRASE } from './system-prompt'
+import { LANDING_V2_GPT_PROMPT, VALIDATION_PHRASE } from './system-prompt'
 
 const GATHER_TOOLS = ['get_session_state', 'update_inputs', 'extract_research_document'] as const
 
@@ -153,7 +153,7 @@ export function createLandingAgent(initial: LandingSession, ctx: Ctx, deps: Agen
     }),
 
     generate_section: tool({
-      description: 'Generate (copy + image) ONE landing section. Omit section to generate the next one in the skeleton.',
+      description: 'Design and render ONE landing section image. Omit section to generate the next one in the skeleton.',
       inputSchema: z.object({ section: sectionArg }),
       execute: ({ section }) => serial(async () => {
         try {
@@ -163,11 +163,8 @@ export function createLandingAgent(initial: LandingSession, ctx: Ctx, deps: Agen
           const id: SectionId | null = section ?? getNextSection(s)
           if (!id) return { ok: true, done: true, message: 'Todas las secciones seleccionadas están aprobadas.' }
           if (!s.visualSystem) { s = await deps.analyze(s); await commit(s) }
-          // Una sección ya generada que se vuelve a nombrar se regenera desde cero (copy nuevo).
-          if (s.sections[id]?.versions.length) {
-            const { [id]: _viejo, ...copies } = s.copies
-            s = { ...s, copies }
-          }
+          // Una sección ya generada que se vuelve a nombrar se rediseña desde cero: el director no
+          // reusa el diseño anterior.
           await commit(await deps.generate(s, id, ctx))
           const v = latestVersion(runtimeContext.session, id)!
           return { ok: true, section: id, label: SECTION_BY_ID[id].es, imageUrl: v.imageUrl }
@@ -207,7 +204,7 @@ export function createLandingAgent(initial: LandingSession, ctx: Ctx, deps: Agen
 
   return new ToolLoopAgent({
     model: chatModel,
-    instructions: `${LANDING_V2_SYSTEM_PROMPT}\n${AGENT_RULES}\n\nSESSION STATE AT THE START OF THIS TURN:\n${JSON.stringify(stateSummary(initial))}`,
+    instructions: `${LANDING_V2_GPT_PROMPT}\n${AGENT_RULES}\n\nSESSION STATE AT THE START OF THIS TURN:\n${JSON.stringify(stateSummary(initial))}`,
     tools,
     // Tope por turno: aprobar + generar + responder son 3-4 pasos; más es un loop.
     stopWhen: isStepCount(8),
