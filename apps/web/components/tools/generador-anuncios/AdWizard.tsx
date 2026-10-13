@@ -8,14 +8,14 @@ import { SessionErrorRetry } from '@/components/tools/ui/SessionErrorRetry'
 import StepWizard from '@/components/tools/ui/StepWizard'
 import Section1Reference from './sections/Section1Reference'
 import Section2Product from './sections/Section2Product'
-import Section3Comments from './sections/Section3Comments'
+import Section3Market from './sections/Section3Market'
 import Section4Copy from './sections/Section4Copy'
 import Section5Generate from './sections/Section5Generate'
 
 // Una pantalla por paso. El shell NO trae "Siguiente": cada sección tiene su
 // propio botón de enviar-y-avanzar, y un Siguiente genérico volvería a disparar
 // la llamada al modelo cada vez que navegaras.
-const SECTIONS = [Section1Reference, Section2Product, Section3Comments, Section4Copy, Section5Generate]
+const SECTIONS = [Section1Reference, Section2Product, Section3Market, Section4Copy, Section5Generate]
 
 export default function AdWizard() {
   const {
@@ -101,9 +101,9 @@ export default function AdWizard() {
       hint: 'El producto y a quién le hablas. De ahí sale el ángulo del copy.',
     },
     {
-      label: 'Comentarios',
-      title: 'Lo que dice la gente',
-      hint: 'Pega comentarios reales de TikTok sobre productos como el tuyo. Las objeciones y los elogios textuales son la mejor materia prima para el copy.',
+      label: 'Mercado',
+      title: 'Así habla tu mercado',
+      hint: 'Investigamos las palabras con las que tu nicho busca y nombra su problema. Con ese vocabulario escribimos el copy.',
     },
     {
       label: 'Copy',

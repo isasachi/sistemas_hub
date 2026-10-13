@@ -10,12 +10,16 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@ai-sdk/google": "^4.0.88",
+    "@ai-sdk/openai": "^4.0.84",
+    "@ai-sdk/react": "^4.0.131",
     "@base-ui/react": "^1.5.0",
     "@google/genai": "^2.6.0",
     "@ph/shared": "*",
     "@resvg/resvg-js": "^2.6.2",
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.106.1",
+    "ai": "^7.0.128",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "ffmpeg-static": "^5.3.0",

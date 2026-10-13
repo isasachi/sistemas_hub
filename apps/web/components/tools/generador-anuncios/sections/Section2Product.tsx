@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useWizardStore } from '@/store/wizard'
 import { FileUpload } from '@/components/tools/ui/FileUpload'
 import type { ProductScan } from '@/lib/types'
+import type { MarketResearch } from '@/lib/anuncios/schemas'
 
 const btnPrimary = 'h-11 w-full rounded-xl jr-cta text-[13px] font-bold disabled:opacity-40 transition-all duration-200 cursor-pointer border-0 font-sans flex items-center justify-center gap-2'
 const inputClass = 'jr-field w-full h-10 rounded-xl px-3 text-[13px]'
@@ -51,7 +52,7 @@ export default function Section2Product() {
       form.append('targetAudience', answers.targetAudience)
 
       const res = await fetch(`/api/generador-anuncios/sessions/${sessionId}/analyze-product`, { method: 'POST', body: form })
-      const data = await res.json() as { scan?: ProductScan; productUrl?: string; logoUrl?: string | null; error?: string }
+      const data = await res.json() as { scan?: ProductScan; productUrl?: string; logoUrl?: string | null; research?: MarketResearch | null; error?: string }
       if (!res.ok) throw new Error(data.error ?? 'Error al analizar el producto')
       setProductData({
         productUrl: data.productUrl!,
@@ -61,6 +62,7 @@ export default function Section2Product() {
         whatItIs: answers.whatItIs,
         whatItDoes: answers.whatItDoes,
         targetAudience: answers.targetAudience,
+        marketResearch: data.research ?? null,
       })
     } catch (err) {
       setError((err as Error).message)

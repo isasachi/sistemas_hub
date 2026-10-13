@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { transcribeLaReferencia } from './anuncios/copy-check'
 import { BodyFocus } from '@/lib/body-focus'
+import type { MarketResearch } from './anuncios/schemas'
 
 // ─── Step 1: Reference ────────────────────────────────────────────────────────
 
@@ -152,9 +153,14 @@ export interface SessionResponse {
   what_it_is: string | null
   what_it_does: string | null
   target_audience: string | null
-  tiktok_comments: string | null
+  // La investigación de mercado por keywords del nicho (reemplazó a `tiktok_comments`, columna que
+  // sigue en la tabla y ya no se lee ni se escribe). `null` en sesiones anteriores: se calcula al
+  // generar el copy.
+  market_research: MarketResearch | null
   copy_versions: CopyVersions | null
   confirmed_copy: ConfirmedCopy | null
   edit_instruction: string | null
   image_url: string | null
+  // El historial del chat (`UIMessage[]` del AI SDK). `null` si la sesión solo usó el wizard.
+  messages: unknown[] | null
 }

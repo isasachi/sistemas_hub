@@ -2,6 +2,7 @@
 
 import { create } from 'zustand'
 import type { ReferenceAnalysis, ProductScan, CopyVersions, ConfirmedCopy, SessionResponse } from '@/lib/types'
+import type { MarketResearch } from '@/lib/anuncios/schemas'
 
 export const SESSION_KEY = 'anuncios_session_id'
 
@@ -19,6 +20,7 @@ interface WizardState {
   whatItIs: string | null
   whatItDoes: string | null
   targetAudience: string | null
+  marketResearch: MarketResearch | null
   copyVersions: CopyVersions | null
   confirmedCopy: ConfirmedCopy | null
   imageUrl: string | null
@@ -38,7 +40,9 @@ interface WizardActions {
     whatItIs: string
     whatItDoes: string
     targetAudience: string
+    marketResearch: MarketResearch | null
   }) => void
+  setMarketResearch: (marketResearch: MarketResearch) => void
   setCopyVersions: (copyVersions: CopyVersions) => void
   setConfirmedCopy: (confirmedCopy: ConfirmedCopy) => void
   setImageUrl: (url: string) => void
@@ -65,6 +69,7 @@ const initialState: WizardState = {
   whatItIs: null,
   whatItDoes: null,
   targetAudience: null,
+  marketResearch: null,
   copyVersions: null,
   confirmedCopy: null,
   imageUrl: null,
@@ -95,8 +100,10 @@ export const useWizardStore = create<WizardState & WizardActions>((set, get) => 
   setReferenceData: ({ referenceUrl, referenceAnalysis }) =>
     set({ referenceUrl, referenceAnalysis, step: 1 }),
 
-  setProductData: ({ productUrl, logoUrl, productScan, productName, whatItIs, whatItDoes, targetAudience }) =>
-    set({ productUrl, logoUrl, productScan, productName, whatItIs, whatItDoes, targetAudience, step: 2 }),
+  setProductData: ({ productUrl, logoUrl, productScan, productName, whatItIs, whatItDoes, targetAudience, marketResearch }) =>
+    set({ productUrl, logoUrl, productScan, productName, whatItIs, whatItDoes, targetAudience, marketResearch, step: 2 }),
+
+  setMarketResearch: (marketResearch) => set({ marketResearch }),
 
   setCopyVersions: (copyVersions) => set({ copyVersions, step: 3 }),
 
@@ -110,13 +117,13 @@ export const useWizardStore = create<WizardState & WizardActions>((set, get) => 
       Object.assign(resets, {
         referenceUrl: null, referenceAnalysis: null,
         productUrl: null, logoUrl: null, productScan: null,
-        productName: null, whatItIs: null, whatItDoes: null, targetAudience: null,
+        productName: null, whatItIs: null, whatItDoes: null, targetAudience: null, marketResearch: null,
         copyVersions: null, confirmedCopy: null, imageUrl: null,
       })
     } else if (step <= 2) {
       Object.assign(resets, {
         productUrl: null, logoUrl: null, productScan: null,
-        productName: null, whatItIs: null, whatItDoes: null, targetAudience: null,
+        productName: null, whatItIs: null, whatItDoes: null, targetAudience: null, marketResearch: null,
         copyVersions: null, confirmedCopy: null, imageUrl: null,
       })
     } else if (step <= 3) {
@@ -141,6 +148,7 @@ export const useWizardStore = create<WizardState & WizardActions>((set, get) => 
       whatItIs: session.what_it_is,
       whatItDoes: session.what_it_does,
       targetAudience: session.target_audience,
+      marketResearch: session.market_research ?? null,
       copyVersions: session.copy_versions,
       confirmedCopy: session.confirmed_copy,
       imageUrl: session.image_url,
