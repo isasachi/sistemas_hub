@@ -2,9 +2,8 @@
 // las MISMAS keys (`GOOGLE_API_KEY`, `OPENAI_API_KEY`) y sin Gateway: no se mete otro intermediario.
 // La IMAGEN no pasa por acá: sigue en `generateImage` (respaldo por pieza, que el AI SDK no tiene).
 //
-// Es la parte genérica de `lib/landing-v2/models.ts` (rama `feat/landing-generator-v2`), copiada
-// tal cual para que anuncios no dependa de que esa rama se mergee. Cuando las dos estén en main,
-// landing v2 importa de acá y conserva solo su `DIRECTOR`.
+// Lo usan anuncios y landing v2. `lib/landing-v2/models.ts` re-exporta esto y agrega solo su
+// `DIRECTOR` (gpt-5.5), la única excepción al par.
 import { createGoogle } from '@ai-sdk/google'
 import { createOpenAI } from '@ai-sdk/openai'
 import { generateText, Output, type LanguageModel, type ModelMessage } from 'ai'

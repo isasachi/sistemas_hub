@@ -34,12 +34,12 @@ export default function StepWizard({
   backHref,
   onBack,
   onReset,
-  actions,
   onNext,
   nextLabel = 'Continuar',
   nextDisabled,
   children,
   full,
+  actions,
 }: {
   steps: WizardStep[]
   /** Índice 0-based del paso visible. */
@@ -51,8 +51,6 @@ export default function StepWizard({
   backHref?: string
   onBack?: () => void
   onReset?: () => void
-  /** Controles extra a la derecha de la barra, antes de Reiniciar (p. ej. el selector Wizard/Chat). */
-  actions?: React.ReactNode
   /** Acción del shell. Omitir cuando cada paso trae la suya. */
   onNext?: () => void
   nextLabel?: string
@@ -60,6 +58,8 @@ export default function StepWizard({
   children: React.ReactNode
   /** Sin caja centrada: para pasos que usan el ancho completo (editores). */
   full?: boolean
+  /** Controles extra de la barra, antes de Reiniciar (p. ej. el selector de vista de landing v2). */
+  actions?: React.ReactNode
 }) {
   const reduce = useReducedMotion()
   const prev = useRef(current)
@@ -104,8 +104,7 @@ export default function StepWizard({
 
           <StepRail steps={steps} current={current} maxReached={maxReached} onNavigate={onNavigate} />
 
-          {actions && <div className="ml-auto flex shrink-0 items-center">{actions}</div>}
-
+          {actions && <div className="ml-auto shrink-0">{actions}</div>}
           {onReset ? (
             <button
               type="button"

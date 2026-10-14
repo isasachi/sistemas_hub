@@ -1,0 +1,123 @@
+'use client'
+
+// Paso 6 del wizard v2: render sección por sección con aprobación.
+import { useEffect, useRef, useState } from 'react'
+import { Check, Download, Plus, RefreshCw } from 'lucide-react'
+import { SECTION_BY_ID, inSkeletonOrder, type SectionId } from '@/lib/landing-v2/catalog'
+import { getNextSection, sectionSupport } from '@/lib/landing-v2/flow'
+import { latestVersion, type LandingSession } from '@/lib/landing-v2/schemas'
+import { VALIDATION_PHRASE } from '@/lib/landing-v2/system-prompt'
+import BackToDashboard from '@/components/tools/ui/BackToDashboard'
+import { api } from './client'
+import { SectionImage, downloadAll } from './SectionImage'
+import { btnGhost, btnPrimary, ErrorBox, Spinner, type StepProps } from './WizardV2'
+
+const field = 'jr-field w-full rounded-lg px-3 py-2 text-[14px]'
+
+// ─── Paso 6: render ───────────────────────────────────────────────────────────────
+
+/** La sección en la que se trabaja: la actual si espera validación; si no, la siguiente del esqueleto. */
+function workingSection(s: LandingSession): SectionId | null {
+  if (s.current && !s.sections[s.current]?.approved && s.selected.includes(s.current)) return s.current
+  return getNextSection(s)
+}
+
+export function RenderStep({ session, setSession, reset }: StepProps) {
+  const [busy, setBusy] = useState<'gen' | 'revise' | 'approve' | 'zip' | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [feedback, setFeedback] = useState('')
+  const [asking, setAsking] = useState(false)
+  const tried = useRef<Set<string>>(new Set())
+  const id = session ? workingSection(session) : null
+  const version = session && id ? latestVersion(session, id) : null
+
+  async function act(kind: 'gen' | 'revise' | 'approve', body: object) {
+    if (!session || !id) return
+    setBusy(kind); setError(null)
+    try {
+      setSession((await api.post(session.id, `sections/${id}`, body)).session)
+      if (kind === 'revise') { setFeedback(''); setAsking(false) }
+    } catch (e) { setError((e as Error).message) } finally { setBusy(null) }
+  }
+
+  // Genera sola la sección en curso si todavía no tiene imagen (al entrar y tras cada aprobación).
+  useEffect(() => {
+    if (!session || !id || version || busy || tried.current.has(id)) return
+    tried.current.add(id)
+    act('gen', { action: 'generate' })
+  }, [session, id, version, busy]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!session) return null
+  const approved = inSkeletonOrder(session.selected).filter((x) => session.sections[x]?.approved)
+  const total = inSkeletonOrder(session.selected).filter((x) => sectionSupport(session, x).ok).length
+  const approvedItems = approved.map((x) => ({ id: x, url: latestVersion(session, x)!.imageUrl }))
+  async function zip() {
+    setBusy('zip'); setError(null)
+    try { await downloadAll(approvedItems) } catch (e) { setError((e as Error).message) } finally { setBusy(null) }
+  }
+
+  return (
+    <div className="grid gap-8 lg:grid-cols-[minmax(0,420px)_1fr]">
+      <div className="flex flex-col gap-4">
+        {id ? (
+          <>
+            <p className="lp-label">Sección {SECTION_BY_ID[id].wf} de 14 · {SECTION_BY_ID[id].es} · {approved.length}/{total} aprobadas</p>
+            {busy === 'gen' || busy === 'revise' || (!version && !error) ? (
+              <div className="flex aspect-[9/16] w-full flex-col items-center justify-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.02] px-6 text-center" aria-live="polite">
+                <Spinner />
+                <p className="text-[14px] text-[#efe7e0]">{busy === 'revise' ? 'Aplicando tus cambios…' : `Diseñando «${SECTION_BY_ID[id].es}»…`}</p>
+                <p className="text-[12px] text-[#a98c88]">Suele tardar alrededor de un minuto.</p>
+              </div>
+            ) : version ? (
+              <SectionImage id={id} url={version.imageUrl} />
+            ) : null}
+            <ErrorBox msg={error} />
+            {error && !version && <button type="button" className={btnGhost} onClick={() => act('gen', { action: 'generate' })}><RefreshCw className="h-4 w-4" /> Reintentar</button>}
+            {version && !busy && (
+              <div className="flex flex-col gap-3">
+                <p className="text-[13px] text-[#c9b4ae]">{VALIDATION_PHRASE}</p>
+                {asking ? (
+                  <>
+                    <textarea className={field} rows={3} value={feedback} onChange={(e) => setFeedback(e.target.value)} autoFocus
+                              placeholder="¿Qué cambiamos? Ej.: el titular más grande, fondo más claro…" aria-label="Cambios" />
+                    <div className="flex gap-2">
+                      <button type="button" className={btnPrimary} disabled={feedback.trim().length < 3} onClick={() => act('revise', { action: 'revise', feedback })}>Aplicar cambios</button>
+                      <button type="button" className={`${btnGhost} shrink-0`} onClick={() => setAsking(false)}>Cancelar</button>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex gap-2">
+                    <button type="button" className={btnPrimary} onClick={() => act('approve', { action: 'approve' })}><Check className="h-4 w-4" /> Aprobar</button>
+                    <button type="button" className={`${btnGhost} shrink-0`} onClick={() => setAsking(true)}>Pedir cambios</button>
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="flex flex-col gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.02] p-6">
+            <p className="text-[16px] font-semibold text-[#f6f2eb]">¡Tu landing está lista!</p>
+            <p className="text-[13px] text-[#c9b4ae]">Aprobaste {approved.length} secciones. Descárgalas y súbelas en este orden.</p>
+            {/* El cierre del wizard anterior. Sin "Regenerar todo": acá cada sección se aprueba de a una. */}
+            <button type="button" className={btnPrimary} disabled={busy === 'zip' || !approvedItems.length} onClick={zip}>
+              {busy === 'zip' ? <><Spinner />Descargando…</> : <><Download className="h-4 w-4" /> Descargar secciones</>}
+            </button>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" className={`${btnGhost} flex-1`} onClick={reset}><Plus className="h-4 w-4" /> Nueva landing</button>
+              <BackToDashboard className="flex flex-1 items-center justify-center gap-2" />
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <p className="lp-label">Aprobadas</p>
+        {approvedItems.length ? (
+          <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 xl:grid-cols-5">
+            {approvedItems.map((it) => <SectionImage key={it.id} id={it.id} url={it.url} />)}
+          </div>
+        ) : <p className="text-[13px] text-[#a98c88]">Las secciones que apruebes aparecen aquí, en el orden de la landing.</p>}
+      </div>
+    </div>
+  )
+}

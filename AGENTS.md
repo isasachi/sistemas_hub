@@ -57,6 +57,16 @@ respaldo.** Por eso `callStructured`/`callReasoning` **no toman opciones**: el v
 ya no puede significar nada distinto del default. Los dos sitios que NO quieren respaldo llaman a
 `geminiCallStructured`, que es otra función y se lee como lo que es.
 
+⚠️ **La ÚNICA excepción es el director de arte de landing v2** (`DIRECTOR` en
+`apps/web/lib/landing-v2/models.ts`): **`gpt-5.5` primario, `gemini-3.6-flash` de respaldo**,
+decisión del dueño del 2026-10-13. Con el mismo pedido —su system prompt literal, el checklist y el
+PDF de wireframes completo—, Gemini flash, pro y 3.1-pro describieron un layout en vez de una idea
+visual en 0 de 8 draws, y `gpt-5.5` propuso un concepto que cuenta el ángulo en todos los draws, en 4
+productos y 3 nichos. Lleva 90 s por intento (el PDF pesa 25 MB) y el reintento de corrección va solo
+al modelo que ya respondió, para que el peor caso quepa en los 300 s de la ruta. **No lo devuelvas al
+par del hub "por consistencia"**: el probe `scripts/probe-landing-v2-director-texto.ts` compara los
+dos (`director,base`).
+
 **Dos tools ya piden ese par por el AI SDK y no por `callStructured`:** landing v2 (`lib/landing-v2/models.ts`) y anuncios (`lib/ai-sdk.ts` — `structured`/`reasoning`/`chatModel`), con providers directos, las mismas keys y **sin Gateway**. Mismo par, misma regla de timeout y respaldo logueado. ⚠️ **Lo que cambia es el contrato del schema:** el AI SDK convierte zod con `io: 'input'`, así que un `.catch`/`.nullish()`/`.optional()` saca el campo del `required`. Los schemas que viajan por ahí van aparte, todo en `required` y lo opcional `.nullable()` (ver `agents/anuncios.md`, "Arquitectura").
 
 **En IMAGEN el primario también es uno solo —`gpt-image-2.5-sunburst`— y lo que cambia por pieza
