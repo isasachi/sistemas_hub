@@ -1,26 +1,24 @@
 /**
- * Roles del hub: `admin` y `operador`.
+ * Roles del hub: `admin`, `gestor` y `operador`.
  *
  * `operador` es el usuario normal — el nombre sale de `lib/tools.ts`, que ya llama así
  * a quien usa las herramientas ("etapa del flujo del operador").
  *
- * ⚠️ SIN MATRIZ DE PERMISOS. Un solo rol privilegiado no necesita una: ver el
- * razonamiento en la migración 20260821000001.
+ * `gestor` está DEBAJO de `admin`: entra al panel y hace todo lo que hace un admin
+ * (cortesías, créditos) MENOS cambiar roles. Esa es la única diferencia, y es la que
+ * importa: un gestor que pudiera tocar roles podría nombrarse admin a sí mismo.
+ *
+ * ⚠️ LOS PERMISOS SON DOS PREDICADOS (`puedeEntrarAlPanel`, `puedeCambiarRoles`), NO
+ * UNA TABLA. Con una sola rebanada distinta entre los dos roles privilegiados, una
+ * matriz en la DB respondería lo mismo que estos dos `if` a cambio de una tabla, un
+ * join y una pantalla. Si aparece una segunda diferencia, va otro predicado acá.
  */
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { getUser } from './supabase/server'
 
-export type Role = 'admin' | 'operador'
-
-export const ROLE_LABEL: Record<Role, string> = {
-  admin: 'Administrador',
-  operador: 'Operador',
-}
-
-/** Normaliza cualquier entrada. Lo que no sea 'admin' es 'operador'. */
-export function toRole(v: unknown): Role {
-  return v === 'admin' ? 'admin' : 'operador'
-}
+export { ROLES, ROLE_LABEL, toRole, puedeEntrarAlPanel, puedeCambiarRoles } from './role-defs'
+export type { Role, PanelRole } from './role-defs'
+import { toRole, puedeEntrarAlPanel, type PanelRole, type Role } from './role-defs'
 
 let _db: SupabaseClient | null = null
 function getDb(): SupabaseClient {
@@ -68,8 +66,16 @@ export async function getRole(userId: string): Promise<Role> {
   return toRole(data?.role)
 }
 
-export async function isAdmin(userId: string, email?: string | null): Promise<boolean> {
-  return isBootstrapAdmin(email) || (await getRole(userId)) === 'admin'
+/**
+ * El rol con el que este usuario entra al panel, o null si no entra.
+ *
+ * Los de `ADMIN_EMAILS` son admin aunque la columna diga otra cosa: es la salida de
+ * emergencia, y no puede depender de lo que diga la DB.
+ */
+export async function panelRole(userId: string, email?: string | null): Promise<PanelRole | null> {
+  if (isBootstrapAdmin(email)) return 'admin'
+  const r = await getRole(userId)
+  return puedeEntrarAlPanel(r) ? r : null
 }
 
 export async function setRole(userId: string, role: Role): Promise<void> {
@@ -81,16 +87,17 @@ export async function setRole(userId: string, role: Role): Promise<void> {
 }
 
 /**
- * El admin de ESTA request, o null.
+ * Quien opera el panel en ESTA request (admin o gestor), o null.
  *
  * ⚠️ Toda mutación del panel arranca por acá y NUNCA por un id que venga del cliente.
  * Un server action es un endpoint público: si el id del admin saliera del formulario,
  * cualquiera podría otorgarse el plan 3 (ver el mismo comentario en
  * app/cuenta/actions.ts, y la nota de AGENTS.md sobre `/api/*` fuera del gate).
  */
-export async function currentAdmin(): Promise<{ id: string; email: string | null } | null> {
+export async function currentStaff(): Promise<{ id: string; email: string | null; role: PanelRole } | null> {
   const user = await getUser().catch(() => null)
   if (!user) return null
-  if (!(await isAdmin(user.id, user.email))) return null
-  return { id: user.id, email: user.email ?? null }
+  const role = await panelRole(user.id, user.email)
+  if (!role) return null
+  return { id: user.id, email: user.email ?? null, role }
 }

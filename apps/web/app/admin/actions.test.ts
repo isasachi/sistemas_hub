@@ -4,7 +4,7 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('@/lib/supabase/server', () => ({ getUser: vi.fn() }))
 vi.mock('@/lib/roles', async (orig) => ({
   ...(await orig<typeof import('@/lib/roles')>()),
-  currentAdmin: vi.fn(),
+  currentStaff: vi.fn(),
   setRole: vi.fn().mockResolvedValue(undefined),
 }))
 vi.mock('@/lib/credits', () => ({
@@ -22,7 +22,7 @@ vi.mock('@/lib/admin', async (orig) => ({
 }))
 
 import { cambiarRol, otorgarAcceso, revocarAcceso, ajustarCreditos } from './actions'
-import { currentAdmin, setRole, isBootstrapAdmin } from '@/lib/roles'
+import { currentStaff, setRole, isBootstrapAdmin, toRole } from '@/lib/roles'
 import { setCreditBonus } from '@/lib/credits'
 import { otorgarCortesia, quitarCortesia, manualMembershipId } from '@/lib/admin'
 
@@ -36,7 +36,7 @@ const escrituras = () => [setRole, setCreditBonus, otorgarCortesia, quitarCortes
 
 beforeEach(() => {
   vi.clearAllMocks()
-  vi.mocked(currentAdmin).mockResolvedValue({ id: 'admin-1', email: 'jefe@jrhub.pe' })
+  vi.mocked(currentStaff).mockResolvedValue({ id: 'admin-1', email: 'jefe@jrhub.pe', role: 'admin' })
 })
 
 /**
@@ -46,7 +46,7 @@ beforeEach(() => {
  * (AGENTS.md), así que esto NO está cubierto por ninguna otra capa.
  */
 describe('sin rol de admin no se escribe nada', () => {
-  beforeEach(() => vi.mocked(currentAdmin).mockResolvedValue(null))
+  beforeEach(() => vi.mocked(currentStaff).mockResolvedValue(null))
 
   it.each([
     ['rol', () => cambiarRol({}, fd({ userId: 'v', role: 'admin' }))],
@@ -81,6 +81,61 @@ describe('rol', () => {
   it('un rol desconocido cae a operador y nunca a admin', async () => {
     await cambiarRol({}, fd({ userId: 'otro', role: 'superadmin' }))
     expect(setRole).toHaveBeenCalledWith('otro', 'operador')
+  })
+
+  it('el admin puede nombrar gestor a otro', async () => {
+    expect((await cambiarRol({}, fd({ userId: 'otro', role: 'gestor' }))).ok).toBeTruthy()
+    expect(setRole).toHaveBeenCalledWith('otro', 'gestor')
+  })
+
+  // Pasar a gestor TAMBIÉN es quitarse el admin: lo bloquea la misma guarda.
+  it('el admin no se baja a sí mismo a gestor', async () => {
+    expect((await cambiarRol({}, fd({ userId: 'admin-1', role: 'gestor' }))).error).toMatch(/ti mismo/i)
+    expect(setRole).not.toHaveBeenCalled()
+  })
+
+  it('toRole reconoce los tres roles y nada más', () => {
+    expect(toRole('admin')).toBe('admin')
+    expect(toRole('gestor')).toBe('gestor')
+    expect(toRole('operador')).toBe('operador')
+    expect(toRole('Admin')).toBe('operador')
+    expect(toRole(null)).toBe('operador')
+  })
+})
+
+/**
+ * ⚠️ El gestor está debajo del admin: entra al panel y hace TODO lo demás, pero no
+ * toca roles. Si pudiera, se nombraría admin a sí mismo y la diferencia no existiría.
+ * El formulario de rol ni se le pinta, pero el action es un endpoint público: el
+ * bloqueo que cuenta es el de acá.
+ */
+describe('gestor', () => {
+  beforeEach(() =>
+    vi.mocked(currentStaff).mockResolvedValue({ id: 'gestor-1', email: 'g@jrhub.pe', role: 'gestor' }))
+
+  it.each([
+    ['ascenderse a admin', 'gestor-1', 'admin'],
+    ['ascender a otro', 'otro', 'admin'],
+    ['degradar a un admin', 'admin-1', 'operador'],
+    ['nombrar otro gestor', 'otro', 'gestor'],
+  ])('no puede %s', async (_caso, userId, role) => {
+    expect((await cambiarRol({}, fd({ userId, role }))).error).toMatch(/permiso/i)
+    expect(setRole).not.toHaveBeenCalled()
+  })
+
+  it('otorga acceso de cortesía', async () => {
+    expect((await otorgarAcceso({}, fd({ userId: 'v', tier: '3' }))).ok).toBeTruthy()
+    expect(otorgarCortesia).toHaveBeenCalledWith('v', 3)
+  })
+
+  it('revoca cortesía', async () => {
+    expect((await revocarAcceso({}, fd({ userId: 'v' }))).ok).toBeTruthy()
+    expect(quitarCortesia).toHaveBeenCalledWith('v')
+  })
+
+  it('ajusta créditos', async () => {
+    expect((await ajustarCreditos({}, fd({ userId: 'v', bonus: '20' }))).ok).toBeTruthy()
+    expect(setCreditBonus).toHaveBeenCalledWith('v', 20)
   })
 })
 

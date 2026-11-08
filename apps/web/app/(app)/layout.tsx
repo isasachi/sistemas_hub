@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getUser } from "@/lib/supabase/server";
 import { getAccess } from "@/lib/whop";
 import { getProfile } from "@/lib/user-settings";
-import { isAdmin } from "@/lib/roles";
+import { panelRole } from "@/lib/roles";
 import { creditStatus } from "@/lib/credits";
 import { AppShell } from "@/components/dashboard/AppShell";
 
@@ -44,7 +44,7 @@ export default async function AppLayout({
   const [perfil, credits, admin] = await Promise.all([
     getProfile(user.id),
     creditStatus(user.id, access),
-    isAdmin(user.id, user.email),
+    panelRole(user.id, user.email).then(Boolean),
   ]);
   const label = perfil.fullName ?? user.email ?? "Cuenta";
 

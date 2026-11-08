@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowLeft, Search, ShieldCheck, Gift } from "lucide-react";
 import { PLANS } from "@ph/shared";
 import { listUsuarios, consumo, type AdminUser } from "@/lib/admin";
+import { ROLE_LABEL } from "@/lib/roles";
 import { ESTADO, TONO, fecha, Card, Insignia } from "./ui";
 
 /**
@@ -145,9 +146,9 @@ export default async function AdminPage({
                           {u.fullName && (
                             <span className="text-[11px] text-[#a98c88]">{u.fullName}</span>
                           )}
-                          {u.role === "admin" && (
+                          {u.role !== "operador" && (
                             <Insignia tono="ok">
-                              <ShieldCheck className="h-3 w-3" aria-hidden /> Admin
+                              <ShieldCheck className="h-3 w-3" aria-hidden /> {ROLE_LABEL[u.role]}
                             </Insignia>
                           )}
                           {u.creditBonus > 0 && (
