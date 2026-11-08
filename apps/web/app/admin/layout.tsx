@@ -1,9 +1,9 @@
 import { notFound, redirect } from "next/navigation";
 import { getUser } from "@/lib/supabase/server";
-import { isAdmin } from "@/lib/roles";
+import { panelRole } from "@/lib/roles";
 
 /**
- * Panel de administración. Gate de ROL, y de nada más.
+ * Panel de administración. Gate de ROL (admin o gestor), y de nada más.
  *
  * ⚠️ VIVE FUERA DEL GRUPO `(app)`, igual que /cuenta y /suscripcion, y por una razón
  * más fuerte que en esos dos: el layout de `(app)` redirige a /suscripcion a quien no
@@ -12,8 +12,8 @@ import { isAdmin } from "@/lib/roles";
  * quedaría encerrado justo fuera de la única pantalla capaz de arreglar entitlements.
  * El acceso de administración NO puede depender de tener un plan pagado.
  *
- * ⚠️ Y esto gatea la UI del panel; lo que protege las ESCRITURAS es `currentAdmin()`
- * dentro de cada server action. Un layout no cubre un action.
+ * ⚠️ Y esto gatea la UI del panel; lo que protege las ESCRITURAS es `currentStaff()`
+ * dentro de cada server action (y `puedeCambiarRoles` en el de roles). Un layout no cubre un action.
  */
 export const dynamic = "force-dynamic";
 
@@ -21,9 +21,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const user = await getUser();
   if (!user) redirect("/login");
 
-  // 404 y no un redirect: para quien no es admin el panel simplemente no existe.
+  // 404 y no un redirect: para quien no es admin ni gestor el panel simplemente no existe.
   // Un "no tienes permiso" confirma que la ruta está ahí y a quién buscar.
-  if (!(await isAdmin(user.id, user.email))) notFound();
+  if (!(await panelRole(user.id, user.email))) notFound();
 
   return (
     <div className="min-h-screen bg-[#14050a] px-6 py-12">

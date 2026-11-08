@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { Loader2 } from "lucide-react";
 import { TIERS, PLANS } from "@ph/shared";
+import { ROLES, ROLE_LABEL } from "@/lib/role-defs";
 import {
   cambiarRol, otorgarAcceso, revocarAcceso, ajustarCreditos,
   type FormState,
@@ -13,7 +14,10 @@ import {
 //
 // ⚠️ El `userId` viaja en un input oculto, y eso es correcto ACÁ: el objetivo de una
 // acción de administración es otra persona por definición. Lo que no puede venir del
-// cliente es el permiso, y eso lo resuelve `currentAdmin()` dentro de cada action.
+// cliente es el permiso, y eso lo resuelve `currentStaff()` dentro de cada action.
+//
+// `RolForm` solo se pinta para un admin, pero esconderlo es cosmético: lo que impide
+// que un gestor cambie roles es `puedeCambiarRoles` dentro de `cambiarRol`.
 
 const INICIAL: FormState = {};
 
@@ -148,8 +152,11 @@ export function RolForm({
         <label className="flex flex-col gap-1.5">
           <span className="text-[12px] text-[#a98c88]">Rol</span>
           <select name="role" defaultValue={role} className={SELECT}>
-            <option value="operador">Operador</option>
-            <option value="admin">Administrador</option>
+            {ROLES.map((r) => (
+              <option key={r} value={r}>
+                {ROLE_LABEL[r]}
+              </option>
+            ))}
           </select>
         </label>
         <Guardar pending={pending}>Guardar</Guardar>

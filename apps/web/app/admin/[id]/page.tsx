@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, ShieldCheck, Gift } from "lucide-react";
 import { PLANS, precioUSD } from "@ph/shared";
 import { getUsuario, creditosDe, consumo, actividad } from "@/lib/admin";
-import { currentAdmin } from "@/lib/roles";
+import { currentStaff, puedeCambiarRoles, ROLE_LABEL } from "@/lib/roles";
 import { ESTADO, TONO, fecha, Card, Insignia } from "../ui";
 import { RolForm, AccesoForm, CreditosForm } from "../Acciones";
 
@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 
 export default async function FichaUsuario({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [u, admin] = await Promise.all([getUsuario(id), currentAdmin()]);
+  const [u, staff] = await Promise.all([getUsuario(id), currentStaff()]);
   if (!u) notFound();
 
   const [credits, gasto, act] = await Promise.all([
@@ -40,9 +40,9 @@ export default async function FichaUsuario({ params }: { params: Promise<{ id: s
         </Link>
         <h1 className="lp-serif mb-1.5 flex flex-wrap items-center gap-2 text-[26px] leading-[1.15] text-[#f6f2eb]">
           {u.email ?? "(sin correo)"}
-          {u.role === "admin" && (
+          {u.role !== "operador" && (
             <Insignia tono="ok">
-              <ShieldCheck className="h-3 w-3" aria-hidden /> Admin
+              <ShieldCheck className="h-3 w-3" aria-hidden /> {ROLE_LABEL[u.role]}
             </Insignia>
           )}
         </h1>
@@ -165,9 +165,18 @@ export default async function FichaUsuario({ params }: { params: Promise<{ id: s
 
         <Card
           title="Rol"
-          description="Un administrador ve este panel y puede otorgar acceso y créditos a cualquiera."
+          description="Administrador y gestor ven este panel y pueden otorgar acceso y créditos a cualquiera. Solo un administrador cambia roles."
         >
-          <RolForm userId={u.id} role={u.role} esYoMismo={admin?.id === u.id} />
+          {puedeCambiarRoles(staff?.role) ? (
+            <RolForm userId={u.id} role={u.role} esYoMismo={staff?.id === u.id} />
+          ) : (
+            <p className="text-[13px] text-[#efe7e0]">
+              {ROLE_LABEL[u.role]}
+              <span className="mt-1 block text-[11px] text-[#8d7470]">
+                Como gestor no puedes cambiar roles.
+              </span>
+            </p>
+          )}
         </Card>
       </div>
     </>

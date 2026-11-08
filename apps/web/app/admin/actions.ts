@@ -7,8 +7,12 @@
  * y la diferencia importa. En "Mi cuenta" el usuario objetivo SIEMPRE es el de la
  * sesión, así que aceptarlo del cliente sería dejar que cualquiera le escriba a otro.
  * Acá el objetivo es otra persona por definición: lo que no puede venir del cliente es
- * el PERMISO. Por eso cada acción arranca con `currentAdmin()`, que resuelve la sesión
+ * el PERMISO. Por eso cada acción arranca con `currentStaff()`, que resuelve la sesión
  * por su cuenta y verifica el rol contra la DB.
+ *
+ * Admin y gestor pasan las mismas acciones, salvo `cambiarRol`, que además exige
+ * `puedeCambiarRoles` — y lo exige ACÁ, no escondiendo el formulario: esconderlo no
+ * cierra nada, el action se puede llamar igual.
  *
  * Server actions y no rutas de `/api/*` justamente por eso: esas rutas no pasan por el
  * middleware ni por ningún layout (AGENTS.md), así que un endpoint de API que otorgue
@@ -16,7 +20,7 @@
  */
 import { revalidatePath } from 'next/cache'
 import { isTier, toTier } from '@ph/shared'
-import { currentAdmin, setRole, toRole } from '@/lib/roles'
+import { currentStaff, puedeCambiarRoles, setRole, toRole, ROLE_LABEL, type PanelRole } from '@/lib/roles'
 import { setCreditBonus } from '@/lib/credits'
 import { otorgarCortesia, quitarCortesia } from '@/lib/admin'
 
@@ -26,13 +30,15 @@ const texto = (fd: FormData, campo: string) => String(fd.get(campo) ?? '').trim(
 
 const SIN_PERMISO = 'No tienes permiso para hacer esto.'
 
-/** El objetivo de la acción, validado. Sin admin o sin id, no se toca nada. */
-async function objetivo(fd: FormData): Promise<{ adminId: string; userId: string } | FormState> {
-  const admin = await currentAdmin()
-  if (!admin) return { error: SIN_PERMISO }
+/** El objetivo de la acción, validado. Sin admin/gestor o sin id, no se toca nada. */
+async function objetivo(
+  fd: FormData,
+): Promise<{ adminId: string; adminRole: PanelRole; userId: string } | FormState> {
+  const staff = await currentStaff()
+  if (!staff) return { error: SIN_PERMISO }
   const userId = texto(fd, 'userId')
   if (!userId) return { error: 'Falta el usuario.' }
-  return { adminId: admin.id, userId }
+  return { adminId: staff.id, adminRole: staff.role, userId }
 }
 
 const fallo = (r: unknown): r is FormState => typeof (r as FormState).error === 'string'
@@ -45,6 +51,8 @@ function refrescar(userId: string) {
 export async function cambiarRol(_prev: FormState, fd: FormData): Promise<FormState> {
   const q = await objetivo(fd)
   if (fallo(q)) return q
+  // ⚠️ El gestor entra al panel pero NO toca roles: si pudiera, se nombraría admin.
+  if (!puedeCambiarRoles(q.adminRole)) return { error: SIN_PERMISO }
   const role = toRole(texto(fd, 'role'))
 
   // ⚠️ Nadie se quita a sí mismo el rol. Con un solo admin real eso deja el panel sin
@@ -61,7 +69,7 @@ export async function cambiarRol(_prev: FormState, fd: FormData): Promise<FormSt
     return { error: 'No pudimos guardar el rol.' }
   }
   refrescar(q.userId)
-  return { ok: `Rol actualizado a ${role}.` }
+  return { ok: `Rol actualizado a ${ROLE_LABEL[role]}.` }
 }
 
 export async function otorgarAcceso(_prev: FormState, fd: FormData): Promise<FormState> {

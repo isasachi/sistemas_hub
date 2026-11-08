@@ -17,7 +17,7 @@ interface AppShellProps {
   /**
    * Muestra el acceso al panel de usuarios. Lo resuelve el layout del servidor:
    * este componente es cliente y no puede consultar el rol — y aunque el enlace se
-   * escondiera mal, `/admin` tiene su propio gate (devuelve 404 a quien no es admin).
+   * escondiera mal, `/admin` tiene su propio gate (devuelve 404 a quien no es admin ni gestor).
    */
   admin?: boolean;
   children: React.ReactNode;
