@@ -20,6 +20,9 @@ export const ESTADO: Record<string, { texto: string; tono: "ok" | "aviso" | "mal
   canceled: { texto: "Cancelada", tono: "malo" },
   expired: { texto: "Vencida", tono: "malo" },
   drafted: { texto: "Sin completar", tono: "aviso" },
+  // No es de Whop: lo pone lib/admin.ts cuando una cortesía con plazo ya pasó su fecha
+  // (su `status` sigue en `active` porque nadie la cierra).
+  cortesia_vencida: { texto: "Cortesía vencida", tono: "malo" },
 };
 
 export const TONO: Record<"ok" | "aviso" | "malo", string> = {

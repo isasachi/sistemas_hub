@@ -10,7 +10,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { PLANS, toTier, type Tier } from '@ph/shared'
 import {
-  pickAccess, isGrandfathered, saveEntitlement, esManual,
+  pickAccess, daAcceso, isGrandfathered, saveEntitlement, esManual,
   type Access, type EntitlementRow,
 } from './whop'
 import { toRole, type Role } from './roles'
@@ -46,17 +46,23 @@ export { esManual }
  * Otorga (o cambia) la cortesía de un usuario. Upsert sobre la PK, así que repetirlo
  * no acumula filas.
  *
- * ⚠️ `renewal_period_end` va en null a propósito: no hay período pagado que anclar.
- * `periodStart` (credits.ts) trata el null anclando los créditos al día 1 del mes,
- * que es exactamente lo que ya hace con los grandfathered.
+ * `vence` (ISO) es el día en que deja de dar acceso; null = sin plazo. En una
+ * cortesía `renewal_period_end` ES ese vencimiento: `daAcceso` (whop.ts) la corta ahí,
+ * porque nadie más lo haría — no existe en Whop y su `status` nunca cambia.
+ *
+ * Sin plazo, `periodStart` (credits.ts) ancla los créditos al día 1 del mes, como con
+ * los grandfathered; con plazo, al día del vencimiento.
+ *
+ * Volver a otorgar REEMPLAZA el plazo: otorgar sin fecha a quien tenía una lo deja
+ * sin vencimiento.
  */
-export async function otorgarCortesia(userId: string, tier: Tier): Promise<void> {
+export async function otorgarCortesia(userId: string, tier: Tier, vence: string | null = null): Promise<void> {
   await saveEntitlement({
     whop_membership_id: manualMembershipId(userId),
     user_id: userId,
     status: 'active',
     tier,
-    renewal_period_end: null,
+    renewal_period_end: vence,
   })
 }
 
@@ -168,7 +174,12 @@ export async function listUsuarios(): Promise<AdminUser[]> {
         lastSignInAt: u.last_sign_in_at ?? null,
         access,
         manual: filas.some((f) => esManual(String(f.whop_membership_id ?? ''))),
-        ultimoEstado: (reciente?.status as string | null) ?? null,
+        // Una cortesía vencida sigue en `active` (nadie la cierra): sin esto el panel
+        // la mostraba como "Activa" a alguien que ya no entra.
+        ultimoEstado: reciente && esManual(String(reciente.whop_membership_id ?? '')) &&
+          !daAcceso(reciente as EntitlementRow)
+          ? 'cortesia_vencida'
+          : (reciente?.status as string | null) ?? null,
         creditBonus: Number(aj?.credit_bonus ?? 0),
       }
     })

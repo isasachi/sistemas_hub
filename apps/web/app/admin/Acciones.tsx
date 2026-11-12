@@ -58,7 +58,16 @@ function Guardar({
   );
 }
 
-export function AccesoForm({ userId, tierActual }: { userId: string; tierActual: number | null }) {
+export function AccesoForm({
+  userId,
+  tierActual,
+  venceActual,
+}: {
+  userId: string;
+  tierActual: number | null;
+  /** `YYYY-MM-DD` en Lima de la cortesía vigente, o null si no tiene plazo. */
+  venceActual: string | null;
+}) {
   const [otorgado, otorgar, pOtorgar] = useActionState(otorgarAcceso, INICIAL);
   const [revocado, revocar, pRevocar] = useActionState(revocarAcceso, INICIAL);
 
@@ -78,6 +87,15 @@ export function AccesoForm({ userId, tierActual }: { userId: string; tierActual:
               ))}
             </select>
           </label>
+          <label className="flex flex-col gap-1.5">
+            <span className="text-[12px] text-[#a98c88]">Vence el (opcional)</span>
+            <input
+              type="date"
+              name="vence"
+              defaultValue={venceActual ?? ""}
+              className={SELECT}
+            />
+          </label>
           <Guardar pending={pOtorgar}>
             {tierActual ? "Cambiar cortesía" : "Otorgar acceso"}
           </Guardar>
@@ -92,6 +110,10 @@ export function AccesoForm({ userId, tierActual }: { userId: string; tierActual:
           </form>
         )}
       </div>
+      <p className="text-[11px] text-[#8d7470]">
+        Con fecha, deja de dar acceso al terminar ese día (hora de Lima). Sin fecha, no vence.
+        Volver a otorgar reemplaza la fecha.
+      </p>
       <Estado state={otorgado} />
       <Estado state={revocado} />
     </div>

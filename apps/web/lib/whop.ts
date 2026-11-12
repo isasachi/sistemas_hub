@@ -84,6 +84,30 @@ export function grantsAccess(status: string): boolean {
 export const esManual = (id: string) => id.startsWith('manual:')
 
 /**
+ * ¿Esta fila da acceso AHORA? El estado manda para todas; la fecha, solo para las
+ * cortesías.
+ *
+ * ⚠️ UNA CORTESÍA CON `renewal_period_end` VENCE SOLA ESE DÍA. Nadie más la cerraría:
+ * las memberships de Whop terminan porque Whop manda el evento, pero una fila
+ * `manual:` no existe allá y su `status` se queda en `active` para siempre. Sin fecha
+ * (null) es una cortesía sin plazo, como las de antes de esto.
+ *
+ * ⚠️ Y NO SE APLICA A LAS FILAS DE WHOP, a propósito: ahí la fecha es el fin del
+ * período pagado y la renovación llega por webhook, que puede demorarse. Cortar por
+ * fecha dejaría afuera a alguien que ya pagó el mes siguiente.
+ *
+ * Una fecha ilegible cuenta como vencida: es un gate de dinero, fail-closed como
+ * `hasAccess`.
+ */
+export function daAcceso(r: EntitlementRow, now: Date = new Date()): boolean {
+  if (!grantsAccess(String(r.status ?? ''))) return false
+  if (!esManual(String(r.whop_membership_id ?? ''))) return true
+  if (r.renewal_period_end == null || r.renewal_period_end === '') return true
+  const fin = Date.parse(String(r.renewal_period_end))
+  return !Number.isNaN(fin) && fin > now.getTime()
+}
+
+/**
  * ¿Whop todavía le puede cobrar esta membership? `active`/`trialing` se renuevan, y
  * `past_due` es un cobro que Whop sigue REINTENTANDO: si cancelar la saltara, el
  * usuario leería "no se te volverá a cobrar" y el reintento le cobraría igual.
@@ -159,11 +183,11 @@ export interface EntitlementRow {
  *
  * No cubre el caso grandfathered: eso depende del email, no de las filas.
  */
-export function pickAccess(filas: EntitlementRow[]): Access | null {
+export function pickAccess(filas: EntitlementRow[], now: Date = new Date()): Access | null {
   // Un usuario puede tener varias filas (canceló una y compró otra, o subió de
   // plan). Vale la MEJOR de las que dan acceso: quitarle el plan caro porque
   // arrastra una membership vieja cancelada sería cobrarle de más.
-  const vivas = filas.filter((r) => grantsAccess(String(r.status ?? '')))
+  const vivas = filas.filter((r) => daAcceso(r, now))
   if (!vivas.length) return null
   const mejor = vivas.reduce((a, b) => (toTier(b.tier) > toTier(a.tier) ? b : a))
 
@@ -191,6 +215,7 @@ export function pickAccess(filas: EntitlementRow[]): Access | null {
     renewalPeriodEnd: (mejor.renewal_period_end as string | null) ?? null,
     grandfathered: false,
     bajaA: bajaA ? toTier(bajaA.tier) : null,
+    cortesia: esManual(String(mejor.whop_membership_id ?? '')),
     // Sobre TODAS las filas, no solo las vivas: un `past_due` no da acceso pero Whop
     // lo sigue cobrando. Misma regla que `cancelarVivas`, así el botón aparece
     // exactamente cuando cancelar tiene algo que hacer (una cortesía `manual:` sola
@@ -204,8 +229,13 @@ export interface Access {
   tier: Tier
   /** Estado de la membership en Whop. null = grandfathered (no hay fila). */
   status: string | null
-  /** Fin del período pagado — ancla del reinicio de créditos. */
+  /**
+   * Fin del período pagado — ancla del reinicio de créditos. En una cortesía es su
+   * VENCIMIENTO (ver `daAcceso`), o null si no tiene plazo.
+   */
   renewalPeriodEnd: string | null
+  /** Quien manda es una cortesía del panel (`manual:`), no una membership de Whop. */
+  cortesia?: boolean
   /** Usuario previo al paywall: acceso de por vida, sin fila en la tabla. */
   grandfathered: boolean
   /**
