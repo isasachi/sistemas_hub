@@ -39,7 +39,7 @@ describe('getAccess', () => {
   it('devuelve el tier de la membership viva', async () => {
     filas = [fila('active', 2, '2026-09-20T00:00:00Z')]
     expect(await getAccess('u1')).toEqual({
-      tier: 2, status: 'active', renewalPeriodEnd: '2026-09-20T00:00:00Z', grandfathered: false, bajaA: null, cancelable: true,
+      tier: 2, status: 'active', renewalPeriodEnd: '2026-09-20T00:00:00Z', grandfathered: false, bajaA: null, cancelable: true, cortesia: false,
     })
   })
 

@@ -125,7 +125,7 @@ describe('gestor', () => {
 
   it('otorga acceso de cortesía', async () => {
     expect((await otorgarAcceso({}, fd({ userId: 'v', tier: '3' }))).ok).toBeTruthy()
-    expect(otorgarCortesia).toHaveBeenCalledWith('v', 3)
+    expect(otorgarCortesia).toHaveBeenCalledWith('v', 3, null)
   })
 
   it('revoca cortesía', async () => {
@@ -149,8 +149,21 @@ describe('acceso de cortesía', () => {
 
   it('otorga el plan pedido', async () => {
     expect((await otorgarAcceso({}, fd({ userId: 'v', tier: '3' }))).ok).toBeTruthy()
-    expect(otorgarCortesia).toHaveBeenCalledWith('v', 3)
+    expect(otorgarCortesia).toHaveBeenCalledWith('v', 3, null)
   })
+
+  // "Vence el 12" = el 12 todavía entra: fin del día en Lima (UTC-5), no medianoche UTC.
+  it('con fecha, vence al terminar ese día en Lima', async () => {
+    const r = await otorgarAcceso({}, fd({ userId: 'v', tier: '3', vence: '2099-12-12' }))
+    expect(r.ok).toMatch(/hasta el 2099-12-12/)
+    expect(otorgarCortesia).toHaveBeenCalledWith('v', 3, '2099-12-13T04:59:59.000Z')
+  })
+
+  it.each(['2020-01-01', '2099-02-30', '12/12/2099', '2099-13-01'])(
+    'rechaza el vencimiento %s sin escribir', async (vence) => {
+      expect((await otorgarAcceso({}, fd({ userId: 'v', tier: '3', vence }))).error).toBeTruthy()
+      expect(otorgarCortesia).not.toHaveBeenCalled()
+    })
 
   it('revoca', async () => {
     expect((await revocarAcceso({}, fd({ userId: 'v' }))).ok).toBeTruthy()

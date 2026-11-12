@@ -41,6 +41,22 @@ async function objetivo(
   return { adminId: staff.id, adminRole: staff.role, userId }
 }
 
+/**
+ * `YYYY-MM-DD` → el último segundo de ese día en Lima, en ISO. null si no es una
+ * fecha real (`2026-02-30` no pasa).
+ *
+ * Fin del día y en Lima porque es lo que el admin quiere decir con "vence el 12": que
+ * el 12 todavía entra. Medianoche UTC lo cortaría el 11 a las 7 p. m.
+ */
+function finDelDiaLima(dia: string): string | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dia)
+  if (!m) return null
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])]
+  const real = new Date(Date.UTC(y, mo - 1, d))
+  if (real.getUTCFullYear() !== y || real.getUTCMonth() !== mo - 1 || real.getUTCDate() !== d) return null
+  return new Date(`${dia}T23:59:59-05:00`).toISOString()
+}
+
 const fallo = (r: unknown): r is FormState => typeof (r as FormState).error === 'string'
 
 function refrescar(userId: string) {
@@ -81,14 +97,25 @@ export async function otorgarAcceso(_prev: FormState, fd: FormData): Promise<For
   // equivocado en silencio. Se rechaza en vez de normalizar.
   if (!isTier(crudo)) return { error: 'Plan inválido.' }
 
+  // Vencimiento opcional. Vacío = sin plazo.
+  const dia = texto(fd, 'vence')
+  let vence: string | null = null
+  if (dia) {
+    vence = finDelDiaLima(dia)
+    if (!vence) return { error: 'Fecha de vencimiento inválida.' }
+    if (Date.parse(vence) <= Date.now()) return { error: 'La fecha de vencimiento ya pasó.' }
+  }
+
   try {
-    await otorgarCortesia(q.userId, toTier(crudo))
+    await otorgarCortesia(q.userId, toTier(crudo), vence)
   } catch (err) {
     console.error('[admin] cortesía:', err instanceof Error ? err.message : String(err))
     return { error: 'No pudimos otorgar el acceso.' }
   }
   refrescar(q.userId)
-  return { ok: `Acceso de cortesía al plan ${crudo} otorgado.` }
+  return {
+    ok: `Acceso de cortesía al plan ${crudo} otorgado${vence ? ` hasta el ${dia}` : ', sin vencimiento'}.`,
+  }
 }
 
 export async function revocarAcceso(_prev: FormState, fd: FormData): Promise<FormState> {

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { createHmac } from 'node:crypto'
 import { Webhook } from 'standardwebhooks'
-import { grantsAccess, isGrandfathered, entitlementFromEvent, webhookKey } from './whop'
+import { grantsAccess, isGrandfathered, entitlementFromEvent, webhookKey, daAcceso, pickAccess } from './whop'
 
 // Secreto de juguete en el formato que pide Standard Webhooks (base64).
 const SECRET = Buffer.from('secreto-de-prueba-para-firmar-webhooks').toString('base64')
@@ -342,5 +342,49 @@ describe('firma con el secret real de Whop (ws_…)', () => {
 
     expect(res.status).toBe(200)
     expect(guardadas).toHaveLength(1)
+  })
+})
+
+/**
+ * ⚠️ Una cortesía con fecha VENCE SOLA: nadie más la cerraría (no existe en Whop y su
+ * `status` se queda en `active`). Y la fecha NO corta las filas de Whop: ahí es el fin
+ * del período pagado y la renovación llega por webhook, a veces tarde.
+ */
+describe('vencimiento de cortesías', () => {
+  const ahora = new Date('2026-12-12T12:00:00Z')
+  const cortesia = (end: string | null, tier = 3) =>
+    ({ whop_membership_id: 'manual:u1', status: 'active', tier, renewal_period_end: end })
+
+  it('con fecha futura da acceso', () => {
+    expect(daAcceso(cortesia('2026-12-13T04:59:59Z'), ahora)).toBe(true)
+  })
+
+  it('con fecha pasada ya no da acceso', () => {
+    expect(daAcceso(cortesia('2026-12-12T11:59:59Z'), ahora)).toBe(false)
+    expect(pickAccess([cortesia('2026-12-12T11:59:59Z')], ahora)).toBeNull()
+  })
+
+  it('sin fecha no vence nunca (las cortesías de antes)', () => {
+    expect(daAcceso(cortesia(null), ahora)).toBe(true)
+  })
+
+  it('una fecha ilegible cuenta como vencida', () => {
+    expect(daAcceso(cortesia('mañana'), ahora)).toBe(false)
+  })
+
+  it('la fecha NO corta una membership de Whop con el webhook de renovación demorado', () => {
+    const whop = { whop_membership_id: 'mem_1', status: 'active', tier: 2, renewal_period_end: '2026-12-01T00:00:00Z' }
+    expect(daAcceso(whop, ahora)).toBe(true)
+  })
+
+  it('vencida la cortesía, vuelve a mandar la membership real', () => {
+    const whop = { whop_membership_id: 'mem_1', status: 'active', tier: 1, renewal_period_end: '2027-01-01T00:00:00Z' }
+    const a = pickAccess([cortesia('2026-12-01T00:00:00Z'), whop], ahora)
+    expect(a?.tier).toBe(1)
+    expect(a?.cortesia).toBe(false)
+  })
+
+  it('marca cuándo quien manda es la cortesía', () => {
+    expect(pickAccess([cortesia('2027-01-01T00:00:00Z')], ahora)?.cortesia).toBe(true)
   })
 })

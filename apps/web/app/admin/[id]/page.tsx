@@ -71,8 +71,10 @@ export default async function FichaUsuario({ params }: { params: Promise<{ id: s
           </div>
 
           <dl className="mt-4 flex flex-col gap-1.5 text-[12px]">
-            <Dato k="Renovación">
-              {u.access?.renewalPeriodEnd ? fecha.instante(u.access.renewalPeriodEnd) : "—"}
+            <Dato k={u.access?.cortesia ? "Vence" : "Renovación"}>
+              {u.access?.renewalPeriodEnd
+              ? fecha.instante(u.access.renewalPeriodEnd)
+              : u.access?.cortesia ? "sin vencimiento" : "—"}
             </Dato>
             {u.access?.bajaA && (
               <Dato k="Baja en curso">
@@ -152,7 +154,15 @@ export default async function FichaUsuario({ params }: { params: Promise<{ id: s
         title="Acceso de cortesía"
         description="Escribe una suscripción a mano, sin pasar por Whop. Es el arreglo cuando alguien pagó y el webhook no llegó: convive con su membership real y manda el plan más alto de los dos."
       >
-        <AccesoForm userId={u.id} tierActual={u.manual ? (u.access?.tier ?? null) : null} />
+        <AccesoForm
+          userId={u.id}
+          tierActual={u.manual ? (u.access?.tier ?? null) : null}
+          venceActual={
+            u.access?.cortesia && u.access.renewalPeriodEnd
+              ? diaLima(u.access.renewalPeriodEnd)
+              : null
+          }
+        />
       </Card>
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -182,6 +192,10 @@ export default async function FichaUsuario({ params }: { params: Promise<{ id: s
     </>
   );
 }
+
+/** Un instante → `YYYY-MM-DD` en Lima, lo que espera un `<input type="date">`. */
+const diaLima = (iso: string) =>
+  new Intl.DateTimeFormat("en-CA", { timeZone: "America/Lima" }).format(new Date(iso));
 
 function Dato({ k, children }: { k: string; children: React.ReactNode }) {
   return (
