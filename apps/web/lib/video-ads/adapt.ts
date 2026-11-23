@@ -68,7 +68,7 @@ export const TomaFinalSchema = z.object({
   // duración de la plantilla sin cambios — un corte de 0s legítimo (relámpago) tumba
   // los 6 intentos de AdaptedScriptSchema (3 OpenAI + 3 Gemini) de forma determinista,
   // porque el reintento relee la misma plantilla guardada: la sesión queda trabada sin
-  // salida salvo re-correr el análisis forense, que es el paso caro con tope per-step.
+  // salida salvo re-correr el análisis forense, que es el paso caro.
   // Las duraciones degeneradas (NaN/Infinity/0/negativo) se sanean en un solo lugar:
   // `sanearDuracion` en lotes.ts, justo antes de que importen (agrupar en lotes).
   duracionSeg: z.number(),

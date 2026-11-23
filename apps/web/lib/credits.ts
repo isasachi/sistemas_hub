@@ -7,12 +7,13 @@
  * tabla de saldo: el saldo ES el conteo de esas filas en el período, y así no existe
  * el estado desincronizado clásico ("descontó el crédito pero la imagen falló").
  *
- * ⚠️ ESTO NO CUENTA VIDEO. `IMAGE_KINDS` de gen-quota.ts incluye `video-character`,
- * `video-generation` y `video-forensic` porque son igual de caros que una imagen y
- * comparten el cap per-step — pero el video lo paga el usuario con SU propia API key
- * de KIE y viene incluido en los tres planes, así que no puede comerse los créditos
- * que se le vendieron para anuncios, branding y landing. Por eso `CREDIT_KINDS` es
- * una lista aparte y no un `filter` sobre la otra.
+ * ⚠️ ESTO NO CUENTA VIDEO. `video-character` y `video-forensic` son igual de caros que
+ * una imagen, pero el video viene incluido en los tres planes (el render lo paga el
+ * usuario con SU propia API key de KIE), así que no puede comerse los créditos que se
+ * le vendieron para anuncios, branding y landing.
+ *
+ * ⚠️ Y LOS CRÉDITOS SON EL ÚNICO LÍMITE DEL HUB (2026-11-23, ver gen-quota.ts): lo que
+ * no está en `CREDIT_KINDS` —el texto y todo el video— no tiene tope.
  */
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { PLANS, type Tier } from '@ph/shared'
@@ -53,8 +54,8 @@ export function isCreditKind(kind: string): boolean {
  * usando el hub (los grandfathered, que arrastran meses de `ph_gen_usage`) arrancaría
  * con los créditos gastados de entrada.
  *
- * Es una fecha y no una migración que borre filas: esas filas siguen alimentando el
- * backstop global diario y la visibilidad de costo.
+ * Es una fecha y no una migración que borre filas: esas filas siguen alimentando la
+ * visibilidad de costo (panel de consumo del admin).
  */
 const EPOCH = process.env.CREDITS_EPOCH ?? '2026-08-20'
 
@@ -96,7 +97,7 @@ export function periodStartDay(renewalEnd: string | null, now = new Date()): str
  *
  * ⚠️ ES UN SUMANDO Y NO UN "RESET" DEL PERÍODO. El saldo ES el conteo de filas de
  * `ph_gen_usage`, así que resetear significaría BORRAR esas filas — las mismas que
- * alimentan el backstop global diario y la única visibilidad del costo real de
+ * alimentan la única visibilidad del costo real de
  * Gemini/OpenAI. Compensar sumando no destruye ese dato.
  *
  * ponytail: es una lectura por PK más en el gate de generación. Es la misma tabla que
@@ -151,9 +152,9 @@ export async function creditStatus(userId: string, access: Access | null): Promi
   // PostgREST: `landing-section` necesita match por prefijo y el filtro quedaría
   // ilegible por ahorrar unos KB. El volumen está acotado por lo que una persona
   // puede generar en un mes.
-  // ponytail: tope de 5.000 filas. Los kinds de texto comparten la tabla y el
-  // backstop global permite 500/día, así que un usuario muy pesado podría pasarse
-  // y quedarse con créditos sin contar. Falla ABIERTO, que es el lado correcto para
+  // ponytail: tope de 5.000 filas. Los kinds de texto y de video comparten la tabla y
+  // no tienen tope (desde 2026-11-23 no hay backstop diario), así que un usuario muy
+  // pesado podría pasarse y quedarse con créditos sin contar. Falla ABIERTO, que es el lado correcto para
   // un control de costo. Si alguna vez importa, el upgrade es contar en Postgres con
   // un `or(...like...)` en vez de filtrar en JS.
   const { data, error } = await getDb()
@@ -163,8 +164,7 @@ export async function creditStatus(userId: string, access: Access | null): Promi
     .gte('gen_day', desde)
     .limit(5_000)
   if (error) {
-    // Fail-OPEN, igual que el resto de gen-quota: con la DB caída no bloqueamos, y el
-    // backstop global diario sigue siendo la red. Esto es control de costo, no el
+    // Fail-OPEN: con la DB caída no bloqueamos. Esto es control de costo, no el
     // paywall (ese sí fail-cierra, en whop.ts).
     console.error('[credits] leyendo consumo:', error.message)
     return { tier, limite, usados: 0, restantes: limite, desde }
@@ -212,7 +212,7 @@ export async function currentCreditStatus(): Promise<CreditStatus | null> {
  * `CreditOwner`).
  *
  * ⚠️ SIN SESIÓN SE RECHAZA (2026-08-21). Antes se dejaba pasar, razonando que `/api/*`
- * nunca pidió sesión y que el backstop global diario alcanzaba. Medido, eso no era un
+ * nunca pidió sesión y que el backstop global diario (ya borrado) alcanzaba. Medido, eso no era un
  * hueco de anónimos sino algo peor: **el propio comprador podía evadir el tope que le
  * vendimos** — el mismo POST desde curl sin la cookie no resolvía owner, no contaba
  * créditos y no imputaba la generación a nadie, con el plan 1 (30 imágenes) intacto.

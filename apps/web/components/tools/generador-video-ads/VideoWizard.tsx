@@ -4,7 +4,6 @@ import { useEffect, useRef } from 'react'
 import { useVideoStore, SESSION_KEY } from '@/store/video'
 import type { VideoSessionResponse } from '@/lib/video-ads/types'
 import { capMaxReached } from '@/lib/video-ads/validation'
-import { fetchRegens } from '@/lib/gen-quota-client'
 import { STEP } from '@/lib/video-ads/steps'
 import { SessionErrorRetry } from '@/components/tools/ui/SessionErrorRetry'
 import StepWizard from '@/components/tools/ui/StepWizard'
@@ -31,7 +30,7 @@ const VALIDATION_STEP = STEP.VALIDATION
 export default function VideoWizard() {
   const {
     step, sessionId, sessionError, validation,
-    startNewSession, ensureSession, resetSession, hydrateFromSession, setStep, setRegens,
+    startNewSession, ensureSession, resetSession, hydrateFromSession, setStep,
   } = useVideoStore()
 
   // Reanudar: si hay un id guardado y la sesión existe, rehidratar. Si no, NADA — la fila
@@ -65,10 +64,6 @@ export default function VideoWizard() {
       // en cada visita.
       .catch(() => { localStorage.removeItem(SESSION_KEY); resetSession() })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (sessionId) fetchRegens(sessionId).then(setRegens)
-  }, [sessionId, setRegens])
 
   // `maxStep` = paso más avanzado alcanzado; hasta ahí se navega por el riel sin
   // reenviar nada. Se resetea al cambiar de sesión (mismo patrón que AdWizard).

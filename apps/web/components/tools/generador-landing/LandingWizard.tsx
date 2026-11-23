@@ -3,7 +3,6 @@
 import { useEffect, useRef } from 'react'
 import { useLandingStore, SESSION_KEY } from '@/store/landing'
 import type { LandingSessionResponse } from '@/lib/landing/types'
-import { fetchRegens } from '@/lib/gen-quota-client'
 import { SessionErrorRetry } from '@/components/tools/ui/SessionErrorRetry'
 import StepWizard from '@/components/tools/ui/StepWizard'
 import Section1Product from './sections/Section1Product'
@@ -27,7 +26,7 @@ const SECTIONS = [
 export default function LandingWizard() {
   const {
     step, sessionId, sessionError,
-    startNewSession, hydrateFromSession, setStep, setRegens, sections,
+    startNewSession, hydrateFromSession, setStep, sections,
     resetSession,
   } = useLandingStore()
 
@@ -66,10 +65,6 @@ export default function LandingWizard() {
       // visita — el wizard queda pidiéndole al servidor una sesión que no existe para siempre.
       .catch(() => { localStorage.removeItem(SESSION_KEY); resetSession() })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (sessionId) fetchRegens(sessionId).then(setRegens)
-  }, [sessionId, setRegens])
 
   // `maxStep` = paso más avanzado alcanzado; hasta ahí se puede volver por el
   // riel sin reenviar nada. Se resetea al cambiar de sesión.

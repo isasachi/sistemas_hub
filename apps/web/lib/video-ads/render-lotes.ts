@@ -307,7 +307,7 @@ export function scriptFingerprint(input: {
  *    dos videos distintos". `resumeSeed` empareja por ÍNDICE sin mirar el contenido
  *    de `base[i]`, así que un lote ya renderizado se conserva tal cual esté; si el
  *    guión (o el personaje, o la voz) se re-hizo en el medio —nada lo impide:
- *    `video-adapt` y la FASE 4 no tienen tope per-step— ese lote quedó renderizado
+ *    ningún paso del video tiene tope— ese lote quedó renderizado
  *    con el contenido VIEJO y los pendientes se renderizarían con el ACTUAL. La
  *    revisión lo reprodujo ejecutándolo: `lote1.prompt` con el texto del guión viejo
  *    y su `taskId` original intacto, `lote2` con el texto del guión nuevo. No es un

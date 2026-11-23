@@ -8,7 +8,6 @@ export interface SSEEvent {
   imageUrl?: string;
   images?: string[];
   retryable?: boolean;
-  regensLeft?: number;
 }
 
 interface SSEStatusProps {

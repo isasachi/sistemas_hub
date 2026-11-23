@@ -6,7 +6,7 @@ import type { Lote } from '@/lib/video-ads/lotes'
 import { totalDuration, resumeSeed, mergeRescue, isPaidResume, renderDone, insumosDeRender, promptDeLote } from '@/lib/video-ads/render-lotes'
 import { AdaptedScriptSchema, type AdaptedScript } from '@/lib/video-ads/adapt'
 import { extractPending } from '@/lib/video-ads/pending'
-import { checkGenQuota, checkGlobalBackstop, recordGenQuota } from '@/lib/gen-quota'
+import { recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 import { STEP } from '@/lib/video-ads/steps'
 
@@ -46,13 +46,9 @@ async function saveRescue(id: string, lotes: Lote[]) {
   }
 }
 
-// Un render por lote sigue siendo una llamada pagada, pero la CUOTA (fix round 2) se
-// mide por VIDEO, no por lote: 1 generación + 2 regens sin importar cuántos lotes
-// tenga el guión. Un guión de 2 lotes no se queda sin regeneraciones y uno de 4 no
-// se topa antes de arrancar — el tope real es "¿cuántas veces intentaste generar ESTE
-// video?", no "¿cuántas llamadas a KIE hiciste?". Se sigue registrando una fila por
-// lote (kind 'video-render', ver gen-quota.ts) para conservar la visibilidad del
-// costo real y el backstop global diario, pero esa fila ya no topa nada por sí sola.
+// Un render por lote es una llamada pagada (con la key del usuario). Sin tope: se
+// registra una fila por lote (kind 'video-render') y una `video-generation` por
+// llamada, solo para que el costo real se vea en el panel de consumo.
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -124,8 +120,8 @@ export async function POST(
   // Sin `resume`, con tareas ya creadas, es 409: un POST repetido no puede duplicar
   // lotes pagados. Con `resume` sobre el mismo contenido entra por `isPaidResume` sin
   // cobrar; con contenido nuevo (guión, personaje o voz rehechos) se registra otra
-  // `video-generation` — que desde 2026-09-07 NO tiene tope (ver gen-quota.ts): el
-  // render lo paga el usuario con su key, y el único freno es el backstop global.
+  // `video-generation`, que no tiene tope (ver gen-quota.ts): el render lo paga el
+  // usuario con su key.
   const existentes = session.lotes ?? []
   if (existentes.some((l) => l.taskId) && !resume) {
     return NextResponse.json(
@@ -156,33 +152,13 @@ export async function POST(
   // que terminó justo antes — de cualquier modo, no hay nada pagado de más que hacer.
   if (!pendientes.length) return NextResponse.json({ lotes: seed })
 
-  // BYOK: la key se resuelve ANTES de tocar la cuota. Al revés, `checkGenQuota` ya
-  // habría escrito su fila y la primera llamada a KIE moriría con un 401: el usuario
-  // perdería una generación de su tope por no haber cargado la key.
+  // BYOK: sin key no se crea ninguna tarea (la primera llamada a KIE moriría con 401).
   const kieKey = await currentKieKey()
   if (!kieKey) return NextResponse.json({ error: SIN_KEY }, { status: 400 })
 
-  // El backstop global diario aplica SIEMPRE que se vaya a llamar a KIE — reanudar
-  // también gasta (crea tarea para los lotes que quedaron pendientes). `checkGenQuota`
-  // con `video-generation` ya no tiene gate per-step (fuera de IMAGE_KINDS): es el
-  // mismo backstop más los créditos, que el video no gasta.
-  if (reanuda) {
-    const { blocked } = await checkGlobalBackstop()
-    if (blocked) return blocked
-  } else {
-    // Fix round 5: antes se descartaba el `Response` real de `checkGenQuota` y se
-    // devolvía SIEMPRE el mismo mensaje ("empieza otra sesión"), sin importar cuál de
-    // las dos capas bloqueó. `checkGenQuota` bloquea por dos motivos distintos —el
-    // tope per-sesión (`regensLeft: 0`) o el backstop GLOBAL de todo el hub
-    // (`regensLeft: null`, 500/día, ver gen-quota.ts)— y son dos avisos que no se
-    // pueden intercambiar: a alguien que chocó con el backstop global, decirle "abre
-    // otra sesión" es un consejo que no puede funcionar (la sesión nueva gasta MÁS
-    // contra el mismo backstop compartido). El propio `blocked` ya trae el mensaje
-    // correcto para cada caso — se devuelve tal cual, igual que la rama de
-    // reanudación tres líneas arriba (`checkGlobalBackstop`), en vez de reinventarlo.
-    const { blocked } = await checkGenQuota(id, 'video-generation')
-    if (blocked) return blocked
-  }
+  // Sin gate de cuota (2026-11-23): el video no gasta créditos del plan y ya no hay
+  // tope per-step ni backstop diario (ver gen-quota.ts). El render lo paga el usuario
+  // con su propia key de KIE.
 
   // Había taskId pagados pero esta llamada NO es una reanudación (huella distinta, o
   // distinta cantidad de lotes): `reanuda` da `false` a propósito —el render viejo ya
@@ -191,8 +167,8 @@ export async function POST(
   // el rescate del round 1 existe para evitar, así que quedan logueados con el id de
   // sesión (el mp4 se puede rescatar a mano desde KIE y hay que saber de quién es).
   //
-  // El log va DEBAJO del gate de cuota, no arriba (fix round 4): arriba se disparaba
-  // igual cuando el gate cortaba con 429 y no se escribía nada — un falso positivo que
+  // El log va DEBAJO de la comprobación de la key, no arriba (fix round 4): arriba se
+  // disparaba igual cuando la ruta cortaba antes de escribir nada — un falso positivo que
   // manda a perseguir una pérdida que nunca ocurrió. Acá abajo ya está decidido que
   // esta llamada sigue y va a pisar lo guardado. No hace falta bajarlo aún más (debajo
   // del claim): `existentes.some(taskId)` implica `session.lotes != null`, o sea
@@ -269,8 +245,7 @@ export async function POST(
       const taskId = await createVideoTask({ images: insumos.images, prompt, durationSec }, kieKey)
       creados++
       lotes.push({ ...lote, duracionSeg: durationSec, prompt, taskId, status: 'waiting', videoUrl: null, failMsg: null })
-      // Fila por lote: visibilidad del costo real y backstop global diario. Ya NO topa
-      // per-step (kind fuera de IMAGE_KINDS) — el tope vive en 'video-generation'.
+      // Fila por lote: visibilidad del costo real. No topa nada.
       await recordGenQuota(id, 'video-render', userId)
     }
   } catch (err) {

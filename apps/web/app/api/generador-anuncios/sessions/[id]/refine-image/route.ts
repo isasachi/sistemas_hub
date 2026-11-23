@@ -18,7 +18,7 @@ export async function POST(
 ) {
   const { id } = await params
 
-  const { blocked, regensLeft } = await checkGenQuota(id, 'anuncios-image')
+  const { blocked } = await checkGenQuota('anuncios-image')
   if (blocked) return blocked
   const userId = await readUserId()
 
@@ -61,5 +61,5 @@ export async function POST(
   const imageUrl = await uploadToStorage(id, imageBuffer, 'image/png', `result-${Date.now()}`)
   await updateSession(id, { image_url: imageUrl })
   await recordGenQuota(id, 'anuncios-image', userId)
-  return NextResponse.json({ imageUrl, regensLeft })
+  return NextResponse.json({ imageUrl })
 }

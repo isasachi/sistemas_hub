@@ -1,9 +1,6 @@
 'use client'
 
-import { regenButtonState } from '@/lib/regen-button-state'
-
 interface RegenControlsProps {
-  regensLeft: number | null
   prompt: string
   onPromptChange: (v: string) => void
   onRegenerate: () => void
@@ -11,12 +8,12 @@ interface RegenControlsProps {
   label?: string
 }
 
-// Control compartido de regeneración: textarea opcional de precisión + botón +
-// contador "Quedan N de 3" (solo si regensLeft es number). Sin estado propio.
+// Control compartido de regeneración: textarea opcional de precisión + botón. Sin estado
+// propio. Sin contador: el único tope son los créditos del plan (ver lib/gen-quota.ts), y
+// cuando se acaban la ruta devuelve el error que el caller ya muestra.
 export function RegenControls({
-  regensLeft, prompt, onPromptChange, onRegenerate, busy = false, label = '↻ Regenerar',
+  prompt, onPromptChange, onRegenerate, busy = false, label = '↻ Regenerar',
 }: RegenControlsProps) {
-  const { disabled, showCounter, reason } = regenButtonState(regensLeft, busy)
   return (
     <div className="flex flex-col gap-2">
       <textarea
@@ -29,18 +26,12 @@ export function RegenControls({
       <div className="flex items-center gap-3">
         <button
           onClick={onRegenerate}
-          disabled={disabled}
+          disabled={busy}
           className="h-10 px-4 rounded-xl border border-white/[0.14] text-[#efe7e0] text-[13px] font-medium hover:bg-white/[0.05] transition-colors cursor-pointer bg-transparent disabled:opacity-40"
         >
           {busy ? 'Regenerando...' : label}
         </button>
-        {showCounter && (
-          <span className="text-[12px] text-[#a98c88]">
-            Quedan {Math.max(0, regensLeft as number)} de 3 regeneraciones
-          </span>
-        )}
       </div>
-      {reason && <p className="text-[12px] text-[#c9b4ae]">{reason}</p>}
     </div>
   )
 }

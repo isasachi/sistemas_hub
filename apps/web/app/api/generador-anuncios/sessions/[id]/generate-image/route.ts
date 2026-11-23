@@ -21,7 +21,7 @@ export async function POST(
   let precision = ''
   try { const b = await req.json(); precision = (b?.prompt ?? '').trim() } catch { /* sin body */ }
 
-  const { blocked, regensLeft } = await checkGenQuota(id, 'anuncios-image')
+  const { blocked } = await checkGenQuota('anuncios-image')
   if (blocked) return blocked
   const userId = await readUserId()
 
@@ -117,7 +117,7 @@ export async function POST(
 
         await updateSession(id, { step: 5, edit_instruction: editInstruction, image_url: imageUrl })
         await recordGenQuota(id, 'anuncios-image', userId)
-        send({ status: 'done', imageUrl, regensLeft })
+        send({ status: 'done', imageUrl })
       } catch (err) {
         send({ status: 'error', message: String(err), retryable: true })
       } finally {

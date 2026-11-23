@@ -19,7 +19,7 @@ export const maxDuration = 30 // extractDna = 1 llamada gemini-flash con visión
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const kind = 'landing-dna'
-  const { blocked } = await checkGenQuota(id, kind)
+  const { blocked } = await checkGenQuota(kind)
   if (blocked) return blocked
   const userId = await readUserId()
 

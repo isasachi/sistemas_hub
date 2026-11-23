@@ -22,7 +22,7 @@ const STAGES = ['loading_images', 'building_prompt', 'generating', 'uploading', 
 const btnPrimary = 'rounded-xl jr-cta text-[13px] font-bold disabled:opacity-40 transition-all duration-200 cursor-pointer border-0 font-sans flex items-center justify-center gap-2'
 
 export default function Section5Generate() {
-  const { sessionId, imageUrl, setImageUrl, startNewSession, regens, setRegen } = useWizardStore()
+  const { sessionId, imageUrl, setImageUrl, startNewSession } = useWizardStore()
   const [status, setStatus] = useState<string>('loading_images')
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
@@ -30,13 +30,12 @@ export default function Section5Generate() {
   const [refining, setRefining] = useState(false)
   const sseKey = useRef(0)
 
-  function handleEvent(event: { status: string; imageUrl?: string; message?: string; regensLeft?: number }) {
+  function handleEvent(event: { status: string; imageUrl?: string; message?: string }) {
     const info = STATUS_LABELS[event.status]
     if (info) setProgress(info.pct)
     setStatus(event.status)
     if (event.status === 'done' && event.imageUrl) {
       setImageUrl(event.imageUrl)
-      if (typeof event.regensLeft === 'number') setRegen('anuncios-image', event.regensLeft)
     }
     if (event.status === 'error') setError(event.message ?? 'Error al generar')
   }
@@ -63,10 +62,9 @@ export default function Section5Generate() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ feedback: feedback.trim() }),
       })
-      const data = await res.json() as { imageUrl?: string; regensLeft?: number; error?: string }
+      const data = await res.json() as { imageUrl?: string; error?: string }
       if (!res.ok) throw new Error(data.error ?? 'Error al aplicar cambios')
       setImageUrl(data.imageUrl!)
-      if (typeof data.regensLeft === 'number') setRegen('anuncios-image', data.regensLeft)
       setFeedback('')
     } catch (err) {
       setError((err as Error).message)
@@ -155,7 +153,6 @@ export default function Section5Generate() {
             <p className="text-[10px] font-bold uppercase tracking-widest text-[#a98c88] mb-2">¿Quieres ajustar algo?</p>
             {error && <div className="mb-2 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-[11px] text-red-400">{error}</div>}
             <RegenControls
-              regensLeft={regens['anuncios-image'] ?? 3}
               prompt={feedback}
               onPromptChange={setFeedback}
               onRegenerate={handleRefine}

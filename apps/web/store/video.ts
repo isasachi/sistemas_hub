@@ -26,7 +26,6 @@ interface VideoState {
   validation: ValidationMatrix | null
   // FASE 2
   template: ScriptTemplate | null
-  regens: Record<string, number>
   // FASE 3
   adapted: AdaptedScript | null
   // FASE 4 / 4.5
@@ -46,7 +45,7 @@ const initialState: VideoState = {
   sessionId: null, sessionError: false, step: STEP.REFERENCE, isLoading: false,
   referenceVideoUrl: null, forensicAnalysis: null,
   productUrl: null, productScan: null, characterUrl: null,
-  inputs: EMPTY_INPUTS, validation: null, template: null, regens: {},
+  inputs: EMPTY_INPUTS, validation: null, template: null,
   adapted: null, consistencyBlock: null, voiceProfile: null, lotes: null,
 }
 
@@ -58,7 +57,6 @@ interface VideoActions {
   startNewSession: () => Promise<void>
   ensureSession: () => Promise<string | null>
   resetSession: () => void
-  setRegens: (m: Record<string, number>) => void
 }
 
 /** Crea la fila y guarda su id; `null` si falló. */
@@ -119,8 +117,6 @@ export const useVideoStore = create<VideoState & VideoActions>((set, get) => ({
       sessionError: false,
     })
   },
-
-  setRegens: (regens) => set({ regens }),
 
   startNewSession: async () => {
     set({ ...initialState })

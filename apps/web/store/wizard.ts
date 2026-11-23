@@ -22,7 +22,6 @@ interface WizardState {
   copyVersions: CopyVersions | null
   confirmedCopy: ConfirmedCopy | null
   imageUrl: string | null
-  regens: Record<string, number>
 }
 
 interface WizardActions {
@@ -47,8 +46,6 @@ interface WizardActions {
   startNewSession: () => Promise<void>
   ensureSession: () => Promise<string | null>
   resetSession: () => void
-  setRegens: (m: Record<string, number>) => void
-  setRegen: (kind: string, n: number) => void
 }
 
 const initialState: WizardState = {
@@ -68,7 +65,6 @@ const initialState: WizardState = {
   copyVersions: null,
   confirmedCopy: null,
   imageUrl: null,
-  regens: {},
 }
 
 /** Crea la fila y guarda su id; `null` si falló. */
@@ -146,9 +142,6 @@ export const useWizardStore = create<WizardState & WizardActions>((set, get) => 
       imageUrl: session.image_url,
     })
   },
-
-  setRegens: (regens) => set({ regens }),
-  setRegen: (kind, n) => set((s) => ({ regens: { ...s.regens, [kind]: n } })),
 
   startNewSession: async () => {
     set({ ...initialState })
