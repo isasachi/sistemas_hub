@@ -35,7 +35,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!parsedType.success) return NextResponse.json({ error: 'Tipo de sección inválido' }, { status: 400 })
 
   const kind = `landing-section:${type}`
-  const { blocked, regensLeft } = await checkGenQuota(id, kind)
+  const { blocked } = await checkGenQuota(kind)
   if (blocked) return blocked
   const userId = await readUserId()
 
@@ -220,5 +220,5 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const section: LandingSection = { type: copy.kind, order, copy, imageUrl, status: 'done' }
   await upsertLandingSection(id, section)
   await recordGenQuota(id, kind, userId)
-  return NextResponse.json({ section, regensLeft })
+  return NextResponse.json({ section })
 }

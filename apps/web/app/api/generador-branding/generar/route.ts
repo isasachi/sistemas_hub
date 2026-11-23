@@ -125,9 +125,11 @@ export async function POST(req: NextRequest) {
         // (`setState({...s, [stage]: …})`), así que los eventos SSE fuera de orden se pintan bien.
         const correrEtapa = async (stage: Stage) => {
           const kind = `branding-${stage}`
-          const { blocked } = await checkGenQuota(sessionId, kind, creditOwner)
+          const { blocked } = await checkGenQuota(kind, creditOwner)
           if (blocked) {
-            send({ status: 'stage_failed', stage, message: 'Llegaste al límite de regeneraciones de este paso' })
+            // El motivo real (créditos agotados o sin sesión) viene en el cuerpo del gate.
+            const { error } = (await blocked.json().catch(() => ({}))) as { error?: string }
+            send({ status: 'stage_failed', stage, message: error ?? 'No se pudo generar esta pieza' })
             failed.push(stage)
             return
           }

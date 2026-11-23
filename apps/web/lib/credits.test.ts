@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { PLANS, TIERS, RAW_BUCKETS, lockedBuckets, precioUSD, unlocksBucket, toTier } from '@ph/shared'
 import { isCreditKind, periodStart, periodStartDay, CREDIT_KINDS } from './credits'
-import { IMAGE_KINDS } from './gen-quota'
 
 describe('planes', () => {
   // Lo que se cobra: 29.90/69.90/89.90, con 10/20/50 productos y 30/100/180 imágenes.
@@ -48,27 +47,16 @@ describe('CREDIT_KINDS', () => {
     '%s gasta un crédito', (k) => expect(isCreditKind(k)).toBe(true),
   )
 
-  // ⚠️ EL INVARIANTE QUE MÁS IMPORTA. `IMAGE_KINDS` (el cap per-step) incluye los
-  // kinds de video porque son igual de caros; los créditos NO, porque el video lo
-  // paga el usuario con su propia key de KIE y viene incluido en los tres planes.
-  // Reusar una lista para las dos cosas es cómo el video se come las imágenes que
-  // se vendieron para anuncios, branding y landing.
-  it.each(['video-character', 'video-forensic'])(
-    '%s NO gasta créditos aunque esté en IMAGE_KINDS', (k) => {
-      expect(IMAGE_KINDS).toContain(k)
-      expect(isCreditKind(k)).toBe(false)
-    },
+  // ⚠️ EL INVARIANTE QUE MÁS IMPORTA. Los kinds de video son igual de caros que una
+  // imagen, pero el video viene incluido en los tres planes: si gastaran créditos se
+  // comerían las imágenes que se vendieron para anuncios, branding y landing.
+  it.each(['video-character', 'video-forensic', 'video-generation', 'video-render'])(
+    '%s NO gasta créditos', (k) => expect(isCreditKind(k)).toBe(false),
   )
 
   it('los kinds de texto tampoco gastan', () => {
     expect(isCreditKind('landing-copy')).toBe(false)
     expect(isCreditKind('anuncios-copy')).toBe(false)
-  })
-
-  // Si alguien agrega un kind de imagen nuevo a IMAGE_KINDS, este test no lo obliga
-  // a agregarlo acá — pero deja escrito que las dos listas son distintas a propósito.
-  it('todo CREDIT_KIND es también un IMAGE_KIND', () => {
-    for (const k of CREDIT_KINDS) expect(IMAGE_KINDS).toContain(k)
   })
 })
 

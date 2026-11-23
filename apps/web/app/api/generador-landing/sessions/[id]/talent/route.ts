@@ -12,13 +12,12 @@ export const maxDuration = 300 // gen de imagen (retrato); con OpenAI primario (
 
 // Talento canónico (Fase 4 C4.4 → paso 0.b, spec 2026-07-23). Genera/regenera la placa de
 // talento desde `landing_dna.model_persona` (ya resuelto por extract-dna.ts) y persiste
-// talent_canonical_url. Kind 'landing-talent' NO está en IMAGE_KINDS → sin cap per-step (regens
-// generosos: es la decisión estética que más importa), solo acotado por el backstop global de
-// 500/día. $0-rule OK (Gemini).
+// talent_canonical_url. Kind 'landing-talent' no gasta créditos (no está en CREDIT_KINDS) →
+// sin tope: es la decisión estética que más importa. $0-rule OK (Gemini).
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const kind = 'landing-talent'
-  const { blocked } = await checkGenQuota(id, kind)
+  const { blocked } = await checkGenQuota(kind)
   if (blocked) return blocked
   const userId = await readUserId()
 

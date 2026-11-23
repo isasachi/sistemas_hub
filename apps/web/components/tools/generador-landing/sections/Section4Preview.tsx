@@ -27,22 +27,22 @@ class GenError extends Error {
 // POST una sección (genera o regenera). Reusado por el pool inicial y por el editor.
 async function genSection(
   sessionId: string, type: SectionType, copy: SectionCopy, order: number, prompt?: string,
-): Promise<{ section: LandingSection; regensLeft?: number }> {
+): Promise<LandingSection> {
   const res = await fetch(`/api/generador-landing/sessions/${sessionId}/section/${type}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ copy, order, prompt: prompt?.trim() || undefined }),
   })
-  const data = (await res.json()) as { section?: LandingSection; regensLeft?: number; error?: string; retryable?: boolean }
+  const data = (await res.json()) as { section?: LandingSection; error?: string; retryable?: boolean }
   if (!res.ok || !data.section) throw new GenError(data.error ?? 'No se pudo generar la sección', res.status >= 500 || data.retryable === true)
-  return { section: data.section, regensLeft: data.regensLeft }
+  return data.section
 }
 
 // Reintento automático de las fallas REINTENTABLES (hasta 2), con backoff corto (evita recolisión
 // con el rate limit de Gemini). Una falla no-reintentable (400, cuota) corta al toque.
 async function genWithRetry(
   sessionId: string, type: SectionType, copy: SectionCopy, order: number, retries = 2,
-): Promise<{ section: LandingSection; regensLeft?: number }> {
+): Promise<LandingSection> {
   let last: unknown
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
@@ -70,7 +70,7 @@ async function runPool<T>(items: T[], limit: number, worker: (item: T) => Promis
 }
 
 function SectionCard({ section }: { section: LandingSection }) {
-  const { sessionId, setSectionImage, regens, setRegen } = useLandingStore()
+  const { sessionId, setSectionImage } = useLandingStore()
   const [editing, setEditing] = useState(false)
   const [copy, setCopy] = useState<SectionCopy>(section.copy)
   const [saving, setSaving] = useState(false)
@@ -89,9 +89,7 @@ function SectionCard({ section }: { section: LandingSection }) {
     setSaving(true)
     setError(null)
     try {
-      const { section: updated, regensLeft } = await genSection(sessionId, section.type, copy, section.order, prompt)
-      setSectionImage(updated)
-      if (typeof regensLeft === 'number') setRegen(`landing-section:${section.type}`, regensLeft)
+      setSectionImage(await genSection(sessionId, section.type, copy, section.order, prompt))
       setEditing(false)
     } catch (err) {
       setError((err as Error).message)
@@ -140,7 +138,6 @@ function SectionCard({ section }: { section: LandingSection }) {
           )}
           {error && <p className="text-[12px] text-red-400">{error}</p>}
           <RegenControls
-            regensLeft={regens[`landing-section:${section.type}`] ?? 3}
             prompt={prompt}
             onPromptChange={setPrompt}
             onRegenerate={regenerate}
@@ -166,7 +163,7 @@ function SectionSkeleton({ type, status }: { type: SectionType; status: GenStatu
 }
 
 export default function Section4Preview() {
-  const { sessionId, copy, sections, setSectionImage, startNewSession, setRegen } = useLandingStore()
+  const { sessionId, copy, sections, setSectionImage, startNewSession } = useLandingStore()
   const [generating, setGenerating] = useState(false)
   const [status, setStatus] = useState<Record<string, GenStatus>>({})
   const [error, setError] = useState<string | null>(null)
@@ -204,9 +201,7 @@ export default function Section4Preview() {
     await runPool(targets, 3, async ({ c, order }) => {
       setStatus((s) => ({ ...s, [c.kind]: 'generating' }))
       try {
-        const { section, regensLeft } = await genWithRetry(sessionId, c.kind, c, order)
-        setSectionImage(section)
-        if (typeof regensLeft === 'number') setRegen(`landing-section:${c.kind}`, regensLeft)
+        setSectionImage(await genWithRetry(sessionId, c.kind, c, order))
         setStatus((s) => ({ ...s, [c.kind]: 'done' }))
       } catch (err) {
         failed++

@@ -7,7 +7,6 @@ vi.mock('@/lib/video-ads/kie', async (importOriginal) => ({
 }))
 vi.mock('@/lib/gen-quota', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/gen-quota')>()),
-  checkGlobalBackstop: vi.fn().mockResolvedValue({ blocked: null }),
   recordGenQuota: vi.fn().mockResolvedValue(undefined),
 }))
 vi.mock('@/lib/product-hunter/session', () => ({ readUserId: vi.fn().mockResolvedValue('user-1') }))

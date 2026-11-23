@@ -16,8 +16,6 @@ vi.mock('@/lib/video-ads/kie', async (importOriginal) => ({
 
 vi.mock('@/lib/gen-quota', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/gen-quota')>()),
-  checkGenQuota: vi.fn(),
-  checkGlobalBackstop: vi.fn(),
   recordGenQuota: vi.fn().mockResolvedValue(undefined),
 }))
 
@@ -33,7 +31,7 @@ import { NextRequest } from 'next/server'
 import { POST } from './route'
 import { getVideoSession, updateVideoSession, claimFreshLotes } from '@/lib/video-ads/db'
 import { createVideoTask } from '@/lib/video-ads/kie'
-import { checkGenQuota, checkGlobalBackstop, recordGenQuota } from '@/lib/gen-quota'
+import { recordGenQuota } from '@/lib/gen-quota'
 import { currentKieKey } from '@/lib/user-settings'
 import type { VideoSessionResponse } from '@/lib/video-ads/types'
 import type { Lote } from '@/lib/video-ads/lotes'
@@ -128,8 +126,6 @@ describe('POST generate-lotes — fix round 2: cuota por video, no por lote', ()
     vi.clearAllMocks()
     vi.mocked(currentKieKey).mockResolvedValue('kie-del-usuario')
     vi.mocked(claimFreshLotes).mockResolvedValue(true)
-    vi.mocked(checkGenQuota).mockResolvedValue({ blocked: null, regensLeft: null })
-    vi.mocked(checkGlobalBackstop).mockResolvedValue({ blocked: null })
     vi.mocked(createVideoTask).mockImplementation(async () => `task-${Math.random()}`)
   })
 
@@ -195,8 +191,6 @@ describe('POST generate-lotes — fix round 2: cuota por video, no por lote', ()
 
     // Solo el lote 2 (pendiente) crea tarea nueva; el lote 1 se conserva tal cual.
     expect(createVideoTask).toHaveBeenCalledTimes(1)
-    expect(checkGenQuota).not.toHaveBeenCalled() // el gate per-video NO aplica al reanudar
-    expect(checkGlobalBackstop).toHaveBeenCalledTimes(1) // pero el backstop SÍ sigue aplicando
     expect(claimFreshLotes).not.toHaveBeenCalled() // ya no es la primera escritura
 
     const generationCalls = vi.mocked(recordGenQuota).mock.calls.filter((c) => c[1] === 'video-generation')
@@ -214,7 +208,6 @@ describe('POST generate-lotes — fix round 2: cuota por video, no por lote', ()
     const res = await POST(req({ resume: true }), ctx())
     expect(res.status).toBe(200)
 
-    expect(checkGenQuota).toHaveBeenCalledWith('s1', 'video-generation') // gate normal, no bypass
     const generationCalls = vi.mocked(recordGenQuota).mock.calls.filter((c) => c[1] === 'video-generation')
     expect(generationCalls).toHaveLength(1)
   })
@@ -229,48 +222,6 @@ describe('POST generate-lotes — fix round 2: cuota por video, no por lote', ()
     expect(createVideoTask).not.toHaveBeenCalled()
     expect(recordGenQuota).not.toHaveBeenCalled()
     expect(updateVideoSession).not.toHaveBeenCalled()
-  })
-
-  // Fix round 5: antes esta rama IGNORABA el `Response` real de `checkGenQuota` y
-  // devolvía siempre el mismo texto hardcodeado ("empieza otra sesión"), sin importar
-  // qué capa bloqueó. Ahora se propaga el `blocked` tal cual — mismo patrón que la
-  // rama de reanudación (`checkGlobalBackstop`).
-  it('gate per-sesión bloqueado (regensLeft: 0): se devuelve el mensaje real de checkGenQuota, no uno inventado', async () => {
-    vi.mocked(getVideoSession).mockResolvedValue(session())
-    vi.mocked(checkGenQuota).mockResolvedValue({
-      blocked: Response.json({ error: 'Llegaste al límite de 2 regeneraciones para este paso.' }, { status: 429 }),
-      regensLeft: 0,
-    })
-
-    const res = await POST(req(), ctx())
-    expect(res.status).toBe(429)
-    const body = await res.json()
-    expect(body.error).toBe('Llegaste al límite de 2 regeneraciones para este paso.')
-
-    expect(claimFreshLotes).not.toHaveBeenCalled()
-    expect(createVideoTask).not.toHaveBeenCalled()
-  })
-
-  // El bug que motivó el fix: un usuario que choca contra el backstop GLOBAL (500/día
-  // de TODO el hub, `regensLeft: null`) recibía el consejo de "empieza otra sesión" —
-  // que no puede funcionar, porque la sesión nueva gasta MÁS contra el mismo backstop
-  // compartido. Con el fix, el mensaje real del backstop ("vuelve mañana") es el que
-  // llega, y el texto viejo específico de sesión ya no aparece.
-  it('backstop GLOBAL bloqueado (regensLeft: null): el mensaje NO sugiere abrir otra sesión', async () => {
-    vi.mocked(getVideoSession).mockResolvedValue(session())
-    vi.mocked(checkGenQuota).mockResolvedValue({
-      blocked: Response.json({ error: 'El servicio alcanzó su límite diario de generaciones. Vuelve mañana.' }, { status: 429 }),
-      regensLeft: null,
-    })
-
-    const res = await POST(req(), ctx())
-    expect(res.status).toBe(429)
-    const body = await res.json()
-    expect(body.error).toMatch(/diario|mañana/i)
-    expect(body.error).not.toMatch(/otra sesión/i)
-
-    expect(claimFreshLotes).not.toHaveBeenCalled()
-    expect(createVideoTask).not.toHaveBeenCalled()
   })
 
   it('fallo total en el primer lote (prompt que nunca cabe): NO cobra video-generation y guarda placeholders', async () => {
@@ -306,8 +257,6 @@ describe('POST generate-lotes — fix round 3', () => {
     vi.clearAllMocks()
     vi.mocked(currentKieKey).mockResolvedValue('kie-del-usuario')
     vi.mocked(claimFreshLotes).mockResolvedValue(true)
-    vi.mocked(checkGenQuota).mockResolvedValue({ blocked: null, regensLeft: null })
-    vi.mocked(checkGlobalBackstop).mockResolvedValue({ blocked: null })
     vi.mocked(createVideoTask).mockImplementation(async () => `task-${Math.random()}`)
   })
 
@@ -353,9 +302,6 @@ describe('POST generate-lotes — fix round 3', () => {
     const res = await POST(req({ resume: true }), ctx())
     expect(res.status).toBe(200)
 
-    // Se trató como intento nuevo: pasó por el gate per-video, no por el backstop-only.
-    expect(checkGenQuota).toHaveBeenCalledWith('s1', 'video-generation')
-    expect(checkGlobalBackstop).not.toHaveBeenCalled()
 
     // Ningún lote reusa el taskId viejo — los 2 lotes del guión nuevo se crean de cero.
     expect(createVideoTask).toHaveBeenCalledTimes(2)
@@ -381,7 +327,6 @@ describe('POST generate-lotes — fix round 3', () => {
     const res = await POST(req({ resume: true }), ctx())
     expect(res.status).toBe(200)
 
-    expect(checkGenQuota).toHaveBeenCalledWith('s1', 'video-generation')
     const body = await res.json()
     // Ninguno de los 2 taskId viejos sobrevive: no se descartan en silencio dentro de
     // un array que igual se guarda como si todo estuviera bien — el intento entero
@@ -403,8 +348,6 @@ describe('POST generate-lotes — fix round 4: huella de contenido', () => {
     vi.clearAllMocks()
     vi.mocked(currentKieKey).mockResolvedValue('kie-del-usuario')
     vi.mocked(claimFreshLotes).mockResolvedValue(true)
-    vi.mocked(checkGenQuota).mockResolvedValue({ blocked: null, regensLeft: null })
-    vi.mocked(checkGlobalBackstop).mockResolvedValue({ blocked: null })
     vi.mocked(createVideoTask).mockImplementation(async () => `task-${Math.random()}`)
   })
 
@@ -435,10 +378,7 @@ describe('POST generate-lotes — fix round 4: huella de contenido', () => {
     expect(body.lotes.some((l: Lote) => l.prompt === promptViejo)).toBe(false)
     expect(createVideoTask).toHaveBeenCalledTimes(2) // los 2 lotes se rehacen de cero
 
-    // Y es una generación nueva a todos los efectos: pasa por el gate per-video (no
-    // por el backstop-only de reanudar) y cobra.
-    expect(checkGenQuota).toHaveBeenCalledWith('s1', 'video-generation')
-    expect(checkGlobalBackstop).not.toHaveBeenCalled()
+    // Y es una generación nueva a todos los efectos: se registra su `video-generation`.
     const generationCalls = vi.mocked(recordGenQuota).mock.calls.filter((c) => c[1] === 'video-generation')
     expect(generationCalls).toHaveLength(1)
 
@@ -466,7 +406,6 @@ describe('POST generate-lotes — fix round 4: huella de contenido', () => {
     const res = await POST(req({ resume: true }), ctx())
     expect(res.status).toBe(200)
 
-    expect(checkGenQuota).toHaveBeenCalledWith('s1', 'video-generation')
     const generationCalls = vi.mocked(recordGenQuota).mock.calls.filter((c) => c[1] === 'video-generation')
     expect(generationCalls).toHaveLength(1)
     const body = await res.json()
@@ -474,23 +413,21 @@ describe('POST generate-lotes — fix round 4: huella de contenido', () => {
     errSpy.mockRestore()
   })
 
-  // El falso positivo del round 3: el log de abandono estaba ARRIBA del gate de cuota,
-  // así que se disparaba incluso cuando el 429 cortaba sin escribir nada — mandando a
-  // perseguir una pérdida que nunca ocurrió.
-  it('si el gate de cuota corta con 429, NO se loguea ningún taskId abandonado', async () => {
+  // El falso positivo del round 3: el log de abandono estaba ARRIBA del corte temprano
+  // de la ruta, así que se disparaba incluso cuando la llamada moría sin escribir nada —
+  // mandando a perseguir una pérdida que nunca ocurrió. (Antes el corte era el 429 del
+  // gate de cuota; desde 2026-11-23 el único que queda es la falta de key.)
+  it('si la ruta corta antes de crear tareas (sin key), NO se loguea ningún taskId abandonado', async () => {
     const guardados = await renderInicial()
     vi.mocked(getVideoSession).mockResolvedValue(session({
       lotes: conPendiente(guardados) as unknown as VideoSessionResponse['lotes'],
       adapted: ADAPTED_2_LOTES_OTRO_TEXTO, // huella distinta → no es reanudación
     }))
-    vi.mocked(checkGenQuota).mockResolvedValue({
-      blocked: Response.json({ error: 'generic' }, { status: 429 }),
-      regensLeft: 0,
-    })
+    vi.mocked(currentKieKey).mockResolvedValue(null)
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
     const res = await POST(req({ resume: true }), ctx())
-    expect(res.status).toBe(429)
+    expect(res.status).toBe(400)
 
     expect(createVideoTask).not.toHaveBeenCalled()
     expect(updateVideoSession).not.toHaveBeenCalled() // nada se pisó: nada se abandonó

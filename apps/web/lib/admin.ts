@@ -207,9 +207,8 @@ export function creditosDe(u: AdminUser): Promise<CreditStatus> {
  * Es la única visibilidad que existe del costo real de Gemini/OpenAI: `ph_gen_usage`
  * lleva una fila por generación exitosa desde que existe el gate de cuota.
  *
- * ponytail: UNA consulta y todo el agrupado en JS. Tope de 20.000 filas — el backstop
- * global permite 500/día, así que cubre 40 días completos a tope absoluto. Pasado eso
- * el resumen subestima; se nota porque el total se queda clavado en 20.000.
+ * ponytail: UNA consulta y todo el agrupado en JS. Tope de 20.000 filas (desde 2026-11-23 ya
+ * no hay backstop diario que acote el volumen). Pasado eso el resumen subestima; se nota porque el total se queda clavado en 20.000.
  */
 export interface ConsumoResumen {
   total: number
@@ -217,7 +216,7 @@ export interface ConsumoResumen {
   imagenes: number
   porKind: { kind: string; total: number }[]
   porUsuario: { userId: string; total: number }[]
-  /** Generaciones de hoy, contra el backstop global diario. */
+  /** Generaciones de hoy. */
   hoy: number
 }
 

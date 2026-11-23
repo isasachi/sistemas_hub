@@ -34,7 +34,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     })
   }
 
-  const { blocked } = await checkGenQuota(id, 'landing-classify')
+  const { blocked } = await checkGenQuota('landing-classify')
   if (blocked) return blocked
   const userId = await readUserId()
   const result = await classifyNiche(session)

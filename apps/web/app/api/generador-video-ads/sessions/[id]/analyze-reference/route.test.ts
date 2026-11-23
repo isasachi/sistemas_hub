@@ -15,7 +15,7 @@ vi.mock('@/lib/gemini', () => ({
 }))
 
 vi.mock('@/lib/gen-quota', () => ({
-  checkGenQuota: vi.fn().mockResolvedValue({ blocked: null, regensLeft: null }),
+  checkGenQuota: vi.fn().mockResolvedValue({ blocked: null, credits: null }),
   recordGenQuota: vi.fn().mockResolvedValue(undefined),
 }))
 

@@ -50,10 +50,10 @@ export async function POST(
   if (!characterUrl)
     return NextResponse.json({ error: 'Sube la foto del personaje primero' }, { status: 409 })
 
-  // Ya está construido PARA ESTA FOTO: se devuelve tal cual. Va ANTES del gate de cuota
-  // a propósito — el disparo en segundo plano y el del paso del guión pueden coincidir
-  // sobre la misma sesión, y cobrarle una regeneración por un acierto de caché sería
-  // quemarle el tope.
+  // Ya está construido PARA ESTA FOTO: se devuelve tal cual. Va ANTES de generar a
+  // propósito — el disparo en segundo plano y el del paso del guión pueden coincidir
+  // sobre la misma sesión, y regenerar por un acierto de caché sería pagar una imagen
+  // (de OpenAI, con la key del hub) por nada.
   //
   // ⚠️ La comparación con `character_url` NO es de más: sin ella, cambiar la foto
   // devolvía el avatar de la ANTERIOR. La fila termina con la foto nueva y el avatar
@@ -62,7 +62,7 @@ export async function POST(
   //
   // ponytail: dos llamadas simultáneas sobre una sesión virgen (el disparo de fondo
   // todavía en vuelo cuando el paso del guión reintenta) generan dos avatares y gana
-  // la última escritura. Cuesta una imagen y una regeneración del tope de 1+3; si se
+  // la última escritura. Cuesta una imagen de más; si se
   // mide que pasa seguido, el upgrade es un claim atómico como el de `generate-lotes`.
   if (
     session.avatar_url && session.consistency_block && session.voice_profile &&
@@ -75,7 +75,7 @@ export async function POST(
     })
   }
 
-  const { blocked } = await checkGenQuota(id, 'video-character')
+  const { blocked } = await checkGenQuota('video-character')
   if (blocked) return blocked
 
   try {

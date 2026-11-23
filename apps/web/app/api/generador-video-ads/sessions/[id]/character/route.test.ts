@@ -57,7 +57,7 @@ function session(over: Partial<VideoSessionResponse> = {}): VideoSessionResponse
 
 beforeEach(() => {
   vi.clearAllMocks()
-  vi.mocked(checkGenQuota).mockResolvedValue({ blocked: null, regensLeft: 3 })
+  vi.mocked(checkGenQuota).mockResolvedValue({ blocked: null, credits: null })
   vi.mocked(callStructured).mockResolvedValue(IDENTIDAD as never)
   vi.mocked(openaiGenerateImage).mockResolvedValue('YXZhdGFy')
 })

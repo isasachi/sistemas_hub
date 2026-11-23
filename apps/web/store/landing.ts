@@ -33,7 +33,6 @@ interface LandingState {
   selectedSections: SectionType[]
   copy: SectionCopy[]
   sections: LandingSection[]
-  regens: Record<string, number>
 }
 
 interface LandingActions {
@@ -57,8 +56,6 @@ interface LandingActions {
   startNewSession: () => Promise<void>
   ensureSession: () => Promise<string | null>
   resetSession: () => void
-  setRegens: (m: Record<string, number>) => void
-  setRegen: (kind: string, n: number) => void
 }
 
 const initialState: LandingState = {
@@ -83,7 +80,6 @@ const initialState: LandingState = {
   selectedSections: [],
   copy: [],
   sections: [],
-  regens: {},
 }
 
 /** Crea la fila y guarda su id; `null` si falló. */
@@ -168,9 +164,6 @@ export const useLandingStore = create<LandingState & LandingActions>((set, get) 
       sections: (s.sections ?? []).slice().sort((a, b) => a.order - b.order),
     })
   },
-
-  setRegens: (regens) => set({ regens }),
-  setRegen: (kind, n) => set((s) => ({ regens: { ...s.regens, [kind]: n } })),
 
   startNewSession: async () => {
     set({ ...initialState })

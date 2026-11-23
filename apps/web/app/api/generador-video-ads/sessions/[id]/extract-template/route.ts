@@ -23,7 +23,7 @@ export async function POST(
 ) {
   const { id } = await params
 
-  const { blocked } = await checkGenQuota(id, 'video-template')
+  const { blocked } = await checkGenQuota('video-template')
   if (blocked) return blocked
   const userId = await readUserId()
 
@@ -43,8 +43,7 @@ export async function POST(
 
   // Segunda puerta de la reparación de cronometraje, para las sesiones cuyo análisis se
   // guardó ANTES de que `analyze-reference` la aplicara. Acá es gratis: este paso no
-  // vuelve a mandarle el video a Gemini (por eso `video-template` no tiene tope
-  // per-step), así que un análisis viejo con cortes indecibles se arregla sin pagar el
+  // vuelve a mandarle el video a Gemini, así que un análisis viejo con cortes indecibles se arregla sin pagar el
   // paso caro. Es idempotente: sobre un informe ya sano devuelve el mismo objeto y este
   // bloque no escribe nada.
   //

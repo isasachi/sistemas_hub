@@ -5,7 +5,7 @@ import { currentKieKey } from '@/lib/user-settings'
 import type { Lote } from '@/lib/video-ads/lotes'
 import { renderDone, insumosDeRender, promptDeLote } from '@/lib/video-ads/render-lotes'
 import { AdaptedScriptSchema } from '@/lib/video-ads/adapt'
-import { checkGlobalBackstop, recordGenQuota } from '@/lib/gen-quota'
+import { recordGenQuota } from '@/lib/gen-quota'
 import { readUserId } from '@/lib/product-hunter/session'
 import { isInFlight } from '@/lib/video-ads/lote-ui'
 
@@ -22,9 +22,8 @@ export const maxDuration = 60
  * (`insumosDeRender` / `promptDeLote`): mismo prompt, misma huella, y solo cambia el
  * sorteo del modelo — que es lo que un clip que salió mal necesita.
  *
- * Es una llamada pagada con la key del USUARIO (BYOK), sin gate per-video: no es una
- * generación nueva, es un clip suelto. Lo que sí aplica es el backstop diario global
- * (`checkGlobalBackstop`), y se registra `video-render` para que el costo se vea.
+ * Es una llamada pagada con la key del USUARIO (BYOK), sin tope (el video no gasta
+ * créditos del plan). Se registra `video-render` para que el costo se vea.
  *
  * El reparto tiene que coincidir con lo guardado: si el guión cambió y ahora salen
  * otros lotes, un clip suelto no tiene a qué hermanos pegarse — ahí es "generar de
@@ -60,11 +59,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: err instanceof Error ? err.message : 'No se pudo armar el lote' }, { status: 400 })
   }
 
-  // BYOK: la key ANTES del backstop, para no escribir cuota por una llamada que moriría en 401.
   const kieKey = await currentKieKey()
   if (!kieKey) return NextResponse.json({ error: SIN_KEY }, { status: 400 })
-  const { blocked } = await checkGlobalBackstop()
-  if (blocked) return blocked
 
   let taskId: string
   try {

@@ -3,7 +3,6 @@
 import { useEffect, useRef } from 'react'
 import { useWizardStore, SESSION_KEY } from '@/store/wizard'
 import type { SessionResponse } from '@/lib/types'
-import { fetchRegens } from '@/lib/gen-quota-client'
 import { SessionErrorRetry } from '@/components/tools/ui/SessionErrorRetry'
 import StepWizard from '@/components/tools/ui/StepWizard'
 import Section1Reference from './sections/Section1Reference'
@@ -20,7 +19,7 @@ const SECTIONS = [Section1Reference, Section2Product, Section3Comments, Section4
 export default function AdWizard() {
   const {
     step, imageUrl, sessionId, sessionError,
-    startNewSession, hydrateFromSession, setStep, setRegens,
+    startNewSession, hydrateFromSession, setStep,
     resetSession,
   } = useWizardStore()
 
@@ -60,10 +59,6 @@ export default function AdWizard() {
       // visita — el wizard queda pidiéndole al servidor una sesión que no existe para siempre.
       .catch(() => { localStorage.removeItem(SESSION_KEY); resetSession() })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (sessionId) fetchRegens(sessionId).then(setRegens)
-  }, [sessionId, setRegens])
 
   // `maxStep` = paso más avanzado alcanzado; hasta ahí se puede volver por el
   // riel sin reenviar nada. Se resetea al cambiar de sesión: sin esto el ref

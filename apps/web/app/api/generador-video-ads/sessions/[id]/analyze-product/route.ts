@@ -21,7 +21,7 @@ export async function POST(
 ) {
   const { id } = await params
 
-  const { blocked } = await checkGenQuota(id, 'video-product')
+  const { blocked } = await checkGenQuota('video-product')
   if (blocked) return blocked
   const userId = await readUserId()
 

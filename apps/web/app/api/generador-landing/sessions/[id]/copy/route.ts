@@ -17,7 +17,7 @@ export const maxDuration = 300
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
 
-  const { blocked } = await checkGenQuota(id, 'landing-copy')
+  const { blocked } = await checkGenQuota('landing-copy')
   if (blocked) return blocked
   const userId = await readUserId()
 

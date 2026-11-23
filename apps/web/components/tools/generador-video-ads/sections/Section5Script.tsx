@@ -274,7 +274,7 @@ export default function Section5Script() {
         // que quedó guardado — lo que falló es construir el personaje (identidad +
         // voz), no la adaptación. "Reintentar" (el botón de abajo) vuelve a intentar
         // ambos pasos; re-adaptar un guión que ya está bien no tiene costo de cuota
-        // (`video-adapt` no tiene tope per-step) y el paso caro que sí falló es el que
+        // (el video no tiene tope) y el paso caro que sí falló es el que
         // esto describe.
         <div className={errorBox}>{characterError}</div>
       )}
