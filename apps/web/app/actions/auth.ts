@@ -2,7 +2,9 @@
 
 import { z } from 'zod'
 import { redirect } from 'next/navigation'
+import { headers } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
+import { enviarEnlaceAcceso, origenDe } from '@/lib/enlace-acceso'
 
 export type AuthState = {
   error?: string
@@ -85,6 +87,31 @@ export async function signUp(_prev: AuthState, formData: FormData): Promise<Auth
   }
 
   redirect(safeNext(next))
+}
+
+/**
+ * Entrar sin contraseña: manda un enlace al correo (lib/enlace-acceso.ts). Es el único
+ * login de las cuentas Empire de cortesía, que nacen sin contraseña, y la salida de
+ * quien olvidó la suya.
+ *
+ * ⚠️ "Sin cuenta" responde lo MISMO que el éxito: este botón no puede ser un oráculo
+ * para preguntar qué correos están registrados.
+ */
+export async function sendLoginLink(_prev: AuthState, formData: FormData): Promise<AuthState> {
+  const email = String(formData.get('email') ?? '').trim().toLowerCase()
+  const next = String(formData.get('next') ?? '/dashboard') || '/dashboard'
+  const emailCheck = emailSchema.safeParse(email)
+  if (!emailCheck.success) return { fieldErrors: { email: emailCheck.error.issues[0].message } }
+
+  const envio = await enviarEnlaceAcceso(email, origenDe(await headers()), safeNext(next))
+  if (envio.ok || envio.motivo === 'sin-cuenta') {
+    return {
+      notice: `Si ${email} tiene una cuenta, te llegará un enlace para entrar. Vence en 1 hora.`,
+    }
+  }
+  if (envio.motivo === 'limite')
+    return { error: 'Ya pediste varios enlaces seguidos. Espera unos minutos y vuelve a probar.' }
+  return { error: 'No pudimos enviar el enlace. Inténtalo de nuevo en un momento.' }
 }
 
 export async function signOut() {
