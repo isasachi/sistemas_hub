@@ -214,7 +214,7 @@ decisión con su medición detrás. Y **no se cargan solas**: hay que leerlas.
 | `app/api/generador-anuncios/**`, `tools/generador-anuncios/**`, `lib/prompts/step5.md`, `lib/anuncios/**` | `agents/anuncios.md` |
 | `lib/landing/**`, `app/api/generador-landing/**`, `tools/generador-landing/**` | `agents/landing.md` |
 | `apps/worker/**`, `packages/shared/{db,prescore,keywords}.ts`, `app/api/buscador-productos/**` | `agents/buscador-productos.md` |
-| `lib/whop.ts`, `packages/shared/plans.ts`, `lib/credits.ts`, `lib/gen-quota.ts`, `app/cuenta/**`, `app/admin/**`, `app/suscripcion/**` | `agents/suscripcion-whop.md` |
+| `lib/whop.ts`, `packages/shared/plans.ts`, `lib/credits.ts`, `lib/gen-quota.ts`, `app/cuenta/**`, `app/admin/**`, `app/suscripcion/**`, `lib/cortesia-empire.ts`, `lib/enlace-acceso.ts`, `app/(auth)/registro/**` | `agents/suscripcion-whop.md` |
 | `lib/calculadora-costos/**`, `tools/calculadora-costos/**` | `agents/calculadora-costos.md` |
 
 ⚠️ **`agents/video-ads.md` tiene 356 KB y su encabezado es un aviso de REINICIO** (commit

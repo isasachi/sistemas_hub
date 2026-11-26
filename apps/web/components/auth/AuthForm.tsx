@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from "react";
 import Link from "next/link";
-import { Loader2, Eye, EyeOff } from "lucide-react";
+import { Loader2, Eye, EyeOff, Mail } from "lucide-react";
 import type { AuthState } from "@/app/actions/auth";
 import { createClient } from "@/lib/supabase/client";
 
@@ -13,7 +13,11 @@ interface AuthFormProps {
   action: (prev: AuthState, formData: FormData) => Promise<AuthState>;
   next?: string;
   initialError?: string;
+  /** Solo login: "Enviarme un enlace" (entrar sin contraseña, magic link). */
+  linkAction?: (prev: AuthState, formData: FormData) => Promise<AuthState>;
 }
+
+const SIN_ENLACE = async (): Promise<AuthState> => ({});
 
 const COPY = {
   login: {
@@ -47,11 +51,20 @@ function GoogleIcon() {
   );
 }
 
-export function AuthForm({ mode, action, next, initialError }: AuthFormProps) {
-  const [state, formAction, pending] = useActionState<AuthState, FormData>(
+export function AuthForm({ mode, action, next, initialError, linkAction }: AuthFormProps) {
+  const [pwState, formAction, pwPending] = useActionState<AuthState, FormData>(
     action,
     initialError ? { error: initialError } : {},
   );
+  // El enlace comparte el formulario (mismo campo de email) pero tiene su propio estado.
+  const [linkState, linkFormAction, linkPending] = useActionState<AuthState, FormData>(
+    linkAction ?? SIN_ENLACE,
+    {},
+  );
+  // Se pinta el aviso del último botón usado.
+  const [ultimo, setUltimo] = useState<"pw" | "link">("pw");
+  const state = ultimo === "link" ? linkState : pwState;
+  const pending = pwPending || linkPending;
   const [showPw, setShowPw] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const c = COPY[mode];
@@ -157,11 +170,28 @@ export function AuthForm({ mode, action, next, initialError }: AuthFormProps) {
 
         <button
           type="submit"
+          onClick={() => setUltimo("pw")}
           disabled={pending || googleLoading}
           className="jr-cta mt-1 w-full rounded-xl py-3 text-[14px] cursor-pointer"
         >
-          {pending ? <Loader2 className="w-4 h-4 animate-spin" /> : c.submit}
+          {pwPending ? <Loader2 className="w-4 h-4 animate-spin" /> : c.submit}
         </button>
+
+        {/* Entrar sin contraseña. Es el login de las cuentas Empire de cortesía (nacen sin
+            contraseña) y la salida de quien olvidó la suya. Secundario: el carmesí
+            sigue siendo de "Entrar". */}
+        {mode === "login" && linkAction && (
+          <button
+            type="submit"
+            formAction={linkFormAction}
+            onClick={() => setUltimo("link")}
+            disabled={pending || googleLoading}
+            className="w-full flex items-center justify-center gap-2 rounded-xl border border-white/[0.12] bg-white/[0.04] py-2.5 text-[13px] font-semibold text-[#efe7e0] transition-all duration-200 hover:border-white/[0.2] hover:bg-white/[0.07] cursor-pointer disabled:opacity-50"
+          >
+            {linkPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+            Enviarme un enlace (sin contraseña)
+          </button>
+        )}
       </form>
 
       <p className="relative mt-5 text-center text-[13px] text-[#a98c88]">
